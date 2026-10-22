@@ -281,7 +281,7 @@ operator, user, and contributor references are easier to find.
   the reserved `1.1.0` manifest minor version.
 - [ADR-0045](adrs/adr-0045-isolate-command-list-entries.md): Opt-in command-list
   entry isolation with shared mode preserved as the default.
-- [ADR-056](adr-056-manifest-linting-under-netsuke-check.md):
+- [ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md):
   Manifest-linting decision record, placing the linter under `netsuke check`,
   treating findings as data with a threshold-selected success or failure
   document, and fixing the rule-identifier and rule-text ownership rules.

@@ -105,7 +105,7 @@ impl Stage {
 /// by [`RuleMeta::name`], and keeps this text as the source-locale fallback. The
 /// identifiers never move: a name, a category, a severity, and a code are
 /// values a user types and a machine matches. See
-/// `docs/adr-056-manifest-linting-under-netsuke-check.md`.
+/// `docs/adrs/adr-0056-manifest-linting-under-netsuke-check.md`.
 #[derive(Debug, Clone, Copy)]
 pub struct RuleMeta {
     /// Stable kebab-case identifier, unique across every stage.
