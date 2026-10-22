@@ -3521,7 +3521,7 @@ checks the package boundary and that dependency equality. `slice.rs` mirrors
 four CLI declarations and the two `pub use` re-exports, then the path imports
 for `src/cli/localization/mod.rs`, `src/host/pattern.rs`,
 `src/locale/catalogues.rs`, and `src/localization/mod.rs`. The source contract
-compares every one of those declarations in order after normalising the
+compares every one of those declarations in order after normalizing the
 fixture's `../src/` prefix, so a reordered path attribute fails even when the
 same modules are still named. `build_l10n_audit` is the one declaration
 `build.rs` keeps to itself — it lives beside the build script, declares no

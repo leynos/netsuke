@@ -61,7 +61,7 @@ production module slice during Cargo's ordinary build phase.
   the source-boundary assertions. It compares `build.rs` with
   `build_slice_fixture/slice.rs` across the whole slice — the four inline `cli`
   declarations, the two `pub use` re-exports, and every sibling path/module
-  pair — in order, after normalising the fixture's `../src/` prefix. Order is
+  pair — in order, after normalizing the fixture's `../src/` prefix. Order is
   part of the comparison because a path attribute applies to the declaration
   beneath it, so a reordered pair would compile a different file while still
   naming the same modules. `build_l10n_audit` is declared only by `build.rs`,

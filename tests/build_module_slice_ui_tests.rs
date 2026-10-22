@@ -186,10 +186,11 @@ fn fixture_contract_accepts_crlf_build_script_source() -> io::Result<()> {
         .ok_or_else(|| io::Error::other("the expected slice lost its localization import"))?;
     declarations.insert(audit_position, BUILD_SCRIPT_ONLY_DECLARATION);
 
-    let build_script = declarations
-        .iter()
-        .map(|line| format!("{line}\r\n"))
-        .collect::<String>();
+    let mut build_script = String::new();
+    for line in &declarations {
+        build_script.push_str(line);
+        build_script.push_str("\r\n");
+    }
 
     assert_fixture_matches_build_source(&build_script)
 }
