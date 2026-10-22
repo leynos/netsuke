@@ -170,11 +170,41 @@ fn slice_declarations(source: &str, start: usize) -> Vec<&str> {
 /// by their shape. Nothing here admits a `use` import or an item definition, so
 /// an unrelated addition cannot be mistaken for slice membership.
 fn is_slice_declaration(line: &str) -> bool {
-    let is_module = line.starts_with("mod ") || line.starts_with("pub mod ");
+    SLICE_DECLARATION_FORMS.iter().any(|is_form| is_form(line))
+}
+
+/// The declaration shapes the slice admits, tried in turn by
+/// [`is_slice_declaration`].
+///
+/// A table rather than a chain of `||`: each shape states its own rule, so
+/// adding a form means writing one predicate, and auditing the admitted set
+/// means reading one list instead of parsing a boolean expression.
+const SLICE_DECLARATION_FORMS: &[fn(&str) -> bool] = &[
+    is_closing_brace,
+    is_path_attribute,
+    is_module_declaration,
+    is_reexport,
+];
+
+/// Return whether `line` closes the inline `cli` module.
+fn is_closing_brace(line: &str) -> bool {
     line == "}"
-        || (line.starts_with("#[path = \"") && line.ends_with("\"]"))
-        || (is_module && (line.ends_with(';') || line.ends_with('{')))
-        || (line.starts_with("pub use ") && line.ends_with(';'))
+}
+
+/// Return whether `line` is a `#[path = ...]` import for the declaration below.
+fn is_path_attribute(line: &str) -> bool {
+    line.starts_with("#[path = \"") && line.ends_with("\"]")
+}
+
+/// Return whether `line` declares a module, public or private.
+fn is_module_declaration(line: &str) -> bool {
+    let is_module = line.starts_with("mod ") || line.starts_with("pub mod ");
+    is_module && (line.ends_with(';') || line.ends_with('{'))
+}
+
+/// Return whether `line` re-exports a name the slice's consumers rely on.
+fn is_reexport(line: &str) -> bool {
+    line.starts_with("pub use ") && line.ends_with(';')
 }
 
 #[test]
