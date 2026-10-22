@@ -335,10 +335,11 @@ Repository documentation, in the order it becomes useful:
 - `docs/formal-verification-methods-in-netsuke.md` §"Proptest for determinism
   and manifest semantics" (`FV-DET`) and §"Determinism contract"
   (`FV-CONTRACT`).
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` (`ADR-004`).
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  (`ADR-004`).
 - `docs/netsuke-design.md` §1.2, §5.4, §5.5.
 - `docs/developers-guide.md` §"Property-based testing with proptest".
-- `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md`.
+- `docs/adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md`.
 - `docs/documentation-style-guide.md` and `AGENTS.md`.
 - `docs/rust-testing-with-rstest-fixtures.md`,
   `docs/reliable-testing-in-rust-via-dependency-injection.md`,
@@ -397,7 +398,12 @@ There is no Terms of Reference document in this repository. Upstream artefacts:
   `origin/main` merged `adr-020` through `adr-029`, and `adr-039`–`adr-041` are
   claimed in flight. Allocating now, having swept every ref and every open pull
   request, avoids a second collision. `ADR-NNN` is retained as the trace
-  identifier so the links below stay stable; it denotes `ADR-030`.
+  identifier so the links below stay stable; it denotes `ADR-030`. The same
+  applies to `ADR-004` throughout this plan: it is the trace identifier this
+  plan was written against, and it denotes the Kani hand-off record, which the
+  style-guide migration renumbered to **ADR-0047**. The bare number `ADR-004`
+  now names an unrelated record — the graph renderer — so every occurrence here
+  is the trace identifier, never a reference to that one.
 
 Trace links:
 
@@ -418,7 +424,7 @@ FV-CONTRACT  -> ADR-NNN     -> EP-M6 -> tests::ninja_determinism_process::two_ru
 RM-4.3.1.a   -> ADR-NNN     -> EP-M6 -> ninja_gen::determinism::property_tests::declaration::declaration_order_does_not_change_emission
 RM-4.2.1.dup -> ADR-004     -> EP-M7 -> ir::graph::property_tests::duplicates::duplicate_outputs_are_rejected_at_larger_n
 RM-4.2.1.cyc -> ADR-004     -> EP-M7 -> ir::graph::property_tests::cycles::cycles_are_rejected_at_larger_n
-FV-CONTRACT  -> ADR-NNN     -> EP-M1 -> docs/adr-030-ninja-emission-determinism-contract.md
+FV-CONTRACT  -> ADR-NNN     -> EP-M1 -> docs/adrs/adr-0030-ninja-emission-determinism-contract.md
 ```
 
 Roadmap §4.4 is titled "Contract documentation and optional proof kernels", and
@@ -1468,9 +1474,9 @@ prototype source was scratch and has been deleted; nothing from it is merged.
 
 *Assigned:* `FV-CONTRACT`, `ADR-NNN`.
 
-Write `docs/adr-030-ninja-emission-determinism-contract.md` in the repository's
-Y-Statement style, **before any property is authored**, from the four
-statements in `Context and orientation`. It must state:
+Write `docs/adrs/adr-0030-ninja-emission-determinism-contract.md` in the
+repository's Y-Statement style, **before any property is authored**, from the
+four statements in `Context and orientation`. It must state:
 
 - which statements are public guarantees and which are internal invariants;
 - the full parameter tuple the guarantee is a function of — manifest,
@@ -1502,14 +1508,14 @@ statements in `Context and orientation`. It must state:
 verify it. *Acceptance:* `make markdownlint`, `make nixie`, `make check-fmt`
 pass; the ADR is indexed in `docs/contents.md`. *Recovery:* documentation-only.
 
-*Outcome:* `docs/adr-030-ninja-emission-determinism-contract.md` is written and
-indexed. It publishes one guarantee (`G-1`, process-level reproducibility over
-the five-element parameter tuple, sidecars included) and records the
-insertion-order, declaration-order, and within-edge statements as internal
-invariants `I-1` … `I-3`; five numbered preconditions `P-1` … `P-5` that
-obligations now cite instead of restating; four explicit non-promises `N-1` …
-`N-4`; the Kani argument; the rejected options with their real reasons; and the
-two domain-purity leaks.
+*Outcome:* `docs/adrs/adr-0030-ninja-emission-determinism-contract.md` is
+written and indexed. It publishes one guarantee (`G-1`, process-level
+reproducibility over the five-element parameter tuple, sidecars included) and
+records the insertion-order, declaration-order, and within-edge statements as
+internal invariants `I-1` … `I-3`; five numbered preconditions `P-1` … `P-5`
+that obligations now cite instead of restating; four explicit non-promises
+`N-1` … `N-4`; the Kani argument; the rejected options with their real reasons;
+and the two domain-purity leaks.
 
 Deriving the contract from the code at *this* revision, rather than from the
 plan, falsified two of the plan's own mechanism claims — both recorded as
@@ -1860,12 +1866,12 @@ restated:
   ("reproducible dependency graphs as Graphviz DOT…"), inside the "What works
   today" bullet list, and even that describes the `graph` renderer rather than
   the Ninja emission this plan governs. The corrected paragraph now cites the
-  `[What works today](../README.md#what-works-today)` heading and `ADR-030`
+  `[What works today](../../README.md#what-works-today)` heading and `ADR-030`
   instead of a sentence fragment.
 - Footnote `[^6]` already read `../src/ninja_gen/mod.rs` at line 416; it did
   not point at the nonexistent `../src/ninja_gen.rs`. No repoint was needed.
 - `ADR-030` is neither the next free number nor current: the ADR set now runs
-  to `adr-043`, and `docs/adr-030-ninja-emission-determinism-contract.md`
+  to `adr-043`, and `docs/adrs/adr-0030-ninja-emission-determinism-contract.md`
   already exists. The number is confirmed allocated, which is the only part of
   the requirement that still mattered.
 
@@ -2390,7 +2396,7 @@ per-obligation classification counts are the two sections above. All `EP-M0`
 questions are answered above.
 
 The determinism contract itself is no longer on this list: it is
-[`docs/adr-030-ninja-emission-determinism-contract.md`](../adr-030-ninja-emission-determinism-contract.md),
+[`docs/adrs/adr-0030-ninja-emission-determinism-contract.md`](../adrs/adr-0030-ninja-emission-determinism-contract.md),
 written in `EP-M1`. Every numbered precondition an obligation cites (`P-1` …
 `P-5`), every published and unpublished statement (`G-1`, `I-1` … `I-3`, `N-1` …
 `N-4`), the parameter tuple, the Kani argument, and the two domain purity
@@ -2404,6 +2410,52 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [x] (2026-10-23) **The branch is rebased onto `origin/main` at
+      `64046d78`, and the rebase exposed two classes of post-merge damage that
+      git could not see.** 78 commits replay in `64046d78..54f8f56a`; no
+      merges; `Cargo.lock` is byte-identical to target because the branch never
+      touched it.
+      1. *Six branch-authored files still constructed `Recipe::Command`
+      without the `isolation` field* that target made mandatory: both
+      `src/ir/action_hash_property_tests` children, both `src/ir/graph`
+      property suites, `property_tests/declaration.rs`, and
+      `strategy/manifest/mod.rs`. Each auto-merged cleanly — the hunks do not
+      overlap — so the conflict was semantic, not textual. Found by compiler
+      diagnostics during the `--continue` stops and by an LSP sweep after, not
+      by `git add`. Fixed with `CommandIsolation::Shared`, the value the
+      generated domain already uses, and confirmed by
+      `cargo check --workspace --all-targets --all-features`.
+      2. *The flat `docs/adr-NNN-slug.md` layout was retired on target* by
+      PR #937. The branch's ADR still sat at `docs/adr-030-…` and its H1 still
+      read `# Architecture decision record (ADR): …`, missing the serial and
+      using the wrong adjective. Migrated to
+      `docs/adrs/adr-0030-ninja-emission-determinism-contract.md`, retitled to
+      `# Architectural decision record (ADR) 0030: …`, and every inbound
+      reference repointed: 7 root/localized READMEs, `docs/contents.md`,
+      `docs/developers-guide.md`, `docs/netsuke-design.md`,
+      `docs/formal-verification-methods-in-netsuke.md`, `docs/roadmap.md`,
+      `docs/users-guide.md`, ADR-0047, and 11 sites in this plan. The ADR's own
+      relative links gained the extra `../`, and one link that never resolved —
+      `adr-004-bound-kani-ir-harnesses-to-small-n.md`, renumbered to 0047 by
+      the same migration — was repaired on the way. The plan's own reading
+      inventory carried the same casualty in its `ADR-004` entry, whose path no
+      longer resolved; it now points at ADR-0047, and the note beside the trace
+      table records that the bare `ADR-004` in this plan is a trace identifier
+      for that record rather than the graph-renderer ADR the number now names.
+
+  *A count, not the prose, caught a near-miss.* The rewrite script asserted one
+  occurrence per file and failed on
+  `docs/formal-verification-methods-in-netsuke.md`, which carries two. A
+  blanket replace would have hidden the discrepancy without being wrong; the
+  assertion is what makes the edit reviewable. The `ADR-NNN` token in the trace
+  table is deliberately retained — this plan states at *Trace links* and again
+  beneath it that `ADR-NNN` is the stable trace identifier — but the concrete
+  path in that table is a factual claim and migrated with everything else.
+
+  Verified: repository-wide check reports no residual flat-path reference, and
+  the `docs/contents.md` index matches `docs/adrs/` exactly at 49 entries each
+  with no members missing in either direction.
 
 - [ ] (2026-10-21) **A third batch is green on all eleven gates, and that green
       does not clear `OBL-NINJA`.** Candidate frozen at staged-diff
@@ -4039,7 +4091,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       than in this worktree. All 16 commits replay onto `e1df2ead` (the true
       remote `main`, resolved from the API — the bare repository's cached
       `main` is a stale `1e60fb18`) with **zero conflicts**. On the rebased
-      tree: `docs/adr-030-ninja-emission-determinism-contract.md` and this
+      tree: `docs/adrs/adr-0030-ninja-emission-determinism-contract.md` and this
       execplan both survive, the adr-030 link still resolves at
       `docs/contents.md:222`, `src/ninja_gen*` collapses to just
       `src/ninja_gen`, and the layout contract reports **0 prefix groups and
@@ -4120,7 +4172,8 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       **0 behind**. A count check confirms the replay dropped nothing: the
       pre-rebase tip sat 18 ahead of the old merge base and the rebase replayed
       18. A content check confirms the two files this branch actually authors —
-      `docs/adr-030-ninja-emission-determinism-contract.md` and this execplan —
+      `docs/adrs/adr-0030-ninja-emission-determinism-contract.md` and this
+      execplan —
       are **byte-identical** before and after (same blob SHAs), against the
       earlier draft's claim that the rebase "brings 44 commits of upstream
       Markdown into the tree": it brings 44 upstream commits, whose Markdown
@@ -4182,7 +4235,8 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       scratch prototype. `EP-M0` is complete; nothing from the prototype is
       merged.
 - [x] (2026-10-10T00:00:00Z) `EP-M1`: wrote
-      `docs/adr-030-ninja-emission-determinism-contract.md` and indexed it in
+      `docs/adrs/adr-0030-ninja-emission-determinism-contract.md` and indexed
+      it in
       `docs/contents.md`. Reading the code to state the contract found two
       defects in this plan, both recorded as amendments in the ADR and
       corrected here (see `Surprises & discoveries`).
@@ -4256,7 +4310,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       item.
 - [x] (2026-10-10T00:00:00Z) Resolved the CodeRabbit ADR-Status finding on
       evidence, and the resolution is narrower than the finding. The finding
-      was that `docs/adr-030-ninja-emission-determinism-contract.md` should
+      was that `docs/adrs/adr-0030-ninja-emission-determinism-contract.md` should
       write `Accepted.` rather than `Accepted`. Reading
       `docs/documentation-style-guide.md` verbatim shows the rule is split: the
       prose says only "**Status:** One of `Proposed`, `Accepted`, `Superseded`,
@@ -4385,7 +4439,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   approved for implementation", and `APPROVED` means "approved, implementation
   not yet started". Neither holds — the approval gate was passed on 2026-09-27
   and `EP-M1` has since **delivered** a tracked artefact,
-  `docs/adr-030-ninja-emission-determinism-contract.md`, indexed in
+  `docs/adrs/adr-0030-ninja-emission-determinism-contract.md`, indexed in
   `docs/contents.md`. The header had read `DRAFT` in every revision since the
   first, so the field had drifted eight revisions behind the `Progress` section
   that is its authority.
@@ -6496,19 +6550,20 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   rounds have been discharged — while the roadmap box asserts the *item's*
   deliverable, Proptest coverage for deterministic Ninja emission, which does
   not exist. The branch diff against `origin/main` is four files —
-  `docs/adr-030-ninja-emission-determinism-contract.md`, `docs/contents.md`,
-  this plan, and `typos.toml` — with no Rust, no `Makefile`, and no
-  `.config/nextest.toml` change; `src/ninja_gen/named_action.rs` is absent on
-  every ref, `make proptest` is absent from the `Makefile`, and the roadmap's
-  three sub-items (insertion-order stability, `default` target ordering,
-  `path_key` invariance) are unproven. Checking the box would assert coverage
-  that does not exist — the exact defect class this plan has spent eight
-  revisions removing, including a retraction published in `3180ccd2`. Options
-  considered: (a) check the box on the strength of the plan being complete; (b)
-  leave it unchecked and record why. (b) was chosen because roadmap 4.3.1's own
-  text names Proptest coverage as the deliverable, not the plan. Affected
-  identifiers: none; no obligation, tolerance, or acceptance clause changed.
-  Date/Author: 2026-10-13 / implementing agent.
+  `docs/adrs/adr-0030-ninja-emission-determinism-contract.md`,
+  `docs/contents.md`, this plan, and `typos.toml` — with no Rust, no
+  `Makefile`, and no `.config/nextest.toml` change;
+  `src/ninja_gen/named_action.rs` is absent on every ref, `make proptest` is
+  absent from the `Makefile`, and the roadmap's three sub-items
+  (insertion-order stability, `default` target ordering, `path_key` invariance)
+  are unproven. Checking the box would assert coverage that does not exist —
+  the exact defect class this plan has spent eight revisions removing,
+  including a retraction published in `3180ccd2`. Options considered: (a) check
+  the box on the strength of the plan being complete; (b) leave it unchecked
+  and record why. (b) was chosen because roadmap 4.3.1's own text names
+  Proptest coverage as the deliverable, not the plan. Affected identifiers:
+  none; no obligation, tolerance, or acceptance clause changed. Date/Author:
+  2026-10-13 / implementing agent.
 
 - Decision: reconcile the base **before** implementing `EP-M2`, rather than
   implementing against this branch's tree. Rationale: the sixth revision's

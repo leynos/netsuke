@@ -29,7 +29,9 @@
 //! node — belongs to roadmap item 4.2.2 and is proved by Kani over
 //! `canonicalize_cycle_by`; restating it here would duplicate that proof.
 
-use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, StringOrList, Target, Vars};
+use crate::ast::{
+    CommandIsolation, DependencyOrder, NetsukeManifest, Recipe, StringOrList, Target, Vars,
+};
 use crate::ir::{BuildGraph, IrGenError};
 use crate::ninja_gen::RecipeShell;
 use proptest::prelude::*;
@@ -266,6 +268,7 @@ fn target(slot: usize, deps: &[usize]) -> Target {
         name: StringOrList::String(output(slot)),
         recipe: Recipe::Command {
             command: StringOrList::String(format!("echo target-{slot:02}")),
+            isolation: CommandIsolation::Shared,
         },
         sources: StringOrList::Empty,
         deps: if deps.is_empty() {

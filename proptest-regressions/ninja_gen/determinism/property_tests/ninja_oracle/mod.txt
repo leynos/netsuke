@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 88deed2f1025af81b489bbfc6a0aafe4c66c412c5dd743d4335bf97f9ea400a2 # shrinks to spec = GraphSpec { digest: c18b256ef688794d, classes: Classification { actions: 1, edges: 1, explicit_outputs: 1, implicit_outputs: 0, multi_output_edges: 0, phony_edges: 1, dyndep_staged_edges: 0, always_edges: 0, phony_flag_edges: 0, restat_actions: 0, default_targets: 1, distinct_default_targets: 1, always_restat_seen: 1 } }

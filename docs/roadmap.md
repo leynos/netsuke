@@ -627,7 +627,7 @@ and test workflow intact. See
   [execplan 4.3.1](execplans/4-3-1-proptests-for-deterministic-ninja-emission.md)
   delivers the suites under `src/ninja_gen/determinism/property_tests/` and
   publishes the contract in
-  [ADR-030](adr-030-ninja-emission-determinism-contract.md). The larger-N
+  [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md). The larger-N
   hand-off from 4.2.1 is discharged, and each ordering rule is demonstrated by
   a committed mutation patch that a named property fails. The real-`ninja` arm,
   `OBL-NINJA`, is implemented and gate-green but not yet green *in substance*:

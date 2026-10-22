@@ -241,10 +241,10 @@ operator, user, and contributor references are easier to find.
   `mold` and the parallel `rustc` front end as the committed default build,
   with the release and coverage exclusions, the Cranelift refusal, and the
   toolchain-versus-tools boundary.
-- [ADR-0030](adr-030-ninja-emission-determinism-contract.md): The published
-  process-level determinism guarantee for Ninja emission, its parameter tuple
-  and preconditions, what is explicitly not promised, and why Kani cannot
-  discharge insertion-order invariance.
+- [ADR-0030](adrs/adr-0030-ninja-emission-determinism-contract.md): The
+  published process-level determinism guarantee for Ninja emission, its
+  parameter tuple and preconditions, what is explicitly not promised, and why
+  Kani cannot discharge insertion-order invariance.
 - [ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md):
   Windows final component validation through a same-handle reparse-point open.
 - [ADR-0033](adrs/adr-0033-record-split-build-cargo-messages.md): Recorded Cargo

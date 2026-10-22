@@ -33,7 +33,7 @@
 //! obligation is stronger over the lowering and weaker over the emitter's
 //! input domain; neither subsumes the other.
 
-use crate::ast::{NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
+use crate::ast::{CommandIsolation, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
 use crate::ir::BuildGraph;
 use crate::ninja_gen::RecipeShell;
 use crate::ninja_gen::determinism::strategy::manifest::{ManifestSpec, arb_manifest_spec};
@@ -330,6 +330,7 @@ fn duplicate_rule(body: &str) -> Rule {
         name: "dup".to_owned(),
         recipe: Recipe::Command {
             command: StringOrList::String(body.to_owned()),
+            isolation: CommandIsolation::Shared,
         },
         description: None,
     }

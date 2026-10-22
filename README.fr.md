@@ -175,7 +175,7 @@ de Netsuke fixes, `netsuke generate` produit une sortie identique octet pour
 octet, y compris chaque fichier annexe dyndep. La stabilité des octets entre
 versions de Netsuke, entre plateformes ou entre sélections de shell n'est
 **pas** garantie. Le
-[contrat de déterminisme](docs/adr-030-ninja-emission-determinism-contract.md)
+[contrat de déterminisme](docs/adrs/adr-0030-ninja-emission-determinism-contract.md)
 énonce la garantie, ses préconditions et ses exclusions.
 
 Depuis la beta3, Netsuke prend également en charge les agrégats d'actions et de

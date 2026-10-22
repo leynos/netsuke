@@ -6277,7 +6277,7 @@ all valid inputs.
 #### Emission determinism suites
 
 The suites that verify
-[ADR-030](adr-030-ninja-emission-determinism-contract.md) live in
+[ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) live in
 `src/ninja_gen/determinism/property_tests/`, one module per obligation, behind
 `#[cfg(test)]`. They share the generator in `.../strategy/graph/` rather than
 copying it: a second generator is a second statement of the well-formedness

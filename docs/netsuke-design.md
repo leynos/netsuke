@@ -130,7 +130,7 @@ before execution, a critical requirement for compatibility with Ninja.
    and shell qualifications are load-bearing, because PowerShell and POSIX are
    different renderers. This property is essential for reproducible builds and
    makes the output suitable for caching or source control.
-   [ADR-030](adr-030-ninja-emission-determinism-contract.md) states the
+   [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) states the
    guarantee, its preconditions, and its exclusions.
 
 ```mermaid
@@ -2847,10 +2847,10 @@ to keep the representation portable.
   no longer requires generator-side value recovery or deduplication. Sorting
   uses the joined path strings to keep ordering stable across platforms, which
   is the insertion-order invariant behind the guarantee
-  [ADR-030](adr-030-ninja-emission-determinism-contract.md) publishes. Actions
-  and default targets are sorted the same way, and each of the three sorts is
-  the mutation target its property is validated against. Small macros reduce
-  formatting boilerplate when writing optional key-value pairs or flags,
+  [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) publishes.
+  Actions and default targets are sorted the same way, and each of the three
+  sorts is the mutation target its property is validated against. Small macros
+  reduce formatting boilerplate when writing optional key-value pairs or flags,
   keeping the generator easy to scan.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.

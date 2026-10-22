@@ -85,7 +85,7 @@ Netsuke accepts small bounded Kani harnesses for roadmap item `4.2.1`.
 - The larger-N graph property was handed off to Proptest roadmap item `4.3.1`.
   **Discharged 2026-10-20:** roadmap 4.3.1 delivers the larger-N properties
   under the emission-determinism contract
-  ([ADR-030](adr-030-ninja-emission-determinism-contract.md)), which states
+  ([ADR-030](adr-0030-ninja-emission-determinism-contract.md)), which states
   the domains and preconditions the bounded `4.2.1` harnesses cannot cover. The
   two layers are complementary rather than duplicative: Kani is exhaustive
   within its bound and cannot see the nondeterminism, and Proptest samples but

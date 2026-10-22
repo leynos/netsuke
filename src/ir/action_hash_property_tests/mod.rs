@@ -35,7 +35,7 @@
 
 mod generator;
 
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::hasher::ActionHasher;
 use crate::ir::Action;
 use generator::{Arm, Field, action_case};
@@ -243,6 +243,7 @@ fn a_pool_difference_is_not_interned_away() {
     let base = Action {
         recipe: Recipe::Command {
             command: StringOrList::String("cc -c".to_owned()),
+            isolation: CommandIsolation::Shared,
         },
         description: None,
         depfile: None,
@@ -277,6 +278,7 @@ fn a_restat_difference_is_not_interned_away() {
     let base = Action {
         recipe: Recipe::Command {
             command: StringOrList::String("cc -c".to_owned()),
+            isolation: CommandIsolation::Shared,
         },
         description: None,
         depfile: None,

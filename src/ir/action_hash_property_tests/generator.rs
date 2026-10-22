@@ -13,7 +13,7 @@
 //! `ninja_gen::determinism::property_tests::defaults::generator`: generation
 //! here, properties and their evidence there.
 
-use crate::ast::{Recipe, StringOrList};
+use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::Action;
 use proptest::prelude::*;
 
@@ -139,6 +139,7 @@ fn other_recipe(recipe: &Recipe) -> Recipe {
         },
         Recipe::Rule { .. } => Recipe::Command {
             command: StringOrList::String("echo mutated".to_owned()),
+            isolation: CommandIsolation::Shared,
         },
     }
 }
@@ -216,9 +217,11 @@ fn recipe_strategy() -> impl Strategy<Value = Recipe> {
     prop_oneof![
         "[a-z ]{0,16}".prop_map(|command| Recipe::Command {
             command: StringOrList::String(command),
+            isolation: CommandIsolation::Shared,
         }),
         prop::collection::vec("[a-z ]{0,16}", 0..=3).prop_map(|items| Recipe::Command {
             command: StringOrList::List(items),
+            isolation: CommandIsolation::Shared,
         }),
         "[a-z ]{0,16}".prop_map(|script| Recipe::Script { script }),
         "[a-z-]{0,16}".prop_map(|rule| Recipe::Rule {

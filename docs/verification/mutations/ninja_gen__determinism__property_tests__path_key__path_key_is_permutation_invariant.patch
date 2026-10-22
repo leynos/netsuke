@@ -1,12 +1,13 @@
-diff --git a/src/ninja_gen/mod.rs b/src/ninja_gen/mod.rs
---- a/src/ninja_gen/mod.rs
-+++ b/src/ninja_gen/mod.rs
-@@ -225,7 +225,6 @@ pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
+diff --git a/src/ninja_gen/rule_utils.rs b/src/ninja_gen/rule_utils.rs
+--- a/src/ninja_gen/rule_utils.rs
++++ b/src/ninja_gen/rule_utils.rs
+@@ -63,8 +63,7 @@ pub(crate) fn join(paths: &[Utf8PathBuf]) -> String {
+ 
  /// Generate a stable key for a list of paths.
  pub(crate) fn path_key(paths: &[Utf8PathBuf]) -> String {
--    let mut parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
+-    let mut parts: Vec<String> = paths.iter().map(|path| path.as_str().to_owned()).collect();
 -    parts.sort_unstable();
-+    let parts: Vec<String> = paths.iter().map(|p| p.as_str().to_owned()).collect();
++    let parts: Vec<String> = paths.iter().map(|path| path.as_str().to_owned()).collect();
      parts.join(&char::from(0).to_string())
  }
- /// Whether the graph contains an edge whose serial list needs dyndep gates.
+ 

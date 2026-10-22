@@ -32,7 +32,9 @@
 //! specification; the split is the file-size cap, not a boundary in the
 //! reasoning.
 
-use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars};
+use crate::ast::{
+    CommandIsolation, DependencyOrder, NetsukeManifest, Recipe, Rule, StringOrList, Target, Vars,
+};
 use crate::ir::OUTS_TOKEN;
 use blueprint::Blueprint;
 use proptest::prelude::*;
@@ -157,6 +159,7 @@ impl RulePlan {
             name: self.name.clone(),
             recipe: Recipe::Command {
                 command: StringOrList::String(self.command.clone()),
+                isolation: CommandIsolation::Shared,
             },
             description: None,
         }

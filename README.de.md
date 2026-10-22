@@ -172,7 +172,7 @@ fester Netsuke-Version erzeugt `netsuke generate` byte-identische Ausgabe,
 einschließlich aller Dyndep-Begleitdateien. Byte-Stabilität über
 Netsuke-Versionen, über Plattformen oder über Shell-Auswahlen hinweg wird
 **nicht** zugesichert. Der
-[Determinismus-Vertrag](docs/adr-030-ninja-emission-determinism-contract.md)
+[Determinismus-Vertrag](docs/adrs/adr-0030-ninja-emission-determinism-contract.md)
 nennt die Zusicherung, ihre Vorbedingungen und ihre Ausnahmen.
 
 Seit beta3 unterstützt Netsuke außerdem reine Abhängigkeits-Aggregate für
