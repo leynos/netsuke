@@ -69,6 +69,7 @@ updates:
           - "patch"
     directories:
       - "/"
+      - "/build_slice_fixture"
       - "/test_support"
     open-pull-requests-limit: 5
     labels:

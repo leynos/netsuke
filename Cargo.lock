@@ -1775,6 +1775,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "netsuke-build-slice-fixture"
+version = "0.0.0"
+dependencies = [
+ "camino",
+ "clap",
+ "ortho_config",
+ "serde",
+ "thiserror 1.0.69",
+ "tracing",
+]
+
+[[package]]
 name = "newt-hype"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

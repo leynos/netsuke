@@ -42,10 +42,18 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 /// is missing costs a false failure naming a real file, while an entry that
 /// should not be here can only hide a source. Do not remove it for failing the
 /// rationale its neighbours share.
-pub(super) const COMPILED_SOURCE_ROOTS: [&str; 7] = [
+///
+/// `build_slice_fixture` is a workspace member, so `cargo clippy --workspace`
+/// lints it exactly as it lints the library, and it compiles production
+/// sources through `#[path]`. Listing it is what keeps that boundary honest:
+/// an inner attribute in the fixture would silence the policy for a crate the
+/// gates compile, and the coverage assertion below would otherwise be the only
+/// thing standing between that and silence.
+pub(super) const COMPILED_SOURCE_ROOTS: [&str; 8] = [
     "src",
     "build_l10n_audit",
     "test_support/src",
+    "build_slice_fixture",
     "tests",
     "benches",
     "examples",

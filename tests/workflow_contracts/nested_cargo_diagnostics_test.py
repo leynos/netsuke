@@ -8,7 +8,6 @@ def test_json_cargo_preparations_render_compiler_diagnostics() -> None:
     sources = (
         REPO_ROOT / "tests" / "support" / "test_support_rlib.rs",
         REPO_ROOT / "tests" / "command_env_ui_tests.rs",
-        REPO_ROOT / "tests" / "build_module_slice_ui_tests.rs",
         REPO_ROOT / "tests" / "locale_stub_ui_tests.rs",
     )
     for source in sources:

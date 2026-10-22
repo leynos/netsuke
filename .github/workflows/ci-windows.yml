@@ -334,8 +334,14 @@ jobs:
           # the one build here not compiled with the parallel frontend. mold is
           # Linux-only, so its flag stays absent. Same assignment, and same
           # reason, as `Lint (Whitaker)` above.
+          #
+          # `--workspace` rather than `--bin netsuke`: the workspace has no
+          # `default-members`, so a package-scoped build never compiles
+          # `build_slice_fixture`, the member that compiles the production
+          # build-script module slice. The binary this step exists to smoke-test
+          # is still built, as `--workspace` selects every member including it.
           $env:RUSTFLAGS = "$env:RUSTFLAGS -Zthreads=8"
-          cargo build --locked --bin netsuke
+          cargo build --workspace --locked
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
