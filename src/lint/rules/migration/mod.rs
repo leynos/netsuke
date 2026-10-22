@@ -3,7 +3,7 @@
 //! A stale workaround is worse than no workaround: it was correct once, so it
 //! looks deliberate, and the manifest still compiles. Both rules here police
 //! the Ninja escaping boundary that
-//! `docs/adr-014-backend-text-escaping-seam.md` moved.
+//! `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md` moved.
 
 use crate::lint::document::Document;
 use crate::lint::registry::Registered;

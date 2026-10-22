@@ -5,7 +5,7 @@ name: CI (default features)
 # default feature set (`release.yml` runs `cargo build --locked --bin
 # netsuke`), and that set leaves out the `lint` feature, which carries
 # `netsuke check`, until v0.2.0; see
-# docs/adr-056-manifest-linting-under-netsuke-check.md. Every other lane
+# docs/adrs/adr-0056-manifest-linting-under-netsuke-check.md. Every other lane
 # builds `--all-features`, so without this one a release could ship code that
 # only compiles, or only stays warning-free, with every feature enabled.
 #
