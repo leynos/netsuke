@@ -99,13 +99,13 @@ Table: defects found in the repository's own example manifests
 
 Table: documented behaviour changes that leave a detectable stale workaround
 
-| Evidence                                                                                                                                                                                          | Source                                                                                          | Rule it justifies                              |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| "Existing manifests that wrote the former workaround `$$PATH` must change to `$PATH`; otherwise the shell receives `$$PATH`, whose first two dollars are its process identifier."                 | [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md)                                | `manual-ninja-escape`                          |
-| `$in` and `$out` are still substituted during lowering, but the users' guide documents only `{{ ins }}` and `{{ outs }}`, so a recipe that means the shell variable `$out` is silently rewritten. | `src/ir/cmd_interpolate/mod.rs`, [users' guide](users-guide.md#targets-inputs-and-dependencies) | `legacy-placeholder`                           |
-| "The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not currently a portable PowerShell abstraction."                                                                           | [users' guide](users-guide.md#rules-and-recipes)                                                | `bashism`                                      |
-| "Serial lists containing two or more dependencies require Ninja 1.10 or newer", so a serial list shorter than that is inert.                                                                      | [users' guide](users-guide.md#run-direct-dependencies-serially)                                 | `serial-order-without-deps`                    |
-| "`phony` targets are always considered out of date, while `always` targets are regenerated even if their inputs are unchanged."                                                                   | `src/ast/target.rs`                                                                             | `redundant-always`, `phony-dep-of-file-target` |
+| Evidence                                                                                                                                                                                                                     | Source                                                                                                      | Rule it justifies                              |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+| "Existing manifests that wrote the former workaround `$$PATH` must change to `$PATH`; otherwise the shell receives `$$PATH`, whose first two dollars are its process identifier."                                            | [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md)                                            | `manual-ninja-escape`                          |
+| Beta3 lowered `$in` and `$out` in `script:` recipes to the edge's paths; beta4 made them shell variables in both recipe kinds, so a script written for the old expansion now reads unset shell variables instead of failing. | `src/ir/cmd_interpolate/mod.rs`, [ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md) | `legacy-placeholder`                           |
+| "The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not currently a portable PowerShell abstraction."                                                                                                      | [users' guide](users-guide.md#rules-and-recipes)                                                            | `bashism`                                      |
+| "Serial lists containing two or more dependencies require Ninja 1.10 or newer", so a serial list shorter than that is inert.                                                                                                 | [users' guide](users-guide.md#run-direct-dependencies-serially)                                             | `serial-order-without-deps`                    |
+| "`phony` targets are always considered out of date, while `always` targets are regenerated even if their inputs are unchanged."                                                                                              | `src/ast/target.rs`                                                                                         | `redundant-always`, `phony-dep-of-file-target` |
 
 ## 2. Constraints
 
@@ -574,32 +574,32 @@ not exist. The summary below groups the first set by the concern it addresses.
 
 Table: the v0.2.0 rule set
 
-| Rule                           | Stage     | Category    | Default | Concern                                                                                  |
-| ------------------------------ | --------- | ----------- | ------- | ---------------------------------------------------------------------------------------- |
-| `manual-ninja-escape`          | document  | migration   | warning | Stale pre-v0.1.0 `$$` workaround now reaching the shell as a literal `$$`.               |
-| `legacy-placeholder`           | document  | migration   | warning | Undocumented `$in`/`$out` spelling that also captures a shell variable of the same name. |
-| `literal-recipe-path`          | document  | clarity     | warning | Recipe repeats a declared output or source path instead of `{{ outs }}`/`{{ ins }}`.     |
-| `command-chain-not-list`       | document  | clarity     | advice  | Scalar `command` chaining with `&&` where an ordered list is the canonical form.         |
-| `bashism`                      | document  | portability | warning | Construct that `/bin/sh -e` does not portably support.                                   |
-| `background-job`               | document  | determinism | warning | Recipe detaches a process, so completion no longer means the work finished.              |
-| `recursive-build-invocation`   | document  | determinism | warning | Recipe invokes `netsuke`, `make`, or `ninja`, defeating the single static graph.         |
-| `builtin-clean-action`         | document  | redundancy  | advice  | Handwritten `clean` action duplicating `netsuke clean`.                                  |
-| `serial-order-without-deps`    | document  | redundancy  | advice  | `dependency_order: serial` with fewer than two `deps`, which is inert.                   |
-| `redundant-always`             | document  | redundancy  | advice  | `always` on a target that is already phony.                                              |
-| `action-without-description`   | document  | clarity     | advice  | Action invisible to `netsuke help targets` discovery.                                    |
-| `rule-without-description`     | document  | clarity     | off     | House style: every rule carries Ninja progress text.                                     |
-| `unused-var`                   | document  | hygiene     | warning | Global `vars` entry no template references.                                              |
-| `unused-macro`                 | document  | hygiene     | warning | Declared macro never called.                                                             |
-| `unused-rule`                  | manifest  | hygiene     | warning | Declared rule no target or action references.                                            |
-| `duplicate-rule-recipe`        | manifest  | redundancy  | warning | Two rules with identical recipes that should be one rule.                                |
-| `redundant-dependency`         | manifest  | redundancy  | advice  | Same path declared under more than one dependency key.                                   |
-| `phony-dep-of-file-target`     | manifest  | caching     | warning | File target depends on an always-dirty phony target.                                     |
-| `directory-dep-not-order-only` | manifest  | caching     | warning | Directory-producing target used as a content dependency.                                 |
-| `undeclared-target-input`      | graph     | correctness | warning | Recipe consumes another target's output without declaring the edge.                      |
-| `unreachable-target`           | graph     | clarity     | off     | Target reachable from no default and no other target.                                    |
-| `unknown-suppression`          | directive | suppression | warning | Directive names a rule that does not exist.                                              |
-| `suppression-without-reason`   | directive | suppression | warning | Directive omits its `--` reason.                                                         |
-| `unused-suppression`           | directive | suppression | advice  | Directive suppressed nothing.                                                            |
+| Rule                           | Stage     | Category    | Default | Concern                                                                              |
+| ------------------------------ | --------- | ----------- | ------- | ------------------------------------------------------------------------------------ |
+| `manual-ninja-escape`          | document  | migration   | warning | Stale pre-v0.1.0 `$$` workaround now reaching the shell as a literal `$$`.           |
+| `legacy-placeholder`           | document  | migration   | warning | `script:` still relying on the `$in`/`$out` path substitution beta3 performed.       |
+| `literal-recipe-path`          | document  | clarity     | warning | Recipe repeats a declared output or source path instead of `{{ outs }}`/`{{ ins }}`. |
+| `command-chain-not-list`       | document  | clarity     | advice  | Scalar `command` chaining with `&&` where an ordered list is the canonical form.     |
+| `bashism`                      | document  | portability | warning | Construct that `/bin/sh -e` does not portably support.                               |
+| `background-job`               | document  | determinism | warning | Recipe detaches a process, so completion no longer means the work finished.          |
+| `recursive-build-invocation`   | document  | determinism | warning | Recipe invokes `netsuke`, `make`, or `ninja`, defeating the single static graph.     |
+| `builtin-clean-action`         | document  | redundancy  | advice  | Handwritten `clean` action duplicating `netsuke clean`.                              |
+| `serial-order-without-deps`    | document  | redundancy  | advice  | `dependency_order: serial` with fewer than two `deps`, which is inert.               |
+| `redundant-always`             | document  | redundancy  | advice  | `always` on a target that is already phony.                                          |
+| `action-without-description`   | document  | clarity     | advice  | Action invisible to `netsuke help targets` discovery.                                |
+| `rule-without-description`     | document  | clarity     | off     | House style: every rule carries Ninja progress text.                                 |
+| `unused-var`                   | document  | hygiene     | warning | Global `vars` entry no template references.                                          |
+| `unused-macro`                 | document  | hygiene     | warning | Declared macro never called.                                                         |
+| `unused-rule`                  | manifest  | hygiene     | warning | Declared rule no target or action references.                                        |
+| `duplicate-rule-recipe`        | manifest  | redundancy  | warning | Two rules with identical recipes that should be one rule.                            |
+| `redundant-dependency`         | manifest  | redundancy  | advice  | Same path declared under more than one dependency key.                               |
+| `phony-dep-of-file-target`     | manifest  | caching     | warning | File target depends on an always-dirty phony target.                                 |
+| `directory-dep-not-order-only` | manifest  | caching     | warning | Directory-producing target used as a content dependency.                             |
+| `undeclared-target-input`      | graph     | correctness | warning | Recipe consumes another target's output without declaring the edge.                  |
+| `unreachable-target`           | graph     | clarity     | off     | Target reachable from no default and no other target.                                |
+| `unknown-suppression`          | directive | suppression | warning | Directive names a rule that does not exist.                                          |
+| `suppression-without-reason`   | directive | suppression | warning | Directive omits its `--` reason.                                                     |
+| `unused-suppression`           | directive | suppression | advice  | Directive suppressed nothing.                                                        |
 
 ## 11. Testing strategy
 

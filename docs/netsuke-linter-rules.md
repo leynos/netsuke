@@ -62,32 +62,32 @@ and [unused-suppression](#unused-suppression).
 Table: every rule `netsuke check` ships, with its category, stage, and default
 severity
 
-| Rule                                                            | Category    | Stage     | Default | Detects                                                           |
-| --------------------------------------------------------------- | ----------- | --------- | ------- | ----------------------------------------------------------------- |
-| [`undeclared-target-input`](#undeclared-target-input)           | correctness | graph     | warning | recipe names another target's output without depending on it      |
-| [`directory-dep-not-order-only`](#directory-dep-not-order-only) | caching     | manifest  | warning | directory-creating target used as a content dependency            |
-| [`phony-dep-of-file-target`](#phony-dep-of-file-target)         | caching     | manifest  | warning | file target depends on a phony target through `sources` or `deps` |
-| [`bashism`](#bashism)                                           | portability | document  | warning | recipe uses a construct `/bin/sh` does not promise                |
-| [`background-job`](#background-job)                             | determinism | document  | warning | recipe detaches a process with a trailing `&`                     |
-| [`recursive-build-invocation`](#recursive-build-invocation)     | determinism | document  | warning | recipe invokes a build tool                                       |
-| [`builtin-clean-action`](#builtin-clean-action)                 | redundancy  | document  | advice  | action named `clean` duplicates the built-in `netsuke clean`      |
-| [`duplicate-rule-recipe`](#duplicate-rule-recipe)               | redundancy  | manifest  | warning | two rules declare identical recipes                               |
-| [`redundant-always`](#redundant-always)                         | redundancy  | document  | advice  | `always` declared on a target that is already phony               |
-| [`redundant-dependency`](#redundant-dependency)                 | redundancy  | manifest  | advice  | path declared under more than one dependency key                  |
-| [`serial-order-without-deps`](#serial-order-without-deps)       | redundancy  | document  | advice  | `dependency_order: serial` declared with fewer than two `deps`    |
-| [`unused-macro`](#unused-macro)                                 | hygiene     | document  | warning | declared macro that nothing calls                                 |
-| [`unused-rule`](#unused-rule)                                   | hygiene     | manifest  | warning | declared rule that no target or action references                 |
-| [`unused-var`](#unused-var)                                     | hygiene     | document  | warning | global `vars` entry that no template references                   |
-| [`action-without-description`](#action-without-description)     | clarity     | document  | advice  | action declares no `description`                                  |
-| [`command-chain-not-list`](#command-chain-not-list)             | clarity     | document  | advice  | scalar `command` chains steps with `&&`                           |
-| [`literal-recipe-path`](#literal-recipe-path)                   | clarity     | document  | warning | recipe repeats a path the target already declares                 |
-| [`rule-without-description`](#rule-without-description)         | clarity     | document  | off     | rule declares no `description`                                    |
-| [`unreachable-target`](#unreachable-target)                     | clarity     | graph     | off     | target reachable from no default and no other target              |
-| [`legacy-placeholder`](#legacy-placeholder)                     | migration   | document  | warning | recipe uses the undocumented `$in` or `$out` placeholder          |
-| [`manual-ninja-escape`](#manual-ninja-escape)                   | migration   | document  | warning | recipe doubles a dollar to escape it for Ninja                    |
-| [`suppression-without-reason`](#suppression-without-reason)     | suppression | directive | warning | lint directive states no reason                                   |
-| [`unknown-suppression`](#unknown-suppression)                   | suppression | directive | warning | lint directive names a rule that does not exist                   |
-| [`unused-suppression`](#unused-suppression)                     | suppression | directive | advice  | lint directive suppressed no finding                              |
+| Rule                                                            | Category    | Stage     | Default | Detects                                                                     |
+| --------------------------------------------------------------- | ----------- | --------- | ------- | --------------------------------------------------------------------------- |
+| [`undeclared-target-input`](#undeclared-target-input)           | correctness | graph     | warning | recipe names another target's output without depending on it                |
+| [`directory-dep-not-order-only`](#directory-dep-not-order-only) | caching     | manifest  | warning | directory-creating target used as a content dependency                      |
+| [`phony-dep-of-file-target`](#phony-dep-of-file-target)         | caching     | manifest  | warning | file target depends on a phony target through `sources` or `deps`           |
+| [`bashism`](#bashism)                                           | portability | document  | warning | recipe uses a construct `/bin/sh` does not promise                          |
+| [`background-job`](#background-job)                             | determinism | document  | warning | recipe detaches a process with a trailing `&`                               |
+| [`recursive-build-invocation`](#recursive-build-invocation)     | determinism | document  | warning | recipe invokes a build tool                                                 |
+| [`builtin-clean-action`](#builtin-clean-action)                 | redundancy  | document  | advice  | action named `clean` duplicates the built-in `netsuke clean`                |
+| [`duplicate-rule-recipe`](#duplicate-rule-recipe)               | redundancy  | manifest  | warning | two rules declare identical recipes                                         |
+| [`redundant-always`](#redundant-always)                         | redundancy  | document  | advice  | `always` declared on a target that is already phony                         |
+| [`redundant-dependency`](#redundant-dependency)                 | redundancy  | manifest  | advice  | path declared under more than one dependency key                            |
+| [`serial-order-without-deps`](#serial-order-without-deps)       | redundancy  | document  | advice  | `dependency_order: serial` declared with fewer than two `deps`              |
+| [`unused-macro`](#unused-macro)                                 | hygiene     | document  | warning | declared macro that nothing calls                                           |
+| [`unused-rule`](#unused-rule)                                   | hygiene     | manifest  | warning | declared rule that no target or action references                           |
+| [`unused-var`](#unused-var)                                     | hygiene     | document  | warning | global `vars` entry that no template references                             |
+| [`action-without-description`](#action-without-description)     | clarity     | document  | advice  | action declares no `description`                                            |
+| [`command-chain-not-list`](#command-chain-not-list)             | clarity     | document  | advice  | scalar `command` chains steps with `&&`                                     |
+| [`literal-recipe-path`](#literal-recipe-path)                   | clarity     | document  | warning | recipe repeats a path the target already declares                           |
+| [`rule-without-description`](#rule-without-description)         | clarity     | document  | off     | rule declares no `description`                                              |
+| [`unreachable-target`](#unreachable-target)                     | clarity     | graph     | off     | target reachable from no default and no other target                        |
+| [`legacy-placeholder`](#legacy-placeholder)                     | migration   | document  | warning | script recipe uses `$in` or `$out` where the beta3 substitution has stopped |
+| [`manual-ninja-escape`](#manual-ninja-escape)                   | migration   | document  | warning | recipe doubles a dollar to escape it for Ninja                              |
+| [`suppression-without-reason`](#suppression-without-reason)     | suppression | directive | warning | lint directive states no reason                                             |
+| [`unknown-suppression`](#unknown-suppression)                   | suppression | directive | warning | lint directive names a rule that does not exist                             |
+| [`unused-suppression`](#unused-suppression)                     | suppression | directive | advice  | lint directive suppressed no finding                                        |
 
 ## Correctness
 
@@ -790,12 +790,14 @@ A workaround for behaviour that a released version has since changed.
 Stage `document`, default severity `warning`, diagnostic code
 `netsuke::lint::legacy_placeholder`.
 
-Recipe uses the undocumented `$in` or `$out` placeholder.
+Script recipe uses `$in` or `$out` where the beta3 substitution has stopped.
 
-Netsuke substitutes `$in` and `$out` while lowering a recipe, but the users'
-guide documents only `{{ ins }}` and `{{ outs }}`. A recipe that meant the
-shell variable of the same name is silently rewritten, and a reader cannot tell
-the two intentions apart.
+Published beta3 substituted `$in` and `$out` in `script:` recipes with the
+edge's paths; beta4 keeps them as shell variables in both recipe kinds, as
+ADR-0034 records. A script written for the old expansion now reads shell
+variables that are usually unset, so it copies nothing instead of failing, while
+`{{ ins }}` and `{{ outs }}` are the documented markers. In a `command:` recipe
+`$in` and `$out` were shell variables all along and are not a migration site.
 
 Reported:
 
@@ -803,7 +805,8 @@ Reported:
 targets:
   - name: out.txt
     sources: in.txt
-    command: "cp $in $out"
+    script: |
+      cp $in $out
 ```
 
 Fixed:
@@ -812,7 +815,8 @@ Fixed:
 targets:
   - name: out.txt
     sources: in.txt
-    command: "cp {{ ins }} {{ outs }}"
+    script: |
+      cp {{ ins }} {{ outs }}
 ```
 
 **Remediation:** Write `{{ ins }}` or `{{ outs }}` for Netsuke's paths, and

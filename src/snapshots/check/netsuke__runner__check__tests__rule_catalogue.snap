@@ -226,8 +226,8 @@ expression: rendered
         "stage": "document",
         "default_severity": "warning",
         "code": "netsuke::lint::legacy_placeholder",
-        "summary": "recipe uses the undocumented `$in` or `$out` placeholder",
-        "rationale": "Netsuke substitutes `$in` and `$out` while lowering a recipe, but the users' guide documents only `{{ ins }}` and `{{ outs }}`. A recipe that meant the shell variable of the same name is silently rewritten, and a reader cannot tell the two intentions apart.",
+        "summary": "script recipe uses `$in` or `$out` where the beta3 substitution has stopped",
+        "rationale": "Published beta3 substituted `$in` and `$out` in `script:` recipes with the edge's paths; beta4 keeps them as shell variables in both recipe kinds, as ADR-0034 records. A script written for the old expansion now reads shell variables that are usually unset, so it copies nothing instead of failing, while `{{ ins }}` and `{{ outs }}` are the documented markers. In a `command:` recipe `$in` and `$out` were shell variables all along and are not a migration site.",
         "remediation": "Write `{{ ins }}` or `{{ outs }}` for Netsuke's paths, and rename any shell variable that collides.",
         "url": "https://github.com/leynos/netsuke/blob/main/docs/netsuke-linter-rules.md#legacy-placeholder"
       },

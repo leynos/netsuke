@@ -13,8 +13,8 @@ roadmap step 31.2; rule identifiers never move.
 
 Roadmap phase 31 owns the work that turns the prototype into a supported
 feature. The rule set, the default severities, and everything in the
-[manifest linter design](netsuke-linter-design.md) except the identifiers are
-expected to change under it.
+[manifest linter design](../netsuke-linter-design.md) except the identifiers
+are expected to change under it.
 
 ## Date
 
@@ -27,7 +27,7 @@ band between "parses and lowers" and "provably wrong" contains the mistakes
 that cost the most: recipes that defeat change detection, dependency shapes
 that race under parallel builds, shell constructs that fail on a host whose
 `/bin/sh` is not `bash`, and stale workarounds such as the pre-v0.1.0 `$$PATH`
-spelling that [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md)
+spelling that [ADR-014](adr-0014-use-a-typed-ninja-text-escaping-seam.md)
 turned from a fix into a bug.
 
 Adding an analysis for that band forces four decisions that outlive the
@@ -47,7 +47,7 @@ implementation, and that a reader of the code alone would have to reconstruct:
 
 ## Decision drivers
 
-- [ADR-003](adrs/adr-0046-agent-consistent-human-first-cli.md) removes legacy
+- [ADR-003](adr-0046-agent-consistent-human-first-cli.md) removes legacy
   spellings rather than aliasing them, makes `--json` the only structured
   result mode, and requires that agents and humans share one vocabulary.
 - Roadmap task 3.15.1 already lists `check` in the canonical command vocabulary
@@ -222,9 +222,9 @@ off-by-default Cargo feature named `lint` (`lint = ["dep:granit-parser"]`).
 Release binaries build the default feature set, so v0.1.0 ships without the
 linter; removing the gate is planned for v0.2.0, at which point `check` becomes
 standard. The gate exists so the linting work already described by this ADR and
-the [manifest linter design](netsuke-linter-design.md) can be merged and kept
-current against a fast-moving `main` without shipping it in the v0.1.0 release
-build.
+the [manifest linter design](../netsuke-linter-design.md) can be merged and
+kept current against a fast-moving `main` without shipping it in the v0.1.0
+release build.
 
 Gated behind `#[cfg(feature = "lint")]`: `crate::lint`; the CLI's
 `Commands::Check`, `CheckArgs`, `DEFAULT_FAIL_ON`, `DEFAULT_FINDING_LIMIT`,
@@ -244,7 +244,7 @@ lane builds, lints, and tests the default feature set. An absence test asserts
 that without the `lint` feature, `check` is an unknown subcommand and does not
 appear in `--help`, which is what makes "not in the release build" a tested
 property rather than an assertion. See the "Feature-gated code" section of the
-[developers' guide](developers-guide.md) for the mechanics contributors need
+[developers' guide](../developers-guide.md) for the mechanics contributors need
 when touching gated code.
 
 Two alternatives were rejected. Holding the branch unmerged until v0.2.0 would
@@ -266,4 +266,4 @@ suppression, documentation, and editor integration to refer to the same thing,
 which is the property that lets all four evolve independently.
 
 The full rule model, stage hooks, suppression grammar, and output schemas are
-specified in the [manifest linter design](netsuke-linter-design.md).
+specified in the [manifest linter design](../netsuke-linter-design.md).

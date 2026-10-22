@@ -10,7 +10,7 @@ use crate::lint::registry::Registered;
 use crate::lint::rule::{Category, DocumentRule, FindingSink, RuleMeta, Stage};
 use crate::lint::severity::{DefaultSeverity, Severity};
 
-use super::recipes::{self, RecipePart};
+use super::recipes::{self, RecipeKind, RecipePart};
 use super::shellscan;
 
 /// Register this module's rules.
@@ -81,7 +81,8 @@ fn opens_variable(text: &str, start: usize) -> bool {
         .is_some_and(|byte| byte.is_ascii_alphabetic() || matches!(byte, b'_' | b'{'))
 }
 
-/// Detects the undocumented `$in` and `$out` placeholder spellings.
+/// Detects a `script:` that still relies on the retired `$in` and `$out`
+/// path substitution.
 pub struct LegacyPlaceholder;
 
 /// Metadata for [`LegacyPlaceholder`].
@@ -90,12 +91,15 @@ static LEGACY_PLACEHOLDER: RuleMeta = RuleMeta {
     category: Category::Migration,
     stage: Stage::Document,
     default_severity: DefaultSeverity::On(Severity::Warning),
-    summary: "recipe uses the undocumented `$in` or `$out` placeholder",
+    summary: "script recipe uses `$in` or `$out` where the beta3 substitution has stopped",
     rationale: concat!(
-        "Netsuke substitutes `$in` and `$out` while lowering a recipe, but the ",
-        "users' guide documents only `{{ ins }}` and `{{ outs }}`. A recipe that ",
-        "meant the shell variable of the same name is silently rewritten, and a ",
-        "reader cannot tell the two intentions apart."
+        "Published beta3 substituted `$in` and `$out` in `script:` recipes with ",
+        "the edge's paths; beta4 keeps them as shell variables in both recipe ",
+        "kinds, as ADR-0034 records. A script written for the old expansion now ",
+        "reads shell variables that are usually unset, so it copies nothing ",
+        "instead of failing, while `{{ ins }}` and `{{ outs }}` are the ",
+        "documented markers. In a `command:` recipe `$in` and `$out` were shell ",
+        "variables all along and are not a migration site."
     ),
     remediation: "Write `{{ ins }}` or `{{ outs }}` for Netsuke's paths, and rename any shell variable that collides.",
 };
@@ -106,7 +110,14 @@ impl DocumentRule for LegacyPlaceholder {
     }
 
     fn check(&self, doc: &Document, sink: &mut FindingSink<'_>) {
-        for part in recipes::parts(doc) {
+        // Only `script:` ever resolved these names as paths, so a `command:`
+        // that writes `$in` is ordinary shell text and not a stale workaround.
+        // Reporting both kinds would bury the real migration site among
+        // findings the user cannot act on.
+        for part in recipes::parts(doc)
+            .into_iter()
+            .filter(|part| part.kind == RecipeKind::Script)
+        {
             for (token, replacement) in PLACEHOLDERS {
                 report_placeholders(&part, token, replacement, sink);
             }
