@@ -28,7 +28,12 @@ node whose out-edge vector is being iterated and has no spare capacity, the
 append reallocates the vector and the iteration reads freed memory.
 
 Reachability was measured rather than reasoned about, on Ninja 1.11.1 and on
-the debug build of 1.11.1. Three conditions are needed together:
+the debug build of 1.11.1. The measurement used the *emitted* bundle for the
+crashing shape, rewritten into the pre-relay form, not a hand-built model of
+it; the same bundle as the emitter now produces is accepted. Which targets
+Ninja is asked about is itself a variable: the pre-relay bundle dies when the
+invocation names the graph's full explicit-output set and survives when asked
+about one output alone. Three conditions are needed together:
 
 1. a node revealed by a later sidecar, not the first one;
 2. an **order-only** edge naming that node, loaded earlier in the file — an

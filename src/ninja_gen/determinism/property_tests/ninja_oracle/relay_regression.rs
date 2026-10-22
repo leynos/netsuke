@@ -17,7 +17,16 @@
 //! **order-only** edge naming the revealed node that was loaded earlier in the
 //! file; an ordinary edge to the same node does not trigger it. On Ninja
 //! 1.11.1 this graph segfaults when the sidecar reveals the real dependency and
-//! is accepted when it reveals the relay.
+//! is accepted when it reveals the relay. Both halves were measured on the
+//! *emitted* bundle, not on a hand-built model: rewriting the emitter's own
+//! output into the pre-relay shape dies of signal 11.
+//!
+//! The target list decides whether the crash is reachable, which is why
+//! [`super::workspace::BundleWorkspace`] names every explicit output rather
+//! than a single one. Asking the same pre-relay bundle about `out/0008` alone
+//! exits 0; asking about the full explicit-output set dies. A narrower target
+//! selection here would therefore leave this regression green while proving
+//! nothing, so the breadth is part of the measurement rather than tidiness.
 //!
 //! # What this test can and cannot separate
 //!
