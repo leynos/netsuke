@@ -384,6 +384,18 @@ the conflict in `Decision log` before proceeding.
   review that requested changes is not an approval, so the merge obligation is
   unchanged until the next review clears and the merge lands.
 
+  2026-10-22, equilibrium. CodeRabbit answered each inline reply separately on
+  `c72d61892` and reported the fix verified in both, closing the first with "✅
+  Review thread resolved". The review's substance is therefore discharged.
+  Hosted CI on `73338d3c7` reached a terminal state with **21 checks: 17
+  success, 4 skipped by design, 0 failures**, and `mergeable_state` moved
+  `blocked` → `unstable` → `clean` as the required checks completed. The four
+  required checks named by the `main-required-checks` ruleset (`build-test`,
+  `kani-smoke`, `netsukefile`, `release / metadata`) all pass. That ruleset
+  requires status checks only and no approving review, which is why the earlier
+  `CHANGES_REQUESTED` never blocked the merge mechanically — worth recording,
+  because "blocked" here meant pending required checks, not a withheld approval.
+
 ## Surprises & discoveries
 
 - Observation: a byte-for-byte import makes every relative link in the source
