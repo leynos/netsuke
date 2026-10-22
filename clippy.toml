@@ -1,5 +1,31 @@
-# Align with CodeScene’s ceiling
-cognitive-complexity-threshold = 9     # default is 25
+# Clippy measures this after macro expansion, so it counts branching that a
+# macro generated and the author never wrote. The trigger here is feature
+# unification: rstest-bdd 0.6.0 declares `tracing` non-optionally with
+# `features = ["log"]`, and because it is a dev-dependency Cargo unifies that
+# feature onto the library's own `tracing` node whenever the test graph is
+# built. Under the `log` bridge every `tracing` macro expands into extra
+# branches.
+#
+# The ceiling is raised rather than the source restructured around a metric.
+# Hoisting an `info!` into a helper does not remove the generated branching; it
+# only moves it behind a call, so the metric stops seeing a cost that is still
+# present.
+#
+# 32 is measured, not guessed. Demoting this threshold to 0 and linting the
+# library with `--all-features` reports 2174 functions across `src/`; the
+# largest is 31 (`fetch_inner` in `src/stdlib/network/mod.rs`). Linting the
+# same library with the bridge off reports the same 2174 functions with a
+# maximum of 8, and exactly one function anywhere above 7. The 23-unit gap on
+# `fetch_inner` is entirely generated: it has two source branches and four
+# inline `debug!` calls.
+#
+# Set above Clippy's default of 25 so the metric cannot fire on expansion
+# noise while still bounding control flow written by hand: the least a
+# bridge-inflated function can measure is its own floor, and the largest floor
+# in `src/` is 8. Lower this back toward CodeScene's ceiling of 9 once a
+# macro-aware rule lands; see
+# https://github.com/leynos/whitaker/issues/504.
+cognitive-complexity-threshold = 32    # default is 25
 too-many-arguments-threshold = 4       # default is 7
 too-many-lines-threshold = 70          # default is 100
 excessive-nesting-threshold = 4        # default is off

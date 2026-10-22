@@ -1977,6 +1977,37 @@ The recipe interpolation terms have distinct roles:
 Do not run an untrusted `Netsukefile`. Prefer explicit inputs, avoid embedding
 secrets in commands or URLs, and pin dependencies used by recipes.
 
+## Compatibility links for the imported `rstest-bdd` guides
+
+Netsuke imports two documents from the upstream `leynos/rstest-bdd` repository
+byte-for-byte, and keeps them unedited so their recorded digests still prove
+which upstream revision each one holds:
+[`rstest-bdd-users-guide.md`](rstest-bdd-users-guide.md) and
+[`rstest-bdd-v0-6-0-migration-guide.md`](rstest-bdd-v0-6-0-migration-guide.md).
+
+Those documents refer to each other and to upstream design records by relative
+path. Because the imported text cannot be rewritten, the headings below exist
+only to give the surviving upstream anchors a local target. They are
+compatibility shims, not Netsuke documentation; the linked sections in the
+imported guide are the content.
+
+### Stateful GPUI scenarios with durable handles
+
+The thread-local scenario-state playbook for `rstest-bdd` 0.6.x, including the
+`StepContext::borrow_mut` constraint it works around, is in the imported
+reference at
+[Stateful GPUI scenarios with durable handles](rstest-bdd-users-guide.md#stateful-gpui-scenarios-with-durable-handles).
+
+### Published gpui 0.2.2 stateful step variants
+
+The `gpui` 0.2.2 step variants that replace the vendored call sites are in the
+imported reference at
+[Published gpui 0.2.2 stateful step variants](rstest-bdd-users-guide.md#published-gpui-022-stateful-step-variants).
+
+The complete mapping — renamed filenames, and the upstream files Netsuke does
+not carry — is in
+[`rstest-bdd-link-compatibility.md`](rstest-bdd-link-compatibility.md).
+
 ## Explore complete examples
 
 The repository contains complete manifests for several domains:
