@@ -48,16 +48,28 @@ fn dependency_only_graph(dependencies: &[String], order: DependencyOrder) -> Bui
     graph
 }
 
-/// Extract dependencies from dyndep sidecars in their staged order.
-fn staged_dependencies(bundle: &GeneratedNinja) -> Vec<String> {
+/// Resolve each sidecar to the real dependency it reaches, in staged order.
+///
+/// A sidecar names a relay phony rather than the dependency itself, so the
+/// dependency is read from the relay's own build line. See
+/// [`super::super::dyndep`]'s module documentation for why the indirection
+/// exists; a sidecar whose relay line is missing resolves to `None` rather than
+/// to an arbitrary name.
+fn staged_dependencies(bundle: &GeneratedNinja) -> Vec<Option<String>> {
     bundle
         .dyndep_files()
         .iter()
-        .filter_map(|sidecar| {
-            sidecar.content().lines().find_map(|line| {
-                line.split_once(" | ")
-                    .map(|(_, dependency)| dependency.into())
-            })
+        .map(|sidecar| {
+            let relay = sidecar
+                .content()
+                .lines()
+                .find_map(|line| line.split_once(" | ").map(|(_, path)| path.trim()))?;
+            let prefix = format!("build {relay}: phony | ");
+            bundle
+                .build_file()
+                .lines()
+                .find_map(|line| line.strip_prefix(prefix.as_str()))
+                .map(str::to_owned)
         })
         .collect()
 }
@@ -92,7 +104,8 @@ proptest! {
             prop_assert!(serial.dyndep_files().is_empty());
         } else {
             prop_assert!(serial.build_file().contains("build all: phony | .netsuke/serial/"));
-            prop_assert_eq!(staged_dependencies(&serial), dependencies);
+            let expected = dependencies.iter().cloned().map(Some).collect::<Vec<_>>();
+            prop_assert_eq!(staged_dependencies(&serial), expected);
         }
     }
 }

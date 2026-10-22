@@ -303,6 +303,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0051](adrs/adr-0051-compile-the-build-script-module-slice-in-the-workspace-graph.md):
   Compiling the build-script module slice in the Cargo workspace graph rather
   than inside a timed test body.
+- [ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md):
+  Revealing a relay phony per staged serial dependency, to keep emitted bundles
+  out of the Ninja out-edge reallocation crash.
 
 ## Proposals
 

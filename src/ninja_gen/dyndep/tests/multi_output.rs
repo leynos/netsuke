@@ -1,6 +1,6 @@
 //! Regression coverage for serial staging of a multi-output canonical edge.
 
-use super::{graph_with_edge, serial_edge};
+use super::{graph_with_edge, is_gate, is_relay, serial_edge};
 use crate::ninja_gen::dyndep::generate_bundle;
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
@@ -29,10 +29,17 @@ fn multi_output_serial_edge_renders_one_statement_and_one_gate_set() -> Result<(
     );
     ensure!(
         file.lines()
-            .filter(|line| line.starts_with("build .netsuke/serial/"))
+            .filter(|line| line.starts_with("build .netsuke/serial/") && is_gate(line))
             .count()
             == 3,
         "one gate per dependency, not one gate set per output alias: {file}"
+    );
+    ensure!(
+        file.lines()
+            .filter(|line| line.starts_with("build .netsuke/serial/") && is_relay(line))
+            .count()
+            == 3,
+        "one relay per dependency, not one relay set per output alias: {file}"
     );
     ensure!(
         bundle.dyndep_files().len() == 3,
