@@ -85,9 +85,9 @@ envelope contract is unchanged and a consumer parses one representation.
 
 The [manifest linter design](netsuke-linter-design.md) specifies the rule model
 and the output schemas, and
-[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records why linting
-lives under `check` rather than under a new noun. The subcommand exists only in
-builds with the `lint` Cargo feature enabled until v0.2.0.
+[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records why
+linting lives under `check` rather than under a new noun. The subcommand exists
+only in builds with the `lint` Cargo feature enabled until v0.2.0.
 
 ### Discover manifest operations
 

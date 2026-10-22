@@ -3483,9 +3483,10 @@ is a proposal rather than a contract.
 
 This step answers how far the linter's text can move into the localization
 catalogues without letting the emitted text and the rule reference drift apart,
-which is the risk [ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md)
-cited when it deferred the work. It is sequenced after step 31.1 so the prose
-being translated is prose the rules have earned.
+which is the risk
+[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) cited when it
+deferred the work. It is sequenced after step 31.1 so the prose being
+translated is prose the rules have earned.
 
 Rule identifiers stay untranslated. A rule name, its category name, its
 severity name, and its diagnostic code are values a user types into a

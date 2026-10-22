@@ -1038,10 +1038,10 @@ concerns.
 `netsuke check` and the whole `crate::lint` module compile only under the
 `lint` Cargo feature (`lint = ["dep:granit-parser"]`), which is off by default.
 The "Release gating" section of
-[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records why: release
-binaries build the default feature set, so v0.1.0 ships without the linter, and
-removing the gate is planned for v0.2.0. Treat it as temporary scaffolding, not
-a permanent configuration knob.
+[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records why:
+release binaries build the default feature set, so v0.1.0 ships without the
+linter, and removing the gate is planned for v0.2.0. Treat it as temporary
+scaffolding, not a permanent configuration knob.
 
 Run the usual gates against `--all-features` as before. When a change touches
 gated code, also run `make lint-default-features` and

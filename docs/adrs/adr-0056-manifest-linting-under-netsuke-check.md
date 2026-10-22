@@ -27,8 +27,8 @@ band between "parses and lowers" and "provably wrong" contains the mistakes
 that cost the most: recipes that defeat change detection, dependency shapes
 that race under parallel builds, shell constructs that fail on a host whose
 `/bin/sh` is not `bash`, and stale workarounds such as the pre-v0.1.0 `$$PATH`
-spelling that [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md) turned from a
-fix into a bug.
+spelling that [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md)
+turned from a fix into a bug.
 
 Adding an analysis for that band forces four decisions that outlive the
 implementation, and that a reader of the code alone would have to reconstruct:

@@ -18,12 +18,15 @@
   operators wiring `netsuke check` into `make`, continuous integration (CI),
   editors, and agents.
 - **Documents that take precedence:**
-  - [ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) owns the command
+  - [ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) owns the
+    command
     placement, the findings-as-data output contract, and the sequencing that
     keeps rule prose in the registry for the prototype period.
-  - [ADR-003](adrs/adr-0046-agent-consistent-human-first-cli.md) owns the command-line
+  - [ADR-003](adrs/adr-0046-agent-consistent-human-first-cli.md) owns the
+    command-line
     interface (CLI) doctrine this design conforms to.
-  - [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md) owns the Ninja escaping
+  - [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md) owns the
+    Ninja escaping
     boundary that the migration rules police.
   - [users' guide](users-guide.md) is the source of truth for manifest syntax;
     this document never restates it normatively.
@@ -98,7 +101,7 @@ Table: documented behaviour changes that leave a detectable stale workaround
 
 | Evidence                                                                                                                                                                                          | Source                                                                                          | Rule it justifies                              |
 | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| "Existing manifests that wrote the former workaround `$$PATH` must change to `$PATH`; otherwise the shell receives `$$PATH`, whose first two dollars are its process identifier."                 | [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md)                                                | `manual-ninja-escape`                          |
+| "Existing manifests that wrote the former workaround `$$PATH` must change to `$PATH`; otherwise the shell receives `$$PATH`, whose first two dollars are its process identifier."                 | [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md)                                | `manual-ninja-escape`                          |
 | `$in` and `$out` are still substituted during lowering, but the users' guide documents only `{{ ins }}` and `{{ outs }}`, so a recipe that means the shell variable `$out` is silently rewritten. | `src/ir/cmd_interpolate/mod.rs`, [users' guide](users-guide.md#targets-inputs-and-dependencies) | `legacy-placeholder`                           |
 | "The v0.1.0-beta2 `script` implementation invokes `/bin/sh -e`; it is not currently a portable PowerShell abstraction."                                                                           | [users' guide](users-guide.md#rules-and-recipes)                                                | `bashism`                                      |
 | "Serial lists containing two or more dependencies require Ninja 1.10 or newer", so a serial list shorter than that is inert.                                                                      | [users' guide](users-guide.md#run-direct-dependencies-serially)                                 | `serial-order-without-deps`                    |
@@ -642,8 +645,8 @@ catalogues under roadmap step 31.2, keyed by the rule's stable name; rule
 identifiers never move, because they are values a user types and a machine
 matches. The command's framing text — help, summary, threshold message, and
 errors — is already localized.
-[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records why the
-prose migration waits for the rule set to settle.
+[ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md) records why
+the prose migration waits for the rule set to settle.
 
 **The rule set will grow faster than the engine.** The registry is a static
 table and adding a rule touches the table, one category module, the rule
