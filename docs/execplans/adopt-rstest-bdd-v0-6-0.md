@@ -396,6 +396,22 @@ the conflict in `Decision log` before proceeding.
   `CHANGES_REQUESTED` never blocked the merge mechanically — worth recording,
   because "blocked" here meant pending required checks, not a withheld approval.
 
+  2026-10-22, resumed review. The "Review paused" status was CodeRabbit's own
+  auto-pause after successive commits, not a rate limit: its notice named
+  `6c7567950` as the last inspected commit and offered `@coderabbitai resume`.
+  A resume was queued through `comenq` (entry `b956499e`), posted, and
+  CodeRabbit ran a fresh review of `ec4de9192` rather than of the stale head.
+  That review returned `CHANGES_REQUESTED` with one inline finding at
+  `docs/contents.md:362`: describing the migration-guide compatibility path as
+  holding "no content of its own" is inaccurate, because the file supplies the
+  `#migrate-a-stateful-gpui-test` anchor and forwards the reader. The finding
+  is valid. It was fixed in both places that carried the claim — the contents
+  entry and the same description in this plan — rather than only at the cited
+  line, since the plan repeated the error verbatim. The page's own opening
+  paragraph ("exists only so that relative links … keep working") was checked
+  and left alone: it describes the mechanism, not the absence of content, and
+  remains accurate.
+
 ## Surprises & discoveries
 
 - Observation: a byte-for-byte import makes every relative link in the source
@@ -1165,7 +1181,9 @@ the link site.
   constraint and puts the compatibility outside the imports:
 
   - `docs/v0-6-0-migration-guide.md` is a Netsuke-owned compatibility path
-    carrying no content of its own, so the upstream filename resolves.
+    whose whole substance is a forwarding heading: it supplies the upstream
+    filename and the `#migrate-a-stateful-gpui-test` anchor, then points at
+    the real section in the imported guide.
   - `docs/users-guide.md` gains two compatibility headings,
     `stateful-gpui-scenarios-with-durable-handles` and
     `published-gpui-022-stateful-step-variants`, each forwarding to the real

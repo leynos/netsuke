@@ -358,8 +358,9 @@ operator, user, and contributor references are easier to find.
   repository, which upstream names change on import, and which upstream files
   are not carried locally.
 - [v0-6-0-migration-guide.md](v0-6-0-migration-guide.md): Compatibility path
-  for the upstream filename of the `rstest-bdd` 0.6.0 migration guide. It holds
-  no content of its own.
+  for the upstream filename of the `rstest-bdd` 0.6.0 migration guide. It
+  supplies the upstream name and the `#migrate-a-stateful-gpui-test` anchor,
+  then forwards readers to the imported guide rather than restating it.
 - [rust-doctest-dry-guide.md](rust-doctest-dry-guide.md): Doctest workflow and
   dry-run guidance.
 - [rust-testing-with-rstest-fixtures.md](rust-testing-with-rstest-fixtures.md):
