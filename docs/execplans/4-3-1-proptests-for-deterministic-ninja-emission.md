@@ -2443,6 +2443,26 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       5. *Documentation.* `docs/users-guide.md`, `docs/developers-guide.md`, and
       `docs/netsuke-design.md` now describe the relay; `docs/contents.md` indexes
       ADR-0058.
+      6. *Two `module_max_lines` violations followed the relay commit*, and both
+      were fixed by splitting on ownership rather than by suppressing the lint.
+      The relay pushed `dyndep/mod.rs` to 409 lines against the 400-line cap;
+      the staging format — gate-set identity, the dyndep document, content
+      addressing, and the per-stage statements — moved to `dyndep/staging.rs`,
+      leaving bundle assembly and reserved-path rejection in the parent. With
+      that fixed, the same lint then reported `dyndep/tests` at 459 lines, from
+      a base of 399; the path-validation suite moved to `dyndep/tests/paths.rs`,
+      separating "which paths are legal and how are they escaped" from the
+      staging-structure tests that remain. Both splits are plain `mod`
+      declarations needing no `#[path]`, and neither required a test edit
+      beyond the moves.
+      7. *The regression's prose claim was re-measured against the emitted
+      bundle* rather than the hand-built model it was first derived from, and
+      it holds. The measurement also showed that **target selection is part of
+      the trigger**: the pre-relay bundle dies of SIGSEGV under the full
+      explicit-output set the regression already names, and exits 0 when asked
+      about one output alone. That is recorded in the test's documentation and
+      in ADR-0058, because narrowing the target list would silently make the
+      regression vacuous.
 
 - [x] (2026-10-23) **The branch is rebased onto `origin/main` at
       `64046d78`, and the rebase exposed two classes of post-merge damage that
