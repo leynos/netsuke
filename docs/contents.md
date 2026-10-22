@@ -287,6 +287,9 @@ operator, user, and contributor references are easier to find.
   independence from `-C`, and the in-process environment-mutation gate.
 - [ADR-0050-bound-manifest-template-evaluation.md](adrs/adr-0050-bound-manifest-template-evaluation.md):
   Manifest evaluation resource budget decision record.
+- [ADR-0051](adrs/adr-0051-compile-the-build-script-module-slice-in-the-workspace-graph.md):
+  Compiling the build-script module slice in the Cargo workspace graph rather
+  than inside a timed test body.
 
 ## Proposals
 

@@ -303,11 +303,17 @@ test-linux-package-metadata: ## Test Linux package metadata reading and validati
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no
 # longer share a command line. The debug build takes the standard; the release
 # build is one of the two exclusions.
+#
+# Both select the whole workspace rather than `--bin $(APP)`. The workspace has
+# no `default-members`, so a package-scoped build compiles only `netsuke-build`
+# and never `build_slice_fixture`; the fixture is what compiles the production
+# build-script module slice, so a package-scoped build would leave that slice
+# compiled by nothing but the test commands. See ADR-0051.
 target/debug/$(APP): | check-build-tools ## Build the debug binary
-	$(DEBUG_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --bin $(APP)
+	$(DEBUG_RUSTFLAGS) $(CARGO) build --workspace $(BUILD_JOBS)
 
 target/release/$(APP): ## Build the release binary on the LLVM backend
-	$(RELEASE_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --release --bin $(APP)
+	$(RELEASE_RUSTFLAGS) $(CARGO) build --workspace $(BUILD_JOBS) --release
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
@@ -400,7 +406,7 @@ check-fmt: ## Verify formatting
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 typecheck: check-build-tools typecheck-python ## Typecheck all targets and features
-	$(GATE_RUSTFLAGS) $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
 typecheck-python: ## Typecheck the Python sources with ty
 	# `uv tool run` materialises one venv holding ty plus the test-suite

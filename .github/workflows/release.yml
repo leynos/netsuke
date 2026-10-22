@@ -321,7 +321,10 @@ jobs:
       - name: Reset sccache statistics
         run: sccache --zero-stats
       - name: Build Netsuke
-        run: cargo build --locked --bin netsuke
+        # `--workspace` rather than `--bin netsuke`: with no `default-members`,
+        # a package-scoped build omits `build_slice_fixture`, the workspace
+        # member that compiles the production build-script module slice.
+        run: cargo build --workspace --locked
       - name: Exercise native Windows recipes
         run: >-
           ./scripts/windows-recipe-smoke.ps1
