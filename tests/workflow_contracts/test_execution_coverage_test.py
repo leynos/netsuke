@@ -216,18 +216,24 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
     """Keep direct-rustc preparation within each fixture's dependency graph.
 
     The support fixture selects its library; the production fixtures select
-    the application library, which also runs its build script and prepares its
-    build dependencies. None needs Cargo to check every workspace target
-    before compiling a small direct-rustc fixture.
+    the application library, which also prepares its build dependencies. None
+    needs Cargo to check every workspace target.
     """
-    module = GATE_FEATURES_MODULE.read_text(encoding="utf-8")
-    declaration = module.split("pub const LIBRARY_BUILD_ARGUMENTS:", maxsplit=1)
-    assert len(declaration) == 2, "the shared module must define library arguments"
-    selected_arguments = declaration[1].split(";", maxsplit=1)[0]
-    assert '"--lib"' in selected_arguments, "ambient checks must select library targets"
-    assert '"--all-features"' in selected_arguments, (
-        "ambient checks must enable all features"
+    # `lint` marks the all-features lane; the default lane must not add it.
+    lanes = dict(
+        re.findall(
+            r'#\[cfg\((feature = "lint"|not\(feature = "lint"\))\)\]\s*'
+            r"pub const LIBRARY_BUILD_ARGUMENTS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
+            GATE_FEATURES_MODULE.read_text(encoding="utf-8"),
+            re.DOTALL,
+        )
     )
+    for lane, expected in (
+        ('feature = "lint"', ["--lib", "--all-features"]),
+        ('not(feature = "lint")', ["--lib"]),
+    ):
+        arguments = re.findall(r'"([^"]+)"', lanes.get(lane, ""))
+        assert arguments == expected, f"cfg({lane}) must select exactly {expected}"
     for package, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES:
         text = source.read_text(encoding="utf-8")
         required_composition = (
@@ -236,9 +242,7 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
             'manifest_dir().join("Cargo.toml")',
             '.arg("check")',
         )
-        missing = [
-            fragment for fragment in required_composition if fragment not in text
-        ]
+        missing = [part for part in required_composition if part not in text]
         assert not missing, (
             f"{source.relative_to(REPO_ROOT)} must compose Cargo check with "
             f"the {package} library selector and root manifest; missing {missing!r}"

@@ -8,8 +8,12 @@
 //! vocabularies prevent manifest- or process-controlled data from entering the
 //! retained snapshot.
 
+mod check;
 mod labels;
 
+#[cfg(feature = "lint")]
+use check::CHECK_OUTCOMES;
+use check::is_check_metric;
 use labels::{any_exact_labels, exact_labels};
 
 use super::{
@@ -20,6 +24,8 @@ use metrics::{Counter, Gauge, Histogram, Key, KeyName, Metadata, SharedString, U
 use metrics_util::MetricKind;
 use metrics_util::debugging::{DebuggingRecorder, Snapshotter};
 
+#[cfg(feature = "lint")]
+use netsuke::runner::{CHECK_DURATION, CHECK_TOTAL};
 use netsuke::{
     cli::{
         DISCOVERY_DURATION, DISCOVERY_OUTCOME_VALUES, DISCOVERY_TOTAL,
@@ -148,7 +154,7 @@ impl ConfigMetricsRecorder {
                 | MANIFEST_STRUCTURES_TOTAL
                 | NINJA_STATUS_OVERSIZED_LINES_TOTAL
                 | SHELL_QUOTE_DIALECT_TOTAL
-        )
+        ) || is_check_metric(name)
     }
 
     /// Admit exact bounded counter series by their registered name.
@@ -208,6 +214,8 @@ impl ConfigMetricsRecorder {
             | WHICH_CACHE_TOTAL
             | WHICH_RESOLUTION_TOTAL
             | SHELL_QUOTE_DIALECT_TOTAL => accepts_stdlib_counter_registration(key),
+            #[cfg(feature = "lint")]
+            CHECK_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }
     }
@@ -228,6 +236,8 @@ impl ConfigMetricsRecorder {
                     ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
                 ],
             ),
+            #[cfg(feature = "lint")]
+            CHECK_DURATION => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
             _ => false,
         }
     }

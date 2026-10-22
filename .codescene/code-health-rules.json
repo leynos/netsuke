@@ -50,6 +50,16 @@
           "weight": 0.0
         }
       ]
+    },
+    {
+      "matching_content_path": "src/lint/rules/shellscan/tests.rs",
+      "matching_content_path_doc": "Test-only example tables for the quote-aware shell scanner, gated behind #[cfg(test)] in src/lint/rules/shellscan/mod.rs. The scanner's whole contract is a function of the text it is given, so every parameterised case takes the shell fragment under test and, for the word searches, the needle to look for: those strings are the subject matter, not a missing domain type. A newtype over either would enforce nothing, because the cases exist to feed the scanner quotes, escapes, comments, and Jinja delimiters that no well-formed wrapper would admit, and would add a conversion at every case. Measured rather than assumed: 9 of the file's 13 arguments are &str (69%); folding every same-shaped table together (the three find_words tables into one and the find_all cases into another) still leaves 5 of 9 (55.6%), far above the 39.0% threshold, because the floor is the irreducible fragment and needle per case. The generated-input counterpart, proptests.rs, already scores 10.00 and stays measured. Reassess if this module gains non-test callers or a helper that takes strings for any reason other than scanning them.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
     }
   ]
 }

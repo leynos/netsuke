@@ -37,14 +37,14 @@ use ortho_config::figment::Figment;
 use ortho_config::{OrthoError, OrthoMergeExt, OrthoResult, sanitize_value};
 use serde::Serialize;
 
-use serde_json::{Map, Value, json};
+use serde_json::{Map, Value};
 
 use self::apply::apply_config;
 use self::input::MergeComposition;
 use self::observability::{
     collect_override_leaf_paths, is_empty_configuration_value, validation_rejection_reason,
 };
-use super::command::{Cli, Commands};
+use super::command::Cli;
 use super::config::CliConfig;
 use super::discovery::{
     DiscoveredLayers, EnvProvider, StdEnvProvider, discover_file_layers,
@@ -56,7 +56,7 @@ use super::validation::validation_error;
 
 mod command_overrides;
 mod manifest_budget_overrides;
-use command_overrides::build_cli_overrides;
+use command_overrides::command_cli_overrides;
 use manifest_budget_overrides::insert_manifest_budget_cli_overrides;
 
 /// Merge discovered configuration layers over parsed CLI input.
@@ -254,76 +254,51 @@ fn collect_validation_rejection(events: &mut Vec<MergeEvent>, error: &OrthoError
 /// Returns a validation error when a supplied value cannot be serialized.
 fn cli_overrides_from_matches(cli: &Cli, matches: &ArgMatches) -> OrthoResult<Value> {
     let mut root = Map::new();
+    insert_global_cli_overrides(cli, matches, &mut root)?;
+    let cmds = command_cli_overrides(cli, matches)?;
+    if !cmds.is_empty() {
+        root.insert("cmds".to_owned(), Value::Object(cmds));
+    }
+    Ok(Value::Object(root))
+}
 
-    maybe_insert_explicit(matches, "file", &cli.file, &mut root)?;
-    maybe_insert_explicit(matches, "jobs", &cli.jobs, &mut root)?;
-    maybe_insert_explicit(matches, "verbose", &cli.verbose, &mut root)?;
-    maybe_insert_explicit(matches, "locale", &cli.locale, &mut root)?;
-    maybe_insert_explicit(
-        matches,
-        "fetch_allow_scheme",
-        &cli.fetch_allow_scheme,
-        &mut root,
-    )?;
-    maybe_insert_explicit(matches, "env_allow_var", &cli.env_allow_var, &mut root)?;
-    maybe_insert_explicit(matches, "env_block_var", &cli.env_block_var, &mut root)?;
-    maybe_insert_explicit(
-        matches,
-        "fetch_allow_host",
-        &cli.fetch_allow_host,
-        &mut root,
-    )?;
-    maybe_insert_explicit(
-        matches,
-        "fetch_block_host",
-        &cli.fetch_block_host,
-        &mut root,
-    )?;
-    maybe_insert_explicit(
-        matches,
-        "fetch_default_deny",
-        &cli.fetch_default_deny,
-        &mut root,
-    )?;
+/// Insert the explicitly supplied top-level options into `root`.
+///
+/// Subcommand arguments belong under `cmds` and are collected separately by
+/// [`command_cli_overrides`].
+///
+/// # Errors
+///
+/// Returns a validation error when a supplied value cannot be serialized.
+fn insert_global_cli_overrides(
+    cli: &Cli,
+    matches: &ArgMatches,
+    root: &mut Map<String, Value>,
+) -> OrthoResult<()> {
+    maybe_insert_explicit(matches, "file", &cli.file, root)?;
+    maybe_insert_explicit(matches, "jobs", &cli.jobs, root)?;
+    maybe_insert_explicit(matches, "verbose", &cli.verbose, root)?;
+    maybe_insert_explicit(matches, "locale", &cli.locale, root)?;
+    maybe_insert_explicit(matches, "fetch_allow_scheme", &cli.fetch_allow_scheme, root)?;
+    maybe_insert_explicit(matches, "env_allow_var", &cli.env_allow_var, root)?;
+    maybe_insert_explicit(matches, "env_block_var", &cli.env_block_var, root)?;
+    maybe_insert_explicit(matches, "fetch_allow_host", &cli.fetch_allow_host, root)?;
+    maybe_insert_explicit(matches, "fetch_block_host", &cli.fetch_block_host, root)?;
+    maybe_insert_explicit(matches, "fetch_default_deny", &cli.fetch_default_deny, root)?;
     maybe_insert_explicit(
         matches,
         "trust_project_fetch_policy",
         &cli.trust_project_fetch_policy,
-        &mut root,
+        root,
     )?;
-    insert_manifest_budget_cli_overrides(cli, matches, &mut root)?;
-    maybe_insert_explicit(matches, "json", &cli.json, &mut root)?;
-    maybe_insert_explicit(matches, "no_input", &cli.no_input(), &mut root)?;
-    maybe_insert_explicit(matches, "color", &cli.color, &mut root)?;
-    maybe_insert_explicit(matches, "emoji", &cli.emoji, &mut root)?;
-    maybe_insert_explicit(matches, "progress", &cli.progress, &mut root)?;
-    maybe_insert_explicit(matches, "accessibility", &cli.accessibility, &mut root)?;
-
-    let mut cmds_build: Map<String, Value> = Map::new();
-
-    if matches.value_source("default_targets") == Some(ValueSource::CommandLine) {
-        cmds_build.insert(
-            "targets".to_owned(),
-            serialize_value("default_targets", &cli.default_targets)?,
-        );
-    }
-
-    if let Some(Commands::Build(args)) = cli.command.as_ref()
-        && let Some(build_matches) = matches.subcommand_matches("build")
-    {
-        for (k, v) in build_cli_overrides(args, build_matches)? {
-            cmds_build.insert(k, v);
-        }
-    }
-
-    if !cmds_build.is_empty() {
-        root.insert(
-            "cmds".to_owned(),
-            json!({ "build": Value::Object(cmds_build) }),
-        );
-    }
-
-    Ok(Value::Object(root))
+    insert_manifest_budget_cli_overrides(cli, matches, root)?;
+    maybe_insert_explicit(matches, "json", &cli.json, root)?;
+    maybe_insert_explicit(matches, "no_input", &cli.no_input(), root)?;
+    maybe_insert_explicit(matches, "color", &cli.color, root)?;
+    maybe_insert_explicit(matches, "emoji", &cli.emoji, root)?;
+    maybe_insert_explicit(matches, "progress", &cli.progress, root)?;
+    maybe_insert_explicit(matches, "accessibility", &cli.accessibility, root)?;
+    Ok(())
 }
 
 /// Insert `field` into `target` when `matches` reports it was supplied on the

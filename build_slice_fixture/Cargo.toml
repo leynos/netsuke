@@ -11,6 +11,18 @@ test = false
 [lints]
 workspace = true
 
+# The fixture compiles production modules by path, so it inherits their
+# `cfg(feature = ...)` sites. Cargo derives the expected feature set from each
+# package's own manifest and the workspace denies `unexpected_cfgs`, so every
+# name `src/` gates on must be declared here as well; otherwise `cargo doc` and
+# `cargo clippy` reject the slice over a `cfg` the host package does define.
+# These are name declarations only: the fixture's slice compiles no code behind
+# either gate today, and leaving both off by default mirrors a default-features
+# build of the host package.
+[features]
+legacy-digests = []
+lint = []
+
 [dependencies]
 camino = { version = "1.2.0", features = ["serde1"] }
 clap = { version = "4.5.0", features = ["derive"] }

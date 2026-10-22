@@ -67,6 +67,16 @@ fn policy_from_str_embedder_fixture_compiles_without_clap() -> io::Result<()> {
         "the policy FromStr fixture should compile without Clap",
     )
 }
+/// The public lint API fixture compiles for an external embedder.
+#[cfg(feature = "lint")]
+#[test]
+fn lint_public_api_fixture_compiles() -> io::Result<()> {
+    compile_public_api_fixture(
+        "tests/ui/lint_public_api_pass.rs",
+        "the lint public API fixture should compile",
+    )
+}
+
 /// Type-check the public cache API only when the Netsuke library is supplied.
 #[rstest]
 #[case::public_api(true)]
