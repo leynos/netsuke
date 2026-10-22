@@ -27,7 +27,7 @@ band between "parses and lowers" and "provably wrong" contains the mistakes
 that cost the most: recipes that defeat change detection, dependency shapes
 that race under parallel builds, shell constructs that fail on a host whose
 `/bin/sh` is not `bash`, and stale workarounds such as the pre-v0.1.0 `$$PATH`
-spelling that [ADR-014](adr-014-backend-text-escaping-seam.md) turned from a
+spelling that [ADR-014](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md) turned from a
 fix into a bug.
 
 Adding an analysis for that band forces four decisions that outlive the
@@ -47,7 +47,7 @@ implementation, and that a reader of the code alone would have to reconstruct:
 
 ## Decision drivers
 
-- [ADR-003](adr-003-agent-consistent-human-first-cli.md) removes legacy
+- [ADR-003](adrs/adr-0046-agent-consistent-human-first-cli.md) removes legacy
   spellings rather than aliasing them, makes `--json` the only structured
   result mode, and requires that agents and humans share one vocabulary.
 - Roadmap task 3.15.1 already lists `check` in the canonical command vocabulary
