@@ -47,6 +47,7 @@
 //! [`GraphSpec`]: crate::ninja_gen::determinism::strategy::graph::GraphSpec
 //! [`GraphBounds`]: crate::ninja_gen::determinism::strategy::graph::GraphBounds
 
+mod relay_regression;
 mod workspace;
 
 use crate::ir::{BuildEdge, BuildGraph};

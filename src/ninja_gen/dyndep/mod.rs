@@ -3,10 +3,18 @@
 //! Netsuke keeps one top-level Ninja invocation. To make a `serial` `deps`
 //! list execute in declaration order, this module lowers each serial edge
 //! into a chain of phony gates plus content-addressed dyndep sidecars. Each
-//! gate names one sidecar through Ninja `dyndep` binding; the sidecar
-//! reveals exactly one real dependency. The next sidecar is not visible until
-//! the preceding gate completes, so Ninja cannot schedule a later dependency
-//! before an earlier one succeeds.
+//! gate names one sidecar through Ninja `dyndep` binding; the sidecar reveals
+//! exactly one *relay* phony, and the relay carries the real dependency. The
+//! next sidecar is not visible until the preceding gate completes, so Ninja
+//! cannot schedule a later dependency before an earlier one succeeds.
+//!
+//! The relay exists to keep Ninja out of a crash in its own scheduler. Loading
+//! a sidecar appends an edge to the revealed node's out-edge list, and Ninja
+//! does that while iterating that same node's list when the revealed node is
+//! already scheduled — reachable when a user edge is an order-only dependency
+//! of a node a later sidecar reveals (`ninja-build/ninja#2662`). Revealing a
+//! relay means the appended edge belongs to a node created for the purpose,
+//! which no user edge names, so no iteration is ever in progress over it.
 //!
 //! The sidecars are immutable and content-addressed beneath `.netsuke/dyndep`,
 //! and the gates live beneath `.netsuke/serial`. The runner materializes the
@@ -74,6 +82,7 @@ const SERIAL_NAMESPACE: &str = ".netsuke/serial";
 
 /// Reserved state namespace for dyndep sidecar files.
 const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
+
 
 /// Generate a complete Ninja bundle for `graph`, materializing staged dyndep
 /// sidecars for every multi-dependency serial edge.
@@ -164,8 +173,6 @@ fn generate_bundle_inner(
     })
 }
 
- (S+F, confidence: low)
-
 /// Reject user outputs or dependencies that collide with the reserved
 /// serial-ordering state namespace.
 pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenError> {
@@ -201,4 +208,5 @@ pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenEr
 
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/ninja_gen/dyndep/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/ninja_gen/dyndep/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -21,6 +21,8 @@ use std::fmt::Write as _;
 const PARENT_SCHEMA: &str = "netsuke-serial-v1";
 /// Format tag incorporated into every dyndep filename digest.
 const DYNDEP_SCHEMA: &str = "netsuke-dyndep-v1";
+/// Filename prefix distinguishing a stage's relay phony from its gate.
+const RELAY_PREFIX: &str = "relay-";
 
 /// Mutable staging state shared while lowering one serial edge.
 #[derive(Default)]
@@ -135,9 +137,13 @@ struct RenderedAction<'a> {
     restat: bool,
 }
 
-/// Emit the staged gates and sidecar-producing phony edges for one serial edge,
-/// collecting each sidecar into the bundle and returning the gate paths in
-/// dependency order.
+/// Emit the staged relays, gates, and sidecar-producing phony edges for one
+/// serial edge, collecting each sidecar into the bundle and returning the gate
+/// paths in dependency order.
+///
+/// Each stage emits three statements — a relay carrying the real dependency, a
+/// phony producing the sidecar, and the gate — so a serial edge with `N`
+/// implicit dependencies contributes `1 + 3N` statements to the file.
 fn render_serial_block(
     edge: &BuildEdge,
     out: &mut String,
@@ -147,13 +153,20 @@ fn render_serial_block(
     let parent = parent_identity(edge);
     for (index, dep) in edge.implicit_deps.iter().enumerate() {
         let gate = parent.join(format!("{index:03}"));
-        let content = sidecar_content(&gate, dep)?;
+        let relay = parent.join(format!("{RELAY_PREFIX}{index:03}"));
+        let content = sidecar_content(&gate, &relay)?;
         let digest = sidecar_digest(&content);
         let sidecar = Utf8PathBuf::from(format!("{DYNDEP_NAMESPACE}/{digest}.dd"));
 
         let sidecar_escaped = validated_ninja_path(sidecar.as_str())?;
         let gate_escaped = validated_ninja_path(gate.as_str())?;
+        let relay_escaped = validated_ninja_path(relay.as_str())?;
+        let dep_escaped = validated_ninja_path(dep.as_str())?;
 
+        // The relay carries the real dependency and is what the sidecar
+        // reveals. It is emitted before the gate so the revealed name is
+        // already declared where the file is read top to bottom.
+        writeln!(out, "build {relay_escaped}: phony | {dep_escaped}")?;
         // The phony edge that produces (but never rebuilds) the sidecar file.
         // Starting at the second stage it depends on the previous gate, which
         // prevents Ninja from revealing the next sidecar early.
@@ -165,7 +178,7 @@ fn render_serial_block(
             }
         }
         // The gate edge: order-only depends on the sidecar and declares it as
-        // its dyndep file so Ninja loads the real dependency from the sidecar.
+        // its dyndep file so Ninja loads the revealed relay from the sidecar.
         writeln!(out, "build {gate_escaped}: phony || {sidecar_escaped}")?;
         writeln!(out, "  dyndep = {sidecar_escaped}")?;
         writeln!(out)?;
@@ -201,12 +214,16 @@ fn parent_identity(edge: &BuildEdge) -> Utf8PathBuf {
     Utf8PathBuf::from(format!("{SERIAL_NAMESPACE}/{digest}"))
 }
 
-/// Render the dyndep document for one gate and its real dependency.
-fn sidecar_content(gate: &Utf8PathBuf, dep: &Utf8PathBuf) -> Result<String, NinjaGenError> {
+/// Render the dyndep document revealing one stage's relay phony.
+///
+/// The revealed path is the relay rather than the real dependency so that
+/// Ninja's `AddOutEdge` targets a node with no other consumer; see the module
+/// documentation for the upstream crash this avoids.
+fn sidecar_content(gate: &Utf8PathBuf, relay: &Utf8PathBuf) -> Result<String, NinjaGenError> {
     let gate_escaped = validated_ninja_path(gate.as_str())?;
-    let dep_escaped = validated_ninja_path(dep.as_str())?;
+    let relay_escaped = validated_ninja_path(relay.as_str())?;
     Ok(format!(
-        "ninja_dyndep_version = 1\nbuild {gate_escaped}: dyndep | {dep_escaped}\n"
+        "ninja_dyndep_version = 1\nbuild {gate_escaped}: dyndep | {relay_escaped}\n"
     ))
 }
 

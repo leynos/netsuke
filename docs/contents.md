@@ -309,6 +309,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0051](adrs/adr-0051-compile-the-build-script-module-slice-in-the-workspace-graph.md):
   Compiling the build-script module slice in the Cargo workspace graph rather
   than inside a timed test body.
+- [ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md):
+  Revealing a relay phony per staged serial dependency, to keep emitted bundles
+  out of the Ninja out-edge reallocation crash.
 - [ADR-0059](adrs/adr-0059-keep-compile-time-contracts-out-of-timed-tests.md):
   Compiling public-API contracts as a workspace library and rejections as
   pinned compile-fail doctests, retiring the direct-`rustc` test harness and

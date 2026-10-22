@@ -651,31 +651,34 @@ question.
   `std::vector<Edge*>`, and a nested `Builder::LoadDyndeps` calls `AddOutEdge`,
   reallocating the vector that an enclosing `Plan::NodeFinished` is iterating —
   and it reproduces on distro `ninja` 1.11.1, on a self-built debug 1.11.1, and
-  on upstream master 1.14.0.git. It is reachable only when a sidecar-revealed
-  dependency has another consumer edge and both are requested:
-  `ninja -n <dyndep-owner>` alone exits 0, `ninja -n <other-consumer>` alone
-  exits 0, and the pair together segfaults — on a **real** build as well as
-  under `-n`. It is now confirmed upstream:
+  on upstream master 1.14.0.git. Two earlier statements in this entry were
+  **falsified by re-measurement on 2026-10-23** and are corrected here rather
+  than left to mislead. First, it is not a pair-only effect:
+  `ninja -n <staged-gate>` alone segfaults, and only requests that never reach
+  the staged gate (`out/0002`, `out/0006`) exit 0, alone or together. Second,
+  the consumer-count relation is not a threshold: with the order-only edge
+  present, one extra ordinary consumer of the revealed node segfaults, two do
+  not, three do again, and five and eight do not. What stands is that the
+  trigger needs an **order-only** edge naming a node a later sidecar reveals —
+  six ordinary-edge controls all exited 0 — and that the crash reproduces on a
+  **real** build as well as under `-n`. It is now confirmed upstream:
   [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662) is
   open and reports the same allocation and the same read,
   [PR #2840](https://github.com/ninja-build/ninja/pull/2840) holds an unmerged
   index-access fix, and the maintainer has been unable to reproduce it — so
   this plan's 13-line reproducer is evidence the issue lacks. *Mitigation:* the
-  diagnosis is complete and recorded in the delivery ledger; the shape-level
-  repair (a relay phony per sidecar-revealed dependency) was verified against
-  both binaries. Applying it is a production change, which `Tolerances` makes
-  an escalation rather than a drafting choice, so it is escalated to the user
-  with four options: (a) repair the emitter; (b) document the limitation and
-  narrow the generated domain so the property cannot reach the crash; (c)
-  report to #2662 with the reproducer and leave the gate red until upstream
-  lands #2840, keeping the seed uncommitted so the suite stays green in the
-  meantime; (d) run the oracle against a self-built `ninja` carrying #2840 in
-  its CI provisioning. Options (a) and (b) are the only ones that change this
-  repository; (c) and (d) leave the emitter alone. No mitigation is applied
-  until that direction arrives; the property must not be weakened quietly to
-  make it pass. One option is explicitly **rejected**: suppressing the signal
-  or treating a SIGSEGV as a skip would make the oracle blind to the crash it
-  was written to find.
+  diagnosis is complete and recorded in the delivery ledger, and the
+  shape-level repair (a relay phony per sidecar-revealed dependency) was
+  verified against both binaries. It was escalated to the user as a production
+  change with four options: (a) repair the emitter; (b) document the limitation
+  and narrow the generated domain; (c) report to #2662 with the reproducer and
+  leave the gate red; (d) provision a self-built `ninja` carrying #2840. **The
+  user chose (a)** — "Repair the emitter — relay phony per sidecar-revealed
+  dependency" — so the repair is implemented and this risk is now closed by
+  [ADR-0058](../adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md)
+  rather than merely mitigated. One option remains explicitly **rejected**:
+  suppressing the signal or treating a SIGSEGV as a skip would make the oracle
+  blind to the crash it was written to find.
 - **Real-Ninja oracle silently vanishes from a lane.** *Severity: moderate.
   Likelihood: moderate.* `ci-windows.yml` installs Ninja but does not set
   `NETSUKE_REQUIRE_NINJA`, so that lane skips silently today. *Mitigation:* use
@@ -787,21 +790,22 @@ A first version of this statement said instead that "the number of `build`
 statements in the emitted text equals the number of distinct edges in the
 graph". **That count conjunct is false, and it was corrected on 2026-10-15
 before `EP-M4` implemented it.** The bundle path lowers a serial edge into
-staged dyndep gates, and `render_serial_block`
-(`src/ninja_gen/dyndep/mod.rs:247-290`) emits, for each of the edge's `N`
-implicit dependencies, both a sidecar-producing phony line and a gate line:
+staged dyndep gates, and `render_serial_block` (`src/ninja_gen/dyndep/mod.rs`)
+emits, for each of the edge's `N` implicit dependencies, a relay carrying the
+real dependency, a sidecar-producing phony line, and a gate line:
 
 ```plaintext
-build <sidecar>: phony [<previous gate>]     # dyndep/mod.rs:269 or :272
-build <gate>: phony || <sidecar>             # dyndep/mod.rs:277
+build <relay>: phony | <real-dep>            # dyndep/mod.rs, render_serial_block
+build <sidecar>: phony [<previous gate>]
+build <gate>: phony || <sidecar>
 ```
 
 then once, after the loop, the real edge itself through `render_display_edge`
-(`dyndep/mod.rs:212`). A staged edge therefore contributes **`1 + 2N`** `build`
-statements, and the equality fails by `2N` on exactly the graphs `EP-M3`'s
-non-vacuity assertion guarantees are generated: `reaches_class_intersection`
-requires `dyndep_staged_edges > 0`, and that predicate is
-`dependency_order == Serial && implicit_deps.len() > 1`
+(`dyndep/mod.rs`, `render_serial_edge`). A staged edge therefore contributes
+**`1 + 3N`** `build` statements, and the equality fails by `3N` on exactly the
+graphs `EP-M3`'s non-vacuity assertion guarantees are generated:
+`reaches_class_intersection` requires `dyndep_staged_edges > 0`, and that
+predicate is `dependency_order == Serial && implicit_deps.len() > 1`
 (`strategy/classification.rs:95-100`), which is byte-for-byte the same
 conjunction as `edge_requires_gates` (`src/ninja_gen/mod.rs:237`) — so the
 generator's *interesting* cases are precisely the ones the count breaks on.
@@ -2410,6 +2414,35 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [x] (2026-10-23) **The emitter now reveals a relay phony per staged
+      dependency, on the user's direction, and `OBL-NINJA`'s crash shape is
+      guarded by a directed regression rather than by sampling alone.**
+      Implementation and evidence are recorded in the decision log; the durable
+      record is
+      [ADR-0058](../adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md),
+      and ADR-0011 carries an amendment banner pointing at it.
+      1. *Code.* `render_serial_block` emits relay, sidecar-producing phony, and
+      gate per stage; `sidecar_content` reveals the relay. Raised to `1 + 3N` in
+      `dyndep/mod.rs` docs, `no_loss.rs`, and the `OBL-NOLOSS` statement.
+      2. *Every consumer of a revealed path was rebuilt around the indirection.*
+      Four test sites and three property helpers had assumed a sidecar names the
+      real dependency; they now resolve sidecar → relay → dependency through
+      shared helpers, and a sidecar whose relay line is missing resolves to
+      `None` rather than to an arbitrary name. The remaining six `dyndep_files()`
+      sites were read and need no change: they iterate paths, compare
+      `(path, content)` pairs, assert only the version header, or write bodies
+      to disk unread.
+      3. *Evidence.* `dyndep::tests` asserts the relay structurally;
+      `ninja_oracle/relay_regression.rs` pins the measured crashing shape and
+      fails with SIGSEGV 139 against a deliberately mutated emitter, which is
+      what makes it evidence rather than decoration.
+      4. *Two recorded claims were falsified by re-measurement and corrected at
+      their original sites*, not quietly replaced: the crash is not pair-only,
+      and the consumer count is not a threshold.
+      5. *Documentation.* `docs/users-guide.md`, `docs/developers-guide.md`, and
+      `docs/netsuke-design.md` now describe the relay; `docs/contents.md` indexes
+      ADR-0058.
 
 - [x] (2026-10-23) **The branch is rebased onto `origin/main` at
       `64046d78`, and the rebase exposed two classes of post-merge damage that
@@ -5089,11 +5122,15 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   bundle" with empty stderr, because a signal-killed child has no stderr; a
   future harness should report the exit signal distinctly so that "Ninja
   refused this" and "Ninja died on this" are not the same message. Second, the
-  failure is *shape-dependent, not seed-dependent*: `ninja -n` on either target
-  alone exits 0 and only the pair crashes, so the property's 64-case budget
-  reached it once and would have been easy to dismiss as a flake. Third, it is
-  upstream, and the tracker now says so with the same mechanism rather than
-  only the same symptom.
+  failure is *shape-dependent, not seed-dependent*, so the property's 64-case
+  budget reached it once and would have been easy to dismiss as a flake. (This
+  entry originally explained the rarity as "`ninja -n` on either target alone
+  exits 0 and only the pair crashes". Re-measured on 2026-10-23 that is false:
+  `ninja -n <staged-gate>` alone segfaults, and only requests that never reach
+  the staged gate exit 0. Rarity comes from the shape a case must draw — an
+  order-only edge naming a node a later sidecar reveals — not from a pair-only
+  invocation rule.) Third, it is upstream, and the tracker now says so with the
+  same mechanism rather than only the same symptom.
 
 - (2026-10-21) **The upstream tracker locates the crash exactly, and the fix
   exists but is unmerged — which changes the escalation from "is this ours?" to
@@ -5565,7 +5602,9 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   1. A staged edge emits `1 + 2N` `build` statements, not one, so "the number
      of `build` statements equals the number of distinct edges" fails by `2N`,
      and that quoted claim is itself withdrawn; the statement above records
-     why. The glossary entry at line 285 — "Edge — one `BuildEdge`, rendered as
+     why. (The constant has since risen to `1 + 3N`; see the 2026-10-23 relay
+     entry, which adds a third statement per stage.) The glossary entry at line
+     285 — "Edge — one `BuildEdge`, rendered as
      one Ninja `build` statement" — has since been qualified to name the
      staging, because the serial `dyndep` lowering is exactly what breaks it.
   2. Because `generate_into_with_shell` rejects any graph where
@@ -7139,6 +7178,46 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `ADR-030` publishes; (c) leaves a required gate red at hand-off. Each crosses
   a boundary the plan names, so the choice is recorded with its costs and put
   to the user rather than resolved here.
+
+- Decision: **the user chose option (a), and the emitter now reveals a relay
+  phony per staged dependency.** Date/Author: 2026-10-23 / implementation
+  agent, on the user's instruction.
+
+  *The authorization.* The user's direction was "(a) Repair the emitter — relay
+  phony per sidecar-revealed dependency. Verified to clear the crash on 1.11.1
+  and debug 1.11.1; changes emitted output for every serial-gate bundle." That
+  supersedes the preceding entry's reservation: `Tolerances` makes this a
+  production change reserved to the user, and the user has now decided it.
+
+  *What was implemented.* `render_serial_block` (`src/ninja_gen/dyndep/mod.rs`)
+  emits a relay phony per stage and `sidecar_content` reveals the relay; the
+  record is
+  [ADR-0058](../adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md).
+  Per-edge cost rises from `1 + 2N` to `1 + 3N` statements, and every
+  obligation that counted statements or read a sidecar's revealed path was
+  updated with it.
+
+  *Acceptance evidence, and why a property was not enough.* `OBL-NINJA` draws
+  its domain, so it reaches the crashing shape only by sampling; a sampled
+  green run over a rare shape would not have guarded the repair. Two pieces of
+  evidence were added instead. Structurally, `dyndep::tests` requires every
+  sidecar to name a relay and no sidecar to name a real dependency. End to end,
+  `ninja_oracle/relay_regression.rs` pins the measured crashing shape — a
+  producer, an **order-only** consumer, a two-dependency serial edge, and one
+  ordinary consumer — and requires a real Ninja binary to accept the emitted
+  bundle. The regression's sensitivity was demonstrated, not assumed: with the
+  sidecar deliberately mutated to reveal the dependency instead of the relay
+  and the relay line removed, the test fails with
+  `ninja -n [] rejected the bundle (ExitStatus(unix_wait_status(139)))`; with
+  the emitter restored it passes. The emitter was then verified byte-identical
+  to its pre-probe copy.
+
+  *A corrected mechanism claim.* Re-measurement on 2026-10-23 falsified two
+  statements this plan had recorded. The crash is not pair-only —
+  `ninja -n <staged-gate>` alone segfaults — and the consumer count is not a
+  threshold. What does hold is the order-only precondition: six ordinary-edge
+  controls all exited 0. Both corrections are recorded at the risk entry and in
+  the `2026-10-21` surprise above rather than silently replaced.
 
 ## Design review findings
 

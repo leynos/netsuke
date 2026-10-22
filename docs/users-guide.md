@@ -681,10 +681,17 @@ same ordered entry point.
 
 Netsuke uses Ninja's `dyndep` support for serial lists with two or more
 dependencies, and generated builds containing staged serial ordering require
-Ninja 1.10 or newer. `netsuke generate`, `build`, and `clean` materialize the
-generated sidecars under `.netsuke/dyndep` in the effective working directory
-before writing or invoking the generated Ninja file. The sidecars are immutable
-and content-addressed. Each sidecar-capable command retains the current bundle,
+Ninja 1.10 or newer. Each staged dependency appears in the generated file as a
+relay phony that carries the real dependency, alongside the gate phony and the
+sidecar-producing phony. The indirection is deliberate: it keeps the generated
+build clear of a Ninja scheduler crash that unreliable dyndep revelation can
+reach on affected Ninja releases. You do not need to name or reason about relay
+paths; they are generated state beneath `.netsuke/serial` like the gates.
+
+`netsuke generate`, `build`, and `clean` materialize the generated sidecars
+under `.netsuke/dyndep` in the effective working directory before writing or
+invoking the generated Ninja file. The sidecars are immutable and
+content-addressed. Each sidecar-capable command retains the current bundle,
 then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
 `.tmp` files are removed while the exclusive sidecar-directory lease is held.
 `build` and `generate` prune after materialization; `clean` prunes only after

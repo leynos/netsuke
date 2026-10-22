@@ -82,30 +82,57 @@ fn serial_bundle_emits_version_and_staged_sidecars() -> Result<()> {
         "expected one sidecar per dependency, got {}",
         bundle.dyndep_files().len()
     );
-    for dep in ["check-fmt", "lint", "test"] {
-        let revealed = bundle
-            .dyndep_files()
-            .iter()
-            .any(|dd| dd.content().contains(dep));
-        ensure!(revealed, "expected a sidecar revealing {dep}");
-    }
     let file = bundle.build_file();
     ensure!(
-        file.lines()
-            .filter(|l| l.starts_with("build .netsuke/serial/"))
-            .count()
-            == 3,
-        "expected three gate edges"
+        serial_paths(file, is_gate).len() == 3,
+        "expected three gate edges, got {:?}",
+        serial_paths(file, is_gate)
     );
     ensure!(
-        file.contains("build all: a |"),
-        "aggregate edge must list gates as implicit deps"
+        serial_paths(file, is_relay).len() == 3,
+        "expected one relay per dependency, got {:?}",
+        serial_paths(file, is_relay)
     );
     Ok(())
 }
 
 #[test]
-fn serial_sidecars_reveal_real_deps_in_order() -> Result<()> {
+fn serial_sidecars_reveal_relays_that_carry_the_real_deps() -> Result<()> {
+    let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]));
+    let bundle = generate_bundle(&graph)?;
+    let relays = serial_paths(bundle.build_file(), is_relay);
+    ensure!(relays.len() == 3, "expected three relays, got {relays:?}");
+    // Each sidecar must reveal a relay, never the real dependency: revealing
+    // the real path is the shape that reaches the upstream Ninja crash.
+    for (index, relay) in relays.iter().enumerate() {
+        let revealed = bundle
+            .dyndep_files()
+            .iter()
+            .filter(|dd| dd.content().contains(relay.as_str()))
+            .count();
+        ensure!(
+            revealed == 1,
+            "relay {relay} (stage {index}) must be the revealed path of exactly \
+             one sidecar, was revealed by {revealed}"
+        );
+    }
+    for dep in ["check-fmt", "lint", "test"] {
+        let leaks = bundle
+            .dyndep_files()
+            .iter()
+            .filter(|dd| dd.content().contains(dep))
+            .count();
+        ensure!(
+            leaks == 0,
+            "the real dependency {dep} must not appear in any sidecar, found \
+             {leaks}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn serial_sidecars_preserve_declaration_order() -> Result<()> {
     let graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]));
     let bundle = generate_bundle(&graph)?;
     let contents: Vec<&str> = bundle
@@ -115,23 +142,49 @@ fn serial_sidecars_reveal_real_deps_in_order() -> Result<()> {
         .collect();
     // Sidecar order follows declaration order because the first sidecar has no
     // predecessor while later sidecars are produced by ordered edges.
-    let fmt_at = contents
-        .iter()
-        .position(|c| c.contains("check-fmt"))
-        .context("check-fmt sidecar missing")?;
-    let lint_at = contents
-        .iter()
-        .position(|c| c.contains("lint"))
-        .context("lint sidecar missing")?;
-    let test_at = contents
-        .iter()
-        .position(|c| c.contains("test"))
-        .context("test sidecar missing")?;
+    let position = |needle: &str| -> Result<usize> {
+        contents
+            .iter()
+            .position(|content| content.contains(needle))
+            .with_context(|| format!("{needle} sidecar missing: {contents:?}"))
+    };
+    let (fmt_at, lint_at, test_at) = (
+        position("relay-000")?,
+        position("relay-001")?,
+        position("relay-002")?,
+    );
     ensure!(
         fmt_at < lint_at && lint_at < test_at,
-        "sidecars must preserve declaration order"
+        "sidecars must preserve declaration order, got {fmt_at} {lint_at} {test_at}"
     );
     Ok(())
+}
+
+/// Every serial-namespace path a `build` line declares as an output.
+///
+/// `predicate` selects gates or relays, so a count cannot silently absorb the
+/// other kind: a change that drops every relay would leave the gate count
+/// intact and fail the relay count instead.
+fn serial_paths(file: &str, predicate: fn(&str) -> bool) -> Vec<String> {
+    file.lines()
+        .filter_map(|line| line.strip_prefix("build "))
+        .filter_map(|rest| rest.split_once(": ").map(|(lhs, _)| lhs))
+        .flat_map(str::split_whitespace)
+        .filter(|path| path.starts_with(".netsuke/serial/"))
+        .filter(|path| predicate(path))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Whether a serial-namespace path names a gate rather than a relay.
+fn is_gate(path: &str) -> bool {
+    !is_relay(path)
+}
+
+/// Whether a serial-namespace path names a stage's relay phony.
+fn is_relay(path: &str) -> bool {
+    path.rsplit_once('/')
+        .is_some_and(|(_, name)| name.starts_with("relay-"))
 }
 
 #[test]
@@ -176,26 +229,34 @@ fn bundle_rejects_an_empty_command_list() -> Result<()> {
     );
     Ok(())
 }
+
 #[test]
 fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
     let graph = graph_with_edge(serial_edge("all", &["same", "same"]));
     let bundle = generate_bundle(&graph)?;
     // Each gate stage is distinct, so each stage has its own content-addressed
-    // sidecar even when the revealed dependency is the same node. Ninja
-    // unifies the real dependency path, so its recipe still runs once.
+    // sidecar even when the relay carries the same dependency. Ninja unifies
+    // the real dependency path, so its recipe still runs once.
+    let file = bundle.build_file();
     ensure!(
-        bundle
-            .build_file()
-            .lines()
-            .filter(|l| l.starts_with("build .netsuke/serial/"))
-            .count()
-            == 2,
-        "expected two gate edges for a repeated dependency"
+        serial_paths(file, is_gate).len() == 2,
+        "expected two gate edges for a repeated dependency, got {:?}",
+        serial_paths(file, is_gate)
+    );
+    ensure!(
+        serial_paths(file, is_relay).len() == 2,
+        "each stage needs its own relay, got {:?}",
+        serial_paths(file, is_relay)
     );
     ensure!(
         bundle.dyndep_files().len() == 2,
         "each stage needs its own sidecar, got {}",
         bundle.dyndep_files().len()
+    );
+    let relay_lines: Vec<&str> = file.lines().filter(|line| is_relay(line)).collect();
+    ensure!(
+        relay_lines.iter().all(|line| line.ends_with("| same")),
+        "every relay must carry the shared dependency, got {relay_lines:?}"
     );
     let contents: Vec<&str> = bundle
         .dyndep_files()
@@ -203,8 +264,8 @@ fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
         .map(GeneratedDyndep::content)
         .collect();
     ensure!(
-        contents.iter().all(|c| c.contains("same")),
-        "every stage sidecar must reveal the shared dependency"
+        contents.iter().all(|c| !c.contains("| same")),
+        "no sidecar may reveal the shared real dependency, got {contents:?}"
     );
     Ok(())
 }
@@ -348,6 +409,7 @@ fn whitespace_paths_are_escaped_in_every_path_field(
     ensure!(bundle.build_file().contains("path$ with$ space"));
     Ok(())
 }
+
 #[rstest]
 #[case::explicit_output(EdgePathField::ExplicitOutput)]
 #[case::implicit_output(EdgePathField::ImplicitOutput)]

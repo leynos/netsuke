@@ -2755,12 +2755,24 @@ structures to the Ninja file syntax.
    A `BuildEdge` whose `dependency_order` is `serial` and has more than one
    implicit dependency is an exception to this direct rendering. The generator
    lowers it into staged phony gates, with one content-addressed Ninja dyndep
-   sidecar per dependency. A gate can reveal exactly one real dependency; the
-   gate edge associated with the next sidecar depends on the preceding gate.
-   This makes each later dependency unavailable to Ninja until the previous one
-   succeeds, while preserving one Ninja scheduler and its shared-work
-   memoization. The runner materializes every sidecar file before Ninja starts;
-   no Ninja edge produces sidecar content.
+   sidecar per dependency. A gate reveals exactly one *relay* phony, and that
+   relay carries the real dependency; the gate edge associated with the next
+   sidecar depends on the preceding gate. This makes each later dependency
+   unavailable to Ninja until the previous one succeeds, while preserving one
+   Ninja scheduler and its shared-work memoization. The runner materializes
+   every sidecar file before Ninja starts; no Ninja edge produces sidecar
+   content.
+
+   A sidecar reveals a relay rather than the dependency itself because of an
+   upstream Ninja scheduler defect
+   ([ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662)).
+   Loading a sidecar appends an edge to the revealed node's out-edge vector,
+   and Ninja does that while iterating the same vector when the revealed node
+   is already scheduled — reachable when a user edge is an order-only
+   dependency of a node a later sidecar reveals. Revealing a relay means the
+   append belongs to a node created for the purpose, which no user edge names,
+   so no iteration is ever in progress over it. See
+   [ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md).
 
    The generated result is a bundle, not merely a string: generation is an
    effect-free query that returns the main Ninja text and its `.netsuke/dyndep`

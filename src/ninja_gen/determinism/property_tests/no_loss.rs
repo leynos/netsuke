@@ -7,11 +7,11 @@
 //! side in the emitted text.
 //!
 //! Counting emission lines is deliberately not the assertion. A staged serial
-//! edge emits `1 + 2N` `build` statements — a sidecar and a gate per implicit
-//! dependency, plus one for the edge itself — so the number of statements
-//! exceeds the number of edges by `2N` on exactly the graphs this obligation
-//! cares about. An equality between those two counts is false, and a property
-//! built on it would be unsatisfiable rather than rigorous.
+//! edge emits `1 + 3N` `build` statements — a relay, a sidecar, and a gate per
+//! implicit dependency, plus one for the edge itself — so the number of
+//! statements exceeds the number of edges by `3N` on exactly the graphs this
+//! obligation cares about. An equality between those two counts is false, and a
+//! property built on it would be unsatisfiable rather than rigorous.
 //!
 //! The entry point is [`generate_bundle`], not [`crate::ninja_gen::generate`].
 //! The generated domain reaches the class intersection on purpose, so
@@ -232,7 +232,7 @@ fn lhs_counts(text: &str) -> BTreeMap<String, usize> {
 /// The property is only interesting on a graph with an edge owning more than
 /// one output, because that is where a lost edge is distinguishable from a lost
 /// output. It is separately interesting on a graph with a staged serial edge,
-/// because that is the shape whose `1 + 2N` statement count forbids the
+/// because that is the shape whose `1 + 3N` statement count forbids the
 /// count-based statement this obligation replaced. Neither shape is guaranteed
 /// in any single case, so the tally is evidence about the run rather than an
 /// assertion about a case — the same form as `EP-M3`'s class tally, for the
@@ -262,7 +262,7 @@ fn the_run_reaches_multi_output_and_staged_graphs() {
     );
     assert!(
         observed.staged_cases > 0,
-        "no case carried a staged serial edge, so the 1 + 2N statement count \
+        "no case carried a staged serial edge, so the 1 + 3N statement count \
          the obligation warns about was never exercised: {observed:?}",
     );
 }

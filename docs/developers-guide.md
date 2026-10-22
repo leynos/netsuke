@@ -6353,14 +6353,28 @@ Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
 list has at least two items and therefore needs staged ordering; parallel lists
 and serial lists with zero or one item retain the existing Ninja requirement.
 
-Each gate reveals one real dependency through a pre-materialized Ninja dyndep
-file. The gate edge associated with the next sidecar depends on the preceding
-gate, which keeps later direct dependencies unavailable to the scheduler until
-earlier work succeeds. The runner materializes every sidecar file before Ninja
-starts; no Ninja edge produces sidecar content. This is not an order-only chain
-or a Ninja pool: both leave the real dependencies visible to Ninja too early.
-Preserve one top-level Ninja invocation so shared nodes keep Ninja's normal
-execute-once memoization.
+Each gate reveals one *relay* phony through a pre-materialized Ninja dyndep
+file, and the relay in turn carries the real dependency. The gate edge
+associated with the next sidecar depends on the preceding gate, which keeps
+later direct dependencies unavailable to the scheduler until earlier work
+succeeds. The runner materializes every sidecar file before Ninja starts; no
+Ninja edge produces sidecar content. This is not an order-only chain or a Ninja
+pool: both leave the real dependencies visible to Ninja too early. Preserve one
+top-level Ninja invocation so shared nodes keep Ninja's normal execute-once
+memoization.
+
+The relay is not decoration. Ninja appends to the revealed node's out-edge
+vector while loading a sidecar, and does so inside an iteration over that same
+vector when the node is already scheduled — reachable when a user edge is an
+order-only dependency of a node a later sidecar reveals
+([ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662)).
+A relay is a node created for the purpose, named by no user edge, so the append
+can never reallocate a vector under a live iterator. Do not "simplify" a
+sidecar to reveal the real dependency: `src/ninja_gen/dyndep/tests` asserts
+structurally that every sidecar names a relay, and
+`src/ninja_gen/determinism/property_tests/ninja_oracle/relay_regression.rs`
+pins the crashing shape end to end. See
+[ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md).
 
 `GeneratedNinja` is the query-command boundary: generation may construct and
 return it, but it must not publish any filesystem state.

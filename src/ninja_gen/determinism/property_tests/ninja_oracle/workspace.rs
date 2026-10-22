@@ -136,8 +136,12 @@ impl BundleWorkspace {
         if output.status.success() {
             return Ok(output.stdout);
         }
+        // The status is reported as well as the stderr because a signal death
+        // and a clean rejection are different findings with the same empty
+        // stderr, and `ExitStatus`'s debug form names the signal.
         Err(TestCaseError::fail(format!(
-            "ninja {flag} {tool:?} rejected the bundle: {stderr}",
+            "ninja {flag} {tool:?} rejected the bundle ({:?}): {stderr}",
+            output.status,
             stderr = String::from_utf8_lossy(&output.stderr).trim(),
         )))
     }
