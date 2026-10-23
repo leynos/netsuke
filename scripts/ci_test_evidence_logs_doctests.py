@@ -17,15 +17,7 @@ RESULT = re.compile(
 
 
 def _closes_doctest_scope(body: str, target: str | None, completed: str | None) -> bool:
-    """Close a command or completed target while retaining a new target.
-
-    For example, ``_closes_doctest_scope("$ cargo test", None, None)`` is true.
-
-    Returns
-    -------
-    bool
-        Whether the line closes the active command or target scope.
-    """
+    """Return whether this line closes the active command or completed target."""
     boundary = body.startswith(("##[endgroup]", "$ ", "[command]"))
     finished_target = body.startswith("all doctests ran in ") and target == completed
     return boundary or finished_target
