@@ -47,8 +47,10 @@ This section assumes no prior knowledge of the repository.
 `[lib] name = "netsuke"` and `[[bin]] name = "netsuke"`. The command users
 type, the manual page, and the operating-system packages are all `netsuke`;
 only the registry identity is `netsuke-build`. This divergence is decided and
-recorded in `docs/adr-007-publish-as-netsuke-build.md`, and it is why a
-publisher must never derive a user-facing name from Cargo package metadata.
+recorded in
+`docs/adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md`, and it
+is why a publisher must never derive a user-facing name from Cargo package
+metadata.
 
 **The workspace.** `Cargo.toml` is both the package manifest and the workspace
 root; `test_support/` is a second, `publish = false` workspace member. Only
@@ -56,7 +58,7 @@ root; `test_support/` is a second, `publish = false` workspace member. Only
 `-p` selector would attempt `test_support` and fail, or worse succeed under a
 name nobody reviewed.
 
-**The release today.** `.github/workflows/release.yml` is 685 lines on `main` —
+**The release today.** `.github/workflows/release.yml` is 688 lines on `main` —
 grown from the 438 this plan was drafted against, and now well past the
 400-line ceiling that `AGENTS.md` sets for code files. It runs on a `v*.*.*`
 tag push, and as a reusable workflow (`workflow_call`) with inputs `publish`,
@@ -79,14 +81,14 @@ Its jobs are:
    `ready_for_review` event.
 4. `release-admission-canaries` — the ADR-020 admission-evidence gate.
 5. `release` — the read-only **rehearsal**. It runs only when
-   `dry_run == 'true'` (`release.yml:412`), holds `contents: read`, downloads
+   `dry_run == 'true'` (`release.yml:415`), holds `contents: read`, downloads
    the workflow artefacts into `dist/`, hoists the cargo-binstall archives to
    the release root, and calls the shared `upload-release-assets` action at pin
    `a5765019…` with `dry-run: true`. It creates no release and uploads nothing.
 6. `publish-release` — added by #834 after this plan was drafted. It runs only
-   when `should_publish == 'true'` (`release.yml:545`), holds
+   when `should_publish == 'true'` (`release.yml:548`), holds
    `contents: write`, and creates the draft release
-   (`scripts/ensure_draft_release.py` at `release.yml:586`), then runs the same
+   (`scripts/ensure_draft_release.py` at `release.yml:589`), then runs the same
    download, hoist and upload sequence. It calls the shared
    `upload-release-assets` action at the newer pin `0606ca89…`, so the
    repository now invokes one shared action at two revisions, chosen by job.
@@ -178,8 +180,8 @@ Read, in this order, before writing code:
    belongs.
 4. `docs/documentation-style-guide.md` — the *ExecPlan* section, which is
    authoritative for this file's header.
-5. `docs/adr-007-publish-as-netsuke-build.md` and
-   `docs/adr-020-release-admission-observability.md`.
+5. `docs/adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md` and
+   `docs/adrs/adr-0020-bounded-release-admission-observability.md`.
 6. `docs/whitaker-users-guide.md` — `module_max_lines` and
    `no_std_fs_operations`, both of which constrain new Rust and Python.
 
@@ -203,8 +205,8 @@ artefacts are:
 ```plaintext
 AGENTS.md                      -> EP-M1..EP-M6  -> every gate named below
 docs/terms-of-reference.md     -> EP-M1, EP-M4   -> 7.3 strategic / 8.3 dependencies
-docs/adr-007-...              -> EP-M2         -> tests/binstall_metadata_tests.rs
-docs/adr-020-...              -> EP-M6         -> make test-release-admission
+docs/adrs/adr-0007-...              -> EP-M2         -> tests/binstall_metadata_tests.rs
+docs/adrs/adr-0020-...              -> EP-M6         -> make test-release-admission
 docs/documentation-style-guide.md -> EP-M1      -> tests/execplan_status_contract_tests.rs
 docs/developers-guide.md      -> EP-M2, EP-M6   -> docs updates
 docs/repository-layout.md     -> EP-M2         -> docs updates
@@ -740,9 +742,9 @@ exists to prevent.
 
 Each new job's body is a single `uses: ./.github/actions/...` step. The
 justification for extracting them is that the composite-action convention is
-the repository's own documented practice (`docs/developers-guide.md:1415-1416`
+the repository's own documented practice (`docs/developers-guide.md:1574-1575`
 records it for the cache steps), **not** that a contract enforces a 400-line
-cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
+cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 `main` and is not failing anything.
 
 ### Stage D — wiring and documentation
@@ -769,8 +771,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
   partial-publication recovery.
 - `docs/contents.md` and `docs/repository-layout.md` if a new workflow file
   is added.
-- `docs/adr-007-publish-as-netsuke-build.md`: an addendum naming the
-  publisher.
+- `docs/adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md`: an
+  addendum naming the publisher.
 
 ## Milestones and plateaus
 
@@ -807,8 +809,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 685 lines on
 - Outcome: `release.yml` carries the full sequence, every new job body
   extracted to a composite action so the job graph stays readable at a glance.
   (Not "under 400 lines": no contract caps workflow YAML, and `release.yml` is
-  already 685 lines on `main`. The extraction follows the repository's
-  documented composite-action convention, `docs/developers-guide.md:1415-1416`.)
+  already 688 lines on `main`. The extraction follows the repository's
+  documented composite-action convention, `docs/developers-guide.md:1574-1575`.)
 - Requirements: INV-1, LEM-5, LEM-6 discharged.
 - Acceptance evidence: `make test-workflow-contracts` passes, including the
   new permission and mode-matrix tests.
@@ -927,7 +929,7 @@ A reviewer accepts this change when all of the following hold.
    first and last lines are pinned verbatim by
    `github_actions_validation_test.py:218-227`.
 5. `wc -l .github/workflows/release.yml` reports a value at or below 400.
-   **Unsatisfiable as written.** The file is 685 lines on `main` before this
+   **Unsatisfiable as written.** The file is 688 lines on `main` before this
    change, and no repository contract enforces a 400-line cap on workflow YAML:
    `ci.yml` (642) and `build-and-package.yml` (441) exceed it too. The premise
    behind this criterion — that the cap is enforced on workflow files and that
@@ -1375,21 +1377,23 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   be adjudicated by re-running the gate at that revision, which is what
   established this sequence.
 
-  The violation was at `docs/execplans/use-trusted-packaging.md:1185`, an
-  89-column line whose over-long content was a long Rust test path. The cause
-  is specific and worth recording, because the same file already carries lines
-  of 125 and 81 columns that pass. MD013's only live exemption here is the
-  **final** whitespace-free run of the line: the rule rewrites
-  `line.replace(/\S*$/u, "#")` before measuring, so a line whose *last* token
-  is one unbreakable span is exempt no matter how long that span is. On line
-  1185 that last token was a one-character em-dash, so the 85-column code span
-  before it was counted and the dash itself was the exempt run. Repaired by
-  ending the sentence at the code span and starting the em-dash clause as a new
-  sentence, which makes the span line-final and matches the two lines that
-  already pass. Targeted probes after the edit: `markdownlint-cli2` reports **0
-  issues** on the plan, and `mdtablefix --check` reports it unchanged. The
-  verdict was obtained by running the tool, never by predicting it from the
-  rule source.
+  The violation was at line 1185 of this file *as it stood at that revision* —
+  an 89-column line whose over-long content was a long Rust test path. (The
+  number is not re-derivable: the line has since been reflowed out of
+  existence, so it names a position in a superseded revision of this document
+  rather than one in the current file.) The cause is specific and worth
+  recording, because the same file already carries lines of 125 and 81 columns
+  that pass. MD013's only live exemption here is the **final** whitespace-free
+  run of the line: the rule rewrites `line.replace(/\S*$/u, "#")` before
+  measuring, so a line whose *last* token is one unbreakable span is exempt no
+  matter how long that span is. On line 1185 that last token was a
+  one-character em-dash, so the 85-column code span before it was counted and
+  the dash itself was the exempt run. Repaired by ending the sentence at the
+  code span and starting the em-dash clause as a new sentence, which makes the
+  span line-final and matches the two lines that already pass. Targeted probes
+  after the edit: `markdownlint-cli2` reports **0 issues** on the plan, and
+  `mdtablefix --check` reports it unchanged. The verdict was obtained by
+  running the tool, never by predicting it from the rule source.
 
   `make test` was refused a second time by the same admission failure, so it
   again carries no verdict and the doctest half is again unobserved. The
@@ -1471,7 +1475,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Also corrected two stale counts found while editing: the modules are seven,
   not six (`release_semver` was added in Stage B), and the orientation's job
   list said `release` creates the draft when it is read-only and runs only for
-  a dry run; `publish-release` creates it at `release.yml:586`. Prose and one
+  a dry run; `publish-release` creates it at `release.yml:589`. Prose and one
   test; no workflow body, Rust source, or gate configuration changed.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   Scope correction from recon at `c1f3f2ed`: this is not an extraction of
@@ -1821,6 +1825,56 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   one occurrence with no Rust edit. Rationale, the measured two-occurrence
   count, and the rehearsal-lane gap left for Stage D are in the Decision log.
 
+- [x] (2026-10-23) Committed the packaging job's own slice at `7527111ae`
+  after `check-fmt`, `lint`, `typecheck` and `test` all exited zero on exactly
+  those bytes. It adds `.github/actions/package-crate/` and the `package-crate`
+  job that calls it, which is what discharges the coverage obligation measured
+  two entries above, and it sets `package_name` on `metadata` from
+  `steps.ensure_version.outputs['crate-name']` so neither the packaging seam
+  nor the registry exchange is fed a binary name in the package-name slot.
+- [x] (2026-10-23) Rebased the whole branch onto `origin/main` at `6572fb956`
+  from its current base `37fc364a` (37 commits replayed, `range-diff` reports
+  36 identical and one changed). One conflict, predicted before the replay by a
+  `git merge-tree` rehearsal: the `Makefile` `.PHONY` line, where `main` had
+  added `test-default-features` and `lint-default-features` for its new
+  default-feature lane and this branch had added `test-release-publication` for
+  its script suites. Resolved as the union of the two sides, verified token by
+  token rather than by eye — the result contains every token from both sides
+  and adds exactly one — because each side's addition is load-bearing and
+  dropping either would silently unschedule a real target. Every other branch
+  commit replayed byte-identical, and the only delta `range-diff` shows is that
+  line. `main`'s work survives intact: the default-feature lane, its workflow
+  file, and all 49 renamed ADRs are present, and the branch deletes no file
+  that exists on the target. Gates: see the next entry.
+- [x] (2026-10-23) Repaired the one defect the rebase introduced into this
+  plan, and only that one. `main` moved every ADR to `docs/adrs/adr-0NNN-` with
+  a longer slug; this plan cited seven times the two paths that move mattered
+  for. Rather than trust a rename map, resolved **every** doc path the plan
+  cites against the filesystem — 11 distinct paths, exactly 2 missing — and
+  confirmed the new files carry the expected serials and subjects, since that
+  rename had already collided serials elsewhere. Also confirmed the other
+  stale-looking `.md` paths the repository still contains are `main`'s own
+  deliberate historical quotations in other ExecPlans, not defects to inherit.
+  `main` performed no equivalent rewrite of those, so this branch carries no
+  obligation to invent one.
+
+- [x] (2026-10-23) Re-derived every line-number and file-path claim this plan
+  makes against the rebased base, and corrected the ones `main`'s four new
+  commits had invalidated. The drift was mechanical and traceable: #939 changed
+  `release.yml`'s Windows build to `--workspace` and added three comment lines
+  above it, which shifts every citation below that point by three, so
+  `release.yml:412/545/586/537` are now `415/548/589/540`. The file itself also
+  grew — 685 lines at the old base, 688 at the target, 733 in this branch after
+  the `package-crate` job — so the five live "685 lines on `main`" statements
+  now read 688 and the `ci.yml` comparison reads 710 (was 642). The
+  developers'-guide citation for the composite-action convention moved from
+  `:1415-1416` to `:1574-1575`. Deliberately **not** touched: the `685` in the
+  dated `Revision note` and the two `1415-1416` mentions that record a previous
+  rebase — those are historical statements about what was true on the date they
+  name, and rewriting them would falsify the record rather than correct it.
+  Verified each new number by printing the target's line at that offset, not by
+  trusting an arithmetic shift alone.
+
 ## Surprises & discoveries
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
@@ -2055,7 +2109,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `scripts/release_operation_observability.py`. It also splits API-bound
   publication out of staging into a new `publish-release` job holding
   `contents: write`. Evidence: `git show --stat 24293a1b`; the permissive job
-  header is at `release.yml:537` on `main`. Impact: Stage B must extend these
+  header is at `release.yml:540` on `main`. Impact: Stage B must extend these
   modules rather than introduce parallel ones. **Corrected 2026-10-12:** this
   entry first concluded that Stage C must add the registry exchange *inside*
   the existing `publish-release` job. That job holds `contents: write`, so the
@@ -2488,10 +2542,10 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - Decision: extract every new step body into a composite action rather than
   growing `release.yml` inline. Rationale: the repository's own convention,
-  stated in `docs/developers-guide.md:1415-1416` for the lane cache steps, and
+  stated in `docs/developers-guide.md:1574-1575` for the lane cache steps, and
   the only way to keep the job graph readable while making the sequence
   explicit. **Not** a 400-line cap: no contract enforces one on workflow YAML,
-  and `release.yml` is 685 lines on `main`. A local `action.yml` resolves from
+  and `release.yml` is 688 lines on `main`. A local `action.yml` resolves from
   the checked-out commit, so it carries no pin — `action_references.py:66-69`
   in fact refuses a `./`-prefixed action for exactly that reason, meaning
   `uses: ./.github/actions/<name>` needs no SHA. Date/Author: 2026-09-27,
@@ -2567,8 +2621,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - Decision: record acceptance criterion 5 as a **deviation** rather than
   silently redefining it or restructuring five existing job bodies to chase it.
-  Rationale: the criterion's premise is false. `release.yml` is 685 lines on
-  `main`, `ci.yml` is 642 and `build-and-package.yml` is 441, and no contract
+  Rationale: the criterion's premise is false. `release.yml` is 688 lines on
+  `main`, `ci.yml` is 710 and `build-and-package.yml` is 441, and no contract
   test enforces a 400-line cap on workflow YAML — the 400-line rule reaches
   Python through Pylint's `max-module-lines` (`pyproject.toml:175`) and Rust
   through Whitaker's `module_max_lines`, and the developers' guide applies it
@@ -2927,11 +2981,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   more output, `package_name`. Rationale: the value has to come from the
   manifest rather than from a workflow literal, because `Cargo.toml` declares
   `package.name = "netsuke-build"` while `[lib]`/`[[bin]]` are both `netsuke`
-  (the divergence `docs/adr-007-publish-as-netsuke-build.md` records), and this
-  job's only manifest-derived name today is the *binary* name — passing that as
-  `--package-name` would make the packaging seam reject the candidate, and
-  `publish-crates-io`'s authenticated exchange request the wrong crate.
-  `ensure-cargo-version` at the pin `release.yml` already carries
+  (the divergence
+  `docs/adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md`
+  records), and this job's only manifest-derived name today is the *binary*
+  name — passing that as `--package-name` would make the packaging seam reject
+  the candidate, and `publish-crates-io`'s authenticated exchange request the
+  wrong crate. `ensure-cargo-version` at the pin `release.yml` already carries
   (`ff1dd759dfffc0db3459e30e833f52437ee62b57`) declares a `crate-name` output
   and writes it unconditionally from `manifest_versions[0].name`, independent of
   `check-tag`, so the name is already resolved in this job and needs no new
@@ -3049,7 +3104,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   only way to hold the stated property rather than restate it. The action is a
   composite action rather than an inline `run:` block because the repository's
   own convention is to extract a step body into `.github/actions/`
-  (`docs/developers-guide.md:1415-1416`), and because the composite-action
+  (`docs/developers-guide.md:1574-1575`), and because the composite-action
   contract then applies the run-interpolation rule to it automatically. It is a
   sixth action rather than a sixth *job*: the five-action rule in Stage C names
   the actions the five new jobs call, and this one is called by an existing
