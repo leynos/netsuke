@@ -90,6 +90,28 @@ source pins, not substitutes for observed runtime versions in each record.
 `7d751eded578e48dacf43ab173d5820e6437c474`; setup-rust is pinned to
 `6cec89bac47a21cf756d68d638a9a510998e57f8`.
 
+### Current-source comparison at the assessed PR head
+
+Rechecked the source at PR base `8a961000859c02862454338fda6c4dd65bda2aa1` and
+candidate `99522c517c13e0414370df408f2648ee0bb7312a` on 23 October 2026. The
+candidate does not change `.github/workflows/ci.yml` or `.config/nextest.toml`.
+Compared with the historical `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`
+description above, the current limits are:
+
+| Limit                         | Historical source | Current source |
+| ----------------------------- | ----------------: | -------------: |
+| Linux job timeout             | 90 minutes        | 100 minutes    |
+| Cargo watchdog per invocation | 1,800 seconds     | 1,980 seconds  |
+| Nextest CI global timeout     | 780 seconds       | 960 seconds    |
+| Largest per-test allowance    | 600 seconds       | 900 seconds    |
+
+The default per-test allowance remains 300 seconds. The current-source values
+are read from `ci.yml` and `.config/nextest.toml`; the largest per-test
+allowance is the scoped 900-second override. These timeout changes are an
+additional reason that the retained historical runs cannot serve as matched
+current controls. They do not change the timing or cost accounting of those
+observations.
+
 Since the reference snapshot, the taiki installer pin changed from
 `83ac0ad63c0167e6f06796fab0fce28db1bf3db0` to
 `183e4297cca2404691e9380e1307288dced5c82a`; its version changed from v2.87.22
@@ -406,6 +428,9 @@ fidelity comparisons block adoption.
   ignore policy.
 - [x] Confirm `make nixie` exits successfully on the final documentation
   revision; the follow-up gate returned exit 0 and validated every diagram.
+- [x] Reconcile the offline assessment by adding a current-source timeout
+  comparison and documenting the legacy duplicate identity without
+  reclassifying it as a retry.
 - [x] Keep default CI execution unchanged and defer in-watchdog telemetry to the
   separately reviewed EP-2 milestone.
 - [ ] Propose separate bounded telemetry only after phase-one review.

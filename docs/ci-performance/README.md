@@ -295,22 +295,36 @@ from Nextest summary timestamps.
 
 Executed Nextest identities are recorded, but the selected identity inventory
 includes skipped tests and is incomplete when those skipped identities are
-absent. Coverage-command `coverage_environment` is a snapshot at the command
-marker; the general `environment` mapping contains the last observed value for
-each allowlisted variable. Neither proves the complete environment inherited by
+absent. The legacy schema `1` record for job
+[114633818860](https://github.com/leynos/netsuke/actions/runs/38194408698/job/114633818860)
+contains 2,922 result entries but 2,921 unique identities. The test
+`netsuke-build::polonius_toolchain_contract coverage_workflow_setup_matches_the_pinned_toolchain`
+appears twice as a failure with the same 0.027-second duration and different
+timestamps. Both completeness flags are false and `executed_count` is unknown.
+Retain both entries, count one unique identity for identity-set analysis, and
+do not infer that the repeated record represents a retry; the retained data
+does not establish why it appears twice. This legacy exception does not affect
+the attempt-level runner-second totals.
+
+Coverage-command `coverage_environment` is a snapshot at the command marker;
+the general `environment` mapping contains the last observed value for each
+allowlisted variable. Neither proves the complete environment inherited by
 every child process. System-used peak memory appears in some records; CPU
 seconds and process RSS are missing. Native raw-profile and object inventories
 are also missing until bounded telemetry is enabled.
 
 ## Current state
 
-The base for revalidation is `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`. The
-issue's source snapshot, `24293a1b3616872100d379e277540bb1df89203c`, is
-historical. Run `38276341866` is one of the four successful PR Linux gate
-observations: its gate job took 1,062 seconds, with 3,912 passes, six skips,
-3,103 sccache hits, 390 misses and 3,120 MiB peak system-used. Its source
-differs from the other PR observations. September timings are historical
-context, not baseline measurements.
+The current-source comparison is scoped to PR base
+`8a961000859c02862454338fda6c4dd65bda2aa1` and the assessed candidate head
+`99522c517c13e0414370df408f2648ee0bb7312a`; timeout differences from the
+historical `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8` snapshot are recorded in
+the ExecPlan. The issue's source snapshot,
+`24293a1b3616872100d379e277540bb1df89203c`, is historical. Run `38276341866` is
+one of the four successful PR Linux gate observations: its gate job took 1,062
+seconds, with 3,912 passes, six skips, 3,103 sccache hits, 390 misses and 3,120
+MiB peak system-used. Its source differs from the other PR observations.
+September timings are historical context, not baseline measurements.
 
 An exact-SHA run query on 15 October found only scheduled CI and mutation runs
 for this implementation base. In the [scheduled CI attempt][base-schedule],
