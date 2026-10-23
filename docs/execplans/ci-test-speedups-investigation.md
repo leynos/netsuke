@@ -425,6 +425,8 @@ fidelity comparisons block adoption.
 - [x] Reconcile the offline assessment by adding a current-source timeout
   comparison and documenting the legacy duplicate identity without
   reclassifying it as a retry.
+- [x] Add generated parser properties for retry and post-summary isolation,
+  and malformed inventory values, within a fixed 80-example budget per case.
 - [x] Keep default CI execution unchanged and defer in-watchdog telemetry to the
   separately reviewed EP-2 milestone.
 - [ ] Propose separate bounded telemetry only after phase-one review.

@@ -3,10 +3,11 @@
 import json
 import string
 
+import pytest
 from ci_test_evidence_logs import parse_log
 from ci_test_evidence_nextest import parse_nextest_records
 from ci_test_evidence_telemetry import NUMERIC_FIELDS, apply_inventory
-from hypothesis import given
+from hypothesis import given, settings
 from hypothesis import strategies as st
 
 SAFE_TEST_NAME = st.text(alphabet=string.ascii_lowercase, min_size=1, max_size=8)
@@ -15,6 +16,16 @@ INVENTORY_MEASUREMENTS = tuple(
     (section, field)
     for section, fields in NUMERIC_FIELDS.items()
     for field in sorted(fields)
+)
+INVALID_MEASUREMENT = st.one_of(
+    st.booleans(),
+    st.integers(max_value=-1),
+    st.integers(min_value=2**63),
+    st.floats(max_value=-0.1, allow_nan=False, allow_infinity=False),
+    st.just(float("nan")),
+    st.just(float("inf")),
+    st.text(max_size=8),
+    st.none(),
 )
 
 
@@ -44,6 +55,88 @@ def test_nextest_start_scopes_identity_inventory_to_latest_run(
     )
     assert evidence["executed_identity_inventory_complete"] is True, (
         "Generated complete runs must reconcile with their identity inventory"
+    )
+
+
+@settings(max_examples=80, derandomize=True, deadline=None)
+@given(
+    attempts=st.lists(
+        st.tuples(
+            st.sampled_from(("PASS", "FAIL", "TIMEOUT")),
+            st.integers(min_value=1, max_value=999),
+        ),
+        min_size=1,
+        max_size=6,
+    ),
+    late_attempts=st.lists(
+        st.tuples(
+            st.sampled_from(("PASS", "FAIL", "TIMEOUT")),
+            st.integers(min_value=1, max_value=999),
+        ),
+        max_size=5,
+    ),
+)
+def test_nextest_retries_and_post_summary_lines_keep_final_attempt(
+    attempts: list[tuple[str, int]], late_attempts: list[tuple[str, int]]
+) -> None:
+    """Keep retry identity and final outcome stable after the summary closes."""
+    identity = "fixture::unit retry_case"
+    result_lines = [
+        (
+            f"2026-10-23T00:00:{index:02d}Z",
+            f"TRY {index} {outcome} [ 0.{milliseconds:03d}s] {identity}",
+        )
+        for index, (outcome, milliseconds) in enumerate(attempts, start=1)
+    ]
+    final_outcome, final_milliseconds = attempts[-1]
+    summary_outcome = {
+        "PASS": "1 passed",
+        "FAIL": "1 failed",
+        "TIMEOUT": "1 timed out",
+    }[final_outcome]
+    summary = (
+        "2026-10-23T00:01:00Z",
+        f"Summary [ 0.100s] 1 test run: {summary_outcome}",
+    )
+    late_lines = [
+        (
+            f"2026-10-23T00:02:{index:02d}Z",
+            (
+                f"TRY {len(attempts) + index} {outcome} "
+                f"[ 0.{milliseconds:03d}s] {identity}"
+            ),
+        )
+        for index, (outcome, milliseconds) in enumerate(late_attempts, start=1)
+    ]
+
+    evidence = parse_nextest_records([
+        (None, "Starting 1 test across 1 binary"),
+        *result_lines,
+        summary,
+        *late_lines,
+    ])
+
+    assert len(evidence["tests"]) == 1, (
+        "All generated attempts must resolve to one retained identity"
+    )
+    final_test = evidence["tests"][0]
+    assert final_test["identity"] == identity, (
+        "The retry history must keep its original test identity"
+    )
+    assert final_test["outcome"] == final_outcome.lower(), (
+        "Only the final pre-summary retry may define the retained outcome"
+    )
+    assert final_test["seconds"] == pytest.approx(final_milliseconds / 1000), (
+        "The retained duration must belong to the final pre-summary retry"
+    )
+    assert final_test["ended_at"] == result_lines[-1][0], (
+        "Late retry-looking output must not replace the final timestamp"
+    )
+    assert evidence["retries"] == len(attempts) - 1, (
+        "Only observed pre-summary attempts after the first count as retries"
+    )
+    assert evidence["executed_count"] == 1, (
+        "Late retry-looking output must not alter the completed summary"
     )
 
 
@@ -153,4 +246,28 @@ def test_inventory_copies_only_generated_allowlisted_measurements(
     )
     assert "private-error" not in serialized, (
         "Raw inventory errors must never enter published evidence"
+    )
+
+
+@settings(max_examples=80, derandomize=True, deadline=None)
+@given(
+    measurement=st.sampled_from(INVENTORY_MEASUREMENTS),
+    value=INVALID_MEASUREMENT,
+)
+def test_generated_invalid_inventory_values_remain_unknown(
+    measurement: tuple[str, str], value: object
+) -> None:
+    """Leave malformed, negative, or out-of-range measures unknown."""
+    section, field = measurement
+    evidence = parse_log("")
+
+    apply_inventory(evidence, {section: {field: value}})
+
+    evidence_sections = {
+        "profiles": evidence["profiles"],
+        "resources": evidence["resources"],
+        "nested_cargo": evidence["nested_cargo"],
+    }
+    assert evidence_sections[section][field] is None, (
+        "Invalid generated telemetry must not become a published measurement"
     )
