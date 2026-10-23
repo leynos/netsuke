@@ -234,9 +234,13 @@ def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     try:
         declared_text = arguments.expected.read_text(encoding="utf-8")
-        trusted = release_digest_record.read_digest_record(arguments.trusted)
     except OSError as error:
         print(f"declaration unreadable: {error}", file=sys.stderr)
+        return EXIT_INPUT_UNREADABLE
+    try:
+        trusted = release_digest_record.read_digest_record(arguments.trusted)
+    except release_digest_record.UnreadableDigestRecordError as error:
+        print(f"trusted digest record unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
     except release_digest_record.DigestRecordError as error:
         print(f"trusted digest record rejected: {error}", file=sys.stderr)

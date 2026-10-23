@@ -15,6 +15,7 @@ import release_digest
 from release_digest_record import (
     DigestRecordError,
     RecordedDigestMismatchError,
+    UnreadableDigestRecordError,
     read_digest_record,
     require_downloads_match_record,
     require_record_matches_declaration,
@@ -94,8 +95,14 @@ def test_a_malformed_record_is_refused(
 
 
 def test_an_unreadable_record_is_refused(tmp_path: pathlib.Path) -> None:
-    """Refuse a path that does not exist rather than treating it as empty."""
-    with pytest.raises(DigestRecordError):
+    """Refuse a path that does not exist rather than treating it as empty.
+
+    The narrower type is asserted, not merely the base one. A consumer that
+    reports this as a rejected release rather than an unreadable input sends an
+    operator to the upload for a fault in a path, so which subclass is raised
+    is part of the contract rather than an implementation detail.
+    """
+    with pytest.raises(UnreadableDigestRecordError):
         _ = read_digest_record(tmp_path / "absent.json")
 
 
