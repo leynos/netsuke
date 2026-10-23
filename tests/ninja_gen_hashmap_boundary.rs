@@ -49,6 +49,9 @@ use cap_std::{
 #[path = "hashmap_boundary/scan.rs"]
 mod scan;
 
+#[path = "hashmap_boundary/bindings.rs"]
+mod bindings;
+
 use scan::{Hit, Kind, UNORDERED_TYPES};
 
 /// The emitter's source root, relative to the workspace root.
@@ -77,6 +80,11 @@ const PERMITTED_UNORDERED_FIELDS: [(&str, &str); 1] =
 /// An import is exempt when its own *file* is the permitted file: the import is
 /// how the permitted field's type arrives, and it cannot be iterated by itself.
 /// Every other hit must name the permitted field.
+///
+/// A permitted *declaration* is necessary and not sufficient. The exemption's
+/// justification is that the field is only asked whether a member is present,
+/// which is a claim about its uses rather than its type; `bindings` reads those
+/// and [`uncovered_uses`] reports any that the exemption does not cover.
 fn is_permitted(hit: &Hit) -> bool {
     let source = hit.source.as_str();
     let permitted_source = PERMITTED_UNORDERED_FIELDS
@@ -89,6 +97,32 @@ fn is_permitted(hit: &Hit) -> bool {
             .any(|(permitted, owner)| *permitted == field.as_str() && *owner == source),
         Kind::Field(None) | Kind::Other => false,
     }
+}
+
+/// Every use of a permitted field that its exemption does not cover.
+///
+/// The exemption list permits a collection to be *held*; it does not permit it
+/// to be read. Only a membership call is allowed, so a borrow, a `for` loop, an
+/// iterator method, or an alias each appear here. Without this, a loop writing
+/// every staged path into the emitted text would pass the scan untouched: the
+/// loop names no collection, so there is no declaration for the list to judge.
+fn uncovered_uses(sources: &[Source]) -> Result<Vec<String>> {
+    let mut uncovered = Vec::new();
+    for source in sources {
+        if source.declaration_is_test_only {
+            continue;
+        }
+        let parsed = scan::parse(&source.text).with_context(|| format!("parse {}", source.path))?;
+        for (field, owner) in PERMITTED_UNORDERED_FIELDS {
+            if owner != source.path {
+                continue;
+            }
+            for found in bindings::uses(&parsed, field) {
+                uncovered.push(format!("{}: {field} is {found:?}", source.path));
+            }
+        }
+    }
+    Ok(uncovered)
 }
 
 /// Join `name` to `prefix` with a forward slash.
@@ -300,6 +334,16 @@ fn only_membership_use_of_unordered_collections_reaches_the_emitter() -> Result<
         "these sites are permitted to hold an unordered collection but no longer \
          do: {stale:?}. Drop the permission rather than leaving a rule that \
          describes a tree this is not."
+    );
+
+    let uncovered = uncovered_uses(&sources)?;
+    ensure!(
+        uncovered.is_empty(),
+        "a permitted unordered collection may only be asked whether a member is \
+         present, but these uses read it: {uncovered:?}. Membership is what the \
+         exemption covers; iteration, a borrow, or an alias can put a hash \
+         iteration order into the emitted file, so impose a total order before \
+         consuming the values."
     );
     Ok(())
 }
