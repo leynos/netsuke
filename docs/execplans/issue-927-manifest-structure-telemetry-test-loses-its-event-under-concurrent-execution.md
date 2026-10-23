@@ -183,9 +183,35 @@ seeded duplicate.
   (no issues). `make fmt` and `make check-fmt` also passed before these gates.
   The hosted failure log was `/tmp/issue-927-build-test-job-120243674734.zip`;
   current-head hosted checks must pass after publishing this repair.
-- [ ] Complete the separate completeness and bounded-model assessments for PR
-  #943, mark it ready only after those replies and current checks clear, then
-  follow it to merge.
+- [x] (2026-10-23) The first completeness assessment for the published head
+  identified two in-scope coverage gaps: the mitigated schedule did not
+  acknowledge T2's registration attempt before starting its fixed release
+  interval, and V3 lacked wrong-value, duplicate-token, and extra-token
+  controls. The response is recorded at
+  [CodeRabbit assessment](https://github.com/leynos/netsuke/pull/943#issuecomment-6358510181).
+- [x] (2026-10-23) Add a T2 attempt-phase acknowledgement before starting the
+      fixed
+  installation deadline, retain the completed-installation signal, and add
+  wrong-value, duplicate-token, and additional-token controls. Focused tests
+  passed: the fresh-process worker printed the attempt marker in both modes,
+  reproduced zero events in unmitigated mode, and accepted exactly one summary
+  in mitigated mode; the malformed-token test passed. Logs:
+  `/tmp/test-focused-b52a33dc-f184-4eef-82fc-038987db14c6-issue-927-manifest-structure-telemetry-test-loses-its-event-under-concurrent-execution-7.out`
+  and `...-8.out`. Full local gates and an assessment follow-up on the
+- [x] (2026-10-23) Recovered from the prior no-space failures and reran the
+  complete gate sequence on the repaired candidate without cache cleanup or
+  resource exhaustion. `make fmt`, `make check-fmt`,
+  `make test-workflow-contracts` (1337 passed, 3 skipped, plus 27 script tests),
+  `make test` (4668 passed, 7 skipped; doctests passed), `make typecheck`,
+  `make lint`, `make doc-coverage` (98.13%), `make markdownlint` (zero issues),
+  `make nixie` (all diagrams), and `cs delta origin/main` (no issues) passed.
+  The host had 220 GiB free at the start and 222 GiB after the Rust gates;
+  compile admission remained healthy. Logs use the
+  `/tmp/<gate>-b52a33dc-f184-4eef-82fc-038987db14c6-issue-927-manifest-structure-telemetry-test-loses-its-event-under-concurrent-execution-<run>.out`
+  pattern.
+- [ ] Obtain completeness and bounded-model assessment follow-ups for the
+  repaired, committed, published head; mark the PR ready only after those
+  replies and current checks clear, then follow it to merge.
 
 ## Surprises & discoveries
 
@@ -375,23 +401,26 @@ referenced from the design and developers' guides, and indexed from
 - **V2: Real callsite schedule is deterministic.** The first T1 registration
   for the summary event pauses while T2 installs a TRACE capture dispatch.
   Unmitigated mode must release on `installed`, capture the structural span,
-  and report zero summaries. Mitigated mode must release on the fixed deadline
-  because the registry read lock blocks T2 registration, then capture the span
-  and exactly one summary. Method: ignored child worker driven by a parent test
-  through `current_exe()`, with a wall-clock deadline. The unmitigated gate
-  uses the existing 10-second thread deadline so loaded hosts have time to
-  construct and register the TRACE capture; the mitigated gate retains its
-  fixed 250 ms delay because T2 cannot install while T1 holds the registry read
-  lock. The parent kills a child that exceeds its 20-second deadline. Artefact:
+  and report zero summaries. Mitigated mode requires T2 to acknowledge its
+  registration attempt after T1 pauses and before the fixed installation
+  deadline begins. It must then release on the deadline because the registry
+  read lock blocks T2 registration, then capture the span and exactly one
+  summary. Retain the separate installation-completion signal inside
+  `with_default`. Method: ignored child worker driven by a parent test through
+  `current_exe()`, with a wall-clock deadline. The attempt phase uses the
+  existing 10-second thread deadline so loaded hosts can reach the capture
+  installation boundary; the mitigated installation gate retains its fixed 250
+  ms delay after that acknowledgement. The parent kills a child that exceeds
+  its 20-second deadline. Artefact:
   `src/runner/callsite_interest_reproduction/`. Non-vacuity: require all phase
   markers and the exact-cardinality oracle; removing the pre-registration
   anchor must reproduce zero summaries and a validator error.
 - **V3: Summary oracle is exact and non-vacuous.** One exact summary with the
   six expected count tokens succeeds; zero or two summaries fail; wrong or
-  duplicate count tokens and `SENTINEL` fail. Method: synthetic controls plus a
-  real TRACE capture seeded with a duplicate. Artefact:
-  `src/runner/manifest_structure_telemetry.rs`. Evidence: the zero and
-  duplicate controls return errors and the seeded duplicate is rejected.
+  duplicate count tokens, an additional count token, and `SENTINEL` fail.
+  Method: synthetic controls plus a real TRACE capture seeded with a duplicate.
+  Artefact: `src/runner/manifest_structure_telemetry.rs`. Evidence: the zero
+  and duplicate controls return errors and the seeded duplicate is rejected.
 - **V4: Capture contract remains stable.** A same static callsite transitions
   from DEBUG to TRACE with zero then one captured event, and anchoring does not
   change `dispatcher::get_default` outside a scoped capture. Method: unit tests

@@ -44,6 +44,7 @@ pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<CaptureSna
     let WorkerChannels {
         gate,
         paused_receiver,
+        registration_attempt_sender,
         installed_sender,
         finished_sender,
         finished_receiver,
@@ -56,6 +57,7 @@ pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<CaptureSna
         capture_mode,
         CaptureThreadChannels {
             paused_receiver,
+            registration_attempt_sender,
             installed_sender,
             finished_receiver,
         },
@@ -68,6 +70,10 @@ pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<CaptureSna
     ensure!(
         gate.was_paused(),
         "T1 did not reach the summary-event registration gate"
+    );
+    ensure!(
+        gate.was_attempted(),
+        "T2 did not acknowledge its capture-dispatch installation attempt"
     );
     ensure!(
         gate.failure().is_none(),
@@ -112,6 +118,7 @@ fn spawn_capture_thread(
 ) -> JoinHandle<Result<CaptureSnapshot>> {
     let CaptureThreadChannels {
         paused_receiver,
+        registration_attempt_sender,
         installed_sender,
         finished_receiver,
     } = channels;
@@ -119,6 +126,9 @@ fn spawn_capture_thread(
         paused_receiver
             .recv_timeout(THREAD_DEADLINE)
             .context("wait for T1 to pause the summary registration")?;
+        registration_attempt_sender
+            .send(())
+            .context("signal the capture-dispatch installation attempt")?;
         match capture_mode {
             CaptureMode::Unmitigated => {
                 let (trace_subscriber, captured) =
@@ -199,6 +209,7 @@ fn empty_manifest() -> Result<NetsukeManifest> {
 struct WorkerChannels {
     gate: Arc<RegistrationGate>,
     paused_receiver: Receiver<()>,
+    registration_attempt_sender: Sender<()>,
     installed_sender: Sender<()>,
     finished_sender: Sender<()>,
     finished_receiver: Receiver<()>,
@@ -207,6 +218,7 @@ struct WorkerChannels {
 /// Own the phase channels consumed by T2's capture thread.
 struct CaptureThreadChannels {
     paused_receiver: Receiver<()>,
+    registration_attempt_sender: Sender<()>,
     installed_sender: Sender<()>,
     finished_receiver: Receiver<()>,
 }
@@ -219,15 +231,18 @@ impl WorkerChannels {
             CaptureMode::Mitigated => GATE_DEADLINE,
         };
         let (paused_sender, paused_receiver) = mpsc::channel();
+        let (registration_attempt_sender, registration_attempt_receiver) = mpsc::channel();
         let (installed_sender, installed_receiver) = mpsc::channel();
         let (finished_sender, finished_receiver) = mpsc::channel();
         Self {
             gate: Arc::new(RegistrationGate::new(
                 paused_sender,
+                registration_attempt_receiver,
                 installed_receiver,
                 gate_deadline,
             )),
             paused_receiver,
+            registration_attempt_sender,
             installed_sender,
             finished_sender,
             finished_receiver,
