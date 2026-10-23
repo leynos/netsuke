@@ -30,12 +30,16 @@ GitHub or another service. Run it with:
 ```console
 uv run --script scripts/ci_test_evidence.py \
   --run RUN_JSON --jobs JOBS_JSON --log-dir LOG_DIR \
-  --telemetry-dir TELEMETRY_DIR --variant control
+  --telemetry-dir TELEMETRY_DIR --variant control \
+  > /tmp/ci-test-evidence-v2.jsonl
 ```
 
-It emits one JSON object per job attempt to standard output. Review the output
-before appending it to the dataset. Exclude credentials, raw errors and raw
-logs. Use fixed labels for cohorts and cache results.
+Before collection, choose a separately named destination for schema `2`, such as
+`/tmp/ci-test-evidence-v2.jsonl`, and write the output there. Never append
+schema `2` records to the retained schema `1` files `observations.jsonl` or
+`2026-10-15-observations.jsonl`. Review the output before publishing it.
+Exclude credentials, raw errors and raw logs. Use fixed labels for cohorts and
+cache results.
 
 The collector emits schema `2`. The retained observation files preserve their
 original schema `1` records. This abbreviated example shows current top-level
