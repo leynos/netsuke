@@ -53,7 +53,13 @@ EXPECTED_NAMES = [
 
 @pytest.fixture
 def attempt() -> tuple[dict, dict]:
-    """Supply a complete CI attempt boundary with one Linux job."""
+    """Supply a complete CI attempt boundary with one Linux job.
+
+    Returns
+    -------
+    tuple[dict, dict]
+        The saved run response, then the matching complete jobs response.
+    """
     return {
         "id": 123,
         "run_attempt": 2,

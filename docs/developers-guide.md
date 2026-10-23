@@ -24,9 +24,6 @@ fixed runner, outcome, and phase vocabularies, positive-integer API identity,
 and non-negative step-number validation. Only the offline collector may call
 those checks; application identity policies remain in their domain modules.
 
-**Triage:** [type:docstyle] The explicit module name avoids implying a separate
-serialization layer for collector-internal types and validation.
-
 Keep parsing independent of filesystem delivery and retain unknown evidence as
 `null`. Validate optional inventory artefacts against the run, attempt, and job
 identity before use. Deduplicate attempt totals before summing cost, and retain
