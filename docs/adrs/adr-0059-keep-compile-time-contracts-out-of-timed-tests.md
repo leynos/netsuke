@@ -5,7 +5,9 @@
 Accepted. Positive compile-time contracts compile as workspace libraries in
 Cargo's build phase, negative ones are pinned `compile_fail` doctests, and the
 direct-`rustc` harness that used to drive both from inside Nextest tests is
-retired. Supersedes [ADR-0033](adr-0033-record-split-build-cargo-messages.md).
+retired. Cargo's package verification build runs as `make test-package-verify`
+on the Linux gate rather than inside a test. Supersedes
+[ADR-0033](adr-0033-record-split-build-cargo-messages.md).
 
 ## Date
 
@@ -33,6 +35,10 @@ families of tests, all members of the serialized `nested-cargo-builds` group:
   isolated two-crate workspace built under private split roots and compiled
   through the harness's `rustc` response file. The latter also carried a 900 s
   allowance.
+- `tests/packaging_smoke_tests.rs` ran `cargo publish --dry-run`, which
+  compiles the extracted package with its default features, before asserting
+  the packaged file list. That build reached 600 s and then 720 s caps under
+  saturated admission, and carried a 900 s allowance of its own.
 
 Each of those tests charged Cargo's package-cache lock, any dependency rebuild
 its check mode or feature selection triggered, and every compiler-admission
@@ -73,11 +79,12 @@ allowance for a queue to exhaust.
 
 _Table 1: Where each kind of compile-time contract runs under each option._
 
-| Contract kind         | Option A                       | Option B                         | Option C                       |
-| --------------------- | ------------------------------ | -------------------------------- | ------------------------------ |
-| Public API compiles   | Nested Cargo in a timed test   | Shared nested Cargo, still timed | Workspace library, build phase |
-| Item must not compile | Direct `rustc` in a timed test | Direct `rustc` in a timed test   | Pinned `compile_fail` doctest  |
-| Harness self-tests    | Kept, with 900 s allowance     | Kept                             | Retired with the harness       |
+| Contract kind              | Option A                       | Option B                         | Option C                          |
+| -------------------------- | ------------------------------ | -------------------------------- | --------------------------------- |
+| Public API compiles        | Nested Cargo in a timed test   | Shared nested Cargo, still timed | Workspace library, build phase    |
+| Item must not compile      | Direct `rustc` in a timed test | Direct `rustc` in a timed test   | Pinned `compile_fail` doctest     |
+| Harness self-tests         | Kept, with 900 s allowance     | Kept                             | Retired with the harness          |
+| Package verification build | Nested Cargo in a timed test   | Nested Cargo in a timed test     | Makefile target on the Linux gate |
 
 ## Decision outcome
 
@@ -111,9 +118,25 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   holds `public_api_fixture` to its single dependency, its forwarded feature,
   and its module list, and requires the support crate's compile-fail examples
   to stay in place.
-- **Nextest.** The ten public-API tests, the support-crate tests, and the two
-  harness tests leave `nested-cargo-builds`, along with the two 900 s
-  allowances they carried.
+- **Package verification is a Makefile target.**
+  `make test-package-verify` runs
+  `cargo publish --dry-run --allow-dirty -p netsuke-build`, and the Linux gate's
+  `Package verification` step runs it. The packaging test keeps only
+  `cargo package --list`, which compiles nothing, so the file-list assertions
+  still run on every platform. The target is not part of `make test`: the
+  Windows lane runs `make test`, and moving the verification off that lane is
+  what an earlier change measured at a 240.8 s median saving, since packaged
+  content does not vary by platform.
+- **Nextest.** The ten public-API tests, the support-crate tests, the two
+  harness tests, and the packaging test leave `nested-cargo-builds`, along with
+  the three 900 s allowances they carried. With no build left in the default
+  suite, the generated-completion readers leave the group too, and the
+  `#[ignore]`-gated mutation compile gate is its only member. Its 600 s is now
+  the largest per-test allowance.
+- **Discovery.** The child-Cargo discovery used by the workflow contracts no
+  longer treats `cargo package --list` as build-capable, and a contract now
+  requires that no test outside the mutation compile gate starts a
+  build-capable Cargo command at all.
 
 ## Known risks and limitations
 
@@ -127,6 +150,10 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   per-test allowance locally and runs inside its own cargo watchdog in CI, so a
   queue makes it slower rather than failing it. Four such examples now exist
   across the workspace.
+- `make test` no longer runs the package verification build, so a local run
+  of the full test suite does not prove the packaged crate compiles. The Linux
+  gate does, and AGENTS.md names the inputs after which a contributor should run
+  `make test-package-verify` locally.
 - `public_api_fixture` compiles on every workspace build, including a local
   `make build`. The cost is small and bounded by the same compiler cache as the
   rest of the workspace.
@@ -154,5 +181,9 @@ bound.
   the type-checked boundaries.
 - [`tests/workflow_contracts/compile_contract_placement_test.py`](../../tests/workflow_contracts/compile_contract_placement_test.py)
   holds the placement.
+- [`tests/workflow_contracts/nextest_child_cargo_group_test.py`](../../tests/workflow_contracts/nextest_child_cargo_group_test.py)
+  refuses a build-capable child Cargo command in any default-suite test.
+- [`Makefile`](../../Makefile) defines `test-package-verify`, and
+  [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs it.
 - [`docs/developers-guide.md`](../developers-guide.md), section "Compile-time
   contracts live in the build graph", states the practice for contributors.

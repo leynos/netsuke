@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-package-verify build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -238,6 +238,15 @@ test-documentation-contracts: check-build-tools ## Validate marked documentation
 
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
+
+# Cargo's publish verification: extract the packaged crate and compile it with
+# the shipped default features. It runs here rather than in a test because the
+# cost is a cold compile of the packaged crate, which no per-test allowance can
+# bound; `tests/packaging_smoke_tests.rs` keeps the file-list assertions, which
+# compile nothing. Not part of `make test`: CI runs it on the Linux lane, and
+# what Cargo packages does not vary by platform. See ADR-0059.
+test-package-verify: check-build-tools ## Verify that the packaged crate builds for publication
+	$(GATE_RUSTFLAGS) $(CARGO) publish --dry-run --allow-dirty -p netsuke-build $(BUILD_JOBS)
 
 # The default-feature lane. Release binaries build the default feature set,
 # which excludes `lint` (`netsuke check`) until v0.2.0, so these targets lint

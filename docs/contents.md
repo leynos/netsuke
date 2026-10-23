@@ -304,7 +304,8 @@ operator, user, and contributor references are easier to find.
   than inside a timed test body.
 - [ADR-0059](adrs/adr-0059-keep-compile-time-contracts-out-of-timed-tests.md):
   Compiling public-API contracts as a workspace library and rejections as
-  pinned compile-fail doctests, retiring the direct-`rustc` test harness.
+  pinned compile-fail doctests, retiring the direct-`rustc` test harness and
+  moving package verification into `make test-package-verify`.
 
 ## Proposals
 

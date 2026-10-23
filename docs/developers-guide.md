@@ -4767,14 +4767,12 @@ Markdown. A 38 s margin is not a budget but the difference between two runners,
 and the failure then names nextest's cap rather than the patch that was slow.
 The widened allowance is bounded from above by the whole-run budget: the
 ordering requires `global-timeout` strictly above the largest per-test
-allowance. The mutation gate keeps its 600 s allowance. The stub-environment
-compile-fail check, split-build, and packaging smoke tests each get 900 s,
-leaving 60 s below the 960 s whole-run budget; the production module-slice
-check uses the 300 s default, because it checks source text and leaves
-compilation to the workspace build. At 60 s periods, 960 s would permit at most
-fifteen periods (900 s) while remaining strictly below the whole-run budget. An
-allowance of 960 s would equal that budget, and the run could end before the
-test used its allowance.
+allowance. The mutation gate's 600 s is now the largest allowance in the file;
+every other test uses the 300 s default, because ADR-0059 moved the compiler
+work that once needed 900 s out of the suite. At 60 s periods, 960 s would
+permit at most fifteen periods (900 s) while remaining strictly below the
+whole-run budget. An allowance of 960 s would equal that budget, and the run
+could end before the test used its allowance.
 
 That widening was inert when it first landed, which is why the override is
 worth reading as a worked example of the trap above. Its filter named the bare
@@ -5036,6 +5034,7 @@ Table: the executed test set of every job that runs tests.
 | -------------------------- | ------------ | ------------------------------------------ | -------- | ----------- | -------- |
 | `build-test` coverage step | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `build-test` doctest step  | Ubuntu 24.04 | `cargo test --doc`                         | all      | doctests    | denied   |
+| `build-test` package step  | Ubuntu 24.04 | `make test-package-verify`                 | default  | package     | denied   |
 | `coverage-upload`          | Ubuntu 24.04 | `cargo llvm-cov nextest --workspace`       | all      | all         | denied   |
 | `netsukefile`              | Ubuntu 22.04 | builds a manifest and runs Ninja           | default  | binary only | allowed  |
 | `kani-smoke`               | Ubuntu 24.04 | `make kani-ir`                             | Kani cfg | harnesses   | allowed  |
@@ -5065,12 +5064,13 @@ because no coverage runs there; its native-recipe smoke steps are part of the
 test job rather than a job of their own, and its lints run beside that job
 rather than ahead of it.
 
-One assertion is deliberately not run twice.
-`packaged_manifest_retains_build_script_sources` skips Cargo's publish
-verification build on Windows and keeps it on the Linux coverage lane, because
-what Cargo puts in a package does not vary by platform and the verification
-costs a median of 240.8s on `windows-latest` against about 25s on the cached
-Linux runner. Both platforms still assert the packaged file list. See
+One check is deliberately not run twice. Cargo's publish verification build
+runs only on the Linux gate, as the `Package verification` step's
+`make test-package-verify`, because what Cargo puts in a package does not vary
+by platform and the verification costs a median of 240.8s on `windows-latest`
+against about 25s on the cached Linux runner. Both platforms still assert the
+packaged file list through `packaged_manifest_retains_build_script_sources`,
+which runs `cargo package --list` and compiles nothing. See
 [Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
 [windows-test-budget]: #historical-windows-budget-for-the-isolated-cargo-build-tests
@@ -5115,14 +5115,12 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
-- **Targeted cold-build allowances.**
-  `packaged_manifest_retains_build_script_sources` runs
-  `cargo publish --dry-run` with the invoking workspace's build directory for
-  matching dependency artefacts while Cargo verifies the freshly extracted
-  package sources. The earlier private-target harness reached the targeted 600s
-  cap during a cold build under shared compiler admission, so this test retains
-  fifteen warning periods (900s) for cold or contended package builds. The
-  production module-slice boundary, the embedder-facing public API, and the
+- **No cold builds inside tests.** Cargo's publish verification build runs as
+  `make test-package-verify` rather than inside
+  `packaged_manifest_retains_build_script_sources`, which keeps only the
+  `cargo package --list` assertions. Under shared compiler admission that build
+  reached a 600s cap, then a 720s one, so no per-test allowance could bound it.
+  The production module-slice boundary, the embedder-facing public API, and the
   `test_support` compile-time contracts all compile in the workspace build
   before test execution (see "Compile-time contracts live in the build graph"),
   so none of them has a nested Cargo invocation or a widened timeout. The
@@ -5405,20 +5403,24 @@ tests require workflow YAML files under `.github/workflows` and ensure local
 composite action manifests under `.github/actions` are covered by the
 configured Dependabot directory patterns.
 
-`tests/packaging_smoke_tests.rs` runs `cargo publish --dry-run` to verify the
-packaged crate builds successfully for release. It then uses
-`cargo package --list` to confirm that the packaged manifest retains
-build-script sources, including the `build_l10n_audit/` modules, and rejects
-stale `ninja_env/` paths. It also asserts that every catalogue named by the
-locale registry ships in the package, so adding a locale cannot silently omit
-its `messages.ftl` from a release. Every `README*.md` in the crate root must
-likewise ship, because the localization menu at the top of each edition links
-its siblings by relative path; the expected set is read from the crate root, so
-a new translation is required to be packaged without updating the test. Package
-`include` patterns are anchored to the crate root so similarly named files
-below local caches cannot leak into the archive. The smoke test also confirms
-that `.uv-cache/` and the workspace-only `test_support/` crate are absent from
-the netsuke package.
+`make test-package-verify` runs `cargo publish --dry-run` to verify the
+packaged crate builds successfully for release; the Linux gate runs it as its
+`Package verification` step, outside the test suite, because the verification
+compile has no bound a per-test allowance could express (ADR-0059). Run it
+locally after changing the package's `include` list, `build.rs`, or
+`build_l10n_audit/`. `tests/packaging_smoke_tests.rs` uses
+`cargo package --list`, which compiles nothing, to confirm that the packaged
+manifest retains build-script sources, including the `build_l10n_audit/`
+modules, and rejects stale `ninja_env/` paths. It also asserts that every
+catalogue named by the locale registry ships in the package, so adding a locale
+cannot silently omit its `messages.ftl` from a release. Every `README*.md` in
+the crate root must likewise ship, because the localization menu at the top of
+each edition links its siblings by relative path; the expected set is read from
+the crate root, so a new translation is required to be packaged without
+updating the test. Package `include` patterns are anchored to the crate root so
+similarly named files below local caches cannot leak into the archive. The
+smoke test also confirms that `.uv-cache/` and the workspace-only
+`test_support/` crate are absent from the netsuke package.
 
 `tests/man_page_contract_tests.rs` and `tests/binstall_metadata_tests.rs` guard
 the package-versus-target naming split described in
@@ -7080,12 +7082,12 @@ The `netsuke-build` script follows this boundary: it omits watchers for
 `SOURCE_DATE_EPOCH` to be the only watched variable, written as a literal
 directive.
 
-Generated completion contract tests share the `nested-cargo-builds` group with
-the preparations that may regenerate their target/profile staging files.
-`clap_complete::generate_to` writes those final files in place, so a concurrent
-reader can observe empty content. Grouping the readers and writers makes the
-standard Nextest run wait for complete generation; it preserves the original
-test assertions and timeout policy.
+Generated completion contract tests once shared the `nested-cargo-builds` group
+with the nested preparations that could regenerate their target/profile staging
+files: `clap_complete::generate_to` writes those files in place, so a
+concurrent reader could observe empty content. No test in the default suite
+starts such a build any longer, so the readers run ungrouped and the files are
+complete before the first test starts.
 
 ### Manifest `env()` reader
 
@@ -9768,12 +9770,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                             |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 900 s packaging smoke test |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                         |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step             |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                     |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation compile gate    |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally             |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                         |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9787,32 +9789,33 @@ and the watchdog's 1,980 s are the current values.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real maximum is 900 s. Any
+alone would report a 60 s allowance where the real maximum is 600 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
 
-There are three distinct per-test allowances and the largest governs.
+There are two distinct per-test allowances and the larger governs.
 `[profile.default]`'s own `slow-timeout` gives five periods — 300 s — to every
 test no override matches, which is almost all of them. The mutation compile
 gate gets ten periods, 600 s; it compiles all 18 patched trees through the Kani
-frontend into a target directory no cache restores. The packaging smoke test
-gets fifteen periods, 900 s. It verifies fresh extracted crate sources but
-inherits Cargo's environment and configuration, allowing matching dependency
-artefacts in the original workspace build directory to be reused. A whole-run
-budget has to sit above the largest allowance in the file, so 900 s is the
-figure the ordering below is written against, not the 300 s most tests get.
+frontend into a target directory no cache restores, and it runs in its own
+`make test-kani-mutations` invocation rather than in the default suite. A
+whole-run budget has to sit above the largest allowance in the file, so 600 s
+is the figure the ordering below is written against, not the 300 s most tests
+get.
 
-No compile-time contract needs an allowance of its own any longer. The
+No test the default suite runs needs an allowance of its own any longer. The
 production module slice, the embedder-facing public API, and the `test_support`
 rejections compile in the workspace build or the doctest pass rather than
-inside a test (see "Compile-time contracts live in the build graph"). Their
-former tests waited on the shared package-cache lock and on compiler admission:
-the CLI configuration fixture measured 171.4 s on a quiet host and 709.2 s on a
+inside a test (see "Compile-time contracts live in the build graph"), and the
+package verification build runs as `make test-package-verify`. Their former
+tests waited on the shared package-cache lock and on compiler admission: the
+CLI configuration fixture measured 171.4 s on a quiet host and 709.2 s on a
 cold per-run tree, the split-build fixture timed out at 720 s, the module-slice
 check timed out at 900 s, and the stub compile-fail fixture reached the 300 s
-default before receiving 900 s of its own. That spread is the evidence that the
-wait belonged to the host rather than to the tests, and it is why the fix moved
-the work instead of widening the budgets.
+default before receiving 900 s of its own, and the packaging verification
+reached 600 s and then 720 s caps. That spread is the evidence that the wait
+belonged to the host rather than to the tests, and it is why the fix moved the
+work instead of widening the budgets.
 
 Those overrides are the targeted, written-rationale case
 `.config/nextest.toml`'s own policy asks for, and the mutation gate is worth
@@ -9820,23 +9823,14 @@ reading as the worked example of it. The gate passed twice at 257.7 s and 261.5
 s and then failed at 300.008 s on a head whose only diff was eight lines of
 Markdown. The code was not slow; the cap was too near the cost, and a margin of
 38 s is the difference between one runner and another rather than a budget. The
-packaging smoke test also exceeded its budget. `cargo publish --dry-run`
-verifies extracted package sources while using the invoking workspace's build
-directory for matching dependency artefacts. The harness previously assigned a
-fresh private `CARGO_TARGET_DIR`, preventing that reuse; it now inherits
-Cargo's build configuration without skipping verification. Earlier runs under
-that private-target harness passed at 145 s and timed out at 300.047 s on this
-host on one head whose only change between the two runs was a word in a plan,
-with load average the rest of the difference. Against the 300 s allowance it
-measured 259.5 s in the gate run that passed, 40 s of margin. Separate
-full-suite runs passed at 208.921 s and reached the 300.017 s cap during
-concurrent Cargo work, confirming that its timing varies with host load. The
-latest cold-target run reached 600 s while compiler admission was saturated.
-The candidate gives this test fifteen warning periods, 900 s, which remains
-strictly below the 960 s whole-run budget. Each override binds only because its
-filter carries the test's module path; earlier passing runs did not prove the
-wider allowance was in force because the test completed inside the 300 s
-default. See "nextest configuration" for the rule.
+packaging smoke test once carried a 900 s override of the same kind: under a
+private-target harness it passed at 145 s and timed out at 300.047 s on heads
+that differed by a word in a plan, and later full-suite runs passed at 208.921
+s and reached the 300.017 s cap during concurrent Cargo work. Its verification
+build has since left the suite, so it no longer needs one. Each override binds
+only because its filter carries the test's module path; earlier passing runs
+did not prove the wider allowance was in force because the test completed
+inside the 300 s default. See "nextest configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
 
@@ -9853,9 +9847,9 @@ apply under it.
 #### Why the budget is not in `[profile.default]`
 
 `default` is what every local `make test` runs under, and a developer's host is
-contended in a way a CI runner is not. The packaging smoke test still spawns
-Cargo, so its nested invocation can queue behind the package-cache lock of
-other builds on the machine.
+contended in a way a CI runner is not. No test the default suite runs starts a
+Cargo build any longer, but every test binary still waits for the shared build
+phase, and a whole-run clock would count that wait as well.
 
 A whole-run cap in `default` would have ended such a run against a figure read
 from CI logs, which have nothing to say about local contention, and the figure
@@ -9910,7 +9904,7 @@ to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-960 s          > 900 s
+960 s          > 600 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,980 s       >= 960 s + 70 s + 600 s + 300 s = 1,930 s
@@ -10405,7 +10399,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-900 s largest per-test allowance and the 1,010 s the watchdog can cover, so the
+600 s largest per-test allowance and the 1,010 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 

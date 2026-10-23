@@ -200,8 +200,14 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
-def test_cold_packaging_verification_has_a_scoped_budget() -> None:
-    """Allow measured cold package compilation without relaxing ordinary tests."""
+def test_only_the_mutation_gate_has_an_extended_budget() -> None:
+    """Keep every test the default suite runs on the ordinary allowance.
+
+    Extended allowances existed for tests that compiled inside their own time
+    budget. ADR-0059 moved that work out of the suite, so the `#[ignore]`-gated
+    mutation compile gate, which runs in its own invocation, is the one test
+    left with a measured cold-build allowance.
+    """
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
     )
@@ -209,20 +215,12 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
         "ordinary tests must retain their five-minute budget"
     )
-    timed_overrides = [
-        override for override in profile["overrides"] if "slow-timeout" in override
-    ]
-    assert len(timed_overrides) == 2, (
-        "only remaining nested builds may need extended test budgets"
-    )
     configured = {
-        override["filter"]: override["slow-timeout"] for override in timed_overrides
+        override["filter"]: override["slow-timeout"]
+        for override in profile["overrides"]
+        if "slow-timeout" in override
     }
     expected = {
-        "test(/^packaged_manifest_retains_build_script_sources($|::)/)": {
-            "period": "60s",
-            "terminate-after": 15,
-        },
         (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
@@ -232,12 +230,12 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
         },
     }
     assert configured == expected, (
-        "cold-build budgets must retain current-main allowances"
+        "only the mutation compile gate may carry an extended allowance"
     )
 
 
-def test_packaging_verification_preserves_cargo_build_configuration() -> None:
-    """Reuse Cargo build configuration while retaining package verification."""
+def test_packaging_list_check_compiles_nothing() -> None:
+    """Keep the packaging test to the file list, which spawns no build."""
     source = (REPO_ROOT / "tests" / "packaging_smoke_tests.rs").read_text(
         encoding="utf-8"
     )
@@ -246,17 +244,38 @@ def test_packaging_verification_preserves_cargo_build_configuration() -> None:
         r'\.env(?:_remove)?\(\s*"CARGO_(?:TARGET_DIR|BUILD_TARGET_DIR|BUILD_BUILD_DIR)"'
     )
     assert not re.search(forbidden, source), "preserve Cargo's build placement"
+    assert '"publish"' not in source, (
+        "publish verification compiles the package, so it belongs to "
+        "`make test-package-verify`, not to a timed test"
+    )
     required = (
-        ".args(PUBLISH_DRY_RUN_ARGS)",
         '.args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])',
         "assert_required_paths_present(&packaged_paths, &readme_paths, &source_paths);",
         "assert_forbidden_roots_absent(&packaged_paths);",
     )
     assert all(fragment in source for fragment in required), (
-        "package verification and source-list assertions must remain intact"
+        "the packaged file-list assertions must remain intact"
     )
-    linux = source.split("} else {", maxsplit=1)[1].split("};", maxsplit=1)[0]
-    assert '"--no-verify"' not in linux, "Linux must verify the extracted package"
+
+
+def test_package_verification_runs_outside_the_test_suite() -> None:
+    """Keep the verification build in a Makefile target the Linux lane runs."""
+    recipe = expand_makefile_variables(
+        makefile_recipe("test-package-verify"), makefile_definitions(load_makefile())
+    )
+    for fragment in ("publish --dry-run", "-p netsuke-build", "-D warnings"):
+        assert fragment in recipe, f"test-package-verify must pass {fragment!r}"
+    assert "--no-verify" not in recipe, (
+        "the target exists to run the verification build; skipping it would "
+        "leave the packaged crate's compilation untested"
+    )
+    step = named_step(
+        job_steps(load_workflow(WORKFLOW_DIR / "ci.yml"), "build-test"),
+        "Package verification",
+    )
+    assert step.get("run") == "make test-package-verify", (
+        "the Linux gate must run the package verification target"
+    )
 
 
 @pytest.mark.parametrize(
