@@ -14,12 +14,13 @@ the block is discharged: the user directed "Widen the cap", and the cap is now
 with a counted inventory for the rest. The derivation, and the reason the new
 number is a measurement rather than a round figure, are in `Decision log`.
 
-`EP-M0` through `EP-M5` are complete. `ADR-030` is written and indexed, and the
-approval gate was passed on 2026-09-27. `EP-M4` closed on 2026-10-17 by
-execution rather than by reading: its four files compiled for the first time,
-`make proptest` passed 104 of 104 at `1b4b3fb1`, and both assigned mutations
-were applied, observed to fail the named properties, and reverted. `EP-M5`
-closed on 2026-10-18: its eight gates passed against `f0a2831f`, its milestone
+`EP-M0` through `EP-M7` are complete, and `EP-M8`'s implementation and evidence
+sweep are delivered. `ADR-030` is written and indexed, and the approval gate
+was passed on 2026-09-27. `EP-M4` closed on 2026-10-17 by execution rather than
+by reading: its four files compiled for the first time, `make proptest` passed
+104 of 104 at `1b4b3fb1`, and both assigned mutations were applied, observed to
+fail the named properties, and reverted. `EP-M5` closed on 2026-10-18: its
+eight gates passed against `f0a2831f`, its milestone
 `coderabbit review --agent` pass was finally obtained against `d4225faf`, and
 every finding from that pass has a recorded disposition. Hosted CI then caught
 one defect the local batch could not have caught, because `make typecheck` was
@@ -27,37 +28,56 @@ missing from it; the repair and the review repairs were then gated together by
 a nine-gate batch at `d4225faf`, and committed as `8fe31258` and `cb455c57`
 without further edit.
 
-`EP-M2`'s thirteenth gate — `test-nextest` — is red on an environmental timeout
-of `cli_configuration_fixture_compiles`, which is **not** this branch's test.
-The branch has since been rebased onto `origin/main` and the failure **survived
-the rebase**: `TIMEOUT [300.024s]` on `case_1_public_api`. The expectation that
-`origin/main`'s repair would remove it was wrong, and the user's earlier
-direction anticipated that case — "If that doesn't fix the timeout, address the
-way the timeout is calculated to account for the queue" — so the allowance is
-now widened to 900 s on the family override that carries all nine ambient
-fixtures. The measurement and the reasoning are in `Surprises & discoveries` and
-`Decision log`. The timeout was never this suite's cost: the child
-`cargo check` is cold in a half-cleaned tree, and any of the nine fixtures can
-be the one that pays it. No test's own behaviour is relaxed, and the per-test
-tier is raised inside the unchanged 960 s whole-run budget.
+`EP-M2`'s thirteenth gate — `test-nextest` — went red on an environmental
+timeout of `cli_configuration_fixture_compiles`, which is **not** this branch's
+test. The failure **survived two rebases**, so the expectation that
+`origin/main`'s repair would remove it was wrong; the user's earlier direction
+anticipated exactly that case — "If that doesn't fix the timeout, address the
+way the timeout is calculated to account for the queue" — and the allowance was
+widened to 900 s on the family override that carries the ambient fixtures. The
+timeout was never this suite's cost: the child `cargo check` is cold in a
+half-cleaned tree, and any fixture in the family can be the one that pays it.
+No test's own behaviour is relaxed, and the per-test tier sits inside the
+unchanged 960 s whole-run budget. `make test` passed 4,720 tests plus 39
+doctests in the final batch, so this is closed by measurement rather than by
+the widening alone.
 
-`EP-M6` onward is unwritten. The compile pool is not a blocking factor: on
-2026-10-17 it reported
-`capacity 4, held 0, healthy, sccache unreachable, compiling directly`, with
-nothing compiling anywhere on the host, and a compile can be started. Its
-occupancy varies with other agents' work, so a slow gate is a queue measurement
-rather than a failure signal.
+The compile pool is not a blocking factor. Its occupancy varies with other
+agents' work, so a slow gate is a queue measurement rather than a failure
+signal.
 
 The `EP-M5` milestone `coderabbit review --agent` pass is **obtained**, after
 the seven service-side refusals recorded below. The successful run reviewed
 `origin/main (077cf366)…HEAD` at `d4225faf` — the 43 files of that range — and
 completed with exit 0 and six findings. Each has a disposition in `Progress`:
 finding 1 is rejected with clock evidence, and findings 2 through 6 are
-repaired. `docs/roadmap.md:595` shows the house pattern treats such a review as
-completion evidence, and roadmap item 4.3.1 stays unchecked until `EP-M8`.
+repaired. `docs/roadmap.md` shows the house pattern treats such a review as
+completion evidence.
 
-This revision follows a design review, a rebase onto `origin/main`, that
-Windows repair, gate pass #5, and the `EP-M5` review round.
+The branch tip is `f91f663a7`, rebased onto `origin/main` at `6572fb956`: 86
+commits, no merges, and the target verified as an ancestor. Ten gates passed
+sequentially against that exact candidate with the tree clean at both ends —
+`check-fmt`, `typecheck`, `lint`, `doc-coverage`, `test`, `proptest`,
+`markdownlint`, `nixie`, `test-documentation-contracts`, and
+`test-workflow-contracts`.
+
+Note that this plan file is itself a tracked input:
+`tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`
+from disk at test time, so a revision of this document is **not** a docs-only
+delta and is gated by the same ten targets, including `make test`. Each batch's
+result is recorded in the delivery ledger rather than restated here, so this
+document does not have to be rewritten — and re-gated — every time a gate runs;
+the revision of record is the one named in the ledger. What remains for `EP-M8`
+is the milestone `coderabbit review --agent` pass and the hosted CI it will be
+published to; both are external to the implementation.
+
+The `Scope` tolerance is **breached and not re-widened**: 87 files and 8,618
+net added lines against a cap of 56 and 6,000. The derivation, the four causes,
+and the reason the cap was not moved a second time are in `Progress`.
+
+This revision follows a design review, two rebases onto `origin/main`, that
+Windows repair, the emitter relay repair, gate batch #6, and the `EP-M5` review
+round.
 
 ## Purpose / big picture
 
@@ -684,6 +704,20 @@ question.
   `NETSUKE_REQUIRE_NINJA`, so that lane skips silently today. *Mitigation:* use
   the existing `ninja_is_required` mechanism and record the Windows gap as a
   finding for a separate item rather than fixing it here.
+- **The `Scope` tolerance is breached, open, and deliberately not re-widened.**
+  *Severity: moderate. Likelihood: realized.* Measured against `origin/main`
+  (`6572fb956`) and excluding this ExecPlan, the branch is **87 files and 8,618
+  net added lines** against a cap of 56 and 6,000. The cap was widened once, on
+  2026-10-17, from 34/2,600 on user direction; that widening's inventory missed
+  the strategy modules entirely and undercosted four suites, which is why the
+  new figure is a measurement rather than another estimate. *Mitigation:* the
+  overrun is disclosed here and in the PR body with its counted derivation, so
+  a reviewer can see the number moved. It was **not** re-widened by this
+  session: the tolerance is a stop-and-escalate control, the previous exception
+  came from the user, and self-granting a second one would retire the control.
+  The four options — widen to ~90 files / ~9,300, accept the overrun, cut
+  scope, or split into a stacked PR — are stated in `Progress` and remain the
+  user's to choose. None blocks delivery, and no gate depends on the number.
 - **~~Regression seeds in `tests/` are inert.~~** ***Falsified 2026-09-27.***
   Proptest's default `SourceParallel` persistence does print
   `failed to find lib.rs or main.rs` from an integration-test crate, but that
@@ -2415,6 +2449,112 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
 
+- [x] (2026-10-23) **Ten gates passed sequentially against one frozen candidate,
+      `f91f663a7`, and the tree did not move.** Candidate
+      `f91f663a705e828d67fa44b5852d6ad11f825c49`; `git status` clean before and
+      after every gate. `check-fmt` (261 formatted, 199 unchanged), `typecheck`
+      (119 s), `lint` (389 s; Pylint 10.00/10 across both trees, interrogate
+      100%, yamllint and actionlint clean), `doc-coverage` (98.13% against the
+      80% bar), `test` (nextest 4,720 passed, 6 skipped, 2 slow; 39 doctests),
+      `proptest` (166 run, 166 passed, 4,560 skipped), `markdownlint` (199
+      files, 0 issues), `nixie`, `test-documentation-contracts` (14 passed, 46
+      skipped), `test-workflow-contracts` (1,337 passed + 3 skipped; second
+      suite 27 passed).
+
+  *One gate was re-run rather than reported green, and the distinction matters.*
+  `make proptest` first failed with `No space left on device (os error 28)`
+  while creating an incremental-compilation directory. **Zero test lines
+  executed**, so that run was not a test verdict in either direction and was
+  not counted as a failure of the code, nor as a pass. Space recovered on the
+  host without any deletion by this session (14 G free at the failure, 203 G
+  before the re-run), and the re-run passed 166 of 166. The other nine gates
+  were reported by the scrutineer against the same candidate, which verified
+  start SHA = end SHA and a clean tree, so the batch is valid evidence for all
+  ten.
+
+  *An apparent competing gate was investigated and dismissed.* A process scan
+  reported a `make test` running in this worktree; reading `/proc/<pid>/cwd`
+  showed it belonged to `femtologging`, a different repository. A later scan
+  printed `RUNNING pid=1131732`, which turned out to be the scanning shell
+  matching its own command line — `/proc/1131732/cmdline` did not exist by the
+  time it was read. Neither was a peer session on this branch, so no gate was
+  run concurrently and no other agent's work was touched.
+
+- [x] (2026-10-23) **The branch is rebased a second time, onto `origin/main` at
+      `6572fb956`, and five conflicts resolved in favour of both sides where
+      both had improved the same text.** 86 commits replay with no merges;
+      `range-diff` over `64046d789..38f31a404` against
+      `6572fb956..HEAD` yields 87 rows — **80 `=`, four `!`, one `<` and two
+      `>`**. The four `!` rows are the conflicted commits that survived replay
+      (`Add a make proptest convenience selector`, `Declare the proptest target
+      in the nextest worker-bound contract`, `Add emission-order,
+      default-order, and no-hash property suites`, `Add the real-Ninja
+      determinism oracle`). The fifth conflicted commit, `38f31a404 Restore the
+      ambient-target and packaging coverage contracts`, has no `!` row at all:
+      it was **replaced** by two commits, `032bb0bf4` (the restored contracts)
+      and `f91f663a7` (their reconciliation with main's lane-aware checks),
+      which are exactly the two unmatched `>` rows. So five source commits
+      handled five conflicts and became six commits. No unexplained
+      divergence. The target is verified as an ancestor of the new head
+      (`merge-base --is-ancestor`, not inferred from a clean log).
+
+  - *The conflict worth recording is `test_execution_coverage_test.py`, which
+    conflicted twice.* Target had split `LIBRARY_BUILD_ARGUMENTS` into two
+    `#[cfg]` lanes — `all-features` for the lint lane, plain `--lib` otherwise
+    — while the branch had written a richer docstring and a per-package
+    assertion over both ambient fixtures. The resolution keeps target's
+    lane-aware scan, which is strictly the stronger contract because it also
+    catches the default lane *gaining* `--all-features`, and keeps the
+    branch's docstring and `--package` composition assertions. The "why" is
+    that the replayed branch commit had been authored against a base where the
+    constant was a single declaration; it was not a disagreement about the
+    contract, but two different moments of the same file.
+  - *`.config/nextest.toml` took the branch's explanatory comment with target's
+    filter line*, which names ten ambient fixtures rather than nine — a strict
+    superset, so the branch's budget contract still holds and its contract
+    test was updated to match rather than being left to pass vacuously on a
+    name list that no longer described the config.
+  - *`Makefile`, `tests/makefile_test_target.rs`, and `docs/users-guide.md`
+    are unions*, each resolved by keeping both sides' additions and then
+    verified by count: 47 `.PHONY` names all unique, and a `NEXTEST_TARGETS`
+    array whose length is a compile-time assertion.
+  - *A leftover `# weave:` advisory comment at end of file* failed
+    `check-fmt`, and stripping it by hand failed again by leaving one blank
+    line; `ruff format` removed exactly that line. The lesson is that a marker
+    the driver uses for human adjudication is still tracked text and must be
+    deleted before the formatter sees it.
+
+- [x] (2026-10-23) **The `Scope` tolerance is breached again, and this time it
+      is recorded rather than re-widened.** The measurement against
+      `origin/main` (`6572fb956`) is **87 files and 8,618 net added lines,
+      excluding this ExecPlan itself**, against a cap of 56 files and 6,000
+      lines that was itself widened from 34/2,600 on 2026-10-17 by user
+      direction. Counted by directory: `src` 41 files +6,059,
+      `tests` 13 files +1,287, `docs` 21 files +1,147, and the rest in
+      packaging, README translations, `Makefile`, and
+      `proptest-regressions/`.
+
+  The 2026-10-17 widening counted a 2,550-line inventory of nine suites plus
+  ~350 lines of patches and wiring, and concluded 5,597 inside 6,000. Four
+  things were not in that inventory: the **strategy modules** (~1,390 lines)
+  were never counted at all, because a list of "nine new suites" cannot see the
+  scaffolding they compose; `ninja_oracle` landed as three files (783) against
+  a ~400 estimate, because the 400-line file cap itself forced the split;
+  `hashmap_boundary` landed at 729 against ~250; and six further suites
+  (`duplicates` 399, `cycles` 358, `declaration` 356, `path_key` 348,
+  `defaults` 521, `order` 343) each exceeded its nearest measured comparable. A
+  fifth contributor is the ADR at 498 lines.
+
+  *The decision is not this session's to take, and it was not taken.* The
+  previous widening came from the user, an `AskUserQuestion` for this one was
+  aborted by the permission layer, and widening a stop-and-escalate tolerance
+  unilaterally would delete the control that makes the tolerance real. The
+  overrun is therefore recorded here, in `Risks`, and in the PR body so a
+  reviewer sees a number that moved and why, rather than a cap quietly renamed.
+  The options remain open: (a) widen to ~90 files / ~9,300 with a counted
+  derivation, (b) accept the overrun leaving the cap as a tripwire, (c) cut
+  scope, or (d) split into a stacked PR.
+
 - [x] (2026-10-23) **The emitter now reveals a relay phony per staged
       dependency, on the user's direction, and `OBL-NINJA`'s crash shape is
       guarded by a directed regression rather than by sampling alone.**
@@ -2510,7 +2650,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
   the `docs/contents.md` index matches `docs/adrs/` exactly at 49 entries each
   with no members missing in either direction.
 
-- [ ] (2026-10-21) **A third batch is green on all eleven gates, and that green
+- [x] (2026-10-21) **A third batch is green on all eleven gates, and that green
       does not clear `OBL-NINJA`.** Candidate frozen at staged-diff
       `66e1cc5c…` / tree `ae96832`, unchanged before and after (21 staged
       entries, 0 untracked). All eleven gates exited 0: `check-fmt`,
@@ -2542,7 +2682,15 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
   scrutineer raised (`.coverage`, `.hypothesis/*`, `.pytest_cache/*` written
   during the run) is tool scratch state that appears in no `git status` entry.
 
-- [ ] (2026-10-21) **`EP-M8` second gate batch did not complete, for two
+  *Superseded 2026-10-23, in the direction this entry predicted.* Its headline
+  claim — that a green batch does not clear `OBL-NINJA` — was correct and is
+  now discharged on the axis it named. The user directed the emitter repair,
+  the relay landed as `8d80d5341` with ADR-0058, and `OBL-NINJA` now passes on
+  its own terms rather than by sampling. What this entry preserves is the
+  reasoning that a sampling property's pass is not the same claim as the
+  obligation holding; that reasoning is why the directed regression exists.
+
+- [x] (2026-10-21) **`EP-M8` second gate batch did not complete, for two
       independent reasons; `OBL-NINJA` is red and escalated.** The batch ran
       against the frozen candidate in `/tmp`, sequentially, with the two
       previously omitted in-scope gates (`proptest`, and
@@ -2571,6 +2719,18 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
   *Coverage gap now closed.* The first batch omitted `make proptest` and
   `make test-documentation-contracts`, both of which `AGENTS.md` and the plan
   place in scope for this milestone's surface; they are added to the re-batch.
+
+  *Both reasons are now closed, and the third re-run is the one that counts.*
+  The Whitaker finding was repaired by the split named above. The SIGSEGV was
+  repaired in the emitter on the user's direction (`8d80d5341`, ADR-0058), and
+  the directed regression `relay_regression.rs` fails with SIGSEGV 139 against
+  a deliberately mutated emitter, so the repair is guarded rather than merely
+  absent. The batch-integrity defect is closed by construction: the final batch
+  ran against candidate `f91f663a7` with the tree clean at both ends and no
+  concurrent authoring, and `test-workflow-contracts` ran all its stages to
+  completion — 1,337 passed plus 3 skipped, then 27 passed. **That earlier
+  statement that the third stage "has still never run to completion on this
+  branch" is falsified** by the run recorded below.
 
 - [x] (2026-10-19) **The `EP-M7` milestone CodeRabbit review completed and all
       six distinct findings were valid; every one is repaired.** Scope was
@@ -7272,11 +7432,150 @@ accepted but deferred, so they are not lost:
 
 ## Outcomes & retrospective
 
-To be completed after `EP-M8`. Record: whether any property failed against
-current production code; whether `OBL-E2E` held; the measured suite cost
-against the 6-second estimate; which mutations proved hardest to make specific;
-whether the `graph_view` strategy was successfully absorbed; and whether the
-generalized mutation-evidence contract held up.
+Completed 2026-10-23 against candidate `f91f663a7`. Each heading below is one
+of the questions this section was reserved to answer.
+
+### Did any property fail against current production code?
+
+**Yes, once, and it was the most valuable result in the plan.** Every
+obligation except `OBL-NINJA` reads the emitter's text, and all of them passed
+against production throughout. `OBL-NINJA` runs real `ninja`, and on its first
+red run it found a **SIGSEGV in a shipped feature** rather than a defect in the
+new test: an order-only edge naming a node a later dyndep sidecar reveals makes
+`Builder::LoadDyndeps` call `Node::AddOutEdge`, reallocating `Node::out_edges_`
+while an enclosing `Plan::NodeFinished` iterates it. The defect is upstream
+([ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662)),
+reproduces on 1.11.1, a self-built debug 1.11.1, and master 1.14.0.git, and had
+no prior minimal reproducer on the tracker.
+
+The honest reading is uncomfortable and worth stating: **ten of the eleven
+obligations could not have found this.** `OBL-NINJA` is the only one that
+executes `ninja`; every other reads emitted text or compares two emissions'
+bytes, and neither distinguishes a bundle that is deterministic from a bundle
+that makes Ninja die. (`OBL-PROCESS` runs the Netsuke binary twice and compares
+bytes; it does not invoke Ninja, so it cannot see this either.) That is the
+argument for the real-process arm, and it is why the review suggestion to drop
+`OBL-NINJA` was declined.
+
+### Did `OBL-E2E` hold?
+
+**Yes, and it holds by construction rather than by luck.** The property
+compares the full emitted bundle across two declaration orders for a
+`ManifestSpec` graph. Well-formedness is established when the case is built,
+not filtered afterwards: rule names are indexed so they are pairwise distinct
+(the obligation's precondition, since `process_rules` is last-writer-wins),
+outputs are allocated once, dependencies are drawn only from strictly lower
+slots, and declared defaults are drawn descending so the list is *not already
+ascending* and deleting the emitter's sort must change the line. `MUT-DEFSORT`
+fails it with minimal input
+`ManifestSpec { targets: 2, rules: 4, defaults: [1, 0],`
+`first: [0, 1], second: [1, 0] }`, which is the evidence that the property is
+load-bearing and not vacuous.
+
+### Measured suite cost against the 6-second estimate
+
+**The wall figure was right and the CPU figure was low by about 1.9×.** The
+final `make proptest` gate ran 166 tests in **2.783 s wall** and skipped 4,560,
+and summing nextest's per-test durations for the determinism suites gives **34
+tests and 11.377 s** of test time (`ninja_gen::determinism::property_tests`);
+counting all of `ninja_gen::` — the determinism suites plus the pre-existing
+emitter property tests — gives 45 tests and 12.954 s. The original figure was
+~6 s CPU and 2–3 s wall against a 45-second budget.
+
+Both figures are derived by parsing the per-test `PASS [  x.xxxs]` lines of
+`/tmp/proptest-netsuke-4-3-1-proptests-for-deterministic-ninja-emission.out`,
+not estimated. Note that the summed per-test durations (29.3 s over all 166)
+exceed the 2.783 s wall by an order of magnitude, which is nextest's
+parallelism doing its job: the CPU figure and the wall figure measure different
+things, and the budget is stated against the wall.
+
+The revision that matters is that the suite more than doubled in test count
+since the estimate and still finishes **about 4× inside the 45-second budget**
+(11.4 s against 45 s), so the **decision not to tier it holds on measurement,
+not on the original number**: `PROPTEST_HEAVY`, `make proptest-heavy`, and a
+separate CI job remain branches that would never be taken. The estimate's shape
+was right (seconds, not minutes) and its precision was not load-bearing — but
+its *CPU* figure was low, and that error would not have been harmless had the
+budget been tighter.
+
+### Which mutations proved hardest to make specific?
+
+**`MUT-DUPWITHIN`, and discovering *why* was the finding.** Disabling only
+`from_manifest`'s seen-list left all 13 tests green, because
+`BuildGraph::insert_edge`'s `duplicate_output` keeps a second seen-set at the
+graph layer. The mutation is only specific once it removes the within-target
+arm at **both** layers while leaving `edge_id_for_output` (across targets)
+intact. A mutation that stops at the first layer reads as "the property is
+weak" when the truth is "the mutation is shallow", and only measuring both
+layers distinguishes them.
+
+`MUT-CYCLEDEPTH` is the runner-up and failed for a structural reason rather
+than a design one: an early version drew target count independently of shape,
+so a `Long` draw on a small manifest produced an ordinary short cycle while the
+tally still counted it as long — over-reporting the one class Kani cannot
+reach. Fixing it meant flooring the draw at `LONG_CYCLE_MIN`, which is now
+pinned by `a_long_case_is_never_truncated_to_a_short_chain`.
+
+### Was the `graph_view` strategy absorbed?
+
+**No, and divergence was the measured answer rather than the convenient one.**
+Four grounds, each re-verified against the tree rather than carried from the
+planning pass: the existing strategy returns a tuple of loose specifications
+and never constructs a `BuildGraph`; `EdgeSpec` is declared without `pub`
+inside a private `#[cfg(test)] mod tests;` so no sibling can name it; it
+*filters* colliding edges where this plan requires well-formedness *by
+construction*, because a filter that silently drops cases is the generator
+defect the plan exists to prevent; and its return shape cannot express
+insertion-order permutation. Absorbing it would have meant changing its type
+and its well-formedness strategy, which is a rewrite wearing the name of reuse.
+
+### Did the generalized mutation-evidence contract hold up?
+
+**Yes, and its green was only half the evidence — which the sweep proved by
+being necessary.** `tests/kani_mutation_evidence_tests.rs` was split into four
+modules (`compile_guard`, `contracts`, `discovery`, `sandbox`; 1,162 lines
+total) and generalized to resolve a patch stem against either module form, so a
+`ninja_gen`-rooted patch is accepted. Its four contracts pass, including
+`every_patch_applies_cleanly` over all 28 patch files in
+`docs/verification/mutations/` (the ten this branch adds and the 18 already
+there), and
+`supplemental_property_location_resolves_directory_and_file_modules` pins the
+resolution directly.
+
+Two limits must travel with that "yes". **Kani itself cannot run on this host**
+— `cargo kani --only-codegen` fails in `libc`'s build script because
+`kani-compiler` cannot load `libLLVM.so.21.1-rust-1.93.0-nightly` — so the
+compile guard is *unrun* and must be reported as unrun rather than as a pass;
+the patches were validated by ordinary compilation and by the property runs.
+And the contract proves that evidence **exists and applies**, not that it is
+**specific**: every one of the ten patches did falsify its named test when
+measured, but that fact came from the sweep and the repair pass, not from the
+contract. The ten patches cover nine faults, because `MUT-DEFPOS` names two
+harnesses (`the_default_line_follows_every_build_line` and
+`real_ninja_accepts_both_insertion_orders`) and so needs a patch per stem.
+
+### Retrospective: what this plan would do differently
+
+Three things, all of which cost real time here.
+
+1. **A sampling property's green is not the obligation holding.** This plan
+   learned it the hard way: a 64-case budget passed on a defect that a single
+   saved seed reproduces every time. The repair was a directed regression, and
+   the general lesson is that an obligation whose failure mode is a *crash*
+   needs a directed case as well as a sampling one.
+2. **Give the scope tolerance teeth or stop calling it a tolerance.** It was
+   breached twice, widened once by user direction, and its inventory missed
+   ~1,390 lines of scaffolding because "nine suites" is not a unit that can see
+   the modules suites compose. A cap derived from a file-list inventory will
+   keep failing the same way; a cap derived from a *measured* diff after one
+   milestone would not.
+3. **Contract tests that hard-code a name-set rot through merges.** This branch
+   hit that three times — `PERMITTED_UNORDERED_FIELDS`, two assertions naming a
+   symbol that never existed, and `AMBIENT_PUBLIC_API_FIXTURES` arriving stale
+   through a rebase in a file with no conflict marker. Each was caught by a
+   gate rather than by review, which is the system working, but the pattern
+   says these assertions want a derived source of truth rather than a literal
+   list.
 
 ## Revision note
 
