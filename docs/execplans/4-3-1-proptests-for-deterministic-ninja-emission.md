@@ -8,14 +8,15 @@ proceeds.
 
 Status: IN PROGRESS
 
-Current position: the branch is published at `d1093b137`, the ten local gates
-passed sequentially against that exact head with a tree that did not move, and
-hosted checks on it are green (19 passed, 4 skipped by condition, none failed).
-Two conditions remain before this plan can be called complete, and both are
-reserved to others: the formal `coderabbit review --agent` pass, which requires
-the pull request to be marked ready first, and the plan owner's ruling on the
-breached `Scope` tolerance. The `EP-M8` checkbox below is deliberately
-unchecked for that reason.
+Current position: the branch's evidence binds to `d1093b137`, where the ten
+local gates passed sequentially against that exact head with a tree that did
+not move, and hosted checks on it are green (19 passed, 4 skipped by condition,
+none failed). Every commit after that head is documentation — this plan — and
+is gated in the batch that carries it. Two conditions remain before this plan
+can be called complete, and both are reserved to others: the formal
+`coderabbit review --agent` pass, which requires the pull request to be marked
+ready first, and the plan owner's ruling on the breached `Scope` tolerance. The
+`EP-M8` checkbox below is deliberately unchecked for that reason.
 
 The `Scope` tolerance blocked this plan from 2026-10-16 until 2026-10-17, and
 the block is discharged: the user directed "Widen the cap", and the cap is now
@@ -5443,13 +5444,19 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   - *The failure path was validated, not inferred from passing-run timings.*
     The assessment is right that a green run says nothing about shrinking. A
     deliberate failure was planted at the head of a property body; shrinking
-    terminated in 0.02 s rather than running into the 300-second kill, and the
-    seed was persisted to
+    terminated in 0.02 s, and the seed was persisted to
     `proptest-regressions/ninja_gen/determinism/property_tests/order.txt` with
     its compact `GraphSpec` diagnostic. Re-running without the case-budget
     override replayed the persisted seed before generating anything, which is
     the behaviour the requirement exists to secure. Probe and seed file were
     then removed.
+  - *That probe is evidence about the failure path, not about the wall.* It
+    shows a failing case is persisted and replayed; it does not show the
+    30-second limit expiring, because a case that shrinks this trivially
+    terminates long before any wall is reached. What licenses the bound is the
+    source — `HEAVY_SHRINK_TIME_MS` and its five application sites, where
+    `max_shrink_time` previously appeared in no source file at all. The two
+    claims are separate and neither is asked to carry the other.
 
 - **Unlisted branch regression found and repaired alongside: the Windows lane
   failed on a patch-transport defect, not on code.**
@@ -5513,6 +5520,32 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   *This is not a claim about every head the branch has had.* Two heads were
   observed to completion and are named above; the others were not run to a
   verdict in this session, so nothing is asserted about them.
+
+- [x] (2026-10-23) **The failure-path evidence was narrowed to what it actually
+  demonstrates, on the assessment's precision point.** The sentence at *The
+  failure path was validated* read that the planted failure "terminated in 0.02
+  s rather than running into the 300-second kill", which over-reads the probe.
+  A failure that shrinks this trivially terminates long before any wall is
+  reached, so the observation cannot distinguish "the wall worked" from "there
+  was nothing to bound". The passage now says what the probe shows —
+  persistence and replay of a failing seed — and states separately that the
+  bound is licensed by source: `HEAVY_SHRINK_TIME_MS` and its five application
+  sites. The two claims are no longer carried by one piece of evidence.
+
+  *The distinction is checkable, and was checked.* At `13e129ce4`, before the
+  repair, `git grep max_shrink_time 13e129ce4 -- '*.rs'` matches nothing; at
+  `d1093b137` it matches five files, which is the five application sites. The
+  configuration was genuinely absent and is now genuinely present, which is a
+  claim about source rather than about a timing.
+
+  *Neither wording was wrong about the code.* The probe did terminate in 0.02 s
+  and the seed was persisted and replayed; the defect was in what the sentence
+  implied those facts proved. Correcting it cost one paragraph and no
+  implementation, and the repair is recorded in *Decision log* alongside the
+  reason it was not made earlier: the ten-gate batch was live against frozen
+  candidate `ee4c3540f`, and editing this file under a running batch voids that
+  batch, because `tests/execplan_status_contract_tests.rs` reads
+  `docs/execplans/*.md` at test time.
 
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
@@ -6738,6 +6771,28 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   probe that justified the original repair, because a passing suite is also
   what a collector that stopped collecting would produce.
 
+- (2026-10-23) **A probe can be real and still not test the claim it is filed
+  under.** The planted failure really did persist a seed, really did replay it,
+  and really did finish in 0.02 s; every number in that sentence was observed.
+  It was nevertheless not evidence about *the 30-second limit*, because a case
+  that shrinks trivially never approaches a wall, so the run would have looked
+  identical had `max_shrink_time` been absent. The licence for the bound is the
+  constant and its five application sites, which is a different kind of
+  evidence about a different question. *The general lesson:* when an
+  observation is filed as evidence for a bound, ask what the observation would
+  have looked like if the bound were missing. Here the answer was "exactly the
+  same", which is what made the original sentence wrong.
+
+  **The mechanism is checkable in the dependency, not only asserted.** Proptest
+  1.11.0 saves a failing seed *after* the case has finished running and
+  shrinking (`runner.rs`, the `if let Err(TestError::Fail(_, ref value))`
+  branch following `gen_and_run_case`). A nextest kill therefore discards the
+  in-progress seed, while a `max_shrink_time` expiry returns normally and
+  reaches the save. That asymmetry is why the constant is load-bearing — which
+  is also the claim the plan's Decision log makes for applying it to `no_loss`
+  and `defaults`, and it now rests on source rather than on a
+  plausible-sounding rationale.
+
 ## Decision log
 
 - Decision: repair the CodeScene `Bumpy Road Ahead` finding by **extracting**
@@ -6750,6 +6805,17 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   refactor was proved behaviour-preserving by re-planting the output-writing
   probe, not by the green suite. Date/Author: 2026-10-23 / lifecycle agent,
   from the hosted CodeScene run on `5aeb852ef`.
+- Decision: narrow the failure-path claim to seed persistence and replay, and
+  state the shrink bound as a **source** fact rather than as something the
+  probe demonstrated. Rationale: the assessment's precision point is correct —
+  a failure that shrinks trivially terminates in 0.02 s whether or not a wall
+  exists, so the probe cannot distinguish a working bound from an absent one,
+  and letting it appear to do so would make the evidence look stronger than it
+  is. The bound is now evidenced by `HEAVY_SHRINK_TIME_MS` and its five
+  application sites, which `git grep max_shrink_time 13e129ce4 -- '*.rs'` shows
+  were absent before the repair. The observation was not discarded: it is
+  retained, at its true scope. Date/Author: 2026-10-23 / lifecycle agent, from
+  the `EPQ-700-20261023-A` follow-up on `5aeb852ef`.
 - Decision: re-run the **whole** ten-gate batch after the CodeScene repair
   rather than re-running only the gates the change could plausibly affect.
   Rationale: the change touched a tracked Rust source read by `make test`, and
@@ -7834,6 +7900,23 @@ hosted analyser are not two views of one standard. `make lint` was green on the
 commit that the analyser scored 9.84, and the configured
 `excessive-nesting-threshold` in `clippy.toml` is inert because the lint it
 configures is enabled in no manifest.
+
+### What did the precision correction change?
+
+The wording of one claim, and nothing else. The failure-path probe was reported
+as showing that shrinking "terminated in 0.02 s rather than running into the
+300-second kill". Every figure in it is real, but the inference was not earned:
+a trivially shrinking failure terminates before any wall, so the probe would
+have behaved identically with `max_shrink_time` absent. That is the
+assessment's point, and accepting it costs one paragraph.
+
+The plan now separates the two claims. The probe demonstrates failure handling,
+seed persistence, and replay. The bound is demonstrated by source:
+`HEAVY_SHRINK_TIME_MS` plus its five application sites, confirmed absent at
+`13e129ce4` and present at `d1093b137` by
+`git grep max_shrink_time <rev> -- '*.rs'`. Neither claim is asked to carry the
+other, and the evidence for the requirement is stronger for the split than it
+was when one observation appeared to establish both.
 
 ### What did the independent assessment change?
 
