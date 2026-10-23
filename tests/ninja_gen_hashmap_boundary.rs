@@ -70,7 +70,7 @@ const MINIMUM_SOURCES: usize = 10;
 /// import that brings `HashSet` into that module is exempt with it, since the
 /// import and the field are one decision about one type.
 const PERMITTED_UNORDERED_FIELDS: [(&str, &str); 1] =
-    [("staged_sidecars", "src/ninja_gen/dyndep/mod.rs")];
+    [("staged_sidecars", "src/ninja_gen/dyndep/staging.rs")];
 
 /// Return whether `hit` is covered by [`PERMITTED_UNORDERED_FIELDS`].
 ///
