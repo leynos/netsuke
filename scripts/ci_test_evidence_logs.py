@@ -170,16 +170,18 @@ def _sccache_version(body: str) -> str | None:
         payload = json.loads(body)
     except json.JSONDecodeError:
         return None
-    if not isinstance(payload, dict):
-        return None
-    version = payload.get("version")
-    if version is None and isinstance(payload.get("stats"), dict):
-        version = payload["stats"].get("version")
-    return (
-        version
-        if isinstance(version, str) and re.fullmatch(r"[0-9.]+", version)
-        else None
-    )
+    match payload:
+        case {"version": selected_version}:
+            pass
+        case {"stats": {"version": selected_version}}:
+            pass
+        case _:
+            return None
+    match selected_version:
+        case str() as version if re.fullmatch(r"[0-9.]+", version):
+            return version
+        case _:
+            return None
 
 
 def _selection_record(
