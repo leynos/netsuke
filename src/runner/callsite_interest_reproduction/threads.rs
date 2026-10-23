@@ -294,6 +294,7 @@ impl WorkerChannels {
                     installed_receiver,
                 },
                 gate_deadline,
+                THREAD_DEADLINE,
             )),
             paused_receiver,
             registration_started_sender,

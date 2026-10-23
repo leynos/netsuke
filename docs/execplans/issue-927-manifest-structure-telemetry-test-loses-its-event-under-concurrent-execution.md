@@ -324,6 +324,19 @@ seeded duplicate.
   typecheck and lint.
 - [x] (2026-10-23) Confirmed PR #943 remains ready for review after the
   candidate-bound assessments and checks passed; it stays ready.
+- [x] (2026-10-23) Recovered from the stop-hook disk-full failure. The
+  filesystem had 169 GiB available before the rerun. On the current local
+  candidate, the focused worker, `make check-fmt`, `make typecheck`,
+  `make lint`, `make doc-coverage` (98.15%), `make markdownlint` (199 files,
+  zero issues), and `make nixie` all passed. `make test` ran 4,664 of 4,688
+  tests before `cli_configuration_fixture_compiles::case_1_public_api` exceeded
+  its 300-second limit: 4,663 passed, one timed out, seven skipped, and 24 were
+  not run. The failure log contains no nested Cargo diagnostics; its cause is
+  not established, and no timeout or retry policy was changed. The source
+  adjustment separates the 10-second wait for T2 to reach the registration
+  boundary from the 250-millisecond callback window. Focused regression passed
+  with both schedule modes. Logs use the current `-4.out` through `-7.out`
+  suffixes under `/tmp`.
 - [ ] Resolve current-head review concerns, follow checks to equilibrium, and
   merge PR #943 with the verified head commit.
 
