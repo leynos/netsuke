@@ -354,4 +354,3 @@ def test_instrumented_lanes_budget_for_a_cold_build(
         f"{CARGO_WAIT_TIMEOUT}s for one instrumented cargo run, got "
         f"{env.get('RUN_RUST_CARGO_WAIT_TIMEOUT')!r}"
     )
-# weave: run 'weave explain tests/workflow_contracts/test_execution_coverage_test.py' for per-hunk detail, 'weave check' to verify your resolution

@@ -85,6 +85,7 @@ AMBIENT_PUBLIC_API_FIXTURES = (
     "legacy_recipe_telemetry_public_api_fixture_compiles",
     "config_cached_discovery_embedder_fixture_compiles",
     "verbose_timing_reporter_embedder_fixture_compiles",
+    "lint_public_api_fixture_compiles",
 )
 
 
