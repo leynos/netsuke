@@ -13,17 +13,18 @@ tag `v0.1.0-beta4`, because semantic-version ordering ignores build metadata.
 That is exactly the near-match this release path must refuse: the tag names the
 commit, and a version carrying metadata the tag does not spell is a different
 package identity from the one a reviewer approved.
+
+This module resolves an identity from facts just gathered. Reading a record
+back from disk — which may have been hand-edited or left by an earlier run —
+belongs to :mod:`release_identity_record`, because that input needs checking
+this module's callers never need to do.
 """
 
 import dataclasses
 import json
 import re
-import typing as typ
 
 from release_semver import is_prerelease, is_valid_semver
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
 
 #: A Cargo package-name-shaped identifier: ASCII alphanumerics, `-`, and `_`.
 #: Cargo permits a leading digit and an underscore, so this refuses only what
@@ -35,15 +36,6 @@ _PACKAGE_NAME = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 _BIN_NAME = _PACKAGE_NAME
 
 _FULL_COMMIT_SHA = re.compile(r"\A[0-9a-f]{40}\Z")
-
-_IDENTITY_FIELDS = (
-    "tag",
-    "commit",
-    "package_name",
-    "version",
-    "bin_name",
-    "is_prerelease",
-)
 
 
 class IdentityError(ValueError):
@@ -127,43 +119,15 @@ class MalformedNameError(IdentityError):
         )
 
 
-class MissingFieldError(IdentityError):
-    """Report a record that does not carry every field an identity needs."""
-
-    def __init__(self, missing: list[str]) -> None:
-        """Initialise the error naming the absent fields.
-
-        Parameters
-        ----------
-        missing
-            The field names the record did not carry.
-        """
-        super().__init__(f"identity record is missing {missing!r}")
-
-
-class RecordedFlagError(IdentityError):
-    """Report a record whose stored prerelease flag contradicts its version."""
-
-    def __init__(self, recorded: object, version: str, *, derived: bool) -> None:
-        """Initialise the error naming the contradiction.
-
-        Parameters
-        ----------
-        recorded
-            The flag the record carried.
-        version
-            The version the record declared.
-        derived
-            The flag that version implies.
-        """
-        super().__init__(
-            f"identity record claims is_prerelease={recorded!r} for version "
-            f"{version!r}, which derives {derived!r}"
-        )
-
-
-def _require_tag_version_agreement(tag: str, version: str) -> None:
+def _require_tag_version_agreement(tag: str | None, version: str) -> None:
     """Refuse any tag that does not spell the package version exactly.
+
+    A ``None`` tag means no tag was supplied, which is what a rehearsal run
+    looks like: a pull request has a merge ref rather than a release tag, so
+    there is no tag whose spelling could agree with anything. An absent tag is
+    therefore not a near-match to refuse but the recorded absence of one, and
+    the resulting identity cannot name a publication candidate because it
+    carries no tag to publish under.
 
     Raises
     ------
@@ -175,7 +139,10 @@ def _require_tag_version_agreement(tag: str, version: str) -> None:
     Examples
     --------
     >>> _require_tag_version_agreement("v1.2.3", "1.2.3")
+    >>> _require_tag_version_agreement(None, "1.2.3")
     """
+    if tag is None:
+        return
     if not tag.startswith("v") or not is_valid_semver(tag[1:]):
         raise MalformedTagError(tag)
     if tag[1:] != version:
@@ -213,7 +180,8 @@ class CandidateFacts:
     Attributes
     ----------
     tag
-        The release tag, such as ``"v0.1.0-beta4"``.
+        The release tag, such as ``"v0.1.0-beta4"``, or ``None`` when the run
+        is a rehearsal with no tag to name.
     commit
         The full commit SHA the tag peels to.
     package_name
@@ -224,7 +192,7 @@ class CandidateFacts:
         The installed binary name, such as ``"netsuke"``.
     """
 
-    tag: str
+    tag: str | None
     commit: str
     package_name: str
     version: str
@@ -236,10 +204,12 @@ class ReleaseIdentity:
     """Record the single candidate a publication run is authorised to publish.
 
     An instance exists only if :func:`resolve_identity` accepted its facts, so
-    holding one is evidence that the tag, version, and commit agree.
+    holding one is evidence that the tag, version, and commit agree. ``tag`` is
+    ``None`` for a rehearsal identity, which records that no tag was supplied
+    rather than inventing one.
     """
 
-    tag: str
+    tag: str | None
     commit: str
     package_name: str
     version: str
@@ -332,63 +302,3 @@ def resolve_identity(facts: CandidateFacts) -> ReleaseIdentity:
         bin_name=facts.bin_name,
         is_prerelease=is_prerelease(facts.version),
     )
-
-
-def identity_from_mapping(record: cabc.Mapping[str, object]) -> ReleaseIdentity:
-    """Rebuild an identity from a previously recorded mapping.
-
-    Later stages read the recorded identity rather than resolving it again, so
-    that every stage compares against the candidate one process resolved.
-
-    Parameters
-    ----------
-    record
-        A mapping produced by :meth:`ReleaseIdentity.as_record`.
-
-    Returns
-    -------
-    ReleaseIdentity
-        The identity the record describes, re-validated on the way in.
-
-    Raises
-    ------
-    MissingFieldError
-        If the record does not carry every field an identity needs.
-    RecordedFlagError
-        If the stored ``is_prerelease`` flag contradicts the version.
-
-    Notes
-    -----
-    A field that fails validation surfaces as ``IdentityError`` from
-    :func:`resolve_identity`, which this function delegates to and therefore
-    does not raise itself.
-
-    Examples
-    --------
-    >>> record = {"tag": "v1.2.3", "commit": "0" * 40,
-    ...           "package_name": "netsuke-build", "version": "1.2.3",
-    ...           "bin_name": "netsuke", "is_prerelease": False}
-    >>> identity_from_mapping(record).version
-    '1.2.3'
-    """
-    missing = [name for name in _IDENTITY_FIELDS if name not in record]
-    if missing:
-        raise MissingFieldError(missing)
-    identity = resolve_identity(
-        CandidateFacts(
-            tag=str(record["tag"]),
-            commit=str(record["commit"]),
-            package_name=str(record["package_name"]),
-            version=str(record["version"]),
-            bin_name=str(record["bin_name"]),
-        )
-    )
-    # Reject a record whose stored flag contradicts its own version rather
-    # than trusting the field: a hand-edited or stale record must not be able
-    # to silently reclassify a prerelease as a final release.
-    recorded = record["is_prerelease"]
-    if not isinstance(recorded, bool) or recorded is not identity.is_prerelease:
-        raise RecordedFlagError(
-            recorded, identity.version, derived=identity.is_prerelease
-        )
-    return identity

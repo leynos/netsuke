@@ -292,7 +292,8 @@ test-workflow-contracts: ## Validate the CV-005 contracts and the GitHub Actions
 			scripts/tests/test_resolve_wix_extension_version.py \
 			scripts/ensure_draft_release.py scripts/install_orthohelp.py \
 			scripts/report_glibc_floor.py scripts/resolve_wix_extension_version.py \
-			scripts/hoist_binstall_archives.py -q --doctest-modules
+			scripts/hoist_binstall_archives.py \
+			scripts/hoist_binstall_discovery.py -q --doctest-modules
 
 test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
@@ -377,13 +378,17 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_declaration.py \
 		scripts/tests/test_release_declaration_cli.py \
 		scripts/release_candidate.py scripts/release_candidate_cli.py \
+		scripts/release_identity_record.py \
 		scripts/package_crate_cli.py scripts/publish_crates_io_cli.py \
 		scripts/verify_release_inventory_cli.py \
 		scripts/finalize_github_release_cli.py \
 		scripts/release_inventory.py \
 		scripts/release_semver.py scripts/release_digest.py \
-		scripts/verify_crates_io_bytes.py scripts/release_reconcile_crates.py \
+		scripts/verify_crates_io_bytes.py \
+		scripts/release_registry_response.py \
+		scripts/release_reconcile_crates.py \
 		scripts/release_reconcile_github.py \
+		scripts/release_asset_names.py scripts/release_package_formats.py \
 		scripts/release_declaration.py scripts/release_declaration_cli.py \
 		-c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules

@@ -24,9 +24,9 @@ lives in ``scripts/tests/test_release_inventory.py``.
 import dataclasses
 import os
 import typing as typ
-from pathlib import PurePosixPath, PureWindowsPath
 
 import hoist_binstall_discovery
+import release_asset_names
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -84,119 +84,46 @@ class PublishedAsset:
     size: int
 
 
-def _walks_out_of_its_directory(parts: tuple[str, ...]) -> bool:
-    """Report whether walking ``parts`` in order ever goes above the start.
+def _require_safe_names(assets: list[PublishedAsset]) -> None:
+    """Refuse staged names that are not bare file names inside the directory.
 
-    Parameters
-    ----------
-    parts
-        Path components, already split by whichever flavour produced them.
-
-    Returns
-    -------
-    bool
-        ``True`` when a ``..`` component is reached with no preceding
-        component left to cancel it, so the path resolves above its origin.
+    Raises
+    ------
+    EscapingAssetNameError
+        If a staged name could resolve outside the staging directory.
+    MalformedAssetNameError
+        If a staged name is not a bare file name.
 
     Notes
     -----
-    Counting depth is what catches ``a/../../b``: the leading ``a`` looks
-    harmless and the traversal happens two components later.
+    Escaping is reported before malformed, because ``..`` is both undeclared
+    and escaping, and the security diagnosis is the one worth surfacing. Each
+    refusal names every offender rather than the first, so one run describes
+    the whole shortfall.
+
+    Examples
+    --------
+    >>> _require_safe_names([PublishedAsset(name="netsuke.tar.gz", size=1)])
+    >>> try:
+    ...     _require_safe_names([PublishedAsset(name="../x", size=1)])
+    ... except EscapingAssetNameError:
+    ...     print("refused")
+    refused
     """
-    depth = 0
-    for part in parts:
-        if part == "..":
-            depth -= 1
-            if depth < 0:
-                return True
-        elif part not in {"", "."}:
-            depth += 1
-    return False
-
-
-def _escapes_its_directory(name: str) -> bool:
-    r"""Report whether ``name`` could resolve outside the directory holding it.
-
-    Parameters
-    ----------
-    name
-        Candidate asset name to judge.
-
-    Returns
-    -------
-    bool
-        ``True`` for an absolute path, a Windows drive or UNC path, or any
-        component sequence that walks above its origin.
-
-    Notes
-    -----
-    Both path flavours are consulted because the name is data, not a path on
-    this host. ``C:\Windows\netsuke.exe`` is one ordinary component to a POSIX
-    parser and something else to an uploader on Windows; a name absolute under
-    *either* reading is refused.
-    """
-    for flavour in (PurePosixPath, PureWindowsPath):
-        parsed = flavour(name)
-        if parsed.is_absolute() or _walks_out_of_its_directory(parsed.parts):
-            return True
-    return False
-
-
-def _is_bare_file_name(name: str) -> bool:
-    """Report whether ``name`` is a single, non-empty, flat component.
-
-    Parameters
-    ----------
-    name
-        Candidate asset name to judge.
-
-    Returns
-    -------
-    bool
-        ``True`` when the name is exactly one component under both path
-        flavours, with no empty component and no reserved spelling such as
-        ``.`` or ``..``.
-
-    Notes
-    -----
-    Both flavours must agree, for the reason given in
-    :func:`_escapes_its_directory`: a name nested under Windows separators
-    alone is not the flat name the uploader publishes, though a POSIX parser
-    treats the backslashes as ordinary characters.
-    """
-    return all(
-        len(flavour(name).parts) == 1 and flavour(name).parts[0] not in {"", ".", ".."}
-        for flavour in (PurePosixPath, PureWindowsPath)
+    escaping, malformed = release_asset_names.rejected_names(
+        asset.name for asset in assets
     )
-
-
-def _rejected_names(names: cabc.Iterable[str]) -> tuple[list[str], list[str]]:
-    """Partition ``names`` into those escaping and those merely malformed.
-
-    Parameters
-    ----------
-    names
-        Candidate asset names, in the order to report them.
-
-    Returns
-    -------
-    tuple[list[str], list[str]]
-        The escaping names and the malformed names, each in input order.
-
-    Notes
-    -----
-    The two are different diagnoses: ``../netsuke`` means the release tried to
-    publish outside its staging directory, ``sub/netsuke`` that a nested path
-    reached the listing. Calling both "bad name" would hide the security one.
-    """
-    escaping: list[str] = []
-    malformed: list[str] = []
-    for name in names:
-        if _escapes_its_directory(name):
-            escaping.append(name)
-        elif not _is_bare_file_name(name):
-            malformed.append(name)
-    return escaping, malformed
+    if escaping:
+        msg = (
+            "staged asset names could resolve outside the staging directory: "
+            + ", ".join(repr(name) for name in escaping)
+        )
+        raise EscapingAssetNameError(msg)
+    if malformed:
+        msg = "staged asset names are not bare file names: " + ", ".join(
+            repr(name) for name in malformed
+        )
+        raise MalformedAssetNameError(msg)
 
 
 def _require_usable_entries(assets: list[PublishedAsset]) -> dict[str, int]:
@@ -214,27 +141,61 @@ def _require_usable_entries(assets: list[PublishedAsset]) -> dict[str, int]:
     DuplicateAssetError
         If two staged entries claim one name.
 
-    Notes
-    -----
     Emptiness is judged before duplication so a duplicated empty file is not
     reported as merely duplicated, which would hide that it could never be
     used.
     """
-    empty = sorted({asset.name for asset in assets if asset.size == 0})
-    if empty:
-        msg = "staged assets carry no bytes: " + ", ".join(repr(name) for name in empty)
-        raise EmptyAssetError(msg)
+    _require_non_empty(assets)
+    counts = _name_counts(assets)
+    _require_unique(counts)
+    return counts
 
+
+def _require_non_empty(assets: list[PublishedAsset]) -> None:
+    """Refuse assets that carry no bytes, naming every one of them.
+
+    Raises
+    ------
+    EmptyAssetError
+        If any staged asset has size zero.
+    """
+    empty = sorted({asset.name for asset in assets if asset.size == 0})
+    if not empty:
+        return
+    msg = "staged assets carry no bytes: " + ", ".join(repr(name) for name in empty)
+    raise EmptyAssetError(msg)
+
+
+def _name_counts(assets: cabc.Iterable[PublishedAsset]) -> dict[str, int]:
+    """Return how many entries claim each staged name.
+
+    Examples
+    --------
+    >>> assets = [PublishedAsset("a", 1), PublishedAsset("a", 2)]
+    >>> _name_counts(assets)
+    {'a': 2}
+    """
     counts: dict[str, int] = {}
     for asset in assets:
         counts[asset.name] = counts.get(asset.name, 0) + 1
-    duplicated = sorted(name for name, count in counts.items() if count > 1)
-    if duplicated:
-        msg = "staged asset names are duplicated: " + ", ".join(
-            repr(name) for name in duplicated
-        )
-        raise DuplicateAssetError(msg)
     return counts
+
+
+def _require_unique(counts: cabc.Mapping[str, int]) -> None:
+    """Refuse two staged entries claiming one asset name.
+
+    Raises
+    ------
+    DuplicateAssetError
+        If any name is claimed more than once.
+    """
+    duplicated = sorted(name for name, count in counts.items() if count > 1)
+    if not duplicated:
+        return
+    msg = "staged asset names are duplicated: " + ", ".join(
+        repr(name) for name in duplicated
+    )
+    raise DuplicateAssetError(msg)
 
 
 def _require_declared_agreement(
@@ -288,10 +249,8 @@ def validate_inventory(
 
     Raises
     ------
-    EscapingAssetNameError
-        If a staged name could resolve outside the staging directory.
-    MalformedAssetNameError
-        If a staged name is not a bare file name.
+    InventoryError
+        Of whichever subclass the first failing check reports.
 
     Notes
     -----
@@ -300,13 +259,7 @@ def validate_inventory(
     before set membership because ``..`` is both undeclared *and* escaping,
     and escaping is the diagnosis worth surfacing. Each check reports every
     offending name rather than the first, so one run describes the whole
-    shortfall.
-
-    The four remaining refusing classes come from the stage helpers this
-    delegates to, which document each: `_require_usable_entries` raises
-    `EmptyAssetError` and `DuplicateAssetError`; `_require_declared_agreement`
-    raises `MissingAssetError` and `UnexpectedAssetError`. Nothing here catches
-    them, so all four remain the caller's to handle.
+    shortfall. Nothing here catches the helpers' refusals.
 
     Examples
     --------
@@ -319,19 +272,7 @@ def validate_inventory(
 'netsuke.tar.gz.sha256'
     """
     assets = list(present)
-    escaping, malformed = _rejected_names(asset.name for asset in assets)
-    if escaping:
-        msg = (
-            "staged asset names could resolve outside the staging directory: "
-            + ", ".join(repr(name) for name in escaping)
-        )
-        raise EscapingAssetNameError(msg)
-    if malformed:
-        msg = "staged asset names are not bare file names: " + ", ".join(
-            repr(name) for name in malformed
-        )
-        raise MalformedAssetNameError(msg)
-
+    _require_safe_names(assets)
     counts = _require_usable_entries(assets)
     _require_declared_agreement(counts, expected=expected)
 

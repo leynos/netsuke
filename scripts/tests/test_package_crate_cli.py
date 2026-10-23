@@ -12,6 +12,7 @@ import dataclasses
 import hashlib
 import json
 import pathlib
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - the stub under test.
 import typing as typ
 
 import pytest
@@ -21,6 +22,7 @@ from package_crate_cli import (
     EXIT_OK,
     EXIT_PACKAGING_FAILED,
     PACKAGE_SUBDIR,
+    PACKAGING_TIMEOUT_SECONDS,
     CratePackage,
     build_parser,
     main,
@@ -66,6 +68,24 @@ def _argv(
     ]
 
 
+def _tagless_argv(destination: pathlib.Path, *, rehearsal: bool) -> list[str]:
+    """Return the packaging arguments with the tag pair removed.
+
+    ``rehearsal`` decides whether ``--dry-run`` replaces the tag. Both shapes
+    are produced from the same base, so the only difference between the two is
+    the selector under test rather than some unrelated argument drifting.
+
+    Returns
+    -------
+    list[str]
+        The packaging arguments, with ``--dry-run`` in place of the tag pair
+        when ``rehearsal`` is true.
+    """
+    argv = _argv(destination)
+    del argv[argv.index("--tag") : argv.index("--tag") + 2]
+    return ["--dry-run", *argv] if rehearsal else argv
+
+
 def _record(destination: pathlib.Path) -> dict[str, object]:
     """Read back the package record the CLI wrote."""
     return json.loads(destination.read_text(encoding="utf-8"))
@@ -108,14 +128,13 @@ def test_the_cli_records_the_crate_and_its_digest(
     destination = tmp_path / "package.json"
     body = b"netsuke crate bytes"
     _ = _stub_cargo(monkeypatch, body)
-    target_dir = tmp_path / "target"
 
-    status = main(_argv(destination, target_dir=target_dir))
+    status = main(_argv(destination, target_dir=tmp_path / "target"))
 
     assert status == EXIT_OK, f"packaging must succeed, got {status}"
     record = _record(destination)
     assert record["crate"] == CRATE_NAME, "the record must name the crate"
-    assert record["sha256"] == _expected_digest(body), (
+    assert record["sha256"] == hashlib.sha256(body).hexdigest(), (
         "the record must carry the digest of the bytes cargo produced"
     )
 
@@ -126,9 +145,8 @@ def test_the_cli_nests_the_identity_beside_the_digest(
     """Carry the whole identity forward, so later stages need no second source."""
     destination = tmp_path / "package.json"
     _ = _stub_cargo(monkeypatch, b"netsuke")
-    target_dir = tmp_path / "target"
 
-    status = main(_argv(destination, target_dir=target_dir))
+    status = main(_argv(destination, target_dir=tmp_path / "target"))
 
     assert status == EXIT_OK, f"packaging must succeed, got {status}"
     identity = _record(destination)["identity"]
@@ -203,9 +221,8 @@ def test_the_packager_refuses_a_destination_holding_a_stale_crate(
 ) -> None:
     """Refuse ambiguity rather than publishing whichever file sorted first.
 
-    A stale ``.crate`` left from an earlier run has a digest that belongs to
-    different bytes. Publishing it under this run's identity is exactly what
-    the digest record exists to prevent, so two candidates are an error.
+    A stale ``.crate`` has a digest belonging to different bytes; publishing it
+    under this run's identity is what the digest record exists to prevent.
     """
     target_dir = tmp_path / "target"
     _ = _stub_cargo(monkeypatch, b"fresh")
@@ -222,12 +239,11 @@ def test_the_packager_reads_the_cargo_staging_subdirectory(
 ) -> None:
     """Read the crate from where ``cargo package`` actually writes it.
 
-    ``cargo package --target-dir`` nests its output: the archive lands in
+    ``--target-dir`` nests its output: the archive lands in
     ``<target-dir>/package/``, beside the ``tmp-crate/`` tree verification
-    unpacks into. A reader that globbed the target directory itself would find
-    nothing and report a successful run as a failure, which is the defect this
-    pins. The stub writes only to the nested path, so a reader that looked at
-    the root would raise instead of returning the crate.
+    unpacks into. A reader globbing the target directory itself would find
+    nothing and report a successful run as a failure. The stub writes only to
+    the nested path, so a reader that looked at the root would raise.
     """
     target_dir = tmp_path / "target"
     body = b"nested crate bytes"
@@ -256,10 +272,40 @@ def test_the_packager_reports_cargo_stderr_on_failure(
         _ = package_crate(pathlib.Path("Cargo.toml"), tmp_path / "target")
 
 
-def test_the_record_is_stable_across_runs(tmp_path: pathlib.Path) -> None:
+def test_the_cli_bounds_cargo_and_reports_a_timeout(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Bound the command, and turn an expiry into a packaging failure.
+
+    Without a ``timeout`` a stuck cargo holds the job until the runner kills
+    it, and the log reports a step timeout with no cause. Asserted twice over:
+    the bound reaches the call, and an expiry becomes this module's exit code
+    rather than a ``TimeoutExpired`` escaping past its handling.
+    """
+    seen: dict[str, object] = {}
+
+    def _hang(_arguments: list[str], **kwargs: object) -> object:
+        """Record the call's keyword arguments, then stand in for a hang."""
+        seen.update(kwargs)
+        raise subprocess.TimeoutExpired(cmd="cargo package", timeout=1)
+
+    monkeypatch.setattr("package_crate_cli.subprocess.run", _hang)
+    destination = tmp_path / "package.json"
+
+    status = main(_argv(destination, target_dir=tmp_path / "target"))
+
+    assert seen.get("timeout") == PACKAGING_TIMEOUT_SECONDS, (
+        f"cargo must be given a wall-clock bound, got {seen.get('timeout')!r}"
+    )
+    assert status == EXIT_PACKAGING_FAILED, (
+        f"a timed-out packaging run must report as packaging failure, got {status}"
+    )
+    assert not destination.exists(), "a timed-out run must leave no record"
+
+
+def test_the_record_is_stable_across_runs() -> None:
     """Render the same package identically, so two records diff only by content."""
-    identity = _record_identity()
-    package = CratePackage(identity, pathlib.Path("p.crate"), "ab")
+    package = CratePackage(_record_identity(), pathlib.Path("p.crate"), "ab")
 
     first = json.dumps(package.as_record(), indent=2, sort_keys=True)
     second = json.dumps(package.as_record(), indent=2, sort_keys=True)
@@ -287,9 +333,58 @@ def test_the_cli_requires_a_target_directory() -> None:
         _ = _parse(["--tag", TAG])
 
 
-def _expected_digest(body: bytes) -> str:
-    """Return the digest of ``body`` as the digest module computes it."""
-    return hashlib.sha256(body).hexdigest()
+def test_the_cli_records_a_rehearsal_with_no_tag(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Record a tagless identity: the pull-request lane has no tag to record.
+
+    ``github.ref_name`` there is a merge ref, so a caller forwarding it would
+    fail the tag validator. ``--dry-run`` records the absence instead, and the
+    archive is still built and digested — what the rehearsal exists to prove.
+    """
+    destination = tmp_path / "package.json"
+    body = b"rehearsed crate bytes"
+    _ = _stub_cargo(monkeypatch, body)
+    status = main(_tagless_argv(destination, rehearsal=True))
+
+    assert status == EXIT_OK, f"a rehearsal must package, got {status}"
+    record = _record(destination)
+    assert record["crate"] == CRATE_NAME, "a rehearsal must still name the crate"
+    assert record["sha256"] == hashlib.sha256(body).hexdigest(), (
+        "a rehearsal must still record the digest of the bytes it produced"
+    )
+    identity = record["identity"]
+    assert isinstance(identity, dict), "the identity must be recorded as a mapping"
+    assert identity["tag"] is None, "a rehearsal must record the absence of a tag"
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        pytest.param("both", id="both"),
+        pytest.param("neither", id="neither"),
+    ],
+)
+def test_the_cli_requires_exactly_one_selector(
+    tmp_path: pathlib.Path, selector: str
+) -> None:
+    """Refuse an ambiguous or mode-less call rather than assuming one.
+
+    Two failures share a rule. A publishing call site that kept its ``--tag``
+    and also set the rehearsal flag would record an identity with no tag, and
+    the publication stage would have nothing to publish under. In the other
+    direction, absence of a tag is what a rehearsal *records*, so a publishing
+    caller that forgot its tag must not be silently reinterpreted as one.
+    """
+    destination = tmp_path / "package.json"
+    argv = (
+        ["--dry-run", *_argv(destination)]
+        if selector == "both"
+        else _tagless_argv(destination, rehearsal=False)
+    )
+
+    with pytest.raises(SystemExit):
+        _ = _parse(argv)
 
 
 def _record_identity() -> release_candidate.ReleaseIdentity:

@@ -18,12 +18,21 @@ module, long after this branch is merged.
 Run via ``make test-workflow-contracts``.
 """
 
-import ast
-import re
 import typing as typ
 
 import pytest
 from makefile_recipes import load_makefile, makefile_recipe
+from release_publication_imports import (
+    any_offender,
+    imported_modules,
+    network_offenders,
+)
+from release_publication_wiring import (
+    TEST_MODULE,
+    collected_modules,
+    docstring_example_count,
+    suite_module_names,
+)
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     MAKEFILE_PATH,
@@ -68,6 +77,7 @@ SECTION_MODULES = (
 SOURCE_MODULES = (
     "scripts/release_candidate.py",
     "scripts/release_candidate_cli.py",
+    "scripts/release_identity_record.py",
     "scripts/package_crate_cli.py",
     "scripts/publish_crates_io_cli.py",
     "scripts/verify_release_inventory_cli.py",
@@ -76,8 +86,11 @@ SOURCE_MODULES = (
     "scripts/release_semver.py",
     "scripts/release_digest.py",
     "scripts/verify_crates_io_bytes.py",
+    "scripts/release_registry_response.py",
     "scripts/release_reconcile_crates.py",
     "scripts/release_reconcile_github.py",
+    "scripts/release_asset_names.py",
+    "scripts/release_package_formats.py",
     "scripts/release_declaration.py",
     "scripts/release_declaration_cli.py",
 )
@@ -100,45 +113,7 @@ REQUIRED_RECIPE_FRAGMENTS = (
     "--doctest-modules",
 )
 
-#: Matches a test module path in a recipe. Deliberately anchored to the
-#: ``scripts/tests/`` directory rather than to any ``test_*.py`` argument:
-#: targets such as ``test-workflow-contracts`` also run ``tests/`` and
-#: ``.github/`` suites, and a pattern loose enough to catch those would make
-#: the orphan check below report them as uncollected.
-_TEST_MODULE = re.compile(r"scripts/tests/(test_[A-Za-z0-9_]+\.py)")
-
 _TESTS_DIRECTORY: Path = REPO_ROOT / "scripts" / "tests"
-
-
-def _collected_modules(makefile: str) -> set[str]:
-    """Return every ``scripts/tests`` module name some recipe names.
-
-    Parameters
-    ----------
-    makefile
-        Whole Makefile text to scan.
-
-    Returns
-    -------
-    set[str]
-        Bare module file names, such as ``test_release_semver.py``.
-
-    Notes
-    -----
-    The whole file is scanned rather than one recipe, because a module may be
-    legitimately collected by any target — a new one here, or an existing
-    target that grew a module. The question this answers is whether the suite
-    is reachable at all, not which target owns it. Mentions inside comments
-    count, which is intentional: a comment naming a module still means a
-    maintainer knows it is there, and the check's purpose is to catch modules
-    nobody wired up, not to audit comment style.
-    """
-    return set(_TEST_MODULE.findall(makefile))
-
-
-def _test_module_names(directory: Path) -> set[str]:
-    """Return the bare file name of each test module in ``directory``."""
-    return {path.name for path in directory.glob("test_*.py")}
 
 
 def test_the_target_recipe_pins_its_interpreter_and_modules() -> None:
@@ -146,7 +121,7 @@ def test_the_target_recipe_pins_its_interpreter_and_modules() -> None:
     recipe = makefile_recipe(TARGET)
     for fragment in REQUIRED_RECIPE_FRAGMENTS:
         assert fragment in recipe, f"{TARGET} must retain {fragment!r} in its command"
-    collected = _TEST_MODULE.findall(recipe)
+    collected = TEST_MODULE.findall(recipe)
     assert [f"scripts/tests/{name}" for name in collected] == list(SECTION_MODULES), (
         f"{TARGET} must execute exactly the release-publication modules, "
         f"got {collected!r}"
@@ -168,60 +143,39 @@ def test_each_source_module_carries_docstring_examples(module: str) -> None:
     the examples ran. This asserts there is something for it to find, which
     makes the target's doctest count a fixed number rather than a value that
     can quietly fall to zero.
+
+    Counted over the parsed docstrings rather than over the raw text. A module
+    whose ``>>>`` appears in its own module docstring's *prose* — the paragraph
+    introducing the convention, say — would satisfy a substring probe while
+    pytest collects no example at all, and the check would report coverage
+    that does not exist.
     """
     source = (REPO_ROOT / module).read_text(encoding="utf-8")
-    assert ">>>" in source, (
+    examples = docstring_example_count(source)
+    assert examples, (
         f"{module} carries no docstring example, so naming it on the "
         f"{TARGET} command line adds no coverage; either restore an example "
         f"or drop the module from SOURCE_MODULES"
     )
 
 
-#: Modules a release-policy module must never import, because each one opens
-#: a socket, a URL, or a process that does. The policy modules decide *what* a
-#: published byte is; only workflow steps touch the network, so that the
-#: decision itself stays testable without one.
-NETWORK_MODULES = frozenset({
-    "ftplib",
-    "http",
-    "http.client",
-    "httpx",
-    "requests",
-    "socket",
-    "ssl",
-    "urllib",
-    "urllib.request",
-    "urllib3",
-})
+def test_a_prompt_outside_a_string_constant_does_not_count() -> None:
+    """Reject a prompt that is not in a docstring, so the check is not textual.
 
-
-def _imported_modules(source: str) -> set[str]:
-    """Return every module name a source file imports, however it is spelled.
-
-    Covers ``import x``, ``import x.y as z``, ``from x import y``, and
-    ``from x.y import z``. Relative imports yield no name and are ignored:
-    they name a sibling, never a standard-library client.
-
-    Returns
-    -------
-    set[str]
-        Every imported module name, with ``import a.b`` recorded as ``a.b``.
+    The control for :func:`test_each_source_module_carries_docstring_examples`.
+    A prompt in a comment is prose to pytest and an example to a substring
+    probe, and the two sources differ in exactly the way this check exists to
+    notice. Both halves are needed: the comment must count zero *and* a real
+    docstring prompt must still count one, or the function returns zero for
+    everything and the parameterised test fails for every module instead of
+    catching one.
     """
-    imported: set[str] = set()
-    for node in ast.walk(ast.parse(source)):
-        match node:
-            case ast.Import():
-                imported.update(alias.name for alias in node.names)
-            case ast.ImportFrom(module=str() as module):
-                imported.add(module)
-    return imported
-
-
-def _opens_a_socket(module: str) -> bool:
-    """Report whether an imported module name is a network client or a parent of one."""
-    return any(
-        module == banned or module.startswith(f"{banned}.")
-        for banned in NETWORK_MODULES
+    assert docstring_example_count("# >>> 1 + 1\n") == 0, (
+        "a prompt in a comment must not count as a docstring example"
+    )
+    documented = 'def f():\n    """Add.\n\n    >>> 1 + 1\n    2\n    """\n'
+    assert docstring_example_count(documented) == 1, (
+        "a prompt inside a docstring must still count"
     )
 
 
@@ -244,9 +198,7 @@ def test_policy_modules_import_no_network_client(module: str) -> None:
     never a Python module.
     """
     source = (REPO_ROOT / module).read_text(encoding="utf-8")
-    offenders = sorted(
-        name for name in _imported_modules(source) if _opens_a_socket(name)
-    )
+    offenders = network_offenders(source)
     assert not offenders, (
         f"{module} imports {offenders!r}, so the module is no longer pure "
         f"policy; move the request into the workflow step and pass the "
@@ -258,9 +210,9 @@ def test_the_no_network_check_would_notice_an_offender() -> None:
     """Exercise the detector on a module that does open a connection.
 
     Without this, :func:`test_policy_modules_import_no_network_client` could
-    pass because :func:`_imported_modules` parses nothing or because the
-    banned set matches no spelling. The positive control is a synthetic
-    source, not a fixture file, so it cannot be mistaken for a real module.
+    pass because :func:`imported_modules` parses nothing or because the banned
+    set matches no spelling. The positive control is a synthetic source, not a
+    fixture file, so it cannot be mistaken for a real module.
     """
     positives = (
         "import urllib.request",
@@ -269,7 +221,7 @@ def test_the_no_network_check_would_notice_an_offender() -> None:
         "from socket import create_connection",
     )
     for source in positives:
-        assert any(_opens_a_socket(name) for name in _imported_modules(source)), (
+        assert any_offender(imported_modules(source)), (
             f"the detector must flag {source!r}, or the no-network check is vacuous"
         )
     negatives = (
@@ -278,7 +230,7 @@ def test_the_no_network_check_would_notice_an_offender() -> None:
         "import typing as typ",
     )
     for source in negatives:
-        assert not any(_opens_a_socket(name) for name in _imported_modules(source)), (
+        assert not any_offender(imported_modules(source)), (
             f"the detector must not flag {source!r}, a non-network import"
         )
 
@@ -334,8 +286,8 @@ def test_every_scripts_test_module_is_collected_by_a_recipe() -> None:
     question is reachability, and a module named by any target is reachable.
     """
     makefile = load_makefile()
-    collected = _collected_modules(makefile)
-    orphaned = sorted(_test_module_names(_TESTS_DIRECTORY) - collected)
+    collected = collected_modules(makefile)
+    orphaned = sorted(suite_module_names(_TESTS_DIRECTORY) - collected)
     assert not orphaned, (
         "these test modules are not run by any Makefile recipe, so their "
         f"assertions never execute in CI: {orphaned}"
@@ -352,12 +304,12 @@ def test_the_orphan_check_would_notice_an_uncoupled_module() -> None:
     synthetic module name that cannot be in the Makefile.
     """
     makefile = load_makefile()
-    collected = _collected_modules(makefile)
+    collected = collected_modules(makefile)
     unwired = "test_deliberately_uncoupled.py"
     assert unwired not in collected, (
         "the synthetic module must be absent, or this check proves nothing"
     )
-    assert _TEST_MODULE.fullmatch(f"scripts/tests/{unwired}"), (
+    assert TEST_MODULE.fullmatch(f"scripts/tests/{unwired}"), (
         "the pattern must match a well-formed module path"
     )
     assert {unwired} - collected == {unwired}, (
@@ -370,6 +322,27 @@ def test_the_orphan_check_would_notice_an_uncoupled_module() -> None:
     assert wired in collected, "a wired module must be found in the Makefile"
     assert {wired} - collected == set(), (
         "a wired module must be subtracted away, not reported"
+    )
+
+
+def test_a_module_named_only_in_a_comment_is_not_collected() -> None:
+    """Reject a comment mention, so the orphan check cannot be satisfied by prose.
+
+    The scan reads the Makefile through :func:`collected_modules`, which
+    blanks comments before matching. Without that, a recipe could lose its
+    module argument and still pass: the explanatory comment beside it would
+    name the module and the check would report it as wired. The synthetic
+    text here is the exact shape that hides the fault — a live target line
+    and a comment line that mentions a module the target no longer runs.
+    """
+    synthetic = (
+        "test-synthetic:\n"
+        "\tpython -m pytest scripts/tests/test_live.py\n"
+        "# test-retired.py was dropped when the suite moved\n"
+    )
+    assert collected_modules(synthetic) == {"test_live.py"}, (
+        "a module named only in a comment must not count as collected; the "
+        "scan must read the recipe, not the prose around it"
     )
 
 

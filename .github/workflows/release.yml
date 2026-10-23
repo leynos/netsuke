@@ -435,6 +435,12 @@ jobs:
         with:
           tag: ${{ github.ref_name }}
           commit: ${{ github.sha }}
+          # A rehearsal runs on a pull request, where `github.ref_name` is the
+          # merge ref (`903/merge`), not a release tag. The same mode output
+          # that tells `upload-release-assets` it is not publishing tells this
+          # action to record the absence of a tag; the archive is still built
+          # and digested, which is what the rehearsal is for.
+          dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
           package-name: ${{ needs.metadata.outputs.package_name }}
           version: ${{ needs.metadata.outputs.version }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}

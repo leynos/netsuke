@@ -186,6 +186,16 @@ def walk_files(root: Path) -> list[Path]:
     -----
     A directory that cannot be read propagates as ``OSError`` through the
     ``onerror`` callback rather than being silently skipped.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     _ = (Path(root) / "pkg.tar.gz").write_text("x", encoding="utf-8")
+    ...     found = sorted(path.name for path in walk_files(Path(root)))
+    >>> found
+    ['pkg.tar.gz']
     """
 
     def _raise(error: OSError) -> None:

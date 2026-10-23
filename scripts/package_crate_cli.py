@@ -12,6 +12,14 @@ what a workflow step may do; the policy that decides whether an identity is
 publishable lives in :mod:`release_candidate`, and the digest arithmetic lives
 in :mod:`release_digest`. Nothing here reaches the network, so the packaging
 job runs to completion during a dry run.
+
+A dry run has no release tag to record. A pull request run is triggered by an
+event whose ``github.ref_name`` is a merge ref such as ``903/merge``, not a
+tag, so the caller passes :option:`--dry-run` instead of :option:`--tag` and
+the record stores ``tag: null``. Making the two mutually exclusive, rather
+than treating an absent tag as a rehearsal, is what stops a publishing call
+site that forgot its tag from silently producing a record that names no
+release: that omission is an argument error here, not a tagless identity.
 """
 
 import argparse
@@ -27,6 +35,17 @@ import release_digest
 EXIT_OK = 0
 EXIT_PACKAGING_FAILED = 1
 EXIT_IDENTITY_REJECTED = 2
+
+#: Wall-clock seconds ``cargo package`` may run before it is killed.
+#:
+#: Without a bound, a cargo invocation that waits on a lock or on a hung
+#: network fetch holds the job until the runner's own limit kills it, and the
+#: job's log says only that the step timed out — no crate, no diagnosis, and no
+#: indication of which command was stuck. The packaging step itself is minutes,
+#: not hours: it compiles the packaged sources once inside
+#: ``<target>/package/tmp-crate/``. Fifteen minutes leaves generous room for a
+#: cold cache while still failing with a message rather than a runner eviction.
+PACKAGING_TIMEOUT_SECONDS = 15 * 60
 
 #: Subdirectory of ``cargo package --target-dir`` the finished archive lands
 #: in. Cargo writes the crate here and unpacks its verification copy into the
@@ -96,51 +115,88 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
     Raises
     ------
     RuntimeError
-        If ``cargo package`` exits non-zero, or if the directory does not hold
+        If ``cargo package`` exits non-zero, exceeds
+        :data:`PACKAGING_TIMEOUT_SECONDS`, or if the directory does not hold
         exactly one crate afterwards.
 
     Notes
     -----
-    ``--no-verify`` is deliberately not passed. The command's own verification
-    compiles the packaged sources, which is the check that the archive is
-    buildable from exactly the files it carries rather than from the working
-    tree. Skipping it would make "the crate is complete" an assumption.
+    ``--no-verify`` is deliberately not passed: the command's own verification
+    compiles the packaged sources, which is the check that the archive builds
+    from exactly the files it carries rather than from the working tree.
 
-    The crate is read from ``destination``'s :data:`PACKAGE_SUBDIR`, not from
-    ``destination`` itself. ``cargo package --target-dir`` nests its output one
-    level down: the finished archive lands in ``<target-dir>/package/`` beside
-    the ``tmp-crate/`` scratch tree verification unpacks into. Measured on the
-    pinned toolchain at the 2026-10-20 probe — a bare ``glob("*.crate")`` over
-    the target directory returns nothing, so a caller that looked there would
-    report a successful packaging run as a failure.
+    The crate is read from :data:`PACKAGE_SUBDIR`, not from ``destination``
+    itself, because ``cargo package --target-dir`` nests its output one level
+    down. Measured on the pinned toolchain at the 2026-10-20 probe, a bare
+    ``glob("*.crate")`` over the target directory returns nothing, so a caller
+    that looked there would report a successful run as a failure.
 
-    Exactly one crate is required rather than "take the first". A stale file
-    left in the staging directory from an earlier run would otherwise be
-    published under this run's identity, which is the failure the digest record
-    exists to prevent.
+    Exactly one crate is required rather than "take the first": a stale file
+    from an earlier run would otherwise be published under this run's
+    identity, which is the failure the digest record exists to prevent.
+
+    Both helpers raise ``RuntimeError`` so :func:`main` translates them into
+    ``EXIT_PACKAGING_FAILED``. A ``TimeoutExpired`` escaping instead would
+    surface as a traceback from a module whose whole contract is "exits with a
+    code and a message".
     """
-    # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
-    # ruff: ignore[start-process-with-partial-path] - cargo is on the workflow PATH.
-    completed = subprocess.run(
-        [
-            "cargo",
-            "package",
-            "--manifest-path",
-            str(manifest),
-            "--target-dir",
-            str(destination),
-        ],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
+    _run_package(manifest, destination)
+    return _the_only_crate(destination / PACKAGE_SUBDIR)
+
+
+def _run_package(manifest: pathlib.Path, destination: pathlib.Path) -> None:
+    """Run ``cargo package``, translating every way it can fail.
+
+    Raises
+    ------
+    RuntimeError
+        If the command exits non-zero or exceeds
+        :data:`PACKAGING_TIMEOUT_SECONDS`.
+    """
+    try:
+        # Both suppressions sit inside the `try` because an ignore comment
+        # binds to the statement that follows it, not to the block a statement
+        # is nested in. Above the `try` they suppress the `try` and leave the
+        # call unsuppressed.
+        # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
+        # ruff: ignore[start-process-with-partial-path] - cargo is on the workflow PATH.
+        completed = subprocess.run(
+            [
+                "cargo",
+                "package",
+                "--manifest-path",
+                str(manifest),
+                "--target-dir",
+                str(destination),
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=PACKAGING_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as error:
+        msg = (
+            f"cargo package did not finish within {PACKAGING_TIMEOUT_SECONDS}s "
+            f"and was killed; the packaging step cannot be left to the "
+            f"runner's own limit, which reports a step timeout and no cause"
+        )
+        raise RuntimeError(msg) from error
     if completed.returncode != 0:
         msg = (
             f"cargo package failed with exit {completed.returncode}:\n"
             f"{completed.stderr}"
         )
         raise RuntimeError(msg)
-    staging = destination / PACKAGE_SUBDIR
+
+
+def _the_only_crate(staging: pathlib.Path) -> pathlib.Path:
+    """Return the single crate in ``staging``, refusing any other count.
+
+    Raises
+    ------
+    RuntimeError
+        If ``staging`` does not hold exactly one ``.crate`` file.
+    """
     produced = sorted(staging.glob("*.crate"))
     if len(produced) != 1:
         msg = (
@@ -163,7 +219,16 @@ def build_parser() -> argparse.ArgumentParser:
         prog="package_crate_cli",
         description="Package the release crate and record its identity.",
     )
-    parser.add_argument("--tag", required=True, help="the release tag, e.g. v1.2.3")
+    release = parser.add_mutually_exclusive_group(required=True)
+    release.add_argument("--tag", help="the release tag, e.g. v1.2.3")
+    release.add_argument(
+        "--dry-run",
+        action="store_true",
+        help=(
+            "record that this run has no release tag, as a pull-request "
+            "rehearsal does; the archive is still packaged and digested"
+        ),
+    )
     parser.add_argument("--commit", required=True, help="the full commit SHA")
     parser.add_argument("--package-name", required=True, help="the Cargo package name")
     parser.add_argument("--version", required=True, help="the manifest version")
@@ -210,8 +275,9 @@ def main(argv: list[str] | None = None) -> int:
     --------
     A tag that does not spell the manifest version is refused before cargo is
     invoked, so the run exits with the identity code rather than with whatever
-    ``cargo package`` would have reported. The diagnosis goes to standard
-    error, which a doctest does not compare:
+    ``cargo package`` would have reported. Rehearsing instead of tagging takes
+    ``--dry-run``, which records the absence of a tag. The diagnosis goes to
+    standard error, which a doctest does not compare:
 
     >>> main(["--tag", "v2.0.0", "--commit", "0" * 40, "--package-name", "p",
     ...       "--version", "1.2.3", "--bin-name", "b",
@@ -222,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     arguments = build_parser().parse_args(argv)
     facts = release_candidate.CandidateFacts(
-        tag=arguments.tag,
+        tag=None if arguments.dry_run else arguments.tag,
         commit=arguments.commit,
         package_name=arguments.package_name,
         version=arguments.version,

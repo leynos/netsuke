@@ -16,6 +16,12 @@ not interchangeable with ``0.1.0-beta4`` — they are different identifiers, and
 no ordering comparison makes them equal — so the tag must spell whichever one
 the manifest declares. Confusing those two facts would either refuse a
 publishable version or accept a tag naming a different one.
+
+The same `Position` distinction keeps the rule out of build metadata, which
+`semver` parses with `Position::Build`. The pad guard is gated on
+`Position::Pre`, so ``0.1.0+001`` is a version Cargo accepts even though
+``0.1.0-001`` is not. Extending the prerelease rule across both fields would
+refuse a manifest that builds.
 """
 
 import re
@@ -28,6 +34,13 @@ _NUMERIC_IDENTIFIER = re.compile(r"\A(?:0|[1-9][0-9]*)\Z")
 #: Hyphens are permitted; underscores are not, which is the rule that refuses
 #: ``0.1.0-beta_4``.
 _ALPHANUMERIC_IDENTIFIER = re.compile(r"\A[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*\Z")
+
+#: One dot-separated build-metadata identifier. The leading-zero rule does not
+#: reach build metadata: `semver` parses it with `Position::Build`, and its
+#: padding guard is gated on `Position::Pre`. So ``0.1.0+001`` is valid where
+#: ``0.1.0-001`` is not, and applying the prerelease rule to both would refuse
+#: a version Cargo accepts.
+_METADATA_IDENTIFIER = re.compile(r"\A[0-9A-Za-z-]+\Z")
 
 _SEMVER = re.compile(
     r"\A(?P<core>[0-9]+(?:\.[0-9]+){2})"
@@ -45,7 +58,7 @@ def _has_well_formed_identifiers(text: str) -> bool:
     Parameters
     ----------
     text
-        A prerelease or build-metadata field, without its leading separator.
+        A prerelease field, without its leading ``-``.
 
     Returns
     -------
@@ -56,6 +69,11 @@ def _has_well_formed_identifiers(text: str) -> bool:
         leading-zero rule lives: a padded identifier is refused only when it
         has no non-digit to make it alphanumeric, so ``01`` fails while
         ``beta04`` passes.
+
+    Notes
+    -----
+    Build metadata is not checked here; :func:`_has_well_formed_metadata`
+    handles that field, where the leading-zero rule does not apply.
 
     Examples
     --------
@@ -73,6 +91,37 @@ def _has_well_formed_identifiers(text: str) -> bool:
     )
 
 
+def _has_well_formed_metadata(text: str) -> bool:
+    """Return whether every dot-separated build-metadata identifier is well formed.
+
+    Parameters
+    ----------
+    text
+        A build-metadata field, without its leading ``+``.
+
+    Returns
+    -------
+    bool
+        `True` when the field is non-empty and every identifier uses only
+        ``[0-9A-Za-z-]``. Numeric padding is not refused here, because the
+        leading-zero rule is a prerelease rule; see
+        :data:`_METADATA_IDENTIFIER`.
+
+    Examples
+    --------
+    >>> _has_well_formed_metadata("001")
+    True
+    >>> _has_well_formed_metadata("build.7")
+    True
+    >>> _has_well_formed_metadata("")
+    False
+    """
+    identifiers = text.split(".")
+    if not identifiers or any(not part for part in identifiers):
+        return False
+    return all(_METADATA_IDENTIFIER.match(part) for part in identifiers)
+
+
 def is_valid_semver(text: str) -> bool:
     """Return whether ``text`` is a well-formed semantic version.
 
@@ -80,6 +129,11 @@ def is_valid_semver(text: str) -> bool:
     an optional prerelease and build metadata follow. A prerelease identifier
     that is entirely numeric must likewise not carry a leading zero, which is
     what makes ``0.1.0-01`` invalid while ``0.1.0-beta04`` remains valid.
+
+    Build metadata is held to a different rule on purpose: SemVer gives
+    metadata no ordering semantics, and ``semver`` parses it with
+    ``Position::Build``, where the padding guard does not apply. So
+    ``0.1.0+001`` is accepted even though ``0.1.0-001`` is not.
 
     Parameters
     ----------
@@ -97,6 +151,8 @@ def is_valid_semver(text: str) -> bool:
     True
     >>> is_valid_semver("0.1.0-01")
     False
+    >>> is_valid_semver("0.1.0+001")
+    True
     """
     match = _SEMVER.match(text)
     if match is None:
@@ -110,7 +166,7 @@ def is_valid_semver(text: str) -> bool:
     if prerelease is not None and not _has_well_formed_identifiers(prerelease):
         return False
     metadata = match.group("metadata")
-    return metadata is None or _has_well_formed_identifiers(metadata)
+    return metadata is None or _has_well_formed_metadata(metadata)
 
 
 def is_prerelease(version: str) -> bool:

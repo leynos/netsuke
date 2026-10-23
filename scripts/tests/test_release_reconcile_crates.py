@@ -32,21 +32,45 @@ from release_reconcile_crates import (
 INTENDED = "f" * 64
 OTHER = "e" * 64
 
+#: The version under test, and one the registry has already published.
+VERSION = "1.0.0"
+EARLIER = "0.9.0"
 
-def _version_body(*, checksum: str, yanked: bool) -> str:
+
+def _version_body(*, checksum: str, yanked: bool, num: str = VERSION) -> str:
     """Render the version endpoint's response, as crates.io sends it."""
-    return json.dumps({"version": {"checksum": checksum, "yanked": yanked}})
+    return json.dumps({"version": {"num": num, "checksum": checksum, "yanked": yanked}})
 
 
-def _crate_body(*records: tuple[str, bool]) -> str:
-    """Render the crate endpoint's response, as crates.io sends it."""
-    return json.dumps({"versions": [{"checksum": c, "yanked": y} for c, y in records]})
+def _crate_body(*records: tuple[str, str, bool]) -> str:
+    """Render the crate endpoint's response, as crates.io sends it.
+
+    The stated total matches the records supplied, which is what the live
+    endpoint was observed to do. :func:`_truncated_body` renders the case
+    where it does not.
+
+    Returns
+    -------
+    str
+        The response body, as JSON text.
+    """
+    return json.dumps({
+        "crate": {"num_versions": len(records)},
+        "versions": [{"num": num, "checksum": c, "yanked": y} for num, c, y in records],
+    })
+
+
+def _truncated_body(*records: tuple[str, str, bool]) -> str:
+    """Render a crate response whose stated total exceeds the records it sent."""
+    parsed = json.loads(_crate_body(*records))
+    parsed["crate"]["num_versions"] = len(records) + 1
+    return json.dumps(parsed)
 
 
 def test_absent_version_is_absent() -> None:
     """Require a 404 to classify as absent, so the release proceeds to publish."""
     state = classify_registry_state(
-        None, intended_sha256=INTENDED, http_status=NOT_FOUND
+        None, version=VERSION, intended_sha256=INTENDED, http_status=NOT_FOUND
     )
     assert state is RegistryState.ABSENT, "a 404 must classify as absent"
     assert plan_crates_action(state) == "publish", (
@@ -58,6 +82,7 @@ def test_identical_version_is_identical() -> None:
     """Require a published version with the intended digest to be identical."""
     state = classify_registry_state(
         _version_body(checksum=INTENDED, yanked=False),
+        version=VERSION,
         intended_sha256=INTENDED,
         http_status=OK,
     )
@@ -76,7 +101,8 @@ def test_crate_endpoint_shape_is_also_understood() -> None:
     the other, which is a failure the singular-shape tests cannot see.
     """
     state = classify_registry_state(
-        _crate_body((INTENDED, False)),
+        _crate_body((VERSION, INTENDED, False)),
+        version=VERSION,
         intended_sha256=INTENDED,
         http_status=OK,
     )
@@ -93,6 +119,7 @@ def test_published_version_with_a_different_digest_conflicts() -> None:
     """
     state = classify_registry_state(
         _version_body(checksum=OTHER, yanked=False),
+        version=VERSION,
         intended_sha256=INTENDED,
         http_status=OK,
     )
@@ -113,6 +140,7 @@ def test_yanked_version_is_yanked_not_identical() -> None:
     """
     state = classify_registry_state(
         _version_body(checksum=INTENDED, yanked=True),
+        version=VERSION,
         intended_sha256=INTENDED,
         http_status=OK,
     )
@@ -124,20 +152,123 @@ def test_yanked_version_is_yanked_not_identical() -> None:
     )
 
 
-def test_a_later_version_record_does_not_mask_the_intended_one() -> None:
-    """Require every record to be considered, not only the first.
+def test_the_intended_record_is_found_wherever_it_sits_in_the_history() -> None:
+    """Require the history to be searched, not read by position.
 
-    The crate endpoint returns all versions. A classifier reading only the
-    first would report a conflict for a release whose intended version is
-    present but not first in the list.
+    The crate endpoint returns every version, newest first, so the intended
+    one is only first when it is the most recent publication. A classifier
+    reading only the leading record would report a conflict for a release
+    whose version is present but not first.
     """
     state = classify_registry_state(
-        _crate_body((OTHER, False), (INTENDED, False)),
+        _crate_body((EARLIER, OTHER, False), (VERSION, INTENDED, False)),
+        version=VERSION,
         intended_sha256=INTENDED,
         http_status=OK,
     )
     assert state is RegistryState.IDENTICAL, (
         "a matching record must be found wherever it sits in the list"
+    )
+
+
+def test_a_yanked_older_version_does_not_poison_a_newer_release() -> None:
+    """Require a yank to be judged for the intended version alone.
+
+    Live evidence: ``GET /api/v1/crates/serde`` answers with all 316 of its
+    versions at once, and 3 of those are yanked. A classifier that asked "is
+    any version in this history yanked?" would therefore classify every future
+    serde release as ``YANKED`` and stop the release for ever. The same body
+    scanned for a digest would likewise let an older release's bytes answer for
+    a newer version.
+    """
+    state = classify_registry_state(
+        _crate_body((VERSION, INTENDED, False), (EARLIER, INTENDED, True)),
+        version=VERSION,
+        intended_sha256=INTENDED,
+        http_status=OK,
+    )
+    assert state is RegistryState.IDENTICAL, (
+        "a yank on an older release must not be reported as this one's state"
+    )
+
+
+def test_the_yank_of_the_intended_version_is_still_reported() -> None:
+    """Require the per-version filter not to hide a genuine yank.
+
+    The control for the row above: narrowing the question must not make the
+    answer unreachable. The same body classifies ``YANKED`` when the intended
+    version is the withdrawn one.
+    """
+    state = classify_registry_state(
+        _crate_body((EARLIER, INTENDED, False), (VERSION, INTENDED, True)),
+        version=VERSION,
+        intended_sha256=INTENDED,
+        http_status=OK,
+    )
+    assert state is RegistryState.YANKED, (
+        "the intended version's own yank must still stop the release"
+    )
+
+
+def test_a_version_the_history_does_not_list_is_absent() -> None:
+    """Publish a version the crate has never released.
+
+    The crate exists, so the endpoint answers 200 with its history; the
+    version is not in it. That is the ordinary first publication of a new
+    version, and reading it as a conflict would stop every release.
+    """
+    state = classify_registry_state(
+        _crate_body((EARLIER, OTHER, False)),
+        version=VERSION,
+        intended_sha256=INTENDED,
+        http_status=OK,
+    )
+    assert state is RegistryState.ABSENT, (
+        "a history without the intended version must classify as absent"
+    )
+    assert plan_crates_action(state) == "publish", (
+        "an unlisted version is the case publication exists for"
+    )
+
+
+def test_a_truncated_history_is_indeterminate() -> None:
+    """Refuse a history that disagrees with its own stated total.
+
+    Filtering by version makes truncation dangerous in a new way: a body
+    missing the intended record is indistinguishable from a version never
+    published, which plans a publish over whatever the registry holds. The
+    stated count is what tells the two apart.
+    """
+    state = classify_registry_state(
+        _truncated_body((EARLIER, OTHER, False)),
+        version=VERSION,
+        intended_sha256=INTENDED,
+        http_status=OK,
+    )
+    assert state is RegistryState.INDETERMINATE, (
+        "a history whose record count contradicts its stated total must not "
+        "be read as evidence that the version is absent"
+    )
+    assert plan_crates_action(state) != "publish", (
+        "a truncated history must not plan a publish"
+    )
+
+
+def test_a_version_answer_about_another_number_conflicts() -> None:
+    """Refuse a single-version answer describing a different version.
+
+    The version endpoint is asked for one number and answers with one record.
+    A record for another number means the response does not describe what was
+    asked about, and nothing may be concluded about the intended version.
+    """
+    state = classify_registry_state(
+        _version_body(checksum=INTENDED, yanked=False, num=EARLIER),
+        version=VERSION,
+        intended_sha256=INTENDED,
+        http_status=OK,
+    )
+    assert state is RegistryState.CONFLICT, (
+        "an answer about a different version must not be read as this one's"
     )
 
 
@@ -149,7 +280,7 @@ def test_an_unrecognised_body_is_indeterminate() -> None:
     absence is how a release publishes over existing bytes.
     """
     state = classify_registry_state(
-        "not json at all", intended_sha256=INTENDED, http_status=OK
+        "not json at all", version=VERSION, intended_sha256=INTENDED, http_status=OK
     )
     assert state is RegistryState.INDETERMINATE, (
         "an unreadable answer must be indeterminate, not absent"
@@ -173,7 +304,8 @@ def test_a_version_with_no_checksum_is_refused() -> None:
     """
     with pytest.raises(RegistryResponseError):
         classify_registry_state(
-            json.dumps({"version": {"yanked": False}}),
+            json.dumps({"version": {"num": VERSION, "yanked": False}}),
+            version=VERSION,
             intended_sha256=INTENDED,
             http_status=OK,
         )
@@ -182,7 +314,9 @@ def test_a_version_with_no_checksum_is_refused() -> None:
 @pytest.mark.parametrize("status", [500, 502, 503, 429])
 def test_a_server_error_is_indeterminate(status: int) -> None:
     """Require a retryable server status not to be read as absence."""
-    state = classify_registry_state(None, intended_sha256=INTENDED, http_status=status)
+    state = classify_registry_state(
+        None, version=VERSION, intended_sha256=INTENDED, http_status=status
+    )
     assert state is RegistryState.INDETERMINATE, (
         "a retryable server status must not be read as absence"
     )
@@ -233,6 +367,7 @@ def test_a_digest_the_registry_does_not_report_conflicts(
     assert (
         classify_registry_state(
             _version_body(checksum=INTENDED, yanked=False),
+            version=VERSION,
             intended_sha256=intended,
             http_status=OK,
         )

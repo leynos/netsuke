@@ -6,8 +6,21 @@ description: >-
 
 inputs:
   tag:
-    description: The release tag, for example `v0.1.0-beta4`.
-    required: true
+    description: >-
+      The release tag, for example `v0.1.0-beta4`. Supply this on a release, or
+      leave it empty and set `dry-run` for a rehearsal: a pull request has a
+      merge ref rather than a release tag, so there is no tag to record.
+    required: false
+    default: ''
+  dry-run:
+    description: >-
+      When `true`, record that this run has no release tag because it is a
+      rehearsal. The crate is still packaged and digested; only the identity's
+      `tag` is absent. `tag` is still passed by the caller in both modes, and
+      this input selects which of the two flags the step forwards, so the
+      action cannot present the CLI with both at once.
+    required: false
+    default: 'false'
   commit:
     description: >-
       The full commit SHA the workflow checked out. Supplied by the caller from
@@ -45,6 +58,7 @@ runs:
       shell: bash
       env:
         RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_DRY_RUN: ${{ inputs['dry-run'] }}
         RELEASE_COMMIT: ${{ inputs.commit }}
         RELEASE_PACKAGE_NAME: ${{ inputs['package-name'] }}
         RELEASE_VERSION: ${{ inputs.version }}
@@ -52,8 +66,20 @@ runs:
       run: |
         set -euo pipefail
         mkdir -p artifacts/package
+        # A rehearsal has no release tag to name, so the two are selected here
+        # rather than passed together and reconciled in the CLI. The CLI also
+        # refuses both at once, so a caller that supplies each reaches an
+        # argument error instead of an identity that quietly prefers one.
+        case "$RELEASE_DRY_RUN" in
+          true) release_selector=(--dry-run) ;;
+          false) release_selector=(--tag "$RELEASE_TAG") ;;
+          *)
+            printf 'dry-run must be true or false, got %s\n' "$RELEASE_DRY_RUN" >&2
+            exit 1
+            ;;
+        esac
         uv run --no-project --python 3.14 scripts/package_crate_cli.py \
-          --tag "$RELEASE_TAG" \
+          "${release_selector[@]}" \
           --commit "$RELEASE_COMMIT" \
           --package-name "$RELEASE_PACKAGE_NAME" \
           --version "$RELEASE_VERSION" \
