@@ -7052,6 +7052,67 @@ holds it in place.
   is no per-test allowance for a queue to exhaust locally, and in CI the pass
   sits inside its own cargo watchdog.
 
+Choose where a new compile-time check runs before writing it. The decision
+turns on what the check claims, not on where similar tests already live.
+
+For screen readers: The following flowchart routes a compile-time contract to
+where it runs. A positive API check becomes a workspace library fixture that
+Cargo compiles in its build phase, with no nested Cargo or direct `rustc`. A
+negative API check becomes a pinned `compile_fail` doctest that runs in the
+doctest phase, where compiler queueing meets no per-test timeout. Anything else
+is a runtime or source-only test in the timed Nextest suite.
+
+```mermaid
+flowchart TD
+    Contract["Compile-time contract"] --> Positive{"Positive API check?"}
+    Positive -->|Yes| Fixture["Workspace library fixture"]
+    Positive -->|No| Negative{"Negative API check?"}
+    Negative -->|Yes| Doctest["Pinned compile_fail doctest"]
+    Negative -->|No| Runtime["Runtime or source-only test"]
+    Fixture --> BuildPhase["Cargo build phase"]
+    Doctest --> DoctestPhase["Cargo doctest phase"]
+    Runtime --> Nextest["Timed Nextest suite"]
+    BuildPhase --> NoNested["No nested Cargo or direct rustc"]
+    DoctestPhase --> NoTimedWait["No per-test timeout for compiler queueing"]
+```
+
+*Figure: Routing a compile-time contract to the build phase, the doctest phase,
+or the timed Nextest suite.*
+
+Do not repeat the patterns that #939 and ADR-0059 removed. Each one looked
+reasonable in isolation and failed only on a busy host:
+
+- **Do not start Cargo from a test body.** A test that runs `cargo check`,
+  `cargo build`, `cargo test --no-run`, or `cargo publish` pays for Cargo's
+  package-cache lock, any rebuild its mode or feature selection triggers, and
+  every compiler-admission wait out of its own allowance. One such test passed
+  in 8 s, timed out at 300 s, and needed 709 s inside a widened allowance, all
+  on one host with no change to its code.
+- **Do not hand Cargo's artefacts to a `rustc` you invoke yourself.** Reading
+  metadata paths from `--message-format=json` and passing them through
+  `--extern` and `-L dependency=` rebuilds Cargo's job by hand, then needs its
+  own parser, response-file writer, and split-build regression tests to stay
+  correct. The fixture library or doctest gets the same proof from Cargo
+  directly.
+- **Do not answer a timeout by widening the allowance.** The module-slice check
+  timed out at 300 s, then 720 s, then 900 s. A wider allowance moves which run
+  fails; it does not change whether one will, because the wait belongs to the
+  host. Move the work out of the test instead.
+- **Do not narrow a nested check to make it cheaper.** Scoping `cargo check` to
+  one package or one target changes the feature unification and build mode, so
+  the nested build stops matching the gate's artefacts and recompiles more, not
+  less.
+- **Do not keep a compiler-driving test because it is serialized.** The
+  `nested-cargo-builds` group stops parallel nested builds from starving one
+  another; it does nothing about other worktrees sharing the compiler pool.
+
+When a check genuinely must run Cargo, as package verification does, give it a
+Makefile target and a CI step rather than a test, as `make test-package-verify`
+does. `tests/workflow_contracts/nextest_child_cargo_group_test.py` fails when a
+default-suite test starts a build-capable Cargo command, and
+`compile_contract_placement_test.py` fails when a test resolves Cargo artefacts
+for a compiler; do not work around either by renaming the call.
+
 `public_api_fixture/` has one module per public boundary, named for it, and
 each module states what it type-checks. Its reuse policy is narrow on purpose.
 Add a module when a public API needs an external-crate compile check; do not
