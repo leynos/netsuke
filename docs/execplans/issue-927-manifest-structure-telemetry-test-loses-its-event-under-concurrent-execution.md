@@ -129,11 +129,13 @@ seeded duplicate.
   code is now in a private `threads` module; its two subscriber boundaries
   remain distinct, and ADR-057 records the helper's scope.
 - [x] (2026-10-23) Committed the implementation as `ba17d7c` after the full
-  gate sequence passed. The separate worker refactor is being validated and
-  will be committed independently as required by the repository guidance.
-- [ ] Finish the refactor gates and commit, then push with SSH and set the
-  named upstream. Attach the model and worker evidence to upstream PR #3614,
-  create the requested draft PR, and mark it ready after publication checks.
+  gate sequence passed. Committed the worker orchestration extraction as
+  `6e43d16` after its gates passed, then pushed it with SSH and verified the
+  named upstream branch.
+- [x] (2026-10-23) Created draft PR #943 against `main` with `Closes #927` and
+  the Lody session reference. The PR author is `leynos`; its base is
+  `6572fb956379f47e70af914bfe4307b740a0b15e` and published head is
+  `6e43d160ab59c2881933c88297a5a508a189b805`.
 - [x] (2026-10-23) Passed `make check-fmt`, `make test` (4667 passed, 0
   failed, 7 skipped; workspace doctests passed), `make typecheck`, `make lint`
   (Clippy, Whitaker, Python lint, yamllint and actionlint), `make doc-coverage`
@@ -156,6 +158,16 @@ seeded duplicate.
   Markdown lint found zero issues in 198 files; and all diagrams passed. The
   first lint attempt identified one extra borrow in the extracted helper; that
   was corrected before this passing run.
+- [x] (2026-10-23) The PR's CodeScene analysis flagged duplicate structure in
+  the two T2 capture wrappers. Replaced them with one mode-selected capture
+  thread and a common snapshot path, preserving the distinct `with_default` and
+  `with_test_subscriber` boundaries. Bundled T2's phase channels after Clippy
+  flagged the initial argument count. The latest focused test and all gates
+  passed; `cs delta origin/main` reported no issues.
+- [ ] Commit and push the CodeScene-driven consolidation. Attach the Loom and
+  real-callsite schedule evidence to upstream PR #3614, complete the separate
+  completeness and bounded-model assessments for PR #943, mark it ready only
+  after those replies and current checks clear, then follow it to merge.
 
 ## Surprises & discoveries
 
@@ -434,15 +446,17 @@ PR whose title contains `(#927)`, summary says `Closes #927`, and terminal
 - **EP-M2 (complete):** Test-process anchors prevent the selected stale
   schedule without global defaults or test serialization. Unmitigated mode
   fails validation, mitigated mode passes after its fixed deadline, and the
-  disabled-anchor control fails. The only remaining delivery work is commit,
-  publication, and the upstream evidence comment.
+  disabled-anchor control fails. The implementation and worker extraction are
+  committed and published; the CodeScene-driven worker consolidation is
+  validated and awaits its own commit.
 - **EP-M3 (implementation and validation complete):** Original tests,
-  supporting tests, docs, ADR, repeated measurements, and the review-driven
-  worker refactor are complete. The implementation commit is validated, and the
-  separate refactor has passed the focused regression and all repository gates.
+  supporting tests, docs, ADR, repeated measurements, and the worker
+  consolidation are complete. The latest source change passed the focused
+  regression and all repository gates; local CodeScene delta found no issues.
   Post-fix manifest runs are clean in the recorded default/high-thread matrix.
-  Remaining work: commit the refactor, push, attach the evidence to upstream PR
-  #3614, create and mark the issue PR ready, then follow it to merge.
+  Remaining work: publish the consolidation, attach evidence to upstream PR
+  #3614, complete hosted assessments, mark PR #943 ready when current checks
+  and replies clear, and follow it to merge.
 
 ## Concrete steps
 
