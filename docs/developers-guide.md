@@ -7415,9 +7415,9 @@ dispatcher registration can rebuild and publish a more permissive interest
 before the first registration publishes its older `Interest::never()` result.
 That stale write then suppresses the event for other thread-local dispatchers.
 The bounded Loom model and fresh-process schedule under
-`src/runner/manifest_structure_telemetry_reproduction/` cover this ordering.
-The model cites the pinned `callsite.rs` implementation; the production summary
-emission remains synchronous.
+`src/runner/callsite_interest_reproduction/` cover this ordering. The model
+cites the pinned `callsite.rs` implementation; the production summary emission
+remains synchronous.
 
 Both capture helpers call
 `test_support::tracing_capture::ensure_test_interest_anchors_registered` before

@@ -9,7 +9,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-const WORKER_TEST: &str = "runner::manifest_structure_telemetry_reproduction::interest_worker";
+const WORKER_TEST: &str = "runner::callsite_interest_reproduction::interest_worker";
 
 /// Require the unmitigated and anchored schedules to reproduce in child processes.
 #[test]
