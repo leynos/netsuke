@@ -1347,8 +1347,8 @@ target's `sources`, `deps`, `order_only_deps`, or `name` list can change the
 bytes while both graphs are correct.
 
 Emission is deterministic, not idempotent under arbitrary text edits: a
-hand-edited generated file is replaced when it is regenerated. Treat `build.ninja` and
-its sidecars as build artefacts.
+hand-edited generated file is replaced when it is regenerated. Treat
+`build.ninja` and its sidecars as build artefacts.
 
 [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) records the
 full contract, its numbered preconditions, and the statements deliberately

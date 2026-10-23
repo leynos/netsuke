@@ -181,7 +181,7 @@ fn serial_paths(file: &str, predicate: fn(&str) -> bool) -> Vec<String> {
 /// left-hand side only, so a dependency containing `/` cannot be mistaken for
 /// part of an output name — the reason a test must never hand a whole `build`
 /// line to [`is_relay`], which splits at the last `/`.
-fn serial_build_lines<'a>(file: &'a str, predicate: fn(&str) -> bool) -> Vec<&'a str> {
+fn serial_build_lines(file: &str, predicate: fn(&str) -> bool) -> Vec<&str> {
     file.lines()
         .filter(|line| {
             line.strip_prefix("build ")
