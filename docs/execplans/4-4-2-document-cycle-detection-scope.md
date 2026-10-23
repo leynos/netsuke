@@ -6,7 +6,10 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: APPROVED
+
+Approved by explicit user instruction on 2026-10-24, before rebase or
+implementation.
 
 Revision 2. Drafted on 2026-09-27 against `origin/main` at `ebcedaef`, then
 revised after an expert-panel design review the same day (see `Revision note`).
@@ -1010,7 +1013,7 @@ already treat order-only dependencies as graph arcs.
 - [x] (2026-09-27) Verified review claims: Kani module-path derivation, BDD
   world error storage, Ninja root-only scheduling, and canary `Netsukefile`s (no
   `order_only_deps` in any of the three).
-- [ ] Plan approved.
+- [x] (2026-10-24) Plan approved by explicit user instruction; D1 accepted.
 - [ ] EP-M1.
 - [ ] EP-M2.
 - [ ] EP-M3.
@@ -1095,8 +1098,8 @@ already treat order-only dependencies as graph arcs.
   affected, and Netsuke is pre-1.0. Ninja-parity scope (check only the subgraph
   reachable from requested targets) was rejected because `generate` has no
   requested targets and it would loosen the whole-graph check that `sources` and
-  `deps` already get. Date/Author: 2026-09-27, planning agent; pending
-  approval.
+  `deps` already get. Date/Author: 2026-09-27, planning agent; approved by the
+  user on 2026-10-24.
 - D2. Decision: implicit outputs participate as aliases of their producing
   edge; no change to code. Rationale: matches Ninja's "identical to explicit
   outputs" semantics and the existing output index. Date/Author: 2026-09-27,
