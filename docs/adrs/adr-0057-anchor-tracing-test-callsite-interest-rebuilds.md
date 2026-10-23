@@ -117,15 +117,22 @@ snapshot rejected by the exact-cardinality oracle; the mitigated worker requires
 zero/one/two-event controls and a seeded duplicate TRACE capture keep the
 oracle non-vacuous.
 
-The worker records two separate phases. T2 signals immediately before
-`Dispatch::new`, which enters `tracing-core`'s `callsite::register_dispatch`,
-and the capture layer separately signals its actual summary `register_callsite`
-callback. T1 requires the first signal before releasing its gate. Without
-anchors, the callback must arrive before release; with anchors, the callback
-must arrive only after T1 releases the registry read lock. A callback drained
-after both workers join is never accepted as evidence of overlap. A unit
-negative control withholds the pre-registration signal until after release and
-requires the gate to report `registration-start-timeout`.
+The worker records two separate phases. After constructing its subscriber, T2
+sends a boundary signal immediately before `Dispatch::new`. That constructor
+allocates its subscriber `Arc` and then calls `tracing-core`'s
+`callsite::register_dispatch`; the private registry write-lock attempt has no
+public subscriber callback. T2 can be preempted after the boundary signal and
+before the constructor reaches that lock, so the signal does not prove lock
+contention in every execution. The capture layer separately signals its actual
+summary `register_callsite` callback. T1 requires the boundary signal before
+releasing its gate. Without anchors, the callback must arrive before release;
+with anchors, the callback must arrive only after T1 releases the registry read
+lock. A callback drained after both workers join is never accepted as evidence
+of overlap. A unit negative control withholds the boundary signal until after
+the gate deadline and requires `registration-start-timeout`; this rejects a
+late signal but does not rule out pre-emption after an on-time signal. The
+bounded Loom model supplies separate ordering coverage for the stale-interest
+interleaving.
 
 ## Consequences and removal criteria
 
