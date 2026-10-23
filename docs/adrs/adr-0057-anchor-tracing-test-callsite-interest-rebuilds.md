@@ -93,6 +93,11 @@ constructing capture state. The private span-capture helper in
 uninstalled constructor remains crate-private and is used only by the
 fresh-process reproduction worker.
 
+The worker keeps thread orchestration and event snapshots in its private
+`threads` module. Those helpers exist only to keep the issue 927 canary and
+mitigated schedule aligned; they retain the distinct subscriber installation
+boundaries and are not general test-support APIs.
+
 With more than one live registrar, a callsite rebuild walks the registry under
 its read lock. Combining an anchor's `never` interest with a different live
 interest yields `sometimes`; the current thread's dispatch still applies its own
