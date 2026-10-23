@@ -16,6 +16,7 @@ use crate::lint::finding::Finding;
 use crate::lint::policy::Policy;
 use crate::lint::{Outcome, Request, analyse};
 use crate::manifest;
+use crate::recipe_shell::RecipeShell;
 
 /// Lint `yaml` under the registry defaults.
 ///
@@ -32,8 +33,24 @@ pub fn lint(yaml: &str) -> Result<Outcome> {
 ///
 /// Returns an error when the fixture does not parse, lower, or index.
 pub fn lint_with(yaml: &str, policy: &Policy) -> Result<Outcome> {
+    lint_with_shell(yaml, policy, RecipeShell::host_default())
+}
+
+/// Lint `yaml` under `policy` after lowering recipes for `shell`.
+///
+/// The host default is PowerShell on Windows and POSIX elsewhere, so a
+/// fixture holding shell syntax only one dialect parses would otherwise be a
+/// different test on each platform. Name a shell when the recipe text is
+/// itself the subject, and keep the host default when the rule under test is
+/// indifferent to it.
+///
+/// # Errors
+///
+/// Returns an error when the fixture does not parse, lower, or index.
+pub fn lint_with_shell(yaml: &str, policy: &Policy, shell: RecipeShell) -> Result<Outcome> {
     let parsed = manifest::from_str(yaml).context("fixture manifest should parse")?;
-    let graph = BuildGraph::from_manifest(&parsed).context("fixture manifest should lower")?;
+    let graph = BuildGraph::from_manifest_for_shell(&parsed, shell)
+        .context("fixture manifest should lower")?;
     analyse(
         Request {
             source: yaml.to_owned(),
@@ -63,11 +80,24 @@ fn silence_every_category() -> Vec<String> {
 /// Returns an error when `rule` is not registered or the fixture does not
 /// compile.
 pub fn lint_only(yaml: &str, rule: &str) -> Result<Vec<Finding>> {
+    lint_only_with_shell(yaml, rule, RecipeShell::host_default())
+}
+
+/// Lint `yaml` with only `rule` enabled after lowering for `shell`.
+///
+/// See [`lint_with_shell`] for when to name a shell rather than accept the
+/// host default.
+///
+/// # Errors
+///
+/// Returns an error when `rule` is not registered or the fixture does not
+/// compile.
+pub fn lint_only_with_shell(yaml: &str, rule: &str, shell: RecipeShell) -> Result<Vec<Finding>> {
     let mut selectors = silence_every_category();
     selectors.push(format!("{rule}=warning"));
     let policy = Policy::resolve(&selectors)
         .map_err(|error| anyhow::anyhow!("selectors should resolve: {}", error.message()))?;
-    Ok(lint_with(yaml, &policy)?.findings)
+    Ok(lint_with_shell(yaml, &policy, shell)?.findings)
 }
 
 /// Report the messages `rule` produced for `yaml`.

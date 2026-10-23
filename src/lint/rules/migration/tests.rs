@@ -2,6 +2,8 @@
 
 use rstest::rstest;
 
+use crate::recipe_shell::RecipeShell;
+
 /// Build a one-target manifest whose command is `command`.
 fn manifest(command: &str) -> String {
     format!("netsuke_version: \"1.0.0\"\ntargets:\n  - name: out\n    command: {command}\n")
@@ -17,7 +19,13 @@ fn script(body: &str) -> String {
 #[case("\"printf %s $${HOME} > {{ outs }}\"")]
 #[case("\"echo $$_private > {{ outs }}\"")]
 fn manual_ninja_escape_reports_a_doubled_dollar(#[case] command: &str) {
-    crate::assert_lint_fires!(&manifest(command), "manual-ninja-escape", 1);
+    let findings = crate::lint::test_support::lint_only_with_shell(
+        &manifest(command),
+        "manual-ninja-escape",
+        RecipeShell::Posix,
+    )
+    .expect("POSIX migration fixture should compile");
+    assert_eq!(findings.len(), 1, "the doubled dollar should be reported");
 }
 
 /// A bare `$$` is the shell's own process identifier, not the retired
