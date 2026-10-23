@@ -45,18 +45,6 @@ REQUIRED_COVERAGE_INPUTS = {
     "doctests": "true",
 }
 
-#: Ambient-target UI checks select only the library whose artefacts they use.
-#: Isolated fixture and packaging builds intentionally retain shipped defaults.
-GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
-TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
-AMBIENT_TARGET_NESTED_BUILD_PACKAGES: tuple[tuple[str, Path], ...] = (
-    ("test_support", REPO_ROOT / "tests" / "support" / "test_support_rlib.rs"),
-    ("netsuke-build", REPO_ROOT / "tests" / "command_env_ui_tests.rs"),
-)
-AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = tuple(
-    source for _, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES
-)
-
 #: Every job that measures coverage, and the event it is restricted to. Two
 #: coverage runs against one commit pay twice and give the ratchet baseline
 #: two writers.
@@ -212,69 +200,6 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
-def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
-    """Keep direct-rustc preparation within each fixture's dependency graph.
-
-    The support fixture selects its library; the production fixtures select
-    the application library, which also prepares its build dependencies. None
-    needs Cargo to check every workspace target.
-    """
-    # `lint` marks the all-features lane; the default lane must not add it.
-    lanes = dict(
-        re.findall(
-            r'#\[cfg\((feature = "lint"|not\(feature = "lint"\))\)\]\s*'
-            r"pub const LIBRARY_BUILD_ARGUMENTS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
-            GATE_FEATURES_MODULE.read_text(encoding="utf-8"),
-            re.DOTALL,
-        )
-    )
-    for lane, expected in (
-        ('feature = "lint"', ["--lib", "--all-features"]),
-        ('not(feature = "lint")', ["--lib"]),
-    ):
-        arguments = re.findall(r'"([^"]+)"', lanes.get(lane, ""))
-        assert arguments == expected, f"cfg({lane}) must select exactly {expected}"
-    for package, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES:
-        text = source.read_text(encoding="utf-8")
-        required_composition = (
-            f'args(["--package", "{package}"])',
-            "cargo_features::LIBRARY_BUILD_ARGUMENTS",
-            'manifest_dir().join("Cargo.toml")',
-            '.arg("check")',
-        )
-        missing = [part for part in required_composition if part not in text]
-        assert not missing, (
-            f"{source.relative_to(REPO_ROOT)} must compose Cargo check with "
-            f"the {package} library selector and root manifest; missing {missing!r}"
-        )
-    manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
-    features = manifest.get("features")
-    assert isinstance(features, dict), "test_support must declare its features"
-    assert features.get("default") == [], "test_support defaults must stay empty"
-    assert features.get("legacy-digests") == ["netsuke/legacy-digests"], (
-        "test_support must forward legacy-digests exactly to netsuke-build"
-    )
-
-
-@pytest.mark.parametrize(
-    "source",
-    AMBIENT_TARGET_NESTED_BUILD_SOURCES,
-    ids=[source.name for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES],
-)
-def test_ambient_ui_harnesses_do_not_rebuild_in_isolated_targets(source: Path) -> None:
-    """Keep public API checks on the ambient target directory.
-
-    The cached CLI configuration fixture previously selected a dedicated
-    target directory and rebuilt Netsuke's dependencies, exceeding Nextest's
-    300-second budget on a shared build host.
-    """
-    text = source.read_text(encoding="utf-8")
-    assert not re.search(r'\.env\(\s*"CARGO_TARGET_DIR"', text), (
-        f"{source.relative_to(REPO_ROOT)} must reuse ambient build artefacts "
-        "rather than compile into an isolated Cargo target directory"
-    )
-
-
 def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     """Allow measured cold package compilation without relaxing ordinary tests."""
     config = tomllib.loads(
@@ -287,7 +212,7 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     timed_overrides = [
         override for override in profile["overrides"] if "slow-timeout" in override
     ]
-    assert len(timed_overrides) == 4, (
+    assert len(timed_overrides) == 2, (
         "only remaining nested builds may need extended test budgets"
     )
     configured = {
@@ -306,13 +231,6 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
             "terminate-after": 10,
         },
     }
-    expected.update({
-        f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
-        for name, periods in (
-            ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
-            ("stub_env_default_does_not_compile", 15),
-        )
-    })
     assert configured == expected, (
         "cold-build budgets must retain current-main allowances"
     )

@@ -2,11 +2,22 @@
 
 ## Status
 
-Accepted.
+Superseded.
 
 ## Date
 
 2026-09-20
+
+## Supersession
+
+On 2026-10-23,
+[ADR-0059: Keep compile-time contracts out of timed tests][adr-0059] superseded
+this decision. Every compile-time contract moved into Cargo's build graph or
+into a pinned `compile_fail` doctest, so the direct-`rustc` harness had no
+caller left. The recorded Cargo messages, the parser regression, and the
+isolated split-build test were retired with it.
+
+[adr-0059]: adr-0059-keep-compile-time-contracts-out-of-timed-tests.md
 
 ## Context and problem statement
 

@@ -1,10 +1,9 @@
-//! Compile-pass fixture for the cached configuration-discovery API.
+//! Type-check the cached configuration-discovery API.
 //!
-//! Compiled by `tests/command_env_ui_tests.rs` against the `netsuke` rlib with
-//! `--emit=metadata`. It proves an external caller can inject configuration
-//! environment access, retain a discovery outcome, emit diagnostics, transfer
-//! its cached layers, retrieve their bounded merge events without rediscovery,
-//! and replay them through its own observer.
+//! An external caller must be able to inject configuration environment access,
+//! retain a discovery outcome, emit diagnostics, transfer its cached layers,
+//! retrieve their bounded merge events without rediscovery, and replay them
+//! through its own observer.
 
 use netsuke::cli::{
     CachedMergeInput, Cli, ConfigEnvProvider, MergeEvent, MergeObserver,
@@ -12,18 +11,27 @@ use netsuke::cli::{
 };
 use std::{ffi::OsString, sync::Arc};
 
-struct EmbeddedConfigEnv;
+/// Supply an empty injected configuration environment.
+pub struct EmbeddedConfigEnv;
 
 impl ConfigEnvProvider for EmbeddedConfigEnv {
-    fn get(&self, _: &str) -> Option<OsString> { None }
+    fn get(&self, _: &str) -> Option<OsString> {
+        None
+    }
 
-    fn entries(&self) -> Vec<(OsString, OsString)> { Vec::new() }
+    fn entries(&self) -> Vec<(OsString, OsString)> {
+        Vec::new()
+    }
 }
 
-struct EmbeddedObserver;
+/// Observe every public merge event, destructuring each payload.
+pub struct EmbeddedObserver;
 
 impl MergeObserver for EmbeddedObserver {
     fn observe(&mut self, event: MergeEvent) {
+        // The match is exhaustive and names every field on purpose: an
+        // external crate can only write it while each variant and field stays
+        // public.
         match event {
             MergeEvent::DefaultsApplied
             | MergeEvent::DefaultsFailed
@@ -58,10 +66,13 @@ impl MergeObserver for EmbeddedObserver {
     }
 }
 
-fn main() {
+/// Run discovery once, then merge and replay from the cached outcome.
+pub fn replay_cached_discovery() {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
-    let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer).expect("parse args");
+    let Ok((cli, matches)) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+    else {
+        return;
+    };
     let env = EmbeddedConfigEnv;
 
     let (_, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
@@ -72,7 +83,11 @@ fn main() {
     for event in events {
         observer.observe(event);
     }
-    let _ = merged;
+    drop(merged);
+}
 
-    let _: Cli = Cli::default();
+/// Construct the default CLI value an embedder may start from.
+#[must_use]
+pub fn default_cli() -> Cli {
+    Cli::default()
 }

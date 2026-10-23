@@ -1,8 +1,8 @@
-//! Compile-pass fixture for Netsuke's public lint surface.
+//! Type-check Netsuke's public lint surface.
 //!
-//! Compiled by `tests/command_env_ui_tests.rs` as an external crate. The
-//! generic helpers below exercise all four stage-rule signatures without
-//! inventing an implementation of a production rule.
+//! The generic helpers exercise all four stage-rule signatures, and the
+//! uninhabited placeholders implement each rule trait without inventing a
+//! production rule.
 
 use netsuke::ast::NetsukeManifest;
 use netsuke::ir::BuildGraph;
@@ -11,15 +11,19 @@ use netsuke::lint::rule::{
     DirectiveContext, DirectiveRule, DocumentRule, FindingSink, GraphContext, GraphRule,
     ManifestContext, ManifestRule,
 };
-use netsuke::lint::{Policy, Request, analyse};
+use netsuke::lint::{Outcome, ParseFailure, Policy, Request, RuleMeta, analyse};
 
 /// Type-check the document-stage public rule signature.
-fn check_document_rule<R: DocumentRule>(rule: &R, document: &Document, sink: &mut FindingSink<'_>) {
+pub fn check_document_rule<R: DocumentRule>(
+    rule: &R,
+    document: &Document,
+    sink: &mut FindingSink<'_>,
+) {
     rule.check(document, sink);
 }
 
 /// Type-check the manifest-stage public rule signature.
-fn check_manifest_rule<R: ManifestRule>(
+pub fn check_manifest_rule<R: ManifestRule>(
     rule: &R,
     context: &ManifestContext<'_>,
     sink: &mut FindingSink<'_>,
@@ -28,7 +32,7 @@ fn check_manifest_rule<R: ManifestRule>(
 }
 
 /// Type-check the graph-stage public rule signature.
-fn check_graph_rule<R: GraphRule>(
+pub fn check_graph_rule<R: GraphRule>(
     rule: &R,
     context: &GraphContext<'_>,
     sink: &mut FindingSink<'_>,
@@ -37,7 +41,7 @@ fn check_graph_rule<R: GraphRule>(
 }
 
 /// Type-check the directive-stage public rule signature.
-fn check_directive_rule<R: DirectiveRule>(
+pub fn check_directive_rule<R: DirectiveRule>(
     rule: &R,
     context: &DirectiveContext<'_>,
     sink: &mut FindingSink<'_>,
@@ -46,7 +50,8 @@ fn check_directive_rule<R: DirectiveRule>(
 }
 
 /// Build an externally constructible lint request.
-fn request<'a>(manifest: &'a NetsukeManifest, graph: &'a BuildGraph) -> Request<'a> {
+#[must_use]
+pub const fn request<'a>(manifest: &'a NetsukeManifest, graph: &'a BuildGraph) -> Request<'a> {
     Request {
         source: String::new(),
         manifest,
@@ -55,27 +60,34 @@ fn request<'a>(manifest: &'a NetsukeManifest, graph: &'a BuildGraph) -> Request<
 }
 
 /// Type-check the analysis function at the external API boundary.
-fn analyse_request(request: Request<'_>, policy: &Policy) {
-    let _ = analyse(request, policy);
+///
+/// # Errors
+///
+/// Returns the parse failure `analyse` reports for the request's source.
+pub fn analyse_request(request: Request<'_>, policy: &Policy) -> Result<Outcome, ParseFailure> {
+    analyse(request, policy)
 }
 
-/// Exercise the non-rule public lint types without executing an analysis.
-fn main() {
-    let _ = Document::parse(String::new());
-    let _ = Policy::defaults();
-    let _ = check_document_rule::<NeverDocumentRule>;
-    let _ = check_manifest_rule::<NeverManifestRule>;
-    let _ = check_graph_rule::<NeverGraphRule>;
-    let _ = check_directive_rule::<NeverDirectiveRule>;
-    let _ = request;
-    let _ = analyse_request;
+/// Parse an empty document through the public constructor.
+///
+/// # Errors
+///
+/// Returns the parse failure `Document::parse` reports.
+pub fn parse_empty_document() -> Result<Document, ParseFailure> {
+    Document::parse(String::new())
+}
+
+/// Construct the default lint policy.
+#[must_use]
+pub fn default_policy() -> Policy {
+    Policy::defaults()
 }
 
 /// An uninhabited placeholder for document-rule signature checking.
-enum NeverDocumentRule {}
+pub enum NeverDocumentRule {}
 
 impl DocumentRule for NeverDocumentRule {
-    fn meta(&self) -> &'static netsuke::lint::RuleMeta {
+    fn meta(&self) -> &'static RuleMeta {
         match *self {}
     }
 
@@ -85,10 +97,10 @@ impl DocumentRule for NeverDocumentRule {
 }
 
 /// An uninhabited placeholder for manifest-rule signature checking.
-enum NeverManifestRule {}
+pub enum NeverManifestRule {}
 
 impl ManifestRule for NeverManifestRule {
-    fn meta(&self) -> &'static netsuke::lint::RuleMeta {
+    fn meta(&self) -> &'static RuleMeta {
         match *self {}
     }
 
@@ -98,10 +110,10 @@ impl ManifestRule for NeverManifestRule {
 }
 
 /// An uninhabited placeholder for graph-rule signature checking.
-enum NeverGraphRule {}
+pub enum NeverGraphRule {}
 
 impl GraphRule for NeverGraphRule {
-    fn meta(&self) -> &'static netsuke::lint::RuleMeta {
+    fn meta(&self) -> &'static RuleMeta {
         match *self {}
     }
 
@@ -111,10 +123,10 @@ impl GraphRule for NeverGraphRule {
 }
 
 /// An uninhabited placeholder for directive-rule signature checking.
-enum NeverDirectiveRule {}
+pub enum NeverDirectiveRule {}
 
 impl DirectiveRule for NeverDirectiveRule {
-    fn meta(&self) -> &'static netsuke::lint::RuleMeta {
+    fn meta(&self) -> &'static RuleMeta {
         match *self {}
     }
 

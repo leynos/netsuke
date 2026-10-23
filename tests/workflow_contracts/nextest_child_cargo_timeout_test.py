@@ -1,7 +1,8 @@
 """Pin targeted slow-timeout policy to cold Cargo build fixtures.
 
-The CLI configuration fixture reuses the gate graph and ordinary timeout;
-``test_execution_coverage_test`` guards its exclusion from the cold-build tier.
+Compile-time contracts no longer start Cargo inside a test (ADR-0059), so the
+packaged-manifest check is the only cold child build left in the default
+profile; ``test_execution_coverage_test`` guards the whole extended tier.
 """
 
 import pytest
@@ -15,16 +16,6 @@ from workflow_loading import require_list, require_mapping
 @pytest.mark.parametrize(
     ("test_name", "fixture_name"),
     [
-        pytest.param(
-            "stub_env_default_does_not_compile",
-            "StubEnv compile-fail fixture",
-            id="stub-env-compile-fail",
-        ),
-        pytest.param(
-            "split_build_fixture_compiles_through_the_direct_rustc_harness",
-            "direct-rustc split-build fixture",
-            id="split-build-direct-rustc",
-        ),
         pytest.param(
             "packaged_manifest_retains_build_script_sources",
             "packaged manifest fixture",

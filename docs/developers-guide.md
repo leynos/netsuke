@@ -1107,11 +1107,11 @@ extra `check` line. The test selects the snapshot name with
 under each feature configuration in turn and reviewing the resulting
 `.snap.new` file before accepting it.
 
-**`GATE_BUILD_ARGUMENTS`.** `tests/support/cargo_features.rs` defines
-`GATE_BUILD_ARGUMENTS` twice — `--workspace --all-targets --all-features` when
-`lint` is enabled, and `--workspace --all-targets` otherwise — so that the
-Cargo checks the user-interface test harness spawns match whichever lane
-compiled them instead of recompiling the whole dependency graph.
+**The lint fixture module.** `public_api_fixture/` forwards `lint` to
+`netsuke-build` and compiles its `lint` module only under that feature, so the
+default-features lane type-checks every other embedder boundary while the
+all-features lane adds the lint surface. See "Compile-time contracts live in
+the build graph".
 
 ## Package and target naming
 
@@ -5016,15 +5016,16 @@ which would have retired real tests, so both coverage callers pass
 `all-features` and `all-targets`. Without the first, the `legacy-digests` tests
 in `src/stdlib/path/hash_utils.rs` and `tests/std_filter_tests/hash_filters.rs`
 stop running; without the second, the two `benches/` targets stop compiling.
-The ambient-target direct-`rustc` UI harness builds use the same
-`--all-features` selection, through `tests/support/cargo_features.rs`, so Cargo
-can reuse the gate's `netsuke-build` artefacts. `test_support` forwards
-`legacy-digests` to `netsuke-build` for that purpose. Isolated fixture and
-packaging builds retain default features because they validate the shipped
-package rather than the gate's feature set. `-D warnings` is not set as
-`env.RUSTFLAGS`, which `tests/polonius_toolchain_contract.rs` forbids;
-`setup-rust` exports it from its `rustflags` input and `cargo llvm-cov` appends
-its instrumentation to whatever it finds, so warnings stay denied.
+The compile-time contract fixtures are workspace libraries, so the same
+`--all-features` selection compiles them in that one build, and their
+compile-fail doctests run in the doctest pass under it too. `test_support`
+forwards `legacy-digests` to `netsuke-build` so that selection reaches the
+production library through the support crate as well. Packaging verification
+retains default features because it validates the shipped package rather than
+the gate's feature set. `-D warnings` is not set as `env.RUSTFLAGS`, which
+`tests/polonius_toolchain_contract.rs` forbids; `setup-rust` exports it from its
+`rustflags` input and `cargo llvm-cov` appends its instrumentation to whatever
+it finds, so warnings stay denied.
 
 Doctests are the one thing the instrumented run cannot do at all, so
 `build-test` runs `make doctest` immediately afterwards, on every event.
@@ -5073,9 +5074,9 @@ Linux runner. Both platforms still assert the packaged file list. See
 [Windows budget for the isolated-Cargo-build tests][windows-test-budget].
 
 [windows-test-budget]: #historical-windows-budget-for-the-isolated-cargo-build-tests
-[fixture-constraints]: #historical-fixture-crate-replacement-constraints
 [adr-0028-trim]: adrs/adr-0028-defer-replacing-the-split-build-dir-harness-test.md
 [adr-0033-split-build]: adrs/adr-0033-record-split-build-cargo-messages.md
+[adr-0059-compile-contracts]: adrs/adr-0059-keep-compile-time-contracts-out-of-timed-tests.md
 [cargo-package-verify]:
   https://github.com/rust-lang/cargo/blob/e8cb624d5701824f46a2ec5873cfd59ee3d2f66c/src/ops/cargo_package/verify.rs
 
@@ -5121,13 +5122,12 @@ governs the non-doctest pass only, and deliberately stays small:
   package sources. The earlier private-target harness reached the targeted 600s
   cap during a cold build under shared compiler admission, so this test retains
   fifteen warning periods (900s) for cold or contended package builds. The
-  isolated `split_build_fixture_compiles_through_the_direct_rustc_harness` test
-  receives fifteen warning periods (900s) after reaching its 720s cap while
-  compiler admission was saturated. The production module-slice boundary
-  compiles as a workspace library before test execution; its source-only
-  runtime check has no nested Cargo invocation and retains the default slow
-  timeout. The remaining targeted allowances stay below the 960s CI whole-run
-  cap; none adds retries or widens timeouts for unrelated tests.
+  production module-slice boundary, the embedder-facing public API, and the
+  `test_support` compile-time contracts all compile in the workspace build
+  before test execution (see "Compile-time contracts live in the build graph"),
+  so none of them has a nested Cargo invocation or a widened timeout. The
+  remaining targeted allowances stay below the 960s CI whole-run cap; none adds
+  retries or widens timeouts for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
@@ -5202,15 +5202,13 @@ governs the non-doctest pass only, and deliberately stays small:
   contracts for that placement live in
   `tests/workflow_contracts/nextest_anchored_filter_runtime_test.py`.
 - **Scoped subprocess timings.** Packaging smoke tests emit their Cargo
-  subprocess durations after each Cargo subprocess returns. The
-  `harness_compiles_under_a_split_build_dir` parser test reads recorded Cargo
-  JSON, so it has no child Cargo build, is not in `nested-cargo-builds`, and
-  uses the default slow timeout on every platform. Its companion,
-  `split_build_fixture_compiles_through_the_direct_rustc_harness`, runs a small
-  isolated split-build Cargo and direct-`rustc` integration test and is grouped
-  with the other child-Cargo tests.
+  subprocess durations after each Cargo subprocess returns.
 
 #### Historical Windows budget for the isolated-Cargo-build tests
+
+[ADR-0059][adr-0059-compile-contracts] later retired both split-build tests
+with the direct-`rustc` harness they protected, so this section and the next
+are history rather than a description of the current suite.
 
 Before issue 732, two tests spawned a complete isolated Cargo build, and on the
 four-vCPU GitHub-hosted `windows-latest` gate that build is 98.8% of each
@@ -5321,10 +5319,9 @@ alternatives already measured and rejected (`cargo check` for `cargo build`,
 warming the compiler cache, and sharing a target directory), and the ten-run
 revisit gate. [ADR-0033][adr-0033-split-build] records the replacement
 decision: the live build was removed in favour of recorded Cargo JSON, while
-the parser boundary remains covered. Any future replacement inherits the
-constraints in
-[what a fixture-crate replacement would have to preserve][fixture-constraints]
-below.
+the parser boundary remains covered. [ADR-0059][adr-0059-compile-contracts]
+then retired the parser, the harness, and both tests together, because no
+compile-time contract drives a compiler from a test any longer.
 
 ### How this relates to the isolation utilities
 
@@ -6689,16 +6686,17 @@ about a different thing, and none observes that a source has opted out.
 
 `tests/env_access_suppressions.rs` closes that gap. It reads the compiled
 sources — `src`, `build_l10n_audit`, `test_support/src`, `build_slice_fixture`,
-`tests`, `benches`, `examples`, and `build.rs` — and fails when an
-`#[allow(...)]` or `#![allow(...)]` attribute names a lint that carries the
-policy. The roots are the ones the workspace lints rather than the ones a
-convention calls source. `tests`, `benches`, and `examples` are in scope
+`public_api_fixture`, `tests`, `benches`, `examples`, and `build.rs` — and
+fails when an `#[allow(...)]` or `#![allow(...)]` attribute names a lint that
+carries the policy. The roots are the ones the workspace lints rather than the
+ones a convention calls source. `tests`, `benches`, and `examples` are in scope
 because Cargo discovers targets in all three and `--all-targets` compiles and
 lints them, and the modules they wire in, exactly as it lints the library, so
 an inner attribute there silences the policy for a whole test, benchmark, or
 example binary just the same. `build_slice_fixture` is in scope because it is a
 workspace member that `cargo clippy --workspace` lints, and it pulls in
-production sources through `#[path]`.
+production sources through `#[path]`. `public_api_fixture` is in scope because
+it is a linted workspace member too, standing in for an external embedder.
 
 Within a root the scan reads every file that is not dot-prefixed, rather than
 only the `*.rs` files, because a `.rs` name is not something the compiler
@@ -7007,73 +7005,64 @@ unset while still answering with the earlier value.
 "default" would have to mean "deny every read", so `StubEnv::default()` would
 compile and then panic at run time for the common "no locale set" case;
 requiring `StubEnv::without_locale()` instead makes that intent explicit at
-compile time. This refusal is itself a tested contract:
-`tests/locale_stub_ui_tests.rs` compiles a fixture calling `StubEnv::default()`
-directly with `rustc` and asserts the compile fails with `E0599` naming the
-missing `default` item, guarding against the constraint regressing to a
-doc-comment promise. `tests/locale_stub_strictness_tests.rs` covers the panic,
-the trichotomy, and the last-declaration-wins rule with both example-based and
-property tests.
+compile time. This refusal is itself a tested contract: `StubEnv`'s
+documentation carries a `compile_fail,E0599` example calling
+`StubEnv::default()`, beside a positive example using `without_locale()`, so
+the doctest pass fails if `Default` returns and the constraint cannot regress
+to a doc-comment promise. `tests/locale_stub_strictness_tests.rs` covers the
+panic, the trichotomy, and the last-declaration-wins rule with both
+example-based and property tests.
 
-#### Direct-`rustc` UI harnesses and split build directories
+#### Compile-time contracts live in the build graph
 
-`tests/support/test_support_rlib.rs` owns the direct-`rustc` preparation used by
-`tests/locale_stub_ui_tests.rs` and `tests/ninja_semantics_ui_tests.rs`. Those
-are its only permitted call sites: include it from a `tests/*.rs` UI harness
-when a fixture must compile against `test_support`; a harness for the
-production crate, or one needing no crate, must use its own narrow support code.
+A compile-time contract is a claim that some code compiles, or does not. Such
+checks used to run inside Nextest tests: each prepared a library with a nested
+`cargo check`, read its artefact paths from Cargo's JSON stream, and handed
+them to a directly invoked `rustc`. That charged Cargo's package-cache lock,
+cold dependency rebuilds, and compiler-admission waits to the test's time
+allowance, so the tests timed out on contended hosts however wide their
+allowances grew. [ADR-0059][adr-0059-compile-contracts] records the
+replacement, and `tests/workflow_contracts/compile_contract_placement_test.py`
+holds it in place.
 
-`TestSupportRlib::build` prepares `test_support` metadata with
-[`cargo check`](https://doc.rust-lang.org/cargo/commands/cargo-check.html) using
-`--package test_support --lib --all-features
---message-format=json-render-diagnostics`
-from the workspace root manifest. This checks the library the fixture
-consumes; it does not prepare unrelated workspace test targets. `test_support`
-forwards `legacy-digests` to `netsuke-build`, so enabling all support-library
-features also prepares that production-library feature. Cargo check avoids
-linking executables, but may still compile metadata, build proc macros, and run
-build scripts. The helper parses Cargo's `compiler-artifact` messages, locating
-metadata artefacts and dependency directories from the reported paths. The
-shared selector used by the remaining ambient consumers selects non-test
-library units by target kind and `profile.test == false`, then matches package,
-source, and artefact-path identity. It prefers metadata-only check units (an
-`.rmeta` without an `.rlib`) over code-generation units. It considers the
-code-generation fallback only after scanning the full stream, and rejects
-ambiguity within the selected class rather than relying on message order. It
-also rejects distinct matching host, target, or package candidates. It retains
-`.rmeta` preference, `.rlib` fallback, and dynamic libraries in dependency
-search paths for proc macros. The isolated split-fixture retains its
-single-message helper; no new artefact handoff protocol is introduced. This
-avoids assuming dependencies live beside the final `test_support` artefact when
-Cargo's `build.build-dir` setting separates intermediate artefacts, or when the
-Cargo shipped with the 1.99 nightlies gives each crate its own directory.
+- **Positive checks are workspace libraries.** `public_api_fixture/` depends on
+  `netsuke` alone and type-checks each embedder-facing boundary — the explicit
+  Ninja environment API, the manifest environment loaders, Clap-independent
+  policy parsing, the cached configuration and discovery flows, the
+  command-list AST, the IR-generation error, the legacy-recipe metric names,
+  the verbose timing reporter, and, under the `lint` feature, the lint API — as
+  an external crate would. `build_slice_fixture/` does the same for the
+  build-script module slice. Cargo compiles both in the build phase, so a
+  visibility or signature regression fails the build.
+- **Negative checks are compile-fail doctests.** A `compile_fail,EXXXX` example
+  sits on the item that owns the contract: `StubEnv` rejects `default()` with
+  `E0599`, `GeneratedNinja::new` and `RecipeNeedle::new` each reject the other
+  text domain with `E0308`, and `build_slice_fixture` rejects `cli::discovery`
+  with `E0432`. Pin the error code, so that an unrelated failure, such as a
+  missing crate, cannot pass for the rejection. Keep a positive example in the
+  same crate beside each one; it proves the doctest environment links the
+  crate, which is what makes the rejection meaningful.
+- **Where the cost lands.** Fixture libraries compile inside Cargo's ordinary
+  build graph under its jobserver. Rustdoc merges a crate's passing doctests
+  into one binary, but compiles each compile-fail example on its own, so the
+  four examples above are the irreducible compiler invocations this policy
+  leaves. They run in the doctest pass, which Nextest does not schedule: there
+  is no per-test allowance for a queue to exhaust locally, and in CI the pass
+  sits inside its own cargo watchdog.
 
-`TestSupportRlib::compile` then invokes the workspace `rustc` directly with the
-discovered artefact as `--extern test_support=…`, every discovered
-`-L dependency=` directory, and `--emit=metadata`. Cargo prepares metadata
-under the workspace toolchain; direct `rustc` is limited to the small UI
-fixtures that prove compile-time contracts without a scratch project or a
-toolchain-sensitive `.stderr` snapshot.
+`public_api_fixture/` has one module per public boundary, named for it, and
+each module states what it type-checks. Its reuse policy is narrow on purpose.
+Add a module when a public API needs an external-crate compile check; do not
+add a second dependency, which would let a module name items an embedder would
+not have, and do not add tests or doctests to it, because nothing in it runs.
+Forward a host feature only when it changes the public surface, as `lint` does.
 
-"Loadable artefact" means an rlib, an `.rmeta` metadata file, or a file with
-the platform's dynamic-library extension. The `.rmeta` file is needed for the
-metadata-only direct-`rustc` checks because Cargo builds with
-`-Zembed-metadata=no`; the parser prefers it while retaining an rlib fallback
-for older layouts. The dynamic-library case matters too: proc-macro crates emit
-a host dynamic library rather than an rlib. A shared `deps/` directory used to
-pick them up for free, so an rlib-only filter went unnoticed; once each crate
-has its own directory, a filtered-out proc macro is simply absent from the
-search path and its dependents fail with `E0463`. The same rule and the same
-reasoning apply to `tests/command_env_ui_tests.rs`, which prepares the
-`netsuke` metadata and derives its search path the same way. Direct-`rustc`
-consumers emit metadata rather than linking test executables.
-
-JSON-producing Cargo preparations use
-`--message-format=json-render-diagnostics`. Cargo still reports artefacts on
-stdout, while compiler diagnostics reach the stderr included in harness
-failures. The split-build regression checks both a successful artefact handoff
-and a deliberate compiler error, so a preparation failure cannot lose the
-underlying diagnostic again.
+The `cfg(kani)` and Ninja escaping UI tests are outside this policy's reach.
+Each compiles one standard-library-only source with `rustc` and resolves no
+Cargo artefact, so it never waits on Cargo's lock or rebuilds a dependency. The
+first's subject is the compiler's handling of the repository's `--check-cfg`
+policy, and the second compiles a private escaping module in isolation by path;
+neither is reachable from a public item that could carry a doctest.
 
 Build scripts should watch environment variables supplied by the build
 invocation, not values Cargo injects for package metadata, target, or profile.
@@ -7086,41 +7075,10 @@ outputs.
 The `netsuke-build` script follows this boundary: it omits watchers for
 `CARGO_PKG_VERSION`, `CARGO_PKG_DESCRIPTION`, `CARGO_PKG_AUTHORS`, `TARGET`, and
 `PROFILE`, while retaining `SOURCE_DATE_EPOCH` and manifest-file tracking.
-`tests/support/cargo_metadata_reuse.rs` adds a parameterized split-fixture case
-for inherited Cargo metadata and `SOURCE_DATE_EPOCH`. It requires metadata-only
-changes to reuse artefacts and the external source-date input to trigger a
-rebuild.
-
-The cached CLI configuration fixture uses that same `NetsukeRlib` harness. It
-type-checks `ConfigEnvProvider`, `DiscoveredLayers`, diagnostic emission, and
-cached-layer merging as an external crate against the workspace library
-metadata. A companion case omits `--extern netsuke` and must fail, ensuring the
-positive check depends on the public library. These checks cover API visibility
-and composition; package verification retains the separate default-feature
-build boundary.
-
-Public API checks must not select their own `CARGO_TARGET_DIR`. The previous
-CLI fixture created an unlocked standalone Cargo project, resolved a different
-dependency graph, and rebuilt it inside Nextest. The current harness prepares
-the workspace dependency graph with the workspace lockfile and shared workspace
-target directory, then uses the workspace metadata. It prepares only the
-package library each fixture needs, with all features: `NetsukeRlib` and the
-CLI configuration fixture use `netsuke-build`; `TestSupportRlib` uses
-`test_support`, which depends on `netsuke-build`. The production module-slice
-boundary is compiled separately as `build_slice_fixture/` in the normal
-workspace build; its timed test performs only source checks.
-`tests/support/cargo_features.rs` shares the `--lib --all-features` arguments;
-each caller selects its package, and the workflow contract pins those
-arguments, package, command mode, and root manifest. These checks avoid
-unrelated integration targets. Cargo check can still run build scripts or
-generators, so the child-command scanner treats it as build-capable and
-requires the exclusive group policy.
-
-The CLI configuration fixture remains in the serialized child-Cargo group
-because Cargo check can run build scripts and update generated outputs. It uses
-the ordinary 300-second allowance; it has no separate cold-graph timeout. The
-workflow contract rejects isolated target-directory overrides in these ambient
-UI harnesses.
+`build_script_watches_only_its_documented_environment_input` in
+`tests/build_module_slice_ui_tests.rs` reads `build.rs` and requires
+`SOURCE_DATE_EPOCH` to be the only watched variable, written as a literal
+directive.
 
 Generated completion contract tests share the `nested-cargo-builds` group with
 the preparations that may regenerate their target/profile staging files.
@@ -7128,103 +7086,6 @@ the preparations that may regenerate their target/profile staging files.
 reader can observe empty content. Grouping the readers and writers makes the
 standard Nextest run wait for complete generation; it preserves the original
 test assertions and timeout policy.
-
-The private `rustc_command_with` constructor belongs only to
-`tests/command_env_ui_tests.rs`: its environment-reading adapter and its
-command-construction tests are the permitted callers. It composes the selected
-compiler with `RUSTC_WRAPPER`, passing the compiler as the wrapper's first
-argument; an empty wrapper disables wrapping, following
-[Cargo's wrapper convention][cargo-compiler-wrapper]. This keeps the small
-fixture compilation inside managed compiler admission when that wrapper is
-configured. Tests inject toolchain values into the constructor rather than
-changing process-wide environment.
-
-[cargo-compiler-wrapper]:
-  https://doc.rust-lang.org/cargo/reference/environment-variables.html
-
-`TestSupportRlib` composes `tests/support/cargo_artifacts.rs`, which parses
-Cargo `compiler-artifact` messages, with
-`tests/support/rustc_response_file.rs`, which renders compiler arguments. The
-UI harnesses retain their case assertions, while the shared support code owns
-the Cargo build, artefact discovery, and direct-`rustc` invocation workflow.
-`LibraryArtefactSelection` is scoped to the single `library_path_in_messages`
-stream selector and carries a borrowed target name and optional exact package
-ID. `CargoJsonLine` pairs JSON text with its diagnostic line number inside that
-parser; it does not own Cargo builds or `rustc` arguments.
-
-Those arguments reach `rustc` through a **response file**, not the command
-line. One `-L dependency=` pair per crate can push the Windows `CreateProcessW`
-command line past its 32,767-character limit; the spawn then failed with
-`Os { code: 206, kind: InvalidFilename }` before `rustc` ran at all. Every
-directory is required to avoid `E0463`, so the list had to move off the command
-line rather than be shortened or deduplicated further. `rustc` reads arguments
-from `@<path>` — UTF-8, one argument per line, no quoting — which leaves each
-harness passing exactly one argument, so command-line length no longer scales
-with the dependency count.
-
-`TestSupportRlib::compile` must use the response-file writer for every direct
-`rustc` invocation. The writer renders one UTF-8 argument per line without
-quoting, and its unit tests retain every source, `--extern`, dependency-search,
-and output argument while rejecting newlines. This is mandatory because the
-failure is Windows-specific and cannot be reproduced on most local hosts.
-
-`harness_compiles_under_a_split_build_dir` is the parser regression test for
-this. It feeds a recorded Cargo JSON fixture through the shared artefact parser
-and asserts that dependency directories span the recorded split build directory
-while the `test_support` artefact remains uplifted under the recorded target
-directory. The parser regression is in interpreting Cargo messages, not running
-Cargo, so this test pays no live build, is not a `nested-cargo-builds` member,
-and uses the default slow timeout on every platform.
-
-`split_build_fixture_compiles_through_the_direct_rustc_harness` is the
-complementary integration test. It creates a temporary two-crate workspace,
-runs Cargo with private split target and build roots, selects the
-Cargo-reported fixture-support artefact, passes every discovered dependency
-directory through a response file, and compiles a fixture with direct `rustc`.
-It remains in `nested-cargo-builds` because it intentionally exercises that
-live subprocess boundary.
-
-#### Historical fixture-crate replacement constraints
-
-This section records the constraints considered before issue 732 replaced the
-live build with recorded Cargo JSON. It remains as historical context for the
-response-file boundary; it is not a current implementation plan.
-
-If the trim is taken up after that gate, the obvious shape is a minimal fixture
-crate built under the split layout in place of `test_support`. It needs at
-least one dependency, so that dependency rlibs land in the split build
-directory while the fixture's own uplifted rlib lands in the target directory.
-That is precisely the arrangement the regression exists to catch: a single
-derived `-L dependency=` directory that missed the dependencies entirely. This
-section records what such a replacement must carry; nothing here is built while
-the trim is deferred.
-
-**The fidelity argument.** The current test is a regression test for a defect
-that was found once, and its subject is the real `test_support` build. Swapping
-that subject for a stand-in weakens the test unless the argument for the swap
-is explicit, in a doc comment beside the test, about exactly which regression
-it still guards and what it no longer covers. A one-dependency fixture does
-exercise the split-directory derivation — dependency artefacts in the build
-directory, uplifted artefacts in the target directory — but it no longer covers
-that derivation against the real crate's roughly 350-dependency scale, nor
-against the proc-macro and dynamic-library artefacts described above. Those are
-what makes the directory enumeration non-trivial, and the comment must say so
-rather than let the coverage drop silently.
-
-**The Windows response-file pressure.** `TestSupportRlib::compile` passes its
-arguments through a `rustc` response file, and the reason is a Windows command
-line limit rather than a style choice. Cargo 1.99 gives every crate its own
-artefact directory, so the `-L dependency=` set holds one entry per dependency;
-this test adds long temporary roots on top of that. Passed directly, the result
-exceeds the Windows `CreateProcess` command-line limit and the spawn fails with
-`Os { code: 206 }` before `rustc` runs at all. A fixture crate with one
-dependency produces far fewer directories and would stop exercising that
-pressure, which is a measurable loss of coverage however cheap the fixture
-becomes. So a replacement must either generate enough search paths to keep the
-`@file` path genuinely exercised, or move the response-file contract into its
-own dedicated test. Either way the doc comment above the replacement must say
-which of the two it does, because the failure it guards is Windows-specific and
-cannot be reproduced on most local hosts.
 
 ### Manifest `env()` reader
 
@@ -9907,12 +9768,12 @@ fed back upstream.
 
 All four tiers are set here.
 
-| Tier                     | What it bounds                     | Where it is set                               | Current value                                                                                              |
-| ------------------------ | ---------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 900 s stub-environment compile-fail, split-build, and packaging smoke tests |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                                                                          |
-| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step                                                              |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                                                                      |
+| Tier                     | What it bounds                     | Where it is set                               | Current value                                             |
+| ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------------------- |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation; 900 s packaging smoke test |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally                         |
+| Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step             |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                                     |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -9934,49 +9795,24 @@ There are three distinct per-test allowances and the largest governs.
 `[profile.default]`'s own `slow-timeout` gives five periods — 300 s — to every
 test no override matches, which is almost all of them. The mutation compile
 gate gets ten periods, 600 s; it compiles all 18 patched trees through the Kani
-frontend into a target directory no cache restores.
-`production_build_module_slice_has_expected_boundary` uses the default 300 s
-allowance because it checks source text only; Cargo compiles the production
-slice in the workspace library build, before the test's timed execution.
-`stub_env_default_does_not_compile`,
-`split_build_fixture_compiles_through_the_direct_rustc_harness`, and the
-packaging smoke test each get fifteen periods, 900 s. The split-build fixture
-uses a private fixture workspace. Packaging verifies fresh extracted crate
-sources but inherits Cargo's environment and configuration, allowing matching
-dependency artefacts in the original workspace build directory to be reused.
-The stub's compile-fail fixture instead uses `TestSupportRlib` to check
-`test_support --lib --all-features`, then invokes direct `rustc` for metadata.
-Its allowance covers potentially cold or contended ambient preparation;
-`cargo check` avoids linking executables. The CLI configuration fixture checks
-the `netsuke-build` library with all features and retains the 300 s default. A
-whole-run budget has to sit above the largest allowance in the file, so 900 s
-is the figure the ordering below is written against, not the 300 s most tests
-get.
+frontend into a target directory no cache restores. The packaging smoke test
+gets fifteen periods, 900 s. It verifies fresh extracted crate sources but
+inherits Cargo's environment and configuration, allowing matching dependency
+artefacts in the original workspace build directory to be reused. A whole-run
+budget has to sit above the largest allowance in the file, so 900 s is the
+figure the ordering below is written against, not the 300 s most tests get.
 
-The CLI configuration fixture's earlier nested `cargo check` spent 300 s
-waiting for the shared package-cache lock; earlier runs completed in 171.4 s on
-a quiet host and measured 709.2 s on a cold per-run tree. That separate graph
-was removed: the current fixture prepares against the workspace lockfile,
-features, and target, checking library metadata in the workspace. The historic
-timing explains the original timeout but no longer justifies a CLI-specific
-allowance. The split-build fixture also timed out at 720 s while waiting on the
-shared package-cache lock; its allowance is now 900 s, matching the
-stub-environment and packaging checks. The production build-module fixture's
-old all-target check reached 720 s in a full gate while its follow-up metadata
-query waited on the shared cache lock. The systemic fix moves compilation of
-the production slice into a small non-published workspace library, so the timed
-test only checks the fixture source against `build.rs`. Root doctests compile
-the supported `cli::Cli` surface and reject runtime-only `cli::discovery`
-through the already-built library. No child Cargo command or test-specific
-timeout is needed.
-
-`stub_env_default_does_not_compile` uses `TestSupportRlib` to prepare the
-`test_support` library metadata with package-scoped `cargo check` before
-invoking `rustc` through its direct-compile harness. The full suite reached the
-default 300 s cap on this fixture, so it now has a targeted 900 s allowance for
-potentially cold or contended ambient preparation. The nested-Cargo test group
-still serializes child builds; the compile-pass fixture retains the default
-allowance, and unrelated tests retain their own allowances.
+No compile-time contract needs an allowance of its own any longer. The
+production module slice, the embedder-facing public API, and the `test_support`
+rejections compile in the workspace build or the doctest pass rather than
+inside a test (see "Compile-time contracts live in the build graph"). Their
+former tests waited on the shared package-cache lock and on compiler admission:
+the CLI configuration fixture measured 171.4 s on a quiet host and 709.2 s on a
+cold per-run tree, the split-build fixture timed out at 720 s, the module-slice
+check timed out at 900 s, and the stub compile-fail fixture reached the 300 s
+default before receiving 900 s of its own. That spread is the evidence that the
+wait belonged to the host rather than to the tests, and it is why the fix moved
+the work instead of widening the budgets.
 
 Those overrides are the targeted, written-rationale case
 `.config/nextest.toml`'s own policy asks for, and the mutation gate is worth
@@ -9997,12 +9833,9 @@ full-suite runs passed at 208.921 s and reached the 300.017 s cap during
 concurrent Cargo work, confirming that its timing varies with host load. The
 latest cold-target run reached 600 s while compiler admission was saturated.
 The candidate gives this test fifteen warning periods, 900 s, which remains
-strictly below the 960 s whole-run budget. The stub-environment compile-fail
-fixture, split-build fixture, and packaging smoke test share that allowance.
-The production module-slice check and the CLI fixture use the 300 s default
-after reusing the gate-built workspace graph. Each override binds only because
-its filter carries the test's module path; earlier passing runs did not prove
-the wider allowance was in force because the test completed inside the 300 s
+strictly below the 960 s whole-run budget. Each override binds only because its
+filter carries the test's module path; earlier passing runs did not prove the
+wider allowance was in force because the test completed inside the 300 s
 default. See "nextest configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
@@ -10022,12 +9855,7 @@ apply under it.
 `default` is what every local `make test` runs under, and a developer's host is
 contended in a way a CI runner is not. The packaging smoke test still spawns
 Cargo, so its nested invocation can queue behind the package-cache lock of
-other builds on the machine. The `harness_compiles_under_a_split_build_dir`
-parser test no longer does: it reads recorded Cargo JSON and pays no
-nested-build cost. The companion
-`split_build_fixture_compiles_through_the_direct_rustc_harness` intentionally
-retains a small isolated nested build to cover the complete Cargo-to-rustc
-boundary and is serialized with the other child-Cargo tests.
+other builds on the machine.
 
 A whole-run cap in `default` would have ended such a run against a figure read
 from CI logs, which have nothing to say about local contention, and the figure
