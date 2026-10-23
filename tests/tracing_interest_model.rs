@@ -14,7 +14,6 @@
 //! dispatch; dropping the dispatch marks that token dead for pruning.
 
 use loom::{
-    model::Builder,
     sync::{
         Arc, Condvar, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard,
         atomic::{AtomicBool, AtomicU8, Ordering},
@@ -28,6 +27,11 @@ use std::{
         atomic::{AtomicUsize, Ordering as StdOrdering},
     },
 };
+
+#[path = "tracing_interest_model/builder_config.rs"]
+mod builder_config;
+
+use builder_config::bounded_model_builder;
 
 const PREEMPTION_BOUND: usize = 3;
 const CACHED_NEVER: u8 = 0;
@@ -313,10 +317,7 @@ fn explore(anchors_are_live: bool) -> ModelCounts {
     let lost_events = StdArc::new(AtomicUsize::new(0));
     let counted_executions = StdArc::clone(&executions);
     let counted_losses = StdArc::clone(&lost_events);
-    let mut builder = Builder::new();
-    builder.max_threads = 3;
-    builder.max_branches = 10_000;
-    builder.preemption_bound = Some(PREEMPTION_BOUND);
+    let builder = bounded_model_builder();
     builder.check(move || {
         counted_executions.fetch_add(1, StdOrdering::Relaxed);
         if one_execution_loses_event(anchors_are_live) {

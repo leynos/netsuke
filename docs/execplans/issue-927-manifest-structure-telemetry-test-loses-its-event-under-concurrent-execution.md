@@ -209,9 +209,38 @@ seeded duplicate.
   compile admission remained healthy. Logs use the
   `/tmp/<gate>-b52a33dc-f184-4eef-82fc-038987db14c6-issue-927-manifest-structure-telemetry-test-loses-its-event-under-concurrent-execution-<run>.out`
   pattern.
-- [ ] Obtain completeness and bounded-model assessment follow-ups for the
-  repaired, committed, published head; mark the PR ready only after those
-  replies and current checks clear, then follow it to merge.
+- [x] (2026-10-23) The current-head completeness assessment explicitly found
+  no remaining in-scope correctness defect or implementation omission. It
+  confirmed the two prior repairs and recorded the bounded model and
+  in-flight-registration limits. The candidate-bound reply is at
+  [CodeRabbit completeness assessment](https://github.com/leynos/netsuke/pull/943#issuecomment-6359344851).
+- [x] (2026-10-23) The separate proof assessment confirmed the bounded model's
+  logic and production correspondence, then identified that `Builder::new`
+  inherits Loom environment limits and checkpoint settings. It found no
+  evidence that the recorded search was truncated. Explicitly clear those
+  settings in the test builder and verify the fixed counts under hostile
+  ambient settings before requesting a candidate-bound follow-up. The
+  assessment is at
+  [CodeRabbit proof assessment](https://github.com/leynos/netsuke/pull/943#issuecomment-6359390997).
+- [x] (2026-10-23) Added a configuration regression that pins every Loom
+  builder option, including no permutation or duration limit, no checkpoint
+  input, and the explicit three-preemption bound. The model still explored 312
+  unanchored executions with 156 lost outcomes and 99 anchored executions with
+  none under normal settings and with hostile `LOOM_*` limits and checkpoint
+  settings; no checkpoint file was created. Focused log:
+  `/tmp/loom-model-ambient-clear-issue-927-final.out` and
+  `/tmp/loom-model-hostile-environment-issue-927-final.out`.
+- [x] (2026-10-23) Reran the full sequential candidate gate sequence after the
+  Loom configuration repair: `make check-fmt`, `make test` (4,669 passed, 7
+  skipped; 40 doctests passed, 6 ignored), `make typecheck`, `make lint`,
+  `make doc-coverage` (98.13%), `make markdownlint` (zero issues), and
+  `make nixie` (all diagrams). Logs are
+  `/tmp/{check-fmt,test,typecheck,lint,doc-coverage,markdownlint,nixie}-issue-927-post-assessment-fix.out`.
+- [ ] Commit and push the Loom configuration repair, then ask CodeRabbit to
+  confirm the proof concern is resolved for the new head. Run the rate-limited
+  local review after its required cooldown.
+- [ ] Mark the PR ready after the candidate-bound assessments and checks clear,
+  then follow PR #943 through merge.
 
 ## Surprises & discoveries
 
