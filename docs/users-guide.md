@@ -1218,7 +1218,9 @@ exception for `netsuke help targets`.
 #### Export dependency edges and raw recipes
 
 Add `--edges` to the JSON help-targets command to include a separate v1 `graph`
-object alongside the existing action and target catalogue:
+object alongside the existing action and target catalogue. The root-level
+`--json` option is required before `help`, as in
+`netsuke --json help targets --edges`:
 
 <!-- tested-example: guide-help-targets-edges-json -->
 
