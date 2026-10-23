@@ -8,6 +8,7 @@ use super::super::manifest_structure_telemetry::record_manifest_structure;
 use super::gate::{GATE_DEADLINE, GatedSubscriber, RegistrationGate};
 use super::{EMPTY_MANIFEST_COUNTS, validate_manifest_structure_events};
 use crate::ast::NetsukeManifest;
+use crate::test_tracing_capture::CapturedEvents;
 use anyhow::{Context, Result, anyhow, ensure};
 use metrics_util::debugging::DebuggingRecorder;
 use std::{
@@ -51,20 +52,15 @@ pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<CaptureSna
     let t2_manifest = empty_manifest()?;
     let debug_composition = tracing_subscriber::registry().with(LevelFilter::DEBUG);
     let gated_subscriber = GatedSubscriber::new(debug_composition, Arc::clone(&gate));
-    let capture_thread = match capture_mode {
-        CaptureMode::Unmitigated => spawn_unmitigated_capture_thread(
+    let capture_thread = spawn_capture_thread(
+        capture_mode,
+        CaptureThreadChannels {
             paused_receiver,
             installed_sender,
             finished_receiver,
-            t2_manifest,
-        ),
-        CaptureMode::Mitigated => spawn_mitigated_capture_thread(
-            paused_receiver,
-            installed_sender,
-            finished_receiver,
-            t2_manifest,
-        ),
-    };
+        },
+        t2_manifest,
+    );
     let emission_thread = spawn_emission_thread(gated_subscriber, finished_sender, t1_manifest);
 
     join_worker(emission_thread, "T1")?;
@@ -108,56 +104,45 @@ impl CaptureMode {
     }
 }
 
-/// Start T2 with an uninstalled TRACE subscriber for the canary schedule.
-fn spawn_unmitigated_capture_thread(
-    paused_receiver: Receiver<()>,
-    installed_sender: Sender<()>,
-    finished_receiver: Receiver<()>,
+/// Start T2 with the selected subscriber installation boundary.
+fn spawn_capture_thread(
+    capture_mode: CaptureMode,
+    channels: CaptureThreadChannels,
     manifest: NetsukeManifest,
 ) -> JoinHandle<Result<CaptureSnapshot>> {
-    spawn_capture_after_pause(paused_receiver, move || {
-        let (trace_subscriber, captured) =
-            crate::test_tracing_capture::uninstalled_test_subscriber(LevelFilter::TRACE);
-        tracing::subscriber::with_default(trace_subscriber, || {
-            capture_manifest_after_install(&installed_sender, &finished_receiver, &manifest, || {
-                CaptureSnapshot {
-                    events: captured.snapshot(),
-                    span_fields: captured.span_fields("runner.manifest.structure"),
-                }
-            })
-        })
-    })
-}
-
-/// Start T2 with the shared capture helper and snapshot after T1 completes.
-fn spawn_mitigated_capture_thread(
-    paused_receiver: Receiver<()>,
-    installed_sender: Sender<()>,
-    finished_receiver: Receiver<()>,
-    manifest: NetsukeManifest,
-) -> JoinHandle<Result<CaptureSnapshot>> {
-    spawn_capture_after_pause(paused_receiver, move || {
-        crate::test_tracing_capture::with_test_subscriber(LevelFilter::TRACE, |captured| {
-            capture_manifest_after_install(&installed_sender, &finished_receiver, &manifest, || {
-                CaptureSnapshot {
-                    events: captured.snapshot(),
-                    span_fields: captured.span_fields("runner.manifest.structure"),
-                }
-            })
-        })
-    })
-}
-
-/// Start T2 after T1 pauses while retaining the selected subscriber boundary.
-fn spawn_capture_after_pause(
-    paused_receiver: Receiver<()>,
-    capture: impl FnOnce() -> Result<CaptureSnapshot> + Send + 'static,
-) -> JoinHandle<Result<CaptureSnapshot>> {
+    let CaptureThreadChannels {
+        paused_receiver,
+        installed_sender,
+        finished_receiver,
+    } = channels;
     thread::spawn(move || {
         paused_receiver
             .recv_timeout(THREAD_DEADLINE)
             .context("wait for T1 to pause the summary registration")?;
-        capture()
+        match capture_mode {
+            CaptureMode::Unmitigated => {
+                let (trace_subscriber, captured) =
+                    crate::test_tracing_capture::uninstalled_test_subscriber(LevelFilter::TRACE);
+                tracing::subscriber::with_default(trace_subscriber, || {
+                    capture_manifest_after_install(
+                        &installed_sender,
+                        &finished_receiver,
+                        &manifest,
+                        &captured,
+                    )
+                })
+            }
+            CaptureMode::Mitigated => {
+                crate::test_tracing_capture::with_test_subscriber(LevelFilter::TRACE, |captured| {
+                    capture_manifest_after_install(
+                        &installed_sender,
+                        &finished_receiver,
+                        &manifest,
+                        &captured,
+                    )
+                })
+            }
+        }
     })
 }
 
@@ -166,7 +151,7 @@ fn capture_manifest_after_install(
     installed_sender: &Sender<()>,
     finished_receiver: &Receiver<()>,
     manifest: &NetsukeManifest,
-    snapshot: impl FnOnce() -> CaptureSnapshot,
+    captured: &CapturedEvents,
 ) -> Result<CaptureSnapshot> {
     installed_sender
         .send(())
@@ -178,7 +163,10 @@ fn capture_manifest_after_install(
     metrics::with_local_recorder(&recorder, || {
         record_manifest_structure(manifest);
     });
-    Ok(snapshot())
+    Ok(CaptureSnapshot {
+        events: captured.snapshot(),
+        span_fields: captured.span_fields("runner.manifest.structure"),
+    })
 }
 
 /// Start T1 with the DEBUG composition wrapped by the single-callsite gate.
@@ -213,6 +201,13 @@ struct WorkerChannels {
     paused_receiver: Receiver<()>,
     installed_sender: Sender<()>,
     finished_sender: Sender<()>,
+    finished_receiver: Receiver<()>,
+}
+
+/// Own the phase channels consumed by T2's capture thread.
+struct CaptureThreadChannels {
+    paused_receiver: Receiver<()>,
+    installed_sender: Sender<()>,
     finished_receiver: Receiver<()>,
 }
 
