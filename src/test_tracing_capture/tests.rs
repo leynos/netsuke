@@ -159,7 +159,12 @@ fn callsite_interest_refreshes_when_capture_level_becomes_trace() {
     }
 
     test_support::tracing_capture::ensure_test_interest_anchors_registered();
-    let (subscriber, captured) = uninstalled_test_subscriber(LevelFilter::DEBUG);
+    let layer = CapturedEventsLayer::default();
+    let captured = CapturedEvents {
+        fields: Arc::clone(&layer.events),
+        span_fields: Arc::clone(&layer.span_fields),
+    };
+    let subscriber = tracing_subscriber::registry().with(layer.with_filter(LevelFilter::DEBUG));
     let transition_interests = Arc::new(Mutex::new(Vec::new()));
     let debug_subscriber = InterestObservingSubscriber {
         inner: subscriber,

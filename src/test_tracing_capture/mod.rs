@@ -255,9 +255,15 @@ pub fn with_test_subscriber<T>(
     level_filter: LevelFilter,
     test: impl FnOnce(CapturedEvents) -> T,
 ) -> T {
-    test_support::tracing_capture::ensure_test_interest_anchors_registered();
-    let (subscriber, captured) = uninstalled_test_subscriber(level_filter);
-    tracing::subscriber::with_default(subscriber, || test(captured))
+    let result = with_test_subscriber_at_registration(
+        level_filter,
+        || Ok::<(), std::convert::Infallible>(()),
+        |captured| Ok(test(captured)),
+    );
+    match result {
+        Ok(value) => value,
+        Err(never) => match never {},
+    }
 }
 
 /// Build a capture subscriber and handle without installing the subscriber.
@@ -276,6 +282,30 @@ pub(crate) fn uninstalled_test_subscriber(
     };
     let subscriber = tracing_subscriber::registry().with(layer.with_filter(level_filter));
     (subscriber, captured)
+}
+
+/// Install a filtered capture after an optional registration-boundary hook.
+///
+/// The hook runs after the complete subscriber has been built and immediately
+/// before `Dispatch::new`, which enters `tracing-core`'s
+/// `callsite::register_dispatch` path. The regular capture helper delegates
+/// here with an infallible no-op hook; the issue 927 worker uses the hook to
+/// record its controlled registration schedule.
+///
+/// # Errors
+///
+/// Returns the error produced by the registration-boundary hook or capture callback.
+#[cfg(test)]
+pub(crate) fn with_test_subscriber_at_registration<T, E>(
+    level_filter: LevelFilter,
+    registration_boundary: impl FnOnce() -> Result<(), E>,
+    test: impl FnOnce(CapturedEvents) -> Result<T, E>,
+) -> Result<T, E> {
+    test_support::tracing_capture::ensure_test_interest_anchors_registered();
+    let (subscriber, captured) = uninstalled_test_subscriber(level_filter);
+    registration_boundary()?;
+    let dispatch = tracing::Dispatch::new(subscriber);
+    tracing::dispatcher::with_default(&dispatch, || test(captured))
 }
 
 #[cfg(test)]

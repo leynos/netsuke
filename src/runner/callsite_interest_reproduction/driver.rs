@@ -19,7 +19,9 @@ fn stale_summary_interest_is_reproduced_in_a_fresh_process() -> Result<()> {
         &output,
         &[
             "ISSUE927_GATE_PAUSED=true",
-            "ISSUE927_REGISTRATION_ATTEMPT=true",
+            "ISSUE927_DISPATCH_REGISTRATION_STARTED_BEFORE_RELEASE=true",
+            "ISSUE927_SUMMARY_CALLBACK_BEFORE_RELEASE=true",
+            "ISSUE927_SUMMARY_CALLBACK_AFTER_RELEASE=false",
             "ISSUE927_RELEASE_CAUSE=installed",
             "ISSUE927_SPAN_FIELDS=[",
             "ISSUE927_EVENT_SNAPSHOT=[]",
@@ -32,7 +34,9 @@ fn stale_summary_interest_is_reproduced_in_a_fresh_process() -> Result<()> {
         &mitigated_output,
         &[
             "ISSUE927_GATE_PAUSED=true",
-            "ISSUE927_REGISTRATION_ATTEMPT=true",
+            "ISSUE927_DISPATCH_REGISTRATION_STARTED_BEFORE_RELEASE=true",
+            "ISSUE927_SUMMARY_CALLBACK_BEFORE_RELEASE=false",
+            "ISSUE927_SUMMARY_CALLBACK_AFTER_RELEASE=true",
             "ISSUE927_RELEASE_CAUSE=deadline",
             "ISSUE927_SPAN_FIELDS=[",
             "ISSUE927_EVENT_SNAPSHOT=[",
