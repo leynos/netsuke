@@ -271,6 +271,50 @@ fn the_generated_domain_reaches_both_isolation_modes() {
     );
 }
 
+/// The action each single-field witness starts from.
+///
+/// Every optional field sits at its default and the recipe is a scalar command,
+/// so a witness can vary exactly one field with struct-update syntax and be
+/// sure nothing else moved. Sharing this rather than restating it keeps each
+/// witness down to the field it is about.
+fn scalar_action() -> Action {
+    Action {
+        recipe: Recipe::Command {
+            command: StringOrList::String("cc -c".to_owned()),
+            isolation: CommandIsolation::Shared,
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    }
+}
+
+/// Assert that two actions differing in one field keep distinct identifiers.
+///
+/// Both claims a single-field witness needs live here: that the pair really
+/// differs in `difference`, and that their digests do. The first is not
+/// bookkeeping — a pair that compares equal says nothing about the hasher —
+/// and pairing the two in one place leaves each witness stating only the field
+/// it varies and why that field matters.
+///
+/// # Panics
+///
+/// Panics when the two actions compare equal, or when they hash equally.
+fn assert_not_interned_away(base: &Action, other: &Action, difference: &str) {
+    assert_ne!(
+        base, other,
+        "the witness must differ in {difference}, or it proves nothing"
+    );
+    assert_ne!(
+        ActionHasher::hash(base).expect("the base action should hash"),
+        ActionHasher::hash(other).expect("the differing action should hash"),
+        "an action's {difference} must take part in its identity, or two \
+         rules differing only there intern to one identifier",
+    );
+}
+
 /// An isolation-mode difference must not be interned away.
 ///
 /// The same argument as `pool` and `restat`, for a field a manifest *can* set.
@@ -278,6 +322,10 @@ fn the_generated_domain_reaches_both_isolation_modes() {
 /// entries share a shell are different operations: shared state carries
 /// changes forward, isolated entries do not. Sharing an identifier would make
 /// the emitter render one of them and silently drop the other.
+///
+/// This witness builds its own base rather than taking [`scalar_action`]: the
+/// mode is only reachable on a *list* recipe, so the shared scalar base cannot
+/// express it.
 #[test]
 fn an_isolation_difference_is_not_interned_away() {
     let base = Action {
@@ -299,15 +347,7 @@ fn an_isolation_difference_is_not_interned_away() {
         ..base.clone()
     };
 
-    assert_ne!(
-        base, isolated,
-        "the witness must differ, or it proves nothing"
-    );
-    assert_ne!(
-        ActionHasher::hash(&base).expect("the shared action should hash"),
-        ActionHasher::hash(&isolated).expect("the isolated action should hash"),
-        "a command list's isolation mode must take part in its identity",
-    );
+    assert_not_interned_away(&base, &isolated, "isolation mode");
 }
 
 /// Two actions differing only in `pool` must not intern together.
@@ -320,32 +360,13 @@ fn an_isolation_difference_is_not_interned_away() {
 /// two throttled rules into one.
 #[test]
 fn a_pool_difference_is_not_interned_away() {
-    let base = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::String("cc -c".to_owned()),
-            isolation: CommandIsolation::Shared,
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
+    let base = scalar_action();
     let pooled = Action {
         pool: Some("console".to_owned()),
         ..base.clone()
     };
 
-    assert_ne!(
-        base, pooled,
-        "the witness must differ, or it proves nothing"
-    );
-    assert_ne!(
-        ActionHasher::hash(&base).expect("the base action should hash"),
-        ActionHasher::hash(&pooled).expect("the pooled action should hash"),
-        "an action's pool must take part in its identity, or two rules \
-         differing only in throttling intern to one identifier",
-    );
+    assert_not_interned_away(&base, &pooled, "pool");
 }
 
 /// A `restat` difference must not be interned away either.
@@ -355,29 +376,11 @@ fn a_pool_difference_is_not_interned_away() {
 /// in it are different operations and cannot share an identifier.
 #[test]
 fn a_restat_difference_is_not_interned_away() {
-    let base = Action {
-        recipe: Recipe::Command {
-            command: StringOrList::String("cc -c".to_owned()),
-            isolation: CommandIsolation::Shared,
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    };
+    let base = scalar_action();
     let restatting = Action {
         restat: true,
         ..base.clone()
     };
 
-    assert_ne!(
-        base, restatting,
-        "the witness must differ, or it proves nothing"
-    );
-    assert_ne!(
-        ActionHasher::hash(&base).expect("the base action should hash"),
-        ActionHasher::hash(&restatting).expect("the restat action should hash"),
-        "an action's restat flag must take part in its identity",
-    );
+    assert_not_interned_away(&base, &restatting, "restat flag");
 }
