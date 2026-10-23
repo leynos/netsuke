@@ -230,6 +230,86 @@ fn the_run_reaches_every_action_field() {
     }
 }
 
+/// The generated domain reaches both isolation modes a command list can hold.
+///
+/// A command list may run its entries in one shell or start each from the
+/// action's environment, and the hasher serializes the choice. Drawing only the
+/// default would leave the non-default half of that field untested: a digest
+/// that ignored the mode would merge two different operations, and no generated
+/// pair would have shown it. `Isolated` is not reachable on a *scalar* command —
+/// the manifest schema rejects it — so this asserts the list arm specifically.
+#[test]
+fn the_generated_domain_reaches_both_isolation_modes() {
+    let modes: Cell<(bool, bool)> = Cell::new((false, false));
+    let mut runner = TestRunner::new(ProptestConfig {
+        cases: 512,
+        rng_seed: RngSeed::Fixed(COVERAGE_SEED),
+        ..ProptestConfig::default()
+    });
+    runner
+        .run(&generator::action_strategy(), |action| {
+            if let Recipe::Command {
+                command: StringOrList::List(_),
+                isolation,
+            } = &action.recipe
+            {
+                let (shared, isolated) = modes.get();
+                modes.set(match isolation {
+                    CommandIsolation::Shared => (true, isolated),
+                    CommandIsolation::Isolated => (shared, true),
+                });
+            }
+            Ok(())
+        })
+        .expect("the action strategy should be generatable");
+
+    let (shared, isolated) = modes.into_inner();
+    assert!(
+        shared && isolated,
+        "both isolation modes must be drawn, or a hasher ignoring the mode \
+         would be invisible; observed Shared={shared}, Isolated={isolated}",
+    );
+}
+
+/// An isolation-mode difference must not be interned away.
+///
+/// The same argument as `pool` and `restat`, for a field a manifest *can* set.
+/// Two command lists that agree on every entry and differ only in whether the
+/// entries share a shell are different operations: shared state carries
+/// changes forward, isolated entries do not. Sharing an identifier would make
+/// the emitter render one of them and silently drop the other.
+#[test]
+fn an_isolation_difference_is_not_interned_away() {
+    let base = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(vec!["cd out".to_owned(), "cc -c".to_owned()]),
+            isolation: CommandIsolation::Shared,
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let isolated = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::List(vec!["cd out".to_owned(), "cc -c".to_owned()]),
+            isolation: CommandIsolation::Isolated,
+        },
+        ..base.clone()
+    };
+
+    assert_ne!(
+        base, isolated,
+        "the witness must differ, or it proves nothing"
+    );
+    assert_ne!(
+        ActionHasher::hash(&base).expect("the shared action should hash"),
+        ActionHasher::hash(&isolated).expect("the isolated action should hash"),
+        "a command list's isolation mode must take part in its identity",
+    );
+}
+
 /// Two actions differing only in `pool` must not intern together.
 ///
 /// This is the directed witness for `MUT-HASHMETA`, and it is stated beside

@@ -140,8 +140,10 @@ exercise path-bearing canonicalization up to the larger randomized bounds.
   is preserved.
 - The cycle harnesses prove the production cycle detector's boolean traversal,
   not the full report-building path. Existing unit tests keep cycle path
-  canonicalization and missing-dependency reporting covered until roadmap item
-  `4.3.1` expands generated graph coverage.
+  canonicalization and missing-dependency reporting covered. Roadmap item
+  `4.3.1` does not take that coverage over: its cycle suite asserts rejection
+  only, because the canonical content of a reported cycle belongs to roadmap
+  item `4.2.2` and is proved over `canonicalize_cycle_by`.
 - The cycle-canonicalization harnesses prove the private production kernel over
   small `u8` cycles, not all direct `Utf8PathBuf` inputs. The wrapper adapter
   harness and Proptest suite are the documented connection back to the
@@ -150,8 +152,9 @@ exercise path-bearing canonicalization up to the larger randomized bounds.
   not a public collection port. If future Kani versions model `HashMap`
   efficiently enough for these harnesses, the compatibility layer should be
   removed.
-- Graph coverage beyond one to three nodes remains a tracked future obligation
-  for Proptest.
+- Graph coverage beyond one to three nodes is sampled rather than exhaustive:
+  the Proptest suites delivered by roadmap item `4.3.1` reach those graphs
+  under the determinism contract in ADR-030. Kani's own bound is unchanged.
 - If the production IR representation changes away from `HashMap` or owned
   strings, the Kani bound should be re-evaluated instead of copied forward.
 - The sibling-file harness layout is a project-local constraint caused by the

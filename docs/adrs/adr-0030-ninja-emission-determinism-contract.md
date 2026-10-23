@@ -72,7 +72,7 @@ read.
   sensitive to the code it claims to protect.
 - Cross-version byte stability is a trap, not a feature. `PARENT_SCHEMA`
   (`"netsuke-serial-v1"`) and `DYNDEP_SCHEMA` (`"netsuke-dyndep-v1"`), both in
-  `src/ninja_gen/dyndep/mod.rs`, exist precisely so the staging format can
+  `src/ninja_gen/dyndep/staging.rs`, exist precisely so the staging format can
   change without colliding with an older namespace.
 
 ## Requirements
@@ -107,9 +107,9 @@ leave `ADR-0047`'s deferral pointing nowhere.
 ### Option B: Promise byte stability across Netsuke versions
 
 Rejected. The dyndep schema tags exist so the staging format _can_ change
-(`PARENT_SCHEMA`, `src/ninja_gen/dyndep/mod.rs`); a version-stability promise
-would make them pointless, and every future change to the emitter would become
-a breaking change requiring a migration note.
+(`PARENT_SCHEMA`, `src/ninja_gen/dyndep/staging.rs`); a version-stability
+promise would make them pointless, and every future change to the emitter would
+become a breaking change requiring a migration note.
 
 ### Option C: Port the IR to an ordered map (`BTreeMap`) so determinism is structural
 
@@ -224,11 +224,11 @@ is an inference a reader would otherwise draw.
 - **N-1, cross-version.** Byte stability is **not** promised across Netsuke
   versions. A version bump may change emitted bytes for an unchanged manifest,
   environment, platform, and shell selection. This is intended: `PARENT_SCHEMA`
-  and `DYNDEP_SCHEMA` (`src/ninja_gen/dyndep/mod.rs`) incorporate an explicit
-  format tag into every content-addressed identity so that a staging-format
-  change yields a fresh namespace instead of a silent collision with sidecars
-  written by an older Netsuke. `ninja_required_version` is likewise emitted
-  conditionally, only when staging is present.
+  and `DYNDEP_SCHEMA` (`src/ninja_gen/dyndep/staging.rs`) incorporate an
+  explicit format tag into every content-addressed identity so that a
+  staging-format change yields a fresh namespace instead of a silent collision
+  with sidecars written by an older Netsuke. `ninja_required_version` is
+  likewise emitted conditionally, only when staging is present.
 - **N-2, cross-platform.** Byte stability is **not** promised across platforms
   or across different recipe-shell selections on one platform. PowerShell and
   POSIX are different renderers: they disagree on `rspfile` emission, on
@@ -303,7 +303,7 @@ A source-shape contract provides the same immunity more cheaply: a test that
 reads every file under `src/ninja_gen/` and fails when an **unordered**
 collection's iteration order is allowed to reach the output — with
 membership-only use exempt, and with one named exemption,
-`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep/mod.rs`). It is the
+`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep/staging.rs`). It is the
 `OBL-NOHASH` obligation, and it is the only element of this work that
 constrains code not yet written.
 
@@ -411,7 +411,7 @@ and establishing the reachability is `EP-M4`'s business.
 `OBL-NOHASH` says membership-only `HashSet` use is exempt "with the two existing
 `seen` sets named as the documented exemptions". There is exactly one
 unordered collection in `src/ninja_gen/`, and it is not called `seen`:
-`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep/mod.rs`), a
+`SerialStages::staged_sidecars` (`src/ninja_gen/dyndep/staging.rs`), a
 `HashSet<Utf8PathBuf>` used solely through `insert` and never iterated. An
 earlier revision of the emitter held a `seen` set in the per-output storage
 path that `2c030fd1` removed, and the obligation's wording did not follow the

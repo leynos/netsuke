@@ -49,6 +49,12 @@ use cap_std::{
 #[path = "hashmap_boundary/scan.rs"]
 mod scan;
 
+#[path = "hashmap_boundary/test_only.rs"]
+mod test_only;
+
+#[path = "hashmap_boundary/macro_body.rs"]
+mod macro_body;
+
 #[path = "hashmap_boundary/bindings.rs"]
 mod bindings;
 
@@ -287,7 +293,7 @@ impl Declarations {
     fn declares_test_only(&self, name: &str) -> bool {
         self.file
             .as_ref()
-            .is_some_and(|file| scan::declares_test_only_module(file, name))
+            .is_some_and(|file| test_only::declares_test_only_module(file, name))
     }
 }
 

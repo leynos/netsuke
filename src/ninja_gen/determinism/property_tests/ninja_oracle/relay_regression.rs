@@ -51,22 +51,24 @@ use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use camino::Utf8PathBuf;
 use proptest::test_runner::TestCaseError;
 
-proptest::proptest! {
-    /// Real Ninja accepts the emitted bundle for the `#2662` shape.
-    ///
-    /// Written as a one-case property rather than a plain `#[test]` so the
-    /// helper's [`TestCaseError`] result can be returned with `?`; the graph is
-    /// constant, so there is nothing to sample.
-    #[test]
-    fn real_ninja_accepts_the_bundle_that_reaches_the_upstream_crash(_ in 0..1u8) {
-        if !ninja_is_available() {
-            return Ok(());
-        }
-        let graph = crash_shaped_graph();
-        let bundle = emitted(&graph)?;
-        let workspace = BundleWorkspace::write(&bundle, &paths_of(&graph), &targets_of(&graph))?;
-        workspace.require_accepts()?;
+/// Real Ninja accepts the emitted bundle for the `#2662` shape.
+///
+/// A plain test rather than a one-case property: the graph is constant, so
+/// there is nothing to sample, and `proptest!` would still run the body once
+/// per configured case — each run writing a workspace and starting `ninja`
+/// subprocesses for an identical check. The `Result<(), TestCaseError>`
+/// return is what the `?` on the helpers needs, and `TestCaseError`
+/// implements `Debug`, so a plain `#[test]` accepts it.
+#[test]
+fn real_ninja_accepts_the_bundle_that_reaches_the_upstream_crash() -> Result<(), TestCaseError> {
+    if !ninja_is_available() {
+        return Ok(());
     }
+    let graph = crash_shaped_graph();
+    let bundle = emitted(&graph)?;
+    let workspace = BundleWorkspace::write(&bundle, &paths_of(&graph), &targets_of(&graph))?;
+    workspace.require_accepts()?;
+    Ok(())
 }
 
 /// Build the graph whose emission reaches the `#2662` scheduler shape.

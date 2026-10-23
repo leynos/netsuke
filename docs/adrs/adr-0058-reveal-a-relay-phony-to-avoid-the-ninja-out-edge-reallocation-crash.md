@@ -156,8 +156,10 @@ a user's `PATH`.
 
 ## Implementation references
 
-- Staged lowering, relay naming, and sidecar rendering:
+- Staged lowering:
   [`src/ninja_gen/dyndep/mod.rs`](../../src/ninja_gen/dyndep/mod.rs)
+- Relay naming and sidecar rendering:
+  [`src/ninja_gen/dyndep/staging.rs`](../../src/ninja_gen/dyndep/staging.rs)
 - Structural assertions:
   [`src/ninja_gen/dyndep/tests/mod.rs`](../../src/ninja_gen/dyndep/tests/mod.rs)
 - End-to-end regression:
