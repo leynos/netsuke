@@ -72,10 +72,19 @@ class ExperimentVariant(enum.StrEnum):
 def duration_seconds(start: str | None, end: str | None) -> float | None:
     """Return elapsed seconds, or null for missing or backwards timestamps.
 
+    Parameters
+    ----------
+    start
+        ISO 8601 timestamp with a UTC offset, or ``None``.
+    end
+        ISO 8601 timestamp with a UTC offset, or ``None``.
+
     Returns
     -------
     float | None
         For example, ``duration_seconds(None, None)`` returns ``None``.
+        Timezone-naive, malformed, or backwards timestamps also return
+        ``None``.
     """
     if start is None or end is None:
         return None

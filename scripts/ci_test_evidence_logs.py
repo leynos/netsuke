@@ -263,6 +263,11 @@ def _phase_marker(body: str) -> str | None:
 def parse_log(log: str) -> LogEvidence:
     """Return safe extracted evidence; unobserved facts remain null.
 
+    Parameters
+    ----------
+    log
+        Raw text of one saved job log, with or without timestamp prefixes.
+
     Returns
     -------
     LogEvidence
