@@ -8,7 +8,7 @@ r"""Collect offline CI evidence from GitHub attempt/job JSON and logs.
 Offline collector; runner-seconds are a cost proxy.
 
 Usage (log: ``<job_id>.log``; inventory: ``<job_id>.json``):
-    uv run scripts/ci_test_evidence.py --run run.json --jobs jobs.json \\
+    uv run scripts/ci_test_evidence.py --run run.json --jobs jobs.json \
         --log-dir logs --telemetry-dir telemetry --variant control > out.jsonl
 """
 
