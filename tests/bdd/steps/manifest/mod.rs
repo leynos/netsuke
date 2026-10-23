@@ -20,6 +20,7 @@ use environment::{expand_env, manifest_env_reader};
 use netsuke::{
     ast::{Recipe, StringOrList, Target},
     manifest::{self, ManifestBudgetLimits},
+    recipe_shell::RecipeShell,
     stdlib::NetworkPolicy,
 };
 use rstest_bdd_macros::{given, then, when};
@@ -92,6 +93,7 @@ fn parse_manifest_inner(world: &TestWorld, path: &ManifestPath) {
         NetworkPolicy::default(),
         &environment,
         world.manifest_budget_limits.get().unwrap_or_default(),
+        RecipeShell::host_default(),
         None,
     )
     .map_err(|e| display_error_chain(e.as_ref()));
@@ -334,7 +336,9 @@ fn action_name_n(world: &TestWorld, index: usize, name: &str) -> Result<()> {
 fn action_command_n(world: &TestWorld, index: usize, command: &str) -> Result<()> {
     let command = crate::bdd::types::CommandText::new(command);
     with_action(world, index, |action| match &action.recipe {
-        Recipe::Command { command: actual } => {
+        Recipe::Command {
+            command: actual, ..
+        } => {
             ensure!(
                 actual.as_single() == Some(command.as_str()),
                 "expected action {index} command '{command}', got '{actual:?}'"

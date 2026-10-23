@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = بدون موضوع، يطابق هذا `--help
 cli.help.actions_heading = الإجراءات:
 cli.help.targets_heading = الأهداف:
 cli.help.targets.about = سرد الأهداف والإجراءات في الملف المحدد.
+cli.help.targets.flag.edges.help = تضمين حواف التبعيات والوصفات الخام في مخرجات JSON.
 cli.help.default_marker = الافتراضي
 cli.help.conditional_marker = مشروط
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = تعذّر تحميل ملف البيانات م�
 runner.context.build_graph = تعذّر بناء الرسم من ملف البيانات.
 runner.context.generate_ninja = تعذّر توليد ملف بيانات Ninja.
 runner.context.render_graph = تعذّر عرض مخرج الرسم.
+runner.help.targets_edges_require_json = يتطلب الخيار --edges وجود --json على المستوى الأعلى.
 
 runner.io.create_temp_file = تعذّر إنشاء ملف Ninja المؤقت.
 runner.io.write_temp_ninja = تعذّرت الكتابة إلى ملف Ninja المؤقت.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = هرّب الشرطات المائلة العكسي�
 manifest.env.missing = متغيّر بيئة مطلوب غير مضبوط.
 manifest.env.invalid_utf8 = يتضمّن متغيّر بيئة ترميز UTF-8 غير صالح.
 manifest.env.blocked = تم حظر الوصول إلى متغير بيئة.
+manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = يجب أن تكون قيمة default في env سلسلة نصية، وتم تلقّي { $kind }.
 manifest.vars.not_object = يجب أن يكون `vars` في ملف البيانات تخطيطًا أو كائنًا.
 manifest.vars.reserved_name = يُعدّ مفتاح `vars` المسمّى '{ $name }' في ملف البيانات محجوزًا لدالة قوالب مدمجة؛ أعد تسمية المتغيّر.
 manifest.read_failed = تعذّرت قراءة ملف البيانات من { $path }.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = خطأ نمط غير معروف.
 manifest.glob.io_failed = فشل glob للنمط «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
 manifest.command_list_empty = يجب ألّا يكون الحقل «command» فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
+manifest.command_isolation_recipe = يتطلب الحقل «command_isolation» وصفةً تتضمن قائمة أوامر.
+manifest.command_isolation_scalar = يتطلب «command_isolation: isolated» قائمة أوامر.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = التدفّق
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = ‏[netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = يتوقّع shell_quote سلسلة نصية لكنه تلقّى { $kind }.
+stdlib.shell.quote.control_character = لا يمكن وضع قيمة تتضمّن بايتاً صفرياً أو إرجاع أوّل السطر أو تغذية السطر بين علامتي اقتباس.
+stdlib.shell.dialect_invalid = لهجة صدفة غير معروفة { $dialect }؛ المتوقّع أحد هذه: { $accepted }.
+stdlib.shell.dialect_not_string = يجب أن يكون خيار dialect في shell سلسلة نصية، وتم تلقّي { $kind }.
+stdlib.shell.join.not_sequence = يتوقّع shell_join تسلسلاً لكنه تلقّى { $kind }.
+stdlib.shell.join.item_not_string = العنصر { $index } في shell_join نوعه { $kind } وليس سلسلة نصية.
+stdlib.shell.positional_option = ‏{ $filter } يتلقّى خياراته ككلمات مفتاحية؛ اكتب { $example }.
+
 # تشخيصات مساعد المسارات.
 stdlib.path.io.failed = فشل الإجراء «{ $action }» على { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = فشل الإجراء «{ $action }» على { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = خوارزمية تلبيد غي
 
 # تشخيصات مساعدات المجموعات.
 stdlib.collections.flatten.expected_sequence = توقّع flatten عناصر متتالية لكنه وجد { $kind }.
+stdlib.collections.compact.not_sequence = يتطلّب compact تسلسلاً لكنه وجد { $kind }.
 stdlib.collections.group_by.empty_attribute = يتطلّب group_by سمة غير فارغة.
 stdlib.collections.group_by.unresolved = تعذّر على group_by إيجاد «{ $attr }» في عنصر من النوع { $kind }.
 
@@ -449,3 +467,28 @@ manifest.budget.exceeded = ‏استُنفدت ميزانية موارد الب�
 
 cli.flag.env_allow_var.help = متغير البيئة المسموح به لمساعد env() في البيان.
 cli.flag.env_block_var.help = متغير البيئة المحظور على مساعد env() في البيان.
+
+# فحص ملف البيان (`netsuke check`).
+cli.subcommand.check.about = افحص ملف البيان دون توليد بناء أو تشغيله.
+cli.subcommand.check.long_about = افحص ملف البيان المحدد بحثًا عن تراكيب تُحلَّل نحويًا لكنها على الأرجح خاطئة أو غير آمنة أو غير قابلة للنقل أو ضارة بالتخزين المؤقت.
+cli.subcommand.check.flag.rule.help = اضبط درجة خطورة قاعدة أو فئة، مكتوبة بالصيغة NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = درجة الخطورة التي تجعل النتائج تُفشل الأمر.
+cli.subcommand.check.flag.limit.help = الحد الأقصى للنتائج المُبلَّغ عنها؛ القيمة 0 تُبلغ عنها جميعًا.
+cli.subcommand.check.flag.explain.help = اطبع مرجع القواعد بدلًا من فحص ملف بيان.
+check.threshold_exceeded = بلغت النتائج عتبة { $severity }: { $failing } من أصل { $reported } نتيجة مُبلَّغ عنها.
+check.threshold_exceeded.help = أصلح النتائج المُبلَّغ عنها، أو عدّل ‎--rule، أو خفّف ‎--fail-on.
+check.summary.counts = نتائج الفحص — أخطاء: { $errors }، تحذيرات: { $warnings }، إرشادات: { $advice }، مكبوتة: { $suppressed }.
+check.summary.clean = لا توجد نتائج.
+check.summary.truncated = { $shown ->
+    [one] يجري عرض نتيجة واحدة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [two] يجري عرض نتيجتين؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [few] يجري عرض { $shown } نتائج؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+    [many] يجري عرض { $shown } نتيجةً؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+   *[other] يجري عرض { $shown } نتيجة؛ أسقط ‎--limit عدد { $omitted } نتيجة أخرى.
+}
+check.rule.malformed = المُحدِّد { $selector } غير مكتوب بالصيغة NAME=SEVERITY.
+check.rule.unknown = يسمي المُحدِّد { $name }، وهو ليس قاعدة ولا فئة.
+check.rule.severity = يسمي المُحدِّد { $name } درجة الخطورة { $severity }؛ كان المتوقع إحدى القيم { $values }.
+check.fail_on.invalid = عتبة إخفاق غير معروفة { $value }؛ كان المتوقع إحدى القيم { $values }.
+check.source_index = تعذّرت فهرسة { $path } للتشخيص عند السطر { $line }: { $reason }.
+status.tool.check = فحص

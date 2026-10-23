@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Tanpa topik, ini sama dengan `--help`. Gunakan 
 cli.help.actions_heading = Tindakan:
 cli.help.targets_heading = Target:
 cli.help.targets.about = Mencetak target dan tindakan dalam berkas yang dipilih.
+cli.help.targets.flag.edges.help = Sertakan sisi dependensi dan resep mentah dalam keluaran JSON.
 cli.help.default_marker = bawaan
 cli.help.conditional_marker = bersyarat
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifes di { $path } tidak dapat dimuat.
 runner.context.build_graph = Graf tidak dapat dibangun dari manifes.
 runner.context.generate_ninja = Manifes Ninja tidak dapat dihasilkan.
 runner.context.render_graph = Artefak graf tidak dapat dirender.
+runner.help.targets_edges_require_json = Opsi --edges memerlukan --json pada tingkat teratas.
 
 runner.io.create_temp_file = Berkas Ninja sementara tidak dapat dibuat.
 runner.io.write_temp_ninja = Berkas Ninja sementara tidak dapat ditulis.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Lakukan escape pada garis miring terbalik atau hapus
 manifest.env.missing = Variabel lingkungan wajib belum disetel.
 manifest.env.invalid_utf8 = Variabel lingkungan memuat UTF-8 yang tidak sah.
 manifest.env.blocked = Akses ke variabel lingkungan diblokir.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default pada env harus berupa untai, menerima { $kind }.
 manifest.vars.not_object = `vars` pada manifes harus berupa pemetaan atau objek.
 manifest.vars.reserved_name = Kunci `vars` '{ $name }' pada manifes dicadangkan untuk fungsi bantu templat bawaan; ganti nama variabel tersebut.
 manifest.read_failed = Manifes di { $path } tidak dapat dibaca.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = galat pola yang tidak dikenal.
 manifest.glob.io_failed = Glob gagal untuk "{ $pattern }": { $detail }.
 manifest.glob.unknown_io_error = galat masukan/keluaran yang tidak dikenal.
 manifest.command_list_empty = Bidang "command" tidak boleh kosong: berikan string perintah atau daftar yang tidak kosong.
+manifest.command_isolation_recipe = Bidang ‘command_isolation’ memerlukan resep dengan daftar perintah.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ memerlukan daftar perintah.
 
 # Galat representasi antara.
 ir.rule_not_found = Aturan "{ $rule }" yang dirujuk target "{ $target }" tidak ditemukan.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = penstriman
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote mengharapkan string, tetapi menerima { $kind }.
+stdlib.shell.quote.control_character = Nilai yang memuat byte nol, retur kereta, atau ganti baris tidak dapat diberi tanda kutip.
+stdlib.shell.dialect_invalid = Dialek shell tidak dikenal { $dialect }; diharapkan salah satu dari { $accepted }.
+stdlib.shell.dialect_not_string = Opsi dialect pada shell harus berupa untai, menerima { $kind }.
+stdlib.shell.join.not_sequence = shell_join mengharapkan urutan, tetapi menerima { $kind }.
+stdlib.shell.join.item_not_string = Item { $index } pada shell_join bertipe { $kind }, bukan string.
+stdlib.shell.positional_option = { $filter } mengambil opsinya sebagai kata kunci; tulis { $example }.
+
 # Diagnostik pembantu jalur.
 stdlib.path.io.failed = Tindakan "{ $action }" gagal untuk { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Tindakan "{ $action }" gagal untuk { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritme hash tidak didukung: "
 
 # Diagnostik pembantu koleksi.
 stdlib.collections.flatten.expected_sequence = flatten mengharapkan butir urutan tetapi menemukan { $kind }.
+stdlib.collections.compact.not_sequence = compact mengharapkan urutan tetapi menemukan { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by memerlukan atribut yang tidak kosong.
 stdlib.collections.group_by.unresolved = group_by tidak dapat menemukan "{ $attr }" pada butir bertipe { $kind }.
 
@@ -440,3 +458,22 @@ manifest.budget.exceeded = Anggaran sumber daya manifes habis selama { $stage } 
 
 cli.flag.env_allow_var.help = Variabel lingkungan yang diizinkan untuk pembantu env() manifes.
 cli.flag.env_block_var.help = Variabel lingkungan yang diblokir untuk pembantu env() manifes.
+
+# Pemeriksaan manifes (`netsuke check`).
+cli.subcommand.check.about = Periksa manifes tanpa membuat atau menjalankan build.
+cli.subcommand.check.long_about = Telaah manifes terpilih untuk konstruksi yang memang terurai tetapi kemungkinan besar keliru, tidak aman, tidak portabel, atau merugikan singgahan.
+cli.subcommand.check.flag.rule.help = Atur tingkat keparahan aturan atau kategori, ditulis sebagai NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Tingkat keparahan saat temuan menggagalkan perintah.
+cli.subcommand.check.flag.limit.help = Jumlah maksimum temuan yang dilaporkan; 0 melaporkan semuanya.
+cli.subcommand.check.flag.explain.help = Cetak rujukan aturan alih-alih memeriksa manifes.
+check.threshold_exceeded = Temuan mencapai ambang { $severity }: { $failing } dari { $reported } yang dilaporkan.
+check.threshold_exceeded.help = Perbaiki temuan yang dilaporkan, sesuaikan --rule, atau longgarkan --fail-on.
+check.summary.counts = Hasil pemeriksaan — galat: { $errors }, peringatan: { $warnings }, saran: { $advice }, ditekan: { $suppressed }.
+check.summary.clean = Tidak ada temuan.
+check.summary.truncated = Menampilkan { $shown } temuan; --limit menghilangkan { $omitted } lainnya.
+check.rule.malformed = Pemilih { $selector } tidak ditulis sebagai NAME=SEVERITY.
+check.rule.unknown = Pemilih menyebut { $name }, yang bukan aturan maupun kategori.
+check.rule.severity = Pemilih { $name } menyebut keparahan { $severity }; diharapkan salah satu dari { $values }.
+check.fail_on.invalid = Ambang kegagalan tidak dikenal { $value }; diharapkan salah satu dari { $values }.
+check.source_index = Tidak dapat mengindeks { $path } untuk diagnostik pada baris { $line }: { $reason }.
+status.tool.check = Pemeriksaan

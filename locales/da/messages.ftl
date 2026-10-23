@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Uden emne svarer dette til `--help`. Brug `help
 cli.help.actions_heading = Handlinger:
 cli.help.targets_heading = Mål:
 cli.help.targets.about = Vis mål og handlinger i det valgte manifest.
+cli.help.targets.flag.edges.help = Medtag afhængighedskanter og rå opskrifter i JSON-outputtet.
 cli.help.default_marker = standard
 cli.help.conditional_marker = betinget
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestet i { $path } kunne ikke indlæses.
 runner.context.build_graph = Grafen kunne ikke bygges ud fra manifestet.
 runner.context.generate_ninja = Ninja-manifestet kunne ikke genereres.
 runner.context.render_graph = Grafartefaktet kunne ikke gengives.
+runner.help.targets_edges_require_json = Indstillingen --edges kræver --json på øverste niveau.
 
 runner.io.create_temp_file = Den midlertidige Ninja-fil kunne ikke oprettes.
 runner.io.write_temp_ninja = Den midlertidige Ninja-fil kunne ikke skrives.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Escape omvendte skråstreger, eller fjern ugyldige e
 manifest.env.missing = En påkrævet miljøvariabel er ikke sat.
 manifest.env.invalid_utf8 = En miljøvariabel indeholder ugyldig UTF-8.
 manifest.env.blocked = Adgang til en miljøvariabel er blokeret.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default i env skal være en streng, modtog { $kind }.
 manifest.vars.not_object = Manifestets `vars` skal være en tilknytning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøgle '{ $name }' er reserveret til en indbygget skabelonhjælper; omdøb variablen.
 manifest.read_failed = Manifestet i { $path } kunne ikke læses.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = ukendt mønsterfejl.
 manifest.glob.io_failed = Glob mislykkedes for "{ $pattern }": { $detail }.
 manifest.glob.unknown_io_error = ukendt I/O-fejl.
 manifest.command_list_empty = Feltet "command" må ikke være tomt: angiv en kommandostreng eller en ikke-tom liste.
+manifest.command_isolation_recipe = Feltet ‘command_isolation’ kræver en opskrift med en kommandoliste.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ kræver en kommandoliste.
 
 # Fejl i den interne repræsentation.
 ir.rule_not_found = Reglen "{ $rule }", som målet "{ $target }" henviser til, blev ikke fundet.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = strømning
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote forventede en streng, men fik { $kind }.
+stdlib.shell.quote.control_character = En værdi med nulbyte, vognretur eller linjeskift kan ikke sættes i anførselstegn.
+stdlib.shell.dialect_invalid = Ukendt shell-dialekt { $dialect }; forventede en af { $accepted }.
+stdlib.shell.dialect_not_string = dialect-indstillingen i shell skal være en streng, modtog { $kind }.
+stdlib.shell.join.not_sequence = shell_join forventede en følge, men fik { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } i shell_join er { $kind }, ikke en streng.
+stdlib.shell.positional_option = { $filter } tager sine valgmuligheder som nøgleord; skriv { $example }.
+
 # Diagnostik for stihjælperen.
 stdlib.path.io.failed = { $action } mislykkedes for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } mislykkedes for { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hash-algoritmen "{ $algorithm }"
 
 # Diagnostik for samlingshjælpere.
 stdlib.collections.flatten.expected_sequence = flatten forventede elementer fra en følge, men fandt { $kind }.
+stdlib.collections.compact.not_sequence = compact forventede en følge, men fik { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by kræver en attribut, der ikke er tom.
 stdlib.collections.group_by.unresolved = group_by kunne ikke slå "{ $attr }" op på et element af typen { $kind }.
 
@@ -441,3 +459,22 @@ manifest.budget.exceeded = Manifestets ressourcebudget blev opbrugt under { $sta
 
 cli.flag.env_allow_var.help = Miljøvariabel tilladt for manifestets env()-hjælper.
 cli.flag.env_block_var.help = Miljøvariabel blokeret for manifestets env()-hjælper.
+
+# Manifestanalyse (`netsuke check`).
+cli.subcommand.check.about = Analysér manifestet uden at generere eller køre et build.
+cli.subcommand.check.long_about = Undersøg det valgte manifest for konstruktioner, der godt nok kan fortolkes, men sandsynligvis er fejlbehæftede, usikre, ikke-portable eller cachefjendtlige.
+cli.subcommand.check.flag.rule.help = Angiv en regels eller kategoris alvorsgrad, skrevet som NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Alvorsgrad hvor fund får kommandoen til at fejle.
+cli.subcommand.check.flag.limit.help = Højeste antal rapporterede fund; 0 rapporterer dem alle.
+cli.subcommand.check.flag.explain.help = Udskriv regelreferencen i stedet for at analysere et manifest.
+check.threshold_exceeded = Fund nåede tærsklen { $severity }: { $failing } af { $reported } rapporterede.
+check.threshold_exceeded.help = Ret de rapporterede fund, justér --rule, eller slæk --fail-on.
+check.summary.counts = Analyseresultater — fejl: { $errors }, advarsler: { $warnings }, råd: { $advice }, undertrykt: { $suppressed }.
+check.summary.clean = Ingen fund.
+check.summary.truncated = Viser { $shown } fund; --limit udelod yderligere { $omitted }.
+check.rule.malformed = Vælgeren { $selector } er ikke skrevet som NAME=SEVERITY.
+check.rule.unknown = Vælgeren nævner { $name }, som hverken er en regel eller en kategori.
+check.rule.severity = Vælgeren { $name } nævner alvorsgraden { $severity }; forventede en af { $values }.
+check.fail_on.invalid = Ukendt fejltærskel { $value }; forventede en af { $values }.
+check.source_index = Kunne ikke indeksere { $path } til diagnostik på linje { $line }: { $reason }.
+status.tool.check = Kontrol

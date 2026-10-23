@@ -58,10 +58,9 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
         f"nested Cargo build tests missing from {CHILD_CARGO_GROUP}: "
         f"{sorted(set(NESTED_CARGO_BUILD_TESTS) - grouped)!r}"
     )
-    assert {
-        "cli_configuration_fixture_compiles",
-        "packaged_manifest_retains_build_script_sources",
-    } <= grouped, "the two isolated nested Cargo tests must be serialized"
+    assert "packaged_manifest_retains_build_script_sources" in grouped, (
+        "the isolated packaging build must be serialized"
+    )
     immediate = [
         override
         for override in all_overrides(config)
@@ -71,6 +70,18 @@ def test_nested_cargo_group_serializes_build_capable_tests() -> None:
     assert all(
         override.get("success-output") == "immediate" for override in immediate
     ), "nested Cargo build diagnostics must remain immediate"
+
+
+def test_completion_readers_share_the_nested_build_group() -> None:
+    """Prevent readers from observing completions truncated by nested builds.
+
+    Cargo preparation can regenerate completions in the shared target/profile
+    directory. The completion contract must share the writers' exclusive group
+    so every parameterized reader waits for a complete generated file.
+    """
+    assert "generated_completion_exposes_the_clap_command_tree" in grouped_test_names(
+        nextest_config()
+    ), "generated completion readers must be serialized with nested Cargo builds"
 
 
 def test_nested_cargo_group_covers_discovered_build_commands() -> None:
@@ -166,6 +177,19 @@ fn new_fixture_compiles() {
 """
     assert build_capable_test_names(source) == {"new_fixture_compiles"}, (
         "the discovery contract must classify direct Cargo build commands"
+    )
+
+
+def test_child_cargo_test_preparation_requires_group_policy() -> None:
+    """Discover Cargo test preparation as a build-capable child command."""
+    source = """
+#[test]
+fn prepared_fixture_compiles() {
+    Command::new(cargo()).arg("test").arg("--no-run");
+}
+"""
+    assert build_capable_test_names(source) == {"prepared_fixture_compiles"}, (
+        "Cargo test preparation must retain the nested-build group policy"
     )
 
 
@@ -299,6 +323,27 @@ def test_the_anchored_form_is_the_one_the_contracts_admit(tmp_path: Path) -> Non
     assert not unaccepted_test_selectors(config_for(anchored)), (
         "the anchored form must be admitted"
     )
+    # A test declared in a submodule is named `module::name` at run time, so a
+    # filter for it must carry the module path. Two properties matter together,
+    # and the second is the one that is easy to get wrong: the form must be
+    # admitted, AND the name it yields must stay BARE. Every consumer compares
+    # that name against `declared_test_names`, which computes no module path at
+    # all, so a grammar that captured the prefix would report every
+    # module-scoped test as unresolved. Widening the character class to admit
+    # `:` instead of skipping a non-capturing prefix is exactly that mistake.
+    qualified = "test(/^compile_guard::scratch_case_fixture($|::)/)"
+    assert filter_test_names(config_for(qualified)) == {"scratch_case_fixture"}, (
+        "a module-qualified filter must yield the bare name, not the qualified "
+        "one: the declared-test corpus it is checked against carries no module "
+        "path, so capturing the prefix would fail that comparison"
+    )
+    assert not unaccepted_test_selectors(config_for(qualified)), (
+        "the module-qualified form must be admitted, or the configuration "
+        "cannot express a filter for a test declared in a submodule at all"
+    )
+    assert filter_test_names(
+        config_for("test(/^compile_guard::plain_module($|::)/)")
+    ) == {"plain_module"}, "a module-qualified name must still be extracted"
     # The whole-name form is rejected too, by the pattern that reads a name out
     # of it: `test_no_filter_uses_the_exact_name_form` consumes that pattern, so
     # that form is reported there by name and is deliberately left out of this

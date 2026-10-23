@@ -17,9 +17,13 @@ because a commented-out key is what a presence assertion catches and an
 ordering assertion does not.
 
 The per-test allowance is ``period`` multiplied by ``terminate-after``,
-not ``period`` alone. Every platform uses five 60-second periods here,
-so the largest allowance is 300 s; reading the period as the budget would
-understate it fivefold.
+not ``period`` alone. Every period here is 60 seconds and every platform
+uses the same multipliers, so the profile's own five periods give 300 s,
+the mutation compile gate gets 600 s, and the stub-environment
+compile-fail, split-build, and cold package-publish checks get 900 s.
+The largest allowance is therefore 900 s, and it is that figure the whole-run
+budget has to clear; reading the period as the budget would understate either by its
+multiplier.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``, and the canonical wording in
@@ -69,7 +73,9 @@ from whole_run_ordering import whole_run_ordering_faults
 #: changing a condition changes when it runs at all.
 #:
 #: `ci.yml` also runs on pushes, where the trunk lane covers the same
-#: ground, so its coverage step is conditional on the pull request.
+#: ground, so its coverage step is conditional on the pull request. Its
+#: nightly schedule exists for the Kani proofs alone, so the job skips on
+#: that trigger, which never reaches the pull-request step anyway.
 #: Keyed by workflow, job and step, because a job may run the coverage
 #: action twice and the steps need not carry the same condition; keying
 #: by job alone let the second overwrite the first. The entry pins a step
@@ -78,7 +84,7 @@ from whole_run_ordering import whole_run_ordering_faults
 REQUIRED_CONDITIONS: typ.Final[dict[tuple[str, str, str], tuple[object, object]]] = {
     ("ci.yml", "build-test", "Test and Measure Coverage"): (
         "github.event_name == 'pull_request'",
-        None,
+        "github.event_name != 'schedule'",
     ),
     ("coverage-main.yml", "coverage-upload", "Test and Measure Coverage"): (
         None,
@@ -250,7 +256,7 @@ def test_the_largest_per_test_allowance_counts_the_multiplier(
     This is the reading that decides every comparison above, and it is
     the one easy to get wrong: the periods here are all 60 s, so a
     contract reading the period alone would report a 60 s largest
-    allowance where the real figure is 300 s.
+    allowance where the real figure is 900 s.
     """
     largest = largest_test_allowance(nextest_config)
     periods = [
@@ -270,7 +276,7 @@ def test_the_termination_allowance_is_the_grace_period_plus_the_margin() -> None
     every grace period below the margin, so adding one of thirty seconds
     to this configuration would demand nothing more of the watchdog above
     it. The ordering assertion that uses this reading has 50 s of slack
-    against the real tree -- the 1,800 s watchdog against a 1,750 s
+    against the real tree -- the 1,980 s watchdog against a 1,930 s
     requirement -- so it would pass on either reading; the test of the
     reading itself is what stands behind the two terms.
     """

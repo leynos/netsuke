@@ -1,13 +1,16 @@
-//! Builds the `test_support` rlib for direct-rustc UI harnesses.
+//! Locates `test_support` metadata for direct-rustc UI harnesses.
 //!
 //! `test_support` is a dev-dependency of this package, so a fixture that
-//! `rustc` compiles directly needs Cargo to report where the uplifted rlib and
-//! each of its dependency directories landed. Cargo 1.99 gives every crate its
-//! own artefact directory, so the search paths come from Cargo's JSON messages
+//! `rustc` compiles directly needs Cargo to report where its metadata artefact
+//! and each dependency directory landed. Cargo 1.99 gives every crate its own
+//! artefact directory, so the search paths come from Cargo's JSON messages
 //! rather than an assumed shared `target/<profile>/deps`.
 //!
-//! The rlib itself is built by Cargo, so it is borrow-checked exactly as the
-//! rest of the suite is; only the fixtures are compiled directly.
+//! Cargo check prepares only the `test_support` library with all its features,
+//! rather than checking unrelated workspace test targets. It does not preserve
+//! the test build mode or cache identity, and it avoids linking integration
+//! executables while the test suite is running; only the UI fixtures are
+//! compiled directly.
 //!
 //! Reuse policy: include this module from `tests/*.rs` direct-rustc UI
 //! harnesses that compile fixtures against `test_support`. Harnesses compiling
@@ -28,7 +31,7 @@ use std::{
     time::Instant,
 };
 
-/// The `test_support` rlib and the directories holding its dependencies.
+/// The `test_support` metadata artefact and its dependency directories.
 pub struct TestSupportRlib {
     /// The metadata artefact the fixtures load through `--extern`.
     pub rlib: PathBuf,
@@ -37,36 +40,39 @@ pub struct TestSupportRlib {
 }
 
 impl TestSupportRlib {
-    /// Build `test_support` with Cargo and locate the resulting rlib.
+    /// Check `test_support` and locate its metadata artefact.
     pub fn build() -> io::Result<Self> {
         let mut command = Command::new(cargo());
         command
-            .arg("build")
+            .arg("check")
             .arg("--manifest-path")
-            .arg(manifest_dir().join("test_support/Cargo.toml"))
-            .arg("--message-format=json")
-            .args(cargo_features::GATE_FEATURE_ARGUMENTS);
+            .arg(manifest_dir().join("Cargo.toml"))
+            .arg("--message-format=json-render-diagnostics")
+            .args(["--package", "test_support"])
+            .args(cargo_features::LIBRARY_BUILD_ARGUMENTS);
         let started_at = Instant::now();
         let output = command.output()?;
         tracing::info!(
             elapsed_seconds = started_at.elapsed().as_secs_f64(),
-            "cargo build test_support completed"
+            "cargo check test_support completed"
         );
         if !output.status.success() {
             return Err(io::Error::other(format!(
-                "building test_support failed:\n{}",
+                "checking test_support failed:\n{}",
                 stderr(&output),
             )));
         }
 
         let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let rlib = stdout
-            .lines()
-            .filter_map(|line| cargo_artifacts::library_path_in_message(line, "test_support"))
-            .next_back()
-            .ok_or_else(|| io::Error::other("cargo reported no test_support rlib artefact"))?;
+        let rlib = cargo_artifacts::library_path_in_messages(
+            &stdout,
+            cargo_artifacts::LibraryArtefactSelection {
+                target_name: "test_support",
+                expected_package_id: None,
+            },
+        )?;
         // Dependencies do not necessarily sit beside the uplifted
-        // `test_support` rlib: Cargo's `build.build-dir` setting splits
+        // `test_support` metadata artefact: Cargo's `build.build-dir` setting splits
         // intermediate artefacts (where dependencies live) from final ones,
         // and the Cargo shipped with the 1.99 nightlies gives every crate its
         // own directory rather than one shared `deps/`. Every
@@ -83,13 +89,13 @@ impl TestSupportRlib {
         }
         if deps_dirs.is_empty() {
             return Err(io::Error::other(
-                "cargo reported no rlib artefacts to derive dependency dirs from",
+                "cargo reported no loadable dependency artefacts",
             ));
         }
         Ok(Self { rlib, deps_dirs })
     }
 
-    /// Type-check `source` against the rlib without linking a binary.
+    /// Type-check `source` against the metadata artefact without linking a binary.
     ///
     /// `--emit=metadata` is enough to surface the missing-item error while
     /// sparing the harness a full link of `test_support`'s dependency tree.

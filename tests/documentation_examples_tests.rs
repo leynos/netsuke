@@ -1,6 +1,16 @@
-//! Executable contracts for examples in the public user documentation.
+//! Executable contracts for examples in the project documentation.
 
 mod documentation_examples;
+
+#[path = "documentation_examples_tests/cli_examples.rs"]
+mod cli_examples;
+
+#[cfg(feature = "lint")]
+#[path = "documentation_examples_tests/lint_examples.rs"]
+mod lint_examples;
+
+#[path = "documentation_examples_tests/release_wix_extension.rs"]
+mod release_wix_extension;
 
 use anyhow::{Context, Result, ensure};
 use documentation_examples::{
@@ -16,38 +26,45 @@ use test_support::fs as test_fs;
 use test_support::netsuke::{NetsukeRun, run_netsuke_in, run_netsuke_in_with_env};
 
 const EXPECTED_EXAMPLE_IDS: &[&str] = &[
+    "devguide-clock-snippet",
+    "devguide-env-reader-snippet",
+    "devguide-ninja-request-snippet",
+    "devguide-verbose-timing-reporter",
     "guide-accessible-output",
     "guide-binstall-install",
     "guide-boolean-string-interpolation",
+    "guide-check-command",
+    "guide-check-config",
+    "guide-check-explain",
+    "guide-check-policy",
+    "guide-check-suppression",
     "guide-cli-usage",
-    "guide-clock-snippet",
     "guide-command-available-manifest",
     "guide-command-list",
     "guide-complete-manifest",
     "guide-configuration-observability",
     "guide-crates-io-install",
     "guide-direct-command-list",
-    "guide-env-reader-snippet",
     "guide-file-follow-symlinks-expression",
     "guide-file-max-bytes-expression",
     "guide-first-build-commands",
     "guide-first-build-manifest",
     "guide-foreach-manifest",
     "guide-help-targets",
+    "guide-help-targets-edges-json",
     "guide-json-command",
     "guide-json-output",
     "guide-macro-manifest",
     "guide-manifest-environment-policy",
     "guide-manifest-environment-policy-cli",
     "guide-manifest-environment-policy-env",
-    "guide-ninja-request-snippet",
     "guide-output-streams",
     "guide-project-anchor",
     "guide-project-config",
+    "guide-release-wix-extension-version",
     "guide-serial-dependency-order-manifest",
     "guide-source-install",
     "guide-utility-commands",
-    "guide-verbose-timing-reporter",
     "guide-windows-bash-compatibility",
     "guide-windows-help",
     "guide-windows-help-install",
@@ -64,12 +81,13 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "stdlib-file-tests-manifest",
     "stdlib-host-context-manifest",
     "stdlib-jinja-syntax-manifest",
+    "stdlib-optional-rustflags-manifest",
     "stdlib-path-and-collection-manifest",
     "stdlib-time-manifest",
     "stdlib-yaml-syntax-manifest",
 ];
 
-/// Assert that a guide snippet is a Rust fence naming the given API entry points.
+/// Assert that a developers' guide snippet is a Rust fence naming the given APIs.
 ///
 /// Several guide snippets duplicate an executable doctest, and pinning the copy
 /// to the same identifiers is what keeps the two from drifting silently. The
@@ -89,39 +107,39 @@ fn assert_snippet_names(example_id: &str, label: &str, needles: &[&str]) -> Resu
     Ok(())
 }
 
-/// The guide's env-reader snippet must stay in step with the API it mirrors.
+/// The developers' guide env-reader snippet must track the API it mirrors.
 ///
 /// The snippet is Rust and is executed as the doctest on `from_str_with_env`.
 #[test]
 fn env_reader_snippet_mirrors_the_doctest() -> Result<()> {
     assert_snippet_names(
-        "guide-env-reader-snippet",
+        "devguide-env-reader-snippet",
         "env-reader",
         &["from_str_with_env", "EnvReader", "env('PROFILE')"],
     )
 }
 
-/// The guide's clock snippet must stay in step with the API it mirrors.
+/// The developers' guide clock snippet must track the API it mirrors.
 ///
 /// The snippet is Rust and is executed as the doctest on `with_clock`.
 #[test]
 fn clock_snippet_mirrors_the_doctest() -> Result<()> {
     assert_snippet_names(
-        "guide-clock-snippet",
+        "devguide-clock-snippet",
         "clock",
         &["with_clock", "fixed_clock", "StdlibConfig"],
     )
 }
 
-/// The guide's Ninja-request snippet must name the API it documents.
+/// The developers' guide Ninja-request snippet must name the API it documents.
 ///
-/// The snippet is the only place the guide constructs the request bundles, so
-/// pinning the identifiers keeps it from drifting into prose about types the
-/// crate no longer exports.
+/// The snippet is the only place the developers' guide constructs the request
+/// bundles, so pinning the identifiers keeps it from drifting into prose about
+/// types the crate no longer exports.
 #[test]
 fn ninja_request_snippet_names_both_request_types() -> Result<()> {
     assert_snippet_names(
-        "guide-ninja-request-snippet",
+        "devguide-ninja-request-snippet",
         "Ninja-request",
         &[
             "NinjaBuildRequest",
@@ -155,6 +173,31 @@ fn assert_generates_valid_ninja(run: &NetsukeRun, context: &str) -> Result<()> {
         "{context} should generate a Ninja manifest"
     );
     assert_default_edges_exist(&run.stdout, context)
+}
+
+/// Assert that a documented configuration file is accepted by a command.
+///
+/// The two configuration examples differ only in which file they write and
+/// which command reads it, so sharing the setup keeps the thing under test —
+/// that the documented file is accepted as written — in one place.
+fn documented_configuration_example_is_accepted(
+    example_id: &str,
+    config_filename: &str,
+    command_arguments: &[&str],
+    context: &str,
+) -> Result<()> {
+    let example = documented_example(example_id)?;
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let config_path = workspace.path().join(config_filename);
+    test_fs::write(&config_path, example.body)
+        .with_context(|| format!("write documented config {config_filename}"))?;
+    let config = config_path
+        .to_str()
+        .context("temporary config path should be UTF-8")?;
+    let mut arguments = vec!["--config", config];
+    arguments.extend_from_slice(command_arguments);
+    let run = run_netsuke_in(workspace.path(), &arguments)?;
+    assert_success(&run, context)
 }
 
 fn run_with_fake_ninja(workspace: &Path, args: &[&str]) -> Result<NetsukeRun> {
@@ -196,6 +239,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-serial-dependency-order-manifest")]
 #[case("stdlib-yaml-syntax-manifest")]
 #[case("stdlib-jinja-syntax-manifest")]
+#[case("stdlib-optional-rustflags-manifest")]
 fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let workspace = manifest_workspace(example_id)?;
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
@@ -254,190 +298,6 @@ fn documented_first_run_flow_builds(
     ensure!(
         normalize_fluent_isolates(&run.stderr).contains("Build complete."),
         "{commands_id} should finish the documented build"
-    );
-    Ok(())
-}
-
-#[test]
-fn documented_cli_shape_matches_live_help() -> Result<()> {
-    let example = documented_example("guide-cli-usage")?;
-    ensure!(
-        example.body == "netsuke [OPTIONS] [COMMAND]\nnetsuke [OPTIONS] build [TARGETS]...\n",
-        "CLI synopsis example drifted"
-    );
-    let run = run_netsuke_in(Path::new("."), &["--locale", "en-US", "--help"])?;
-    assert_success(&run, "top-level help")?;
-    ensure!(
-        run.stdout.contains("Usage: netsuke [OPTIONS] [COMMAND]"),
-        "top-level help should expose the documented command shape"
-    );
-    let build = run_netsuke_in(Path::new("."), &["--locale", "en-US", "build", "--help"])?;
-    assert_success(&build, "build help")?;
-    ensure!(
-        build.stdout.contains("Usage: netsuke build [TARGETS]..."),
-        "build help should expose the documented target shape"
-    );
-    Ok(())
-}
-
-#[test]
-fn directory_and_utility_command_examples_run() -> Result<()> {
-    let anchor = documented_example("guide-project-anchor")?;
-    ensure!(
-        anchor.body == "netsuke --directory /path/to/project build\n",
-        "directory example drifted"
-    );
-    let utility = documented_example("guide-utility-commands")?;
-    ensure!(
-        utility.body
-            == concat!(
-                "netsuke clean\n",
-                "netsuke graph --output build.dot\n",
-                "netsuke graph --html --output graph.html\n",
-                "netsuke generate\n",
-                "netsuke generate --output build.ninja\n"
-            ),
-        "utility command example drifted"
-    );
-
-    let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let directory = workspace
-        .path()
-        .to_str()
-        .context("temporary workspace path should be UTF-8")?;
-    let anchored = run_with_fake_ninja(Path::new("."), &["--directory", directory, "build"])?;
-    assert_success(&anchored, "directory build")?;
-
-    assert_success(
-        &run_with_fake_ninja(workspace.path(), &["clean"])?,
-        "clean example",
-    )?;
-    assert_success(
-        &run_netsuke_in(workspace.path(), &["graph", "--output", "build.dot"])?,
-        "DOT graph example",
-    )?;
-    assert_success(
-        &run_netsuke_in(
-            workspace.path(),
-            &["graph", "--html", "--output", "graph.html"],
-        )?,
-        "HTML graph example",
-    )?;
-    assert_success(
-        &run_netsuke_in(workspace.path(), &["generate"])?,
-        "generate stdout example",
-    )?;
-    assert_success(
-        &run_netsuke_in(workspace.path(), &["generate", "--output", "build.ninja"])?,
-        "generate file example",
-    )?;
-    for output in ["build.dot", "graph.html", "build.ninja"] {
-        ensure!(
-            workspace.path().join(output).is_file(),
-            "{output} should be created"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn help_targets_example_lists_described_targets() -> Result<()> {
-    let example = documented_example("guide-help-targets")?;
-    ensure!(
-        example.body == "netsuke help targets\n",
-        "help targets example drifted"
-    );
-    let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let run = run_netsuke_in(workspace.path(), &["--locale", "en-US", "help", "targets"])?;
-    assert_success(&run, "help targets example")?;
-    ensure!(
-        normalize_fluent_isolates(&run.stdout).contains("Targets:"),
-        "help targets should print the Targets section"
-    );
-    ensure!(
-        normalize_fluent_isolates(&run.stdout).contains("hello.txt"),
-        "help targets should list the documented target"
-    );
-    Ok(())
-}
-#[test]
-fn project_configuration_example_is_accepted() -> Result<()> {
-    let example = documented_example("guide-project-config")?;
-    let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let config_path = workspace.path().join("example.toml");
-    test_fs::write(&config_path, example.body).context("write documented config")?;
-    let config = config_path
-        .to_str()
-        .context("temporary config path should be UTF-8")?;
-    let run = run_netsuke_in(
-        workspace.path(),
-        &["--config", config, "--progress", "never", "generate"],
-    )?;
-    assert_success(&run, "project configuration example")
-}
-
-#[test]
-fn output_stream_and_accessibility_examples_match_live_output() -> Result<()> {
-    let streams = documented_example("guide-output-streams")?;
-    ensure!(
-        streams.body
-            == concat!(
-                "netsuke graph > build.dot\n",
-                "netsuke --progress never build\n",
-                "netsuke generate > build.ninja\n"
-            ),
-        "output stream example drifted"
-    );
-    let workspace = manifest_workspace("guide-first-build-manifest")?;
-    let graph = run_netsuke_in(workspace.path(), &["graph"])?;
-    assert_success(&graph, "graph stdout example")?;
-    ensure!(graph.stdout.contains("digraph"), "graph should use stdout");
-    let manifest = run_netsuke_in(workspace.path(), &["generate"])?;
-    assert_success(&manifest, "generate stdout example")?;
-    ensure!(
-        manifest.stdout.contains("rule ") && manifest.stdout.contains("build "),
-        "generate should use stdout"
-    );
-    let quiet = run_with_fake_ninja(workspace.path(), &["--progress", "never", "build"])?;
-    assert_success(&quiet, "progress-disabled build")?;
-
-    let expected = documented_example("guide-accessible-output")?;
-    let accessible = run_with_fake_ninja(workspace.path(), &["--accessibility", "on", "build"])?;
-    assert_success(&accessible, "accessible build")?;
-    let stderr = normalize_fluent_isolates(&accessible.stderr);
-    for line in expected.body.lines() {
-        ensure!(
-            stderr.contains(line),
-            "accessible output should contain '{line}', got:\n{stderr}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn json_diagnostic_example_matches_live_schema() -> Result<()> {
-    let command = documented_example("guide-json-command")?;
-    ensure!(
-        command.body == "netsuke --json --no-input --file missing.yml build\n",
-        "JSON command example drifted"
-    );
-    let expected: Value = serde_json::from_str(&documented_example("guide-json-output")?.body)
-        .context("parse documented JSON diagnostic")?;
-    let workspace = tempfile::tempdir().context("create JSON diagnostic workspace")?;
-    let run = run_netsuke_in(
-        workspace.path(),
-        &["--json", "--no-input", "--file", "missing.yml", "build"],
-    )?;
-    ensure!(!run.success, "missing manifest invocation should fail");
-    ensure!(
-        run.stdout.is_empty(),
-        "JSON failure should leave stdout empty"
-    );
-    let actual: Value = serde_json::from_str(&normalize_fluent_isolates(&run.stderr))
-        .context("parse live JSON diagnostic")?;
-    ensure!(
-        actual == expected,
-        "documented JSON diagnostic drifted\nexpected: {expected:#}\nactual: {actual:#}"
     );
     Ok(())
 }

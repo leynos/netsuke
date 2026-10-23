@@ -9,9 +9,10 @@ use std::{
 };
 
 use super::{
-    StderrMode, command_list_telemetry,
-    command_logging::{CommandLogContext, log_command_exit_failure},
+    StderrMode,
     failure_attribution::CommandListFailure,
+    list_failure_telemetry,
+    logging::{CommandLogContext, log_command_exit_failure},
     streaming::ForwardStats,
 };
 
@@ -47,7 +48,7 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
             status,
         );
         if let Some(failure) = failure_context.command_list_failure {
-            command_list_telemetry::record_failure(
+            list_failure_telemetry::record_failure(
                 failure,
                 failure_context
                     .clock

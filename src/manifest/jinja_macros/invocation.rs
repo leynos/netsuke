@@ -3,8 +3,8 @@
 use super::call::call_macro_value;
 use super::telemetry;
 use crate::localization::{self, keys};
+use crate::manifest::budget::adapter::BudgetErrorExt;
 use crate::manifest::budget::{ManifestBudget, ManifestBudgetStage};
-use crate::manifest::budget_adapter::BudgetErrorExt;
 use minijinja::{
     AutoEscape, Captured, Environment, Error, ErrorKind, State,
     value::{Kwargs, Rest, Value},

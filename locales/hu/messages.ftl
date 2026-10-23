@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Téma nélkül ez a `--help`-nek felel meg. A `
 cli.help.actions_heading = Műveletek:
 cli.help.targets_heading = Célok:
 cli.help.targets.about = A kiválasztott fájl céljainak és műveleteinek listázása.
+cli.help.targets.flag.edges.help = A függőségi élek és a nyers receptek felvétele a JSON-kimenetbe.
 cli.help.default_marker = alapértelmezett
 cli.help.conditional_marker = feltételes
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = A jegyzéket nem sikerült betölteni innen: { $p
 runner.context.build_graph = A gráfot nem sikerült felépíteni a jegyzékből.
 runner.context.generate_ninja = A Ninja-jegyzéket nem sikerült előállítani.
 runner.context.render_graph = A gráfterméket nem sikerült megjeleníteni.
+runner.help.targets_edges_require_json = Az --edges kapcsolóhoz a legfelső szintű --json kapcsoló szükséges.
 
 runner.io.create_temp_file = Az ideiglenes Ninja-fájlt nem sikerült létrehozni.
 runner.io.write_temp_ninja = Az ideiglenes Ninja-fájlt nem sikerült megírni.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Escape-elje a fordított perjeleket, vagy távolíts
 manifest.env.missing = Egy kötelező környezeti változó nincs beállítva.
 manifest.env.invalid_utf8 = Egy környezeti változó érvénytelen UTF-8 kódolást tartalmaz.
 manifest.env.blocked = Egy környezeti változóhoz való hozzáférés le van tiltva.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Az env default értékének karakterláncnak kell lennie, ezt kaptuk: { $kind }.
 manifest.vars.not_object = A jegyzék `vars` mezőjének leképezésnek vagy objektumnak kell lennie.
 manifest.vars.reserved_name = A manifest `vars` kulcsa, '{ $name }', egy beépített sablonsegéd számára fenntartott; nevezze át a változót.
 manifest.read_failed = A jegyzéket nem sikerült beolvasni innen: { $path }.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = ismeretlen mintahiba.
 manifest.glob.io_failed = A glob sikertelen ehhez: „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = ismeretlen be- és kiviteli hiba.
 manifest.command_list_empty = A „command” mező nem lehet üres: adjon meg egy parancs-karakterláncot vagy egy nem üres listát.
+manifest.command_isolation_recipe = Az „command_isolation” mezőhöz parancslistás recept szükséges.
+manifest.command_isolation_scalar = Az „command_isolation: isolated” értékhez parancslista szükséges.
 
 # A köztes ábrázolás hibái.
 ir.rule_not_found = A(z) „{ $target }” cél által hivatkozott „{ $rule }” szabály nem található.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = folyamatos átvitel
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = A shell_quote sztringet várt, de ezt kapta: { $kind }.
+stdlib.shell.quote.control_character = Nullabájtot, kocsivisszát vagy soremelést tartalmazó érték nem idézőjelezhető.
+stdlib.shell.dialect_invalid = Ismeretlen shell-dialektus: { $dialect }; a várt értékek: { $accepted }.
+stdlib.shell.dialect_not_string = A shell dialect beállításának karakterláncnak kell lennie, ezt kaptuk: { $kind }.
+stdlib.shell.join.not_sequence = A shell_join sorozatot várt, de ezt kapta: { $kind }.
+stdlib.shell.join.item_not_string = A(z) { $index }. shell_join-elem típusa { $kind }, nem sztring.
+stdlib.shell.positional_option = A(z) { $filter } a beállításait kulcsszóként várja; írja ezt: { $example }.
+
 # Az útvonalakat kezelő segédfüggvény diagnosztikája.
 stdlib.path.io.failed = A(z) „{ $action }” művelet sikertelen ehhez: { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = A(z) „{ $action }” művelet sikertelen ehhez: { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nem támogatott kivonatoló algo
 
 # A gyűjteményeket kezelő segédfüggvények diagnosztikája.
 stdlib.collections.flatten.expected_sequence = A flatten sorozatelemeket várt, de ezt találta: { $kind }.
+stdlib.collections.compact.not_sequence = A compact sorozatot várt, de ezt találta: { $kind }.
 stdlib.collections.group_by.empty_attribute = A group_by nem üres attribútumot igényel.
 stdlib.collections.group_by.unresolved = A group_by nem találta a(z) „{ $attr }” attribútumot a(z) { $kind } típusú elemen.
 
@@ -443,3 +461,22 @@ manifest.budget.exceeded = A jegyzék erőforrás-kerete kimerült a(z) { $stage
 
 cli.flag.env_allow_var.help = A manifest env() segédje számára engedélyezett környezeti változó.
 cli.flag.env_block_var.help = A manifest env() segédje számára tiltott környezeti változó.
+
+# Manifest-ellenőrzés (`netsuke check`).
+cli.subcommand.check.about = A manifest elemzése build előállítása és futtatása nélkül.
+cli.subcommand.check.long_about = A kiválasztott manifest vizsgálata olyan szerkezetek után, amelyek ugyan elemezhetők, de valószínűleg hibásak, nem biztonságosak, nem hordozhatók vagy rontják a gyorsítótárazást.
+cli.subcommand.check.flag.rule.help = Egy szabály vagy kategória súlyosságának beállítása NAME=SEVERITY alakban.
+cli.subcommand.check.flag.fail_on.help = Az a súlyosság, amelynél a megállapítások a parancs hibáját okozzák.
+cli.subcommand.check.flag.limit.help = A jelentett megállapítások legnagyobb száma; a 0 mindet jelenti.
+cli.subcommand.check.flag.explain.help = A szabályhivatkozás kiírása manifest elemzése helyett.
+check.threshold_exceeded = A megállapítások elérték a(z) { $severity } küszöböt: { $failing } a(z) { $reported } jelentettből.
+check.threshold_exceeded.help = Javítsa a jelentett megállapításokat, módosítsa a --rule kapcsolót, vagy lazítson a --fail-on értéken.
+check.summary.counts = Elemzési eredmények — hibák: { $errors }, figyelmeztetések: { $warnings }, tanácsok: { $advice }, elnyomva: { $suppressed }.
+check.summary.clean = Nincs megállapítás.
+check.summary.truncated = { $shown } megállapítás látható; a --limit további { $omitted } elemet hagyott ki.
+check.rule.malformed = A(z) { $selector } választó nem NAME=SEVERITY alakban szerepel.
+check.rule.unknown = A választó a(z) { $name } nevet adja meg, ami sem szabály, sem kategória.
+check.rule.severity = A(z) { $name } választó a(z) { $severity } súlyosságot adja meg; a várt értékek: { $values }.
+check.fail_on.invalid = Ismeretlen hibaküszöb: { $value }; a várt értékek: { $values }.
+check.source_index = A(z) { $path } nem indexelhető a diagnosztikához a(z) { $line }. sorban: { $reason }.
+status.tool.check = Ellenőrzés

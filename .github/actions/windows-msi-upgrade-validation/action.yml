@@ -100,24 +100,32 @@ runs:
 
     - name: Exercise MSI upgrade and downgrade paths
       shell: pwsh
+      env:
+        BETA1_MSI: ${{ steps.package_beta1.outputs.msi-path }}
+        BETA2_MSI: ${{ steps.package_beta2.outputs.msi-path }}
+        FINAL_MSI: ${{ steps.package_final.outputs.msi-path }}
       run: |
         ./scripts/windows-msi-upgrade-validation.ps1 `
-          -Beta1Msi '${{ steps.package_beta1.outputs.msi-path }}' `
-          -Beta2Msi '${{ steps.package_beta2.outputs.msi-path }}' `
-          -FinalMsi '${{ steps.package_final.outputs.msi-path }}' `
-          -LogDirectory $env:MSI_VALIDATION_DIRECTORY
+          -Beta1Msi "$env:BETA1_MSI" `
+          -Beta2Msi "$env:BETA2_MSI" `
+          -FinalMsi "$env:FINAL_MSI" `
+          -LogDirectory "$env:MSI_VALIDATION_DIRECTORY"
 
     - name: Remove MSI upgrade validation installations
       if: always()
       shell: pwsh
+      env:
+        BETA1_MSI: ${{ steps.package_beta1.outputs.msi-path }}
+        BETA2_MSI: ${{ steps.package_beta2.outputs.msi-path }}
+        FINAL_MSI: ${{ steps.package_final.outputs.msi-path }}
       run: |
         $msiPaths = @(
-          '${{ steps.package_beta1.outputs.msi-path }}',
-          '${{ steps.package_beta2.outputs.msi-path }}',
-          '${{ steps.package_final.outputs.msi-path }}'
+          "$env:BETA1_MSI",
+          "$env:BETA2_MSI",
+          "$env:FINAL_MSI"
         ) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
         if ($msiPaths.Count -gt 0) {
           ./scripts/windows-msi-upgrade-cleanup.ps1 `
             -MsiPaths $msiPaths `
-            -LogDirectory $env:MSI_VALIDATION_DIRECTORY
+            -LogDirectory "$env:MSI_VALIDATION_DIRECTORY"
         }

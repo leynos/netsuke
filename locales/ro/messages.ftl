@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Fără subiect, acest lucru corespunde cu `--he
 cli.help.actions_heading = Acțiuni:
 cli.help.targets_heading = Ținte:
 cli.help.targets.about = Listează țintele și acțiunile din fișierul selectat.
+cli.help.targets.flag.edges.help = Include muchiile dependențelor și rețetele neprelucrate în ieșirea JSON.
 cli.help.default_marker = implicit
 cli.help.conditional_marker = condițional
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestul din { $path } nu a putut fi încărcat
 runner.context.build_graph = Graful nu a putut fi construit din manifest.
 runner.context.generate_ninja = Manifestul Ninja nu a putut fi generat.
 runner.context.render_graph = Artefactul grafului nu a putut fi redat.
+runner.help.targets_edges_require_json = Opțiunea --edges necesită --json la nivelul rădăcină.
 
 runner.io.create_temp_file = Fișierul Ninja temporar nu a putut fi creat.
 runner.io.write_temp_ninja = Fișierul Ninja temporar nu a putut fi scris.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Aplicați escape barelor oblice inverse sau elimina�
 manifest.env.missing = O variabilă de mediu obligatorie nu este setată.
 manifest.env.invalid_utf8 = O variabilă de mediu conține UTF-8 nevalid.
 manifest.env.blocked = Accesul la o variabilă de mediu este blocat.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Valoarea default din env trebuie să fie un șir de caractere, s-a primit { $kind }.
 manifest.vars.not_object = Câmpul `vars` al manifestului trebuie să fie o mapare sau un obiect.
 manifest.vars.reserved_name = Cheia `vars` '{ $name }' din manifest este rezervată pentru o funcție ajutătoare de șabloane integrată; redenumiți variabila.
 manifest.read_failed = Manifestul din { $path } nu a putut fi citit.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = eroare de tipar necunoscută.
 manifest.glob.io_failed = Glob a eșuat pentru „{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = eroare de intrare/ieșire necunoscută.
 manifest.command_list_empty = Câmpul „command” nu trebuie să fie gol: furnizați un șir de comandă sau o listă nevidă.
+manifest.command_isolation_recipe = Câmpul „command_isolation” necesită o rețetă cu o listă de comenzi.
+manifest.command_isolation_scalar = „command_isolation: isolated” necesită o listă de comenzi.
 
 # Erori ale reprezentării intermediare.
 ir.rule_not_found = Regula „{ $rule }” la care face referire ținta „{ $target }” nu a fost găsită.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = flux continuu
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote aștepta un șir, dar a primit { $kind }.
+stdlib.shell.quote.control_character = O valoare care conține octet nul, retur de car sau salt de linie nu poate fi pusă între ghilimele.
+stdlib.shell.dialect_invalid = Dialect de shell necunoscut { $dialect }; se aștepta unul dintre { $accepted }.
+stdlib.shell.dialect_not_string = Opțiunea dialect din shell trebuie să fie un șir de caractere, s-a primit { $kind }.
+stdlib.shell.join.not_sequence = shell_join aștepta o secvență, dar a primit { $kind }.
+stdlib.shell.join.item_not_string = Elementul { $index } din shell_join este { $kind }, nu un șir.
+stdlib.shell.positional_option = { $filter } își preia opțiunile ca cuvinte-cheie; scrieți { $example }.
+
 # Diagnostice ale ajutorului pentru căi.
 stdlib.path.io.failed = Acțiunea „{ $action }” a eșuat pentru { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Acțiunea „{ $action }” a eșuat pentru { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritm de dispersie neacceptat
 
 # Diagnostice ale ajutoarelor pentru colecții.
 stdlib.collections.flatten.expected_sequence = flatten aștepta elemente dintr-o secvență, dar a găsit { $kind }.
+stdlib.collections.compact.not_sequence = compact aștepta o secvență, dar a găsit { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by necesită un atribut care nu este gol.
 stdlib.collections.group_by.unresolved = group_by nu a putut găsi „{ $attr }” pe un element de tipul { $kind }.
 
@@ -445,3 +463,26 @@ manifest.budget.exceeded = Bugetul de resurse al manifestului s-a epuizat în ti
 
 cli.flag.env_allow_var.help = Variabilă de mediu permisă pentru ajutorul env() al manifestului.
 cli.flag.env_block_var.help = Variabilă de mediu blocată pentru ajutorul env() al manifestului.
+
+# Analiza manifestului (`netsuke check`).
+cli.subcommand.check.about = Analizează manifestul fără a genera sau rula o compilare.
+cli.subcommand.check.long_about = Examinează manifestul selectat pentru construcții care se analizează corect, dar sunt probabil eronate, nesigure, neportabile sau ostile memoriei cache.
+cli.subcommand.check.flag.rule.help = Stabilește severitatea unei reguli sau categorii, scrisă ca NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severitatea de la care constatările fac comanda să eșueze.
+cli.subcommand.check.flag.limit.help = Numărul maxim de constatări raportate; 0 le raportează pe toate.
+cli.subcommand.check.flag.explain.help = Afișează referința regulilor în loc să analizeze un manifest.
+check.threshold_exceeded = Constatările au atins pragul { $severity }: { $failing } din { $reported } raportate.
+check.threshold_exceeded.help = Remediați constatările raportate, ajustați --rule sau relaxați --fail-on.
+check.summary.counts = Rezultatele analizei — erori: { $errors }, avertismente: { $warnings }, sfaturi: { $advice }, suprimate: { $suppressed }.
+check.summary.clean = Nicio constatare.
+check.summary.truncated = { $shown ->
+    [one] Se afișează { $shown } constatare; --limit a omis încă { $omitted }.
+    [few] Se afișează { $shown } constatări; --limit a omis încă { $omitted }.
+   *[other] Se afișează { $shown } de constatări; --limit a omis încă { $omitted }.
+}
+check.rule.malformed = Selectorul { $selector } nu este scris ca NAME=SEVERITY.
+check.rule.unknown = Selectorul indică { $name }, care nu este nici regulă, nici categorie.
+check.rule.severity = Selectorul { $name } indică severitatea { $severity }; se aștepta una dintre { $values }.
+check.fail_on.invalid = Prag de eșec necunoscut { $value }; se aștepta unul dintre { $values }.
+check.source_index = Nu s-a putut indexa { $path } pentru diagnostice la linia { $line }: { $reason }.
+status.tool.check = Verificare

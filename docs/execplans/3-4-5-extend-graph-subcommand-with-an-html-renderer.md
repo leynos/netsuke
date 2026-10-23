@@ -67,7 +67,7 @@ Observable success means **all** of the following hold simultaneously:
 The following invariants must hold throughout implementation. Violating any of
 them requires escalation, not a workaround.
 
-1. **CLI doctrine.** Follow [ADR-003][adr-003]: no compatibility aliases
+1. **CLI doctrine.** Follow [ADR-0046][ADR-0046]: no compatibility aliases
    for the legacy graph behaviour, no mixing of subprocess output and JSON
    diagnostics on stdout, `--force` and `--dry-run` reserved for destructive or
    consequential mutations. Neither applies here: `--output` writing a new file
@@ -104,7 +104,7 @@ them requires escalation, not a workaround.
    parser struct.
 9. **Pre-0.1.0 freedom.** No compatibility aliases for the previous
    ninja-mediated DOT output. Output is allowed to differ byte-for-byte from
-   the pre-existing `ninja -t graph` text. ADR-003 endorses removing legacy
+   the pre-existing `ninja -t graph` text. ADR-0046 endorses removing legacy
    spellings rather than adding aliases.
 10. **License compatibility.** Any new dependency must be licensed
     compatibly with Netsuke's ISC license (MIT, BSD-2/3, Apache-2.0, ISC,
@@ -238,7 +238,7 @@ timestamp.
       zero-dependency hand-rolled layered SVG layout (2026-05-26); see the
       decision log entry and Surprises & discoveries.
 - [x] Stage D: localization, accessibility polish, BDD scenarios,
-      user-guide and developer-guide updates, ADR-004. (2026-05-26)
+      user-guide and developer-guide updates, ADR-0004. (2026-05-26)
 - [x] Stage E: project `BuildEdge.implicit_deps` through `GraphView`
       with a new `EdgeClass::ImplicitDep` variant. DOT renders as
       `[style=bold]`; HTML uses `.edge.implicit-dep` (the prior
@@ -298,7 +298,7 @@ timestamp.
   `self_named_module_files` by keeping tests in
   `src/graph_view/render_html_tests.rs`. This is superseded as of the
   post-review split: the HTML adapter now lives under
-  `src/graph_view/render_html/` with `mod`, `escape`, `layout`, `noscript`,
+  `src/graph_view/render/html/` with `mod`, `escape`, `layout`, `noscript`,
   `outline`, `style`, `svg`, and `tests` modules, keeping each module focused
   and under the 400-line file cap.
 - 2026-05-26 (Stage B): `write_ninja_file_utf8` became a thin wrapper
@@ -356,7 +356,7 @@ Add further decisions as work proceeds.
 - Decision: at the Stage C go/no-go gate, neither the `layout` crate nor
   the vendored viz-js fallback was adopted. Instead, the HTML renderer uses a
   hand-rolled topological-depth layered SVG layout written inline in
-  `src/graph_view/render_html/layout.rs`. Rationale: the layout crate adds
+  `src/graph_view/render/html/layout.rs`. Rationale: the layout crate adds
   approximately 8 transitive dependencies and ~700 KB of release binary growth
   even for the smoke fixture, exceeding the 1 MB net budget when combined with
   other in-flight features. The vendored viz-js fallback ships a 3 MB WASM blob
@@ -388,7 +388,7 @@ Add further decisions as work proceeds.
 - **Stage C (2026-05-26):** the HTML renderer landed without any new
   dependency. The Stage C go/no-go gate accepted a hand-rolled
   topological-depth layered SVG layout now housed in
-  `src/graph_view/render_html/layout.rs`; the `layout` crate and the vendored
+  `src/graph_view/render/html/layout.rs`; the `layout` crate and the vendored
   viz-js fallback were both rejected for binary-size reasons (see Decision
   log). The renderer produces a byte-identical document across runs (proven by
   `rendering_is_byte_identical_across_runs`), has golden DOT/HTML snapshots
@@ -401,7 +401,7 @@ Add further decisions as work proceeds.
   a later milestone" caveat and now describes the `GraphView` projection and
   renderer port. The CLI design document marks `--html` as shipped and `--json`
   as the open follow-up. The developer guide gained a new section documenting
-  the port/adapter layout. ADR-004 records the migration off Ninja for the
+  the port/adapter layout. ADR-0004 records the migration off Ninja for the
   `graph` dispatch. Roadmap item 3.4.5 was ticked. `make check-fmt`,
   `make lint`, `make test`, `make markdownlint`, and `make nixie` all passed.
 - **Stage F (2026-06-07):** a follow-up review closed traceability gaps
@@ -715,7 +715,7 @@ observed output quality.
    each HTML artefact. Do not silently switch — escalate first.
 
 3. **Promote the spike** (assuming the gate passed). Move the
-   `HtmlRenderer` into the `src/graph_view/render_html/` module tree and drop
+   `HtmlRenderer` into the `src/graph_view/render/html/` module tree and drop
    the `html-renderer-spike` cargo feature, unless the binary-size budget
    dictates gating it behind a default-off feature (`html-renderer`). The
    renderer constructs the document using Rust string-writing helpers:
@@ -808,9 +808,9 @@ new surface.
 5. Decide whether to record the architectural decisions in an ADR. The
    migration off `ninja -t graph` for the `graph` subcommand is substantive
    enough to warrant an ADR. Add
-   `docs/adr-004-graph-subcommand-in-process-rendering.md` if the team agrees
-   during the Stage D review; otherwise add a Decision log entry here and link
-   from the design document. (Default: write the ADR.)
+   `docs/adrs/adr-0004-render-the-graph-subcommand-in-process.md` if the team
+   agrees during the Stage D review; otherwise add a Decision log entry here
+   and link from the design document. (Default: write the ADR.)
 
 6. Add BDD scenarios under `tests/features/cli.feature` and a new
    `tests/features/graph.feature` covering:
@@ -910,8 +910,8 @@ continue to read `GraphView` only.
 
 [graph-view-mod]: ../../src/graph_view/mod.rs
 [graph-view-dot]: ../../src/graph_view/render_dot.rs
-[graph-view-html]: ../../src/graph_view/render_html/mod.rs
-[graph-view-html-tests]: ../../src/graph_view/render_html/tests.rs
+[graph-view-html]: ../../src/graph_view/render/html/mod.rs
+[graph-view-html-tests]: ../../src/graph_view/render/html/tests.rs
 [graph-view-tests]: ../../src/graph_view/tests.rs
 
 ## Concrete steps
@@ -1186,7 +1186,7 @@ pub struct GraphArgs {
 }
 ```
 
-End of Stage C — `src/graph_view/render_html/` module tree:
+End of Stage C — `src/graph_view/render/html/` module tree:
 
 ```rust
 use std::sync::Arc;
@@ -1219,7 +1219,7 @@ These are signposted here so the agent does not need to rediscover them.
   pipeline overview.
 - [`docs/netsuke-cli-design-document.md`](../netsuke-cli-design-document.md)
   — CLI contract, especially the `--html`/`--json` split.
-- [ADR-003: agent-consistent human-first CLI][adr-003] — CLI doctrine.
+- [ADR-0046: agent-consistent human-first CLI][ADR-0046] — CLI doctrine.
 - [OrthoConfig users guide][ortho-guide] — layered configuration;
   relevant for understanding why `--output` and `--html` stay out of
   OrthoConfig.
@@ -1252,7 +1252,7 @@ Skills the agent should load when working on this plan:
 - `nextest` if the test suite is run under cargo-nextest in CI.
 - `execplans` for ongoing maintenance of this document.
 
-[adr-003]: ../adr-003-agent-consistent-human-first-cli.md
+[ADR-0046]: ../adrs/adr-0046-agent-consistent-human-first-cli.md
 [file-io]: ../../src/runner/process/file_io.rs
 [tool-tests]: ../../tests/runner_tool_subcommands_tests.rs
 [l10n-keys]: ../../src/localization/keys.rs

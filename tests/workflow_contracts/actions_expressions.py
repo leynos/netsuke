@@ -24,6 +24,16 @@ import typing as typ
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
+from actions_expression_evaluator import (
+    ExpressionIssue as ExpressionIssue,
+)
+from actions_expression_evaluator import (
+    UnsupportedExpressionError as UnsupportedExpressionError,
+)
+from actions_expression_evaluator import (
+    evaluate_expression as evaluate_expression,
+)
+
 #: The characters that open a string literal, matched by the same character.
 _QUOTES: typ.Final[str] = "'\""
 
@@ -118,14 +128,6 @@ def top_level_conjuncts(expression: str) -> list[str]:
     return [expression[start:end].strip() for start, end in bounds]
 
 
-class UnsupportedExpressionError(ValueError):
-    """Raised when an expression leaves the grammar the evaluator models.
-
-    An evaluator that answered False outside its grammar would let a guard it
-    cannot read pass as one that never runs, so it refuses instead.
-    """
-
-
 #: One comparison of a context field against a quoted literal.
 _COMPARISON = re.compile(
     r"^(?P<context>env|github|steps)\.(?P<field>"
@@ -180,11 +182,11 @@ def _compare(clause: str, contexts: cabc.Mapping[str, cabc.Mapping[str, str]]) -
     """Evaluate one comparison clause, refusing anything else."""
     match = _COMPARISON.fullmatch(clause)
     if match is None:
-        raise UnsupportedExpressionError(clause)
+        raise UnsupportedExpressionError(ExpressionIssue.UNPARSABLE_SYNTAX, clause)
     # A step output is named `<id>.outputs.<name>`, and only a step output is;
     # an `env` or `github` field with that shape is not a comparison modelled.
     if (match["context"] == "steps") != (".outputs." in match["field"]):
-        raise UnsupportedExpressionError(clause)
+        raise UnsupportedExpressionError(ExpressionIssue.UNSUPPORTED_COMPARISON, clause)
     value = contexts.get(match["context"], {}).get(match["field"], "")
     equal = value == match["literal"]
     return equal if match["operator"] == "==" else not equal

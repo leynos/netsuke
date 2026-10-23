@@ -14,11 +14,12 @@
 - **Primary audience:** Netsuke developers implementing `netsuke test`, and
   reviewers assessing the architecture.
 - **Governing documents:**
-  [RFC 0007](rfcs/0007-netsukefile-testing-framework.md); [netsuke-design.md](netsuke-design.md)
-  for the compiler pipeline; [ADR-008](adr-008-environment-seam-taxonomy.md)
-  for environment seams;
-  [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) for filesystem
-  capability scoping. Accepted ADRs take precedence over this document.
+  [RFC 0007](rfcs/rfc-0007-netsukefile-testing-framework.md); [netsuke-design.md](netsuke-design.md)
+  for the compiler pipeline;
+  [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md) for environment seams;
+  [ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md)
+  for filesystem capability scoping. Accepted ADRs take precedence over this
+  document.
 
 ## 1. Constraints
 
@@ -31,7 +32,7 @@ Non-negotiable constraints the rest of the document assumes:
 - **C2 — no ambient mutation.** The runner must not mutate the process
   environment, the project root, or global state. All test I/O happens inside
   per-case `cap-std` sandboxes; all environment values flow through injected
-  readers per ADR-008.
+  readers per ADR-0008.
 - **C3 — no execution.** No action in the first version spawns Ninja, build
   commands, or fixture shell commands. The stdlib command helpers are disabled
   under test (§5.5). When the deferred `execute` action does arrive it should
@@ -167,7 +168,7 @@ have invented:
   template for the "unavailable under test" messages in §5.5; the test mode
   reuses the mechanism with its own message keys rather than intercepting
   MiniJinja's unknown-function error.
-- `disabled_env_reader` (`src/manifest/env_reader.rs:79`) already provides
+- `disabled_env_reader` (`src/manifest/env/reader.rs:115`) already provides
   a reader that refuses every lookup. The test reader is that reader with the
   case's declared variables layered over it (§5.1).
 - `src/manifest/query.rs` is the precedent module for a capability-scoped
@@ -205,7 +206,7 @@ like `Full`, matching the existing constructors in `parse_with_config.rs` and
 cheap to move.
 
 The structure is named `TemplateOverlays`, not `EnvOverlays`: in this codebase
-"env" means the process environment (ADR-008, `EnvReader`), and these overlays
+"env" means the process environment (ADR-0008, `EnvReader`), and these overlays
 substitute callables in the MiniJinja _template_ environment. The clock
 deliberately does not appear here — it has exactly one owner, `StdlibConfig`
 (§5.2). `on_stage` keeps the existing `&mut dyn FnMut` shape from
@@ -248,11 +249,11 @@ surface that can hold shape while internal IR evolves.
 
 ## 5. Injection seams
 
-Each seam follows the ADR-008 taxonomy; two exist, two are new.
+Each seam follows the ADR-0008 taxonomy; two exist, two are new.
 
 ### 5.1. Environment (existing)
 
-`EnvReader` (`src/manifest/env_reader.rs:56`) is an
+`EnvReader` (`src/manifest/env/reader.rs:59`) is an
 `Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + Sync>`. The runner
 builds one from the case's `given.env` map: declared names return their values,
 `unset` names and everything else return `EnvReadError::NotPresent`. The host
@@ -268,13 +269,14 @@ shape (an `Arc` closure, because MiniJinja registration requires `Send + Sync`):
 pub type ClockProvider = Arc<dyn Fn() -> OffsetDateTime + Send + Sync>;
 ```
 
-It lives in `src/stdlib/time/clock.rs` with `system_clock()`, the production
-adapter wrapping `OffsetDateTime::now_utc`, and `fixed_clock(instant)`, the
-deterministic adapter. The seam is held in `StdlibConfig` alongside the existing
-`path_override` and `home_directory` knobs — the clock's single owner — and
-`with_clock` is the injection point; `register_functions` captures the provider
-when it installs `now()`, so each evaluation reads the provider again, and no
-provider-less call path can bypass it.
+It lives in `src/stdlib/time/clock/mod.rs` with `system_clock()`, the
+production adapter wrapping `OffsetDateTime::now_utc`, and
+`fixed_clock(instant)`, the deterministic adapter. The seam is held in
+`StdlibConfig` alongside the existing `path_override` and `home_directory`
+knobs — the clock's single owner — and `with_clock` is the injection point;
+`register_functions` captures the provider when it installs `now()`, so each
+evaluation reads the provider again, and no provider-less call path can bypass
+it.
 
 `StdlibConfig` stores the provider in a private `WallClock` container, a
 mechanical addition this design did not name. It confines a handwritten `Debug`
@@ -353,8 +355,8 @@ pretend otherwise. Two filesystem helpers bypass it today:
   `glob::expand_glob(&pattern)`, which takes no workspace root. Its matcher
   traverses ambiently, and the capability it opens is rooted at the pattern's
   literal prefix — `.` for a relative pattern, meaning the process working
-  directory. ADR-010 records the ambient traversal as an accepted limitation of
-  the build path.
+  directory. ADR-0010 records the ambient traversal as an accepted limitation
+  of the build path.
 - File tests (`dir`, `file`, `symlink`, and the rest) reach
   `path::file_type_matches`, whose `parent_dir` helper calls
   `Dir::open_ambient_dir(.., ambient_authority())`. `register_file_tests` never
@@ -367,7 +369,7 @@ registration therefore supplies sandbox-rooted adapters for both helpers:
 `glob()` resolves relative patterns against the case sandbox `Dir`, and the
 file tests resolve their paths through the same handle, rejecting escapes
 rather than falling back to ambient authority. These adapters are test-mode
-components, not changes to the build path's behaviour, so ADR-010's accepted
+components, not changes to the build path's behaviour, so ADR-0010's accepted
 limitation stands for builds while tests get the stronger guarantee they
 require.
 
@@ -539,7 +541,7 @@ fixtures asserts both the setup and the teardown sequence. Each case owns one
 sandbox: a temporary directory opened as a `cap-std` `Dir`, within which
 `tmpdir`, `mkdir`, `write`, `copy`, and `remove` operate by relative path.
 Absolute paths and `..` traversal are rejected at action-evaluation time,
-keeping fixtures inside the capability boundary that ADR-010 established for
+keeping fixtures inside the capability boundary that ADR-0010 established for
 globbing.
 
 Subject-manifest paths pass through the same boundary before the loader sees
@@ -594,7 +596,7 @@ compositions of public library functions:
 - `load_manifest` → `manifest::from_str_named`-equivalent entry with
   `ManifestLoadOptions` (§4.3);
 - `build_graph` → `BuildGraph::from_manifest`
-  (`src/ir/from_manifest.rs:49`) over the loaded manifest;
+  (`src/ir/from_manifest/mod.rs:49`) over the loaded manifest;
 - `generate_ninja` → `ninja_gen::generate` over the built graph.
 
 `BuildGraph::from_manifest` lowers path placeholders for
@@ -771,8 +773,8 @@ zombies survive the run.
 
 ## 10. CLI integration
 
-`src/cli/parser.rs` gains `Commands::Test(TestArgs)` with the flags from the UX
-design §12. Like `GraphArgs`, the purely per-invocation flags are
+`src/cli/parser/mod.rs` gains `Commands::Test(TestArgs)` with the flags from
+the UX design §12. Like `GraphArgs`, the purely per-invocation flags are
 `#[serde(skip)]`ed out of OrthoConfig layering; candidates for config-file
 defaults (`jobs`, display policy) follow the existing precedence rules.
 `src/runner/dispatch.rs` routes the variant to `testing::run`, which owns
@@ -931,7 +933,7 @@ Existing modules touched: `src/manifest/mod.rs` (options entry point,
 (test-mode loader entry beside the query entry), `src/stdlib/register.rs`
 (test-mode registration), `src/stdlib/time/` (clock seam), `src/stdlib/config/`
 (clock in `StdlibConfig`), `src/ast/mod.rs` (optional `tests` field),
-`src/cli/parser.rs` and `src/runner/dispatch.rs` (command wiring),
+`src/cli/parser/mod.rs` and `src/runner/dispatch.rs` (command wiring),
 `src/localization/keys.rs` (strings). Errors are semantic `thiserror` enums per
 module, composed into the runner's reporting. The supervisor reuses the
 `wait_timeout`-then-kill-then-reap pattern already proven in
@@ -975,12 +977,12 @@ reconciled:
 
 - The [UX design](netsuke-test-framework-ux-design.md), which is normative
   for dialect semantics; implementation detail here must not contradict it.
-- [RFC 0007](rfcs/0007-netsukefile-testing-framework.md), which positions
+- [RFC 0007](rfcs/rfc-0007-netsukefile-testing-framework.md), which positions
   and scopes the feature.
-- [ADR-008](adr-008-environment-seam-taxonomy.md), which governs the
+- [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md), which governs the
   environment injection seams §5 relies on.
-- [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md), which
-  governs the glob capability scoping the mock engine and sandbox rely on.
+- [ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md),
+  which governs the glob capability scoping the mock engine and sandbox rely on.
 - [Roadmap phase 7](roadmap.md), which tracks the phasing above (§14) as
   numbered deliverables.
 

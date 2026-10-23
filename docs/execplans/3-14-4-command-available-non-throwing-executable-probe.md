@@ -49,9 +49,9 @@ triggers escalation, not a workaround.
 - Keep manifest-time evaluation strictly pre-AST. `command_available` may only
   be evaluated by the existing `expand_foreach` pipeline in
   `src/manifest/expand.rs`; no AST, IR, Ninja, or runtime layer may inspect the
-  predicate or its options. ADR-003
-  (`docs/adr-003-actions-foreach-when-scope.md`) already pins this; do not
-  weaken it.
+  predicate or its options. ADR-0003
+  (`docs/adrs/adr-0003-keep-foreach-and-when-scoped-to-manifest-targets.md`)
+  already pins this; do not weaken it.
 - Hexagonal boundary: the public registration site
   (`src/stdlib/which/mod.rs::register`) is the only place that translates a
   resolver result into a `minijinja::Value` or `minijinja::Error`. The typed
@@ -559,17 +559,17 @@ Update documentation only after the implementation is green:
   `trace_span!("stdlib.<helper>.resolve", ...)` instrumentation are the
   template for future stdlib helpers such as `env` (roadmap 3.14.8) and
   `shell_join`; mirror the `From` impl and the absence-coercion helper."
-- New ADR `docs/adr-004-typed-which-resolve-error.md` (or the next free ADR
-  number; check `docs/contents.md` and `docs/adr-*` to avoid collision)
-  following the template at `docs/documentation-style-guide.md`. Capture: the
-  problem (string-matched error detection at the registration boundary), the
-  decision (private `ResolveError` enum in the stdlib `which` module), the
-  rationale (hexagonal seam, removes accidental coupling to message text,
-  mirrors the Rust `which` crate's typed error), the consequences (all resolver
-  callsites use pattern matching; the `From` impl preserves the on-the-wire
-  diagnostic codes), and the alternatives rejected (keep string match; promote
-  `ResolveError` to the public API; introduce a separate resolver for the
-  predicate).
+- New ADR `docs/adrs/adr-0005-use-a-typed-which-resolver-error.md` (or the next
+  free ADR number; check `docs/contents.md` and `docs/adrs/adr-*` to avoid
+  collision) following the template at `docs/documentation-style-guide.md`.
+  Capture: the problem (string-matched error detection at the registration
+  boundary), the decision (private `ResolveError` enum in the stdlib `which`
+  module), the rationale (hexagonal seam, removes accidental coupling to
+  message text, mirrors the Rust `which` crate's typed error), the consequences
+  (all resolver callsites use pattern matching; the `From` impl preserves the
+  on-the-wire diagnostic codes), and the alternatives rejected (keep string
+  match; promote `ResolveError` to the public API; introduce a separate
+  resolver for the predicate).
 - `docs/contents.md`: index the new ADR. If `contents.md` already references
   the affected guides (`users-guide.md`, `netsuke-design.md`,
   `developers-guide.md`) by subsection, update those entries to mention the new
@@ -674,8 +674,8 @@ Acceptance behaviour a reviewer can verify:
 4. `rg "NOT_FOUND_CODE" src/stdlib/which/` returns only the `From`
    implementation that constructs the user-facing diagnostic.
 5. `make check-fmt`, `make lint`, and `make test` succeed.
-6. `docs/adr-004-typed-which-resolve-error.md` exists and is linked from
-   `docs/contents.md` and `docs/netsuke-design.md §4.5`.
+6. `docs/adrs/adr-0005-use-a-typed-which-resolver-error.md` exists and is
+   linked from `docs/contents.md` and `docs/netsuke-design.md §4.5`.
 7. `docs/roadmap.md §3.14.4` is marked `[x]`.
 
 ## Idempotence and recovery
@@ -854,7 +854,7 @@ implementation.
   `/tmp/coderabbit-milestone2-final-netsuke-3-14-4-command-available-non-throwing-executable-probe.out`;
   CodeRabbit reported `findings: 0`.
 - [x] (2026-06-12T00:28:43Z) Milestone 3 documentation update drafted. Added
-  ADR-005, expanded the user guide, design document, and developers' guide,
+  ADR-0005, expanded the user guide, design document, and developers' guide,
   indexed the ADR in `docs/contents.md`, and marked roadmap item 3.14.4
   complete without changing adjacent roadmap items.
 - [x] (2026-06-12T00:29:42Z) Ran Milestone 3 documentation validation.
@@ -1018,7 +1018,7 @@ localized diagnostics.
 
 The user-facing contract is documented in `docs/users-guide.md` and
 `docs/netsuke-design.md`, with the internal typed-error decision captured in
-ADR-005 and indexed from `docs/contents.md`. `docs/roadmap.md` marks 3.14.4
+ADR-0005 and indexed from `docs/contents.md`. `docs/roadmap.md` marks 3.14.4
 complete, and this execplan status now matches that checkbox.
 
 Validation covered unit, behavioural, property, snapshot, lint, typecheck,

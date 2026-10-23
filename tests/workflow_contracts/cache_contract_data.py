@@ -38,11 +38,9 @@ CACHE_RESTORE = f"actions/cache/restore@{CACHE_PIN}"
 CACHE_SAVE = f"actions/cache/save@{CACHE_PIN}"
 EXTERNAL_CACHE_PROVIDER = "external"
 SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust@"
-SCCACHE_CREDENTIALS_ACTION = "./.github/actions/sccache-gha-credentials"
 #: Local actions that own no cache, so a job may call them alongside its lane
 #: cache action without owning two.
 NON_CACHE_ACTIONS = (
-    SCCACHE_CREDENTIALS_ACTION,
     "./.github/actions/install-mdtablefix",
     "./.github/actions/memory-sampler",
 )
@@ -93,20 +91,37 @@ UBICLOUD_CACHE_SOURCES = (
 )
 GITHUB_CACHE_SOURCES = ((ACTION_DIR / "windows-gate-cache" / "action.yml", None),)
 
-#: Ubicloud lanes whose sccache server must be credentialed before it starts.
-#: A `run` step on Ubicloud cannot see `ACTIONS_RESULTS_URL` or
-#: `ACTIONS_RUNTIME_TOKEN`, so a server started first stays on local disk for
-#: the whole job and reports zero compile requests.
-SCCACHE_CREDENTIAL_JOBS = (
-    ("ci.yml", "build-test"),
-    ("netsukefile-test.yml", "netsukefile"),
-    ("coverage-main.yml", "coverage-upload"),
+#: Ubicloud lanes whose compiler cache belongs to `setup-rust`, mapped to the
+#: `expect-cache` value each must pass. The action names the wrapper, starts
+#: and zeroes the server, and selects the backend from the runner (ADR 0005 in
+#: leynos/shared-actions): Ubicloud's cache proxy here, with the credentials
+#: exported and the v2 switch cleared by the action itself. A lane with a fork
+#: arm passes `any`, because a fork's run lands on a GitHub-hosted runner where
+#: the action picks local disk; a lane that runs only on Ubicloud passes
+#: `ubicloud`, so a missing proxy fails the job instead of compiling cold.
+SETUP_RUST_SCCACHE_JOBS: dict[tuple[str, str], str] = {
+    ("ci.yml", "build-test"): "any",
+    ("netsukefile-test.yml", "netsukefile"): "any",
+    ("coverage-main.yml", "coverage-upload"): "ubicloud",
+}
+
+#: Variables that configured the retired hand-rolled Linux cache. A caller's
+#: value wins over `setup-rust`'s choice, so any of these left on a lane in
+#: `SETUP_RUST_SCCACHE_JOBS` silently overrides the runner-aware backend.
+HAND_ROLLED_SCCACHE_VARIABLES = (
+    "RUSTC_WRAPPER",
+    "SCCACHE_DIR",
+    "SCCACHE_CACHE_SIZE",
+    "SCCACHE_GHA_ENABLED",
 )
 
 #: GitHub-hosted Windows lanes use a workspace directory instead of the
 #: GitHub Actions backend: that backend rate-limited every write there. They
 #: therefore need no Actions cache credentials, and must not set the flag that
-#: would re-enable the backend.
+#: would re-enable the backend. They keep the hand-rolled local arm: their
+#: gate caches own the Cargo paths (`cache-provider: external`), and
+#: `setup-rust` owns a hosted runner's sccache directory only when it owns the
+#: job's other caches too.
 SCCACHE_LOCAL_DIR_JOBS = (
     ("ci-windows.yml", "lint-windows"),
     ("ci-windows.yml", "build-test-windows"),
@@ -149,26 +164,18 @@ TARGET_ARCHIVE_OWNERS = (
     ("build-and-package.yml", "build", "Build release binary"),
 )
 
-#: The one lane that compiles Rust without a compiler cache, for two
-#: independent reasons. On Windows sccache re-spawns rustc with the aarch64
-#: target's `--extern` and `-L` list and exceeds the operating system's
-#: command-line limit, which nothing here can shorten. Elsewhere the lane's
-#: server would start inside the nested setup action, whose sccache action
-#: re-exports GitHub's results address and so sends writes past Ubicloud's
-#: proxy. Release builds are infrequent, so the lane runs uncached rather than
-#: unreliably.
+#: The one lane that compiles Rust without a compiler cache. On Windows sccache
+#: re-spawns rustc with the aarch64 target's `--extern` and `-L` list and
+#: exceeds the operating system's command-line limit, which nothing here can
+#: shorten. Elsewhere the nested `setup-rust`, at the gate's pin, would select
+#: the backend correctly, so the reason is cost: release builds are infrequent,
+#: and a cache read that rarely would not pay back its setup.
 SCCACHE_EXEMPT_LANE = ("build-and-package.yml", "build")
 
-#: Jobs that compile Rust and must therefore reach the compiler cache.
-
-SCCACHE_WRAPPER_JOBS = (
-    ("ci.yml", "build-test"),
-    ("ci-windows.yml", "lint-windows"),
-    ("ci-windows.yml", "build-test-windows"),
-    ("netsukefile-test.yml", "netsukefile"),
-    ("coverage-main.yml", "coverage-upload"),
-    ("release.yml", "windows-native-recipe-smoke"),
-)
+#: Jobs that compile Rust through a compiler cache they wire themselves: the
+#: Windows lanes above. The Linux lanes reach theirs through `setup-rust`,
+#: which `SETUP_RUST_SCCACHE_JOBS` holds.
+SCCACHE_WRAPPER_JOBS = SCCACHE_LOCAL_DIR_JOBS
 
 #: Every job whose `Setup Rust` step must delegate cache ownership to the
 #: workflow. `setup-rust` archives `target/${BUILD_PROFILE}` and enables a

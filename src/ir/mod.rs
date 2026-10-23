@@ -8,11 +8,14 @@
 //!
 //! ```
 //! use netsuke::ir::{Action, BuildGraph, BuildEdge};
-//! use netsuke::ast::Recipe;
+//! use netsuke::ast::{CommandIsolation, Recipe};
 //! use camino::Utf8PathBuf;
 //!
 //! let action = Action {
-//!     recipe: Recipe::Command { command: "echo hi".into() },
+//!     recipe: Recipe::Command {
+//!         command: "echo hi".into(),
+//!         isolation: CommandIsolation::Shared,
+//!     },
 //!     description: None,
 //!     depfile: None,
 //!     deps_format: None,

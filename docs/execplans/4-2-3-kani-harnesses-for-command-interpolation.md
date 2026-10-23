@@ -8,7 +8,7 @@ be kept up to date as work proceeds.
 
 Status: COMPLETE
 
-Revision 2.30. See `Revision note` at the foot of this document.
+Revision 2.32. See `Revision note` at the foot of this document.
 
 ## Purpose / big picture
 
@@ -87,12 +87,15 @@ The run completed with all 15 harnesses reporting `VERIFICATION:- SUCCESSFUL`
 and zero `FAILED` lines, resolving the Revision 2.24 exit-124 shortfall: the
 earlier failure was the wrapper's five-minute cap under sequential scheduling,
 not a working-tree defect, and the supported `--jobs 4 --output-format terse`
-pair clears it. That cap did not in fact bind. `timeout` signals only its
-direct child, and `--scope` detaches the payload into its own cgroup, so the
-prefix capped the launcher while the suite ran to completion under it. It has
-been replaced by `-p RuntimeMaxSec=` on the scope, which systemd enforces
-against the cgroup and which kills the whole process tree. The two figures to
-cite are therefore the scope's own lifetime, 5m03s, and CI's
+pair clears it. Revision 2.25 reached for a `timeout` prefix as the cap, and
+that choice did not in fact bind. The prefix itself reaches the payload — GNU
+`timeout` signals the supervised command's process group, and under `--scope`
+the payload's parent is the `timeout` process itself — but the prefix's
+`--kill-after=` grace is added to its deadline, so the bound it enforces is the
+sum of the two rather than the nominal figure. It has been replaced by
+`-p RuntimeMaxSec=` and `-p TimeoutStopSec=20s` on the scope, which systemd
+enforces against the cgroup and which stops the whole process tree. The two
+figures to cite are therefore the scope's own lifetime, 5m03s, and CI's
 `Run Kani harnesses` step, 5m19s in `CI` run `35647353965` on `99cbdf32`. Log:
 `/tmp/kani-full-<branch>.out`, where `<branch>` is the current branch name as
 reported by `git branch --show-current`.
@@ -165,7 +168,7 @@ ancestor of the current head nor its tree.
 `shell_variable_prefix_does_not_match`, `marker_token_match_is_exact`,
 `scanner_agrees_with_independent_specification`,
 `substituted_odd_backticks_are_rejected`, and
-`guard_uses_the_substituted_command`. `ADR-004` and
+`guard_uses_the_substituted_command`. `ADR-0047` and
 `docs/formal-verification-methods-in-netsuke.md` both exist and state the
 achieved bounds and the Proptest hand-off.
 
@@ -335,7 +338,7 @@ you must follow:
 - **Per-harness attributes.** Existing harnesses use `#[kani::solver(kissat)]`
   and `#[kani::unwind(N)]`. Add both to every new harness; kissat is
   substantially faster than the default solver on this workload.
-- **Harnesses drive production code.** ADR-004 forbids re-implementing the
+- **Harnesses drive production code.** ADR-0047 forbids re-implementing the
   logic under proof inside a harness. A harness-local *oracle* for a
   side-condition is a different thing and is permitted where this plan says so
   explicitly; see `Decision log`.
@@ -344,11 +347,11 @@ you must follow:
   realistic fault that the harness must reject.
 - **Resource capping.** Roadmap 4.2.2 established that uncapped local Kani runs
   OOM-killed developer machines. Every Kani command runs inside the
-  `systemd-run` wrapper in `Concrete steps`, whose `RuntimeMaxSec` property is
-  what enforces the cap, with the Kani `LD_LIBRARY_PATH` set. Without that
-  `LD_LIBRARY_PATH`, `cargo kani` and Cargo build scripts fail to load
-  `libLLVM` with an opaque linker error. This is the single most likely place
-  to get stuck.
+  `systemd-run` wrapper in `Concrete steps`, whose `RuntimeMaxSec` and
+  `TimeoutStopSec` properties are what enforce the cap, with the Kani
+  `LD_LIBRARY_PATH` set. Without that `LD_LIBRARY_PATH`, `cargo kani` and Cargo
+  build scripts fail to load `libLLVM` with an opaque linker error. This is the
+  single most likely place to get stuck.
 
 The pre-existing inventory is thirteen harnesses across
 `src/ir/from_manifest_verification.rs` (four) and
@@ -410,8 +413,8 @@ Read these before starting. They are not optional background.
 Repository documents:
 
 - `AGENTS.md` — mandatory gates, file-size cap, commit style, spelling policy.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — the governing decision
-  on Kani bounds and production-owned kernels.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  — the governing decision on Kani bounds and production-owned kernels.
 - `docs/developers-guide.md`, sections "Command and recipe lowering" and
   "Formal-verification tooling".
 - `docs/formal-verification-methods-in-netsuke.md` — the design rationale.
@@ -444,7 +447,8 @@ There is no Terms of Reference document in this repository. Upstream artefacts:
   `RM-4.2.3.a` through `RM-4.2.3.d`.
 - `docs/formal-verification-methods-in-netsuke.md`, section "Kani for command
   interpolation" — the design basis, `FV-CMD`.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` — `ADR-004`.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  — `ADR-0047`.
 
 Trace links:
 
@@ -454,7 +458,8 @@ RM-4.2.3.a -> FV-CMD -> EP-M2 -> ir::cmd_interpolate::verification::marker_token
 RM-4.2.3.b -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::scanner_agrees_with_independent_specification
 RM-4.2.3.c -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::substituted_odd_backticks_are_rejected
 RM-4.2.3.d -> FV-CMD -> EP-M5 -> ir::cmd_interpolate::property_tests::guard_uses_the_substituted_command
-ADR-004    ->           EP-M0 -> docs/adr-004-bound-kani-ir-harnesses-to-small-n.md (4.2.3 extension)
+ADR-0047    ->           EP-M0 -> docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md
+    (4.2.3 extension)
 ```
 
 Roadmap item 4.4.1 declares `Requires 4.2.3`. This plan must therefore leave
@@ -468,8 +473,8 @@ writing the user-facing README section is 4.4.1's job.
    same strings. No pre-existing test may be edited to accommodate the change.
    If one needs editing, that is evidence of a behaviour change: stop.
 2. **No public API widening.** `netsuke::ir`'s public surface must not grow.
-   `ADR-004` Option D rejected verification ports on that surface. New items are
-   `pub(super)` at widest.
+   `ADR-0047` Option D rejected verification ports on that surface. New items
+   are `pub(super)` at widest.
 3. **No new dependencies.** `Cargo.toml` must not gain an entry.
 4. **No capacity limits in production.** Do not introduce a fixed-capacity
    buffer, a maximum placeholder count, or any other new bound into the
@@ -556,7 +561,7 @@ Stop and escalate. Do not work around these.
   Severity: high. Likelihood: high. `interpolate_command_with_bindings` calls
   it unconditionally, so no alphabet restriction avoids it — restriction makes
   `shlex` *total*, not absent, and CBMC still executes its state machine and
-  builds a symbolic `Vec<String>`. `ADR-004` records a `Utf8PathBuf` proof
+  builds a symbolic `Vec<String>`. `ADR-0047` records a `Utf8PathBuf` proof
   hitting the 8 GiB cap at N=3. Mitigation: only two harnesses touch
   `interpolate_command_with_bindings`, and both target a window of 6 to 8
   characters — enough to exhibit the specific fault each is designed to catch
@@ -569,7 +574,7 @@ Stop and escalate. Do not work around these.
   proof needs only an eight-character window with a symbolic position, while
   the marker proof uses a 32-character window containing the real constants.
   The full scanner and guard retain the genuine resource bound, so EP-M5 hands
-  their residual range to Proptest, exactly as `ADR-004` did for roadmap
+  their residual range to Proptest, exactly as `ADR-0047` did for roadmap
   4.2.1's unreachable 10-node bound.
 
 - **Marker-form placeholders fall outside every plausible small alphabet.**
@@ -604,8 +609,8 @@ Stop and escalate. Do not work around these.
   `$out`, `$ins`, and `$outs`. Changing this behaviour is a behaviour change
   and out of scope here (Constraint 1).
 
-- **`ADR-004` numbering collision.** Severity: low. Likelihood: certain.
-  Three files already share the `adr-004` prefix; this is a known accepted
+- **`ADR-0047` numbering collision.** Severity: low. Likelihood: certain.
+  Three files already share the `ADR-0047` prefix; this is a known accepted
   collision. Extend the existing Kani ADR rather than minting a number.
 
 ## Verification plan
@@ -917,7 +922,7 @@ patch or an explicitly justified exemption.
   the adapter harness should gain a patch is a question for the maintainer;
   raise it, do not silently fix roadmap 4.2.2's work here.
 
-### Residual gaps (to be recorded in `ADR-004` and the retrospective)
+### Residual gaps (to be recorded in `ADR-0047` and the retrospective)
 
 - Strings longer than the EP-M0 bound are covered by Proptest, not proof, for
   `OBL-SPEC`, `OBL-ODD`, and `OBL-GUARD`. `OBL-SHELL` has no such gap for its
@@ -932,7 +937,7 @@ patch or an explicitly justified exemption.
   non-matching `char` identically, so the space representative covers it by
   argument rather than by proof.
 - The path from `BuildGraph::from_manifest` down to this code is covered by
-  existing unit and behavioural tests, consistent with `ADR-004`'s existing
+  existing unit and behavioural tests, consistent with `ADR-0047`'s existing
   limitation for `find_duplicates`.
 
 ## Plan of work
@@ -941,7 +946,7 @@ patch or an explicitly justified exemption.
 
 Read `src/ir/cmd_interpolate/mod.rs`, `substitution.rs`, and `verification.rs`
 end to end, then `src/ir/cycle_verification.rs` and `src/ir/cycle_support.rs`
-for the shape you are copying, then `ADR-004`, then the two Decision log
+for the shape you are copying, then `ADR-0047`, then the two Decision log
 entries in the 4.2.2 execplan covering the resource cap and `LD_LIBRARY_PATH`.
 
 Run EP-M0. Write no harness until you have its measurement table.
@@ -1014,7 +1019,7 @@ the next stage on a failing gate.
   reach, and it is not covered by the maintainer's pre-acceptance. A shortfall
   in the *string-level* bound is different: the maintainer accepted it in
   advance on 2026-08-24, so record the achieved bound and the residual gap in
-  `Decision log`, draft the `ADR-004` extension, and continue to EP-M1 without
+  `Decision log`, draft the `ADR-0047` extension, and continue to EP-M1 without
   setting the plan to `BLOCKED`.
 - **Recovery:** delete the scratch branch.
 - **Compatibility decision:** none; no interface exists yet.
@@ -1063,7 +1068,7 @@ the next stage on a failing gate.
 - **Acceptance evidence:** the scanner and odd-backtick property mutations
   produce named counterexamples; `make test` passes after restoration.
 - **Conformance check:** the independent scanner oracle is structurally
-  different from production scanning and is documented in `ADR-004`.
+  different from production scanning and is documented in `ADR-0047`.
 
 ### EP-M4 — guard placement hand-off
 
@@ -1113,7 +1118,8 @@ the next stage on a failing gate.
     the aspirational 256/8, and name the Proptest hand-off; update the harness
     count in the continuous-integration paragraph that currently says
     "13 harnesses".
-  - `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`: extend Status, Date,
+  - `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`:
+    extend Status, Date,
     Decision outcome, and Known risks with the 4.2.3 bound decision, the
     window-completeness argument, the harness-local oracle policy, and the
     residual gaps. Add this execplan to Related documents.
@@ -1127,7 +1133,7 @@ the next stage on a failing gate.
   `coderabbit review --agent` reports no outstanding concerns; the measured CI
   `Run Kani harnesses` step is within the 12-minute tolerance.
 - **Conformance check:** every trace link resolves to a named, passing artefact;
-  every residual gap is in `ADR-004`; set status to `COMPLETE` only after that
+  every residual gap is in `ADR-0047`; set status to `COMPLETE` only after that
   reconciliation.
 - **Remaining gaps:** roadmap 4.4.1 remains open by design.
 
@@ -1173,7 +1179,7 @@ pure scanning — which is why `OBL-SPEC` proves the scanner and `OBL-ODD` and
 
 Do not introduce traits, ports, adapters, or dependency injection here. The
 `hexagonal-architecture` guidance applies where infrastructure is likely to
-change and multiple delivery mechanisms exist; neither is true. `ADR-004`
+change and multiple delivery mechanisms exist; neither is true. `ADR-0047`
 Option D already rejected verification ports on this surface.
 
 ## Concrete steps
@@ -1199,29 +1205,55 @@ optional: without it `cargo kani` and Cargo build scripts fail to load
 `libLLVM` with an opaque linker error, and that is the most common way to lose
 an hour on this task.
 
-The cap is carried by `-p RuntimeMaxSec=`, which systemd enforces against the
-scope's cgroup, so reaching it stops the whole process tree. Do not reintroduce
-a `timeout` prefix: `timeout` signals only its immediate child, and `--scope`
-detaches the payload into its own cgroup, so a prefix caps the launcher while
-the verifier runs on. `set -o pipefail` is needed because a pipeline's status
-is otherwise `tee`'s, which masks a failing `make`.
+The cap is carried by the pair `-p RuntimeMaxSec=8m` and
+`-p TimeoutStopSec=20s`. `RuntimeMaxSec` is the runtime cap, which systemd
+enforces against the scope's cgroup, so reaching it puts the scope into a
+failure state and starts the stop over the whole process tree; `TimeoutStopSec`
+is the stop grace that follows it, in which systemd sends `SIGTERM` and
+escalates to `SIGKILL` only when the grace expires. The effective bound is
+therefore the sum of the two — 8m20s with these figures. An unpinned stop
+timeout hands that decision to the host default, 90 seconds on the reference
+host, and a payload that ignores `SIGTERM` can then overrun the nominal cap by
+that much: one sleeping for 200 seconds under `RuntimeMaxSec=3s` alone was
+killed at 93 seconds, and at 23 seconds once `TimeoutStopSec=20s` was pinned.
+
+`tee` sits inside the scope, and that is deliberate. The pipeline travels as
+the scope's payload, so the captured file is exactly the output the cap
+governs: a run stopped by `RuntimeMaxSec` leaves a capture that ends where the
+budget ran out, rather than one the scope can no longer reach.
+`set -o pipefail` is set in that same shell, because a pipeline written outside
+the scope cannot carry it in. A pipeline's status is otherwise `tee`'s, zero
+whenever the capture succeeded, so a failing verifier would be masked by a
+successful capture.
+
+Do not reintroduce a `timeout` prefix in place of `RuntimeMaxSec`. The prefix
+does reach the verifier: GNU `timeout` signals the supervised command's process
+group rather than only its immediate child, and under `--scope` the payload's
+parent is the `timeout` process itself, so the two share one. Two other limits
+still make it the worse bound: the `--kill-after=` grace is added to the
+deadline rather than nested inside it, and a descendant that changes its
+process-group membership, by `setsid()` or `setpgid()`, escapes a process-group
+signal altogether, while the scope's cgroup stop does not depend on signal
+propagation. A double fork alone does not escape it: the descendant keeps the
+group it inherited, so the signal still reaches it.
 
 ```bash
-set -o pipefail
 systemd-run \
     --user \
     --scope \
     --expand-environment=no \
     -p RuntimeMaxSec=8m \
+    -p TimeoutStopSec=20s \
     -p CPUQuota=200% \
     -p MemoryMax=8G \
     -p MemorySwapMax=0 \
     -p TasksMax=96 \
     -p IOWeight=20 \
     /usr/bin/nice -n 15 \
-    env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
-    make kani-ir \
-  2>&1 | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out
+    bash -c 'set -o pipefail; \
+      env LD_LIBRARY_PATH="$HOME/.kani/kani-0.67.0/toolchain/lib:$HOME/.kani/kani-0.67.0/lib" \
+      make kani-ir 2>&1 \
+      | tee /tmp/kani-netsuke-4-2-3-kani-harnesses-for-command-interpolation.out'
 ```
 
 To iterate on a single harness, add
@@ -1439,7 +1471,7 @@ outside this local completion boundary and must be reported separately by CI.
 ## Progress
 
 - [x] (2026-08-24) Reconnaissance: `src/ir/cmd_interpolate.rs`,
-  `src/ir/cycle_verification.rs`, `src/ir/cycle_support.rs`, `ADR-004`, the
+  `src/ir/cycle_verification.rs`, `src/ir/cycle_support.rs`, `ADR-0047`, the
   developers' guide formal-verification sections, the roadmap, the CI workflow,
   and the 4.2.2 execplan's operational lessons.
 - [x] (2026-08-24) Confirmed Kani 0.67.0 pin; `bounded_any` and stubbing are
@@ -1525,9 +1557,10 @@ outside this local completion boundary and must be reported separately by CI.
   were valid: CI evidence for `99cbdf32` was recorded once the runs completed,
   two pre-rebase SHAs were replaced by their replayed twins, and the Kani
   wrapper's cap was made to bind — `-p RuntimeMaxSec=8m` on the scope replaces a
-  `timeout` prefix that capped only the launcher `systemd-run` leaves behind.
-  One finding misattributed the `-D warnings` change to `00f48f77`; `2c030fd1`
-  is correct and the text stands.
+  `timeout` prefix whose `--kill-after=` grace was added to its deadline.
+  Revisions 2.31 and 2.32 corrected the mechanism this entry originally stated
+  and completed the reconciliation. One finding misattributed the `-D warnings`
+  change to `00f48f77`; `2c030fd1` is correct and the text stands.
 
 ## Surprises & discoveries
 
@@ -1614,7 +1647,7 @@ and are now marked **accepted**. No decision in this log is outstanding.
 
 - **Decision:** Permit harness-local oracles for side conditions, and a
   harness-local declarative specification for `OBL-SPEC`. **Accepted by the
-  maintainer, 2026-08-24.** **Rationale:** `ADR-004` Option C forbids a
+  maintainer, 2026-08-24.** **Rationale:** `ADR-0047` Option C forbids a
   harness-side model *replacing* a production path, and Option D rejects public
   verification ports. Neither forbids an independently written oracle used as
   the right-hand side of an assertion, which is the standard
@@ -1634,7 +1667,7 @@ and are now marked **accepted**. No decision in this log is outstanding.
   the residual gap, and the Proptest hand-off, and continues. The mechanical
   stop in `Tolerances` still applies if the sigil shape cannot reach a window
   of 8 characters, because that would undermine the plan's premise rather than
-  merely narrow its reach. **Rationale:** `ADR-004` records the identical
+  merely narrow its reach. **Rationale:** `ADR-0047` records the identical
   collision for roadmap 4.2.1, where a stated 10-node bound proved unreachable
   and was resolved by small bounds plus a Proptest hand-off. For the sigil
   contract the bound largely dissolves under AXIOM-WINDOW; for the string-level
@@ -1700,11 +1733,12 @@ and are now marked **accepted**. No decision in this log is outstanding.
   because two consecutive rebases have now moved them and the numbers cannot be
   kept true. **Date/Author:** 2026-08-24, planning agent.
 
-- **Decision:** Extend `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md`
+- **Decision:** Extend
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
   rather than minting a new ADR number. **Rationale:** the same decision — how
   far to bound Kani harnesses and where to hand off — applied to a third
   subject. Roadmap 4.2.2 set the precedent, and three files already share the
-  `adr-004` prefix. **Date/Author:** 2026-08-24, planning agent.
+  `ADR-0047` prefix. **Date/Author:** 2026-08-24, planning agent.
 
 - **Decision:** Continue after the EP-M0 string-level shortfall with only the
   small, allocation-free sigil and marker proofs; discharge scanner, backtick,
@@ -1809,7 +1843,7 @@ superseded by the target branch's marker-only lowering; the post-rebase
 shell-variable and marker proofs establish the active boundary-independent
 matching decisions. The full scanner and guard could not meet the cap even at
 six characters, so the independent Proptest properties cover the 256/8 residual
-range instead. `ADR-004` records that boundary, the local-oracle policy, and
+range instead. `ADR-0047` records that boundary, the local-oracle policy, and
 its limits.
 
 The developers' guide now records the established `$$in` and marker-asymmetry
@@ -2074,7 +2108,7 @@ fresh verdict, so the plan remains `IN PROGRESS`.
 **Revision 2.23 (2026-09-03).** Review repair removes the vacuous command-
 interpolation cfg(kani) wiring test and its copied UI fixtures. The real
 production verification module remains covered by `make kani-ir` in the
-`kani-smoke` workflow. ADR-004 restores its historical 2026-06-23 content and
+`kani-smoke` workflow. ADR-0047 restores its historical 2026-06-23 content and
 records the command-interpolation verification boundary in a dated addendum;
 roadmap item `4.2.3` remains completion evidence. The requested test, format,
 lint, Markdown, documentation-coverage, full-suite, and Kani validations are
@@ -2160,19 +2194,25 @@ third finding read the runtime as inconsistent with the documented
 `timeout --kill-after=20s 5m` prefix, and it was right to. The 2026-09-20 run's
 scope recorded a 303-second lifetime (`21:41:15` started, `21:46:18` "Consumed
 7min 53.192s CPU time"), so the suite completed under a nominally 300-second
-cap. The cause is that `timeout` signals only its direct child while `--scope`
-detaches the payload into its own cgroup, so the prefix capped the launcher,
-not the work; the pipeline's status was `tee`'s besides. The wrapper now sets
-`-p RuntimeMaxSec=8m` on the scope, which systemd enforces against the cgroup
-and which kills the whole process tree, and the inert prefix is gone. This
-plan's `5m03s` wall-clock claim is withdrawn in favour of the scope's lifetime
-and CI's directly measured `Run Kani harnesses` step, and a stale
-`Makefile line 17` citation for `KANI_FLAGS` is corrected to line 44.
+cap. The mechanism this revision first gave for that overrun was wrong, and
+Revisions 2.31 and 2.32 correct it: the prefix did reach the payload, but its
+`--kill-after=` grace is added to the prefix's deadline rather than nested
+inside it, so the bound it enforced was `5m + 20s` rather than 5m. The
+pipeline's status was `tee`'s besides. The wrapper now sets
+`-p RuntimeMaxSec=8m` and `-p TimeoutStopSec=20s` on the scope, which systemd
+enforces against the cgroup and which stops the whole process tree, and the
+prefix is gone. This plan's `5m03s` wall-clock claim is withdrawn in favour of
+the scope's lifetime and CI's directly measured `Run Kani harnesses` step, and
+a stale `Makefile line 17` citation for `KANI_FLAGS` is corrected to line 44.
 `set -o pipefail` is now part of the documented invocation, so a failing `make`
-is no longer masked by the pipeline's `tee`. The same inert wrapper is
+is no longer masked by the pipeline's `tee`. The same incomplete wrapper was
 prescribed by
-`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`; it belongs
-to roadmap 4.2.2 and is raised rather than edited, per `OBL-PATCHES`, as #765.
+`docs/execplans/4-2-2-kani-harnesses-for-cycle-canonicalization.md`; it
+belonged to roadmap 4.2.2 and was raised rather than edited, per `OBL-PATCHES`,
+as #765. The residue that escalation left in this file — the unpinned stop
+timeout and the out-of-scope `tee` — was corrected by Revision 2.31, which
+landed from PR #768 as `c298a643`; the same correction reached the 4.2.2 plan
+in that merge. Revision 2.32 below corrects a separate claim.
 
 The fourth finding claimed that `-D warnings` entered `kani-full` via
 `00f48f77` rather than `2c030fd1`; that is false and the text is unchanged.
@@ -2184,3 +2224,98 @@ finding's `-S KANI_RUSTFLAGS` query finds only `00f48f77` because that is when
 the flag was factored into a named variable; the mechanism predates the
 factoring and is behaviourally unchanged by it. The completion state is
 unchanged: header `COMPLETE`, roadmap `[x]`.
+
+**Revision 2.31 (2026-09-25, issue #765).** The wrapper in `Concrete steps` was
+brought into agreement with the corrected command in roadmap 4.2.2, and the
+mechanism Revision 2.30 gave for the 2026-09-20 overrun was corrected. That
+mechanism — that `timeout` signals only its direct child while `--scope`
+detaches the payload into its own cgroup, so the prefix capped the launcher
+rather than the work — does not reproduce on the reference host (systemd 257).
+Probing the topology shows the payload's parent is the `timeout` process itself
+and the two share one process group, and `timeout -s TERM 3 bash -c "sleep 60"`
+inside a scope returns at 3.03s with status 124, so the prefix does reach the
+verifier. The genuine defects the correction removes are narrower: the
+`--kill-after=` grace is added to the prefix's deadline rather than nested
+inside it, so a payload that ignores the first signal is bounded by `5m + 20s`;
+and a descendant that leaves the process group by `setsid` or a double fork
+escapes a process-group signal altogether, while the scope's cgroup stop does
+not depend on signal propagation. The command now adds `-p TimeoutStopSec=20s`
+beside `-p RuntimeMaxSec=8m`, moves `tee` inside the scope by giving `bash -c`
+the whole pipeline, and sets `pipefail` in that same shell. The effective bound
+is the sum of the pair, 8m20s, and that arithmetic is now stated rather than
+implied: an unpinned stop timeout reproduced a 93-second overshoot on a
+3-second cap against the host's 90-second default, against 23 seconds once the
+grace was pinned. Three dependent passages were reconciled to the new form —
+the Progress account of the exit-124 shortfall, the `Resource capping`
+constraint, and the 2026-09-21 progress entry — and the `OBL-PATCHES`
+escalation to #765 is retained as history even though its subject is now edited
+here, because it records why 4.2.3 waited for 4.2.2. No obligation, criterion,
+or completion state changes: header `COMPLETE`, roadmap `[x]`.
+
+**Revision 2.32 (2026-09-27, issue #769).** This revision changes no wrapper.
+The wrapper in `Concrete steps` is byte-identical to the one `main` carries, as
+are its `-p RuntimeMaxSec=8m` / `-p TimeoutStopSec=20s` pair and the
+`bash -c 'set -o pipefail; … | tee …'` capture inside the scope: that work
+landed with Revision 2.31 and is untouched here. What this revision changes is
+the escape clause, which asserts that a descendant escapes a `timeout` prefix's
+process-group signal by `setsid` **or a double fork**. The second half is false.
+
+The clause entered this document with Revision 2.31, not Revision 2.30:
+`git log -S'double fork'` over `origin/main` returns `c298a643` for this file,
+for the 4.2.2 plan, and for `docs/developers-guide.md` alike, and Revision
+2.30's note contains no such wording. The mechanism Revision 2.30 gave for the
+2026-09-20 overrun stands corrected as Revision 2.31 records, and Revision 2.32
+leaves that account intact.
+
+A double fork does not escape a process-group signal. The descendant is
+reparented, so its `ppid` changes to an unrelated process, but it keeps the
+process group it inherited, so a signal sent to that group still reaches it.
+Only a change of group membership — `setsid()` or `setpgid()` — escapes. Five
+cases were probed against a `timeout` prefix firing `SIGTERM` to its group at 3
+seconds, with each descendant resetting its disposition to `SIG_DFL` first: an
+unsignalled control survived, a descendant in the inherited group died, one
+that called `setsid()` survived, one that called `setpgid()` survived, and one
+created by a double fork alone died. The `ppid`/`pgid` pair corroborates it
+directly: the double-forked descendant's `ppid` changed while its `pgid` stayed
+the payload's, whereas the `setsid()` descendant had both a new `pgid` and a
+new session.
+
+Reaching that reading took five probe generations, for two separate reasons.
+The payload's `trap '' TERM` is inherited across `fork` and `exec` and a
+non-interactive shell cannot reset an inherited disposition, so in generations
+1–3 every descendant was immune and a surviving case proved nothing about the
+group it was in. Generation 1's two runs of the same script disagreed with each
+other, which is what an unstable probe looks like. Separately, a generation
+whose positive control dies cannot distinguish a real DEAD from a broken probe,
+and readings taken under a dead control are void on that ground alone. The
+fifth generation removed the mask, by having each descendant reset its
+disposition to `SIG_DFL` from Python, which can, and kept a control that
+survived; group membership was then the single variable deciding survival. That
+is also why the claim survived review: a probe that reports "survived" for a
+reason other than the one under test looks like confirmation, and only a case
+that *can* die makes the reading meaningful.
+
+The other limit on the prefix is the additive grace, and it was reproduced for
+this revision alongside the escape cases. With a `trap '' TERM` payload looping
+on `sleep 1`, a 3-second cap carried it for 94 seconds against the host's
+90-second default stop timeout, and 23 seconds once `-p TimeoutStopSec=20s` was
+pinned; `timeout --kill-after=8s 3` ran 11 seconds, and a scope set to
+`RuntimeMaxSec=45s` with `TimeoutStopSec=5s` ran 50. Each figure is the sum of
+its pair — `3 + 8` for the prefix, `45 + 5` for the scope — so the same
+additive arithmetic is measured in both carriers. The `Concrete steps` figure
+for the unpinned case is 93 seconds rather than this run's 94, because the two
+were separate reproductions and the overshoot is a scheduler tick wide in
+either direction; both lie just past the 90-second default, which is the
+property the figure illustrates.
+
+The claim this revision corrects is given as one of the reasons the scope's
+cgroup stop is the better bound, so it carried weight it could not support. The
+conclusion is unaffected: the additive `--kill-after=` grace and the `setsid()`/
+`setpgid()` escape both still make the prefix the worse bound, and the cgroup
+stop still catches a descendant whose group changed. The corrected wording is
+also carried to the two other files that restate the claim —
+`docs/developers-guide.md`, which cites these plans as its probe evidence, and
+the 4.2.2 plan, which states it in three places.
+
+No obligation, criterion, or completion state changes: header `COMPLETE`,
+roadmap `[x]`.

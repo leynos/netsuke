@@ -1,23 +1,49 @@
-"""Exercise bounded release-admission metrics on controlled failure paths."""
+"""Exercise bounded release-admission metrics on controlled failure paths.
+
+Each case drives the real gate through cmd-mox doubles and asserts on what the
+production boundary saw: the native argument vectors, the records, the workflow
+outputs, and the exit status the workflow step reads.
+
+Example (run from the repository root)::
+
+    PYTHONPATH=scripts uv run --no-project --python 3.14 \
+        --with pytest==9.0.2 --with hypothesis==6.151.9 \
+        --with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
+        python -m pytest scripts/tests/test_release_admission_metric_failures.py \
+        -c /dev/null --rootdir=. -p no:cacheprovider
+"""
 
 import typing as typ
 
 import pytest
+from release_admission_test_doubles import REVISION
+from release_admission_test_scenarios import delay_workflow_run_query
 from release_admission_test_support import (
     CANARY_BY_OPERATION,
+    CLOCK_ARGUMENTS,
+    GITHUB_REPOSITORY,
     METRICS_VALIDATOR,
-    FailureCase,
-    _run_gate,
+    AdaptedBoundaries,
+    Boundaries,
     assert_failure_trace_sequence,
+    assert_identifiers_excluded_from_records,
     expected_gate_labels,
     expected_operation_labels,
+    install_adapted,
+    install_boundaries,
     operation_duration,
     operation_records,
+    run_gate,
 )
 
 if typ.TYPE_CHECKING:
-    from pathlib import Path
+    import pathlib
 
+    from cmd_mox import CmdMox
+
+pytest_plugins = ("cmd_mox.pytest_plugin",)
+
+#: A refused configuration emits exactly one metric: the gate's own.
 INVALID_CONFIGURATION_METRICS = [
     {
         "name": "netsuke_release_admission_gate_total",
@@ -25,293 +51,213 @@ INVALID_CONFIGURATION_METRICS = [
         "value": 1,
     }
 ]
+#: Its traces stop after the gate record, because no operation ever ran.
 INVALID_CONFIGURATION_TRACE_SIGNATURES = [
     ("gate_complete", "verify_evidence", "failure", "unknown"),
     ("workflow_output_delivery", "verify_evidence", "success", "none"),
     ("trace_delivery", "verify_evidence", "success", "none"),
 ]
 
+#: The one-second delay the duration test injects, well inside both the
+#: default thirty-second operation bound and the shim's own client timeout.
+DELAYED_SECONDS = 1.0
+
 
 def _trace_signature(trace: dict[str, object]) -> tuple[object, ...]:
-    """Return the bounded fields that identify one trace record.
-
-    Parameters
-    ----------
-    trace
-        Decoded trace record with the fixed admission schema.
-
-    Returns
-    -------
-    tuple[object, ...]
-        Event, operation, outcome, and error category in schema order.
-
-    Notes
-    -----
-    Contract invariant: only bounded fields participate in sequence assertions.
-    """
+    """Return the bounded fields that identify one trace record."""
     return tuple(
         trace[field] for field in ("event", "operation", "outcome", "error_category")
     )
 
 
+def _assert_malformed_revision_is_a_bounded_mismatch(
+    metrics: list[dict[str, object]],
+    traces: list[dict[str, object]],
+    outputs: dict[str, str],
+    revision: str,
+) -> None:
+    """Assert a malformed revision retains only fixed diagnostic values."""
+    METRICS_VALIDATOR.validate_metrics(metrics)
+    METRICS_VALIDATOR.validate_traces(traces)
+
+    operation_metric = operation_records(metrics, "resolve_tag_commit")[-1]
+    assert operation_metric["labels"] == expected_operation_labels(
+        CANARY_BY_OPERATION["resolve_tag_commit"],
+        "resolve_tag_commit",
+        "failure",
+        "mismatch",
+    ), "malformed revisions must use the fixed commit-resolution mismatch labels"
+    gate_labels = metrics[-1]["labels"]
+    assert gate_labels == expected_gate_labels("failure", "mismatch"), (
+        "the gate metric must retain the commit-resolution mismatch category"
+    )
+    assert outputs["gate-outcome"] == "failure", (
+        "malformed revisions must publish a failed gate outcome"
+    )
+    assert (
+        outputs["gate-error-category"]
+        == typ.cast("dict[str, str]", gate_labels)["error_category"]
+        == "mismatch"
+    ), "workflow outputs must retain the gate metric's mismatch category"
+    assert_failure_trace_sequence(traces, "resolve_tag_commit", "mismatch")
+
+    forbidden = {
+        candidate for candidate in (revision, revision.rstrip("\n")) if candidate
+    }
+    assert_identifiers_excluded_from_records(
+        metrics,
+        traces,
+        identifiers=forbidden,
+        subject="malformed revisions",
+    )
+
+
+def _assert_malformed_revision_stops_followup_requests(
+    boundaries: Boundaries, revision: str
+) -> None:
+    """Assert a malformed revision stops before fetch and workflow lookup."""
+    assert boundaries.gh.calls == [
+        ["api", f"repos/{GITHUB_REPOSITORY}/commits/{revision}", "--jq", ".sha"]
+    ], "commit resolution must be the only GitHub call, carrying the raw revision"
+    assert boundaries.git.calls == [], (
+        "a malformed revision must stop before the bounded fetch"
+    )
+
+
 @pytest.mark.parametrize(
-    "case",
+    ("revision", "mode"),
     [
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GH_FAILURE": "true"},
-                "resolve_tag_commit",
-                "api_error",
-            ),
-            id="api-error",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_RESOLVED_REVISION": "b" * 40},
-                "resolve_tag_commit",
-                "mismatch",
-            ),
-            id="candidate-mismatch",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GIT_FAILURE": "true"},
-                "fetch_candidate_revision",
-                "fetch_error",
-            ),
-            id="fetch-error",
-        ),
-        pytest.param(
-            FailureCase("stale", {}, "check_scan_freshness", "stale_evidence"),
-            id="stale-evidence",
-        ),
-        pytest.param(
-            FailureCase("missing", {}, "check_scan_freshness", "missing_evidence"),
-            id="missing-evidence",
-        ),
-        pytest.param(
-            FailureCase("unexpected", {}, "check_scan_freshness", "unknown"),
-            id="unknown-evidence",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {},
-                "verify_evidence",
-                "missing_evidence",
-            ),
-            id="enforcement-rejects-environment-freshness",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_DELAY_SECONDS": "2",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "resolve_tag_commit",
-                "timeout",
-            ),
-            id="operation-timeout",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_IGNORE_TERM": "true",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "resolve_tag_commit",
-                "timeout",
-            ),
-            id="term-ignoring-timeout",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_WORKFLOW_RUN_ID": ""},
-                "verify_evidence",
-                "missing_evidence",
-                enforce=False,
-            ),
-            id="missing-workflow-run-observation",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
-                "fetch_workflow_run",
-                "api_error",
-            ),
-            id="workflow-run-api-error-enforcement",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {"NETSUKE_FAKE_GH_WORKFLOW_FAILURE": "true"},
-                "fetch_workflow_run",
-                "api_error",
-                enforce=False,
-            ),
-            id="workflow-run-api-error-observation",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "fetch_workflow_run",
-                "timeout",
-            ),
-            id="workflow-run-timeout-enforcement",
-        ),
-        pytest.param(
-            FailureCase(
-                "fresh",
-                {
-                    "NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "2",
-                    "NETSUKE_RELEASE_ADMISSION_OPERATION_TIMEOUT_SECONDS": "1",
-                },
-                "fetch_workflow_run",
-                "timeout",
-                enforce=False,
-            ),
-            id="workflow-run-timeout-observation",
-        ),
+        pytest.param("a" * 40 + "\n", "enforcement", id="sha-newline-enforcement"),
+        pytest.param("\n", "enforcement", id="newline-enforcement"),
+        pytest.param("a" * 40 + "\n", "observation", id="sha-newline-observation"),
+        pytest.param("\n", "observation", id="newline-observation"),
     ],
 )
-def test_gate_emits_fixed_categories_for_failure_paths(
-    tmp_path: Path,
-    case: FailureCase,
+def test_malformed_revision_fails_as_mismatch_before_followup_requests(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+    revision: str,
+    mode: typ.Literal["enforcement", "observation"],
 ) -> None:
-    """Verify every controlled failure retains a bounded metric category.
+    """Reject newline revisions before fetching or looking up workflow runs.
 
     Parameters
     ----------
+    cmd_mox
+        Active controller whose shims answer the admission queries.
     tmp_path
-        Isolated fake-command and output directory.
-    case
-        One failure input and its documented fixed category.
+        Isolated output directory for the gate.
+    revision
+        Malformed SHA text whose trailing newline the API answer loses.
+    mode
+        Whether the gate runs in enforcement or observation mode.
 
     Notes
     -----
-    Every failure must emit operation, gate, and workflow-output results before
-    the admission script exits unsuccessfully.
+    Contract invariants: the raw revision reaches the API unchanged, the
+    comparison is against the stripped answer, and the mismatch stops the chain
+    before the fetch and the workflow-run lookup.
     """
-    result, metrics, traces, _, outputs = _run_gate(
+    boundaries = install_boundaries(cmd_mox)
+    enforce = mode == "enforcement"
+    run = run_gate(
+        cmd_mox,
         tmp_path,
-        evidence_state=case.evidence_state,
+        evidence_state="fresh",
         extra_environment={
-            "NETSUKE_RELEASE_ADMISSION_ENFORCE": str(case.enforce).lower(),
-            **case.extra_environment,
+            "GITHUB_SHA": revision,
+            "NETSUKE_RELEASE_ADMISSION_ENFORCE": str(enforce).lower(),
         },
     )
 
-    assert result.returncode == (1 if case.enforce else 0), (
-        "enforcement must fail closed while observation must retain diagnostics"
+    assert run.result.returncode == (1 if enforce else 0), (
+        "enforcement must reject the malformed revision while observation "
+        "retains diagnostics"
     )
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    METRICS_VALIDATOR.validate_traces(traces)
-    record = operation_records(metrics, case.operation)[-1]
-    assert record["labels"] == expected_operation_labels(
-        CANARY_BY_OPERATION[case.operation],
-        case.operation,
-        "failure",
-        case.error_category,
-    ), f"{case.operation} must retain its fixed error category"
-    assert metrics[-1]["labels"] == expected_gate_labels(
-        "failure", case.error_category
-    ), "the gate must retain the operation's error category"
-    assert outputs["gate-outcome"] == "failure", (
-        "failed operations must reach the workflow summary output"
+    _assert_malformed_revision_is_a_bounded_mismatch(
+        run.metrics, run.traces, run.outputs, revision
     )
-    assert outputs["gate-error-category"] == case.error_category, (
-        "failed operations must retain their bounded category in workflow output"
-    )
-    assert_failure_trace_sequence(traces, case.operation, case.error_category)
-    if (
-        "NETSUKE_FAKE_WORKFLOW_RUN_ID" in case.extra_environment
-        and not case.extra_environment["NETSUKE_FAKE_WORKFLOW_RUN_ID"]
-    ):
-        workflow_run_record = operation_records(metrics, "fetch_workflow_run")[-1]
-        assert workflow_run_record["labels"] == expected_operation_labels(
-            CANARY_BY_OPERATION["fetch_workflow_run"],
-            "fetch_workflow_run",
-            "success",
-            "none",
-        ), "an empty run identifier must reach evidence verification"
-    if case.error_category == "timeout":
-        assert operation_duration(metrics, case.operation) > 0, (
-            "timed-out operations must retain a positive measured duration"
-        )
+    _assert_malformed_revision_stops_followup_requests(boundaries, revision)
 
 
-def test_default_observation_retains_missing_evidence_metrics(tmp_path: Path) -> None:
-    """Verify missing evidence is observed without failing the scaffold workflow.
-
-    Parameters
-    ----------
-    tmp_path
-        Isolated fake-command and output directory.
+def test_default_observation_retains_missing_evidence_metrics(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify missing evidence is observed without failing the workflow.
 
     Notes
     -----
-    The default must mirror the current workflow's lack of an evidence producer.
+    The default must mirror the current workflow's lack of an evidence
+    producer, which is why the harness defaults to a missing evidence state.
     """
-    result, metrics, traces, _, outputs = _run_gate(tmp_path)
+    install_boundaries(cmd_mox)
+    run = run_gate(cmd_mox, tmp_path)
 
-    assert result.returncode == 0, result.stderr
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    METRICS_VALIDATOR.validate_traces(traces)
-    record = operation_records(metrics, "check_scan_freshness")[-1]
+    assert run.result.returncode == 0, run.result.stderr
+    METRICS_VALIDATOR.validate_metrics(run.metrics)
+    METRICS_VALIDATOR.validate_traces(run.traces)
+    record = operation_records(run.metrics, "check_scan_freshness")[-1]
     assert record["labels"] == expected_operation_labels(
         CANARY_BY_OPERATION["check_scan_freshness"],
         "check_scan_freshness",
         "failure",
         "missing_evidence",
     ), "observation must retain the missing-evidence operation result"
-    assert metrics[-1]["labels"] == expected_gate_labels(
+    assert run.metrics[-1]["labels"] == expected_gate_labels(
         "failure", "missing_evidence"
     ), "observation must retain the missing-evidence gate result"
-    assert outputs["gate-outcome"] == "failure", (
+    assert run.outputs["gate-outcome"] == "failure", (
         "observation must publish the failed gate outcome"
     )
-    assert outputs["gate-error-category"] == "missing_evidence", (
+    assert run.outputs["gate-error-category"] == "missing_evidence", (
         "observation must publish the fixed missing-evidence category"
     )
 
 
-def test_operation_durations_measure_controlled_delay(tmp_path: Path) -> None:
+def test_operation_durations_measure_controlled_delay(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
     """Verify operation durations remain finite and measure command latency.
-
-    Parameters
-    ----------
-    tmp_path
-        Isolated fake-command and output directory.
 
     Notes
     -----
     A fixed workflow-run delay must lengthen only that operation's measurement.
+    The real clock is in use, so the undelayed run's durations are the genuine
+    elapsed times rather than a double's constant.
     """
-    _, metrics, _, _, _ = _run_gate(tmp_path, evidence_state="fresh")
+    boundaries = install_boundaries(cmd_mox)
+    baseline = run_gate(cmd_mox, tmp_path, evidence_state="fresh")
     assert all(
-        operation_duration(metrics, operation) > 0 for operation in CANARY_BY_OPERATION
+        operation_duration(baseline.metrics, operation) > 0
+        for operation in CANARY_BY_OPERATION
     ), "every executed operation must record a finite positive duration"
 
-    _, delayed_metrics, _, _, _ = _run_gate(
-        tmp_path / "delayed",
-        evidence_state="fresh",
-        extra_environment={"NETSUKE_FAKE_GH_WORKFLOW_DELAY_SECONDS": "1"},
-    )
-    assert operation_duration(
-        delayed_metrics, "fetch_workflow_run"
-    ) > operation_duration(metrics, "fetch_workflow_run"), (
+    boundaries.gh.wraps(delay_workflow_run_query(DELAYED_SECONDS))
+    delayed = run_gate(cmd_mox, tmp_path / "delayed", evidence_state="fresh")
+    delayed_duration = operation_duration(delayed.metrics, "fetch_workflow_run")
+    baseline_duration = operation_duration(baseline.metrics, "fetch_workflow_run")
+    assert delayed_duration > baseline_duration, (
         "operation duration must increase when its bounded command is delayed"
+    )
+
+
+def _assert_unreachable_boundaries(
+    adapted: AdaptedBoundaries, expected_clock_calls: int
+) -> None:
+    """Assert no admission operation ran, but the clock still reached its double."""
+    assert adapted.gh.calls == [], (
+        "a refused configuration must not reach the GitHub adapter"
+    )
+    assert adapted.git.calls == [], (
+        "a refused configuration must not reach the Git adapter"
+    )
+    assert len(adapted.clock.calls) == expected_clock_calls, (
+        "a refused configuration must not read the clock for any operation"
+    )
+    assert {tuple(call) for call in adapted.clock.calls} <= {CLOCK_ARGUMENTS}, (
+        "every clock call must carry the Python monotonic program"
     )
 
 
@@ -341,7 +287,8 @@ def test_operation_durations_measure_controlled_delay(tmp_path: Path) -> None:
     ],
 )
 def test_invalid_configuration_fails_before_running_admission_operations(
-    tmp_path: Path,
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
     setting: str,
     value: str,
 ) -> None:
@@ -349,37 +296,84 @@ def test_invalid_configuration_fails_before_running_admission_operations(
 
     Parameters
     ----------
+    cmd_mox
+        Active controller whose shims stand in for every adapter.
     tmp_path
-        Isolated fake-command and output directory.
+        Isolated output directory for the gate.
     setting
         Closed configuration input that receives an invalid value.
     value
-        Out-of-contract configuration value supplied to the shell boundary.
+        Out-of-contract configuration value supplied to the gate.
 
     Notes
     -----
     Early validation must still emit valid gate metrics, traces, and workflow
-    outputs while preventing every external admission operation.
+    outputs while preventing every external admission operation. The clock
+    adapter is redirected at a double here, so its absence is observed rather
+    than assumed from a name the gate would never resolve anyway.
     """
-    result, metrics, traces, calls, outputs = _run_gate(
+    adapted = install_adapted(cmd_mox)
+    run = run_gate(
+        cmd_mox,
         tmp_path,
         evidence_state="fresh",
-        extra_environment={setting: value},
+        extra_environment={**adapted.variables(cmd_mox), setting: value},
     )
 
-    assert result.returncode != 0, "invalid configuration must fail closed"
-    assert calls == [], "invalid configuration must prevent API and Git calls"
-    METRICS_VALIDATOR.validate_metrics(metrics)
-    METRICS_VALIDATOR.validate_traces(traces)
-    assert metrics == INVALID_CONFIGURATION_METRICS, (
+    assert run.result.returncode != 0, "invalid configuration must fail closed"
+    _assert_unreachable_boundaries(adapted, expected_clock_calls=0)
+    METRICS_VALIDATOR.validate_metrics(run.metrics)
+    METRICS_VALIDATOR.validate_traces(run.traces)
+    assert run.metrics == INVALID_CONFIGURATION_METRICS, (
         "invalid configuration must emit only the fixed failure gate metric"
     )
-    assert outputs["gate-outcome"] == "failure", (
+    assert run.outputs["gate-outcome"] == "failure", (
         "invalid configuration must publish failure"
     )
-    assert outputs["gate-error-category"] == "unknown", (
+    assert run.outputs["gate-error-category"] == "unknown", (
         "invalid configuration must publish the fixed unknown category"
     )
-    assert [_trace_signature(trace) for trace in traces] == (
+    assert [_trace_signature(trace) for trace in run.traces] == (
         INVALID_CONFIGURATION_TRACE_SIGNATURES
     ), "early configuration failure must retain the bounded trace hand-off sequence"
+
+
+def test_operating_system_refusal_keeps_the_operations_own_category(
+    cmd_mox: CmdMox,
+    tmp_path: pathlib.Path,
+) -> None:
+    """Verify a launch refusal is not reclassified as a timeout.
+
+    Notes
+    -----
+    GNU ``timeout`` reported ``127`` for a program it could not run and ``126``
+    for any other refusal, and ``classify_command_result`` maps neither to
+    ``timeout``. A ``gh`` whose file cannot be executed must therefore still be
+    ``api_error``, which is the classification a missing adapter depends on.
+    """
+    adapted = install_adapted(cmd_mox)
+    unlaunchable = tmp_path / "not-executable"
+    unlaunchable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    run = run_gate(
+        cmd_mox,
+        tmp_path / "run",
+        evidence_state="fresh",
+        extra_environment={
+            **adapted.variables(cmd_mox),
+            "NETSUKE_RELEASE_ADMISSION_GH_ADAPTER": str(unlaunchable),
+        },
+    )
+
+    record = operation_records(run.metrics, "resolve_tag_commit")[-1]
+    assert record["labels"] == expected_operation_labels(
+        CANARY_BY_OPERATION["resolve_tag_commit"],
+        "resolve_tag_commit",
+        "failure",
+        "api_error",
+    ), "an unlaunchable adapter must keep the operation's own error category"
+    assert "release-admission adapter could not be run" in run.result.stderr, (
+        "the gate must name the program the operating system refused"
+    )
+    assert REVISION not in run.result.stderr, (
+        "the launch diagnostic must not carry the revision"
+    )

@@ -1,6 +1,6 @@
 """The CodeScene upload runs for exactly the events that may publish.
 
-`coverage_upload_guard_test` holds the upload step's condition to its shape.
+The shared CV-005 checker holds the upload step's condition to its shape.
 This module runs that condition, as written in `coverage-main.yml`, against
 the events the workflow answers: a push to `main`, a dispatch from `main`, a
 dispatch from a feature branch, and each of those without the credential. The
@@ -84,5 +84,8 @@ def test_the_upload_runs_only_where_it_may_publish(
 def test_the_evaluator_refuses_what_it_does_not_model(condition: str) -> None:
     """Refuse a disjunction or an unmodelled clause rather than answer False."""
     contexts = {"env": {}, "github": {"ref": MAIN}}
-    with pytest.raises(UnsupportedExpressionError):
+    with pytest.raises(UnsupportedExpressionError) as error:
         evaluate_conjunction(condition, contexts)
+    assert condition.split(" && ")[-1] in str(error.value), (
+        "unsupported expressions should include the rejected clause in the error"
+    )

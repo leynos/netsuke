@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Konu olmadan bu, `--help` ile aynıdır. Seçil
 cli.help.actions_heading = Eylemler:
 cli.help.targets_heading = Hedefler:
 cli.help.targets.about = Seçilen bildirimdeki hedef ve eylemleri listele.
+cli.help.targets.flag.edges.help = Bağımlılık kenarlarını ve işlenmemiş tarifleri JSON çıktısına ekle.
 cli.help.default_marker = varsayılan
 cli.help.conditional_marker = koşullu
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path } konumundaki bildirim yüklenemedi.
 runner.context.build_graph = Bildirimden çizge oluşturulamadı.
 runner.context.generate_ninja = Ninja bildirimi üretilemedi.
 runner.context.render_graph = Çizge ürünü işlenemedi.
+runner.help.targets_edges_require_json = --edges seçeneği en üst düzeyde --json gerektirir.
 
 runner.io.create_temp_file = Geçici Ninja dosyası oluşturulamadı.
 runner.io.write_temp_ninja = Geçici Ninja dosyası yazılamadı.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Ters eğik çizgileri kaçırın ya da geçersiz ka�
 manifest.env.missing = Gerekli bir ortam değişkeni ayarlanmamış.
 manifest.env.invalid_utf8 = Bir ortam değişkeni geçersiz UTF-8 içeriyor.
 manifest.env.blocked = Bir ortam değişkenine erişim engellendi.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env default değeri bir dizge olmalıdır, { $kind } alındı.
 manifest.vars.not_object = Bildirimin `vars` alanı bir eşleme ya da nesne olmalıdır.
 manifest.vars.reserved_name = Manifestteki `vars` anahtarı '{ $name }' yerleşik bir şablon yardımcı işlevi için ayrılmıştır; değişkeni yeniden adlandırın.
 manifest.read_failed = { $path } konumundaki bildirim okunamadı.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = bilinmeyen desen hatası.
 manifest.glob.io_failed = "{ $pattern }" için glob başarısız oldu: { $detail }.
 manifest.glob.unknown_io_error = bilinmeyen G/Ç hatası.
 manifest.command_list_empty = "command" alanı boş olmamalıdır: bir komut dizesi veya boş olmayan bir liste verin.
+manifest.command_isolation_recipe = "command_isolation" alanı, komut listesi içeren bir tarif gerektirir.
+manifest.command_isolation_scalar = "command_isolation: isolated" bir komut listesi gerektirir.
 
 # Ara gösterim hataları.
 ir.rule_not_found = "{ $target }" hedefinin başvurduğu "{ $rule }" kuralı bulunamadı.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = akış
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote bir dize bekliyordu, ancak { $kind } aldı.
+stdlib.shell.quote.control_character = Null bayt, satır başı veya satır sonu içeren bir değer tırnak içine alınamaz.
+stdlib.shell.dialect_invalid = Bilinmeyen kabuk lehçesi { $dialect }; şunlardan biri bekleniyordu: { $accepted }.
+stdlib.shell.dialect_not_string = shell dialect seçeneği bir dizge olmalıdır, { $kind } alındı.
+stdlib.shell.join.not_sequence = shell_join bir dizi bekliyordu, ancak { $kind } aldı.
+stdlib.shell.join.item_not_string = shell_join öğesi { $index }, { $kind } türünde; dize değil.
+stdlib.shell.positional_option = { $filter } seçeneklerini anahtar sözcükle alır; şöyle yazın: { $example }.
+
 # Yol yardımcısının tanılaması.
 stdlib.path.io.failed = "{ $action }" eylemi { $path } için başarısız oldu ({ $label }).
 stdlib.path.io.failed_with_detail = "{ $action }" eylemi { $path } için başarısız oldu: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Desteklenmeyen özet algoritmas�
 
 # Koleksiyon yardımcılarının tanılaması.
 stdlib.collections.flatten.expected_sequence = flatten dizi öğeleri bekliyordu, ancak { $kind } buldu.
+stdlib.collections.compact.not_sequence = compact bir dizi bekliyordu, ancak { $kind } buldu.
 stdlib.collections.group_by.empty_attribute = group_by boş olmayan bir öznitelik gerektirir.
 stdlib.collections.group_by.unresolved = group_by, { $kind } türündeki bir öğede "{ $attr }" özniteliğini bulamadı.
 
@@ -442,3 +460,22 @@ manifest.budget.exceeded = Manifest kaynak bütçesi { $stage } aşamasında { $
 
 cli.flag.env_allow_var.help = Bildirim env() yardımcısı için izin verilen ortam değişkeni.
 cli.flag.env_block_var.help = Bildirim env() yardımcısı için engellenen ortam değişkeni.
+
+# Manifest denetimi (`netsuke check`).
+cli.subcommand.check.about = Derleme üretmeden ve çalıştırmadan manifesti denetle.
+cli.subcommand.check.long_about = Seçili manifesti, ayrıştırılabilen ancak muhtemelen hatalı, güvensiz, taşınabilir olmayan veya önbelleğe zarar veren yapılar açısından incele.
+cli.subcommand.check.flag.rule.help = Bir kuralın veya kategorinin önem derecesini NAME=SEVERITY biçiminde ayarla.
+cli.subcommand.check.flag.fail_on.help = Bulguların komutu başarısız kıldığı önem derecesi.
+cli.subcommand.check.flag.limit.help = Bildirilecek en fazla bulgu sayısı; 0 tümünü bildirir.
+cli.subcommand.check.flag.explain.help = Manifesti denetlemek yerine kural başvurusunu yazdır.
+check.threshold_exceeded = Bulgular { $severity } eşiğine ulaştı: bildirilen { $reported } bulgudan { $failing } tanesi.
+check.threshold_exceeded.help = Bildirilen bulguları düzeltin, --rule seçeneğini ayarlayın veya --fail-on eşiğini gevşetin.
+check.summary.counts = Denetim sonuçları — hatalar: { $errors }, uyarılar: { $warnings }, öneriler: { $advice }, bastırılan: { $suppressed }.
+check.summary.clean = Bulgu yok.
+check.summary.truncated = { $shown } bulgu gösteriliyor; --limit { $omitted } tanesini daha atladı.
+check.rule.malformed = { $selector } seçicisi NAME=SEVERITY biçiminde yazılmamış.
+check.rule.unknown = Seçici { $name } adını veriyor; bu ne bir kural ne de bir kategori.
+check.rule.severity = { $name } seçicisi { $severity } önem derecesini veriyor; şunlardan biri bekleniyordu: { $values }.
+check.fail_on.invalid = Bilinmeyen başarısızlık eşiği { $value }; şunlardan biri bekleniyordu: { $values }.
+check.source_index = { $path } tanılama için { $line }. satırda dizinlenemedi: { $reason }.
+status.tool.check = Denetleme

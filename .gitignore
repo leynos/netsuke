@@ -18,6 +18,8 @@ __pycache__/
 .coverage
 .uv-cache/
 .uv-tools/
+.verus/
+uv.lock
 .pytest_cache/
 .ruff_cache/
 .typos-oxendict-base.json

@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Без темы это соответствуе
 cli.help.actions_heading = Действия:
 cli.help.targets_heading = Цели:
 cli.help.targets.about = Вывести список целей и действий в выбранном файле.
+cli.help.targets.flag.edges.help = Включить рёбра зависимостей и необработанные рецепты в вывод JSON.
 cli.help.default_marker = по умолчанию
 cli.help.conditional_marker = условный
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Не удалось загрузить маниф
 runner.context.build_graph = Не удалось построить граф по манифесту.
 runner.context.generate_ninja = Не удалось создать манифест Ninja.
 runner.context.render_graph = Не удалось отобразить артефакт графа.
+runner.help.targets_edges_require_json = Для параметра --edges требуется --json верхнего уровня.
 
 runner.io.create_temp_file = Не удалось создать временный файл Ninja.
 runner.io.write_temp_ninja = Не удалось записать временный файл Ninja.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Экранируйте обратные косые �
 manifest.env.missing = Обязательная переменная окружения не задана.
 manifest.env.invalid_utf8 = Переменная окружения содержит некорректный UTF-8.
 manifest.env.blocked = Доступ к переменной окружения заблокирован.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Значение default в env должно быть строкой, получено { $kind }.
 manifest.vars.not_object = Поле `vars` манифеста должно быть отображением или объектом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' в манифесте зарезервирован для встроенной вспомогательной функции шаблонов; переименуйте переменную.
 manifest.read_failed = Не удалось прочитать манифест по пути { $path }.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = неизвестная ошибка шаб
 manifest.glob.io_failed = Сбой glob для «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = неизвестная ошибка ввода-вывода.
 manifest.command_list_empty = Поле «command» не должно быть пустым: укажите строку команды или непустой список.
+manifest.command_isolation_recipe = Поле «command_isolation» требует рецепт со списком команд.
+manifest.command_isolation_scalar = «command_isolation: isolated» требует список команд.
 
 # Ошибки промежуточного представления.
 ir.rule_not_found = Правило «{ $rule }», на которое ссылается цель «{ $target }», не найдено.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = потоковая передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ожидал строку, но получил { $kind }.
+stdlib.shell.quote.control_character = Значение, содержащее нулевой байт, возврат каретки или перевод строки, нельзя заключить в кавычки.
+stdlib.shell.dialect_invalid = Неизвестный диалект оболочки { $dialect }; ожидается один из { $accepted }.
+stdlib.shell.dialect_not_string = Опция dialect в shell должна быть строкой, получено { $kind }.
+stdlib.shell.join.not_sequence = shell_join ожидал последовательность, но получил { $kind }.
+stdlib.shell.join.item_not_string = Элемент { $index } в shell_join имеет тип { $kind }, а не строку.
+stdlib.shell.positional_option = { $filter } принимает параметры по ключевым словам; напишите { $example }.
+
 # Диагностика помощника для путей.
 stdlib.path.io.failed = Не удалось выполнить действие «{ $action }» для { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Не удалось выполнить действие «{ $action }» для { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Неподдерживаемый
 
 # Диагностика помощников для коллекций.
 stdlib.collections.flatten.expected_sequence = flatten ожидал элементы последовательности, но обнаружил { $kind }.
+stdlib.collections.compact.not_sequence = compact ожидал последовательность, но обнаружил { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by требует непустой атрибут.
 stdlib.collections.group_by.unresolved = group_by не смог найти «{ $attr }» у элемента типа { $kind }.
 
@@ -448,3 +466,22 @@ manifest.budget.exceeded = Бюджет ресурсов манифеста ис
 
 cli.flag.env_allow_var.help = Переменная окружения, разрешённая для помощника env() манифеста.
 cli.flag.env_block_var.help = Переменная окружения, заблокированная для помощника env() манифеста.
+
+# Проверка манифеста (`netsuke check`).
+cli.subcommand.check.about = Проверить манифест без создания и запуска сборки.
+cli.subcommand.check.long_about = Проанализировать выбранный манифест на конструкции, которые разбираются, но, вероятно, ошибочны, небезопасны, непереносимы или мешают кэшированию.
+cli.subcommand.check.flag.rule.help = Задать важность правила или категории в виде NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Важность, при которой находки приводят к сбою команды.
+cli.subcommand.check.flag.limit.help = Максимальное число сообщаемых находок; 0 сообщает обо всех.
+cli.subcommand.check.flag.explain.help = Вывести справочник правил вместо анализа манифеста.
+check.threshold_exceeded = Находки достигли порога { $severity }: { $failing } из { $reported } сообщённых.
+check.threshold_exceeded.help = Исправьте сообщённые находки, измените --rule или ослабьте --fail-on.
+check.summary.counts = Результаты проверки — ошибки: { $errors }, предупреждения: { $warnings }, советы: { $advice }, подавлено: { $suppressed }.
+check.summary.clean = Находок нет.
+check.summary.truncated = Показано находок: { $shown }; --limit пропустил ещё { $omitted }.
+check.rule.malformed = Селектор { $selector } записан не в виде NAME=SEVERITY.
+check.rule.unknown = Селектор указывает { $name }, что не является ни правилом, ни категорией.
+check.rule.severity = Селектор { $name } указывает важность { $severity }; ожидалось одно из { $values }.
+check.fail_on.invalid = Неизвестный порог сбоя { $value }; ожидалось одно из { $values }.
+check.source_index = Не удалось проиндексировать { $path } для диагностики в строке { $line }: { $reason }.
+status.tool.check = Проверка

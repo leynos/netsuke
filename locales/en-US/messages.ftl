@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = With no topic this matches `--help`. Use `help 
 cli.help.actions_heading = Actions:
 cli.help.targets_heading = Targets:
 cli.help.targets.about = List targets and actions in the selected manifest.
+cli.help.targets.flag.edges.help = Include dependency edges and raw recipes in JSON output.
 cli.help.default_marker = default
 cli.help.conditional_marker = conditional
 
@@ -101,6 +102,7 @@ runner.context.load_manifest = Failed to load manifest at { $path }.
 runner.context.build_graph = Failed to build graph from the manifest.
 runner.context.generate_ninja = Failed to generate the Ninja manifest.
 runner.context.render_graph = Failed to render the graph artefact.
+runner.help.targets_edges_require_json = The --edges option requires root-level --json.
 
 runner.io.create_temp_file = Failed to create temporary Ninja file.
 runner.io.write_temp_ninja = Failed to write temporary Ninja file.
@@ -140,6 +142,8 @@ manifest.yaml.hint.escape = Escape backslashes or remove invalid escape sequence
 manifest.env.missing = A required environment variable is not set.
 manifest.env.invalid_utf8 = An environment variable contains invalid UTF-8.
 manifest.env.blocked = Access to an environment variable is blocked.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env default must be a string, received { $kind }.
 manifest.vars.not_object = Manifest `vars` must be a map/object.
 manifest.vars.reserved_name = Manifest `vars` key '{ $name }' is reserved for a built-in template helper; rename the variable.
 manifest.read_failed = Failed to read manifest at { $path }.
@@ -178,6 +182,8 @@ manifest.glob.unknown_pattern_error = unknown pattern error.
 manifest.glob.io_failed = Glob failed for '{ $pattern }': { $detail }.
 manifest.glob.unknown_io_error = unknown IO error.
 manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
+manifest.command_isolation_recipe = The 'command_isolation' field requires a command-list recipe.
+manifest.command_isolation_scalar = 'command_isolation: isolated' requires a command list.
 
 # IR errors.
 ir.rule_not_found = Rule '{ $rule }' referenced by target '{ $target }' was not found.
@@ -286,6 +292,17 @@ stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote expects a string, received { $kind }.
+stdlib.shell.quote.control_character = A value containing a null byte, carriage return, or line feed cannot be quoted.
+stdlib.shell.dialect_invalid = Unknown shell dialect { $dialect }; expected one of { $accepted }.
+stdlib.shell.dialect_not_string = The shell dialect option must be a string, received { $kind }.
+stdlib.shell.join.not_sequence = shell_join expects a sequence, received { $kind }.
+stdlib.shell.join.item_not_string = shell_join item { $index } is { $kind }, not a string.
+stdlib.shell.positional_option = { $filter } takes its options by keyword; write { $example }.
+
 # Path helper diagnostics.
 stdlib.path.io.failed = { $action } failed for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } failed for { $path }: { $detail }.
@@ -341,6 +358,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Unsupported hash algorithm '{ $a
 
 # Collection helper diagnostics.
 stdlib.collections.flatten.expected_sequence = Flatten expected sequence items but found { $kind }.
+stdlib.collections.compact.not_sequence = compact expects a sequence, received { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by requires a non-empty attribute.
 stdlib.collections.group_by.unresolved = group_by could not resolve '{ $attr }' on item of kind { $kind }.
 
@@ -431,8 +449,9 @@ semantic.prefix.rendered = {"{"}symbol{"}"} {"{"}label{"}"}
 # Plural form examples for translators.
 # These messages demonstrate Fluent's select expression syntax using CLDR
 # plural categories. Note: These require numeric FluentValue arguments to
-# properly select variants; the netsuke localization API currently passes
-# all arguments as strings, so selection falls back to the default variant.
+# properly select variants. Code passes a count with
+# `LocalizedMessage::with_count`; an argument attached with `with_arg` is a
+# string, so selection falls back to the default variant.
 example.files_processed = { $count ->
     [one] Processed { $count } file.
    *[other] Processed { $count } files.
@@ -446,3 +465,24 @@ example.errors_found = { $count ->
 
 cli.flag.env_allow_var.help = Environment variable permitted for the manifest env() helper.
 cli.flag.env_block_var.help = Environment variable blocked for the manifest env() helper.
+# Manifest linting (`netsuke check`).
+cli.subcommand.check.about = Lint the manifest without generating or running a build.
+cli.subcommand.check.long_about = Analyse the selected manifest for constructs that parse but are likely erroneous, unsafe, non-portable, or hostile to caching.
+cli.subcommand.check.flag.rule.help = Set a rule's or category's severity, written as NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severity at which findings fail the command.
+cli.subcommand.check.flag.limit.help = Maximum findings to report; 0 reports all of them.
+cli.subcommand.check.flag.explain.help = Print the rule reference instead of analysing a manifest.
+check.threshold_exceeded = Lint findings reached the { $severity } threshold: { $failing } of { $reported } reported.
+check.threshold_exceeded.help = Fix the reported findings, adjust --rule, or relax --fail-on.
+check.summary.counts = Lint results — errors: { $errors }, warnings: { $warnings }, advice: { $advice }, suppressed: { $suppressed }.
+check.summary.clean = No lint findings.
+check.summary.truncated = { $shown ->
+    [one] Showing { $shown } finding; --limit omitted { $omitted } more.
+   *[other] Showing { $shown } findings; --limit omitted { $omitted } more.
+}
+check.rule.malformed = Lint selector { $selector } is not written as NAME=SEVERITY.
+check.rule.unknown = Lint selector names { $name }, which is neither a rule nor a category.
+check.rule.severity = Lint selector { $name } names severity { $severity }; expected one of { $values }.
+check.fail_on.invalid = Unknown failure threshold { $value }; expected one of { $values }.
+check.source_index = Could not index { $path } for lint diagnostics at line { $line }: { $reason }.
+status.tool.check = Check

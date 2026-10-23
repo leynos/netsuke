@@ -9,6 +9,7 @@
 use anyhow::Result;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+pub(in crate::manifest) mod adapter;
 mod types;
 mod writer;
 pub use types::ManifestBudgetLimits;

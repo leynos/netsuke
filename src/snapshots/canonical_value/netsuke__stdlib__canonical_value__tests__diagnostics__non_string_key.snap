@@ -1,0 +1,5 @@
+---
+source: src/stdlib/canonical_value/tests/diagnostics.rs
+expression: rendered
+---
+mapping key of kind `number` is not a string at <root>

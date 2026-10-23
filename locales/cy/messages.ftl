@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Heb bwnc, mae hyn yn cyfateb i `--help`. Defnyd
 cli.help.actions_heading = Gweithredoedd:
 cli.help.targets_heading = Targedau:
 cli.help.targets.about = Rhestru targedau a gweithredoedd yn y maniffest a ddewiswyd.
+cli.help.targets.flag.edges.help = Cynnwys ymylon dibyniaeth a ryseitiau crai yn allbwn JSON.
 cli.help.default_marker = diofyn
 cli.help.conditional_marker = amodol
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Methwyd â llwytho'r maniffest o { $path }.
 runner.context.build_graph = Methwyd â llunio graff o'r maniffest.
 runner.context.generate_ninja = Methwyd â chreu'r maniffest Ninja.
 runner.context.render_graph = Methwyd â rendro arteffact y graff.
+runner.help.targets_edges_require_json = Mae'r opsiwn --edges yn gofyn am --json ar y lefel uchaf.
 
 runner.io.create_temp_file = Methwyd â chreu'r ffeil Ninja dros dro.
 runner.io.write_temp_ninja = Methwyd ag ysgrifennu i'r ffeil Ninja dros dro.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Diangwch y slaesau ôl neu dynnwch y dilyniannau dia
 manifest.env.missing = Nid yw newidyn amgylchedd gofynnol wedi'i osod.
 manifest.env.invalid_utf8 = Mae newidyn amgylchedd yn cynnwys UTF-8 annilys.
 manifest.env.blocked = Mae mynediad at newidyn amgylchedd wedi'i rwystro.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Rhaid i default env fod yn llinyn, derbyniwyd { $kind }.
 manifest.vars.not_object = Rhaid i `vars` y maniffest fod yn fap neu'n wrthrych.
 manifest.vars.reserved_name = Mae'r allwedd `vars` '{ $name }' yn y maniffest wedi'i chadw ar gyfer cynorthwyydd templed mewnol; ailenwch y newidyn.
 manifest.read_failed = Methwyd â darllen y maniffest o { $path }.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = gwall patrwm anhysbys.
 manifest.glob.io_failed = Methodd glob ar gyfer ‘{ $pattern }’: { $detail }.
 manifest.glob.unknown_io_error = gwall mewnbwn/allbwn anhysbys.
 manifest.command_list_empty = Rhaid i’r maes ‘command’ beidio â bod yn wag: rhowch linyn gorchymyn neu restr nad yw’n wag.
+manifest.command_isolation_recipe = Mae’r maes ‘command_isolation’ yn gofyn am rysáit rhestr orchmynion.
+manifest.command_isolation_scalar = Mae ‘command_isolation: isolated’ yn gofyn am restr orchmynion.
 
 # Gwallau'r cynrychioliad canolradd.
 ir.rule_not_found = Ni chafwyd hyd i'r rheol ‘{ $rule }’ y cyfeirir ati gan y targed ‘{ $target }’.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = ffrydio
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = Roedd shell_quote yn disgwyl llinyn ond cafodd { $kind }.
+stdlib.shell.quote.control_character = Ni ellir rhoi gwerth sy'n cynnwys beit nwl, dychweliad cerbyd neu doriad llinell mewn dyfynodau.
+stdlib.shell.dialect_invalid = Tafodiaith plisgyn anhysbys { $dialect }; disgwylir un o { $accepted }.
+stdlib.shell.dialect_not_string = Rhaid i'r opsiwn dialect yn shell fod yn llinyn, derbyniwyd { $kind }.
+stdlib.shell.join.not_sequence = Roedd shell_join yn disgwyl dilyniant ond cafodd { $kind }.
+stdlib.shell.join.item_not_string = Mae eitem { $index } shell_join yn { $kind }, nid yn llinyn.
+stdlib.shell.positional_option = Mae { $filter } yn cymryd ei opsiynau fel allweddair; ysgrifennwch { $example }.
+
 # Diagnosteg y cynorthwyydd llwybrau.
 stdlib.path.io.failed = Methodd y weithred ‘{ $action }’ ar gyfer { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Methodd y weithred ‘{ $action }’ ar gyfer { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algorithm stwnsio nas cefnogir: 
 
 # Diagnosteg cynorthwywyr y casgliadau.
 stdlib.collections.flatten.expected_sequence = Roedd flatten yn disgwyl eitemau dilyniant ond cafodd { $kind }.
+stdlib.collections.compact.not_sequence = Mae compact yn disgwyl dilyniant ond cafodd { $kind }.
 stdlib.collections.group_by.empty_attribute = Mae group_by angen priodoledd nad yw'n wag.
 stdlib.collections.group_by.unresolved = Methodd group_by â chanfod ‘{ $attr }’ ar eitem o'r math { $kind }.
 
@@ -449,3 +467,22 @@ manifest.budget.exceeded = Daeth cyllideb adnoddau'r maniffest i ben yn ystod { 
 
 cli.flag.env_allow_var.help = Newidyn amgylchedd a ganiateir i gynorthwyydd env() y maniffest.
 cli.flag.env_block_var.help = Newidyn amgylchedd a rwystir i gynorthwyydd env() y maniffest.
+
+# Dadansoddi'r maniffest (`netsuke check`).
+cli.subcommand.check.about = Dadansoddi'r maniffest heb greu na rhedeg adeiladwaith.
+cli.subcommand.check.long_about = Archwilio'r maniffest a ddewiswyd am gystrawennau sy'n dosrannu ond sy'n debygol o fod yn wallus, yn anniogel, yn anghludadwy neu'n niweidiol i storfa.
+cli.subcommand.check.flag.rule.help = Gosod difrifoldeb rheol neu gategori, wedi'i ysgrifennu fel NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Y difrifoldeb lle mae canfyddiadau'n gwneud i'r gorchymyn fethu.
+cli.subcommand.check.flag.limit.help = Uchafswm y canfyddiadau a adroddir; mae 0 yn adrodd pob un.
+cli.subcommand.check.flag.explain.help = Argraffu'r cyfeirlyfr rheolau yn lle dadansoddi maniffest.
+check.threshold_exceeded = Cyrhaeddodd y canfyddiadau'r trothwy { $severity }: { $failing } o { $reported } a adroddwyd.
+check.threshold_exceeded.help = Trwsiwch y canfyddiadau a adroddwyd, addaswch --rule, neu lacio --fail-on.
+check.summary.counts = Canlyniadau'r dadansoddiad — gwallau: { $errors }, rhybuddion: { $warnings }, cyngor: { $advice }, atalwyd: { $suppressed }.
+check.summary.clean = Dim canfyddiadau.
+check.summary.truncated = Yn dangos { $shown } canfyddiad; hepgorodd --limit { $omitted } arall.
+check.rule.malformed = Nid yw'r dewisydd { $selector } wedi'i ysgrifennu fel NAME=SEVERITY.
+check.rule.unknown = Mae'r dewisydd yn enwi { $name }, nad yw'n rheol nac yn gategori.
+check.rule.severity = Mae'r dewisydd { $name } yn enwi'r difrifoldeb { $severity }; disgwylid un o { $values }.
+check.fail_on.invalid = Trothwy methiant anhysbys { $value }; disgwylid un o { $values }.
+check.source_index = Methwyd mynegeio { $path } ar gyfer diagnosteg ar linell { $line }: { $reason }.
+status.tool.check = Gwirio

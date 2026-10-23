@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Không có chủ đề, lệnh này tương ứ
 cli.help.actions_heading = Hành động:
 cli.help.targets_heading = Mục tiêu:
 cli.help.targets.about = Liệt kê mục tiêu và hành động trong tệp kê khai đã chọn.
+cli.help.targets.flag.edges.help = Đưa các cạnh phụ thuộc và công thức thô vào đầu ra JSON.
 cli.help.default_marker = mặc định
 cli.help.conditional_marker = có điều kiện
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Không nạp được tệp kê khai tại { $pat
 runner.context.build_graph = Không dựng được đồ thị từ tệp kê khai.
 runner.context.generate_ninja = Không tạo được tệp kê khai Ninja.
 runner.context.render_graph = Không kết xuất được sản phẩm đồ thị.
+runner.help.targets_edges_require_json = Tùy chọn --edges yêu cầu --json ở cấp cao nhất.
 
 runner.io.create_temp_file = Không tạo được tệp Ninja tạm.
 runner.io.write_temp_ninja = Không ghi được tệp Ninja tạm.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Hãy thoát dấu gạch chéo ngược hoặc bỏ 
 manifest.env.missing = Một biến môi trường bắt buộc chưa được đặt.
 manifest.env.invalid_utf8 = Một biến môi trường chứa UTF-8 không hợp lệ.
 manifest.env.blocked = Quyền truy cập vào biến môi trường đã bị chặn.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Giá trị default của env phải là chuỗi, nhưng nhận được { $kind }.
 manifest.vars.not_object = Trường `vars` của tệp kê khai phải là ánh xạ hoặc đối tượng.
 manifest.vars.reserved_name = Khóa `vars` '{ $name }' của tệp kê khai được dành riêng cho hàm trợ giúp mẫu tích hợp; hãy đổi tên biến.
 manifest.read_failed = Không đọc được tệp kê khai tại { $path }.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = lỗi mẫu không xác định.
 manifest.glob.io_failed = Glob thất bại với “{ $pattern }”: { $detail }.
 manifest.glob.unknown_io_error = lỗi vào/ra không xác định.
 manifest.command_list_empty = Trường “command” không được để trống: hãy cung cấp một chuỗi lệnh hoặc một danh sách không rỗng.
+manifest.command_isolation_recipe = Trường “command_isolation” yêu cầu công thức có danh sách lệnh.
+manifest.command_isolation_scalar = “command_isolation: isolated” yêu cầu danh sách lệnh.
 
 # Lỗi của biểu diễn trung gian.
 ir.rule_not_found = Không tìm thấy quy tắc “{ $rule }” mà đích “{ $target }” tham chiếu.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = truyền luồng
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote mong đợi một chuỗi nhưng lại nhận { $kind }.
+stdlib.shell.quote.control_character = Giá trị chứa byte null, ký tự về đầu dòng hoặc xuống dòng không thể đặt trong dấu nháy.
+stdlib.shell.dialect_invalid = Phương ngữ shell không xác định { $dialect }; mong đợi một trong { $accepted }.
+stdlib.shell.dialect_not_string = Tùy chọn dialect của shell phải là chuỗi, nhưng nhận được { $kind }.
+stdlib.shell.join.not_sequence = shell_join mong đợi một dãy nhưng lại nhận { $kind }.
+stdlib.shell.join.item_not_string = Phần tử { $index } của shell_join có kiểu { $kind }, không phải chuỗi.
+stdlib.shell.positional_option = { $filter } nhận tùy chọn theo từ khóa; hãy viết { $example }.
+
 # Chẩn đoán của hàm trợ giúp đường dẫn.
 stdlib.path.io.failed = Hành động “{ $action }” thất bại với { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Hành động “{ $action }” thất bại với { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Thuật toán băm không đư�
 
 # Chẩn đoán của các hàm trợ giúp tập hợp.
 stdlib.collections.flatten.expected_sequence = flatten mong đợi các phần tử của một dãy nhưng lại gặp { $kind }.
+stdlib.collections.compact.not_sequence = compact mong đợi một dãy nhưng lại gặp { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by cần một thuộc tính không rỗng.
 stdlib.collections.group_by.unresolved = group_by không tìm được “{ $attr }” trên phần tử kiểu { $kind }.
 
@@ -439,3 +457,22 @@ manifest.budget.exceeded = Đã dùng hết ngân sách tài nguyên của manif
 
 cli.flag.env_allow_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai được phép sử dụng.
 cli.flag.env_block_var.help = Biến môi trường mà hàm trợ giúp env() của tệp kê khai không được phép sử dụng.
+
+# Kiểm tra tệp kê khai (`netsuke check`).
+cli.subcommand.check.about = Kiểm tra tệp kê khai mà không tạo hay chạy bản dựng.
+cli.subcommand.check.long_about = Rà soát tệp kê khai đã chọn để tìm cấu trúc tuy phân tích được nhưng nhiều khả năng sai, không an toàn, kém khả chuyển hoặc bất lợi cho bộ nhớ đệm.
+cli.subcommand.check.flag.rule.help = Đặt mức nghiêm trọng cho một quy tắc hoặc hạng mục, viết dạng NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Mức nghiêm trọng khiến các phát hiện làm lệnh thất bại.
+cli.subcommand.check.flag.limit.help = Số phát hiện tối đa được báo cáo; 0 báo cáo tất cả.
+cli.subcommand.check.flag.explain.help = In tài liệu tham chiếu quy tắc thay vì kiểm tra tệp kê khai.
+check.threshold_exceeded = Các phát hiện đã chạm ngưỡng { $severity }: { $failing } trên { $reported } đã báo cáo.
+check.threshold_exceeded.help = Hãy sửa các phát hiện đã báo cáo, điều chỉnh --rule hoặc nới --fail-on.
+check.summary.counts = Kết quả kiểm tra — lỗi: { $errors }, cảnh báo: { $warnings }, khuyến nghị: { $advice }, đã ẩn: { $suppressed }.
+check.summary.clean = Không có phát hiện nào.
+check.summary.truncated = Đang hiển thị { $shown } phát hiện; --limit đã bỏ qua { $omitted } phát hiện khác.
+check.rule.malformed = Bộ chọn { $selector } không được viết dạng NAME=SEVERITY.
+check.rule.unknown = Bộ chọn nêu { $name }, vốn không phải quy tắc cũng không phải hạng mục.
+check.rule.severity = Bộ chọn { $name } nêu mức nghiêm trọng { $severity }; cần một trong { $values }.
+check.fail_on.invalid = Ngưỡng thất bại không xác định { $value }; cần một trong { $values }.
+check.source_index = Không thể lập chỉ mục { $path } cho chẩn đoán tại dòng { $line }: { $reason }.
+status.tool.check = Kiểm tra

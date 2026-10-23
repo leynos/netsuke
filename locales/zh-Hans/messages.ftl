@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = 没有主题时，此命令等价于 `--help`�
 cli.help.actions_heading = 动作：
 cli.help.targets_heading = 目标：
 cli.help.targets.about = 列出所选清单中的目标和动作。
+cli.help.targets.flag.edges.help = 在 JSON 输出中包含依赖边和原始配方。
 cli.help.default_marker = 默认
 cli.help.conditional_marker = 条件
 
@@ -99,6 +100,7 @@ runner.context.load_manifest = 无法加载 { $path } 处的清单。
 runner.context.build_graph = 无法根据清单构建图。
 runner.context.generate_ninja = 无法生成 Ninja 清单。
 runner.context.render_graph = 无法渲染图产物。
+runner.help.targets_edges_require_json = --edges 选项需要在顶层指定 --json。
 
 runner.io.create_temp_file = 无法创建临时 Ninja 文件。
 runner.io.write_temp_ninja = 无法写入临时 Ninja 文件。
@@ -138,6 +140,8 @@ manifest.yaml.hint.escape = 请转义反斜杠，或删除无效的转义序列�
 manifest.env.missing = 未设置必需的环境变量。
 manifest.env.invalid_utf8 = 环境变量包含无效的 UTF-8。
 manifest.env.blocked = 对环境变量的访问已被阻止。
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env 的 default 必须是字符串，但收到了 { $kind }。
 manifest.vars.not_object = 清单的 `vars` 必须是映射或对象。
 manifest.vars.reserved_name = 清单的 `vars` 键 '{ $name }' 已保留给内置模板辅助函数；请重命名该变量。
 manifest.read_failed = 无法读取 { $path } 处的清单。
@@ -176,6 +180,8 @@ manifest.glob.unknown_pattern_error = 未知的模式错误。
 manifest.glob.io_failed = 对“{ $pattern }”执行 glob 失败：{ $detail }。
 manifest.glob.unknown_io_error = 未知的输入输出错误。
 manifest.command_list_empty = “command”字段不能为空：请提供命令字符串或非空列表。
+manifest.command_isolation_recipe = “command_isolation”字段需要包含命令列表的配方。
+manifest.command_isolation_scalar = “command_isolation: isolated”需要命令列表。
 
 # 中间表示的错误。
 ir.rule_not_found = 找不到目标“{ $target }”引用的规则“{ $rule }”。
@@ -284,6 +290,17 @@ stdlib.command.output.mode.streaming = 流式
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote 期望字符串，却收到 { $kind }。
+stdlib.shell.quote.control_character = 含有空字节、回车或换行的值无法加引号。
+stdlib.shell.dialect_invalid = 未知的 shell 方言 { $dialect }；应为 { $accepted } 之一。
+stdlib.shell.dialect_not_string = shell 的 dialect 选项必须是字符串，但收到了 { $kind }。
+stdlib.shell.join.not_sequence = shell_join 期望序列，却收到 { $kind }。
+stdlib.shell.join.item_not_string = shell_join 的第 { $index } 项为 { $kind }，不是字符串。
+stdlib.shell.positional_option = { $filter } 以关键字接收选项；请写作 { $example }。
+
 # 路径辅助函数的诊断。
 stdlib.path.io.failed = 对 { $path } 执行“{ $action }”失败（{ $label }）。
 stdlib.path.io.failed_with_detail = 对 { $path } 执行“{ $action }”失败：{ $detail }。
@@ -339,6 +356,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 不支持的散列算法“{ $al
 
 # 集合辅助函数的诊断。
 stdlib.collections.flatten.expected_sequence = flatten 期望序列元素，却发现 { $kind }。
+stdlib.collections.compact.not_sequence = compact 期望序列，却发现 { $kind }。
 stdlib.collections.group_by.empty_attribute = group_by 需要非空的属性。
 stdlib.collections.group_by.unresolved = group_by 无法在类型为 { $kind } 的元素上解析“{ $attr }”。
 
@@ -438,3 +456,22 @@ manifest.budget.exceeded = 清单资源预算在 { $stage } 阶段达到 { $limi
 
 cli.flag.env_allow_var.help = 允许清单 env() 助手使用的环境变量。
 cli.flag.env_block_var.help = 清单 env() 助手阻止使用的环境变量。
+
+# 清单静态检查（`netsuke check`）。
+cli.subcommand.check.about = 在不生成或运行构建的情况下检查清单。
+cli.subcommand.check.long_about = 检查所选清单中虽能解析、但很可能有误、不安全、不可移植或不利于缓存的写法。
+cli.subcommand.check.flag.rule.help = 以 NAME=SEVERITY 的形式设置规则或类别的严重级别。
+cli.subcommand.check.flag.fail_on.help = 使发现项导致命令失败的严重级别。
+cli.subcommand.check.flag.limit.help = 报告的发现项上限；0 表示全部报告。
+cli.subcommand.check.flag.explain.help = 输出规则参考，而不检查清单。
+check.threshold_exceeded = 发现项已达到 { $severity } 阈值：已报告 { $reported } 项中的 { $failing } 项。
+check.threshold_exceeded.help = 请修正已报告的发现项，调整 --rule，或放宽 --fail-on。
+check.summary.counts = 检查结果 — 错误：{ $errors }，警告：{ $warnings }，建议：{ $advice }，已抑制：{ $suppressed }。
+check.summary.clean = 没有发现项。
+check.summary.truncated = 显示 { $shown } 项发现；--limit 略去了另外 { $omitted } 项。
+check.rule.malformed = 选择器 { $selector } 未写成 NAME=SEVERITY 的形式。
+check.rule.unknown = 选择器指定的 { $name } 既不是规则也不是类别。
+check.rule.severity = 选择器 { $name } 指定的严重级别 { $severity } 无效；应为 { $values } 之一。
+check.fail_on.invalid = 未知的失败阈值 { $value }；应为 { $values } 之一。
+check.source_index = 无法为诊断在第 { $line } 行索引 { $path }：{ $reason }。
+status.tool.check = 检查

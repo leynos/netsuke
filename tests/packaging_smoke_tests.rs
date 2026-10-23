@@ -19,7 +19,6 @@ use std::env;
 use std::ffi::OsStr;
 use std::process::Command;
 use std::time::Instant;
-use tempfile::TempDir;
 
 const REQUIRED_PACKAGED_FILES: [&str; 9] = [
     "build_l10n_audit/mod.rs",
@@ -160,11 +159,9 @@ fn collect_rust_sources(root: &Dir, directory: &str, sources: &mut Vec<String>) 
     Ok(())
 }
 
-/// Create a Cargo subprocess that writes build artefacts beneath `target_dir`.
-fn cargo_subprocess(cargo_binary: &OsStr, target_dir: &TempDir) -> Command {
-    let mut command = Command::new(cargo_binary);
-    command.env("CARGO_TARGET_DIR", target_dir.path());
-    command
+/// Create a Cargo subprocess that inherits the caller's build configuration.
+fn cargo_subprocess(cargo_binary: &OsStr) -> Command {
+    Command::new(cargo_binary)
 }
 
 /// Verify that the published package retains required build-script sources.
@@ -177,10 +174,10 @@ fn packaged_manifest_retains_build_script_sources() {
     let subscriber = tracing_subscriber::fmt().with_test_writer().finish();
     tracing::subscriber::with_default(subscriber, || {
         let cargo_binary = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        let cargo_target_dir = tempfile::tempdir()
-            .unwrap_or_else(|error| panic!("create isolated Cargo target directory: {error}"));
+        // Cargo verifies freshly extracted package sources while reusing the
+        // caller's build directory for matching dependency artefacts.
         let publish_started_at = Instant::now();
-        let publish_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)
+        let publish_output = cargo_subprocess(&cargo_binary)
             .args(PUBLISH_DRY_RUN_ARGS)
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()
@@ -197,7 +194,7 @@ fn packaged_manifest_retains_build_script_sources() {
         );
 
         let package_started_at = Instant::now();
-        let list_output = cargo_subprocess(&cargo_binary, &cargo_target_dir)
+        let list_output = cargo_subprocess(&cargo_binary)
             .args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])
             .current_dir(env!("CARGO_MANIFEST_DIR"))
             .output()
@@ -263,15 +260,25 @@ fn publish_dry_run_skips_verification_only_on_windows() {
 }
 
 #[test]
-fn cargo_subprocess_uses_the_given_target_directory() {
-    let target_dir = tempfile::tempdir().expect("create isolated Cargo target directory");
-    let command = cargo_subprocess(OsStr::new("cargo"), &target_dir);
-    let configured_target_dir = command
+fn cargo_subprocess_preserves_cargo_build_configuration() {
+    let cargo_binary = OsStr::new("cargo-for-packaging-test");
+    let command = cargo_subprocess(cargo_binary);
+    let build_variables = [
+        OsStr::new("CARGO_TARGET_DIR"),
+        OsStr::new("CARGO_BUILD_TARGET_DIR"),
+        OsStr::new("CARGO_BUILD_BUILD_DIR"),
+    ];
+    let overrides = command
         .get_envs()
-        .find_map(|(key, value)| (key == OsStr::new("CARGO_TARGET_DIR")).then_some(value))
-        .flatten();
+        .filter_map(|(key, _)| build_variables.contains(&key).then_some(key))
+        .collect::<Vec<_>>();
 
-    assert_eq!(configured_target_dir, Some(target_dir.path().as_os_str()));
+    assert_eq!(command.get_program(), cargo_binary);
+    assert_eq!(
+        overrides,
+        Vec::<&OsStr>::new(),
+        "Cargo build placement must inherit the caller's environment and configuration"
+    );
 }
 
 /// Normalize Cargo's platform-native package-list separators for comparison.

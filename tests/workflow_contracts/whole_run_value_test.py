@@ -1,8 +1,8 @@
 """The whole-run budget's value, pinned to the figure the guide states.
 
 The ordering assertions in ``timeout_ordering_test`` hold for every
-budget between the 300 s largest per-test allowance and the 830 s the
-1,800 s watchdog can cover, so the budget can drift to a value nobody
+budget between the 900 s largest per-test allowance and the 1,010 s the
+1,980 s watchdog can cover, so the budget can drift to a value nobody
 chose while each of them still passes. The guide records one value and
 the arithmetic that produced it, and this is what makes changing the
 file change the guide with it.
@@ -25,10 +25,9 @@ from timeout_budgets import CAPPED_PROFILE, NEXTEST_CONFIG
 #: holds the sample and the arithmetic. It belongs to the profile CI
 #: selects, not to `default`, which local runs use uncapped.
 #:
-#: Thirteen minutes rather than fifteen. The watchdog requirement the
-#: ordering asserts grew a report-phase term, and at 900s the budget no
-#: longer fitted inside the 1,800s watchdog it has to sit below.
-STATED_WHOLE_RUN_BUDGET_SECONDS: typ.Final[float] = 13 * 60.0
+#: Sixteen minutes. It clears the longest measured run by more than eight
+#: minutes and remains below what the 1,980s watchdog can cover.
+STATED_WHOLE_RUN_BUDGET_SECONDS: typ.Final[float] = 16 * 60.0
 
 
 def test_the_whole_run_budget_is_the_value_the_guide_states() -> None:

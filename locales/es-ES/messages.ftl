@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Sin tema, esto coincide con `--help`. Use `help
 cli.help.actions_heading = Acciones:
 cli.help.targets_heading = Objetivos:
 cli.help.targets.about = Enumerar objetivos y acciones en el manifiesto seleccionado.
+cli.help.targets.flag.edges.help = Incluir aristas de dependencias y recetas sin procesar en la salida JSON.
 cli.help.default_marker = predeterminado
 cli.help.conditional_marker = condicional
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = No se pudo cargar el manifiesto en { $path }.
 runner.context.build_graph = No se pudo construir el grafo desde el manifiesto.
 runner.context.generate_ninja = No se pudo generar el manifiesto Ninja.
 runner.context.render_graph = No se pudo renderizar el artefacto de grafo.
+runner.help.targets_edges_require_json = La opción --edges requiere --json en el nivel raíz.
 
 runner.io.create_temp_file = No se pudo crear el archivo Ninja temporal.
 runner.io.write_temp_ninja = No se pudo escribir el archivo Ninja temporal.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Escapa las barras inversas o elimina secuencias inv�
 manifest.env.missing = Una variable de entorno requerida no está establecida.
 manifest.env.invalid_utf8 = Una variable de entorno contiene UTF-8 inválido.
 manifest.env.blocked = El acceso a una variable de entorno está bloqueado.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = El default de env debe ser una cadena, se recibió { $kind }.
 manifest.vars.not_object = `vars` del manifiesto debe ser un mapa/objeto.
 manifest.vars.reserved_name = La clave `vars` '{ $name }' del manifiesto está reservada para una función auxiliar de plantillas integrada; renombre la variable.
 manifest.read_failed = No se pudo leer el manifiesto en { $path }.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = error de patrón desconocido.
 manifest.glob.io_failed = Falló el glob para '{ $pattern }': { $detail }.
 manifest.glob.unknown_io_error = error de E/S desconocido.
 manifest.command_list_empty = El campo 'command' no debe estar vacío: proporcione una cadena de comando o una lista no vacía.
+manifest.command_isolation_recipe = El campo 'command_isolation' requiere una receta con una lista de comandos.
+manifest.command_isolation_scalar = 'command_isolation: isolated' requiere una lista de comandos.
 
 # Errores de IR.
 ir.rule_not_found = No se encontró la regla '{ $rule }' referenciada por el objetivo '{ $target }'.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote esperaba una cadena pero recibió { $kind }.
+stdlib.shell.quote.control_character = Un valor que contenga un byte nulo, un retorno de carro o un salto de línea no se puede entrecomillar.
+stdlib.shell.dialect_invalid = Dialecto de shell desconocido { $dialect }; se esperaba uno de { $accepted }.
+stdlib.shell.dialect_not_string = La opción dialect de shell debe ser una cadena, se recibió { $kind }.
+stdlib.shell.join.not_sequence = shell_join esperaba una secuencia pero recibió { $kind }.
+stdlib.shell.join.item_not_string = El elemento { $index } de shell_join es { $kind }, no una cadena.
+stdlib.shell.positional_option = { $filter } toma sus opciones por palabra clave; escriba { $example }.
+
 # Diagnósticos de rutas.
 stdlib.path.io.failed = { $action } falló para { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } falló para { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo hash no compatible '{ 
 
 # Diagnósticos de colecciones.
 stdlib.collections.flatten.expected_sequence = Flatten esperaba elementos de secuencia pero encontró { $kind }.
+stdlib.collections.compact.not_sequence = compact esperaba una secuencia pero encontró { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by requiere un atributo no vacío.
 stdlib.collections.group_by.unresolved = group_by no pudo resolver '{ $attr }' en un elemento de tipo { $kind }.
 
@@ -445,3 +463,25 @@ manifest.budget.exceeded = Se ha agotado el presupuesto de recursos del manifies
 
 cli.flag.env_allow_var.help = Variable de entorno permitida para el asistente env() del manifiesto.
 cli.flag.env_block_var.help = Variable de entorno bloqueada para el asistente env() del manifiesto.
+
+# Análisis del manifiesto (`netsuke check`).
+cli.subcommand.check.about = Analiza el manifiesto sin generar ni ejecutar una compilación.
+cli.subcommand.check.long_about = Analiza el manifiesto seleccionado en busca de construcciones que se analizan correctamente pero probablemente sean erróneas, inseguras, no portables u hostiles a la caché.
+cli.subcommand.check.flag.rule.help = Establecer la severidad de una regla o categoría, escrita como NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Severidad a partir de la cual los hallazgos hacen fallar el comando.
+cli.subcommand.check.flag.limit.help = Número máximo de hallazgos informados; 0 los informa todos.
+cli.subcommand.check.flag.explain.help = Mostrar la referencia de reglas en lugar de analizar un manifiesto.
+check.threshold_exceeded = Los hallazgos alcanzaron el umbral { $severity }: { $failing } de { $reported } informados.
+check.threshold_exceeded.help = Corrija los hallazgos informados, ajuste --rule o relaje --fail-on.
+check.summary.counts = Resultados del análisis — errores: { $errors }, advertencias: { $warnings }, consejos: { $advice }, suprimidos: { $suppressed }.
+check.summary.clean = Sin hallazgos.
+check.summary.truncated = { $shown ->
+    [one] Se muestra { $shown } hallazgo; --limit omitió { $omitted } más.
+   *[other] Se muestran { $shown } hallazgos; --limit omitió { $omitted } más.
+}
+check.rule.malformed = El selector { $selector } no está escrito como NAME=SEVERITY.
+check.rule.unknown = El selector nombra { $name }, que no es ni una regla ni una categoría.
+check.rule.severity = El selector { $name } nombra la severidad { $severity }; se esperaba una de { $values }.
+check.fail_on.invalid = Umbral de fallo desconocido { $value }; se esperaba uno de { $values }.
+check.source_index = No se pudo indexar { $path } para los diagnósticos en la línea { $line }: { $reason }.
+status.tool.check = Comprobación

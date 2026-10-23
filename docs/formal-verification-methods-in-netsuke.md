@@ -22,18 +22,38 @@ The highest-return verification work is concentrated in the semantic core:
 
 ## Current repository state
 
-The repository currently has no formal-verification tooling. `Cargo.toml`
-contains unit-testing, behavioural-testing, snapshot-testing, and CLI-testing
-dependencies, but no `proptest`, `kani`, `verus`, or Stateright support.[^1]
-The top-level `Makefile` exposes build, test, lint, formatting, Markdown lint,
-and Mermaid validation targets only.[^2] The current `CI` workflow runs the
-same conventional checks across supported toolchains and does not define a
-separate proof or model-checking job.[^3]
+This section describes the tree as it stands on 2026-10-13. The rest of this
+document is a forward-looking plan, so its tenses read as design intent rather
+than as a description of what exists; this section is the one kept current.
 
-That absence is useful context. Netsuke does not need a new verification
-workspace as a first step. The strongest verification targets already live in
-production modules with clear semantic boundaries, so a lightweight,
-module-adjacent approach is the most proportionate fit.
+The plan below has largely been implemented. `Cargo.toml` carries `proptest`
+for generated testing, a `[package.metadata.kani.flags]` table, and a declared
+`cfg(kani)` expectation in `unexpected_cfgs`.[^1] Verus is pinned under
+`tools/verus/` and invocable through `make verus`, but remains outside the
+ordinary dependency set.
+
+The `Makefile` now exposes the formal-verification surface the "Repository
+integration plan" below describes: `install-kani`, `kani-check`, `kani-full`,
+`kani-ir`, `test-kani-mutations`, `test-kani-scope-wrapper`, `install-verus`,
+`verus`, and `formal-pr`, alongside the build, test, lint, formatting, Markdown
+lint, and Mermaid validation targets.[^2]
+
+The `CI` workflow does define a separate proof job. `kani-smoke` is a dedicated
+required job covering every harness on pushes to `main`, nightly schedules, and
+manual dispatches, and on pull requests it runs only when a proof input changes
+(see
+[ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).[^3]
+The 15 harnesses live in three verification modules:
+`src/ir/cycle/verification.rs` (9), `src/ir/from_manifest/verification.rs` (4),
+and `src/ir/cmd_interpolate/verification.rs` (2). `src/ir/graph/kani_map.rs` is
+`cfg(kani)` support code those harnesses use, not a harness location.
+
+That earlier absence still shapes the design. Netsuke did not need a new
+verification workspace as a first step: the strongest verification targets
+already lived in production modules with clear semantic boundaries, so the
+lightweight, module-adjacent approach described below is what the repository
+adopted — harnesses colocated beside the helpers they exercise, and the Verus
+kernel kept outside ordinary Cargo.
 
 ## Recommended scope
 
@@ -54,10 +74,13 @@ The first Kani harnesses should cover these properties:
 - Acyclic bounded graphs (same size limits) are never rejected as cyclic.
 - Missing dependencies are recorded without creating false cycles.
 
-`src/ir/cycle.rs` is the strongest narrow proof candidate in the current
+`src/ir/cycle/mod.rs` is the strongest narrow proof candidate in the current
 repository. `canonicalize_cycle` has a crisp normalization contract that is
-small enough for Kani immediately and remains a plausible later Verus kernel if
-stronger proof obligations become worthwhile.[^7]
+small enough for Kani immediately and remains a plausible Verus kernel if
+stronger proof obligations become worthwhile.[^7] It is not yet one: the two
+kernels the "Optional Verus proof kernel" section below accepts are the
+canonical value key and equality relation, which is committed, and this cycle
+model, which is not.
 
 ### Kani for command interpolation
 
@@ -121,22 +144,39 @@ targets, Verus Continuous Integration (CI), or Verus files under ordinary Cargo
 as part of the phase-1 boundary.
 
 Verus is not the correct first tool for the manifest or command-interpolation
-layers. The only current entry point worth preserving for later evaluation is a
-cycle canonicalization model related to `src/ir/cycle.rs`. That model is
-appropriate because `canonicalize_cycle` exposes a clear mathematical contract:
+layers. Two kernels are accepted, and both are narrow normalization or
+algorithm models rather than production subsystems.
+
+The first is a cycle canonicalization model related to `src/ir/cycle/mod.rs`.
+That model is appropriate because `canonicalize_cycle` exposes a clear
+mathematical contract:
 
 - output length is preserved,
 - the cycle remains closed,
 - the interior node multiset is preserved, and
 - the chosen start node is stable under the repository's ordering rule.[^7]
 
-If Verus is introduced by a later approved roadmap item, it should prove only
-that narrow normalization model at first. Production `HashMap` structures,
-MiniJinja values, filesystem helpers, and subprocess orchestration should
-remain outside the first proof boundary. Until the proof kernel is stable and
-reviewed, Verus should remain outside pull-request gates, `make test`,
-`make lint`, `make check-fmt`, `make all`, `make kani-check`, `make kani-full`,
-and `make formal-pr`.
+The second is the algorithm behind the canonical value key and equality
+relation, proved in `verus/canonical_value/main.rs`. It establishes that
+first-index deduplication retains exactly the least occurrences of each key,
+against an independent quadratic specification stated over the input rather
+than derived from any membership structure. The relation's own reflexivity,
+symmetry, and transitivity are *not* among its results: they are properties of
+byte-identity over a canonical form, and they are checked by the property
+battery in `src/stdlib/canonical_value/tests/properties.rs`, not proved here.
+
+Production `HashMap` structures, MiniJinja values, filesystem helpers, and
+subprocess orchestration remain outside both proof boundaries. The second
+kernel's keys are an abstract sort standing in for the runtime's byte strings,
+so the template-to-key conversion, the runtime's own membership structure, and
+the production adapter are each outside what it proves, and the kernel carries
+no `assume`, `admit`, external body, or axiom beyond `vstd`'s own. The runtime
+correspondence is carried by the independent quadratic oracle in
+`src/stdlib/canonical_value/tests/oracle.rs`, not by Verus.
+
+Verus remains outside pull-request gates, `make test`, `make lint`,
+`make check-fmt`, `make all`, `make kani-check`, `make kani-full`, and
+`make formal-pr`.
 
 ### Stateright remains deferred
 
@@ -184,6 +224,15 @@ The preferred first layout is intentionally lightweight:
 This layout keeps Kani harnesses close to the internal helpers they exercise,
 which avoids widening the public API solely for proofs. Verus can remain
 outside Cargo until it proves its value.
+
+The diagram is the shape this plan proposed, not an inventory of the tree as it
+stands; parts of it were never adopted. The `tools/` entries are real, and
+`tools/verus/VERSION` and `tools/verus/SHA256SUMS` are the pins that
+`make install-verus` and `make verus` read. The `verus/` filenames and the three
+`src/` harness modules are illustrative: the repository instead colocated its
+Kani harnesses beside the helpers they exercise, and its one Verus kernel is
+`verus/canonical_value/main.rs`. The `## Current repository state` section
+above records the actual layout.
 
 Kani and Verus installation and execution should be delegated to the
 `rust-prover-tools` CLI rather than repository-local shell scripts. Netsuke
@@ -245,16 +294,27 @@ Formal verification should not be folded into the existing `build-test` job.
 The current `CI` workflow already performs formatting, linting, tests, and
 coverage, and those checks should remain intact.[^3]
 
-The `kani-smoke` job is a dedicated, pull-request-only job (it runs only when
-`github.event_name == 'pull_request'`) that:
+The `kani-smoke` job is a dedicated, required job that runs on every trigger.
+It verifies every harness on each push to `main`, nightly, and on a manual
+dispatch; on a pull request it runs them only when the pull request changes a
+proof input (see
+[ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).
+When the proofs run, it:
 
-- installs `uv` and then installs the pinned Kani toolchain through
-  `make install-kani`,
-- runs `make kani-check` and then the bounded harness suite through
-  `make kani-ir` (15 harnesses across the manifest, cycle, and
-  command-interpolation verification modules),
+- installs the pinned Kani front-end and release bundle from checksummed
+  archives, then checks the reported version against `tools/kani/VERSION`,
+- runs the bounded harness suite through `make kani-ir` (15 harnesses across
+  the manifest, cycle, and command-interpolation verification modules), then
+  `make install-build-tools` and the mutation patch compile gate through
+  `make test-kani-mutations`,
 - caches tool downloads separately from the ordinary Rust build artefacts, and
-- is bounded by a 20-minute job timeout (`timeout-minutes: 20`).
+- is bounded by a 30-minute job timeout (`timeout-minutes: 30`).
+
+The dispatch trigger exists for the cache: a dispatch cannot publish a
+generation, because the save gates on a push to `main`, so what it measures is
+a warm restore. The compile gate is the reason the ceiling moved from 20
+minutes, since it builds the whole dependency graph through the Kani frontend
+into a `CARGO_TARGET_DIR` no cache restores.
 
 Any later Verus job should be added only after a stable proof kernel exists.
 
@@ -267,7 +327,8 @@ Three contracts should be documented before proofs become gating checks.
 The interpolation layer recognizes only the internal `INS_TOKEN` and
 `OUTS_TOKEN` tokens emitted by manifest rendering, identically in both recipe
 kinds. `$in`, `$out`, `$ins`, and `$outs` are all literal shell variables,
-following [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md). On
+following
+[ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md). On
 POSIX-compatible routes, markers inside backticks are rejected in both recipe
 kinds. The two further checks — unmatched backticks and a substituted result
 that fails the current `shlex` guard — run only on `command:` text; scripts may
@@ -277,14 +338,15 @@ PowerShell treats a backtick as an escape.
 **Settled.** Roadmap item 4.4.1 documents this contract for users in the
 [README](../README.md#security-and-command-interpolation) and all six
 translated editions under *Security and command interpolation*. The decisions
-are recorded in [ADR-027](adr-027-command-placeholder-contract.md). The three
-questions this section raised are now answered:
+are recorded in [ADR-0027](adrs/adr-0027-command-placeholder-contract.md). The
+three questions this section raised are now answered:
 
 - The supported placeholder set is `{{ ins }}` and `{{ outs }}`, and nothing
   else, identically in both recipe kinds. Every dollar-prefixed form is a shell
-  variable. [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md)
+  variable.
+  [ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md)
   settled this by removing the former `script:`-only lowering of `$in` and
-  `$out`; ADR-027 states the resulting contract.
+  `$out`; ADR-0027 states the resulting contract.
 - Backtick handling is two mechanisms at two strengths. Rejecting a marker
   inside a backtick or `$( … )` region is a promised invariant. Rejecting a
   `command:` whose substituted text contains an odd backtick count is a
@@ -342,12 +404,13 @@ into a proof-first shape that its current architecture does not need.
   current continuous integration workflow.
 [^4]: [`README.md`](../README.md) describes Netsuke as a compiler from YAML and
   Jinja to Ninja, with deterministic graph generation and Ninja execution.
-[^5]: [`src/ir/from_manifest.rs`](../src/ir/from_manifest.rs) defines
+[^5]: [`src/ir/from_manifest/mod.rs`](../src/ir/from_manifest/mod.rs) defines
   `BuildGraph::from_manifest`, duplicate-output rejection, rule resolution, and
   cycle reporting.
-[^6]: [`src/ninja_gen.rs`](../src/ninja_gen.rs) sorts actions, edges, and
+[^6]: [`src/ninja_gen/mod.rs`](../src/ninja_gen/mod.rs) sorts actions, edges,
+      and
   default targets to keep emitted Ninja text deterministic.
-[^7]: [`src/ir/cycle.rs`](../src/ir/cycle.rs) defines cycle analysis and
+[^7]: [`src/ir/cycle/mod.rs`](../src/ir/cycle/mod.rs) defines cycle analysis and
   `canonicalize_cycle`.
 [^8]: [`src/ir/cmd_interpolate/mod.rs`](../src/ir/cmd_interpolate/mod.rs)
   defines placeholder substitution and command validation.

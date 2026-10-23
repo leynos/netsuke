@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Bez tématu odpovídá příkazu `--help`. Pomo
 cli.help.actions_heading = Akce:
 cli.help.targets_heading = Cíle:
 cli.help.targets.about = Vypsat cíle a akce ve vybraném manifestu.
+cli.help.targets.flag.edges.help = Zahrnout hrany závislostí a nezpracované recepty do výstupu JSON.
 cli.help.default_marker = výchozí
 cli.help.conditional_marker = podmíněný
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifest v { $path } se nepodařilo načíst.
 runner.context.build_graph = Z manifestu se nepodařilo sestavit graf.
 runner.context.generate_ninja = Manifest Ninja se nepodařilo vytvořit.
 runner.context.render_graph = Artefakt grafu se nepodařilo vykreslit.
+runner.help.targets_edges_require_json = Volba --edges vyžaduje --json na nejvyšší úrovni.
 
 runner.io.create_temp_file = Dočasný soubor Ninja se nepodařilo vytvořit.
 runner.io.write_temp_ninja = Dočasný soubor Ninja se nepodařilo zapsat.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Escapujte zpětná lomítka nebo odstraňte neplatn�
 manifest.env.missing = Povinná proměnná prostředí není nastavena.
 manifest.env.invalid_utf8 = Proměnná prostředí obsahuje neplatné UTF-8.
 manifest.env.blocked = Přístup k proměnné prostředí je zablokován.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Hodnota default v env musí být řetězec; typ obdržené hodnoty: { $kind }.
 manifest.vars.not_object = Položka `vars` manifestu musí být mapování nebo objekt.
 manifest.vars.reserved_name = Klíč `vars` '{ $name }' v manifestu je vyhrazen pro vestavěného pomocníka šablon; přejmenujte proměnnou.
 manifest.read_failed = Manifest v { $path } se nepodařilo přečíst.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = neznámá chyba vzoru.
 manifest.glob.io_failed = Glob selhal pro „{ $pattern }“: { $detail }.
 manifest.glob.unknown_io_error = neznámá vstupně-výstupní chyba.
 manifest.command_list_empty = Pole „command“ nesmí být prázdné: zadejte řetězec s příkazem nebo neprázdný seznam.
+manifest.command_isolation_recipe = Pole „command_isolation“ vyžaduje recept se seznamem příkazů.
+manifest.command_isolation_scalar = „command_isolation: isolated“ vyžaduje seznam příkazů.
 
 # Chyby mezikódu.
 ir.rule_not_found = Pravidlo „{ $rule }“, na které odkazuje cíl „{ $target }“, nebylo nalezeno.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = proudové zpracování
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote očekával řetězec, ale obdržel { $kind }.
+stdlib.shell.quote.control_character = Hodnotu obsahující nulový bajt, návrat vozíku nebo konec řádku nelze uzavřít do uvozovek.
+stdlib.shell.dialect_invalid = Neznámý dialekt shellu { $dialect }; očekáván jeden z { $accepted }.
+stdlib.shell.dialect_not_string = Volba dialect v shell musí být řetězec; typ obdržené hodnoty: { $kind }.
+stdlib.shell.join.not_sequence = shell_join očekával posloupnost, ale obdržel { $kind }.
+stdlib.shell.join.item_not_string = Prvek { $index } v shell_join má typ { $kind }, nikoli řetězec.
+stdlib.shell.positional_option = { $filter } přijímá své volby jako klíčová slova; zapište { $example }.
+
 # Diagnostika pomocníka pro cesty.
 stdlib.path.io.failed = Akce „{ $action }“ selhala pro { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Akce „{ $action }“ selhala pro { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nepodporovaný hashovací algori
 
 # Diagnostika pomocníků pro kolekce.
 stdlib.collections.flatten.expected_sequence = flatten očekával prvky posloupnosti, ale nalezl { $kind }.
+stdlib.collections.compact.not_sequence = compact očekává posloupnost; typ obdržené hodnoty: { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vyžaduje neprázdný atribut.
 stdlib.collections.group_by.unresolved = group_by nedokázal najít „{ $attr }“ u prvku typu { $kind }.
 
@@ -446,3 +464,26 @@ manifest.budget.exceeded = Rozpočet prostředků manifestu byl během fáze { $
 
 cli.flag.env_allow_var.help = Proměnná prostředí povolená pomocníkovi env() manifestu.
 cli.flag.env_block_var.help = Proměnná prostředí blokovaná pomocníkovi env() manifestu.
+
+# Analýza manifestu (`netsuke check`).
+cli.subcommand.check.about = Analyzovat manifest bez generování či spuštění sestavení.
+cli.subcommand.check.long_about = Prozkoumat zvolený manifest na konstrukce, které sice projdou rozborem, ale jsou pravděpodobně chybné, nebezpečné, nepřenositelné nebo nepříznivé pro mezipaměť.
+cli.subcommand.check.flag.rule.help = Nastavit závažnost pravidla nebo kategorie, zapsanou jako NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Závažnost, při níž nálezy způsobí selhání příkazu.
+cli.subcommand.check.flag.limit.help = Nejvyšší počet hlášených nálezů; 0 hlásí všechny.
+cli.subcommand.check.flag.explain.help = Vypsat referenci pravidel místo analýzy manifestu.
+check.threshold_exceeded = Nálezy dosáhly prahu { $severity }: { $failing } z { $reported } hlášených.
+check.threshold_exceeded.help = Opravte hlášené nálezy, upravte --rule nebo uvolněte --fail-on.
+check.summary.counts = Výsledky analýzy — chyby: { $errors }, varování: { $warnings }, doporučení: { $advice }, potlačeno: { $suppressed }.
+check.summary.clean = Žádné nálezy.
+check.summary.truncated = { $shown ->
+    [one] Zobrazen { $shown } nález; --limit vynechal dalších { $omitted }.
+    [few] Zobrazeny { $shown } nálezy; --limit vynechal dalších { $omitted }.
+   *[other] Zobrazeno { $shown } nálezů; --limit vynechal dalších { $omitted }.
+}
+check.rule.malformed = Selektor { $selector } není zapsán jako NAME=SEVERITY.
+check.rule.unknown = Selektor uvádí { $name }, což není ani pravidlo, ani kategorie.
+check.rule.severity = Selektor { $name } uvádí závažnost { $severity }; očekávána jedna z { $values }.
+check.fail_on.invalid = Neznámý práh selhání { $value }; očekáván jeden z { $values }.
+check.source_index = Nepodařilo se indexovat { $path } pro diagnostiku na řádku { $line }: { $reason }.
+status.tool.check = Kontrola

@@ -16,13 +16,11 @@ use anyhow::{Context, Result, ensure};
 use common::workflow_contents;
 use workflow_steps::workflow_step_body;
 
-/// Reject every `cargo install` form that would compile `cargo-orthohelp`.
+/// Keep the release workflow on the tested prebuilt installer.
 ///
-/// Matching the bare `cargo install cargo-orthohelp` prefix is not enough:
-/// `cargo install --locked cargo-orthohelp@0.9.1` compiles the tool just the
-/// same, and so does any other flag placed before the crate name. The pattern
-/// therefore allows arbitrary flags and version selectors between the
-/// subcommand and the crate.
+/// The workflow passes the pinned version and scoped token to the Python
+/// script, which owns the version probe and non-compiling binstall flags. A
+/// source-install scan keeps the retired fallback out of the workflow.
 ///
 /// `ortho-config` published no binaries until 0.9.1
 /// (leynos/ortho-config#479), so this lane once carried a documented exception
@@ -32,32 +30,22 @@ use workflow_steps::workflow_step_body;
 fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> {
     let install_body = workflow_step_body(contents, "Install cargo-orthohelp").join("\n");
     ensure!(
-        install_body.contains("cargo binstall --no-confirm --locked \\"),
-        "workflow should install cargo-orthohelp with cargo-binstall"
-    );
-    // Structural rather than hopeful. The retired form named the binary-only
-    // strategies it preferred and fell through to a compile when they missed.
-    // Disabling the compile strategy means a release that stops publishing
-    // assets fails the lane instead of quietly building the tool from source.
-    ensure!(
-        install_body.contains("--disable-strategies compile"),
-        "cargo-binstall must be unable to fall back to compiling the tool"
+        install_body.contains("scripts/install_orthohelp.py"),
+        "workflow should delegate installation to the tested Python script"
     );
     ensure!(
-        !install_body.contains("--strategies crate-meta-data,quick-install"),
-        "the retired strategy list permitted a compile fallback and must not return"
+        install_body.lines().any(|line| line.trim()
+            == "run: uv run --no-project --python \"$UV_PYTHON\" scripts/install_orthohelp.py"),
+        "workflow should keep the installer invocation thin"
     );
-    // Only 0.9.1 and later carry release assets, so pinning below that would
-    // reintroduce the compile this contract exists to forbid.
     ensure!(
-        install_body.contains("cargo-orthohelp@0.9.1"),
-        "workflow should pin a cargo-orthohelp release that publishes assets"
+        install_body.contains("INPUT_VERSION: '0.9.1'"),
+        "workflow should pin the installed version through INPUT_VERSION"
     );
-
-    // Flags, `--version`/`--index` selectors, and quoting all sit between the
-    // subcommand and the crate name, so the pattern allows arbitrary tokens
-    // that are not themselves the crate. Zero matches: unlike the retired
-    // exception, no source install of this tool is permitted anywhere.
+    ensure!(
+        install_body.contains("GITHUB_TOKEN: ${{ github.token }}"),
+        "workflow should retain the scoped token for release asset resolution"
+    );
     let source_install =
         regex::Regex::new(r#"cargo\s+install\s+(?:[-"'][^\s]*\s+)*"?cargo-orthohelp"#)
             .context("compile the cargo-orthohelp source-install pattern")?;
@@ -66,13 +54,9 @@ fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> 
         "cargo-orthohelp must never be installed from source; 0.9.1 publishes \
          prebuilt archives for every platform this lane targets"
     );
-    // The dedicated build directory existed only to keep that source build's
-    // compiler output away from the product's tree. With no source build it
-    // has no purpose, and leaving it in the cache entry would archive an empty
-    // path on every packaging run.
     ensure!(
         !contents.contains("orthohelp-build"),
-        "the source build's dedicated target directory should be gone"
+        "the retired source build's dedicated target directory should stay gone"
     );
 
     let build_index = contents
@@ -99,13 +83,21 @@ fn behavioural_build_and_package_generates_release_help_with_orthohelp() {
         contents.contains("scripts/generate-release-help.sh"),
         "workflow should call the release help script"
     );
+    let help_step = workflow_step_body(&contents, "Generate release help").join("\n");
+    for expected in [
+        "TARGET: ${{ inputs.target }}",
+        "BIN_NAME: ${{ env.BIN_NAME }}",
+        "HELP_MODULE_NAME: ${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}",
+        "\"target/orthohelp/$TARGET/release\"",
+    ] {
+        assert!(
+            help_step.contains(expected),
+            "release-help step should preserve argument wiring: {expected}"
+        );
+    }
     assert!(
-        contents.contains("\"target/orthohelp/${{ inputs.target }}/release\""),
-        "workflow should generate help under target/orthohelp"
-    );
-    assert!(
-        contents.contains("man-paths: ${{ steps.stage_paths.outputs.man_path }}"),
-        "Linux packaging should consume the staged man_path output"
+        contents.contains("man-paths: ${{ steps.stage.outputs['man-path'] }}"),
+        "Linux packaging should consume the staged man-path output directly"
     );
     assert!(
         !contents.contains("target/generated-man"),
@@ -119,14 +111,12 @@ fn behavioural_build_and_package_validates_release_help_tooling() {
         .expect("build-and-package workflow should be readable");
 
     assert!(
-        contents.contains(
-            "cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\\.9\\.1([[:space:]]|$)'"
-        ),
-        "workflow should validate the installed cargo-orthohelp version"
+        contents.contains("scripts/install_orthohelp.py"),
+        "workflow should use the tested cargo-orthohelp installer"
     );
     assert!(
-        contents.contains("\"${{ inputs.platform == 'windows' && 'Netsuke' || env.BIN_NAME }}\""),
-        "workflow should pass the PowerShell module name explicitly"
+        contents.contains("cargo-orthohelp --version"),
+        "workflow should verify the installed cargo-orthohelp version"
     );
     for step_name in ["Validate cargo-orthohelp version", "Generate release help"] {
         let step_body = workflow_step_body(&contents, step_name).join("\n");

@@ -1,6 +1,6 @@
 //! Bounded extraction of command-list failure attribution from Ninja output.
 
-use crate::ninja_gen::ninja_gen_command_list::COMMAND_LIST_FAILURE_PREFIX;
+use crate::ninja_gen::command_list::COMMAND_LIST_FAILURE_PREFIX;
 use std::io::{self, Write};
 
 use super::streaming::{ForwardStats, forward_child_output};

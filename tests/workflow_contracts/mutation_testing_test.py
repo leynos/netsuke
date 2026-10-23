@@ -3,18 +3,39 @@
 The executable logic lives in the ``leynos/shared-actions`` reusable
 workflow, which carries its own unit and integration tests; netsuke's
 caller is declarative configuration. These tests parse the caller through
-the shared workflow loader and pin the contract it must uphold, so drift (repointing the
-reference at a branch, widening permissions, or losing the Kani-module
-excludes or the feature args) fails CI on the pull request rather than
-surfacing in a scheduled or manual run.
+the shared workflow loader and pin the contract it must uphold, so drift
+(repointing the reference at a branch, widening permissions, or losing the
+Kani-module excludes, the feature args, or the mold provisioning) fails CI
+on the pull request rather than surfacing in a scheduled or manual run.
 
 The caller must reference the correct reusable workflow at a commit SHA;
 Dependabot owns the SHA value, so this test asserts the shape of the pin
 (a 40-character lowercase hex commit SHA) rather than a specific SHA.
 
+Two of the caller's inputs provision the build toolchain rather than the
+mutation run, and they are asserted as a pair. ``install-mold`` asks the
+shared ``setup-rust`` action to put the pinned mold on ``PATH``, which is
+what the repository's own ``check-build-tools`` preflight requires before
+any build target runs. ``setup-commands`` then re-runs that preflight
+inside the worker, so a run whose mold is missing, unrunnable, or at the
+wrong version says so before the baseline compiles rather than failing
+later as an opaque linker error. Installing a linker on some other CI job
+provisions that job's worker and not this one, which is why the input is
+asserted here rather than assumed from ``ci.yml``.
+
+The two assertions are deliberately independent of each other and of the
+version. ``install-mold`` is pinned as the *string* ``"true"`` because the
+shared workflow declares it ``type: string``; passing a YAML boolean would
+be a type error at workflow-call time. No mold version is passed, because
+the shared revision declares none and the repository's pin lives in
+``tools/mold/VERSION``, which the preflight checks at run time.
+
 Run via ``make test-workflow-contracts``.
 """
 
+import copy
+
+import pytest
 from workflow_loading import (
     MUTATION_TESTING_WORKFLOW_PATH,
     load_workflow,
@@ -27,17 +48,45 @@ EXPECTED_USES_PATH = "leynos/shared-actions/.github/workflows/mutation-cargo.yml
 #: declarations; cargo-mutants does not evaluate that cfg, so their
 #: survivors would be noise.
 KANI_EXCLUDES = (
-    "src/ir/cycle_verification.rs",
+    "src/ir/cycle/verification.rs",
     "src/ir/cmd_interpolate/verification.rs",
-    "src/ir/from_manifest_verification.rs",
-    "src/ir/graph_kani_map.rs",
+    "src/ir/from_manifest/verification.rs",
+    "src/ir/graph/kani_map.rs",
 )
+
+#: The shared workflow input that installs the pinned linker.
+INSTALL_MOLD_INPUT = "install-mold"
+
+#: The shared workflow input that runs caller commands before cargo-mutants.
+SETUP_COMMANDS_INPUT = "setup-commands"
+
+#: The repository target that verifies every build-tool pin.
+BUILD_TOOLS_TARGET = "make check-build-tools"
+
+#: The flag names the setup commands print for the run log.
+FLAG_VARIABLES = ("RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS")
+
+
+# Both variables are printed because Cargo gives `CARGO_ENCODED_RUSTFLAGS`
+# precedence and falls back to `RUSTFLAGS` only when the encoded form is unset,
+# so a run where just one is set is visible in the log. An unset variable is
+# not an error: the shared workflow's guide documents that `setup-rust` may
+# leave `RUSTFLAGS` such that the project's own Cargo configuration decides the
+# linker.
+def _flag_report_lines() -> str:
+    """Return one setup command per linker-flag variable, for the run log."""
+    return "".join(
+        f'printf "{name}=%s\\n" "${{{name}-<unset>}}"\n' for name in FLAG_VARIABLES
+    )
+
 
 #: The exact caller configuration; assert the whole block so an added or
 #: dropped input fails loudly.
 EXPECTED_WITH = {
     "exclude-globs": ",".join(KANI_EXCLUDES),
     "extra-args": "--all-features",
+    INSTALL_MOLD_INPUT: "true",
+    SETUP_COMMANDS_INPUT: BUILD_TOOLS_TARGET + "\n" + _flag_report_lines(),
 }
 
 
@@ -135,15 +184,188 @@ def test_triggers_keep_schedule_and_plain_dispatch() -> None:
     )
 
 
-def test_with_block_carries_the_caller_configuration() -> None:
-    """The caller passes exactly the Kani excludes and feature args."""
-    with_block = require_mapping(
+def _flag_override_problems(workflow: dict[str, object]) -> list[str]:
+    """Return every place the caller sets a compiler-flag variable.
+
+    Invariant I1 of the ExecPlan forbids the caller from setting
+    ``RUSTFLAGS`` or ``CARGO_ENCODED_RUSTFLAGS`` anywhere, because Cargo takes
+    an assigned ``RUSTFLAGS`` over every ``rustflags`` table in
+    ``.cargo/config.toml``: an ``env:`` block here would silently displace the
+    project configuration the build standard is defined by. The whole-workflow
+    walk is deliberate — the prohibition is on *any* scope, so a future job,
+    step, or reusable-workflow argument cannot introduce the override in a
+    corner this test never looks at.
+
+    Kept separate from the assertion itself so a seeded edit can be checked
+    against the same predicate: that is the negative control the ExecPlan
+    promises, and it cannot be run by re-reading only the file on disk.
+
+    Returns
+    -------
+    list[str]
+        One entry per offending key, naming the dotted path and the variable,
+        or an empty list when the caller satisfies the invariant. An empty
+        result is the passing outcome, so the caller asserts on truthiness
+        rather than on a sentinel.
+    """
+    found: list[str] = []
+
+    def walk(node: object, path: str) -> None:
+        match node:
+            case dict():
+                for key, child in node.items():
+                    child_path = f"{path}.{key}"
+                    if key in FLAG_VARIABLES:
+                        found.append(f"{child_path} (a {key} key)")
+                    walk(child, child_path)
+            case list():
+                for index, child in enumerate(node):
+                    walk(child, f"{path}[{index}]")
+
+    walk(workflow, "workflow")
+    return found
+
+
+def test_no_compiler_flag_variable_is_set_anywhere_in_the_caller() -> None:
+    """The caller never assigns a compiler-flag variable, at any scope.
+
+    ``setup-rust`` already exports ``RUSTFLAGS`` in the worker, and Cargo
+    prefers an assigned ``RUSTFLAGS`` over the ``rustflags`` table in
+    ``.cargo/config.toml``. Setting it here — to "help" with the linker, or to
+    override anything else — would displace the build standard rather than
+    configure it, so the prohibition is asserted over the whole parsed
+    workflow and not only over the job's ``with:`` block. Printing the
+    variables in ``setup-commands`` is unaffected: a ``printf`` reads them, it
+    does not assign them.
+    """
+    problems = _flag_override_problems(load_workflow(MUTATION_TESTING_WORKFLOW_PATH))
+    assert not problems, (
+        "the caller must not set a compiler-flag variable anywhere, because "
+        "Cargo takes an assigned RUSTFLAGS over the project's rustflags table; "
+        f"found {problems}"
+    )
+
+
+def test_flag_guard_rejects_a_seeded_override() -> None:
+    """The I1 guard fails on a caller that sets ``RUSTFLAGS``.
+
+    This is the ExecPlan's promised negative control, kept as a test rather
+    than a one-off manual edit so it stays runnable: a guard that cannot fail
+    on the defect it names is not a guard. The fixture mirrors the shape the
+    real caller could grow — an ``env:`` block on the calling job — and the
+    control would also catch it at workflow, step, or argument scope.
+    """
+    workflow = load_workflow(MUTATION_TESTING_WORKFLOW_PATH)
+    seeded = copy.deepcopy(workflow)
+    job = require_mapping(
+        require_mapping(seeded.get("jobs"), "jobs")["mutation"], "jobs.mutation"
+    )
+    job["env"] = {"RUSTFLAGS": "-D warnings"}
+
+    assert _flag_override_problems(seeded), (
+        "the I1 guard must reject a caller that seeds an env.RUSTFLAGS "
+        "override; it accepted one"
+    )
+    assert not _flag_override_problems(workflow), (
+        "the unmodified caller must satisfy the I1 guard"
+    )
+
+
+def _mutation_with_block() -> dict[str, object]:
+    """Return the caller's ``with:`` block."""
+    return require_mapping(
         _mutation_job(load_workflow(MUTATION_TESTING_WORKFLOW_PATH)).get("with"),
         "jobs.mutation.with",
     )
+
+
+def _require_str(value: object, description: str, consequence: str = "") -> str:
+    """Return ``value`` as a string, failing the test when it is not one.
+
+    The caller supplies the consequence rather than this helper, because
+    only the caller knows *why* the type matters: for ``install-mold`` a
+    YAML boolean is an argument-type error at workflow-call time, whereas
+    for ``setup-commands`` any non-string is simply the wrong shape.
+
+    Parameters
+    ----------
+    value
+        The parsed YAML value to narrow.
+    description
+        How to name the value in a failure, e.g. the caller's dotted path.
+    consequence
+        A clause appended to the failure message explaining why the type
+        matters. Empty when the wrong shape is self-evidently wrong.
+
+    Returns
+    -------
+    str
+        ``value`` itself, narrowed to ``str``.
+    """
+    match value:
+        case str() as text:
+            return text
+        case other:
+            pytest.fail(
+                f"{description} must be a string, got {other!r} "
+                f"({type(other).__name__}){consequence}"
+            )
+
+
+def test_with_block_carries_the_caller_configuration() -> None:
+    """The caller passes exactly the documented configuration."""
+    with_block = _mutation_with_block()
     assert with_block == EXPECTED_WITH, (
         "jobs.mutation.with must be exactly the documented configuration "
-        f"(the #[cfg(kani)] module excludes and --all-features to match "
-        f"the CI baseline); expected "
+        "(the #[cfg(kani)] module excludes, --all-features to match the CI "
+        "baseline, install-mold so the worker has the pinned linker the "
+        "check-build-tools preflight requires, and setup-commands to run "
+        f"that preflight before the baseline); expected "
         f"{EXPECTED_WITH!r}, got {with_block!r}"
     )
+
+
+def test_install_mold_is_enabled_in_the_type_the_shared_workflow_declares() -> None:
+    """Mold provisioning is enabled, as the string the input's type requires.
+
+    The shared workflow declares ``install-mold`` with ``type: string``. A
+    bare YAML ``true`` would parse to the boolean ``True`` and the call
+    would be rejected, so the value's type is asserted and not just its
+    truthiness.
+    """
+    value = _require_str(
+        _mutation_with_block().get(INSTALL_MOLD_INPUT),
+        f"jobs.mutation.with.{INSTALL_MOLD_INPUT}",
+        "; the shared workflow declares it type: string, and a YAML boolean "
+        "would be rejected at workflow-call time",
+    )
+    assert value == "true", (
+        f"jobs.mutation.with.{INSTALL_MOLD_INPUT} must enable the pinned "
+        f"mold install, got {value!r}"
+    )
+
+
+def test_setup_commands_verify_the_build_tool_pins_before_the_baseline() -> None:
+    """The worker re-runs the repository preflight, then prints the flags.
+
+    Asserting the preflight rather than a bare version string ties the
+    caller to the repository's own definition of "the pinned toolchain is
+    present": ``check-build-tools`` reads ``tools/mold/VERSION`` itself, so
+    a mold bump cannot leave this caller asserting a stale number. The
+    printed variables are what the run log carries for the open question
+    about which flag source selects the linker.
+    """
+    value = _require_str(
+        _mutation_with_block().get(SETUP_COMMANDS_INPUT),
+        f"jobs.mutation.with.{SETUP_COMMANDS_INPUT}",
+    )
+    assert BUILD_TOOLS_TARGET in value, (
+        f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must run "
+        f"{BUILD_TOOLS_TARGET!r} so a missing or drifted tool stops the run "
+        f"before the baseline compiles; got {value!r}"
+    )
+    for name in FLAG_VARIABLES:
+        assert name in value, (
+            f"jobs.mutation.with.{SETUP_COMMANDS_INPUT} must report {name} "
+            f"in the run log; got {value!r}"
+        )

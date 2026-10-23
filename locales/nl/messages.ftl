@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Zonder onderwerp komt dit overeen met `--help`.
 cli.help.actions_heading = Acties:
 cli.help.targets_heading = Doelen:
 cli.help.targets.about = Doelen en acties in het geselecteerde manifest weergeven.
+cli.help.targets.flag.edges.help = Neem afhankelijkheidskanten en onbewerkte recepten op in de JSON-uitvoer.
 cli.help.default_marker = standaard
 cli.help.conditional_marker = voorwaardelijk
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Het manifest in { $path } kon niet worden geladen
 runner.context.build_graph = De graaf kon niet uit het manifest worden opgebouwd.
 runner.context.generate_ninja = Het Ninja-manifest kon niet worden gegenereerd.
 runner.context.render_graph = Het graafartefact kon niet worden weergegeven.
+runner.help.targets_edges_require_json = De optie --edges vereist --json op het hoogste niveau.
 
 runner.io.create_temp_file = Het tijdelijke Ninja-bestand kon niet worden aangemaakt.
 runner.io.write_temp_ninja = Het tijdelijke Ninja-bestand kon niet worden geschreven.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Escape de backslashes of verwijder ongeldige escaper
 manifest.env.missing = Een vereiste omgevingsvariabele is niet ingesteld.
 manifest.env.invalid_utf8 = Een omgevingsvariabele bevat ongeldige UTF-8.
 manifest.env.blocked = Toegang tot een omgevingsvariabele is geblokkeerd.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = De default van env moet een tekenreeks zijn, ontvangen { $kind }.
 manifest.vars.not_object = De `vars` van het manifest moet een toewijzing of object zijn.
 manifest.vars.reserved_name = De `vars`-sleutel '{ $name }' in het manifest is gereserveerd voor een ingebouwde sjabloonfunctie; hernoem de variabele.
 manifest.read_failed = Het manifest in { $path } kon niet worden gelezen.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = onbekende patroonfout.
 manifest.glob.io_failed = Glob is mislukt voor ‘{ $pattern }’: { $detail }.
 manifest.glob.unknown_io_error = onbekende I/O-fout.
 manifest.command_list_empty = Het veld ‘command’ mag niet leeg zijn: geef een opdrachtreeks of een niet-lege lijst op.
+manifest.command_isolation_recipe = Het veld ‘command_isolation’ vereist een recept met een opdrachtenlijst.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ vereist een opdrachtenlijst.
 
 # Fouten in de tussenrepresentatie.
 ir.rule_not_found = De regel ‘{ $rule }’ waarnaar doel ‘{ $target }’ verwijst, is niet gevonden.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = streamen
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote verwachtte een tekenreeks, maar kreeg { $kind }.
+stdlib.shell.quote.control_character = Een waarde met een nulbyte, regelterugloop of regeleinde kan niet tussen aanhalingstekens worden gezet.
+stdlib.shell.dialect_invalid = Onbekend shell-dialect { $dialect }; verwacht een van { $accepted }.
+stdlib.shell.dialect_not_string = De optie dialect van shell moet een tekenreeks zijn, ontvangen { $kind }.
+stdlib.shell.join.not_sequence = shell_join verwachtte een reeks, maar kreeg { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } van shell_join is { $kind }, geen tekenreeks.
+stdlib.shell.positional_option = { $filter } neemt zijn opties als trefwoord; schrijf { $example }.
+
 # Diagnostiek van de padhelper.
 stdlib.path.io.failed = { $action } is mislukt voor { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } is mislukt voor { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Het hash-algoritme ‘{ $algorit
 
 # Diagnostiek van de verzamelinghelpers.
 stdlib.collections.flatten.expected_sequence = flatten verwachtte items uit een reeks, maar vond { $kind }.
+stdlib.collections.compact.not_sequence = compact verwachtte een reeks, maar vond { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by vereist een attribuut dat niet leeg is.
 stdlib.collections.group_by.unresolved = group_by kon ‘{ $attr }’ niet vinden op een item van het type { $kind }.
 
@@ -442,3 +460,25 @@ manifest.budget.exceeded = Het resourcebudget van het manifest is tijdens { $sta
 
 cli.flag.env_allow_var.help = Omgevingsvariabele toegestaan voor de env()-helper van het manifest.
 cli.flag.env_block_var.help = Omgevingsvariabele geblokkeerd voor de env()-helper van het manifest.
+
+# Manifest-analyse (`netsuke check`).
+cli.subcommand.check.about = Analyseer het manifest zonder een build te genereren of uit te voeren.
+cli.subcommand.check.long_about = Onderzoek het gekozen manifest op constructies die weliswaar ontleed worden maar waarschijnlijk onjuist, onveilig, niet-overdraagbaar of cachevijandig zijn.
+cli.subcommand.check.flag.rule.help = De ernst van een regel of categorie instellen, geschreven als NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Ernst waarbij bevindingen het commando laten falen.
+cli.subcommand.check.flag.limit.help = Maximaal aantal gemelde bevindingen; 0 meldt ze allemaal.
+cli.subcommand.check.flag.explain.help = De regelreferentie afdrukken in plaats van een manifest te analyseren.
+check.threshold_exceeded = Bevindingen bereikten de drempel { $severity }: { $failing } van { $reported } gemeld.
+check.threshold_exceeded.help = Los de gemelde bevindingen op, pas --rule aan of versoepel --fail-on.
+check.summary.counts = Analyseresultaten — fouten: { $errors }, waarschuwingen: { $warnings }, adviezen: { $advice }, onderdrukt: { $suppressed }.
+check.summary.clean = Geen bevindingen.
+check.summary.truncated = { $shown ->
+    [one] { $shown } bevinding getoond; --limit liet er nog { $omitted } weg.
+   *[other] { $shown } bevindingen getoond; --limit liet er nog { $omitted } weg.
+}
+check.rule.malformed = Selector { $selector } is niet geschreven als NAME=SEVERITY.
+check.rule.unknown = Selector noemt { $name }, wat noch een regel noch een categorie is.
+check.rule.severity = Selector { $name } noemt ernst { $severity }; verwacht werd een van { $values }.
+check.fail_on.invalid = Onbekende faaldrempel { $value }; verwacht werd een van { $values }.
+check.source_index = Kon { $path } niet indexeren voor diagnostiek op regel { $line }: { $reason }.
+status.tool.check = Controleren

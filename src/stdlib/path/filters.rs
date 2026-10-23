@@ -8,7 +8,7 @@ use minijinja::{Environment, Error, ErrorKind, value::Kwargs};
 
 use super::{bounded_read, fs_utils, hash_utils, path_utils, read_telemetry};
 use crate::localization::{self, keys};
-use crate::stdlib::config_types::HomeDirectory;
+use crate::stdlib::config::types::HomeDirectory;
 use crate::stdlib::path::fs_utils::FileReadLimits;
 
 /// Register the `expanduser` filter.

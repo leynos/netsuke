@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest doctest test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -124,10 +124,21 @@ ACTIONLINT ?= actionlint
 export ACTIONLINT
 # Single source of truth for the shared spelling gate; the Makefile and CI
 # both consume it, so the pinned builder cannot drift apart.
-TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.1
+TYPOS_CONFIG_BUILDER_VERSION ?= v0.1.3
 YAMLLINT_VERSION ?= 1.38.0
 UV ?= uv
 UV_ENV = UV_CACHE_DIR=.uv-cache UV_TOOL_DIR=.uv-tools
+
+# The CV-005 CodeScene contracts live in shared-actions and run from a full
+# commit, so a fix is a pin bump. `.github/cv005.toml` holds this repository's
+# parameters and lane pairing.
+CV005_CONTRACTS_REF ?= 3754876bc4e94dc65c83af3def37828934f8f65e
+CV005_CONTRACTS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+	--from 'git+https://github.com/leynos/shared-actions@$(CV005_CONTRACTS_REF)\#subdirectory=packages/cv005-contracts' \
+	cv005-contracts
+# Public GitHub tool sources must not inherit URL rewrites or custom Git
+# helper paths from the invoking environment.
+PUBLIC_GIT_SOURCE_ENV = env -u GIT_EXEC_PATH GIT_CONFIG_COUNT=0
 # The Python baseline every uv-driven helper pins. Bump this alongside the
 # `target-version`/`py-version` settings in pyproject.toml and the
 # `python-version` inputs in .github/workflows/ci.yml, release.yml, and
@@ -158,14 +169,13 @@ TY_VERSION ?= 0.0.74
 # the walk.
 PYTHON_SOURCES = .github/scripts scripts tests/workflow_contracts
 # Pylint must run on the Python baseline so it parses every repository-owned
-# source. `--load-plugins=` clears the shim's default plugin list so this pass
-# runs exactly the messages pyproject.toml enables.
+# source. `--load-plugins=` clears any configured plugins so this pass runs
+# exactly the messages pyproject.toml enables.
 PYLINT_PYTHON ?= $(PYTHON_BASELINE)
+PYLINT_VERSION ?= 4.0.9
 PYLINT_TARGETS ?= $(PYTHON_SOURCES)
-PYLINT_PYPY_SHIM_REF ?= 726d09f968b4d729ee4b29c71fc732e744854f3b
-PYLINT_PYPY_SHIM = git+https://github.com/leynos/pylint-pypy-shim.git@$(PYLINT_PYPY_SHIM_REF)
-PYLINT = $(UV_ENV) $(UV) tool run --python $(PYLINT_PYTHON) \
-	--from '$(PYLINT_PYPY_SHIM)' pylint-pypy --load-plugins=
+PYLINT = $(UV_ENV) $(UV) tool run --managed-python --python $(PYLINT_PYTHON) \
+	--from 'pylint==$(PYLINT_VERSION)' pylint --load-plugins=
 # The df12 house lints need CPython 3.14: they parse syntax PyPy's 3.11
 # runtime cannot, and the baseline-gated messages (R9112, C9112) key off the
 # `py-version` in pyproject.toml. They run through `uv tool run` rather than
@@ -174,34 +184,22 @@ PYLINT = $(UV_ENV) $(UV) tool run --python $(PYLINT_PYTHON) \
 DF12_PYTHON_LINTS_REF ?= v0.3.0
 DF12_PYTHON_LINTS = git+https://github.com/leynos/df12-python-lints.git@$(DF12_PYTHON_LINTS_REF)
 DF12_PYLINT_MESSAGES = R9101,C9102,R9103,R9104,C9105,C9106,C9107,R9108,R9109,R9110,R9111,R9112,C9112
-DF12_PYLINT = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+DF12_PYLINT = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from 'pylint' --with '$(DF12_PYTHON_LINTS)' pylint \
 	--disable=all --load-plugins=df12_python_lints \
 	--enable=$(DF12_PYLINT_MESSAGES)
-AMBRLEAKS = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+AMBRLEAKS = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from '$(DF12_PYTHON_LINTS)' ambrleaks
-# The estate-synchronised spelling helpers retain their standalone coverage
-# policy. Keep this explicit so Interrogate covers every other owned Python
-# definition in the same source boundary as Ruff and Pylint.
-INTERROGATE_EXCLUDES = $(addprefix --exclude ,$(SPELLING_HELPER_FILES))
-SPELLING_HELPER_COVERAGE = --cov=generate_typos_config --cov=typos_rollout_check --cov=typos_rollout \
-	--cov=typos_rollout_cache --cov=typos_rollout_http
-SPELLING_HELPER_FILES = scripts/generate_typos_config.py \
-	scripts/typos_rollout_check.py \
-	scripts/typos_rollout.py scripts/typos_rollout_cache.py \
-	scripts/typos_rollout_http.py scripts/tests/conftest.py \
-	scripts/tests/test_typos_rollout.py \
-	scripts/tests/test_typos_rollout_check.py \
-	scripts/tests/test_typos_rollout_hardening.py \
-	scripts/tests/test_typos_rollout_refresh.py \
-	scripts/tests/typos_rollout_test_support.py
 # The shared en-GB-oxendict spelling gate. It regenerates `typos.toml` from
 # the live shared dictionary and the `typos.local.toml` overlay on every run,
 # then runs Typos and the prohibited-phrase check.
-TYPOS_CONFIG_BUILDER = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
+TYPOS_CONFIG_BUILDER = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) \
 	--from "git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
-PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@b07ef696f8373d54ae68e517d39d47a5d27a5bd5
+PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@2ba17da6b7e24160c4041e8d41ba1ba6cca87b35
 PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 unexport RUSTDOC_FLAGS
@@ -231,11 +229,51 @@ test: test-nextest doctest ## Run every Rust test with warnings treated as error
 test-nextest: check-build-tools ## Run all non-doctest Rust tests through cargo-nextest
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
+.PHONY: test-rfc-stdlib-coverage
+test-rfc-stdlib-coverage: check-build-tools ## Check the RFC 0006 split and its parsers
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test rfc_stdlib_coverage_tests --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+test-documentation-contracts: check-build-tools ## Validate marked documentation examples and semantic contracts
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(help_targets_edges_example_matches_live_schema) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
 doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
-test-workflow-contracts: ## Validate GitHub Actions workflow contracts
-	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) --with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' pytest tests/workflow_contracts -q --doctest-modules
+# The default-feature lane. Release binaries build the default feature set,
+# which excludes `lint` (`netsuke check`) until v0.2.0, so these targets lint
+# and test exactly that set; `lint-clippy` and `test` above cover
+# `--all-features`. See ADR-056 and "Feature-gated code" in the developers'
+# guide.
+test-default-features: check-build-tools ## Run every Rust test with only the default features, as release binaries build
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc $(BUILD_JOBS)
+
+lint-default-features: check-build-tools ## Run rustdoc and Clippy with only the default features and warnings denied
+	$(GATE_RUSTFLAGS) $(CARGO) doc --workspace --no-deps
+	$(GATE_RUSTFLAGS) $(CARGO) clippy --workspace --all-targets -- -D warnings
+
+test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under the Kani configuration
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+# The first uv run mirrors the exact Cuprum/Cyclopts pins in
+# scripts/kani_proof_scope.py's PEP 723 metadata. The second uses compatible
+# bounded ranges for those tools.
+test-workflow-contracts: ## Validate the CV-005 contracts and the GitHub Actions workflow contracts
+	$(CV005_CONTRACTS) check --repository .
+	$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with 'pytest>=8' --with 'pyyaml>=6' --with 'hypothesis>=6' \
+		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' \
+		--with 'cyclopts==4.25.3' pytest tests/workflow_contracts -q --doctest-modules
+	PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with 'pytest>=8' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
+		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
+		pytest scripts/tests/test_ensure_draft_release.py \
+			scripts/tests/test_install_orthohelp.py \
+			scripts/tests/test_report_glibc_floor.py \
+			scripts/tests/test_resolve_wix_extension_version.py \
+			scripts/ensure_draft_release.py scripts/install_orthohelp.py \
+			scripts/report_glibc_floor.py scripts/resolve_wix_extension_version.py \
+			scripts/hoist_binstall_archives.py -q --doctest-modules
 
 test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
@@ -245,9 +283,21 @@ test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 test-release-admission: ## Validate the release-admission runtime contract
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		--with 'cmd-mox==0.2.0' --with 'cuprum==0.1.0' --with 'cyclopts==4.25.3' \
 		python -m pytest scripts/tests/test_release_admission_metrics.py \
 		scripts/tests/test_release_admission_metric_failures.py \
-		scripts/tests/test_release_admission_metric_boundedness.py -c /dev/null \
+		scripts/tests/test_release_admission_metric_boundedness.py \
+		scripts/tests/test_release_admission_process_bounds.py \
+		scripts/tests/test_release_admission_environment_contract.py \
+		scripts/tests/test_release_admission_configuration_resolution.py \
+		scripts/tests/test_release_admission_artefact_initialization.py \
+		scripts/tests/test_release_admission_artefact_truncation.py \
+		scripts/tests/test_release_admission_default_forms.py \
+		scripts/tests/test_release_admission_adapter_defaults.py \
+		scripts/tests/test_release_admission_status_translation.py \
+		scripts/tests/test_release_admission_runner_contract.py \
+		scripts/tests/test_release_admission_metric_degradation.py \
+		scripts/tests/test_release_admission_sink_persistence.py -c /dev/null \
 		--rootdir=. -p no:cacheprovider
 
 test-coverage-artifact: ## Test hostile LCOV artefact validation
@@ -256,14 +306,27 @@ test-coverage-artifact: ## Test hostile LCOV artefact validation
 		scripts/tests/test_validate_coverage_archive.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
 
+test-linux-package-metadata: ## Test Linux package metadata reading and validation
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
+		scripts/tests/test_cargo_package_metadata.py \
+		scripts/tests/test_validate_linux_package_metadata.py -c /dev/null --rootdir=. \
+		-p no:cacheprovider
+
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no
 # longer share a command line. The debug build takes the standard; the release
 # build is one of the two exclusions.
+#
+# Both select the whole workspace rather than `--bin $(APP)`. The workspace has
+# no `default-members`, so a package-scoped build compiles only `netsuke-build`
+# and never `build_slice_fixture`; the fixture is what compiles the production
+# build-script module slice, so a package-scoped build would leave that slice
+# compiled by nothing but the test commands. See ADR-0051.
 target/debug/$(APP): | check-build-tools ## Build the debug binary
-	$(DEBUG_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --bin $(APP)
+	$(DEBUG_RUSTFLAGS) $(CARGO) build --workspace $(BUILD_JOBS)
 
 target/release/$(APP): ## Build the release binary on the LLVM backend
-	$(RELEASE_RUSTFLAGS) $(CARGO) build $(BUILD_JOBS) --release --bin $(APP)
+	$(RELEASE_RUSTFLAGS) $(CARGO) build --workspace $(BUILD_JOBS) --release
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
@@ -272,7 +335,7 @@ lint-python: lint-workflow-scripts ## Run Ruff, Pylint, Interrogate, the df12 ho
 	$(PYLINT) $(PYLINT_TARGETS)
 	$(DF12_PYLINT) $(PYLINT_TARGETS)
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
-	$(INTERROGATE) $(INTERROGATE_EXCLUDES) $(PYTHON_SOURCES)
+	$(INTERROGATE) $(PYTHON_SOURCES)
 
 lint-workflow-scripts: ## Load every trusted workflow module under the Python baseline
 	# The trusted coverage workflow runs these through GitHub Actions' `python`
@@ -288,7 +351,7 @@ lint-workflow-scripts: ## Load every trusted workflow module under the Python ba
 	# only when something resolves the annotation. The claim held under 3.12
 	# and no longer does. Catch it by calling typing.get_type_hints, not by
 	# loading; see
-	# docs/adr-038-runtime-annotation-introspection-in-workflow-contracts.md.
+	# docs/adrs/adr-0038-runtime-annotation-introspection-in-workflow-contracts.md.
 	@for module in .github/scripts/*.py; do \
 		$(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) python -c \
 			'import runpy, sys; runpy.run_path(sys.argv[1], run_name="lint_workflow_scripts")' \
@@ -356,17 +419,24 @@ check-fmt: ## Verify formatting
 	$(MDTABLEFIX) --check $(MDTABLEFIX_SELECT) $(MDTABLEFIX_RULES)
 
 typecheck: check-build-tools typecheck-python ## Typecheck all targets and features
-	$(GATE_RUSTFLAGS) $(CARGO) check --all-targets --all-features $(BUILD_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) check --workspace --all-targets --all-features $(BUILD_JOBS)
 
 typecheck-python: ## Typecheck the Python sources with ty
 	# `uv tool run` materialises one venv holding ty plus the test-suite
 	# dependencies, so ty can resolve third-party imports. `uv run --with`
 	# would layer the extras through `.pth` chaining, which ty cannot follow.
+	# Standalone scripts declare these runtime dependencies in PEP 723 blocks,
+	# which ty does not read, so include them in its environment explicitly.
+	# Both `scripts` and `.github/scripts` are named as search roots because
+	# the contract tests import from them through a `sys.path` insert, which
+	# ty does not follow; without the roots those imports read as unresolved.
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
 		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
+		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
 		ty check --python-version $(PYTHON_BASELINE) \
-		--extra-search-path scripts $(PYTHON_SOURCES)
+		--extra-search-path scripts --extra-search-path .github/scripts \
+		$(PYTHON_SOURCES)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
 	@unset FORCE_COLOR; $(MDLINT) "**/*.md"
@@ -393,6 +463,28 @@ kani-full: ## Run the full Kani verification suite
 	$(KANI_RUSTFLAGS) $(KANI) $(KANI_FLAGS)
 
 kani-ir: kani-full ## Run the IR Kani verification suite
+
+# The scope wrapper's own end-to-end suite. It drives `systemd-run --user
+# --scope` at test-sized limits rather than the documented eight minutes, so it
+# needs no Kani install. The strict variable is what makes this lane meaningful:
+# without it a host lacking a per-user systemd manager would skip every scenario
+# and still report green, which would be coverage in name only. See
+# tests/kani_scope_wrapper_e2e_tests.rs for the prerequisites.
+#
+# It takes `KANI_RUSTFLAGS`, not `GATE_RUSTFLAGS`, and declares no
+# `check-build-tools` prerequisite. Both would be wrong here: the lane that runs
+# this is `kani-smoke`, which builds on the stable toolchain, so `-Zthreads` is
+# rejected outright and the capability check would fail before a single scenario
+# ran. The suite is an ordinary test binary with no need for the build standard's
+# linker or frontend, so it takes the same flags the Kani targets do. The lane
+# does install the build standard, because every Linux job that runs the nextest
+# suite must -- but that is `nextest_lane_mold_test.py`'s rule about the lane,
+# not a prerequisite of this target, and this target must stay reachable on a
+# host that has only `rustup`.
+KANI_SCOPE_WRAPPER_STRICT ?= 1
+test-kani-scope-wrapper: ## Verify the Kani scope wrapper end to end
+	NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT) \
+		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test kani_scope_wrapper_e2e_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2

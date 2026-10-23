@@ -1,7 +1,7 @@
 //! Behavioural coverage for `NETSUKE_WHICH_WORKSPACE` at the process boundary.
 //!
 //! The classification rule is covered exhaustively at its pure seam
-//! (`src/stdlib/which/workspace_switch.rs`); these cases prove the switch
+//! (`src/stdlib/which/workspace_switch/mod.rs`); these cases prove the switch
 //! observed by a real `netsuke` process changes `command_available`'s
 //! answer. The variable reaches the child through `Command::env`, never by
 //! mutating this process (#493), which is why the boundary test is a

@@ -252,17 +252,26 @@ fn the_real_invocation_is_selected(#[case] source: &str) -> Result<()> {
     Ok(())
 }
 
-/// The real macro body is the contract this parser exists to read.
-#[test]
-fn the_repository_macro_parses() -> Result<()> {
-    let extracted = extract_source(include_str!("../src/localization/keys.rs"))?;
+/// The real macro bodies are the contract this parser exists to read.
+///
+/// The key table is split across two files, and the audit reads both, so each
+/// must parse on its own.
+#[rstest]
+#[case::core(include_str!("../src/localization/keys.rs"), "cli.about", 300)]
+#[case::check(include_str!("../src/localization/check_keys.rs"), "check.summary.truncated", 10)]
+fn the_repository_macro_parses(
+    #[case] source: &str,
+    #[case] expected_key: &str,
+    #[case] minimum: usize,
+) -> Result<()> {
+    let extracted = extract_source(source)?;
     ensure!(
-        extracted.contains("cli.about"),
-        "expected the repository keys to include cli.about"
+        extracted.contains(expected_key),
+        "expected the repository keys to include {expected_key}"
     );
     ensure!(
-        extracted.len() > 300,
-        "expected the repository to declare over 300 keys, got {}",
+        extracted.len() > minimum,
+        "expected over {minimum} keys, got {}",
         extracted.len()
     );
     Ok(())

@@ -1,6 +1,6 @@
 //! Contract tests pinning the Polonius toolchain plumbing.
 //!
-//! The tree only borrow-checks under the Polonius alpha analysis (see ADR-006
+//! The tree only borrow-checks under the Polonius alpha analysis (see ADR-0006
 //! and docs/polonius.md). Nightly toolchains dated 2026-08-04 and later enable
 //! Polonius by default, so the requirement is carried entirely by the dated
 //! pin in `rust-toolchain.toml`: no build configuration passes a `-Zpolonius`
@@ -8,11 +8,17 @@
 //! interface that is on its way out. These tests hold both halves — the pin is
 //! recent enough to enable Polonius, and nothing restates the retired flag —
 //! plus the workflow contract that keeps CI on the same pinned channel.
+//!
+//! The assertions that describe how one job obtains its channel live in
+//! `tests/polonius_toolchain_contract/toolchain_wiring.rs`, which keeps this
+//! file inside the repository's 400-line limit.
 
 #[path = "support/makefile.rs"]
 mod makefile;
 #[path = "support/shared_actions.rs"]
 pub mod shared_actions;
+#[path = "polonius_toolchain_contract/toolchain_wiring.rs"]
+mod toolchain_wiring;
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -28,6 +34,21 @@ const POLONIUS_DEFAULT_SINCE: &str = "2026-08-04";
 const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rust";
 const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release";
 const DENY_WARNINGS_RUSTFLAGS: &str = "-D warnings";
+const ENV_TOOLCHAIN_INPUT: &str = "${{ env.NETSUKE_RUST_TOOLCHAIN }}";
+const INPUT_TOOLCHAIN_ENV: &str = "${{ inputs['rust-toolchain'] }}";
+
+/// Where a workflow obtains the channel it provisions.
+#[derive(Clone, Copy)]
+enum ToolchainPin {
+    /// The job declares `NETSUKE_RUST_TOOLCHAIN` and passes
+    /// [`ENV_TOOLCHAIN_INPUT`] to the shared action.
+    JobEnv,
+    /// The caller passes the channel to a reusable workflow, whose job declares
+    /// `NETSUKE_RUST_TOOLCHAIN` and passes [`INPUT_TOOLCHAIN_ENV`].
+    CallerInput,
+    /// The job neither declares nor reads the pin.
+    Absent,
+}
 
 /// Build-configuration surfaces that could reintroduce the retired directive.
 ///
@@ -54,8 +75,15 @@ struct WorkflowExpectation {
     action: &'static str,
     /// The `with.rustflags` input the job must pass, or `None` when it must
     /// pass none at all and inherit the action's default.
+    ///
+    /// `None` is a requirement that the input be absent, not the absence of a
+    /// requirement: this field is compared for equality like the others.
     rustflags: Option<&'static str>,
-    pins_toolchain_env: bool,
+    /// How the job obtains the channel it provisions.
+    ///
+    /// Each arm is a requirement compared for equality, so an unexpected pin
+    /// shape fails rather than being read as "no pin required".
+    pin: ToolchainPin,
 }
 
 const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
@@ -63,41 +91,70 @@ const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     job: "build-test",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
-    pins_toolchain_env: true,
+    pin: ToolchainPin::JobEnv,
+};
+/// The second `ci.yml` job on the shared-action contract.
+///
+/// It passes no `rustflags`, so `None` here means the action's default is
+/// inherited rather than denied, the same shape as the coverage job.
+const CI_KANI_SMOKE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/ci.yml",
+    job: "kani-smoke",
+    action: SETUP_RUST_ACTION,
+    rustflags: None,
+    pin: ToolchainPin::JobEnv,
 };
 const CI_WINDOWS_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/ci-windows.yml",
     job: "build-test-windows",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
-    pins_toolchain_env: true,
+    pin: ToolchainPin::JobEnv,
+};
+/// The default-feature lane, a reusable workflow whose caller owns the pin.
+///
+/// GitHub does not pass the caller's `env` to a reusable workflow, so the
+/// channel travels as a `with` input and the job maps it to
+/// `NETSUKE_RUST_TOOLCHAIN`. That gives the repository one authoritative pin —
+/// the `env` block in `ci.yml` — instead of a second literal here that could
+/// drift from it without any call changing. This check holds the lane's
+/// expression; `ci_default_features_test.py` holds its value equal to the
+/// caller's.
+const CI_DEFAULT_FEATURES_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
+    path: ".github/workflows/ci-default-features.yml",
+    job: "default-features",
+    action: SETUP_RUST_ACTION,
+    rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
+    pin: ToolchainPin::CallerInput,
 };
 const NETSUKEFILE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/netsukefile-test.yml",
     job: "netsukefile",
     action: SETUP_RUST_ACTION,
     rustflags: None,
-    pins_toolchain_env: true,
+    pin: ToolchainPin::JobEnv,
 };
 const COVERAGE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/coverage-main.yml",
     job: "coverage-upload",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
-    pins_toolchain_env: false,
+    pin: ToolchainPin::Absent,
 };
 const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/build-and-package.yml",
     job: "build",
     action: RUST_BUILD_RELEASE_ACTION,
     rustflags: None,
-    pins_toolchain_env: false,
+    pin: ToolchainPin::Absent,
 };
 
 /// Every workflow under the shared-action toolchain contract.
-const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 5] = [
+const WORKFLOW_EXPECTATIONS: [WorkflowExpectation; 7] = [
     CI_WORKFLOW,
+    CI_KANI_SMOKE_WORKFLOW,
     CI_WINDOWS_WORKFLOW,
+    CI_DEFAULT_FEATURES_WORKFLOW,
     NETSUKEFILE_WORKFLOW,
     COVERAGE_WORKFLOW,
     PACKAGING_WORKFLOW,
@@ -194,6 +251,8 @@ fn build_configuration_does_not_restate_the_retired_polonius_flag() -> Result<()
 
 #[rstest]
 #[case::ci(CI_WORKFLOW)]
+#[case::ci_kani_smoke(CI_KANI_SMOKE_WORKFLOW)]
+#[case::ci_default_features(CI_DEFAULT_FEATURES_WORKFLOW)]
 #[case::ci_windows(CI_WINDOWS_WORKFLOW)]
 #[case::netsukefile(NETSUKEFILE_WORKFLOW)]
 #[case::coverage(COVERAGE_WORKFLOW)]
@@ -206,46 +265,36 @@ fn workflows_agree_with_the_pinned_toolchain(
         job,
         action,
         rustflags: expected_rustflags,
-        pins_toolchain_env,
+        pin,
     } = expectation;
-    let expected_action = &format!("{action}@{}", shared_actions_sha()?);
+    let named = toolchain_wiring::JobRef { path, job };
     let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
         .with_context(|| format!("parse {path}"))?;
     ensure!(
         yaml_str(&workflow, &["jobs", job, "env", "RUSTFLAGS"]).is_none(),
-        "{path} job {job} should pass RUSTFLAGS through the shared action input"
+        "{named} should pass RUSTFLAGS through the shared action input"
     );
     let steps = workflow
         .get("jobs")
         .and_then(|jobs| jobs.get(job))
         .and_then(|job_value| job_value.get("steps"))
         .and_then(YamlValue::as_sequence)
-        .with_context(|| format!("{path} job {job} should declare steps"))?;
-    let shared_action = steps
-        .iter()
-        .find(|step| yaml_str(step, &["uses"]) == Some(expected_action.as_str()))
-        .with_context(|| format!("{path} job {job} should use {expected_action}"))?;
+        .with_context(|| format!("{named} should declare steps"))?;
+    let expected_action = &format!("{action}@{}", shared_actions_sha()?);
+    let shared_action = toolchain_wiring::find_shared_action(steps, named, expected_action)?;
     let rustflags = yaml_str(shared_action, &["with", "rustflags"]);
     ensure!(
         rustflags == expected_rustflags,
         "{path} {expected_action} passes {rustflags:?}, expected {expected_rustflags:?}"
     );
-    let toolchain_env = yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"]);
-    if pins_toolchain_env {
-        let expected = pinned_toolchain()?;
-        let toolchain = toolchain_env
-            .with_context(|| format!("{path} job {job} should pin NETSUKE_RUST_TOOLCHAIN"))?;
-        ensure!(
-            toolchain == expected,
-            "{path} job {job} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
-        );
-    } else {
-        ensure!(
-            toolchain_env.is_none(),
-            "{path} job {job} should not override NETSUKE_RUST_TOOLCHAIN, found {toolchain_env:?}"
-        );
-    }
-    Ok(())
+    toolchain_wiring::ensure_toolchain_pin(
+        &toolchain_wiring::ToolchainWiring {
+            named,
+            toolchain_env: yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"]),
+            toolchain_input: yaml_str(shared_action, &["with", "toolchain"]),
+        },
+        pin,
+    )
 }
 
 #[test]

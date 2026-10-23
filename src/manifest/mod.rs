@@ -15,13 +15,12 @@ use crate::{
 use anyhow::Result;
 use minijinja::{Environment, UndefinedBehavior};
 use serde::de::Error as _;
-use std::sync::Arc;
 
+mod access_policy;
 mod budget;
-pub(crate) mod budget_adapter;
-use budget_adapter::{BudgetErrorExt, from_str_named};
+pub(crate) use budget::adapter::budget_exhaustion_message;
+use budget::adapter::{BudgetErrorExt, from_str_named};
 mod diagnostics;
-mod env_policy;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
 // `GlobEntryResult` alias, stays module-private. Denying `unreachable_pub`
@@ -34,7 +33,6 @@ mod jinja_macros;
 mod load_stage;
 mod loading;
 mod parse_with_config;
-#[path = "path_loaders.rs"]
 mod path_loaders;
 mod query;
 mod registration;
@@ -43,17 +41,17 @@ mod render;
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
 pub type ManifestMap = serde_json::Map<String, ManifestValue>;
-use self::{env_reader::env_var_with, jinja_macros::register_manifest_macros_with_budget};
+use self::jinja_macros::register_manifest_macros_with_budget;
+pub use access_policy::{EnvAccessPolicy, EnvPolicyViolation};
 pub use budget::ManifestBudgetLimits;
 pub use diagnostics::{
     ManifestError, ManifestName, ManifestSource, map_data_error, map_yaml_error,
 };
-pub use env_policy::{EnvAccessPolicy, EnvPolicyViolation};
-pub use env_reader::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
+pub use env::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
 pub(crate) use expand::expand_foreach_with_budget;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
-use loading::{notify_stage, trace_expansion_report};
+use loading::{ExpansionReportObserver, notify_stage, trace_expansion_report};
 pub use parse_with_config::{from_str_with_env_and_config, from_str_with_env_and_policy};
 pub use path_loaders::{
     from_path, from_path_with_policy, from_path_with_policy_and_env,
@@ -63,15 +61,16 @@ pub use path_loaders::{
 #[cfg(test)]
 pub(crate) use query::from_path_for_manifest_query;
 pub(crate) use query::from_path_for_manifest_query_with_limits;
+#[cfg(feature = "lint")]
+pub(crate) use query::{LoadedManifest, from_path_for_manifest_query_with_source};
 #[cfg(test)]
 use registration::RESERVED_VAR_NAMES;
-use registration::{localize_recipe_error, register_manifest_vars};
+use registration::{
+    localize_recipe_error, register_env_function, register_glob_function, register_manifest_vars,
+};
 pub use render::render_manifest;
 #[cfg(test)]
 use workspace::open_manifest_workspace;
-/// Receives normal-loader reports; manifest queries supply `None` to stay
-/// telemetry-free.
-type ExpansionReportObserver = fn(&expand::ExpansionReport);
 
 /// Inputs to a manifest parse, bundled to keep the parameter list bounded.
 struct ManifestParse<'a> {
@@ -132,16 +131,8 @@ fn evaluate_manifest(
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
-    let reader = Arc::clone(env_reader);
-    let policy_for_env_lookup = env_access_policy.clone();
-    jinja.add_function("env", move |var_name: String| {
-        env_var_with(&var_name, &policy_for_env_lookup, |key| reader(key))
-    });
-    let glob_base = glob::GlobBaseCache::new(manifest_root);
-    jinja.add_function("glob", move |pattern: String| {
-        let expansion = glob::expand_manifest_template_glob(&pattern, &glob_base)?;
-        expansion.into_template_paths(&pattern)
-    });
+    register_env_function(&mut jinja, env_reader, env_access_policy);
+    register_glob_function(&mut jinja, manifest_root);
     let _stdlib_state = match stdlib_registration {
         Some(StdlibRegistration::Full(config)) => {
             crate::stdlib::register_with_config(&mut jinja, *config)
@@ -220,7 +211,7 @@ pub fn from_str(yaml: &str) -> Result<NetsukeManifest> {
 ///
 /// assert!(matches!(
 ///     &manifest.targets[0].recipe,
-///     Recipe::Command { command } if command.as_single() == Some("echo release")
+///     Recipe::Command { command, .. } if command.as_single() == Some("echo release")
 /// ));
 /// ```
 pub fn from_str_with_env(yaml: &str, env_reader: &EnvReader) -> Result<NetsukeManifest> {
@@ -251,9 +242,8 @@ pub(crate) fn from_str_with_limits(
         &mut None,
     )
 }
-mod env_reader;
-mod env_telemetry;
-pub use env_telemetry::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
+mod env;
+pub use env::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
 #[cfg(test)]
 mod tests;
 mod workspace;

@@ -3,12 +3,11 @@
 //! Provides execution orchestration; build work streams through Ninja (default
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
+#[cfg(feature = "lint")]
+mod check;
 mod dispatch;
-mod dyndep_generation_telemetry;
-mod dyndep_publication;
+mod dyndep;
 mod error;
-mod graph_generation;
-mod graph_generation_telemetry;
 mod manifest_structure_telemetry;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
@@ -19,6 +18,11 @@ use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use anyhow::{Context, Result};
 pub use camino::{Utf8Path, Utf8PathBuf};
+// `check_diagnostics` predates the move under `check/`; keep the public path.
+#[cfg(feature = "lint")]
+pub use check::diagnostics as check_diagnostics;
+#[cfg(feature = "lint")]
+pub use check::diagnostics::FindingDiagnostic;
 pub use error::RunnerError;
 use monotony::StdMonotonicClock;
 use std::io::IsTerminal;
@@ -42,14 +46,13 @@ pub const NINJA_ENV: &str = "NETSUKE_NINJA";
 
 mod graph;
 mod help;
-mod ninja_content;
-mod ninja_process_adapter;
+mod ninja;
 mod path_helpers;
 mod process;
 mod recipe_shell;
-mod recipe_shell_telemetry;
-pub use ninja_content::NinjaContent;
-pub use ninja_process_adapter::{run_ninja, run_ninja_tool};
+#[cfg(feature = "lint")]
+pub use check::telemetry::{CHECK_DURATION, CHECK_TOTAL};
+pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
@@ -57,15 +60,15 @@ pub use process::{
     NinjaJobCount, NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with,
     run_ninja_with,
 };
-pub use recipe_shell_telemetry::{
+pub use recipe_shell::telemetry::{
     BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
     RECIPE_SHELL_RESOLUTIONS_TOTAL,
 };
 
-use dyndep_publication::{materialize_dyndep_bundle, prune_dyndep_bundle};
-use graph_generation::{GraphGenerationContext, generate_ninja_with_shell};
+use dyndep::{materialize_dyndep_bundle, prune_dyndep_bundle};
+use graph::generation::{GraphGenerationContext, generate_ninja_with_shell};
 use path_helpers::resolve_output_path;
-use recipe_shell_telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
+use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 
 /// Runtime dependencies shared by command dispatch handlers.
 struct ExecutionContext<'a> {
@@ -149,15 +152,22 @@ fn run_with_ninja_program_resolver(
     if let Commands::Help(args) = &command {
         return dispatch::execute_help(cli, args, reporter.as_ref());
     }
+    let clock = StdMonotonicClock;
+    // `check` analyses the manifest without building it, so it is routed
+    // before the Ninja program and recipe shell are resolved.
+    #[cfg(feature = "lint")]
+    if let Commands::Check(args) = &command {
+        return dispatch::execute_check(cli, args, reporter.as_ref(), &clock);
+    }
     let ninja_program = configured_program.map_or_else(resolve_program, Utf8Path::to_owned);
     let recipe_shell = recipe_shell::resolve_recipe_shell()?;
-    let clock = StdMonotonicClock;
     let context = ExecutionContext {
         reporter: reporter.as_ref(),
         progress_enabled,
         ninja_program: &ninja_program,
         graph_generation: GraphGenerationContext {
             recipe_shell,
+            bash_executable: None,
             clock: &clock,
         },
     };
@@ -180,7 +190,15 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
     instrument_legacy_recipe_operation(
         LegacyRecipeOperation::Build,
         context.graph_generation.recipe_shell,
-        || execute_build(cli, args, context),
+        || {
+            let graph_generation =
+                context
+                    .graph_generation
+                    .with_bash_executable(recipe_shell::resolve_bash_runtime(
+                        context.graph_generation.recipe_shell,
+                    )?);
+            execute_build(cli, args, context, &graph_generation)
+        },
     )
 }
 
@@ -189,12 +207,17 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
 /// # Errors
 ///
 /// Returns an error if manifest generation or Ninja execution fails.
-fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> Result<()> {
+fn execute_build(
+    cli: &Cli,
+    args: &BuildArgs,
+    context: &ExecutionContext<'_>,
+    graph_generation: &GraphGenerationContext<'_>,
+) -> Result<()> {
     let bundle = generate_ninja_with_shell(
         cli,
         context.reporter,
         Some(keys::STATUS_TOOL_BUILD.into()),
-        &context.graph_generation,
+        graph_generation,
     )?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
@@ -215,7 +238,7 @@ fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) ->
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_adapter::ninja_process_options(cli)?;
+        let options = ninja::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_status(
             process::NinjaBuildRequest {
@@ -263,7 +286,15 @@ fn handle_ninja_tool(
     instrument_legacy_recipe_operation(
         LegacyRecipeOperation::NinjaTool,
         context.graph_generation.recipe_shell,
-        || execute_ninja_tool(cli, tool, context),
+        || {
+            let graph_generation =
+                context
+                    .graph_generation
+                    .with_bash_executable(recipe_shell::resolve_bash_runtime(
+                        context.graph_generation.recipe_shell,
+                    )?);
+            execute_ninja_tool(cli, tool, context, &graph_generation)
+        },
     )
 }
 
@@ -276,18 +307,15 @@ fn execute_ninja_tool(
     cli: &Cli,
     tool: NinjaToolSpec<'_>,
     context: &ExecutionContext<'_>,
+    graph_generation: &GraphGenerationContext<'_>,
 ) -> Result<()> {
     info!(
         target: "netsuke::subcommand",
         subcommand = tool.name,
         "Preparing Ninja tool invocation"
     );
-    let bundle = generate_ninja_with_shell(
-        cli,
-        context.reporter,
-        Some(tool.key),
-        &context.graph_generation,
-    )?;
+    let bundle =
+        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?;
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);
@@ -302,7 +330,7 @@ fn execute_ninja_tool(
         )
     };
     if context.progress_enabled {
-        let options = ninja_process_adapter::ninja_process_options(cli)?;
+        let options = ninja::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {

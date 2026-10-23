@@ -87,7 +87,9 @@ before execution, a critical requirement for compatibility with Ninja.
    `conditional` JSON field. The catalogue retains conditional unresolved
    alternatives, but graph validation excludes them, so those alternatives are
    not treated as simultaneously active. Full rendering and normal build
-   selection remain unchanged.
+   selection remain unchanged. The opt-in versioned graph projection and its
+   inherited validation limits are defined in
+   [ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md).
 
 - Stage 5: IR Generation & Validation
 
@@ -107,9 +109,10 @@ before execution, a critical requirement for compatibility with Ninja.
    the intended lowering contract rather than the current implementation.
    Lowering can still place an unresolved `Recipe::Rule` in
    `ir::Action.recipe`, and only the Ninja backend rejects it.
-   [ADR-035](adr-035-semantic-compiler-boundaries.md) owns this resolution
-   boundary: its requirement that successful compilation exclude unresolved
-   executable states is the gap that backend-only enforcement leaves open.
+   [ADR-0035](adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md)
+   owns this resolution boundary: its requirement that successful compilation
+   exclude unresolved executable states is the gap that backend-only
+   enforcement leaves open.
 
 - Stage 6: Ninja Synthesis & Execution
 
@@ -308,21 +311,29 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   such as escaping and validation. On Unix and the explicit Windows Bash
   compatibility route, a list is lowered to brace groups that evaluate each
   entry through a shell-quoted `eval` payload and are joined by `&&`. The
-  groups run in declaration order in one shell process and stop at the first
-  non-zero exit, so working directory, environment, and shell variables carry
-  forward. The `eval` boundary keeps an entry's inline comments or trailing
-  control operators from consuming the generated group terminator. A failed
-  entry emits a bounded action/entry marker for the runner to include in the
-  failure diagnostic. The resulting POSIX command must be parsable by
-  [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On Windows with
-  the default PowerShell route, the list is instead one encoded PowerShell
-  script that checks `$LASTEXITCODE` after each generated list entry and stops
-  before a later entry can overwrite the failure. An entry remains opaque
-  recipe text, so multiple native commands separated by semicolons inside one
-  entry are not checked individually. An empty command list is rejected during
-  manifest deserialization. Plain command strings remain shell text; authors
-  should use structured recipes or explicit quoting helpers for arbitrary
-  variables.
+  literal `command_isolation` field selects `shared` or `isolated` and defaults
+  to `shared`. Only `isolated` is serialized; omitting `shared` preserves
+  legacy action hashes, while `isolated` contributes to action identity. The
+  mode is preserved during rendering, rule resolution, and interpolation, and
+  is not templated. Shared groups run in the current shell, so working
+  directory, environment, and shell variables carry forward. Isolated groups
+  run in subshells from the action baseline. The `eval` boundary keeps an
+  entry's inline comments or trailing control operators from consuming the
+  generated group terminator. Entries remain ordered and fail fast. On POSIX
+  and Bash, a successful `exit` or direct `exec` ends only an isolated entry;
+  in shared mode it ends the remaining chain. A successful PowerShell `exit`
+  ends its process, while `exec` has no POSIX meaning on that route. A failed
+  POSIX/Bash entry emits a bounded action/entry marker for the runner to
+  include in the failure diagnostic. The resulting POSIX command must be
+  parsable by [shlex](https://docs.rs/shlex/latest/shlex/) (POSIX mode). On
+  Windows with the default PowerShell route, shared lists use one encoded
+  script, while isolated lists launch one new encoded `powershell.exe` process
+  per entry. Both modes check `$LASTEXITCODE` and stop on a non-zero status. An
+  entry remains opaque recipe text, so multiple native commands separated by
+  semicolons inside one entry are not checked individually. An empty command
+  list is rejected during manifest deserialization. Plain command strings
+  remain shell text; authors should use structured recipes or explicit quoting
+  helpers for arbitrary variables.
 
 - `script`: A multi-line script declared with the YAML `|` block style. The
   entire block is passed to the selected recipe interpreter. On Unix, the POSIX
@@ -606,6 +617,14 @@ leaking Ninja syntax into manifests. A shell fallback such as `${CARGO:-cargo}`
 is written exactly that way; Netsuke owns the chosen backend and escapes its
 file format when it emits `build.ninja`.
 
+Command-list recipes also carry the typed, literal `command_isolation` field.
+Its `shared` default preserves legacy execution, while `isolated` gives each
+entry the action's working-directory and environment baseline on every route.
+The field does not make shell text portable: POSIX `${VAR:-default}` expansion
+is unavailable on the default Windows PowerShell route. See
+[ADR-0045](adrs/adr-0045-isolate-command-list-entries.md) for the decision and
+compatibility constraints.
+
 Netsuke should add four complementary capabilities.
 
 #### Backend dollar escaping (implemented)
@@ -634,7 +653,7 @@ adopted that part of the grammar.
 Metadata follows the same emission-boundary rule. A `description`, `depfile`,
 `deps`, or `pool` keeps its backend-neutral IR text, and the Ninja writer
 escapes only the emitted binding, doubling a literal dollar and rejecting
-newline, carriage-return, and NUL. ADR 014 records the boundary and its
+newline, carriage-return, and NUL. ADR 0014 records the boundary and its
 migration consequences.
 
 #### Structured environment mapping
@@ -725,7 +744,7 @@ exec:
 The renderer must treat each argument as one argv element and quote it for the
 selected backend. List-valued expressions should be supported without forcing
 authors to pre-tokenize flags into strings. This avoids accidental word
-splitting and reduces the need for `shell_escape` in ordinary recipes.
+splitting and reduces the need for `shell_quote` in ordinary recipes.
 
 #### Execution feedback
 
@@ -924,10 +943,28 @@ pub struct Rule {
     // to map to more advanced Ninja features.
 }
 
+/// Select whether ordered command-list entries share shell state.
+#[derive(Default)]
+#[serde(rename_all = "lowercase")]
+pub enum CommandIsolation {
+    #[default]
+    Shared,
+    Isolated,
+}
+
 /// A union of execution styles for both rules and targets.
 #[serde(untagged)]
 pub enum Recipe {
-    Command { command: StringOrList },
+    Command {
+        command: StringOrList,
+        // Serialize only Isolated; omitting Shared preserves legacy hashes.
+        #[serde(
+            rename = "command_isolation",
+            default,
+            skip_serializing_if = "CommandIsolation::is_shared"
+        )]
+        isolation: CommandIsolation,
+    },
     Script { script: String },
     Rule { rule: StringOrList },
     // FUTURE: planned Recipe::Exec extension; not present in src/ast/mod.rs yet.
@@ -1018,7 +1055,7 @@ interpreted only at the manifest-to-IR boundary.*
 `as_single` build on it. Path conversion deliberately does not live here. The
 AST models the manifest's surface syntax, in which `sources`, `deps` and
 `order_only_deps` are plain strings; only manifest-to-IR lowering decides they
-name files on disk, so `src/ir/from_manifest_support.rs::to_paths` performs
+name files on disk, so `src/ir/from_manifest/support/mod.rs::to_paths` performs
 that interpretation at the boundary. Keeping `camino` out of `src/ast/mod.rs`
 stops filesystem concerns leaking into the domain model.
 
@@ -1052,6 +1089,7 @@ let ast = NetsukeManifest {
         name: StringOrList::String("hello".into()),
         recipe: Recipe::Command {
             command: "echo hi".into(),
+            isolation: CommandIsolation::Shared,
         },
         sources: StringOrList::Empty,
         deps: StringOrList::Empty,
@@ -1152,10 +1190,11 @@ fixtures are loaded by the tests to ensure real-world YAML files behave as
 expected. This suite guards against regressions as the schema evolves.
 
 Environment-dependent tests follow the seam taxonomy in
-[ADR-008](adr-008-environment-seam-taxonomy.md): tests inject a boundary-owned
-reader or value, while an end-to-end test configures only its spawned child
-process. This keeps environment lookup outside the domain behaviour under test
-and avoids process-global mutation or synchronization locks.
+[ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md): tests inject a
+boundary-owned reader or value, while an end-to-end test configures only its
+spawned child process. This keeps environment lookup outside the domain
+behaviour under test and avoids process-global mutation or synchronization
+locks.
 
 ## Section 4: Dynamic Builds with the Jinja Templating Engine
 
@@ -1264,8 +1303,8 @@ support, while allowing later macros to override earlier ones.
 Template rendering and macro invocation are each wrapped in a bounded, redacted
 telemetry boundary, kept separate from evaluation so manifest content never
 reaches a span or a metric label.
-[ADR-009](adr-009-bounded-redacted-manifest-telemetry.md) records this
-decision; see the
+[ADR-0009](adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md)
+records this decision; see the
 [developer's guide](developers-guide.md#manifest-telemetry-template-render-and-macro-invocation)
 for the metric names, bounded label vocabulary, and redaction rules.
 
@@ -1287,16 +1326,28 @@ providing a secure bridge to the underlying system.
   influenced by the external environment (e.g., `PATH`, `CC`). It returns an
   error if the variable is undefined and no `default` is provided, or if the
   variable contains invalid UTF-8.
-  [ADR-026](adr-026-manifest-environment-access-policy.md) bounds this port with
-  `manifest::EnvAccessPolicy`, an exact-name allow and block policy the
-  operator configures through `env_allow_var` and `env_block_var`; the policy
-  is evaluated at the `env()` registration boundary before the reader runs, so
-  a denied name never obtains a process value. Each lookup, including a
-  refusal, is counted once on the bounded `netsuke_manifest_env_lookups_total`
-  series recorded by [ADR-009](adr-009-bounded-redacted-manifest-telemetry.md),
-  which carries only the `outcome` label and never the name or its value. The
-  `default` argument is planned; the current implementation only accepts the
-  variable name. The planned manifest-level `env` block in
+  [ADR-0026](adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md)
+  bounds this port with `manifest::EnvAccessPolicy`, an exact-name allow and
+  block policy the operator configures through `env_allow_var` and
+  `env_block_var`; the policy is evaluated at the `env()` registration boundary
+  before the reader runs, so a denied name never obtains a process value.
+  Automatic project discovery quarantines allow entries throughout the selected
+  `.netsuke.toml` `extends` chain, while each shared file occurrence retains
+  the authority of the root that reached it. Each lookup, including a refusal,
+  is counted once on the bounded `netsuke_manifest_env_lookups_total` series.
+  The counter is recorded by
+  [ADR-0009](adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md),
+  which carries only the `outcome` label and never the name or its value. A
+  `default=` keyword argument supplies the value to use when the variable is
+  absent, which keeps `PATH`-style optional configuration out of the manifest's
+  control flow; it is accepted only as a string, and a non-string default
+  raises the `manifest.env.default_not_string` detail under the
+  `[netsuke::jinja::env::args]` code rather than stringifying the value. The
+  default is consulted for a *missing* variable only. An undecodable value is
+  still an error, because substituting there would hide a host fault the author
+  did not ask to tolerate, and a variable the access policy denies is still
+  refused, because a default is a fallback for absence and not a bypass. The
+  planned manifest-level `env` block in
   [§2.6](#26-planned-recipe-ergonomics-and-execution-feedback) controls the
   environment Netsuke applies when actions run.
 
@@ -1342,9 +1393,10 @@ providing a secure bridge to the underlying system.
   capability opened at the pattern's literal directory prefix (`src/` for
   `src/**/*.c`) rather than at an ambient root; the match walk itself remains
   the `glob` crate's own, which traverses the filesystem ambiently.
-  [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) records this
-  decision; see the [developer's guide](developers-guide.md#capability-scope)
-  for the prefix computation and symlink-handling rules.
+  [ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md)
+  records this decision; see the
+  [developer's guide](developers-guide.md#capability-scope) for the prefix
+  computation and symlink-handling rules.
 - `python_version(requirement: &str) -> Result<bool, Error>`: An example of a
   domain-specific helper function that demonstrates the extensibility of this
   architecture. This function would execute `python --version` or
@@ -1358,21 +1410,38 @@ providing a secure bridge to the underlying system.
 In addition to functions, custom filters provide a concise, pipe-based syntax
 for transforming data within templates.
 
-- `| shell_escape`: A filter that takes a string or list and escapes it for
-  safe inclusion as a single argument in a shell command. This is a
-  non-negotiable security feature to prevent command injection vulnerabilities.
-  The implementation will use the `shell-quote` crate for robust, shell-aware
-  quoting.[^22] This filter is planned and must be reconciled with structured
-  `exec` recipes so users do not need it for ordinary argv construction.
+- `| shell_quote`: A filter that takes a string and encodes it as exactly one
+  shell word for a named dialect, so the value survives a shell's word
+  splitting as a single argument. This is a non-negotiable security feature to
+  prevent command injection vulnerabilities; hand-rolled escaping in a manifest
+  is where injection lives, and the manifest author is the party least able to
+  verify it. It is implemented once, in `src/shell_word.rs`, over the
+  `shell-quote` crate's `sh` encoder and a PowerShell single-quoted encoder,
+  and both the IR lowering path and this filter delegate there.[^22] The
+  dialect is named by a `dialect` keyword argument taking `sh` or `powershell`,
+  defaulting to the dialect implied by the active recipe shell;
+  [ADR-0041](adrs/adr-0041-canonical-recipe-shell-quoting-surface.md) records
+  why the argument exists, why `bash` is refused, and why the default is the
+  surface's one unstable axis. The filter is *not* a licence to stop preferring
+  structured `exec` recipes, which need no quoting at all: it serves the
+  manifests that still need shell syntax. Its output is correct only in
+  unquoted argv position, and it does not detect an author interpolating it
+  inside a shell's own double quotes, where the quoter's quotes become data.
 
-- `| shell_join`: A planned filter that accepts a list of arguments and returns
-  one shell-safe command fragment. Each list element is quoted as a separate
-  argument. This is for deliberate shell recipes; structured `exec` recipes
-  remain preferred when no shell syntax is needed.
+- `| shell_join`: A filter that accepts a list of arguments and returns one
+  shell-safe command fragment, joining each encoded element with exactly one
+  space so the shell re-splits it into the original sequence. Every element
+  must be a string, and no element is ever dropped — `['']` renders as one
+  empty word, which is why `compact` is a separate filter rather than a flag
+  here. It does not flatten nested lists. This is for deliberate shell recipes;
+  structured `exec` recipes remain preferred when no shell syntax is needed.
 
-- `| compact`: A planned collection filter that removes empty strings and null
-  values while preserving order. It supports patterns such as constructing
-  `RUSTFLAGS` from an optional user override without handwritten shell tests.
+- `| compact`: A collection filter that removes `none`, undefined, and empty
+  strings while preserving order. It drops nothing else: `0`, `false`, `[]`,
+  `{}`, and a whitespace-only string are all retained, which is what
+  distinguishes it from MiniJinja's `select`. It supports patterns such as
+  constructing `RUSTFLAGS` from an optional user override without handwritten
+  shell tests, which is how the two filters above compose with it.
 
 - `| to_path`: A filter that converts a string into a platform-native path
   representation, handling `/` and `\` separators correctly.
@@ -1504,8 +1573,8 @@ Implementation notes:
   this policy is enforced once rather than re-implemented per filter.
   `FileReadLimits` and `open_file_checked` in `src/stdlib/path/fs_utils.rs`
   decide what may be opened; `BoundedRead` and `read_bounded_chunk` in
-  `src/stdlib/path/bounded_read.rs` stream the bytes and charge the budget as
-  they arrive, so no buffer grows with the length of a line. See the
+  `src/stdlib/path/bounded_read/mod.rs` stream the bytes and charge the budget
+  as they arrive, so no buffer grows with the length of a line. See the
   [developer's guide](developers-guide.md#file-reading-filter-boundary).
 - The configured ceiling is `DEFAULT_FILE_MAX_READ_BYTES` (8 MiB) in
   `src/stdlib/config_types.rs`, stored as `FileConfig::max_read_bytes` and set
@@ -1529,7 +1598,8 @@ Implementation notes:
   `FILE_ATTRIBUTE_REPARSE_POINT`; that refuses symlinks, junctions, volume
   mount points, and every other tag alike, because the test is on the attribute
   bit rather than on the tag value. The judgement and the read share one
-  handle. See [ADR-032](adr-032-windows-reparse-point-same-handle-open.md).
+  handle. See
+  [ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md).
 - An over-budget read fails with `stdlib.path.contents.file_too_large`, which
   quotes the path and the byte limit. An opened object that is not a regular
   file (a FIFO, a device, or a Windows reparse point refused on the opened
@@ -1540,7 +1610,7 @@ Implementation notes:
   `linecount` validates UTF-8 incrementally as it counts, so a file that is not
   text is rejected rather than silently counted as opaque bytes.
 - Each of the four filter closures records its call through
-  `src/stdlib/path/read_telemetry.rs`: one sample of the bounded counter
+  `src/stdlib/path/read_telemetry/mod.rs`: one sample of the bounded counter
   `netsuke_stdlib_file_read_total`, labelled `filter` (`contents`, `linecount`,
   `hash`, or `digest`) and `outcome` (`ok` or `rejected`), plus a
   `stdlib.file_read.read` debug event carrying the same two facts with the
@@ -1635,6 +1705,18 @@ overcommitting memory, and can be tuned via
 `StdlibConfig::with_which_cache_capacity` for hosts with unusually large or
 tiny search paths. Zero is rejected to keep the cache usable.
 
+Resolver telemetry is bounded. `netsuke_stdlib_which_cache_total` and
+`netsuke_stdlib_which_resolution_total` both carry a `cwd_mode` label from the
+closed set `auto`, `always`, `never`, and `workspace_recursive`. The label
+records the requested search policy, not the domain that produced a result; it
+is derived from the options before the lookup runs, so it does not indicate
+whether a recursive workspace lookup ran or produced the result. `cwd_mode` is
+the telemetry spelling, so the recursive mode is `workspace_recursive` there
+while the template value keeps its hyphen as `workspace-recursive`. The cache
+counter carries `hit`, `miss`, or `bypass`, and the resolution counter `found`,
+`not_found`, or `error`, with a bounded `category` added only on failure. No
+command name, path, workspace name, or `PATH`/`PATHEXT` value is recorded.
+
 Errors follow the design’s actionable diagnostic model. Missing executables
 raise `netsuke::jinja::which::not_found` with context on how many `PATH`
 entries were inspected, a shortened preview of the path list, and a hint to use
@@ -1680,7 +1762,7 @@ described below, after its flat `PATH` pass misses. If that search cannot find
 a match, the predicate returns `false`; the analogous `which` call raises
 `netsuke::jinja::which::not_found`. The no-place-to-search case is
 intentionally treated as absence for the predicate, matching the `-NOTFOUND`/
-`.found()` contracts used by comparable build systems. ADR-005 records this
+`.found()` contracts used by comparable build systems. ADR-0005 records this
 typed-result boundary and absence policy.
 
 Unit tests cover POSIX and Windows specifics, canonical deduplication, cache
@@ -1949,6 +2031,10 @@ Implementation notes for collection filters:
 - `uniq` stores values in an `IndexSet` so duplicates are removed with `O(n)`
   complexity while preserving the original order according to MiniJinja's
   equality semantics.
+- `uniq` is unchanged by the canonical value work: it still stores values in an
+  `IndexSet` and still compares them through MiniJinja's own equality. The
+  canonical key and equality relation below is a separate foundation that
+  standard-library helpers may adopt, and no existing filter was migrated to it.
 - `flatten` recurses through nested sequences and iterables; scalars raise an
   `InvalidOperation` error to avoid silently iterating over strings or other
   unintended inputs.
@@ -1997,7 +2083,7 @@ Implementation details:
   that fails policy is therefore rejected only after the initial hop has been
   dispatched, which already marks the template impure. The decision, including
   bounded redirect handling and cache identity, is recorded in
-  [ADR-023](adr-023-revalidate-fetch-redirects.md).
+  [ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md).
 
 For screen readers: `fetch` dispatches the current hop until it receives a
 non-redirect response. For a redirect, the adapter resolves the `Location`
@@ -2007,8 +2093,9 @@ cross-origin credential removal, the loop check, and policy evaluation. A
 target that fails any check is rejected; only one that passes all four becomes
 the next current hop. The header parse is the adapter's, not the chain's: a
 `Location` header is an HTTP response fact, so the chain receives only an
-already-resolved target. [ADR-023](adr-023-revalidate-fetch-redirects.md)
-records the boundary and its addendum.
+already-resolved target.
+[ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md) records the
+boundary and its addendum.
 
 ```mermaid
 stateDiagram-v2
@@ -2138,6 +2225,52 @@ cannot silently wrap. The resulting object exposes `.iso8601`, `.seconds`, and
 {{ fetch('https://example.com/data.csv', cache=True) | head(5) }}
 ```
 
+#### Canonical value key and equality relation
+
+Comparing template values is otherwise entangled with MiniJinja's internal
+equality, which is not a stable, serializable contract: two values that agree
+semantically can differ in a host object's iteration order, and a helper that
+wanted deterministic output had no shared rule to appeal to.
+
+Netsuke derives a **canonical key** for a value by serializing it under RFC
+8785 (JSON Canonicalization Scheme, JCS) through the repository's existing
+canonicalizer. Two values are **equal** exactly when their canonical keys are
+byte-identical, and deduplication retains the first representative of each key
+in input order.
+
+The public surface is five names, re-exported from `src/stdlib` as Rust library
+items rather than template names:
+
+| Name                  | Role                                                           |
+| --------------------- | -------------------------------------------------------------- |
+| `CanonicalKey`        | The canonical byte string, as a newtype                        |
+| `CanonicalValueError` | Typed refusal for values outside the supported domain          |
+| `canonical_key`       | Derive the key for a value, or refuse                          |
+| `canonical_eq`        | Compare two values by canonical key, or refuse                 |
+| `stable_deduplicate`  | Retain first representatives by key, in first-appearance order |
+
+Three properties of this contract matter to readers of the design, because each
+is a deliberate limit rather than an oversight:
+
+- **Equality inherits JCS number semantics, not source-integer identity.**
+  Numbers outside the range JCS represents exactly can share a key: `2^53 + 1`
+  and `2^53` serialize alike, as do negative and positive zero. No
+  arbitrary-precision integer-injectivity claim is made, and the module
+  documents the boundary rather than papering over it.
+- **Map key order is normalized, sequence order is not.** Keying a map sorts its
+  property names, so `{"a":1,"b":2}` and `{"b":2,"a":1}` share a key and the
+  second is a duplicate. Keying a sequence preserves element order, so `[1,2]`
+  and `[2,1]` are distinct values.
+- **The caller supplies a precondition.** Keying relies on the host object being
+  finite, stable, and acyclic. A host object that mutates between traversal
+  steps, or that contains a cycle, is outside the contract; the adapter does
+  not defend against it. This is an explicit precondition on the caller, not a
+  runtime check.
+
+Nothing in this subsection registers a template helper. The existing `uniq` and
+`unique` behaviour is unchanged and no manifest-visible behaviour changes at
+this stage; later helpers decide their own bounds, diagnostics, and integration.
+
 ## Section 5: The Bridge to Ninja: Intermediate Representation and Code Generation
 
 After the user's manifest has been deserialized into the AST and remaining
@@ -2183,17 +2316,18 @@ the Ninja build system, which consists of "Action" nodes (commands) and
 "Target" nodes (files).[^7] This close mapping simplifies the final code
 generation step.
 
-The authoritative live IR contract is [src/ir/graph.rs](../src/ir/graph.rs),
-re-exported through [src/ir/mod.rs](../src/ir/mod.rs). There is no top-level IR
-file in the current codebase. Fields and types marked `FUTURE` in the snippet
-below are forward-looking IR sketches rather than implemented Rust definitions.
+The authoritative live IR contract is
+[src/ir/graph/mod.rs](../src/ir/graph/mod.rs), re-exported through
+[src/ir/mod.rs](../src/ir/mod.rs). There is no top-level IR file in the current
+codebase. Fields and types marked `FUTURE` in the snippet below are
+forward-looking IR sketches rather than implemented Rust definitions.
 `Action.env`, `EnvBinding`, and the `Exec` recipe variant capture the intended
 lowering target for roadmap tasks `3.14.9` and `3.14.10`.
 
 Rust
 
 ```rust
-// In src/ir/graph.rs
+// In src/ir/graph/mod.rs
 
 use std::collections::HashMap;
 use camino::Utf8PathBuf;
@@ -2226,7 +2360,7 @@ pub struct BuildGraph {
 pub struct Action {
     pub recipe: Recipe,
     pub description: Option<String>,
-    // FUTURE: planned Action.env extension; not present in src/ir/graph.rs yet.
+    // FUTURE: planned Action.env extension; not present in src/ir/graph/mod.rs yet.
     pub env: HashMap<String, EnvBinding>,
     pub depfile: Option<String>, // Template for the .d file path, e.g., "$out.d"
     pub deps_format: Option<String>, // "gcc" or "msvc"
@@ -2414,6 +2548,51 @@ This transformation involves several steps:
    traversal are logged, collected, and returned alongside any cycle to aid
    diagnostics.
 
+#### Structured-command shell selection vocabulary
+
+`shell_selection` is a public, data-only vocabulary for the shell intent that
+RFC 0011 adds to structured commands. It sits outside the manifest AST and
+execution IR so configuration, resolution, and later manifest lowering can
+share the types without depending on one another. This milestone does not
+resolve an executable, inspect `PATH`, or launch a shell.
+
+`ShellName` retains a validated spelling matching `[a-z][a-z0-9_-]{0,62}`.
+Parsing is exact: it neither trims nor changes case. The eight lower-case YAML
+Boolean words are reserved even when quoted: `true`, `false`, `yes`, `no`, `y`,
+`n`, `on`, and `off`. Other YAML-like names, including `null`, remain valid
+when they satisfy the name grammar. A finite `BuiltInShell` table describes
+`sh`, `bash`, `pwsh`, and `powershell`; it records host support, executable
+form, and fixed arguments without looking up or running those programs.
+`HostFamily` makes the Unix-like/Windows choice explicit so the table can be
+checked independently of the build host.
+
+`ShellSelection` preserves exactly three intents: `false` is `Direct`, `true` is
+`PlatformDefault`, and a valid string is `Named`. `ShellSelection::default()`
+is `Direct`, so a containing field marked `#[serde(default)]` decodes a missing
+mapping key as `Direct`. Manifest and AST lowering for roadmap task 11.3.1 must
+preserve that field annotation. Explicit null, numbers, sequences, mappings,
+and invalid names fail. Serialization writes the matching Boolean or name, so a
+named value round-trips through JSON and YAML.
+
+The manifest frontend first parses YAML 1.1 scalars into `serde_json::Value`.
+The Boolean coercion is part of the existing manifest-wide compatibility
+contract, so this vocabulary records it rather than changing parser options.
+The spelling groups below summarize the pinned selector cases; the tests also
+cover mixed and upper-case examples.
+
+| Unquoted spelling         | Parsed selector   |
+| ------------------------- | ----------------- |
+| `false`, `no`, `n`, `off` | `Direct`          |
+| `true`, `yes`, `y`, `on`  | `PlatformDefault` |
+
+Quoted Boolean words are strings and still fail the reserved-name rule. The
+compatibility tests separately pin YAML tags: `!!str bash` selects `bash`,
+`!!str true` is rejected, and `!custom yes` follows the parser's Boolean
+interpretation. `!!bool true` cannot be deserialized by the current direct
+tagged-scalar path, while `.inf` fails the initial generic-value parse; neither
+path accepts either value as a shell selection. These parser-specific outcomes
+are evidence for the later YAML contract review, not new coercion rules.
+
 #### Legacy recipe shell selection
 
 `RecipeShell` is the backend boundary for completed legacy recipe text. The
@@ -2423,25 +2602,44 @@ PowerShell recipes are encoded as UTF-16LE Base64 and emitted as
 -EncodedCommand …`,
 so the shell that launched Netsuke does not select the recipe interpreter. On
 Windows, `NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility
-route; the runner verifies `bash.exe --version` before build or Ninja-tool
-execution and reports an actionable error when the runtime is unavailable.
+route. Before a build or Ninja-tool operation, the runner searches the injected
+`PATH` entries from left to right, resolves the selected `bash.exe` to an
+absolute path, and probes that exact executable with `--version`. The runner
+passes the same path to Ninja command rendering, preventing process launch from
+selecting a different application- or system-directory executable. A failed
+probe reports the selected path, exit status, and bounded, sanitized child
+output; the path and output remain outside telemetry labels. `generate` and
+target discovery do not require an installed Bash runtime. A saved plan from
+`generate` retains the literal `bash.exe` command name and resolves it from the
+execution-time `PATH`; a build plan binds the path selected for that operation.
 
-The PowerShell route gives each scalar command and script a fresh process. An
-ordered command list uses one shared process, checks `$LASTEXITCODE`
-immediately after each generated list entry, and exits on the first non-zero
-status; terminating PowerShell errors have the same fail-fast effect. Multiple
-native commands inside one entry are not individually instrumented. The POSIX
-and Bash routes retain the brace-group, `eval`, background-job, and `exec`
-validation and rendering rules. Target discovery and generation do not execute
-recipes, so they do not require the optional Bash runtime.
+The PowerShell route gives each scalar command and script a fresh process. A
+shared command list uses one process and checks `$LASTEXITCODE` immediately
+after each generated list entry. An isolated list starts a fresh
+`powershell.exe` per entry from the action's working-directory and environment
+baseline. Both modes stop on the first non-zero status. A successful PowerShell
+`exit` ends only an isolated child, while it ends the shared process. On POSIX
+and Bash, a successful `exit` or direct `exec` ends only an isolated entry,
+while it ends the shared chain; `exec` has no POSIX meaning on the PowerShell
+route. Shared PowerShell recipes retain their existing `Stop` preference;
+isolated entries keep cmdlet errors fail-fast while native stderr remains
+informational. Multiple native commands inside one entry are not individually
+instrumented. POSIX and Bash use the same brace-group and `eval` wrapper:
+shared groups carry current-shell state, while isolated groups run in
+subshells. The background-job and `exec` validation rules apply to both POSIX
+modes. Target discovery and generation do not execute recipes, so they do not
+require the optional Bash runtime.
 
 PowerShell recipes that fit within the 32,766-character Windows command-line
-limit use `-EncodedCommand`. For larger recipes, Netsuke emits Ninja's per-edge
-`rspfile` and `rspfile_content` bindings instead: Ninja writes the unique
-`$out`-derived `.ps1` response file immediately before the action. It contains
-an ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The
-command invokes it with `powershell.exe -File "$rspfile"`; PowerShell decodes
-the payload, and the bootstrap removes its own `$PSCommandPath` in a `finally`
+limit use `-EncodedCommand`. Each isolated child command line is checked
+against that same limit, with an error naming the one-based entry and measured
+length. The 1 MiB bound applies to the complete parent script, including its
+encoded child payloads. Larger parent recipes use Ninja's per-edge `rspfile` and
+`rspfile_content` bindings instead: Ninja writes the unique `$out`-derived
+`.ps1` response file immediately before the action. It contains an ASCII
+PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The command
+invokes it with `powershell.exe -File "$rspfile"`; PowerShell decodes the
+payload, and the bootstrap removes its own `$PSCommandPath` in a `finally`
 block after the recipe succeeds or fails. The per-edge name isolates concurrent
 actions in the build working directory; generation and target-discovery queries
 create no response files.
@@ -2579,7 +2777,7 @@ materialization; `clean` prunes only after successful `ninja -t clean` and not
 on failure. Sidecars remain immutable and content-addressed. Consequently, an
 older arbitrary `generate --output` manifest may lose its sidecars after a
 later command and must be regenerated. See
-[ADR-012](adr-012-bound-dyndep-sidecar-retention.md) for this policy.
+[ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for this policy.
 
 4\. **Write Defaults:** Finally, write the `default` statement, listing all
 paths from `graph.default_targets`.
@@ -2590,15 +2788,16 @@ default my_app
 
 ### 5.5 Design Decisions
 
-The live IR structures defined in [src/ir/graph.rs](../src/ir/graph.rs), and
-re-exported through [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers
-that mirror Ninja's conceptual model while remaining backend-agnostic.
-`BuildGraph` collects actions in a hash map, canonical edges in an
-insertion-ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash
-map. Actions hold the parsed `Recipe` and optional execution metadata.
-`BuildEdge` connects inputs to outputs using an action identifier and carries
-the `phony` and `always` flags verbatim from the manifest. No Ninja-specific
-placeholders are stored in the IR to keep the representation portable.
+The live IR structures defined in
+[src/ir/graph/mod.rs](../src/ir/graph/mod.rs), and re-exported through
+[src/ir/mod.rs](../src/ir/mod.rs), are minimal containers that mirror Ninja's
+conceptual model while remaining backend-agnostic. `BuildGraph` collects
+actions in a hash map, canonical edges in an insertion-ordered arena, and
+output aliases in a `Utf8PathBuf` to `EdgeId` hash map. Actions hold the parsed
+`Recipe` and optional execution metadata. `BuildEdge` connects inputs to
+outputs using an action identifier and carries the `phony` and `always` flags
+verbatim from the manifest. No Ninja-specific placeholders are stored in the IR
+to keep the representation portable.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed
@@ -2618,7 +2817,7 @@ placeholders are stored in the IR to keep the representation portable.
   execute the Ninja binary to validate structure and no-op behaviour.
   Serial-ordering tests additionally use real Ninja to prove declaration order,
   failure short-circuiting, shared-work reuse, and unrelated-branch concurrency.
-  [ADR-011](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md)
+  [ADR-0011](adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md)
   records why staged dyndep is used instead of order-only gates, pools, or
   recursive Ninja invocations.
 - Backend integration tests can opt into `NETSUKE_REQUIRE_NINJA=1`; in that
@@ -2675,9 +2874,9 @@ parameter list: `NinjaBuildRequest` for a build and `NinjaToolRequest` for
 file, the targets or tool, a `&CommandEnv` describing the child's environment,
 and the `stderr_mode: StderrMode` policy field. `run_ninja_with` and
 `run_ninja_tool_with` consume these; the convenience wrappers `run_ninja` and
-`run_ninja_tool` live in `runner::ninja_process_adapter`, translate `Cli` state
-at the runner boundary, call them with `CommandEnv::inherit()`, and derive the
-`stderr_mode` policy from the CLI via
+`run_ninja_tool` live in `runner::ninja::process_adapter`, translate `Cli`
+state at the runner boundary, call them with `CommandEnv::inherit()`, and
+derive the `stderr_mode` policy from the CLI via
 `StderrMode::from_json_enabled(cli.json)`, which is production behaviour.
 Process requests never import `Cli`; callers without parser state construct
 `NinjaProcessOptions` directly. The CLI parser rejects a non-UTF-8 `--file` or
@@ -2705,7 +2904,7 @@ The command construction follows this pattern:
    results in an argument sequence ending
    `-f <generated-build-file> -- my_target`. The terminator keeps configured
    and explicit target names from being parsed as Ninja options; see
-   [ADR-018](adr-018-terminate-ninja-options-before-build-target-operands.md).
+   [ADR-0018](adrs/adr-0018-terminate-ninja-options-before-build-targets.md).
    When no targets are selected, the command ends with the generated build file
    and omits the terminator. Flags like `-j` for parallelism are Netsuke-owned
    options.[^8]
@@ -2754,7 +2953,7 @@ where it is not — and `CommandEnv` replaces same-key overrides by the same
 rule, so its view of the environment always matches the child's.
 
 The developers' guide documents the module layout and the `PATH` composition
-helper under "Module: `runner::process::command_env`".
+helper under "Module: `runner::process::environment`".
 
 Integration-test support finds the already-built `netsuke` executable before
 spawning it. Its locator derives an ordered candidate list from the test
@@ -2842,13 +3041,13 @@ are outside that check. Ninja generation then receives fully expanded command
 text and is responsible only for preserving the scalar form or constructing the
 list-entry shell boundaries.
 
-[ADR-027](adr-027-command-placeholder-contract.md) settles which parts of this
-behaviour are promises: the marker invariant is contractual, the odd-backtick
-parity check is a conservative check that may widen without that being a
-breaking change, and the `shlex` accepted set is not a stability commitment.
-`{{ ins }}` and `{{ outs }}` are the only markers, identically in both recipe
-kinds, following
-[ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md).
+[ADR-0027](adrs/adr-0027-command-placeholder-contract.md) settles which parts
+of this behaviour are promises: the marker invariant is contractual, the
+odd-backtick parity check is a conservative check that may widen without that
+being a breaking change, and the `shlex` accepted set is not a stability
+commitment. `{{ ins }}` and `{{ outs }}` are the only markers, identically in
+both recipe kinds, following
+[ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md).
 
 ### 6.4 Automatic Security as a "Friendliness" Feature
 
@@ -2915,7 +3114,7 @@ context and polished user output.[^27]
 Rust
 
 ```rust
-// In src/ir/graph.rs use thiserror::Error; use camino::Utf8PathBuf;
+// In src/ir/graph/error.rs use thiserror::Error; use camino::Utf8PathBuf;
 
 #[derive(Debug, Error)]
 pub enum IrGenError {
@@ -3184,7 +3383,7 @@ the targets listed in the `defaults` section of the manifest are built.
   self-contained, offline-safe HTML document with a server-rendered SVG, an
   accessible textual outline, and a `<noscript>` fallback. The renderer
   adapters consume a canonical [`GraphView`](../src/graph_view/mod.rs)
-  projection of [`BuildGraph`](../src/ir/graph.rs); deterministic output is
+  projection of [`BuildGraph`](../src/ir/graph/mod.rs); deterministic output is
   guaranteed because the projection sorts every collection at the IR boundary.
   Ninja is not invoked.
 
@@ -3195,17 +3394,17 @@ the targets listed in the `defaults` section of the manifest are built.
 ### 8.4 Design Decisions
 
 The parser-facing `Cli` type is now defined in `src/cli/command.rs`, with the
-localisation-aware parsing entry point in `src/cli/parser.rs` and the runtime
-preference accessors in `src/cli/preferences.rs`, while layered configuration
-lives in a dedicated `CliConfig` struct derived with OrthoConfig in
-`src/cli/config.rs`. The top-level `src/cli/mod.rs` module re-exports that
-public CLI surface. This separation keeps parsing, configuration discovery, and
-runtime command selection as distinct concerns while preserving the existing
-command syntax. Invoking `netsuke` with no explicit subcommand still resolves to
-`build`, and the `build` command can now take default `emit` and `targets`
-values from `[cmds.build]` in configuration files or `NETSUKE_CMDS__BUILD__*`
-environment variables. Explicit CLI targets or `--emit` values still override
-those defaults.
+localisation-aware parsing entry point in `src/cli/parser/mod.rs` and the
+runtime preference accessors in `src/cli/preferences.rs`, while layered
+configuration lives in a dedicated `CliConfig` struct derived with OrthoConfig
+in `src/cli/config/mod.rs`. The top-level `src/cli/mod.rs` module re-exports
+that public CLI surface. This separation keeps parsing, configuration
+discovery, and runtime command selection as distinct concerns while preserving
+the existing command syntax. Invoking `netsuke` with no explicit subcommand
+still resolves to `build`, and the `build` command can now take default `emit`
+and `targets` values from `[cmds.build]` in configuration files or
+`NETSUKE_CMDS__BUILD__*` environment variables. Explicit CLI targets or
+`--emit` values still override those defaults.
 
 Configuration is layered in the order defaults -> configuration files ->
 environment variables -> CLI overrides. Explicit discovery honours
@@ -3222,11 +3421,11 @@ versioned diagnostic document on failure.
 #### Configuration observability
 
 Configuration loading remains a plain query. The application-owned recorder
-boundary in `src/observability.rs` composes instrumentation at the CLI root,
-around the diagnostic-mode resolution and full-merge queries; configuration
-loading itself does not install a recorder or emit metrics. The process-wide
-recorder is installed by the application after tracing is ready, while tests
-use local recorders.
+boundary in `src/observability/mod.rs` composes instrumentation at the CLI
+root, around the diagnostic-mode resolution and full-merge queries;
+configuration loading itself does not install a recorder or emit metrics. The
+process-wide recorder is installed by the application after tracing is ready,
+while tests use local recorders.
 
 The metric vocabulary keeps labels bounded: `config_load_total` uses only
 `phase` (`diag_mode` or `merge`) and `outcome` (`success` or `failure`), while
@@ -3255,7 +3454,7 @@ its tracing filter before this merge and turns it off for JSON diagnostics,
 preserving machine-readable stderr.
 
 CLI help and clap errors are localized via Fluent resources; locale resolution
-is handled in `src/locale_resolution.rs` in two phases. Before the
+is handled in `src/locale/resolution.rs` in two phases. Before the
 configuration merge, `startup_localizer` (`src/main.rs`) resolves the locale
 used for help and clap errors, with the precedence `--locale` ->
 `NETSUKE_LOCALE` -> system locale -> `en-US`; configuration cannot take part
@@ -3270,7 +3469,7 @@ Startup diagnostics are buffered rather than written. The locale is resolved
 before the command line is parsed, so a fallback can be reported before the
 effective diagnostic mode is known, and the JSON diagnostic document is written
 to stderr — an eagerly emitted warning could corrupt it. `StartupWriter` in
-`src/startup_tracing.rs` therefore holds startup tracing until the mode is
+`src/startup_tracing/mod.rs` therefore holds startup tracing until the mode is
 settled. `settle_startup_diagnostics` in `src/main.rs` then releases the buffer
 to stderr in human mode, or discards it in JSON mode so that stderr carries a
 single diagnostic document. Settlement happens after the JSON mode is resolved
@@ -3282,18 +3481,18 @@ depends on how much a run emits.
 
 Configuration-load observability belongs to the application composition root;
 this decision is recorded in
-[ADR-013](adr-013-application-owned-configuration-observability.md).
+[ADR-0013](adrs/adr-0013-application-owned-configuration-observability.md).
 `config_load::resolve_configuration` owns the startup-attempt measurement: it
 resolves diagnostic mode with `cli::resolve_json_and_layers_outcome_with_env`,
 then replays the outcome's deferred diagnostics and passes the cached layers to
 `cli::merge_with_cached_file_layers_with_observer`. That query returns bounded
 merge events alongside the result, which `config_load::resolve_configuration`
 replays through `cli::TracingMergeObserver`. The ordinary query functions do
-not install a recorder or emit tracing. `src/observability.rs` owns the phase
-recorder and bounded phase/outcome vocabulary, while `src/config_load.rs` owns
-the startup-attempt series. The application installs an in-process
-`DebuggingRecorder`; it does not open a metrics listener as a side effect of a
-command invocation.
+not install a recorder or emit tracing. `src/observability/mod.rs` owns the
+phase recorder and bounded phase/outcome vocabulary, while
+`src/config_load/mod.rs` owns the startup-attempt series. The application
+installs an in-process `DebuggingRecorder`; it does not open a metrics listener
+as a side effect of a command invocation.
 
 Metric labels are closed sets: phase-level series use `diag_mode` or `merge`,
 and both phase-level and startup-attempt counters use `success` or `failure`.
@@ -3307,7 +3506,7 @@ full metric names, phase boundaries, and test-recorder rules are documented in
 the configuration-load observability section of the
 [developer's guide](developers-guide.md).
 
-`src/locale_catalogues.rs` is the authoritative registry of shipped catalogues.
+`src/locale/catalogues.rs` is the authoritative registry of shipped catalogues.
 A `define_locales!` macro embeds `locales/<tag>/messages.ftl` for each declared
 tag, so a registry entry without a catalogue fails to compile. Every other
 surface reads that registry rather than repeating the list: the build-time
@@ -3354,11 +3553,11 @@ matches a real directory change. Error scenarios are validated using clap's
 `ErrorKind` enumeration in unit tests and via rstest-bdd behavioural
 steps/scenarios.
 
-Real-time stage reporting now uses a six-stage model in `src/status.rs` backed
-by `indicatif::MultiProgress` for standard terminals. The reporter keeps one
-persistent summary line per stage and updates each line through localized state
-labels (`pending`, `in progress`, `done`, `failed`) plus localized stage text.
-During Stage 6, Netsuke parses Ninja status lines of the form
+Real-time stage reporting now uses a six-stage model in `src/status/mod.rs`
+backed by `indicatif::MultiProgress` for standard terminals. The reporter keeps
+one persistent summary line per stage and updates each line through localized
+state labels (`pending`, `in progress`, `done`, `failed`) plus localized stage
+text. During Stage 6, Netsuke parses Ninja status lines of the form
 `[current/total] ...` and emits localized task progress updates. It retains a
 fixed, bounded number of bytes for each candidate line. An oversized line is
 ignored for progress purposes until its newline, while every byte continues to
@@ -3386,7 +3585,7 @@ Timing summaries are completion diagnostics. They are suppressed when verbose
 mode is off and also suppressed on failed runs so failures do not imply a
 successful pipeline completion.
 
-Theme resolution for CLI output is centralized in `src/theme.rs`. Netsuke
+Theme resolution for CLI output is centralized in `src/theme/mod.rs`. Netsuke
 derives an internal theme preference from the `--emoji` policy
 (`emoji = always` selects Unicode, `never` selects ASCII, and `auto` falls back
 to the mode default) and hands the resulting symbol and spacing tokens to
@@ -3484,7 +3683,7 @@ flowchart LR
   N --> O[Run Netsuke with final behaviour]
 ```
 
-Netsuke configuration discovery is implemented in `src/cli/discovery.rs`.
+Netsuke configuration discovery is implemented in `src/cli/discovery/mod.rs`.
 Explicit file selection is handled by `selector::resolve_config_selector(...)`,
 which applies the precedence `--config` > `NETSUKE_CONFIG`.
 `discover_file_layers(...)` performs one overall discovery pass, applying the
@@ -3575,11 +3774,28 @@ arguments then override the file layers.
    selector remains unchanged. The `-C/--directory` project-root anchor applies
    to manifest lookup and automatic project configuration discovery.
 
+   Fetch-policy authority follows each file occurrence. If an explicit selector
+   chooses the matching project `.netsuke.toml`, that occurrence and its
+   inherited `extends` parents are project-scoped for grant-bearing fetch
+   fields. An unrelated explicit configuration chain remains operator-scoped.
+   If a file is also reached from an operator root, its separate operator
+   occurrence retains that authority.
+
 2. **Project scope**: Configuration files in the current working directory (or
    the directory specified via `-C/--directory`):
    - `.netsuke.toml` (dotfile in project root)
    - Additional formats when features are enabled: `.netsuke.json`,
      `.netsuke.json5`, `.netsuke.yaml`, `.netsuke.yml`
+
+   For fetch policy, the selected project configuration and every file in its
+   `extends` chain are project requests. By default, their allowlist grants are
+   quarantined, and their trust setting cannot authorize those grants.
+   Project-chain `trust_project_fetch_policy` and `env_allow_var` are
+   discarded; only system, user, environment, or CLI configuration can enable
+   fetch trust. Requests combine dependency-first, with the primary file last;
+   allowlists append in that order and the last present default-deny value
+   applies. Project-chain `fetch_block_host` and `env_block_var` remain
+   cumulative.
 
 3. **User scope**: Configuration files in user-specific directories:
    - **Unix-like systems**:
@@ -3678,7 +3894,7 @@ manual flag repetition.
   process working directory independently of `-C/--directory`. Absolute
   selectors retain their original spelling. `-C` continues to anchor project
   discovery and manifest lookup. Pass an absolute path when the selector must
-  not depend on the invoking directory (see ADR-004).
+  not depend on the invoking directory (see ADR-0048).
 
 ### 8.5 Manual Pages
 
@@ -3700,10 +3916,10 @@ existing CLI Fluent keys onto published configuration fields, omits the
 structural `cmds` container, and adds both selectors as help-only metadata with
 no environment or file source. It must not add selector precedence,
 configuration loading, or discovery policy to OrthoConfig. Those
-responsibilities remain in `src/cli/discovery.rs`: [ADR 004] governs `--config`
-precedence and fail-closed selected-file loading, while [ADR 014] governs
-`-C/--directory` project-discovery rooting and manifest lookup. This boundary
-avoids a duplicate CLI model and is recorded in [ADR 016].
+responsibilities remain in `src/cli/discovery/mod.rs`: [ADR 0048] governs
+`--config` precedence and fail-closed selected-file loading, while [ADR 0049]
+governs `-C/--directory` project-discovery rooting and manifest lookup. This
+boundary avoids a duplicate CLI model and is recorded in [ADR-0016].
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
@@ -3715,9 +3931,9 @@ dates, emitting a warning and falling back to `1970-01-01` when the environment
 value is invalid. Release artefacts include these generated help files; the
 published crate remains code-only.
 
-[ADR 004]: adr-004-explicit-config-selection-outside-orthoconfig.md
-[ADR 014]: adr-014-base-directory-seam-and-dir-anchoring.md
-[ADR 016]: adr-016-public-cli-metadata-source-of-truth.md
+[ADR 0048]: adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md
+[ADR 0049]: adrs/adr-0049-base-directory-seam-and-c-anchoring.md
+[ADR-0016]: adrs/adr-0016-public-cli-metadata-source-of-truth.md
 
 ### 8.6 Release Automation
 
@@ -3726,22 +3942,35 @@ Release engineering is delegated to GitHub Actions workflows built on the
 SHAs so release automation remains reproducible. The tagging workflow first
 verifies that the Git ref matches `Cargo.toml` and records the crate's binary
 name once so all subsequent jobs operate on consistent metadata. Each build job
-installs `cargo-orthohelp = 0.9.0`, invokes the `rust-build-release` composite
+installs `cargo-orthohelp = 0.9.1`, invokes the `rust-build-release` composite
 action, and then runs `scripts/generate-release-help.sh` before staging or
-packaging. The pinned v0.9.0 executable is invoked by the helper as
+packaging. The pinned v0.9.1 executable is invoked by the helper as
 `cargo-orthohelp orthohelp`.
 
 Linux builds cross-compile for `x86_64` and `aarch64`, stage the binary and
 generated manual page through `.github/release-staging.toml`, and pass the
 staged `man_path` output into the shared `linux-packages` composite. The
 resulting `.deb` and `.rpm` archives both declare a runtime dependency on
-`ninja-build`. Windows and macOS builds use the same staging composite from
-`leynos/shared-actions`; Windows staging also carries the PowerShell help files
-as release artefacts alongside the MSI package. Every standalone release
-archive also carries the generated shell completion sidecars under
-`completions/<shell>/`. The composite shells out to a Cyclopts-driven script
-that reads the `.github/release-staging.toml` configuration (Tom's Obvious,
-Minimal Language (TOML)), merges the `[common]` configuration with the
+`ninja-build`. The maintainer value comes from the first `[package].authors`
+entry in `Cargo.toml`; the package homepage, licence identifier, and
+description come from `[package].homepage`, `license`, and `description`. The
+metadata job forwards its resolved manifest path into the Linux build job, so
+the validator checks the same source that supplied those fields. Before upload,
+the Linux job inspects the built Debian and RPM headers against those fields
+and compares Debian's `./usr/share/doc/<package-name>/copyright` contents with
+`LICENSE`. Its request type and injectable package-command runner stay private
+to the validator; Debian and RPM queries use that same runner boundary. The
+Debian tar-member reader is also private to this copyright check. The coverage
+ZIP validator enforces a different archive contract, so the two readers do not
+form a shared archive API. The shared-action follow-up
+[#542](https://github.com/leynos/shared-actions/issues/542) tracks exposing a
+Debian `License` control field. Windows and macOS builds use the same staging
+composite from `leynos/shared-actions`; Windows staging also carries the
+PowerShell help files as release artefacts alongside the MSI package. Every
+standalone release archive also carries the generated shell completion sidecars
+under `completions/<shell>/`. The composite shells out to a Cyclopts-driven
+script that reads the `.github/release-staging.toml` configuration (Tom's
+Obvious, Minimal Language (TOML)), merges the `[common]` configuration with the
 target-specific overrides, and copies the configured artefacts into a fresh
 `dist/{bin}_{platform}_{arch}` directory. It installs Astral's Python package
 manager (uv) with `astral-sh/setup-uv`, double-checks the tool is present, and
@@ -3794,19 +4023,23 @@ The staged artefacts feed a Windows Installer XML (WiX) v4 authoring template
 stored in `installer/Package.wxs`; the workflow invokes the shared
 `windows-package` composite to convert the repository licence into Rich Text
 Format (RTF), embed the binary, and output a signed Microsoft Installer (MSI)
-installer alongside the staged directory. The packaging step gates the action's
-internal artefact uploader behind the `should_publish` flag exported by the
-metadata job so that dry runs do not leak MSI artefacts. The composite pins the
-`WixToolset.UI.wixext` extension to v6 to match the WiX v6 CLI and avoid the
-`WIX6101` incompatibility seen with the legacy v4 bundle. The installer uses
-WiX v4 syntax, installs per-machine, and presents the minimal UI appropriate
-for a CLI tool. Windows does not modify the PATH, so users must add the
-installation directory manually if they want global command resolution. The
-Unix manual page remains in the staged artefacts for parity with the other
-platforms but is not bundled into the installer to avoid shipping an
-inaccessible help format. Windows PowerShell help is staged as sidecar release
-artefacts in the `Netsuke` module layout so users can inspect it with
-`Get-Help Netsuke -Full`.
+installer alongside the staged directory. The release workflow's separate
+`should_upload_package_artifacts` metadata output feeds the build workflow's
+upload input in publishing and dry-run modes. The nested `windows-package`
+action's MSI upload remains disabled; the caller includes
+`steps.package_windows.outputs['msi-path']` in its repository-prefixed,
+architecture-specific artefact for release staging. Dry runs keep diagnostic
+uploads disabled through the separate `should_upload_workflow_artifacts`
+output. The composite pins the `WixToolset.UI.wixext` extension to v6 to match
+the WiX v6 CLI and avoid the `WIX6101` incompatibility seen with the legacy v4
+bundle. The installer uses WiX v4 syntax, installs per-machine, and presents
+the minimal UI appropriate for a CLI tool. Windows does not modify the PATH, so
+users must add the installation directory manually if they want global command
+resolution. The Unix manual page remains in the staged artefacts for parity
+with the other platforms but is not bundled into the installer to avoid
+shipping an inaccessible help format. Windows PowerShell help is staged as
+sidecar release artefacts in the `Netsuke` module layout so users can inspect
+it with `Get-Help Netsuke -Full`.
 
 The MSI keeps a stable WiX `UpgradeCode` for the release family while WiX
 generates a fresh `ProductCode` for each package. Since Windows Installer
@@ -3828,11 +4061,17 @@ dependencies on demand. Python linting still lives in the top-level
 `ruff.toml`, so the dedicated staging scripts remain self-contained whilst the
 broader helper suite stays consistently linted.
 
-Each job uploads its products as workflow artefacts, and the final release job
-downloads every file, filters out unrelated downloads, and prefixes asset names
-with their staging directories to avoid collisions before attaching them to the
-GitHub release draft. This automated pipeline guarantees parity across Windows,
-Linux, and macOS without custom GoReleaser logic.
+Each build job uploads its products as workflow artefacts. In dry-run mode, the
+`release` job downloads those artefacts, hoists the cargo-binstall archives,
+and validates the upload plan without creating a draft or uploading assets to a
+GitHub release. For tag publication, `publish-release` downloads the same build
+artefacts and attaches the assets to the draft, prefixing names with their
+staging directories to avoid collisions. Dry-run staging writes its operation
+summary but does not upload diagnostic artefacts; publication telemetry and the
+full observability policy are documented in
+[ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). This
+automated pipeline guarantees parity across Windows, Linux, and macOS through
+the shared actions.
 
 ### 8.7 Release Notes
 
@@ -3909,7 +4148,7 @@ goal.
   - **Tasks:**
 
     1. Implement the full suite of custom Jinja functions (`glob`, `env`, etc.)
-       and filters (`shell_escape`).
+       and filters (`shell_quote`).
 
     2. Mandate the use of `shell-quote` for all command variable substitutions.
 
@@ -3941,14 +4180,14 @@ selected for this project and the rationale for their inclusion.
 
 Netsuke compiles with the Polonius alpha borrow-checking analysis, which the
 dated nightly toolchain pinned in `rust-toolchain.toml` enables by default
-([ADR-006](adr-006-adopt-polonius-nightly-toolchain.md)). Internal APIs follow
-a borrow-centric design contract: lookups and registries return references
-(`&mut V` accessors with clone-on-miss keys), mutation happens in place, and
-error context is built lazily on the failure path. Owned-value style is
-reserved for genuine constraints — aliasing, suspension points, thread and
-process boundaries, and persistent identity — and each such refusal is recorded
-in the [polonius migration notes](polonius.md) alongside the sites that depend
-on the analysis.
+([ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)).
+Internal APIs follow a borrow-centric design contract: lookups and registries
+return references (`&mut V` accessors with clone-on-miss keys), mutation
+happens in place, and error context is built lazily on the failure path.
+Owned-value style is reserved for genuine constraints — aliasing, suspension
+points, thread and process boundaries, and persistent identity — and each such
+refusal is recorded in the [polonius migration notes](polonius.md) alongside
+the sites that depend on the analysis.
 
 ### 9.3 Future Enhancements
 

@@ -237,8 +237,6 @@ fn timedelta(kwargs: &Kwargs) -> Result<Value, Error> {
 }
 
 #[cfg(test)]
-mod clock_tests;
-#[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod tests_support;
+use self::tests::support as tests_support;

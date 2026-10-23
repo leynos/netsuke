@@ -74,7 +74,7 @@ mold_version() { read_pin "$MOLD_VERSION_FILE"; }
 #
 # Deliberately the same toolchain the ordinary gates use, not a second pin. The
 # tree borrow-checks only under Polonius, which that dated nightly enables by
-# default (ADR-006), and the parallel frontend the standard uses is nightly-only
+# default (ADR-0006), and the parallel frontend the standard uses is nightly-only
 # besides.
 pinned_toolchain() {
   local file=$RUST_TOOLCHAIN_FILE value

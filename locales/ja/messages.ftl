@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = トピックなしの場合、これは `--help
 cli.help.actions_heading = アクション:
 cli.help.targets_heading = ターゲット:
 cli.help.targets.about = 選択したファイルのターゲットとアクションを一覧表示します。
+cli.help.targets.flag.edges.help = 依存関係のエッジと未加工のレシピを JSON 出力に含めます。
 cli.help.default_marker = 既定
 cli.help.conditional_marker = 条件付き
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = { $path } のマニフェストを読み込めま
 runner.context.build_graph = マニフェストからグラフを構築できませんでした。
 runner.context.generate_ninja = Ninja マニフェストを生成できませんでした。
 runner.context.render_graph = グラフ成果物を描画できませんでした。
+runner.help.targets_edges_require_json = --edges オプションには最上位の --json が必要です。
 
 runner.io.create_temp_file = 一時 Ninja ファイルを作成できませんでした。
 runner.io.write_temp_ninja = 一時 Ninja ファイルに書き込めませんでした。
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = 逆斜線をエスケープするか、無効なエ�
 manifest.env.missing = 必須の環境変数が設定されていません。
 manifest.env.invalid_utf8 = 環境変数に無効な UTF-8 が含まれています。
 manifest.env.blocked = 環境変数へのアクセスはブロックされています。
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = env の default は文字列でなければなりません。{ $kind } を受け取りました。
 manifest.vars.not_object = マニフェストの `vars` はマップまたはオブジェクトでなければなりません。
 manifest.vars.reserved_name = マニフェストの `vars` キー '{ $name }' は組み込みのテンプレートヘルパー用に予約されています。変数名を変更してください。
 manifest.read_failed = { $path } のマニフェストを読み取れませんでした。
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = 不明なパターンエラー。
 manifest.glob.io_failed = 「{ $pattern }」の glob に失敗しました: { $detail }。
 manifest.glob.unknown_io_error = 不明な入出力エラー。
 manifest.command_list_empty = 「command」フィールドは空にできません: コマンド文字列または空でないリストを指定してください。
+manifest.command_isolation_recipe = 「command_isolation」フィールドにはコマンドリストのレシピが必要です。
+manifest.command_isolation_scalar = 「command_isolation: isolated」にはコマンドリストが必要です。
 
 # 中間表現のエラー。
 ir.rule_not_found = ターゲット「{ $target }」が参照する規則「{ $rule }」が見つかりません。
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = ストリーミング
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote は文字列を期待しましたが、{ $kind } を受け取りました。
+stdlib.shell.quote.control_character = ヌルバイト、復帰、または改行を含む値は引用符で囲めません。
+stdlib.shell.dialect_invalid = 不明なシェル方言 { $dialect } です。{ $accepted } のいずれかを指定してください。
+stdlib.shell.dialect_not_string = shell の dialect オプションは文字列でなければなりません。{ $kind } を受け取りました。
+stdlib.shell.join.not_sequence = shell_join は列を期待しましたが、{ $kind } を受け取りました。
+stdlib.shell.join.item_not_string = shell_join の { $index } 番目の項目は { $kind } であり、文字列ではありません。
+stdlib.shell.positional_option = { $filter } はオプションをキーワードで受け取ります。{ $example } と記述してください。
+
 # パスヘルパーの診断。
 stdlib.path.io.failed = { $path } に対する「{ $action }」に失敗しました（{ $label }）。
 stdlib.path.io.failed_with_detail = { $path } に対する「{ $action }」に失敗しました: { $detail }。
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = 対応していないハッシ�
 
 # コレクションヘルパーの診断。
 stdlib.collections.flatten.expected_sequence = flatten は列の要素を期待しましたが、{ $kind } が見つかりました。
+stdlib.collections.compact.not_sequence = compact は列を期待しましたが、{ $kind } が見つかりました。
 stdlib.collections.group_by.empty_attribute = group_by には空でない属性が必要です。
 stdlib.collections.group_by.unresolved = group_by は種別 { $kind } の要素で「{ $attr }」を解決できませんでした。
 
@@ -439,3 +457,22 @@ manifest.budget.exceeded = { $stage } 中にマニフェストのリソース予
 
 cli.flag.env_allow_var.help = マニフェストの env() ヘルパーで許可する環境変数。
 cli.flag.env_block_var.help = マニフェストの env() ヘルパーでブロックする環境変数。
+
+# マニフェストの静的検査（`netsuke check`）。
+cli.subcommand.check.about = ビルドを生成も実行もせずにマニフェストを検査します。
+cli.subcommand.check.long_about = 選択したマニフェストを検査し、解析は通るものの誤り・危険・非可搬・キャッシュに不利と思われる記述を洗い出します。
+cli.subcommand.check.flag.rule.help = 規則または分類の重大度を NAME=SEVERITY の形式で設定します。
+cli.subcommand.check.flag.fail_on.help = 指摘がコマンドを失敗させる重大度です。
+cli.subcommand.check.flag.limit.help = 報告する指摘の上限。0 はすべて報告します。
+cli.subcommand.check.flag.explain.help = マニフェストを検査せず規則リファレンスを出力します。
+check.threshold_exceeded = 指摘がしきい値 { $severity } に達しました: 報告 { $reported } 件のうち { $failing } 件。
+check.threshold_exceeded.help = 報告された指摘を修正するか、--rule を調整するか、--fail-on を緩めてください。
+check.summary.counts = 検査結果 — エラー: { $errors }、警告: { $warnings }、助言: { $advice }、抑制: { $suppressed }。
+check.summary.clean = 指摘はありません。
+check.summary.truncated = { $shown } 件を表示しています。--limit により { $omitted } 件を省略しました。
+check.rule.malformed = セレクター { $selector } が NAME=SEVERITY の形式で書かれていません。
+check.rule.unknown = セレクターが指定した { $name } は規則でも分類でもありません。
+check.rule.severity = セレクター { $name } が指定した重大度 { $severity } は無効です。次のいずれかを指定してください: { $values }。
+check.fail_on.invalid = 失敗しきい値 { $value } は不明です。次のいずれかを指定してください: { $values }。
+check.source_index = 診断のために { $path } を { $line } 行目で索引付けできませんでした: { $reason }。
+status.tool.check = 検査

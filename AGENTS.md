@@ -143,10 +143,10 @@ project:
 
 Netsuke compiles with the Polonius alpha analysis, which the dated nightly
 pinned in `rust-toolchain.toml` enables by default (see
-`docs/adr-006-adopt-polonius-nightly-toolchain.md` and `docs/polonius.md`). No
-`-Z` directive is needed, or wanted: do not add one. Internal APIs are
-borrow-centric: lookups and get-or-create accessors return references, clone
-keys only on insertion, and build error context lazily.
+`docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md`
+and `docs/polonius.md`). No `-Z` directive is needed, or wanted: do not add
+one. Internal APIs are borrow-centric: lookups and get-or-create accessors
+return references, clone keys only on insertion, and build error context lazily.
 
 - **Never** rewrite a site tagged `POLONIUS(...)` into a double lookup
   (`contains_key` + `get_mut`), an `entry(key.clone())` call, or an id/index
@@ -172,8 +172,17 @@ Polonius, the pin is the whole mechanism — do not add a `-Znext-solver`
 directive anywhere.
 
 - Run `make check-fmt`, `make lint`, `make doc-coverage`, and `make test`
-  before committing. These targets wrap the following commands, so contributors
-  understand the exact behaviour and policy enforced:
+  before committing. `make test` runs the Rust suite only, and `make lint`
+  lints the Python sources without executing them, so neither runs the Python
+  suites below. When the change touches a workflow or a workflow-contract suite
+  under `tests/workflow_contracts/`, also run `make test-workflow-contracts`.
+  When it touches the coverage artefact validators under `scripts/`, also run
+  `make test-coverage-artifact`; `validate-coverage-artifact` is an
+  operator-run validator rather than a test, and needs a downloaded artefact
+  directory, so it is not part of this set. No one of these targets runs
+  another: `make test-workflow-contracts` does not run either coverage-artefact
+  target. These targets wrap the following commands, so contributors understand
+  the exact behaviour and policy enforced:
   - `make check-fmt` executes:
 
     ```sh
@@ -416,12 +425,25 @@ as `--toolchain`.
 - **`EnvLock`, `CwdGuard`, and `EnvVarGuard` are retired.** They do not relax
   the rule against process-wide locks. Do not restore or replace them; follow
   the injected seam decision in
-  [ADR-008](docs/adr-008-environment-seam-taxonomy.md).
+  [ADR-0008](docs/adrs/adr-0008-environment-seam-taxonomy.md).
 - **Subprocess isolation is the sole exemption.** End-to-end behavioural tests
   invoking `netsuke` through `assert_cmd` may configure the environment via
   `Command::env`/`Command::env_clear`, because the mutation is confined to the
   child process. A test manipulating the environment in-process does not
   qualify, whatever layer it claims to occupy.
+
+### Executable documentation
+
+Every new fenced example in `README.md`, `docs/users-guide.md`, or
+`docs/stdlib-yaml-and-jinja-guide.md` needs a stable `tested-example` marker,
+an entry in `EXPECTED_EXAMPLE_IDS`, and validation appropriate to its domain.
+The YAML language tag alone does not identify a Netsukefile: workflow fragments
+and other YAML examples need their own semantic contract, not inclusion in
+Netsukefile generation or execution cases. Run
+`make test-documentation-contracts` for the loader, exact-set registry, and
+semantic documentation contracts. For changes to these examples, also run
+`make check-fmt`, `make lint`, `make doc-coverage`, `make markdownlint`,
+`make test`, and `make test-workflow-contracts`.
 
 ### Dependency management
 
@@ -488,14 +510,6 @@ as `--toolchain`.
 
 - Validate Markdown files using `make markdownlint`. This target also runs
   `make spelling`, the shared en-GB-oxendict (Oxford) spelling gate.
-- Enforce spelling with `make spelling`. The gate regenerates `typos.toml`
-  from the live shared estate dictionary and the `typos.local.toml` overlay on
-  every run, so `typos.toml` is never drift checked in continuous integration.
-- Never edit generated entries in `typos.toml` by hand. Put narrow
-  repository-specific exceptions in `typos.local.toml`. For identifiers or API
-  names that must keep upstream spelling, prefer backticks (which the gate
-  ignores) over widening the accepted-word list. See the
-  [developers' guide](docs/developers-guide.md) for the full workflow.
 - Run `make fmt` after any documentation changes to format all Markdown
   files and fix table markup.
 - Validate Mermaid diagrams in Markdown files by running `make nixie`.
@@ -505,6 +519,22 @@ as `--toolchain`.
 - Use dashes (`-`) for list bullets.
 - Use GitHub-flavoured Markdown footnotes (`[^1]`) for references and
   footnotes.
+
+<!-- typos-config-builder:agents-md:start -->
+
+## Spelling
+
+- `make spelling` runs the pinned `typos-config-builder gate`, which
+  regenerates `typos.toml` from the shared en-GB-oxendict dictionary and
+  `typos.local.toml`, then checks spelling and the shared phrase corrections.
+- `typos.toml` is generated: never edit it by hand. Put narrow
+  repository-specific exceptions in `typos.local.toml`, as exact or full-line
+  patterns rather than bare accepted words.
+- When `make spelling` changes `typos.toml`, commit the regenerated file. If
+  the change is unrelated to your work, commit it in a separate base pull
+  request and stack your branch on it, so each review diff stays focused.
+
+<!-- typos-config-builder:agents-md:end -->
 
 ## Project documentation
 

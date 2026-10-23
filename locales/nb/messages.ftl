@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Uten emne tilsvarer dette `--help`. Bruk `help 
 cli.help.actions_heading = Handlinger:
 cli.help.targets_heading = Mål:
 cli.help.targets.about = List opp mål og handlinger i det valgte manifestet.
+cli.help.targets.flag.edges.help = Ta med avhengighetskanter og rå oppskrifter i JSON-utdataene.
 cli.help.default_marker = standard
 cli.help.conditional_marker = betinget
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Manifestet i { $path } kunne ikke lastes inn.
 runner.context.build_graph = Grafen kunne ikke bygges ut fra manifestet.
 runner.context.generate_ninja = Ninja-manifestet kunne ikke lages.
 runner.context.render_graph = Grafartefaktet kunne ikke gjengis.
+runner.help.targets_edges_require_json = Alternativet --edges krever --json på øverste nivå.
 
 runner.io.create_temp_file = Den midlertidige Ninja-filen kunne ikke opprettes.
 runner.io.write_temp_ninja = Den midlertidige Ninja-filen kunne ikke skrives.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Escape omvendte skråstreker, eller fjern ugyldige e
 manifest.env.missing = En påkrevd miljøvariabel er ikke satt.
 manifest.env.invalid_utf8 = En miljøvariabel inneholder ugyldig UTF-8.
 manifest.env.blocked = Tilgang til en miljøvariabel er blokkert.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = default i env må være en streng, mottok { $kind }.
 manifest.vars.not_object = `vars` i manifestet må være en tilordning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøkkel '{ $name }' er reservert for en innebygd malhjelper; gi variabelen et nytt navn.
 manifest.read_failed = Manifestet i { $path } kunne ikke leses.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = ukjent mønsterfeil.
 manifest.glob.io_failed = Glob mislyktes for «{ $pattern }»: { $detail }.
 manifest.glob.unknown_io_error = ukjent I/U-feil.
 manifest.command_list_empty = Feltet «command» kan ikke være tomt: oppgi en kommandostreng eller en ikke-tom liste.
+manifest.command_isolation_recipe = Feltet ‘command_isolation’ krever en oppskrift med en kommandoliste.
+manifest.command_isolation_scalar = ‘command_isolation: isolated’ krever en kommandoliste.
 
 # Feil i den interne representasjonen.
 ir.rule_not_found = Regelen «{ $rule }» som målet «{ $target }» viser til, ble ikke funnet.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = strømming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote ventet en streng, men fikk { $kind }.
+stdlib.shell.quote.control_character = En verdi som inneholder en nullbyte, vognretur eller linjeskift kan ikke settes i anførselstegn.
+stdlib.shell.dialect_invalid = Ukjent shell-dialekt { $dialect }; ventet en av { $accepted }.
+stdlib.shell.dialect_not_string = dialect-alternativet i shell må være en streng, mottok { $kind }.
+stdlib.shell.join.not_sequence = shell_join ventet en sekvens, men fikk { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } i shell_join er { $kind }, ikke en streng.
+stdlib.shell.positional_option = { $filter } tar alternativene sine som nøkkelord; skriv { $example }.
+
 # Diagnostikk for stihjelperen.
 stdlib.path.io.failed = { $action } mislyktes for { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = { $action } mislyktes for { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Hash-algoritmen «{ $algorithm }
 
 # Diagnostikk for samlingshjelpere.
 stdlib.collections.flatten.expected_sequence = flatten ventet elementer fra en sekvens, men fant { $kind }.
+stdlib.collections.compact.not_sequence = compact ventet en sekvens, men fant { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by krever et attributt som ikke er tomt.
 stdlib.collections.group_by.unresolved = group_by kunne ikke slå opp «{ $attr }» på et element av typen { $kind }.
 
@@ -441,3 +459,22 @@ manifest.budget.exceeded = Manifestets ressursbudsjett ble brukt opp under { $st
 
 cli.flag.env_allow_var.help = Miljøvariabel tillatt for manifestets env()-hjelper.
 cli.flag.env_block_var.help = Miljøvariabel blokkert for manifestets env()-hjelper.
+
+# Manifestanalyse (`netsuke check`).
+cli.subcommand.check.about = Analyser manifestet uten å generere eller kjøre et bygg.
+cli.subcommand.check.long_about = Undersøk det valgte manifestet for konstruksjoner som riktignok tolkes, men sannsynligvis er feilaktige, utrygge, lite portable eller uheldige for hurtiglagring.
+cli.subcommand.check.flag.rule.help = Angi alvorsgraden til en regel eller kategori, skrevet som NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Alvorsgrad der funn gjør at kommandoen mislykkes.
+cli.subcommand.check.flag.limit.help = Høyeste antall rapporterte funn; 0 rapporterer alle.
+cli.subcommand.check.flag.explain.help = Skriv ut regelreferansen i stedet for å analysere et manifest.
+check.threshold_exceeded = Funn nådde terskelen { $severity }: { $failing } av { $reported } rapporterte.
+check.threshold_exceeded.help = Rett de rapporterte funnene, juster --rule, eller slakk på --fail-on.
+check.summary.counts = Analyseresultater — feil: { $errors }, advarsler: { $warnings }, råd: { $advice }, undertrykt: { $suppressed }.
+check.summary.clean = Ingen funn.
+check.summary.truncated = Viser { $shown } funn; --limit utelot ytterligere { $omitted }.
+check.rule.malformed = Velgeren { $selector } er ikke skrevet som NAME=SEVERITY.
+check.rule.unknown = Velgeren nevner { $name }, som verken er en regel eller en kategori.
+check.rule.severity = Velgeren { $name } nevner alvorsgraden { $severity }; forventet en av { $values }.
+check.fail_on.invalid = Ukjent feilterskel { $value }; forventet en av { $values }.
+check.source_index = Kunne ikke indeksere { $path } for diagnostikk på linje { $line }: { $reason }.
+status.tool.check = Kontroll

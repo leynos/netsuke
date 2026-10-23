@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Bez tematu odpowiada to `--help`. Użyj `help t
 cli.help.actions_heading = Akcje:
 cli.help.targets_heading = Cele:
 cli.help.targets.about = Wyświetl cele i akcje w wybranym manifeście.
+cli.help.targets.flag.edges.help = Uwzględnij krawędzie zależności i nieprzetworzone receptury w wyjściu JSON.
 cli.help.default_marker = domyślny
 cli.help.conditional_marker = warunkowy
 
@@ -100,6 +101,7 @@ runner.context.load_manifest = Nie udało się wczytać manifestu z { $path }.
 runner.context.build_graph = Nie udało się zbudować grafu na podstawie manifestu.
 runner.context.generate_ninja = Nie udało się wygenerować manifestu Ninja.
 runner.context.render_graph = Nie udało się wyrenderować artefaktu grafu.
+runner.help.targets_edges_require_json = Opcja --edges wymaga --json na najwyższym poziomie.
 
 runner.io.create_temp_file = Nie udało się utworzyć tymczasowego pliku Ninja.
 runner.io.write_temp_ninja = Nie udało się zapisać tymczasowego pliku Ninja.
@@ -139,6 +141,8 @@ manifest.yaml.hint.escape = Poprzedź ukośniki odwrotne znakiem ucieczki albo u
 manifest.env.missing = Wymagana zmienna środowiskowa nie jest ustawiona.
 manifest.env.invalid_utf8 = Zmienna środowiskowa zawiera nieprawidłowy UTF-8.
 manifest.env.blocked = Dostęp do zmiennej środowiskowej jest zablokowany.
+manifest.env.args_error = [netsuke::jinja::env::args] { $details }
+manifest.env.default_not_string = Wartość default w env musi być łańcuchem znaków; typ otrzymanej wartości: { $kind }.
 manifest.vars.not_object = Pole `vars` manifestu musi być odwzorowaniem lub obiektem.
 manifest.vars.reserved_name = Klucz `vars` '{ $name }' w manifeście jest zarezerwowany dla wbudowanej funkcji pomocniczej szablonów; zmień nazwę zmiennej.
 manifest.read_failed = Nie udało się odczytać manifestu z { $path }.
@@ -177,6 +181,8 @@ manifest.glob.unknown_pattern_error = nieznany błąd wzorca.
 manifest.glob.io_failed = Wzorzec glob „{ $pattern }” zawiódł: { $detail }.
 manifest.glob.unknown_io_error = nieznany błąd wejścia/wyjścia.
 manifest.command_list_empty = Pole „command” nie może być puste: podaj łańcuch polecenia lub niepustą listę.
+manifest.command_isolation_recipe = Pole „command_isolation” wymaga receptury z listą poleceń.
+manifest.command_isolation_scalar = „command_isolation: isolated” wymaga listy poleceń.
 
 # Błędy reprezentacji pośredniej.
 ir.rule_not_found = Nie znaleziono reguły „{ $rule }”, do której odwołuje się cel „{ $target }”.
@@ -285,6 +291,17 @@ stdlib.command.output.mode.streaming = strumieniowanie
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Recipe-text shell quoting diagnostics.
+stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
+stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
+stdlib.shell.quote.not_string = shell_quote oczekiwał ciągu, ale otrzymał { $kind }.
+stdlib.shell.quote.control_character = Wartości zawierającej bajt zerowy, powrót karetki lub znak nowego wiersza nie można ująć w cudzysłów.
+stdlib.shell.dialect_invalid = Nieznany dialekt powłoki { $dialect }; oczekiwano jednego z { $accepted }.
+stdlib.shell.dialect_not_string = Opcja dialect w shell musi być łańcuchem znaków; typ otrzymanej wartości: { $kind }.
+stdlib.shell.join.not_sequence = shell_join oczekiwał sekwencji, ale otrzymał { $kind }.
+stdlib.shell.join.item_not_string = Element { $index } w shell_join ma typ { $kind }, a nie ciąg.
+stdlib.shell.positional_option = { $filter } przyjmuje opcje jako słowa kluczowe; zapisz { $example }.
+
 # Diagnostyka pomocnika ścieżek.
 stdlib.path.io.failed = Operacja „{ $action }” nie powiodła się dla { $path } ({ $label }).
 stdlib.path.io.failed_with_detail = Operacja „{ $action }” nie powiodła się dla { $path }: { $detail }.
@@ -340,6 +357,7 @@ stdlib.path.hash.unsupported_algorithm_legacy = Nieobsługiwany algorytm skrótu
 
 # Diagnostyka pomocników kolekcji.
 stdlib.collections.flatten.expected_sequence = flatten oczekiwał elementów sekwencji, ale napotkał { $kind }.
+stdlib.collections.compact.not_sequence = compact oczekiwał sekwencji; typ otrzymanej wartości: { $kind }.
 stdlib.collections.group_by.empty_attribute = group_by wymaga niepustego atrybutu.
 stdlib.collections.group_by.unresolved = group_by nie zdołał odnaleźć „{ $attr }” w elemencie typu { $kind }.
 
@@ -447,3 +465,33 @@ manifest.budget.exceeded = Budżet zasobów manifestu został wyczerpany. Etap: 
 
 cli.flag.env_allow_var.help = Zmienna środowiskowa dozwolona dla pomocnika env() manifestu.
 cli.flag.env_block_var.help = Zmienna środowiskowa zablokowana dla pomocnika env() manifestu.
+
+# Analiza manifestu (`netsuke check`).
+cli.subcommand.check.about = Przeanalizuj manifest bez generowania ani uruchamiania kompilacji.
+cli.subcommand.check.long_about = Zbadaj wybrany manifest pod kątem konstrukcji, które wprawdzie się parsują, ale prawdopodobnie są błędne, niebezpieczne, nieprzenośne lub szkodliwe dla pamięci podręcznej.
+cli.subcommand.check.flag.rule.help = Ustaw ważność reguły lub kategorii, zapisaną jako NAME=SEVERITY.
+cli.subcommand.check.flag.fail_on.help = Ważność, przy której ustalenia powodują niepowodzenie polecenia.
+cli.subcommand.check.flag.limit.help = Maksymalna liczba zgłaszanych ustaleń; 0 zgłasza wszystkie.
+cli.subcommand.check.flag.explain.help = Wypisz opis reguł zamiast analizować manifest.
+check.threshold_exceeded = Ustalenia osiągnęły próg { $severity }: { $failing } z { $reported } zgłoszonych.
+check.threshold_exceeded.help = Popraw zgłoszone ustalenia, dostosuj --rule lub złagodź --fail-on.
+check.summary.counts = Wyniki analizy — błędy: { $errors }, ostrzeżenia: { $warnings }, porady: { $advice }, wyciszone: { $suppressed }.
+check.summary.clean = Brak ustaleń.
+check.summary.truncated =
+    { $shown ->
+        [one] Pokazano { $shown } ustalenie
+        [few] Pokazano { $shown } ustalenia
+        [many] Pokazano { $shown } ustaleń
+       *[other] Pokazano { $shown } ustalenia
+    }; --limit pominął { $omitted ->
+        [one] jeszcze { $omitted } ustalenie.
+        [few] kolejne { $omitted } ustalenia.
+        [many] kolejnych { $omitted } ustaleń.
+       *[other] kolejne { $omitted } ustalenia.
+    }
+check.rule.malformed = Selektor { $selector } nie jest zapisany jako NAME=SEVERITY.
+check.rule.unknown = Selektor wskazuje { $name }, co nie jest ani regułą, ani kategorią.
+check.rule.severity = Selektor { $name } wskazuje ważność { $severity }; oczekiwano jednej z { $values }.
+check.fail_on.invalid = Nieznany próg niepowodzenia { $value }; oczekiwano jednego z { $values }.
+check.source_index = Nie udało się zindeksować { $path } dla diagnostyki w wierszu { $line }: { $reason }.
+status.tool.check = Sprawdzanie

@@ -32,16 +32,30 @@ use toml::Value;
 /// Every Make target that invokes `cargo nextest run`, and so shares the
 /// worker-bound contract.
 ///
-/// `test-nextest` is the gate `make test` composes, and the only recipe that
-/// runs the runner. A contributor sets the bounds once and expects them
-/// honoured wherever nextest runs, so the list is a contract rather than a note
-/// of what happens to be true today.
+/// `test-nextest` is the gate `make test` composes.
+/// `test-documentation-contracts` is a focused local contract loop.
+/// `test-kani-scope-wrapper` is the scope wrapper's own end-to-end suite, which
+/// the `kani-smoke` lane runs on its own because that suite needs a per-user
+/// systemd manager rather than the whole workspace. `test-kani-mutations` runs
+/// the same runner over the `#[ignore]`-gated mutation compile gate, which is
+/// too expensive for the default profile.
+/// `test-rfc-stdlib-coverage` runs the RFC parser and coverage contract in
+/// isolation. A contributor sets the worker bounds once and expects them
+/// honoured wherever nextest runs, so the list is a contract rather than a
+/// note of what happens to be true today.
 ///
 /// The list is not trusted on its own.
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 1] = ["test-nextest"];
+const NEXTEST_TARGETS: [&str; 6] = [
+    "test-default-features",
+    "test-documentation-contracts",
+    "test-kani-mutations",
+    "test-kani-scope-wrapper",
+    "test-nextest",
+    "test-rfc-stdlib-coverage",
+];
 
 /// True when `line` is a tab-indented recipe line that invokes the nextest
 /// runner.
@@ -142,6 +156,47 @@ fn behavioural_nextest_targets_forward_both_worker_bounds() -> Result<()> {
     Ok(())
 }
 
+/// Verify that the focused documentation target selects its contracts and fails empty.
+#[test]
+fn behavioural_documentation_contract_target_selects_its_tests() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let phony = phony_targets(&makefile);
+    ensure!(
+        phony.contains(&"test-documentation-contracts"),
+        ".PHONY must include test-documentation-contracts"
+    );
+
+    let prerequisites = target_prerequisites(&makefile, "test-documentation-contracts")
+        .context("Makefile should declare test-documentation-contracts")?;
+    ensure!(
+        prerequisites
+            .iter()
+            .any(|prerequisite| prerequisite == "check-build-tools"),
+        "documentation contracts should check build tools, found {prerequisites:?}"
+    );
+    let recipe = target_recipe(&makefile, "test-documentation-contracts")
+        .context("Makefile should define the focused documentation target")?;
+    for required in [
+        "--test documentation_examples_loader_tests",
+        "--test documentation_examples_tests",
+        "--all-features",
+        "--no-tests fail",
+        "-E",
+        "test(malformed_documented_examples_are_rejected)",
+        "test(every_documented_fence_has_a_known_unique_identifier)",
+        "test(release_wix_extension)",
+        "$(GATE_RUSTFLAGS)",
+        "$(NEXTEST_BUILD_JOBS)",
+        "$(NEXTEST_TEST_JOBS)",
+    ] {
+        ensure!(
+            recipe.contains(required),
+            "documentation contract recipe should contain {required:?}, found {recipe:?}"
+        );
+    }
+    Ok(())
+}
+
 /// The discovery helper sees each target's own recipe, not its neighbours'.
 ///
 /// A guard that attributed a recipe to the wrong target could still return the
@@ -227,6 +282,44 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     ensure!(
         doctest_recipe.contains("--workspace"),
         "doctest should cover the workspace, found {doctest_recipe:?}"
+    );
+    Ok(())
+}
+
+/// Verify `test-kani-mutations` selects the ignored mutation compile gate.
+///
+/// The gate it runs is `#[ignore]`d, so the recipe is correct only if it names
+/// the owning test binary *and* asks nextest to run ignored tests. Drop either
+/// half and the target still exits zero while compiling nothing: nextest skips
+/// the gate and reports success. That is the exact failure this whole contract
+/// exists to prevent — a check that looks green and proves nothing — so the
+/// selection is pinned here rather than left to the recipe's good behaviour.
+///
+/// Asserted against the `nextest run` line, for the reason
+/// [`ensure_worker_bounds_reach_nextest`] gives: a flag sitting in an unrelated
+/// later command would read as configured while selecting nothing.
+#[test]
+fn behavioural_kani_mutation_target_selects_the_ignored_compile_gate() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let recipe = target_recipe(&makefile, "test-kani-mutations")
+        .context("Makefile should declare a test-kani-mutations target")?;
+    let run_command = recipe
+        .lines()
+        .find(|line| line.contains("nextest run"))
+        .context("test-kani-mutations should invoke cargo nextest run")?;
+
+    ensure!(
+        run_command.contains("--test kani_mutation_evidence_tests"),
+        "test-kani-mutations should select the mutation evidence tests, found {run_command:?}"
+    );
+    ensure!(
+        run_command.contains("--run-ignored ignored-only"),
+        "test-kani-mutations should run ignored tests or the gated compile check silently \
+         skips, found {run_command:?}"
+    );
+    ensure!(
+        run_command.contains("$(GATE_RUSTFLAGS)"),
+        "test-kani-mutations should compose GATE_RUSTFLAGS, found {recipe:?}"
     );
     Ok(())
 }

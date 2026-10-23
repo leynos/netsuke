@@ -7,10 +7,14 @@ operator, user, and contributor references are easier to find.
 
 - [contents.md](contents.md): This index for the Netsuke documentation set.
 - [repository-layout.md](repository-layout.md): Path ownership and repository
-  structure guide for contributors.
+  structure guide for contributors, including the
+  [module ownership](repository-layout.md#internal-support-module-ownership).
 
 ## Core design and planning
 
+- [terms-of-reference.md](terms-of-reference.md): Problem statement, target
+  users, scope, non-goals, success criteria, and open questions that the design
+  and roadmap trace back to.
 - [netsuke-design.md](netsuke-design.md): Primary architecture, manifest, and
   execution design document.
 - [netsuke-cli-design-document.md](netsuke-cli-design-document.md): Command-line
@@ -23,6 +27,12 @@ operator, user, and contributor references are easier to find.
   framework.
 - [Technical design](netsuke-test-framework-technical-design.md):
   Implementation architecture for the Netsukefile testing framework.
+- [netsuke-linter-design.md](netsuke-linter-design.md): Manifest linter design,
+  covering the rule model, compiler-stage hooks, suppression grammar, policy
+  configuration, and output schemas behind `netsuke check`.
+- [netsuke-linter-rules.md](netsuke-linter-rules.md): Reference for every lint
+  rule `netsuke check` ships, with its category, default severity, rationale,
+  and remediation.
 - [roadmap.md](roadmap.md): Phased implementation plan and tracked delivery
   work.
 - [roadmap-composition.md](roadmap-composition.md): Roadmap continuation for
@@ -43,46 +53,72 @@ operator, user, and contributor references are easier to find.
 
 ## Requests for comments
 
-- [rfcs/0001-structured-command-blocks.md](rfcs/0001-structured-command-blocks.md):
+- [rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md](rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md):
   Proposed structured command blocks, shell-free argv templates, typed Jinja
   interpolation, stream routing, and pipeline semantics.
-- [rfcs/0009-structured-command-working-directories.md][rfc-0009]:
+- [rfcs/rfc-0009-structured-command-working-directories.md][rfc-0009]:
   Normative amendment adding capability-scoped per-command working directories
   to RFC 0001.
-- [rfcs/0010-runtime-bindings-and-secure-tempdirs.md][rfc-0010]:
+- [rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md][rfc-0010]:
   Normative amendment adding bounded stdout environment capture, standard-error
   pipelines, environment-selected working directories, and secure temporary
   execution directories to RFC 0001.
-- [rfcs/0011-allow-listed-structured-command-shells.md][rfc-0011]:
+- [rfcs/rfc-0011-allow-listed-structured-command-shells.md][rfc-0011]:
   Normative amendment adding finite built-in and trusted configured shell names
   to RFC 0001 structured command blocks.
-- [rfcs/0002-repository-relative-includes.md][rfc-0002]:
+- [rfcs/rfc-0002-repository-relative-manifest-includes.md][rfc-0002]:
   Deterministic repository-relative manifest includes with cycle detection,
   provenance, namespaces, and duplicate rejection.
-- [rfcs/0003-versioned-local-bundles.md](rfcs/0003-versioned-local-bundles.md):
+- [rfcs/rfc-0003-versioned-local-manifest-bundles.md](rfcs/rfc-0003-versioned-local-manifest-bundles.md):
   Versioned local bundles with typed parameters, explicit exports, SemVer
   selection, canonical digests, and lock records.
-- [rfcs/0004-digest-pinned-external-bundles.md][rfc-0004]:
+- [rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md][rfc-0004]:
   Later digest-pinned external Git bundles with exact tag resolution, immutable
   object provenance, bounded acquisition, caching, and offline verification.
 - [RFC 0005: Harden release integrity and
-  admission](rfcs/0005-release-hardening.md): Proposed release-profile
-  invariants, secret and dependency policy, and exact-commit release admission.
-- [rfcs/0006-ansible-inspired-template-standard-library.md](rfcs/0006-ansible-inspired-template-standard-library.md):
+  admission](rfcs/rfc-0005-harden-release-integrity-and-admission.md): Proposed
+  release-profile invariants, secret and dependency policy, and exact-commit
+  release admission.
+- [rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md](rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md):
   Survey of the ansible-core Jinja standard library, with an explicit
   disposition for every candidate helper and Netsuke-native contracts for the
   accepted set.
-- [rfcs/0007-netsukefile-testing-framework.md](rfcs/0007-netsukefile-testing-framework.md):
+- [rfcs/rfc-0013-structured-data-interchange-helpers.md](rfcs/rfc-0013-structured-data-interchange-helpers.md):
+  First focused child of RFC 0006: the JSON and YAML interchange helpers and
+  the cross-cutting contract discharged for them.
+- [rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md](rfcs/rfc-0014-mapping-and-sequence-transform-helpers.md):
+  Second focused child of RFC 0006: the mapping and sequence transform helpers
+  and the cross-cutting contract discharged for them.
+- [rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md](rfcs/rfc-0015-ordered-collection-algebra-and-truth-predicates.md):
+  Third focused child of RFC 0006: the ordered set algebra, the bounded
+  combinatorial filters, and the collection and truth predicates.
+- [rfcs/rfc-0016-pattern-and-version-predicates.md](rfcs/rfc-0016-pattern-and-version-predicates.md):
+  Fourth focused child of RFC 0006: the `netsuke-regex-v1` pattern family, the
+  bounded pattern cache, and the strict version predicate.
+- [rfcs/rfc-0017-lexical-path-composition.md](rfcs/rfc-0017-lexical-path-composition.md):
+  Fifth focused child of RFC 0006: the `dialect` path parsers, the lexical
+  composition filters, and the pure `abs` test.
+- [rfcs/rfc-0018-host-state-predicates-and-environment-expansion.md](rfcs/rfc-0018-host-state-predicates-and-environment-expansion.md):
+  Sixth focused child of RFC 0006: the filesystem predicates, the `files_only`
+  option on `glob`, and the environment-expanding filter.
+- [rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md](rfcs/rfc-0019-encoding-identity-and-formatting-helpers.md):
+  Seventh focused child of RFC 0006: the Base64 and URL codecs, the
+  deterministic UUID derivation, the shell quoter, the comment decorator, the
+  size formatters, and the text digest.
+- [rfcs/rfc-0020-date-and-time-conversion-helpers.md](rfcs/rfc-0020-date-and-time-conversion-helpers.md):
+  Eighth and final focused child of RFC 0006: the shared conversion-specifier
+  set, the timestamp parser, and the locale-pinned formatter.
+- [rfcs/rfc-0007-netsukefile-testing-framework.md](rfcs/rfc-0007-netsukefile-testing-framework.md):
   Proposed Netsukefile testing framework: the `netsuke test` command, the YAML
   test dialect, and its mocking model.
-- [rfcs/0012-netsukefile-property-testing.md][rfc-0012]:
+- [rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md][rfc-0012]:
   Proposed property-testing extension to RFC 0007: the `result.actions` view,
   bounded declarative generation, and built-in metamorphic relations over
   generated build scripts.
 - [RFC 0008: Repository-wide code-health contracts and
-  fuzzing](rfcs/0008-code-health.md): Proposed workflow-policy validation, gate
-  self-consistency, health-signal ownership, and scheduled coverage-guided
-  fuzzing.
+  fuzzing](rfcs/rfc-0008-repository-wide-code-health-contracts-and-fuzzing.md):
+  Proposed workflow-policy validation, gate self-consistency, health-signal
+  ownership, and scheduled coverage-guided fuzzing.
 - [RFC 0021: Managed states and functional probes][rfc-0021]: Optional
   preparation contracts, default built-in checks, and bounded external probes.
 - [RFC 0022: Optional typed task inputs][rfc-0022]: Gradual input annotation,
@@ -94,141 +130,178 @@ operator, user, and contributor references are easier to find.
 - [RFC 0025: Progressive enhancement and maturity policies][rfc-0025]:
   Shallow-end compatibility and opt-in, scoped, trust-aware enforcement.
 
-- [RFC 0026](rfcs/0026-hexagonal-domain-hardening.md): Proposed resolved
-  operations, shell binding, application execution, and diagnostic boundaries.
-- [RFC 0027](rfcs/0027-executable-architecture-contract.md): Proposed structural
-  policy, explicit analysis coverage, migration debt, and qualified checking.
-- [RFC 0028](rfcs/0028-paralegal-architecture-experiment.md): Proposed bounded
-  Paralegal trial, starting with Netsuke toolchain compatibility.
+- [RFC 0026](rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md):
+  Proposed resolved operations, shell binding, application execution, and
+  diagnostic boundaries.
+- [RFC 0027](rfcs/rfc-0027-check-an-executable-architecture-contract.md):
+  Proposed structural policy, explicit analysis coverage, migration debt, and
+  qualified checking.
+- [RFC 0028](rfcs/rfc-0028-evaluate-paralegal-for-architectural-flow-checks.md):
+  Proposed bounded Paralegal trial, starting with Netsuke toolchain
+  compatibility.
 - [RFC 0029: First-class host facts][rfc-0029]: Ansible-informed, typed
   platform observations, explicit collection, privacy-preserving discovery, and
   reproducible planning without ambient environment probes.
 
-[rfc-0009]: rfcs/0009-structured-command-working-directories.md
-[rfc-0012]: rfcs/0012-netsukefile-property-testing.md
-[rfc-0010]: rfcs/0010-runtime-bindings-and-secure-tempdirs.md
-[rfc-0002]: rfcs/0002-repository-relative-includes.md
-[rfc-0004]: rfcs/0004-digest-pinned-external-bundles.md
-[rfc-0011]: rfcs/0011-allow-listed-structured-command-shells.md
-[rfc-0021]: rfcs/0021-managed-states-and-probes.md
-[rfc-0022]: rfcs/0022-typed-task-inputs.md
-[rfc-0023]: rfcs/0023-artefact-ownership-and-scoped-cleanup.md
-[rfc-0024]: rfcs/0024-named-contention-classes.md
-[rfc-0025]: rfcs/0025-progressive-enhancement-and-maturity-policies.md
-[rfc-0029]: rfcs/0029-first-class-host-facts.md
+[rfc-0009]: rfcs/rfc-0009-structured-command-working-directories.md
+[rfc-0012]: rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md
+[rfc-0010]: rfcs/rfc-0010-runtime-bindings-and-secure-execution-contexts.md
+[rfc-0002]: rfcs/rfc-0002-repository-relative-manifest-includes.md
+[rfc-0004]: rfcs/rfc-0004-digest-pinned-external-bundles-and-git-provenance.md
+[rfc-0011]: rfcs/rfc-0011-allow-listed-structured-command-shells.md
+[rfc-0021]: rfcs/rfc-0021-managed-states-and-functional-probes.md
+[rfc-0022]: rfcs/rfc-0022-optional-typed-task-inputs.md
+[rfc-0023]: rfcs/rfc-0023-artefact-ownership-and-scoped-cleanup.md
+[rfc-0024]: rfcs/rfc-0024-named-contention-classes.md
+[rfc-0025]: rfcs/rfc-0025-progressive-enhancement-and-maturity-policies.md
+[rfc-0029]: rfcs/rfc-0029-first-class-host-facts.md
 
 ## Decision records
 
-- [adr-001-replace-serde-yml-with-serde-saphyr.md](adr-001-replace-serde-yml-with-serde-saphyr.md):
+- [adr-0001-replace-serde-yml-with-serde-saphyr-for-yaml-parsing-in-netsuke.md](adrs/adr-0001-replace-serde-yml-with-serde-saphyr-for-yaml-parsing-in-netsuke.md):
   YAML parser migration decision record.
-- [adr-002-replace-cucumber-with-rstest-bdd.md](adr-002-replace-cucumber-with-rstest-bdd.md):
+- [adr-0002-replace-cucumber-rs-with-rstest-bdd-for-behavioural-tests.md](adrs/adr-0002-replace-cucumber-rs-with-rstest-bdd-for-behavioural-tests.md):
   Behavioural-testing framework migration decision record.
-- [adr-003-agent-consistent-human-first-cli.md](adr-003-agent-consistent-human-first-cli.md):
-  Human-first, agent-consistent CLI doctrine decision record.
-- [adr-003-actions-foreach-when-scope.md](adr-003-actions-foreach-when-scope.md):
+- [adr-0003-keep-foreach-and-when-scoped-to-manifest-targets.md](adrs/adr-0003-keep-foreach-and-when-scoped-to-manifest-targets.md):
   Manifest control-key scoping decision record.
-- [ADR-004: Kani IR harnesses](adr-004-bound-kani-ir-harnesses-to-small-n.md):
-  Kani IR harness bound and Proptest hand-off decision record.
-- [adr-004-graph-subcommand-in-process-rendering.md](adr-004-graph-subcommand-in-process-rendering.md):
+- [adr-0004-render-the-graph-subcommand-in-process.md](adrs/adr-0004-render-the-graph-subcommand-in-process.md):
   Graph rendering architecture decision record.
-- [ADR-004](adr-004-explicit-config-selection-outside-orthoconfig.md):
-  Explicit configuration selector ownership decision record.
-- [adr-005-typed-which-resolve-error.md](adr-005-typed-which-resolve-error.md):
+- [adr-0005-use-a-typed-which-resolver-error.md](adrs/adr-0005-use-a-typed-which-resolver-error.md):
   Typed executable resolver error decision record for `which` and
   `command_available`.
-- [adr-006-adopt-polonius-nightly-toolchain.md](adr-006-adopt-polonius-nightly-toolchain.md):
+- [adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md):
   Pinned-nightly Polonius borrow-checker adoption decision record.
-- [adr-007-publish-as-netsuke-build.md](adr-007-publish-as-netsuke-build.md):
+- [adr-0007-publish-the-crates-io-package-as-netsuke-build.md](adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md):
   crates.io package rename decision record, and the package-versus-target
   naming rule it establishes.
-- [adr-008-environment-seam-taxonomy.md](adr-008-environment-seam-taxonomy.md):
+- [adr-0008-environment-seam-taxonomy.md](adrs/adr-0008-environment-seam-taxonomy.md):
   Environment seam taxonomy decision record: three sanctioned shapes for
   injecting environment-dependent input instead of reading the process directly.
-- [adr-009-bounded-redacted-manifest-telemetry.md](adr-009-bounded-redacted-manifest-telemetry.md):
+- [adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md](adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md):
   Manifest telemetry decision record, separating observability from evaluation
   and bounding and redacting the emitted metrics and spans.
-- [adr-010-scope-glob-capability-to-literal-prefix.md](adr-010-scope-glob-capability-to-literal-prefix.md):
+- [adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md):
   Glob capability-scoping decision record, opening the metadata capability at a
   pattern's literal directory prefix instead of an ambient root.
-- [adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md](adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md):
+- [adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md](adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md):
   Serial `deps` ordering decision record, covering staged Ninja dyndep bundles,
   their scoped execution guarantee, and generated-state ownership.
-- [ADR-012](adr-012-bound-dyndep-sidecar-retention.md):
+- [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md):
   Deterministic retention, lease, and failure-boundary policy for generated
   dyndep sidecars.
-- [ADR-013](adr-013-application-owned-configuration-observability.md):
+- [ADR-0013](adrs/adr-0013-application-owned-configuration-observability.md):
   Application-owned configuration-load metrics, verbose snapshots, and bounded
   label vocabulary.
-- [ADR-014: backend text escaping](adr-014-backend-text-escaping-seam.md):
+- [ADR-0014: backend text escaping](adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md):
   Ninja backend escaping boundary decision record, preserving ordinary shell
   dollar syntax in manifests without coupling the IR to Ninja.
-- [ADR-015](adr-015-use-bounded-git-cli-for-change-detection.md):
+- [ADR-0015](adrs/adr-0015-use-bounded-git-cli-queries-for-change-detection.md):
   Feature-private, bounded Git CLI queries for standard-library change
   detection.
-- [ADR-014: base-directory seam](
-  adr-014-base-directory-seam-and-dir-anchoring.md): Base-directory seam for
-  manifest and glob resolution, explicit-selector independence from `-C`, and
-  the in-process environment-mutation gate.
-- [ADR-016: public CLI metadata source of truth](
-  adr-016-public-cli-metadata-source-of-truth.md): Release-help metadata
-  composition boundary for configuration fields, parser-only selectors, and
-  subcommands.
-- [ADR-017](adr-017-require-utf8-ninja-invocation-paths.md):
+- [ADR-0016: public CLI metadata source of truth](adrs/adr-0016-public-cli-metadata-source-of-truth.md):
+  Release-help metadata composition boundary for configuration fields,
+  parser-only selectors, and subcommands.
+- [ADR-0017](adrs/adr-0017-require-utf-8-ninja-invocation-paths.md):
   UTF-8 Ninja invocation-path boundary decision record, with early diagnostics
   for unsupported build-file and working-directory encodings.
-- [adr-018-bound-manifest-template-evaluation.md](adr-018-bound-manifest-template-evaluation.md):
-  Manifest evaluation resource budget decision record.
-- [ADR-018](adr-018-terminate-ninja-options-before-build-target-operands.md):
+- [ADR-0018](adrs/adr-0018-terminate-ninja-options-before-build-targets.md):
   Ninja target operand-boundary decision record, preventing forwarded targets
   from being parsed as Ninja options.
-- [ADR-019](adr-019-structured-command-shell-selection.md): Allow-listed
-  structured-command shell selection, trusted configuration authority,
-  resolution, lowering, diagnostics, and safety boundaries.
-- [ADR-020](adr-020-release-admission-observability.md):
-  Bounded metrics and operator-facing export for the release-admission gate.
-- [ADR-021](adr-021-trust-aware-fetch-policy-merge.md):
+- [ADR-0019](adrs/adr-0019-select-allow-listed-structured-command-shells.md):
+  Allow-listed structured-command shell selection, trusted configuration
+  authority, resolution, lowering, diagnostics, and safety boundaries.
+- [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md):
+  Bounded metrics and operator-facing export for release admission and
+  staging/publication operations.
+- [ADR-0021](adrs/adr-0021-keep-project-fetch-policy-below-the-operator-ceiling.md):
   Trust-aware merging of project fetch-policy requests with operator-enforced
   network policy.
-- [ADR-022](adr-022-pr-coverage-trust-boundary.md): Isolated pull-request
-  coverage generation, hostile-artefact validation, and trusted CodeScene
-  submission with bounded correlation observability.
-- [ADR-023](adr-023-revalidate-fetch-redirects.md): Redirect policy decision
-  record, making network policy an invariant of every outbound fetch hop.
-- [ADR-024](adr-024-require-explicit-recursive-workspace-which-search.md):
+- [ADR-0022](adrs/adr-0022-isolate-pr-coverage-submission.md): Isolated
+  pull-request coverage generation, hostile-artefact validation, and trusted
+  CodeScene submission with bounded correlation observability.
+- [ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md): Redirect policy
+  decision record, making network policy an invariant of every outbound fetch
+  hop.
+- [ADR-0024](adrs/adr-0024-require-explicit-recursive-which-search.md):
   Explicit opt-in for recursive workspace executable discovery, preserving a
   PATH-only default and its manifest trust boundary.
-- [ADR-025](adr-025-main-owned-coverage-publication.md): Local pull-request
+- [ADR-0025](adrs/adr-0025-keep-pr-coverage-local.md): Local pull-request
   coverage ratcheting with persistent coverage data owned by `main`.
-- [ADR-026](adr-026-manifest-environment-access-policy.md):
+- [ADR-0026](adrs/adr-0026-keep-project-environment-policy-below-the-operator-ceiling.md):
   Exact-name manifest environment policy evaluated before the reader, with
   project allow entries quarantined below the operator ceiling.
-- [ADR-027](adr-027-command-placeholder-contract.md): Command placeholder set,
-  the backtick-handling boundary, and the scope of the `shlex` acceptance
-  guard, stated for the uniform marker set ADR-034 established.
-- [ADR-028](adr-028-defer-split-build-dir-harness-trim.md): Deferred trim of
-  the split-build-dir harness test, with the serialized-lane measurements that
-  made the figure unstable and the ten-run gate that reopens the question.
-- [ADR-029](adr-029-mold-and-parallel-frontend-as-build-defaults.md):
+- [ADR-0027](adrs/adr-0027-command-placeholder-contract.md): Command placeholder
+  set, the backtick-handling boundary, and the scope of the `shlex` acceptance
+  guard, stated for the uniform marker set ADR-0034 established.
+- [ADR-0028](adrs/adr-0028-defer-replacing-the-split-build-dir-harness-test.md):
+  Deferred trim of the split-build-dir harness test, with the serialized-lane
+  measurements that made the figure unstable and the ten-run gate that reopens
+  the question.
+- [ADR-0029](adrs/adr-0029-make-mold-and-the-parallel-frontend-the-default-build.md):
   `mold` and the parallel `rustc` front end as the committed default build,
   with the release and coverage exclusions, the Cranelift refusal, and the
   toolchain-versus-tools boundary.
-- [ADR-032](adr-032-windows-reparse-point-same-handle-open.md): Windows final
-  component validation through a same-handle reparse-point open.
-- [ADR-033](adr-033-record-split-build-cargo-messages.md): Recorded Cargo
+- [ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md):
+  Windows final component validation through a same-handle reparse-point open.
+- [ADR-0033](adrs/adr-0033-record-split-build-cargo-messages.md): Recorded Cargo
   messages for split-build artefact discovery, preserving parser coverage
   without an always-cold nested workspace build.
-- [ADR-034](adr-034-preserve-script-in-out-as-shell-variables.md): Script
-  `$in` and `$out` shell-variable semantics and marker-token separation.
-- [ADR-035](adr-035-semantic-compiler-boundaries.md): Proposed semantic
-  compiler/model ownership and application execution boundaries.
-- [ADR-036](adr-036-layered-architecture-enforcement.md): Proposed complementary
-  architecture checks, explicit coverage, and reviewed migration exceptions.
-- [ADR-037](adr-037-gate-paralegal-on-measured-evidence.md): Proposed evidence
-  gates for the optional Paralegal experiment, without mandatory adoption.
-- [ADR-038](adr-038-runtime-annotation-introspection-in-workflow-contracts.md):
+- [ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md):
+  Script `$in` and `$out` shell-variable semantics and marker-token separation.
+- [ADR-0035](adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md):
+  Proposed semantic compiler/model ownership and application execution
+  boundaries.
+- [ADR-0036](adrs/adr-0036-enforce-architecture-through-complementary-checks.md):
+  Proposed complementary architecture checks, explicit coverage, and reviewed
+  migration exceptions.
+- [ADR-0037](adrs/adr-0037-gate-paralegal-adoption-on-measured-evidence.md):
+  Proposed evidence gates for the optional Paralegal experiment, without
+  mandatory adoption.
+- [ADR-0038](adrs/adr-0038-runtime-annotation-introspection-in-workflow-contracts.md):
   Runtime annotation introspection declared unsupported for the workflow
   contract tests, with the loader gate's stale `TYPE_CHECKING` claim corrected
   and a revisit gate that reopens on a real consumer.
+- [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md):
+  Change-scoped Kani proofs, running the required `kani-smoke` harnesses on a
+  pull request only when a derived proof input changes, and in full on `main`
+  and nightly.
+- [ADR-0040](adrs/adr-0040-focused-child-rfcs-for-survey-rfcs.md): Splitting a
+  survey RFC into focused child RFCs, each owning one or more capability
+  groups, with the accepted set partitioned by a coverage map and guarded by a
+  derivation-based coverage test.
+- [ADR-0041](adrs/adr-0041-canonical-recipe-shell-quoting-surface.md):
+  `shell_quote` and `shell_join` as the canonical recipe quoting surface, with
+  two dialects and a host-dependent default.
+- [ADR-0042](adrs/adr-0042-run-the-shared-cv-005-contract-checker.md): Running
+  the pinned shared CV-005 contract checker beside the local workflow contracts.
+- [ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md):
+  One structured-command execution contract across RFC 0001, RFC 0009, RFC
+  0010, RFC 0011, and ADR-0019: the `cwd` stream-path base, absolute-`cwd`
+  rejection, the two capture forms, the two temporary-directory spellings, and
+  the reserved `1.1.0` manifest minor version.
+- [ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md):
+  Versioned graph JSON from the restricted help-targets query, with
+  declaration-level nodes, authored edges, and raw legacy recipes.
+- [ADR-0045](adrs/adr-0045-isolate-command-list-entries.md): Opt-in command-list
+  entry isolation with shared mode preserved as the default.
+- [ADR-056](adrs/adr-0056-manifest-linting-under-netsuke-check.md):
+  Manifest-linting decision record, placing the linter under `netsuke check`,
+  treating findings as data with a threshold-selected success or failure
+  document, and fixing the rule-identifier and rule-text ownership rules.
+- [ADR-0046-agent-consistent-human-first-cli.md](adrs/adr-0046-agent-consistent-human-first-cli.md):
+  Human-first, agent-consistent CLI doctrine decision record.
+- [ADR-0047: Kani IR harnesses](adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md):
+  Kani IR harness bound and Proptest hand-off decision record.
+- [ADR-0048](adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md):
+  Explicit configuration selector ownership decision record.
+- [ADR-0049: base-directory seam](adrs/adr-0049-base-directory-seam-and-c-anchoring.md):
+  Base-directory seam for manifest and glob resolution, explicit-selector
+  independence from `-C`, and the in-process environment-mutation gate.
+- [ADR-0050-bound-manifest-template-evaluation.md](adrs/adr-0050-bound-manifest-template-evaluation.md):
+  Manifest evaluation resource budget decision record.
+- [ADR-0051](adrs/adr-0051-compile-the-build-script-module-slice-in-the-workspace-graph.md):
+  Compiling the build-script module slice in the Cargo workspace graph rather
+  than inside a timed test body.
 
 ## Proposals
 
@@ -242,8 +315,11 @@ operator, user, and contributor references are easier to find.
 - [v0-1-0-migration-guide.md](v0-1-0-migration-guide.md): Migration notes for
   the v0.1.0 child-environment API, glob behaviour, and serial-dependency
   additions, plus the stability caveat that covers them.
-- [v0-1-1-migration-guide.md](v0-1-1-migration-guide.md): Migration note for
-  replacing no-op aggregate recipes with dependency-only actions or targets.
+- [v0-1-1-migration-guide.md](v0-1-1-migration-guide.md): Migration notes for
+  replacing no-op aggregate recipes with dependency-only actions or targets,
+  plus the `cwd_mode` label added to the `which` resolver counters.
+- [v0-2-0-migration-guide.md](v0-2-0-migration-guide.md): Migration signpost
+  for the `netsuke check` linter and its rule, severity, and suppression policy.
 - [users-guide.md](users-guide.md): End-user reference for authoring and
   running Netsuke manifests, including executable discovery and
   `command_available` branch selection.
@@ -274,7 +350,8 @@ operator, user, and contributor references are easier to find.
   conventions, roadmap-writing rules, and Markdown requirements.
 - [scripting-standards.md](scripting-standards.md): Python scripting standards
   for repository automation scripts, covering the Cyclopts CLI pattern,
-  `cuprum` command execution, `pathlib` usage, and pytest coverage rules.
+  `cuprum` command execution, `pathlib` usage, pytest coverage rules, and
+  script-local input-parser ownership.
 - [execplans/](execplans/): Execution plans and implementation handoff notes.
 
 ## Testing and quality references
@@ -284,9 +361,23 @@ operator, user, and contributor references are easier to find.
 - [reliable-testing-in-rust-via-dependency-injection.md](reliable-testing-in-rust-via-dependency-injection.md):
   Dependency-injection testing patterns used by the project.
 - [rstest-bdd-users-guide.md](rstest-bdd-users-guide.md): Current behavioural
-  testing framework reference.
+  testing framework reference. Imported byte-for-byte from `leynos/rstest-bdd`
+  tag `v0.6.0` at commit `72fb2263`; see
+  [adopt-rstest-bdd-v0-6-0.md](execplans/adopt-rstest-bdd-v0-6-0.md) for the
+  recorded checksums.
 - [rstest-bdd-v0-5-0-migration-guide.md](rstest-bdd-v0-5-0-migration-guide.md):
-  Migration notes for the current `rstest-bdd` release.
+  Migration notes for the previous `rstest-bdd` release.
+- [rstest-bdd-v0-6-0-migration-guide.md](rstest-bdd-v0-6-0-migration-guide.md):
+  Migration notes for the current `rstest-bdd` release. Imported byte-for-byte
+  from `leynos/rstest-bdd` tag `v0.6.0` at commit `72fb2263`.
+- [rstest-bdd-link-compatibility.md](rstest-bdd-link-compatibility.md): How the
+  relative links inside the two imported `rstest-bdd` documents resolve in this
+  repository, which upstream names change on import, and which upstream files
+  are not carried locally.
+- [v0-6-0-migration-guide.md](v0-6-0-migration-guide.md): Compatibility path
+  for the upstream filename of the `rstest-bdd` 0.6.0 migration guide. It
+  supplies the upstream name and the `#migrate-a-stateful-gpui-test` anchor,
+  then forwards readers to the imported guide rather than restating it.
 - [rust-doctest-dry-guide.md](rust-doctest-dry-guide.md): Doctest workflow and
   dry-run guidance.
 - [rust-testing-with-rstest-fixtures.md](rust-testing-with-rstest-fixtures.md):

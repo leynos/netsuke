@@ -5,6 +5,10 @@
 //!   packaging.
 //! - Generate Bash, Elvish, Fish, PowerShell, and Zsh completion files into
 //!   `target/generated-completions/<target>/<profile>` from the same Clap command tree.
+//!
+//!   A build with the `lint` feature writes both into a `lint/` subdirectory
+//!   instead, because its command tree has a `check` subcommand the release
+//!   artefacts must not carry.
 //! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
 //!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
 //!   locale.
@@ -43,31 +47,28 @@ const FALLBACK_DATE: &str = "1970-01-01";
 // `src/cli/command.rs` holds command-schema and default-command behaviour,
 // including `Cli::with_default_command`, with runtime preferences in
 // `src/cli/preferences.rs` and the localisation-aware parsing entry point in
-// `src/cli/parser.rs`; matching logic is split out of `src/host_pattern.rs`
-// into `src/host_matching.rs`. Adding a dependency on anything outside this
+// `src/cli/parser/mod.rs`; matching logic is split out of `src/host/pattern.rs`
+// into `src/host/matching.rs`. Adding a dependency on anything outside this
 // slice will surface here as a compile error, which is the intended signal.
 #[path = "src/cli"]
 mod cli {
     //! The Clap schema slice of `src/cli`, mirroring `src/cli/mod.rs`.
 
-    #[path = "config.rs"]
     pub mod config;
-    #[path = "validation.rs"]
     mod validation;
 
-    #[path = "help.rs"]
     mod help;
 
-    #[path = "command.rs"]
     mod command;
 
     pub use command::Cli;
     pub use config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 }
 
-#[path = "src/cli_localization.rs"]
+#[path = "src/cli/localization/mod.rs"]
 mod cli_localization;
-#[path = "src/host_pattern.rs"]
+// The build-script slice compiles pattern syntax without runtime matching.
+#[path = "src/host/pattern.rs"]
 mod host_pattern;
 
 /// The locale registry, shared with the library crate.
@@ -78,13 +79,13 @@ mod host_pattern;
 /// module cannot be re-exported from a public path. The build script itself
 /// reads `SUPPORTED_LOCALES` to emit one `rerun-if-changed` directive per
 /// catalogue.
-#[path = "src/locale_catalogues.rs"]
+#[path = "src/locale/catalogues.rs"]
 pub mod locale_catalogues;
 
 mod build_l10n_audit;
 /// Message rendering, shared with the library crate.
 ///
-/// Exposed as `crate::localization`, which `cli`, `cli_l10n`, and
+/// Exposed as `crate::localization`, which `cli`, `cli::l10n`, and
 /// `host_pattern` reach for `localization::keys` when building the clap
 /// command for man-page generation. Public so its `locales` re-export stays
 /// reachable at `crate::localization::locales`.
@@ -127,10 +128,25 @@ fn manual_date() -> String {
     })
 }
 
+/// Subdirectory separating artefacts generated with a non-default feature set.
+///
+/// The `lint` feature adds the `check` subcommand, so the man page and
+/// completions differ by feature set. Sharing one directory let whichever
+/// build ran the script last decide what a test read: a default-feature build
+/// overwrote the files an all-features test, whose cached build script did not
+/// rerun, then checked for `check`. The default set keeps the bare path that
+/// release staging reads.
+const FEATURE_VARIANT: Option<&str> = if cfg!(feature = "lint") {
+    Some("lint")
+} else {
+    None
+};
+
 /// Return the generated-artefact directory for this build's target triple and profile.
 ///
 /// Uses the `target/{artefact}/{target}/{profile}` layout so man pages and
-/// completions never mix between artefacts, host builds, and cross builds.
+/// completions never mix between artefacts, host builds, and cross builds, and
+/// appends [`FEATURE_VARIANT`] so they never mix between feature sets either.
 #[expect(
     clippy::disallowed_methods,
     reason = "TARGET and PROFILE are set by Cargo for the build script alone; nothing else knows the triple and profile being built, so they cannot be passed in"
@@ -138,7 +154,11 @@ fn manual_date() -> String {
 fn out_dir_for_target_profile(artefact: &str) -> PathBuf {
     let target = env::var("TARGET").unwrap_or_else(|_| "unknown-target".into());
     let profile = env::var("PROFILE").unwrap_or_else(|_| "unknown-profile".into());
-    PathBuf::from(format!("target/{artefact}/{target}/{profile}"))
+    let directory = PathBuf::from(format!("target/{artefact}/{target}/{profile}"));
+    match FEATURE_VARIANT {
+        Some(variant) => directory.join(variant),
+        None => directory,
+    }
 }
 
 /// Write one man page into `dir` atomically and return its path.
@@ -173,19 +193,21 @@ fn write_man_page(data: &[u8], dir: &Path, page_name: &str) -> std::io::Result<P
 fn emit_rerun_directives() {
     // Only the modules this script actually compiles need to trigger a rerun.
     println!("cargo:rerun-if-changed=src/cli/command.rs");
-    println!("cargo:rerun-if-changed=src/cli/config.rs");
-    println!("cargo:rerun-if-changed=src/cli/manifest_budget_config.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/mod.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/validation.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/budget.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/no_input.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/policy_definitions.rs");
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
-    println!("cargo:rerun-if-changed=src/host_pattern.rs");
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_VERSION");
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_DESCRIPTION");
-    println!("cargo:rerun-if-env-changed=CARGO_PKG_AUTHORS");
+    println!("cargo:rerun-if-changed=src/host/pattern.rs");
+    // Cargo supplies package metadata, TARGET, and PROFILE itself. Watching
+    // their ambient values would invalidate artefacts when tests invoke Cargo
+    // with inherited metadata; Cargo.toml and Cargo's build units track them.
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
-    println!("cargo:rerun-if-env-changed=TARGET");
-    println!("cargo:rerun-if-env-changed=PROFILE");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
-    println!("cargo:rerun-if-changed=src/locale_catalogues.rs");
+    println!("cargo:rerun-if-changed=src/localization/check_keys.rs");
+    println!("cargo:rerun-if-changed=src/locale/catalogues.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     // The locale registry owns the catalogue list, so the rerun directives are
     // derived from it rather than repeated by hand.

@@ -17,7 +17,7 @@ enum StepField {
 
 const INSTALL_NIXIE_ACTION: &str = "leynos/shared-actions/.github/actions/install-nixie";
 const INSTALL_WHITAKER_ACTION: &str = "leynos/shared-actions/.github/actions/install-whitaker";
-const WHITAKER_INSTALLER_VERSION: &str = "0.2.7";
+const WHITAKER_INSTALLER_VERSION: &str = "0.2.9";
 
 impl StepField {
     const fn yaml_key(self) -> &'static str {
@@ -484,9 +484,19 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
          cannot be satisfied by a stale cached binary"
     );
     ensure_kani_archives_are_verified_before_use(install_command)?;
+    // Thirty, not twenty. The job includes a mutation compile gate, which
+    // builds the whole dependency graph through the Kani frontend into a cold
+    // `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the harness
+    // run and retained-metrics finalization. The measured warm gate took
+    // 152.952s over all 18 tracked patches, plus 158s of wall clock for the
+    // recipe. The cold case is now measured too: run 35796798133 passed the
+    // gate at 257.703s, and run 35800582469 at 261.514s, so a cold CI run
+    // costs about 105s more than the warm local one rather than the multiple
+    // the headroom was sized for. The margin is kept because a failing host is
+    // what the ceiling is for, not a median one.
     ensure!(
-        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(20),
-        "Kani smoke job should enforce the 20-minute cold-run ceiling"
+        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(30),
+        "Kani smoke job should enforce the 30-minute cold-run ceiling"
     );
     Ok(())
 }

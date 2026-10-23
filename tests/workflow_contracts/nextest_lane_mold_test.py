@@ -125,6 +125,32 @@ def test_the_install_cannot_be_guarded(documents: Documents, makefile: str) -> N
     _reports(documents, makefile, "must not carry an `if:`")
 
 
+KANI_LANE = ("ci.yml", "kani-smoke")
+
+
+def test_a_guard_every_suite_step_shares_is_allowed(
+    documents: Documents, makefile: str
+) -> None:
+    """`kani-smoke` gates its install and its suite steps on one decision."""
+    steps = _steps(documents, *KANI_LANE)
+    guard = _install(steps).get("if")
+    assert guard, "kani-smoke's install must carry the decision guard"
+    assert "ci.yml:kani-smoke" in suite_lanes(documents, makefile), (
+        "kani-smoke must be derived as a suite lane for this case to mean anything"
+    )
+    _clean(documents, makefile)
+
+
+def test_a_guard_one_suite_step_lacks_is_refused(
+    documents: Documents, makefile: str
+) -> None:
+    """The install is skipped while an unguarded suite step still runs."""
+    steps = _steps(documents, *KANI_LANE)
+    gate = next(s for s in steps if s.get("run") == "make test-kani-mutations")
+    del gate["if"]
+    _reports(documents, makefile, "must not carry an `if:`")
+
+
 def test_the_install_cannot_continue_on_error(
     documents: Documents, makefile: str
 ) -> None:

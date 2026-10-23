@@ -9,13 +9,17 @@ The reading that matters most is the per-test one. nextest warns once
 per ``period`` and terminates after ``terminate-after`` of them, so the
 budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
-real figure is 300 s. A
+real maximum is 900 s: five periods by default, ten for the mutation
+compile gate, and fifteen for the stub-environment compile-fail,
+split-build, and cold package-publish checks.
+The contract uses the largest value, because a whole-run cap has to sit
+above it. A
 ``slow-timeout`` naming no ``terminate-after`` terminates nothing at
 all, so that form is refused rather than read as a single period.
 
 Read by ``ty`` and run by pytest; runtime annotation introspection is not
 supported here, because these annotations name ``TYPE_CHECKING``-only imports
-and resolving one raises ``NameError``. ADR-038 records the decision.
+and resolving one raises ``NameError``. ADR-0038 records the decision.
 
 See "Test timeouts: the tiers this repository sets" in
 ``docs/developers-guide.md``.
@@ -25,7 +29,8 @@ import tomllib
 import typing as typ
 from itertools import starmap
 
-from nextest_durations import NextestConfigurationError, UnboundedTestError, seconds
+from nextest_durations import NextestConfigurationError, seconds
+from nextest_slow_timeouts import budget_of
 from timeout_budgets import (
     CAPPED_PROFILE,
     NEXTEST_DEFAULT_GRACE_PERIOD_SECONDS,
@@ -36,10 +41,6 @@ if typ.TYPE_CHECKING:
     import fractions
 
 
-#: One value-and-unit pair of a humantime duration. nextest parses its
-#: durations with `humantime` through `humantime_serde`, which reads a
-#: sequence of these and sums them, so `2h 30m` and `1d` are valid and a
-#: parser taking one pair would refuse configuration the runner accepts.
 def _table(value: object) -> dict[str, object]:
     """Return a parsed value as a table, or an empty one.
 
@@ -136,111 +137,19 @@ def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
     ]
 
 
-def _multiplier_of(path: str, multiplier: object) -> int:
-    """Return a ``terminate-after`` value, refusing what nextest refuses.
-
-    nextest types it as a `NonZeroUsize`, so a zero, a negative, a
-    fraction or a quoted number is a configuration it rejects. Reading
-    any of them as a number here would put a budget on a tier the runner
-    never applies, and zero in particular would make the per-test
-    allowance vanish and every comparison above it pass.
-
-    Booleans are refused before integers because `True` is an `int` in
-    Python and would otherwise read as a multiplier of one.
-
-    Parameters
-    ----------
-    path : str
-        The dotted path of the declaring table, for the message.
-    multiplier : object
-        The value as ``tomllib`` returned it.
-
-    Returns
-    -------
-    int
-        The multiplier.
-
-    Raises
-    ------
-    NextestConfigurationError
-        If the value is not a positive integer.
-    """
-    match multiplier:
-        case bool():
-            pass
-        case int() as count if count > 0:
-            return count
-        case _:
-            pass
-    message = (
-        f"{path}.slow-timeout has terminate-after={multiplier!r}, which "
-        f"nextest refuses: it is typed as a non-zero positive integer, so a "
-        f"zero, a negative, a fraction or a quoted number configures nothing"
-    )
-    raise NextestConfigurationError(message)
-
-
-def _budget_of(path: str, value: object) -> fractions.Fraction:
-    """Return the per-test budget one ``slow-timeout`` declares.
-
-    Parameters
-    ----------
-    path : str
-        The dotted path of the declaring table, for the message.
-    value : object
-        The parsed value, a table or a bare duration.
-
-    Returns
-    -------
-    fractions.Fraction
-        The budget in seconds, exactly.
-
-    Raises
-    ------
-    UnboundedTestError
-        If the value names no ``terminate-after``, in either spelling.
-        nextest then marks the test slow and lets it run on, so there is
-        no per-test tier to compare against.
-    NextestConfigurationError
-        If the value is a table with no ``period``, or is neither a
-        table nor a duration.
-    """
-    match value:
-        case str():
-            message = (
-                f'{path}.slow-timeout = "{value}" sets a warning period with '
-                f"no terminate-after, so nextest reports the test as slow and "
-                f"never stops it"
-            )
-            raise UnboundedTestError(message)
-        case dict():
-            pass
-        case _:
-            message = f"{path}.slow-timeout is neither a table nor a duration"
-            raise NextestConfigurationError(message)
-    period = value.get("period")
-    if not isinstance(period, str):
-        message = f"{path}.slow-timeout names no period: {value!r}"
-        raise NextestConfigurationError(message)
-    multiplier = value.get("terminate-after")
-    if multiplier is None:
-        message = (
-            f"{path}.slow-timeout sets no terminate-after, so nextest marks "
-            f"the test slow and lets it run on; there is no per-test tier to "
-            f"compare against"
-        )
-        raise UnboundedTestError(message)
-    return seconds(period) * _multiplier_of(path, multiplier)
-
-
 def largest_test_allowance(config_text: str) -> fractions.Fraction:
     """Return the longest a single test may run, in seconds.
 
     nextest warns once per ``period`` and terminates after
     ``terminate-after`` of them, so the budget is their product. This
-    repository sets five 60 s periods on every platform, so the largest
-    per-test allowance is 300 s. Reading the period alone would understate
-    that allowance fivefold.
+    repository sets five 60 s periods on the profile's own allowance, so it
+    gives every test it matches 300 s. The mutation compile gate gets ten
+    periods, and the stub-environment compile-fail, split-build, and cold
+    package-publish checks get fifteen.
+    The largest allowance in the file is therefore 900 s, and it is that
+    figure, not the profile's own, that a whole-run budget has to stay
+    above. Reading the period alone would understate either by its
+    multiplier.
 
     Parameters
     ----------
@@ -253,15 +162,16 @@ def largest_test_allowance(config_text: str) -> fractions.Fraction:
         The longest per-test budget, exactly.
 
     A ``slow-timeout`` that names no ``terminate-after`` raises
-    :class:`UnboundedTestError` from :func:`_budget_of` rather than
-    counting as one period, because such a configuration bounds nothing.
+    :class:`nextest_durations.UnboundedTestError` from
+    :func:`nextest_slow_timeouts.budget_of` rather than counting as one
+    period, because such a configuration bounds nothing.
 
     Raises
     ------
     NextestConfigurationError
         If the configuration declares no ``slow-timeout`` at all.
     """
-    budgets = list(starmap(_budget_of, _slow_timeouts(config_text)))
+    budgets = list(starmap(budget_of, _slow_timeouts(config_text)))
     if not budgets:
         message = (
             "the nextest configuration declares no slow-timeout, so no test "

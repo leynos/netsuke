@@ -6,6 +6,14 @@
 use clap::{Args, Subcommand};
 use serde::{Deserialize, Serialize};
 
+/// Arguments accepted by the `help targets` topic.
+#[derive(Debug, Args, PartialEq, Eq, Clone, Serialize, Deserialize, Default)]
+pub struct HelpTargetsArgs {
+    /// Include the versioned dependency graph in JSON output.
+    #[arg(long)]
+    pub edges: bool,
+}
+
 /// Arguments accepted by the `help` command.
 ///
 /// The optional topic selects the help artefact to render. With no topic the
@@ -22,10 +30,13 @@ pub struct HelpArgs {
 #[serde(rename_all = "kebab-case")]
 pub enum HelpTopic {
     /// Print the target and action catalogue for the selected manifest.
-    Targets,
+    Targets(HelpTargetsArgs),
 
     /// Print the help for the `build` command.
     Build,
+    /// Print the help for the `check` command.
+    #[cfg(feature = "lint")]
+    Check,
     /// Print the help for the `clean` command.
     Clean,
     /// Print the help for the `graph` command.

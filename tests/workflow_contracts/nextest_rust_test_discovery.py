@@ -24,7 +24,7 @@ from workflow_loading import REPO_ROOT, WorkflowReadError
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
-BUILD_CAPABLE_SUBCOMMANDS = ("build", "check", "package", "publish")
+BUILD_CAPABLE_SUBCOMMANDS = ("build", "check", "test", "package", "publish")
 RUST_FUNCTION = re.compile(
     r"(?ms)^(?P<indent>[ \t]*)"
     r"(?P<attributes>(?:(?P=indent)#\[[^\n]*\]\s*|"

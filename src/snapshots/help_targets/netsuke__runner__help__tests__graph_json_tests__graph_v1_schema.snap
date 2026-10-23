@@ -1,0 +1,280 @@
+---
+source: src/runner/help/graph_json_tests.rs
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "[version]"
+  },
+  "result": {
+    "command": "help-targets",
+    "actions": [
+      {
+        "name": "check",
+        "description": "Check the source tree",
+        "default": true,
+        "conditional": false
+      },
+      {
+        "name": "verify",
+        "description": "Check the source tree",
+        "default": false,
+        "conditional": false
+      },
+      {
+        "name": "prepare",
+        "description": null,
+        "default": false,
+        "conditional": false
+      }
+    ],
+    "targets": [
+      {
+        "name": "scripted",
+        "description": "Run the script gate",
+        "default": false,
+        "conditional": false
+      },
+      {
+        "name": "built",
+        "description": null,
+        "default": true,
+        "conditional": false
+      },
+      {
+        "name": "aggregate",
+        "description": null,
+        "default": false,
+        "conditional": false
+      },
+      {
+        "name": "choice",
+        "description": null,
+        "default": false,
+        "conditional": true
+      },
+      {
+        "name": "choice",
+        "description": null,
+        "default": false,
+        "conditional": true
+      }
+    ],
+    "graph": {
+      "defaults": [
+        "check",
+        "built",
+        "built"
+      ],
+      "rules": [
+        {
+          "name": "compile",
+          "description": null,
+          "recipe": {
+            "kind": "command",
+            "form": "string",
+            "commands": [
+              "cc {{ ins }} -o {{ outs }}"
+            ],
+            "isolation": "shared"
+          }
+        }
+      ],
+      "nodes": [
+        {
+          "kind": "action",
+          "names": [
+            {
+              "name": "check",
+              "default": true
+            },
+            {
+              "name": "verify",
+              "default": false
+            }
+          ],
+          "description": "Check the source tree",
+          "conditional": false,
+          "phony": true,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "command",
+            "form": "string",
+            "commands": [
+              "command_available(\"cargo\") {{ ins }} {{ outs }}"
+            ],
+            "isolation": "shared"
+          }
+        },
+        {
+          "kind": "action",
+          "names": [
+            {
+              "name": "prepare",
+              "default": false
+            }
+          ],
+          "description": null,
+          "conditional": false,
+          "phony": true,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "command",
+            "form": "list",
+            "commands": [
+              "echo {{ ins }}",
+              "echo {{ outs }}"
+            ],
+            "isolation": "isolated"
+          }
+        },
+        {
+          "kind": "target",
+          "names": [
+            {
+              "name": "scripted",
+              "default": false
+            }
+          ],
+          "description": "Run the script gate",
+          "conditional": false,
+          "phony": false,
+          "always": true,
+          "dependency_order": "serial",
+          "edges": {
+            "sources": [
+              "input.c"
+            ],
+            "deps": [
+              "check"
+            ],
+            "order_only_deps": [
+              "ready"
+            ]
+          },
+          "recipe": {
+            "kind": "script",
+            "script": "echo {{ ins }} {{ outs }}\n"
+          }
+        },
+        {
+          "kind": "target",
+          "names": [
+            {
+              "name": "built",
+              "default": true
+            }
+          ],
+          "description": null,
+          "conditional": false,
+          "phony": false,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "rule",
+            "names": [
+              "compile"
+            ]
+          }
+        },
+        {
+          "kind": "target",
+          "names": [
+            {
+              "name": "aggregate",
+              "default": false
+            }
+          ],
+          "description": null,
+          "conditional": false,
+          "phony": false,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [
+              "built"
+            ],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "dependency_only"
+          }
+        },
+        {
+          "kind": "target",
+          "names": [
+            {
+              "name": "choice",
+              "default": false
+            }
+          ],
+          "description": null,
+          "conditional": true,
+          "phony": false,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "command",
+            "form": "string",
+            "commands": [
+              "echo first"
+            ],
+            "isolation": "shared"
+          }
+        },
+        {
+          "kind": "target",
+          "names": [
+            {
+              "name": "choice",
+              "default": false
+            }
+          ],
+          "description": null,
+          "conditional": true,
+          "phony": false,
+          "always": false,
+          "dependency_order": "parallel",
+          "edges": {
+            "sources": [],
+            "deps": [],
+            "order_only_deps": []
+          },
+          "recipe": {
+            "kind": "command",
+            "form": "string",
+            "commands": [
+              "echo second"
+            ],
+            "isolation": "shared"
+          }
+        }
+      ]
+    }
+  }
+}

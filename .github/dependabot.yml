@@ -3,6 +3,9 @@ updates:
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
     groups:
+      shared-actions:
+        patterns:
+          - 'leynos/shared-actions*'
       github-actions:
         patterns:
           - '*'
@@ -50,6 +53,14 @@ updates:
       rstest-bdd:
         patterns:
           - "rstest-bdd*"
+      # ortho_config and fluent-bundle must resolve to one version: netsuke
+      # constrains `fluent-bundle` to the version `ortho_config` resolves, or
+      # the FluentValue types of the two would differ (see Cargo.toml). Group
+      # them so they bump together; this too must precede the catch-all.
+      ortho-config-fluent:
+        patterns:
+          - "ortho_config"
+          - "fluent-bundle"
       minor-and-patch:
         patterns:
           - "*"
@@ -58,8 +69,8 @@ updates:
           - "patch"
     directories:
       - "/"
+      - "/build_slice_fixture"
       - "/test_support"
-      - "/tests/ui/cli_configuration_pass"
     open-pull-requests-limit: 5
     labels:
       - "dependencies"

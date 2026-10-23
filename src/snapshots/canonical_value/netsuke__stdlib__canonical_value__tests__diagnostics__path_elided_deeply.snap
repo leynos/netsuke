@@ -1,0 +1,5 @@
+---
+source: src/stdlib/canonical_value/tests/diagnostics.rs
+expression: rendered
+---
+value of kind `bytes` has no canonical JSON form at ["m11"]["m10"]["m09"] … (6 more) … ["m02"]["m01"]["m00"]

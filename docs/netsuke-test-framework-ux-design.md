@@ -11,11 +11,12 @@
 - **Primary audience:** Netsukefile authors writing tests, and reviewers
   evaluating the test dialect before implementation.
 - **Governing documents:**
-  [RFC 0007](rfcs/0007-netsukefile-testing-framework.md) proposes and positions
-  this feature; [netsuke-design.md](netsuke-design.md) defines the manifest
-  language and compiler pipeline the tests exercise;
-  [ADR-003](adr-003-actions-foreach-when-scope.md) governs manifest control
-  keys; [ADR-008](adr-008-environment-seam-taxonomy.md) governs environment
+  [RFC 0007](rfcs/rfc-0007-netsukefile-testing-framework.md) proposes and
+  positions this feature; [netsuke-design.md](netsuke-design.md) defines the
+  manifest language and compiler pipeline the tests exercise;
+  [ADR-0003](adrs/adr-0003-keep-foreach-and-when-scoped-to-manifest-targets.md)
+  governs manifest control keys;
+  [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md) governs environment
   injection. Where this document conflicts with an accepted ADR, the ADR takes
   precedence.
 

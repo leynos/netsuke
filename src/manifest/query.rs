@@ -8,8 +8,8 @@
 use super::{
     EnvAccessPolicy, ExpansionReportObserver, ManifestBudgetLimits, ManifestEnvironment,
     ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, StdlibConfig,
-    StdlibRegistration, env_reader::disabled_env_reader, from_str_named,
-    loading::trace_expansion_report, notify_stage, workspace::open_manifest_workspace,
+    StdlibRegistration, env::disabled_env_reader, from_str_named, loading::trace_expansion_report,
+    notify_stage, workspace::open_manifest_workspace,
 };
 use crate::{localization, localization::keys, stdlib::NetworkPolicy};
 use anyhow::{Context, Result};
@@ -35,6 +35,26 @@ pub(crate) fn from_path_for_manifest_query_with_limits(
     budget_limits: ManifestBudgetLimits,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
+    from_path_for_manifest_query_with_source(path, budget_limits, on_stage)
+        .map(|loaded| loaded.manifest)
+}
+
+/// Load a manifest for a discovery query, keeping the source text it came from.
+///
+/// The linter needs the exact bytes the manifest was parsed from so its span
+/// index cannot disagree with the compiler's. Returning them from the same
+/// capability-scoped read is what guarantees that; reading the path again
+/// would open a second, unscoped view of the filesystem.
+///
+/// # Errors
+///
+/// Returns an error if the manifest cannot be read, rendered, or parsed, if it
+/// exceeds `budget_limits`, or if it invokes an impure template helper.
+pub(crate) fn from_path_for_manifest_query_with_source(
+    path: impl AsRef<Path>,
+    budget_limits: ManifestBudgetLimits,
+    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<LoadedManifest> {
     let env_reader = disabled_env_reader();
     let environment = ManifestEnvironment::new(&env_reader, EnvAccessPolicy::default());
     from_path_with_registration(ManifestLoadRequest {
@@ -48,15 +68,20 @@ pub(crate) fn from_path_for_manifest_query_with_limits(
 
 /// Load a full manifest with explicit policy, environment inputs, and
 /// resource ceilings.
+///
+/// `recipe_shell` is the interpreter the runner resolved; the template
+/// filters and IR lowering must agree on it, so it is threaded here rather
+/// than re-derived from the environment.
 #[expect(
     clippy::too_many_arguments,
-    reason = "This compatibility entry point keeps the established policy, environment, budget, and stage-observer seams explicit."
+    reason = "This compatibility entry point keeps the established policy, environment, budget, shell, and stage-observer seams explicit."
 )]
 pub(super) fn from_path_with_policy_and_environment_and_limits(
     path: impl AsRef<Path>,
     policy: NetworkPolicy,
     environment: &ManifestEnvironment<'_>,
     budget_limits: ManifestBudgetLimits,
+    recipe_shell: crate::recipe_shell::RecipeShell,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
     from_path_with_registration(ManifestLoadRequest {
@@ -64,15 +89,45 @@ pub(super) fn from_path_with_policy_and_environment_and_limits(
         environment,
         budget_limits,
         on_stage,
-        mode: ManifestLoadMode::Full(policy),
+        mode: ManifestLoadMode::Full {
+            policy,
+            recipe_shell,
+        },
     })
+    .map(|loaded| loaded.manifest)
+}
+
+/// A rendered manifest together with the source text it was parsed from.
+///
+/// The source and its display name are kept only for the linter's span index;
+/// a build without the `lint` feature has no reader for them.
+pub(crate) struct LoadedManifest {
+    /// The expanded and rendered manifest.
+    pub(crate) manifest: NetsukeManifest,
+    /// The manifest source, exactly as read.
+    #[cfg(feature = "lint")]
+    pub(crate) source: String,
+    /// The display name the diagnostics label the source with.
+    #[cfg(feature = "lint")]
+    pub(crate) name: String,
 }
 
 /// Select the standard-library boundary for a manifest load.
 enum ManifestLoadMode {
-    /// A normal build load with a configured network policy.
-    Full(NetworkPolicy),
+    /// A normal build load with a configured network policy and the
+    /// interpreter the runner resolved.
+    Full {
+        /// Network grant ceiling applied to fetch helpers.
+        policy: NetworkPolicy,
+        /// Interpreter whose quoting rules the template filters follow.
+        recipe_shell: crate::recipe_shell::RecipeShell,
+    },
     /// A metadata-only load that must not construct an ambient stdlib config.
+    ///
+    /// Query-rendered metadata uses a fixed `sh` dialect for shell quoting,
+    /// independent of the host and build-shell configuration. Resolving the
+    /// build shell here would make a metadata query inspect a setting it does
+    /// not use and could make help fail on an unrelated malformed override.
     ManifestQuery,
 }
 
@@ -93,7 +148,7 @@ struct ManifestLoadRequest<'path, 'env, 'stage> {
 /// Read a manifest and render it with the selected stdlib registration.
 fn from_path_with_registration(
     mut request: ManifestLoadRequest<'_, '_, '_>,
-) -> Result<NetsukeManifest> {
+) -> Result<LoadedManifest> {
     notify_stage(&mut request.on_stage, ManifestLoadStage::ManifestIngestion);
     let workspace = open_manifest_workspace(request.path, None)?;
     let data = workspace
@@ -108,18 +163,22 @@ fn from_path_with_registration(
         StdlibRegistration,
         Option<ExpansionReportObserver>,
     ) = match request.mode {
-        ManifestLoadMode::Full(policy) => (
+        ManifestLoadMode::Full {
+            policy,
+            recipe_shell,
+        } => (
             StdlibRegistration::Full(Box::new(
                 StdlibConfig::new(workspace.dir)?
                     .with_workspace_root_path(&workspace.root)?
-                    .with_network_policy(policy),
+                    .with_network_policy(policy)
+                    .with_recipe_shell(recipe_shell),
             )),
             Some(trace_expansion_report),
         ),
         ManifestLoadMode::ManifestQuery => (StdlibRegistration::ManifestQuery, None),
     };
     let manifest_root = Some(workspace.root);
-    from_str_named(
+    let manifest = from_str_named(
         &data,
         ManifestParse {
             name: &name,
@@ -131,5 +190,12 @@ fn from_path_with_registration(
             budget_limits: request.budget_limits,
         },
         &mut request.on_stage,
-    )
+    )?;
+    Ok(LoadedManifest {
+        manifest,
+        #[cfg(feature = "lint")]
+        source: data,
+        #[cfg(feature = "lint")]
+        name: name.as_ref().to_owned(),
+    })
 }

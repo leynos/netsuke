@@ -19,6 +19,7 @@ use crate::ast::NetsukeManifest;
 use crate::cli::Cli;
 use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
+use crate::recipe_shell::BashExecutable;
 use crate::{manifest, ninja_gen};
 use crate::{
     manifest::{EnvAccessPolicy, ManifestEnvironment},
@@ -45,22 +46,35 @@ pub(crate) struct ManifestLoadInputs {
     pub(super) env_access_policy: EnvAccessPolicy,
     /// Resource ceilings applied to manifest evaluation.
     pub(super) budget_limits: manifest::ManifestBudgetLimits,
+    /// Interpreter whose quoting rules the manifest's `shell_quote` and
+    /// `shell_join` filters follow.
+    pub(super) recipe_shell: crate::recipe_shell::RecipeShell,
 }
 
 impl ManifestLoadInputs {
     /// Resolve the trusted configuration bounding one build manifest load.
     ///
+    /// `recipe_shell` is passed in rather than derived here because the runner
+    /// resolves it once, before dispatch, and the same value then governs
+    /// lowering, rendering, and template expansion. Deriving it a second time
+    /// would let a `NETSUKE_WINDOWS_SHELL` change between the two readings
+    /// produce text quoted for one shell and executed by another.
+    ///
     /// # Errors
     ///
     /// Returns an error when the merged network policy or the merged resource
     /// ceilings are invalid.
-    pub(super) fn from_cli(cli: &Cli) -> Result<Self> {
+    pub(super) fn from_cli(
+        cli: &Cli,
+        recipe_shell: crate::recipe_shell::RecipeShell,
+    ) -> Result<Self> {
         Ok(Self {
             network_policy: cli
                 .network_policy()
                 .context(localization::message(keys::RUNNER_CONTEXT_NETWORK_POLICY))?,
             env_access_policy: cli.env_access_policy(),
             budget_limits: cli.manifest_budget_limits()?,
+            recipe_shell,
         })
     }
 }
@@ -86,16 +100,51 @@ pub(super) fn load_manifest(
 }
 
 /// Load a manifest query with explicit resource ceilings.
+// @codescene(disable:"Code Duplication") Twin of `load_manifest_with_source`:
+// same context wrapper, different return contract and feature gate, and
+// merging them needs a mode enum or generic loader (reviewed 2026-10-16).
 pub(super) fn load_manifest_with_limits(
     path: &Utf8Path,
     budget_limits: manifest::ManifestBudgetLimits,
     on_stage: StageObserver<'_>,
 ) -> Result<NetsukeManifest> {
-    manifest::from_path_for_manifest_query_with_limits(path.as_std_path(), budget_limits, on_stage)
-        .with_context(|| {
-            localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
-                .with_arg("path", path.as_str())
-        })
+    with_manifest_load_context(
+        path,
+        manifest::from_path_for_manifest_query_with_limits(
+            path.as_std_path(),
+            budget_limits,
+            on_stage,
+        ),
+    )
+}
+
+/// Load a manifest for a query, keeping the source text it was parsed from.
+///
+/// `netsuke check` needs those exact bytes so the linter's span index cannot
+/// disagree with the parser about what the manifest says. It takes the same
+/// resource ceilings as every other load, so a manifest too large to build is
+/// also too large to lint.
+///
+/// # Errors
+///
+/// Returns an error when the manifest cannot be read, parsed, or rendered, or
+/// when it exceeds `budget_limits`.
+// @codescene(disable:"Code Duplication") Twin of `load_manifest_with_limits`;
+// see the rationale there (reviewed 2026-10-16).
+#[cfg(feature = "lint")]
+pub(super) fn load_manifest_with_source(
+    path: &Utf8Path,
+    budget_limits: manifest::ManifestBudgetLimits,
+    on_stage: StageObserver<'_>,
+) -> Result<manifest::LoadedManifest> {
+    with_manifest_load_context(
+        path,
+        manifest::from_path_for_manifest_query_with_source(
+            path.as_std_path(),
+            budget_limits,
+            on_stage,
+        ),
+    )
 }
 
 /// Load and render a manifest with the full, effectful build stdlib.
@@ -110,6 +159,7 @@ pub(super) fn load_manifest_with_limits(
 ///     network_policy: NetworkPolicy::default(),
 ///     env_access_policy: EnvAccessPolicy::default(),
 ///     budget_limits: manifest::ManifestBudgetLimits::default(),
+///     recipe_shell: crate::recipe_shell::RecipeShell::host_default(),
 /// };
 /// let manifest = load_manifest_for_build_with_limits(
 ///     Utf8Path::new("Netsukefile"),
@@ -132,14 +182,26 @@ pub(super) fn load_manifest_for_build_with_limits(
 ) -> Result<NetsukeManifest> {
     let env_reader = manifest::process_env_reader();
     let environment = ManifestEnvironment::new(&env_reader, inputs.env_access_policy.clone());
-    manifest::from_path_with_policy_and_environment_and_limits(
-        path.as_std_path(),
-        inputs.network_policy.clone(),
-        &environment,
-        inputs.budget_limits,
-        on_stage,
+    with_manifest_load_context(
+        path,
+        manifest::from_path_with_policy_and_environment_and_limits(
+            path.as_std_path(),
+            inputs.network_policy.clone(),
+            &environment,
+            inputs.budget_limits,
+            inputs.recipe_shell,
+            on_stage,
+        ),
     )
-    .with_context(|| {
+}
+
+/// Attach the localized "could not load the manifest" context to `result`.
+///
+/// Every manifest loader in this module reports a load failure the same way,
+/// naming the manifest path, so the context lives here once. It wraps the
+/// loader's own error rather than replacing it, keeping the full cause chain.
+fn with_manifest_load_context<T>(path: &Utf8Path, result: Result<T>) -> Result<T> {
+    result.with_context(|| {
         localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST).with_arg("path", path.as_str())
     })
 }
@@ -191,9 +253,26 @@ pub(super) fn build_graph_for_shell(
 /// # Errors
 ///
 /// Returns an error when Ninja synthesis fails.
+#[cfg(test)]
 pub(super) fn ninja_text_for_shell(
     graph: &BuildGraph,
     shell: crate::recipe_shell::RecipeShell,
 ) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
     ninja_gen::dyndep::generate_bundle_for_shell(graph, shell)
+}
+
+/// Generate a Ninja bundle with one runner-resolved Bash executable binding.
+///
+/// A missing binding keeps pure generation deterministic and leaves the
+/// executable name to be resolved by Ninja's execution environment.
+///
+/// # Errors
+///
+/// Returns an error when Ninja synthesis fails.
+pub(super) fn ninja_text_for_shell_with_bash(
+    graph: &BuildGraph,
+    shell: crate::recipe_shell::RecipeShell,
+    bash_executable: Option<&BashExecutable>,
+) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
+    ninja_gen::dyndep::generate_bundle_for_shell_with_bash(graph, shell, bash_executable)
 }

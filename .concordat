@@ -1,0 +1,6 @@
+language:
+  rust:
+    surfaces:
+      - path: Cargo.toml
+      - path: tests/ui/cli_configuration_pass/Cargo.toml
+      - path: test_support/Cargo.toml

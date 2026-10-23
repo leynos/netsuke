@@ -6,6 +6,13 @@ name: Mutation testing
 # Scheduled runs mutate only files changed within the detection window;
 # manual dispatch runs mutate everything, fanned out across shards. To
 # test a branch, select it in the Actions "Run workflow" control.
+#
+# The `with:` block provisions the worker's toolchain as well as
+# configuring the run. This worker is not the CI merge gate: it gets its
+# own runner, so a tool installed for `ci.yml` is absent here. The
+# repository's build targets all depend on `check-build-tools`, which
+# requires the pinned mold, so the caller installs it and then re-runs the
+# preflight to prove it. See the input comments below.
 
 on:
   schedule:
@@ -27,15 +34,74 @@ jobs:
     permissions:
       contents: read
       id-token: write  # OIDC workflow-source resolution
-    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@438ad8a99a3580e753189c47391a1652c5f46ed4
+    uses: leynos/shared-actions/.github/workflows/mutation-cargo.yml@0606ca899ce2995a0c4bc78e660e80832e6e8855
     with:
       # test_support is deliberately omitted from extra crates: it is a
       # test-fixture crate whose survivors are noise.
       # Kani-only verification modules gated behind #[cfg(kani)] mod
       # declarations; cargo-mutants does not evaluate that cfg, so
       # mutants there would compile to nothing and survive as noise.
-      exclude-globs: "src/ir/cycle_verification.rs,src/ir/cmd_interpolate/verification.rs,\
-        src/ir/from_manifest_verification.rs,src/ir/graph_kani_map.rs"
+      exclude-globs: "src/ir/cycle/verification.rs,src/ir/cmd_interpolate/verification.rs,\
+        src/ir/from_manifest/verification.rs,src/ir/graph/kani_map.rs"
       # Match the CI baseline (`make test` runs --all-features) so
       # feature-gated tests (legacy-digests) run against mutants.
       extra-args: "--all-features"
+      # Install the pinned mold through setup-rust, which appends it to
+      # GITHUB_PATH for every later step. Every build target here depends
+      # on the `check-build-tools` prerequisite, so without this the
+      # worker has no mold and the baseline dies at the preflight before a
+      # single mutant is evaluated. Provisioning a linker on another CI
+      # job provisions that job's worker, not this one.
+      #
+      # The input is a string, not a boolean: the shared workflow declares
+      # it `type: string`, and a bare `true` would be rejected at
+      # workflow-call time.
+      install-mold: 'true'
+      # Re-run the repository's own preflight inside the worker, so a mold
+      # that is missing, unrunnable, or off the `tools/mold/VERSION` pin
+      # says so before the baseline compiles rather than surfacing later
+      # as an opaque linker failure. The version is read from that file,
+      # so a bump cannot leave this caller asserting a stale one.
+      #
+      # Both flag variables are printed for the run log. Which source
+      # actually selects the linker is an open question upstream
+      # (leynos/shared-actions#544): setup-rust exports
+      # `RUSTFLAGS="-D warnings"`, and Cargo takes `RUSTFLAGS` over every
+      # `rustflags` table in `.cargo/config.toml`, so the
+      # `-Clink-arg=-fuse-ld=mold` entry there is displaced. Printing the
+      # values records which happened instead of assuming it.
+      #
+      # Nothing here sets or overrides either variable: overriding
+      # RUSTFLAGS would displace the project configuration that the build
+      # standard is defined by.
+      #
+      # So `check-build-tools` proves the pinned mold is *installed*, not
+      # that Cargo *selects* it. Two measurements bound the gap. A
+      # `--verbose` baseline log from run 38280609203 shows
+      # `-Clink-arg=-fuse-ld=mold` on 0 of 569 rustc invocations with
+      # `RUSTFLAGS=-D warnings` on all 569, so selection is absent on the
+      # worker. And this caller cannot restore it: the `mutation-cargo.yml`
+      # pinned above declares 13 `workflow_call` inputs and no `rustflags`,
+      # and no merged revision has added one.
+      #
+      # leynos/shared-actions#628 supplies a child-only flag-replacement
+      # mechanism. It does not preserve configuration-owned flags and does
+      # not, by itself, resolve netsuke's linker-selection criterion. Its
+      # replacement value *could* name the mold flag, so the reason it is
+      # not adopted here is the caller's own contract, which forbids
+      # caller-owned flag replacement, not any incapacity of that input.
+      #
+      # What survives instead is configuration-owned selection: an
+      # exported RUSTFLAGS displaces a configured `rustflags` table but
+      # leaves the `linker` key intact, measured in a four-configuration
+      # compile probe. A repository-owned `linker` design is a
+      # build-policy change with its own exclusions to preserve, and it is
+      # deliberately not made here; it is tracked under #875 and is to be
+      # delivered separately, so this caller's diff stays reviewable on
+      # its own. Until it lands the gap stays recorded rather than worked
+      # around. Re-check every reference before assuming it still stands;
+      # this paragraph is a claim about upstream state and upstream moves.
+      setup-commands: |
+        make check-build-tools
+        printf "RUSTFLAGS=%s\n" "${RUSTFLAGS-<unset>}"
+        printf "CARGO_ENCODED_RUSTFLAGS=%s\n" "${CARGO_ENCODED_RUSTFLAGS-<unset>}"

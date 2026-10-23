@@ -5,7 +5,8 @@ pub enum NinjaGenError {
     UnsafeNinjaValue,
 }
 
-#[path = "../../src/ninja_gen_escape.rs"]
+// Compile the private escape boundary in isolation to reject a second escape.
+#[path = "../../src/ninja_gen/escape.rs"]
 mod ninja_gen_escape;
 
 fn main() {

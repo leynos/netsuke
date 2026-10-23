@@ -21,12 +21,13 @@ from ci_coverage_wiring_invariants import (
     coverage_surface_offenders,
     pull_request_lane,
 )
+from timeout_budgets import WORKFLOWS_DIRECTORY
 from workflow_call_closure import (
     UnresolvedWorkflowCallError,
     local_workflow_name,
     reachable_workflows,
 )
-from workflow_loading import parse_workflow_text
+from workflow_loading import all_workflow_documents, parse_workflow_text
 
 #: A reusable workflow that reaches CodeScene with an inherited credential.
 PROBE = f"""
@@ -209,10 +210,11 @@ def test_inheriting_into_another_repository_fails_the_boundary() -> None:
 
 
 def test_inheriting_into_a_local_workflow_is_read_through() -> None:
-    """Allow `secrets: inherit` locally, where the callee is itself checked.
+    """Leave `secrets: inherit` on a local call to the closure's reading.
 
-    `release-dry-run.yml` does exactly this, so refusing it would fail the
-    repository for a call whose callee the closure already reads.
+    The coverage-surface clauses read the local callee and hold it to every
+    clause, so they do not refuse the call themselves. Forwarding every secret
+    to a pull-request workflow is refused by its own contract below.
     """
     clean = "on:\n  workflow_call:\njobs:\n  noop:\n    runs-on: ubuntu-latest\n"
     offenders = _lane_offenders({
@@ -244,3 +246,106 @@ def test_an_unprefixed_local_call_is_refused() -> None:
     """
     with pytest.raises(UnresolvedWorkflowCallError, match="without"):
         local_workflow_name(".github/workflows/release.yml")
+
+
+def _wholesale_forwarders(
+    documents: dict[str, dict[str, object]],
+) -> list[str]:
+    """Return each job a pull request runs that forwards every secret.
+
+    A job forwards every secret when its ``secrets:`` is ``inherit``, whether
+    the callee is local or in another repository. The lane is the closure
+    through local calls, so a reusable workflow a pull-request workflow calls
+    is read as well as the caller.
+
+    Parameters
+    ----------
+    documents : dict[str, dict[str, object]]
+        Every workflow document, keyed by file name.
+
+    Returns
+    -------
+    list[str]
+        One message per offending job; empty when none forwards every secret.
+    """
+    return [
+        f"{name}: job {job} forwards every secret (inherit)"
+        for name in sorted(pull_request_lane(documents))
+        for job, body in _jobs(documents[name]).items()
+        if isinstance(body, dict) and body.get("secrets") == "inherit"
+    ]
+
+
+def _jobs(document: dict[str, object]) -> dict[str, object]:
+    """Return a workflow's jobs, empty when it declares none.
+
+    Parameters
+    ----------
+    document : dict[str, object]
+        One parsed workflow document.
+
+    Returns
+    -------
+    dict[str, object]
+        The workflow's ``jobs`` mapping, or an empty one.
+    """
+    jobs = document.get("jobs")
+    return jobs if isinstance(jobs, dict) else {}
+
+
+@pytest.mark.parametrize(
+    "reference", ["./.github/workflows/clean.yml", "$/.github/workflows/clean.yml"]
+)
+def test_a_pull_request_call_forwarding_every_secret_is_refused(reference: str) -> None:
+    """Refuse `secrets: inherit` on a call a pull request makes, local or not.
+
+    A local callee is read, but it still receives every repository and
+    organization secret, which a pull request should never be handed. It reads
+    `GITHUB_TOKEN`, which a called workflow has without being forwarded it.
+    """
+    clean = "on:\n  workflow_call:\njobs:\n  noop:\n    runs-on: ubuntu-latest\n"
+    documents = _documents(ci_yml=_caller(reference), clean_yml=clean)
+    assert _wholesale_forwarders(documents) == [
+        "ci.yml: job call forwards every secret (inherit)"
+    ], "a local inherit must be reported"
+
+
+def test_a_call_forwarding_named_secrets_or_none_is_accepted() -> None:
+    """Accept a call passing one secret by name, and a call passing none."""
+    clean = "on:\n  workflow_call:\njobs:\n  noop:\n    runs-on: ubuntu-latest\n"
+    named = _caller(
+        "./.github/workflows/clean.yml", "\n      TOKEN: ${{ secrets.TOKEN }}"
+    )
+    none = _caller("./.github/workflows/clean.yml").replace(
+        "    secrets: inherit\n", ""
+    )
+    for caller in (named, none):
+        documents = _documents(ci_yml=caller, clean_yml=clean)
+        assert _wholesale_forwarders(documents) == [], "no wholesale forwarding here"
+
+
+def test_a_workflow_no_pull_request_runs_may_inherit() -> None:
+    """Leave a push-only workflow alone: no pull request reaches it."""
+    pushed = _caller("./.github/workflows/clean.yml").replace(
+        "on: pull_request", "on:\n  push:\n    branches: [main]"
+    )
+    documents = _documents(
+        ci_yml="on: pull_request\njobs: {}\n",
+        main_yml=pushed,
+        clean_yml="on:\n  workflow_call:\njobs: {}\n",
+    )
+    assert _wholesale_forwarders(documents) == [], "a push-only inherit is out of scope"
+
+
+def test_no_pull_request_workflow_in_this_repository_forwards_every_secret() -> None:
+    """Hold the real workflows to the rule, including `release-dry-run.yml`.
+
+    That workflow runs on every pull request and calls `release.yml`, which
+    reads only `secrets.GITHUB_TOKEN`. A called workflow has the token without
+    being forwarded it, so passing nothing is enough, and `secrets: inherit`
+    there would hand a pull request every secret.
+    """
+    documents = all_workflow_documents(WORKFLOWS_DIRECTORY)
+    assert _wholesale_forwarders(documents) == [], (
+        "no secret may be forwarded wholesale"
+    )

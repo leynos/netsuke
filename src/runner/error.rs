@@ -21,6 +21,9 @@ use miette::Diagnostic;
 use std::path::PathBuf;
 use thiserror::Error;
 
+#[cfg(feature = "lint")]
+use super::FindingDiagnostic;
+
 /// Errors raised during command execution.
 #[derive(Debug, Error, Diagnostic)]
 pub enum RunnerError {
@@ -47,6 +50,52 @@ pub enum RunnerError {
         #[help]
         help: LocalizedMessage,
     },
+
+    /// The graph-bearing help catalogue requires machine-readable output.
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::runner::help_targets_edges_require_json))]
+    HelpTargetsEdgesRequireJson {
+        /// Localized diagnostic explaining the required root flag.
+        message: LocalizedMessage,
+    },
+
+    /// Lint findings reached the configured failure threshold.
+    ///
+    /// The findings travel as related diagnostics rather than as a formatted
+    /// message so that both the human renderer and the JSON serializer see the
+    /// same per-finding objects, each with its own code, severity, help text,
+    /// documentation URL, and source span.
+    #[cfg(feature = "lint")]
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::lint::threshold_exceeded))]
+    LintThresholdExceeded {
+        /// Localized summary naming the threshold and the finding counts.
+        message: LocalizedMessage,
+        /// Localized hint for resolving the failure.
+        #[help]
+        help: LocalizedMessage,
+        /// Every reported finding, in output order.
+        #[related]
+        findings: Vec<FindingDiagnostic>,
+    },
+
+    /// A `netsuke check` policy selector could not be applied.
+    #[cfg(feature = "lint")]
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::lint::invalid_policy))]
+    CheckPolicy {
+        /// Localized description of the rejected selector.
+        message: LocalizedMessage,
+    },
+
+    /// The manifest source could not be indexed for lint diagnostics.
+    #[cfg(feature = "lint")]
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::lint::source_index_failed))]
+    CheckSourceIndex {
+        /// Localized description of where indexing stopped.
+        message: LocalizedMessage,
+    },
 }
 
 /// Promote budget exhaustion after command contexts have been attached.
@@ -54,7 +103,7 @@ pub enum RunnerError {
 /// Drop the enclosing error chain for this diagnostic because template errors
 /// and command contexts can contain project-controlled or secret-bearing text.
 pub(super) fn promote_manifest_budget(error: anyhow::Error) -> anyhow::Error {
-    crate::manifest::budget_adapter::budget_exhaustion_message(&error).map_or(error, |message| {
+    crate::manifest::budget_exhaustion_message(&error).map_or(error, |message| {
         RunnerError::ManifestBudgetExceeded { message }.into()
     })
 }

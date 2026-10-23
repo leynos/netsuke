@@ -236,7 +236,7 @@ criterion in issue #552 and all repository gates pass.
   failure handling, shared-work behaviour, independent-reachability boundary,
   Ninja 1.10 floor, generated sidecars, and reserved paths. Updated the design,
   developer, repository-layout, contents, and roadmap documents and added
-  ADR-011 for the durable backend decision.
+  ADR-0011 for the durable backend decision.
 - [x] (2026-08-12) Ran the full deterministic suite. Formatting, type checking,
   linting, Markdown linting, and Mermaid validation passed; the documentation
   example loader rejected the new YAML fence because it lacked a
@@ -371,7 +371,7 @@ criterion in issue #552 and all repository gates pass.
   reported zero actionable findings across 75 changed files.
 - [x] (2026-08-14) Rebased onto `origin/main`, preserving main's glob
   capability documentation alongside the serial-ordering contract. Renumbered
-  the serial dyndep record to ADR-011 because main now owns ADR-010.
+  the serial dyndep record to ADR-0011 because main now owns ADR-0010.
   `make check-fmt`, `make test`, `make typecheck`, `make lint`,
   `make markdownlint`, and `make nixie` passed; the test suite reported 2,068
   passed tests, one skipped test, and passing doctests. Lease-protected
@@ -464,7 +464,7 @@ criterion in issue #552 and all repository gates pass.
   sidecars already have bounded count and byte budgets, and materialization,
   cleanup, and command consumption already share a capability-scoped lease.
 - (2026-08-15) The retention request was verified stale and contradictory to
-  accepted ADR-012 bounded automatic retention: the current bundle is
+  accepted ADR-0012 bounded automatic retention: the current bundle is
   protected, while historical output may need regeneration.
 - (2026-08-16) The requested sidecar ownership wording was valid but needed
   one boundary split: `runner/dyndep_publication.rs` owns command-level
@@ -627,10 +627,10 @@ criterion in issue #552 and all repository gates pass.
   `.netsuke/dyndep`, and gates beneath `.netsuke/serial`. **Rationale:**
   deterministic names make generation reproducible, reuse safe, and stale cache
   entries harmless. **Date:** 2026-08-10.
-- **Decision:** renumber the serial dyndep record from ADR-010 to ADR-011 after
-  rebasing. **Rationale:** main introduced the glob capability decision as
-  ADR-010 after this branch diverged; preserving both decisions under distinct
-  numbers keeps the repository index and cross-references unambiguous.
+- **Decision:** renumber the serial dyndep record from ADR-0010 to ADR-0011
+  after rebasing. **Rationale:** main introduced the glob capability decision
+  as ADR-0010 after this branch diverged; preserving both decisions under
+  distinct numbers keeps the repository index and cross-references unambiguous.
   **Date:** 2026-08-14.
 - **Decision:** generate temporary sidecar candidates from a private,
   operation-scoped nonce and local retry sequence. This source is owned only by
@@ -989,8 +989,8 @@ hidden; that is outside the stated compatibility boundary.
 
 ### Stage 6: Document the feature and its architecture
 
-Create `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md` using
-the repository ADR format. Verify the next ADR number immediately before
+Create `docs/adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md`
+using the repository ADR format. Verify the next ADR number immediately before
 creation. The ADR must include a Y-statement and record:
 
 - the rejected order-only gate, pool, and recursive-build alternatives;
@@ -1259,7 +1259,7 @@ validation and review. This does not change the remaining implementation scope.
 
 2026-08-11: Completed the user and maintainer documentation milestone after
 review feedback identified that the implementation-only plan was insufficient
-for issue #552 acceptance. ADR-011 records the staged-dyndep decision and the
+for issue #552 acceptance. ADR-0011 records the staged-dyndep decision and the
 user guide now states the syntax, guarantees, limitations, version floor, and
 generated-state behaviour. Final gates and independent review remain before
 completion.
@@ -1389,15 +1389,15 @@ generation/rendering remains telemetry-free.
 
 2026-08-14: Rebased the completed feature onto `origin/main`. Conflict
 resolution retained main's glob capability and migration guidance alongside the
-serial dependency documentation. Because main now assigns ADR-010 to glob
+serial dependency documentation. Because main now assigns ADR-0010 to glob
 capability scoping, the serial dyndep decision and its references move to
-ADR-011. All code, test, documentation, and diagram gates passed after removing
-one duplicate blank line introduced by the additive documentation merge.
-`origin/main` advanced once during the first gate run, so the branch replayed
-cleanly onto the new tip and passed the complete gate set again.
+ADR-0011. All code, test, documentation, and diagram gates passed after
+removing one duplicate blank line introduced by the additive documentation
+merge. `origin/main` advanced once during the first gate run, so the branch
+replayed cleanly onto the new tip and passed the complete gate set again.
 
 2026-08-15: The review identified that immutable content-addressed sidecars
-were safe but unbounded across changed manifests. ADR-012 now records the
+were safe but unbounded across changed manifests. ADR-0012 now records the
 replacement policy: current sidecars are never pruned, while deterministic
 retention limits obsolete sidecars to 32 files and 1 MiB. A capability-scoped
 advisory lease covers materialization, cleanup, and the command's Ninja or

@@ -7,11 +7,11 @@
 - **Audience:** Netsuke maintainers, reviewers, and manifest authors
 - **Last updated:** 2026-08-30
 - **Precedence:** Accepted ADRs and implemented behaviour prevail; when
-  accepted, ADR-015 governs the bounded Git adapter contract.
+  accepted, ADR-0015 governs the bounded Git adapter contract.
 - **Companion documents:**
   - [Netsuke design](netsuke-design.md)
   - [Template standard-library guide](stdlib-yaml-and-jinja-guide.md)
-  - [ADR-015](adr-015-use-bounded-git-cli-for-change-detection.md)
+  - [ADR-0015](adrs/adr-0015-use-bounded-git-cli-queries-for-change-detection.md)
   - [Roadmap](roadmap.md)
 
 ## 1. Design context
@@ -240,9 +240,9 @@ helper:
 Unlike `glob()`, this filter performs no directory walk, metadata lookup, or
 symbolic-link resolution. It applies patterns to supplied strings only. The
 capability rules in
-[ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md) therefore do not
-apply to its execution, although sharing syntax avoids forcing authors to learn
-two meanings for `**/*.rs`.
+[ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md)
+therefore do not apply to its execution, although sharing syntax avoids
+forcing authors to learn two meanings for `**/*.rs`.
 
 Pattern matching has worst-case work proportional to the number of input paths
 times the number of patterns. The changed-path output byte limit bounds the

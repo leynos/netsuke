@@ -1,5 +1,5 @@
 ---
-source: src/diagnostic_json_tests.rs
+source: src/diagnostic_json/tests/mod.rs
 expression: rendered
 ---
 {

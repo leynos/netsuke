@@ -1,23 +1,43 @@
 # Migrating to v0.1.0
 
-This guide covers the released v0.1.0-beta3 additions: the injectable child
-environment (`CommandEnv`), the named Ninja request types, narrow process
-options (`NinjaProcessOptions`), target/action discovery through `description`
-and `netsuke help targets`, and cached configuration discovery. It also covers
-manifest-relative glob expansion, UTF-8 CLI path boundaries, the Windows
-PowerShell-default legacy recipe contract, and brace-only `{{ ins }}` and
-`{{ outs }}` path markers. Most existing manifests remain compatible, and
-callers of the convenience wrappers retain their child-process behaviour.
-Manifests using Jinja `glob()` must use shell-inert matched paths. The cached
-configuration discovery API is a breaking change for callers of the unstable
-Rust API; ordinary CLI users need no action. Non-UTF-8 build-file and
-working-directory paths are rejected at their input boundary.
+This guide covers the changes released in the v0.1.0 beta series, up to and
+including v0.1.0-beta4.
+
+The v0.1.0-beta3 release added the injectable child environment (`CommandEnv`),
+the named Ninja request types, narrow process options (`NinjaProcessOptions`),
+target/action discovery through `description` and `netsuke help targets`, and
+cached configuration discovery. It also introduced manifest-relative glob
+expansion, UTF-8 CLI path boundaries, the Windows PowerShell-default legacy
+recipe contract, and brace-only `{{ ins }}` and `{{ outs }}` path markers.
+
+The v0.1.0-beta4 release adds manifest evaluation budgets, optional `env()`
+allow and block lists, and bounded file-reading filters. It also contains
+breaking changes: default executable discovery searches only `PATH`, `$in` and
+`$out` in `script:` recipes are shell variables, the primary project
+configuration can no longer widen the operator's fetch policy, every fetch
+redirect is revalidated against that policy, and checkout builds on Linux link
+with `mold` by default.
+
+Beta4 also adds the opt-in `netsuke --json help targets --edges` graph export.
+`--edges` requires the root-level `--json` option before `help`. Omitting
+`--edges` preserves the existing catalogue output, and existing manifests need
+no changes. See the
+[graph export reference](users-guide.md#export-dependency-edges-and-raw-recipes).
+
+Most existing manifests remain compatible, and callers of the convenience
+wrappers retain their child-process behaviour. Manifests using Jinja `glob()`
+must use shell-inert matched paths. The cached configuration discovery API is a
+breaking change for callers of the unstable Rust API; ordinary CLI users need
+no action. Non-UTF-8 build-file and working-directory paths are rejected at
+their input boundary.
 
 Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`); deserialized manifests
 remain compatible. Callers constructing `NinjaBuildRequest` or
-`NinjaToolRequest` must replace `cli: &cli` with `options: &options`; every
-other addition is opt-in.
+`NinjaToolRequest` must replace `cli: &cli` with `options: &options`. Callers
+that read `BuildGraph::targets` must use the graph accessors instead; see
+[Resolve build-graph outputs through the accessors](#resolve-build-graph-outputs-through-the-accessors).
+Every other addition is opt-in.
 
 ## Select the pinned Rust toolchain
 
@@ -92,23 +112,25 @@ tracking those changes.
 Table: documented v0.1.0 additions, including `netsuke help targets`, and their
 impact
 
-| Area                         | Impact                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Where to read more                                                                                       |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| Convenience wrappers         | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [Users' guide](users-guide.md)                                                                           |
-| Child environment            | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Users' guide](users-guide.md)                                                                           |
-| Request types                | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [Users' guide](users-guide.md)                                                                           |
-| Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | [Users' guide](users-guide.md)                                                                           |
-| Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Users' guide](users-guide.md#capture-verbose-timing-output)                                             |
-| Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Users' guide](users-guide.md) and [ADR-010](adr-010-scope-glob-capability-to-literal-prefix.md)         |
-| Executable discovery         | **Breaking:** default `which` and `command_available` no longer recursively discover workspace executables when `PATH` is empty or unset. Opt in with `cwd_mode='workspace-recursive'` only for trusted workspaces.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | [Users' guide](users-guide.md#template-helpers)                                                          |
-| Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                          |
-| Ninja text escaping          | Write shell dollars normally. In `command:` and `script:` recipes, `$in`, `$out`, `$ins`, and `$outs` are shell variables, so Ninja emits their dollars doubled and the selected shell receives their ordinary single-dollar spelling. `{{ ins }}` and `{{ outs }}` are the only Netsuke path markers. A manifest that used script `$in` or `$out` for Netsuke path substitution must use `{{ ins }}` or `{{ outs }}` instead. Spaces in build and default-target paths are escaped for Ninja as a `$` followed by a space, so whitespace-containing outputs remain valid. Paths containing `\|` or control characters remain rejected, as do paths containing `$` or colon, which Ninja can escape but Netsuke does not yet accept. Emitted metadata is escaped separately: a literal dollar in a description, `depfile`, `deps`, or `pool` is doubled, so `depfile: $out.d` is written as `$$out.d` and Ninja reads the literal name. Newline, carriage-return, and NUL metadata values are rejected. | [Users' guide](users-guide.md#review-the-safety-boundary)                                                |
-| Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | [Users' guide](users-guide.md)                                                                           |
-| Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                            |
-| Fetch redirects              | Every redirect destination is now evaluated against the network policy before it is requested, so a redirect can no longer reach a host, scheme, or address the policy refuses. Chains stop after five redirects, a repeated destination is refused as a loop, and URL credentials are removed when the origin changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Users' guide](users-guide.md#network-fetch-policy) and [ADR-023](adr-023-revalidate-fetch-redirects.md) |
-| Manifest environment access  | New optional exact-name `env()` allow and block lists. Existing manifests retain default-allow behaviour when neither list is configured; an active allowlist enables default-deny and a block always wins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [Users' guide](users-guide.md#control-manifest-environment-access)                                       |
-| File-reading filters         | The `contents`, `linecount`, `hash`, and `digest` filters now read under one 8 MiB default byte budget; a symlink final component is rejected unless `follow_symlinks=true` opts in, while FIFOs and devices are rejected outright, and per-call `max_bytes` can only narrow the budget.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | [Configure file reading limits](users-guide.md#configure-file-reading-limits)                            |
-| Clock provider               | The stdlib `now()` helper reads through an injectable `ClockProvider`; `StdlibConfig::with_clock` pins the instant for tests, while the default remains the ambient system clock.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | [Users' guide](users-guide.md#inject-the-clock-for-deterministic-tests)                                  |
+| Area                         | Impact                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | Where to read more                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Convenience wrappers         | Unchanged. `run_ninja` and `run_ninja_tool` behave exactly as before, inheriting the process environment.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [Users' guide](users-guide.md)                                                                                           |
+| Child environment            | New opt-in `netsuke::runner::CommandEnv` carries additive variable overrides and an injected `PATH` for Ninja child processes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Developers' guide](developers-guide.md#ninja-invocation-with-an-explicit-environment)                                   |
+| Request types                | New `netsuke::runner::NinjaBuildRequest` and `netsuke::runner::NinjaToolRequest` name the program, `NinjaProcessOptions`, build file, targets or tool, a child environment, and a required `stderr_mode: StderrMode` policy for the `*_with` run functions.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [Developers' guide](developers-guide.md#ninja-invocation-with-an-explicit-environment)                                   |
+| Cached CLI configuration API | Breaking for callers of the unstable Rust API: use the opt-in cached discovery flow with `ConfigEnvProvider`; `ConfigStdEnvProvider` supplies process-backed access.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | [Developers' guide](developers-guide.md#cached-configuration-merge)                                                      |
+| Timing output                | Existing `VerboseTimingReporter::new` keeps its stderr sink; Rust callers can opt into an owned `Write + Send` sink with `with_writer`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Developers' guide](developers-guide.md#verbose-timing-sink)                                                             |
+| Glob expansion               | Parent-relative patterns such as `glob('../shared/*.h')` now expand. The Jinja helper rejects matched paths that are not portable unquoted shell words. Metadata checks use a capability rooted at the pattern's longest literal directory prefix; missing or non-directory prefixes return no matches, and unresolvable symlink matches are skipped.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Users' guide](users-guide.md) and [ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md) |
+| Executable discovery         | **Breaking:** default `which` and `command_available` no longer recursively discover workspace executables when `PATH` is empty or unset. Opt in with `cwd_mode='workspace-recursive'` only for trusted workspaces.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | [Users' guide](users-guide.md#template-helpers)                                                                          |
+| Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                                          |
+| Ninja text escaping          | Write shell dollars normally. In `command:` and `script:` recipes, `$in`, `$out`, `$ins`, and `$outs` are shell variables, so Ninja emits their dollars doubled and the selected shell receives their ordinary single-dollar spelling. `{{ ins }}` and `{{ outs }}` are the only Netsuke path markers. A manifest that used script `$in` or `$out` for Netsuke path substitution must use `{{ ins }}` or `{{ outs }}` instead. Spaces in build and default-target paths are escaped for Ninja as a `$` followed by a space, so whitespace-containing outputs remain valid. Paths containing `\|` or control characters remain rejected, as do paths containing `$` or colon, which Ninja can escape but Netsuke does not yet accept. Emitted metadata is escaped separately: a literal dollar in a description, `depfile`, `deps`, or `pool` is doubled, so `depfile: $out.d` is written as `$$out.d` and Ninja reads the literal name. Newline, carriage-return, and NUL metadata values are rejected. | [Users' guide](users-guide.md#review-the-safety-boundary)                                                                |
+| Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | [Users' guide](users-guide.md)                                                                                           |
+| Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                                            |
+| Graph export                 | New opt-in `netsuke --json help targets --edges` output exposes a versioned graph beside the existing catalogue; root-level `--json` must precede `help`; omitting `--edges` preserves current output, and manifests need no changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Graph export reference](users-guide.md#export-dependency-edges-and-raw-recipes)                                         |
+| Fetch redirects              | Every redirect destination is now evaluated against the network policy before it is requested, so a redirect can no longer reach a host, scheme, or address the policy refuses. Chains stop after five redirects, a repeated destination is refused as a loop, and URL credentials are removed when the origin changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Users' guide](users-guide.md#network-fetch-policy) and [ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md)     |
+| Manifest environment access  | New optional exact-name `env()` allow and block lists. Existing manifests retain default-allow behaviour when neither list is configured; an active allowlist enables default-deny and a block always wins.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [Users' guide](users-guide.md#control-manifest-environment-access)                                                       |
+| File-reading filters         | The `contents`, `linecount`, `hash`, and `digest` filters now read under one 8 MiB default byte budget; a symlink final component is rejected unless `follow_symlinks=true` opts in, while FIFOs and devices are rejected outright, and per-call `max_bytes` can only narrow the budget.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | [Configure file reading limits](users-guide.md#configure-file-reading-limits)                                            |
+| Script shell variables       | **Breaking:** `$in` and `$out` in `script:` recipes are shell variables, as they already were in `command:` recipes. Use `{{ ins }}` and `{{ outs }}` for Netsuke path substitution.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | [Script shell variables](#replace-script-in-and-out-path-substitution)                                                   |
+| Build graph                  | **Breaking for callers of the unstable Rust API:** each logical build edge is stored once and indexed by output through `EdgeId`; `BuildGraph::targets` is no longer public.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [Graph accessors](#resolve-build-graph-outputs-through-the-accessors)                                                    |
 
 ## Bound manifest evaluation
 
@@ -138,7 +160,7 @@ and supply the required `stderr_mode: StderrMode` field.
 Existing callers that construct `VerboseTimingReporter::new` continue to
 receive timing summaries on stderr. Callers that need to capture or redirect
 those summaries can opt into `VerboseTimingReporter::with_writer`; the
-[users' guide](users-guide.md#capture-verbose-timing-output) documents the
+[developers' guide](developers-guide.md#verbose-timing-sink) documents the
 owned sink and completion-ordering contract.
 
 ## Use UTF-8 manifest and working-directory paths
@@ -216,11 +238,62 @@ Clap-specific validation and help metadata remain an internal CLI concern.
 
 ## Opting into ordered command lists
 
-Existing scalar `command` recipes remain valid, so no migration is required. To
-run a short sequence of commands in declaration order, change a recipe to a
-non-empty YAML list. The entries run in one shell process and stop at the first
-non-zero exit. See [Rules and recipes](users-guide.md#rules-and-recipes) for
-the syntax, shell semantics, and examples.
+Existing scalar `command` recipes remain valid, and command lists remain
+opt-in, ordered and fail-fast. Their `command_isolation` mode defaults to
+`shared`, so entries share one shell and its state. Set
+`command_isolation: isolated` to start each entry from the action's initial
+working directory and environment. POSIX and Bash use a subshell per entry;
+Windows PowerShell uses a child process per entry. Isolated mode has a distinct
+action identity; existing manifests need no migration. See
+[Rules and recipes](users-guide.md#rules-and-recipes) and the
+[Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)
+for the syntax and shell-specific behaviour.
+
+## Replace script `$in` and `$out` path substitution
+
+Published beta3 lowered `$in` and `$out` in `script:` recipes to Ninja's own
+rule variables, so they expanded to the edge's input and output paths. In beta4
+they are ordinary shell variables in both `command:` and `script:` recipes:
+Netsuke doubles their dollars for Ninja, and the selected shell receives `$in`
+and `$out` unchanged. A script that relied on the old expansion now reads
+whatever those shell variables hold, which is usually nothing.
+
+Replace each such use with the Netsuke path markers:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    script: |
+      cat {{ ins }} > {{ outs }}
+defaults: [output.txt]
+```
+
+`{{ ins }}` and `{{ outs }}` are shell-quoted for the selected route, so no
+further quoting is needed. See the
+[users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
+the full marker contract.
+
+## Resolve build-graph outputs through the accessors
+
+The intermediate build graph now owns each logical build edge once, however
+many outputs it declares, and indexes every output alias, explicit and
+implicit, to a stable `EdgeId`. The public `BuildGraph::targets` map, which
+held one cloned edge per output, is gone. Rust callers of this unstable API
+should use:
+
+- `BuildGraph::edges` to iterate each logical edge exactly once;
+- `BuildGraph::output_paths` to iterate every output alias, explicit and
+  implicit;
+- `BuildGraph::target_for_output` to fetch an output together with its edge;
+- `BuildGraph::edge_id_for_output` to obtain the edge's stable identity.
+
+Code should count logical edges with `edge_count()`. Note that `output_paths()`
+and `output_count()` also include implicit outputs, which the old `targets` map
+never held. Code that needs only the declared explicit outputs, as the old map
+provided, should iterate `edges()` and read each edge's `explicit_outputs`.
+Manifests, generated Ninja files, and graph exports are unaffected.
 
 ## Windows legacy recipe interpreter
 
@@ -248,26 +321,31 @@ In the default route, write `$name` for a PowerShell variable and `$env:NAME`
 for an environment variable. PowerShell parses the braced variable name in
 `${VAR:-default}`, but does not perform POSIX default-value expansion. The
 v0.1.0 dollar-escaping fix means these are ordinary, single dollars, not
-Ninja-escaped `$$` forms. Ordered lists share one PowerShell process: Netsuke
-checks `$LASTEXITCODE` immediately after each generated list entry, so a
-non-zero status or terminating error stops the list before a later entry can
-overwrite it. Multiple native commands inside one entry are not individually
-instrumented. Variables, environment assignments, and current-directory changes
-persist between entries. Each scalar, script, action, and target has a fresh
-shell process. In PowerShell, `{{ ins }}` and `{{ outs }}` remain path-quoted.
-Build and default-target paths containing spaces are escaped for Ninja, so
-whitespace-containing outputs remain valid; quote any other path or argument
-with the selected shell's syntax. Encoded PowerShell commands are retained
-while they fit the Windows command-line limit. Larger recipes up to 1 MiB use
-Ninja's `rspfile` and `rspfile_content` bindings, with a unique `$out`-derived
-`.ps1` name per edge, created in that edge's working directory, containing an
-ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe payload. Recipes
-above that limit are rejected before Netsuke allocates their encoded payload.
-The command invokes it with `powershell.exe -File "$rspfile"`. The bootstrap
-removes its own `$PSCommandPath` in a `finally` block after the recipe succeeds
-or fails. Queries do not create response files. On POSIX and Bash routes, `$$`
-means the process identifier; in PowerShell, `$$` is the automatic variable
-containing the last token received by the session.
+Ninja-escaped `$$` forms. With `command_isolation: shared` (the default),
+ordered lists share one PowerShell process. Netsuke checks `$LASTEXITCODE`
+immediately after each generated list entry, so a non-zero status or
+terminating error stops the list before a later entry can overwrite it.
+Multiple native commands inside one entry are not individually instrumented.
+Variables, environment assignments, and current-directory changes persist
+between entries in this mode. With `command_isolation: isolated`, each ordered
+entry runs in a child process starting from the action's initial working
+directory and environment. Netsuke checks each child's exit status before
+starting the next entry, preserving fail-fast behaviour. Each scalar, script,
+action, and target has a fresh shell process. In PowerShell, `{{ ins }}` and
+`{{ outs }}` remain path-quoted. Build and default-target paths containing
+spaces are escaped for Ninja, so whitespace-containing outputs remain valid;
+quote any other path or argument with the selected shell's syntax. Encoded
+PowerShell commands are retained while they fit the Windows command-line limit.
+Larger recipes up to 1 MiB use Ninja's `rspfile` and `rspfile_content`
+bindings, with a unique `$out`-derived `.ps1` name per edge, created in that
+edge's working directory, containing an ASCII PowerShell bootstrap and the
+Base64 UTF-16LE recipe payload. Recipes above that limit are rejected before
+Netsuke allocates their encoded payload. The command invokes it with
+`powershell.exe -File "$rspfile"`. The bootstrap removes its own
+`$PSCommandPath` in a `finally` block after the recipe succeeds or fails.
+Queries do not create response files. On POSIX and Bash routes, `$$` means the
+process identifier; in PowerShell, `$$` is the automatic variable containing
+the last token received by the session.
 
 For reproducible Windows CI, use a `pwsh` step and let Netsuke select
 PowerShell; do not use a workflow-level `shell: bash` setting as evidence of
@@ -303,8 +381,9 @@ pass `options: &options` in place of `cli: &cli`.
 `NinjaProcessOptions::working_dir` is `Option<Utf8PathBuf>`. Non-UTF-8 `--file`
 and `--directory` values fail during CLI parsing. Configuration-file and
 `NETSUKE_FILE` manifest values fail at their configuration or environment
-boundary before runner setup. Worked examples live in the users' guide's "Drive
-Ninja with an explicit environment" section.
+boundary before runner setup. Worked examples live in the developers' guide's
+[Ninja invocation with an explicit environment](developers-guide.md#ninja-invocation-with-an-explicit-environment)
+section.
 
 ## Cached CLI configuration API
 
@@ -351,24 +430,33 @@ and [interpret failures](users-guide.md#interpret-failures) sections.
 
 ## Review the project fetch-policy boundary
 
-The v0.1.0 fetch-policy merge distinguishes operator policy from a project's
-request. System and user configuration, `NETSUKE_` environment variables, and
-explicit CLI options are operator-controlled. The primary project
-`.netsuke.toml` is untrusted by default, so its `fetch_allow_scheme` and
-`fetch_allow_host` entries do not widen the operator's allowlists. The primary
-project file may still tighten the policy by setting
-`fetch_default_deny = true`; a `false` request cannot undo an operator
-restriction. Files loaded through `extends` retain ordinary file-layer
-semantics. Project `fetch_block_host` entries remain cumulative, and a block
-wins over an allow.
+The fetch-policy merge distinguishes operator policy from project requests.
+System and user configuration, `NETSUKE_` environment variables, and explicit
+CLI options are operator-controlled. Every occurrence in the project
+`.netsuke.toml` `extends` chain is untrusted by default. Its
+`fetch_allow_scheme` and `fetch_allow_host` entries do not widen the operator's
+allowlists unless the operator explicitly trusts project policy. Discovery
+folds grants from every project-chain occurrence in dependency-first order and
+retains the last present `fetch_default_deny` value. Without operator trust,
+the grants are ignored and the folded value tightens the operator policy only
+when it is `true`. An earlier project `true` does not survive a later present
+`false`, and the project value cannot weaken an operator restriction.
+
+Only system or user configuration, `NETSUKE_TRUST_PROJECT_FETCH_POLICY`, or
+`--trust-project-fetch-policy` can enable project grants. Trust settings in the
+project chain cannot authorize themselves. Project `fetch_block_host` entries
+remain cumulative, and a block wins over an allow. If one file is reached from
+both project and operator roots, each occurrence retains the authority of its
+own root.
 
 To trust a checkout deliberately, set `trust_project_fetch_policy = true` in
 system or user configuration, set `NETSUKE_TRUST_PROJECT_FETCH_POLICY=true`, or
 pass `--trust-project-fetch-policy`. With that operator opt-in, project scheme
-and host grants from the primary project file append to the operator values. A
-present project `fetch_default_deny` value applies directly. A project cannot
-grant itself this opt-in because its `trust_project_fetch_policy` field is
-ignored in the primary project file.
+and host grants from every project-chain occurrence append to the operator
+values in dependency-first order. The last present project `fetch_default_deny`
+value applies directly; when none is present, the operator value remains in
+effect. A project cannot grant itself this opt-in because its
+`trust_project_fetch_policy` field is ignored in every project-chain occurrence.
 
 ### Revalidate every redirected fetch
 
@@ -418,11 +506,14 @@ An empty allowlist preserves default-allow behaviour. Once at least one
 effective `env_allow_var` entry exists, names outside that list are denied.
 `env_block_var` entries deny only their exact names when no allowlist is
 active, and always override matching allow entries. The policy has no glob or
-pattern matching. Primary-project `env_allow_var` entries are quarantined
-before policy composition, so a project cannot grant itself access to inherited
-environment variables or activate default-deny. Primary-project `env_block_var`
-entries remain cumulative because they only restrict access; configuration
-loaded through `extends` retains ordinary file-layer precedence.
+pattern matching. `env_allow_var` entries from the primary project file and
+every file reached through `extends` in an automatically discovered project
+chain are quarantined before policy composition. A checkout-controlled ancestor
+therefore cannot widen the operator allowlist or activate default-deny.
+`env_block_var` entries remain cumulative because they only restrict access.
+Operator chains retain their grants, and ancestors in an explicitly selected
+configuration chain retain operator authority; a selected primary project file
+remains quarantined.
 
 This policy reduces secret ingress into rendered manifest fields. It does not
 make rendered manifest contents safe to log: allowed values still require the
@@ -448,7 +539,7 @@ MiB of obsolete `.dd` bytes; stale `.tmp` files are cleaned while the exclusive
 sidecar-directory lease is held. `clean` prunes only after successful
 `ninja -t clean`, not after a failure. An old arbitrary `generate --output`
 manifest needs regeneration only if retention has removed any of its referenced
-sidecars. See [ADR-012](adr-012-bound-dyndep-sidecar-retention.md). The
+sidecars. See [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md). The
 [users' guide](users-guide.md#run-direct-dependencies-serially) documents the
 execution scope and the independent-reachability boundary.
 
@@ -516,25 +607,6 @@ The `contents` and `linecount` filters require UTF-8 input and report an error
 for other byte sequences; `hash` and `digest` stay byte-oriented and accept any
 content. See the [users' guide](users-guide.md#configure-file-reading-limits)
 for the full policy and its diagnostics.
-
-## Inject the clock for deterministic tests
-
-The stdlib `now()` helper reads the current instant through an injectable
-provider rather than the host clock directly. `StdlibConfig::with_clock`
-accepts a `ClockProvider`, and `fixed_clock(instant)` builds one that always
-reports a given instant, so a render calling `now()` can be asserted exactly
-instead of racing a real clock.
-
-The addition is opt-in. The default remains the ambient host clock, which
-`system_clock()` names explicitly, so existing templates and manifests are
-unaffected. Registration captures the adapter that holds the provider, and each
-`now()` call invokes it to read the instant afresh. Readings are normalized to
-UTC before the helper's `offset=` argument re-expresses the same instant in the
-requested offset. Manifest-query evaluation still refuses `now()`, so the seam
-does not widen what a query may call.
-
-See the [users' guide](users-guide.md#inject-the-clock-for-deterministic-tests)
-for the worked example.
 
 ## Diagnostics
 

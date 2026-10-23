@@ -1,0 +1,350 @@
+//! Snapshot of PATH, PATHEXT, and current directory for the `which` resolver.
+
+use std::ffi::{OsStr, OsString};
+
+use camino::{Utf8Path, Utf8PathBuf};
+#[cfg(test)]
+use mockable::MockEnv;
+use mockable::{DefaultEnv, Env};
+
+use super::{
+    options::CwdMode,
+    resolve_error::ResolveError,
+    workspace_switch::{WORKSPACE_FALLBACK_ENV, WorkspaceSwitch},
+};
+
+/// Keep path parsing and Windows candidate construction below the module cap.
+mod path_support;
+
+#[cfg(test)]
+pub(super) use path_support::DEFAULT_PATHEXT;
+#[cfg(windows)]
+pub(super) use path_support::candidate_paths;
+#[cfg(any(windows, test))]
+pub(super) use path_support::parse_pathext;
+use path_support::{PathEntry, current_dir_utf8, parse_path_entries};
+
+/// Translate a platform reading of the switch into its domain state.
+///
+/// The conversion lives here, in the adapter that performs the read, so
+/// `workspace_switch` never names `std::env::VarError`. It is the single
+/// place the platform error crosses into the resolver's own vocabulary.
+impl From<Result<String, std::env::VarError>> for WorkspaceSwitch {
+    fn from(raw: Result<String, std::env::VarError>) -> Self {
+        match raw {
+            Ok(value) => Self::Value(value),
+            Err(std::env::VarError::NotPresent) => Self::Absent,
+            Err(std::env::VarError::NotUnicode(_)) => Self::NotUnicode,
+        }
+    }
+}
+
+/// Read and translate the workspace switch, warning about a mis-encoded value.
+///
+/// Both capture variants funnel through here so the diagnostic fires exactly
+/// once per capture, at the boundary where the ambient read happens, rather
+/// than on every consultation of the switch. Silently switching workspace
+/// search off would leave a user whose variable is mis-encoded with commands
+/// mysteriously unresolved and no indication why. Only the variable's name is
+/// logged; its value never is.
+fn capture_workspace_switch(env: &impl Env) -> WorkspaceSwitch {
+    let switch = WorkspaceSwitch::from(env.raw(WORKSPACE_FALLBACK_ENV));
+    if matches!(switch, WorkspaceSwitch::NotUnicode) {
+        tracing::warn!(
+            env = WORKSPACE_FALLBACK_ENV,
+            "workspace fallback disabled because env var is not valid UTF-8",
+        );
+    }
+    switch
+}
+
+/// Build a strict injected environment for a non-Windows snapshot capture.
+///
+/// The fixture mirrors every ambient read made by [`EnvSnapshot::capture_with_env`]
+/// so tests fail when capture's contract gains a new input rather than silently
+/// consulting the host environment.
+#[cfg(all(test, not(windows)))]
+pub(super) fn mock_env_for_capture(
+    path: Option<OsString>,
+    workspace_switch: Result<String, std::env::VarError>,
+) -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .withf(|key| key == "PATH")
+        .once()
+        .return_once(move |_| path);
+    env.expect_raw()
+        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
+        .once()
+        .return_once(move |_| workspace_switch);
+    env
+}
+
+/// Build a strict injected environment for a Windows snapshot capture.
+///
+/// Windows capture reads `PATHEXT` between `PATH` and the workspace switch, so
+/// every Windows fixture supplies all three values explicitly.
+#[cfg(all(test, windows))]
+pub(super) fn mock_env_for_capture(
+    path: Option<OsString>,
+    pathext: Option<OsString>,
+    workspace_switch: Result<String, std::env::VarError>,
+) -> MockEnv {
+    let mut env = MockEnv::new();
+    env.expect_os_string()
+        .withf(|key| key == "PATH")
+        .once()
+        .return_once(move |_| path);
+    env.expect_os_string()
+        .withf(|key| key == "PATHEXT")
+        .once()
+        .return_once(move |_| pathext);
+    env.expect_raw()
+        .withf(|key| key == WORKSPACE_FALLBACK_ENV)
+        .once()
+        .return_once(move |_| workspace_switch);
+    env
+}
+
+/// Snapshot of the environment inputs one `which` resolution consults.
+#[derive(Clone, Debug)]
+pub(super) struct EnvSnapshot {
+    /// The working directory resolutions run from.
+    pub(super) cwd: Utf8PathBuf,
+    /// The raw `PATH` value, when one was present.
+    pub(super) raw_path: Option<OsString>,
+    /// The raw `PATHEXT` value, when one was present.
+    pub(super) raw_pathext: Option<OsString>,
+    /// The parsed `PATH` directory entries in search order.
+    entries: Vec<PathEntry>,
+    /// The parsed executable extensions, on Windows.
+    #[cfg(windows)]
+    pathext: Vec<String>,
+    /// The `NETSUKE_WHICH_WORKSPACE` state captured for this snapshot.
+    ///
+    /// Stored as data rather than a decision so the cache fingerprint can
+    /// hash it — two resolutions differing only in this switch must not
+    /// share a cache entry — and so `env` depends only on the leaf
+    /// `workspace_switch` module rather than calling into `lookup`.
+    workspace_switch: WorkspaceSwitch,
+}
+
+impl EnvSnapshot {
+    /// Capture a snapshot without a `PATHEXT` override.
+    ///
+    /// This is the production capture entry on platforms without `PATHEXT`
+    /// semantics, where `capture_with_pathext` delegates to it. On Windows the
+    /// production entry is `capture_with_pathext` itself, so here the function
+    /// survives only for tests, which is why the gate admits `test`.
+    #[cfg(any(not(windows), test))]
+    pub(super) fn capture(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        Self::capture_with_env(cwd_override, path_override, &DefaultEnv)
+    }
+
+    /// Capture with an injected environment provider.
+    ///
+    /// See [`Self::capture`] for why this is gated to non-Windows production
+    /// plus tests: on Windows the production path threads a `PATHEXT` override
+    /// and reaches `capture_impl` directly, so this chain is test-only there.
+    #[cfg(any(not(windows), test))]
+    pub(super) fn capture_with_env(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        Self::capture_for_platform(cwd_override, path_override, env)
+    }
+
+    /// Capture a snapshot without a `PATHEXT` override on Windows.
+    ///
+    /// Windows threads a `PATHEXT` override that the other platforms have no
+    /// concept of, so the two `capture_impl` arities diverge. Isolating the
+    /// divergence in a pair of wrappers keeps `capture_with_env` free of a
+    /// `cfg`-gated bare `return`, which reads as dead code on either target.
+    ///
+    /// Reachable only from `capture_with_env`, which is itself test-only on
+    /// Windows (production enters through `capture_with_pathext`), so this
+    /// arm is compiled only under `test`.
+    #[cfg(all(windows, test))]
+    fn capture_for_platform(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        Self::capture_impl(cwd_override, path_override, env, None)
+    }
+
+    /// Capture a snapshot on platforms without `PATHEXT` semantics.
+    ///
+    /// See the Windows counterpart for why this wrapper exists.
+    #[cfg(not(windows))]
+    fn capture_for_platform(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        Self::capture_impl(cwd_override, path_override, env)
+    }
+
+    /// Capture with an explicit `PATHEXT`, shadowing the process value.
+    ///
+    /// Defined on every platform so the resolver has one capture entry point:
+    /// the caller need not fork on the target to pass an override through.
+    #[cfg(windows)]
+    pub(super) fn capture_with_pathext(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        Self::capture_impl(cwd_override, path_override, &DefaultEnv, pathext_override)
+    }
+
+    /// Capture ignoring the supplied `PATHEXT`.
+    ///
+    /// `PATHEXT` has no meaning outside Windows — nothing consults the
+    /// snapshot's extension list there — so the override is accepted and
+    /// discarded rather than forcing every caller to gate on the target.
+    #[cfg(not(windows))]
+    pub(super) fn capture_with_pathext(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        _pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        Self::capture(cwd_override, path_override)
+    }
+
+    /// Capture a snapshot on platforms without `PATHEXT` semantics.
+    /// # Errors: returns a [`ResolveError`] when the working directory, `PATH`, or directory entries cannot be read.
+    #[cfg(not(windows))]
+    fn capture_impl(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+    ) -> Result<Self, ResolveError> {
+        let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
+        let workspace_switch = capture_workspace_switch(env);
+        Ok(Self {
+            cwd,
+            raw_path,
+            raw_pathext: None,
+            entries,
+            workspace_switch,
+        })
+    }
+
+    /// Capture a snapshot on Windows, including the parsed extension list.
+    /// # Errors: returns a [`ResolveError`] when the working directory, `PATH`, directory entries, or Windows candidate paths cannot be read or derived.
+    #[cfg(windows)]
+    fn capture_impl(
+        cwd_override: Option<&Utf8Path>,
+        path_override: Option<&OsStr>,
+        env: &impl Env,
+        pathext_override: Option<&OsStr>,
+    ) -> Result<Self, ResolveError> {
+        let (cwd, raw_path, entries) = capture_common(cwd_override, path_override, env)?;
+        let raw_pathext = pathext_override
+            .map(OsString::from)
+            .or_else(|| env.os_string("PATHEXT"));
+        let pathext = parse_pathext(raw_pathext.as_deref());
+        let workspace_switch = capture_workspace_switch(env);
+        Ok(Self {
+            cwd,
+            raw_path,
+            raw_pathext,
+            entries,
+            pathext,
+            workspace_switch,
+        })
+    }
+
+    /// List the directories to search, borrowing them from the snapshot.
+    ///
+    /// Returns references rather than owned paths: the search loop and the
+    /// miss diagnostics only read the directories, and the error path copies
+    /// them into the owned [`super::resolve_error::ResolveError`] at the
+    /// boundary where the data outlives the snapshot.
+    pub(super) fn resolved_dirs(&self, mode: CwdMode) -> Vec<&Utf8Path> {
+        let mut dirs = Vec::new();
+        let can_search_path_current_dir = can_search_path_current_dir(mode, self.raw_path.as_ref());
+        let mut cwd_added = matches!(mode, CwdMode::Always);
+        if cwd_added {
+            dirs.push(self.cwd.as_path());
+        }
+        for entry in &self.entries {
+            match entry {
+                PathEntry::Dir(path) => dirs.push(path.as_path()),
+                // The working directory is searched at most once: `Always`
+                // has already prepended it, and repeated current-directory
+                // PATH entries (for example `::/usr/bin::`) collapse to the
+                // first occurrence.
+                PathEntry::CurrentDir if can_search_path_current_dir && !cwd_added => {
+                    cwd_added = true;
+                    dirs.push(self.cwd.as_path());
+                }
+                PathEntry::CurrentDir => {}
+            }
+        }
+        dirs
+    }
+
+    /// Return the parsed executable extensions.
+    #[cfg(windows)]
+    pub(super) fn pathext(&self) -> &[String] {
+        &self.pathext
+    }
+
+    /// Whether the workspace fallback is enabled for this snapshot.
+    ///
+    /// Decided on demand from the captured state; the non-UTF-8 warning has
+    /// already fired once at capture, so repeated consultations of the switch
+    /// stay silent.
+    pub(super) fn workspace_fallback_enabled(&self) -> bool {
+        self.workspace_switch.enabled()
+    }
+
+    /// Replace the captured switch state, for cache-key tests.
+    #[cfg(test)]
+    pub(super) fn with_workspace_switch(mut self, switch: WorkspaceSwitch) -> Self {
+        self.workspace_switch = switch;
+        self
+    }
+
+    /// The captured switch state, as the cache fingerprint hashes it.
+    pub(super) const fn workspace_switch(&self) -> &WorkspaceSwitch {
+        &self.workspace_switch
+    }
+}
+
+/// Decide whether a non-empty PATH can contribute its current-directory entry.
+fn can_search_path_current_dir(mode: CwdMode, raw_path: Option<&OsString>) -> bool {
+    matches!(mode, CwdMode::Auto | CwdMode::WorkspaceRecursive)
+        && raw_path.as_ref().is_some_and(|path| !path.is_empty())
+}
+
+/// Read the working directory, `PATH`, and directory entries shared by all snapshots.
+/// # Errors: returns a [`ResolveError`] when the working directory cannot be resolved, the `PATH` values cannot be read or parsed, or a directory cannot be read.
+fn capture_common(
+    cwd_override: Option<&Utf8Path>,
+    path_override: Option<&OsStr>,
+    env: &impl Env,
+) -> Result<(Utf8PathBuf, Option<OsString>, Vec<PathEntry>), ResolveError> {
+    let cwd = if let Some(override_cwd) = cwd_override {
+        override_cwd.to_path_buf()
+    } else {
+        current_dir_utf8()?
+    };
+    let raw_path = path_override
+        .map(OsString::from)
+        .or_else(|| env.os_string("PATH"));
+    let entries = parse_path_entries(raw_path.as_deref(), &cwd)?;
+    Ok((cwd, raw_path, entries))
+}
+
+#[cfg(all(test, not(windows)))]
+mod tests;
+
+#[cfg(all(test, windows))]
+mod windows_tests;
