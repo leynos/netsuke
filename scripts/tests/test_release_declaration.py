@@ -95,9 +95,7 @@ STAGED_PACKAGES = (
 )
 
 
-def _workspace(
-    tmp_path: Path, staging_config: str = STAGING_CONFIG
-) -> dict[str, Path]:
+def _workspace(tmp_path: Path, staging_config: str = STAGING_CONFIG) -> dict[str, Path]:
     """Write the configuration, manifest, and empty dist tree under ``tmp_path``.
 
     Parameters
