@@ -75,7 +75,7 @@ The `Scope` tolerance is **breached and not re-widened**: 87 files and 8,618
 net added lines against a cap of 56 and 6,000. The derivation, the four causes,
 and the reason the cap was not moved a second time are in `Progress`.
 
-This revision follows a design review, two rebases onto `origin/main`, that
+This revision follows a design review, two rebases onto `origin/main`, the
 Windows repair, the emitter relay repair, gate batch #6, and the `EP-M5` review
 round.
 

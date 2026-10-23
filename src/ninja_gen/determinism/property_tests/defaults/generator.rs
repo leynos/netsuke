@@ -81,12 +81,11 @@ impl DefaultCase {
 /// The declaration is built from drawn *pool slot numbers*, which is how a
 /// sub-multiset of the graph's own outputs is obtained without rejection: any
 /// slot number names an output the graph declares, and one slot may be drawn
-/// twice. The slot count is drawn from `0..=MAX_DEFAULT_SLOTS`, empty included:
-/// taking a fixed count of a vector that shrinking may shorten would leave the
-/// empty class reachable only by shrink, and the class exists precisely so the
-/// "no `default` line" arm runs on ordinary cases. The repeat term appends up
-/// to [`MAX_DEFAULT_REPEATS`] copies of an already-drawn slot, which is what
-/// makes the duplicate-bearing class guaranteed rather than merely likely.
+/// twice. The slot count is selected from [`DEFAULT_SHAPES`] rather than drawn
+/// uniformly, so every class — the empty one included — is reachable on ordinary
+/// cases instead of only by shrinking. The repeat term appends up to
+/// [`MAX_DEFAULT_REPEATS`] copies of an already-drawn slot, which is what makes
+/// the duplicate-bearing class guaranteed rather than merely likely.
 pub(super) fn arb_default_case() -> impl Strategy<Value = DefaultCase> {
     (1usize..=MAX_DEFAULT_EDGES)
         .prop_flat_map(|edge_count| {

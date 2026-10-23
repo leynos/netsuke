@@ -1,4 +1,6 @@
-//! Property tests for the IR obligations `ADR-004` defers to larger N.
+//! Property tests for the IR obligations
+//! [ADR-0047](../../../../docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md)
+//! defers to larger N.
 //!
 //! Two obligations live here, both about what `from_manifest` *rejects*:
 //! [`duplicates`] covers duplicate outputs and [`cycles`] covers dependency

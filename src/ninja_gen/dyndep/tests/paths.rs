@@ -5,7 +5,8 @@
 //! This module covers the orthogonal question of what a path may contain. Each
 //! graph position is swept because the checks live at different layers: some
 //! reject during string generation, some only in bundle generation, and the
-//! reserved-namespace check runs over every path field including defaults.
+//! reserved-namespace check runs over every edge path field. Default targets
+//! are not checked against the reserved namespaces.
 
 use super::{graph_with_edge, parallel_edge, serial_edge};
 use crate::ir::BuildEdge;

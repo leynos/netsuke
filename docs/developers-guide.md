@@ -6302,7 +6302,6 @@ name a property a candidate source declares and match a committed patch. One
 obligation may not borrow another's stem: the contract compares sets, so a
 shared stem leaves the second obligation with no evidence at all. Where one
 fault demonstrates two obligations, commit the same hunk under two stems.
-discovery-diagnostic replays stay identical without re-reading the environment.
 
 ### Parametrized unit tests with rstest
 

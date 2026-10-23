@@ -214,11 +214,25 @@ fn any_segment_unordered(path: &Path) -> Option<&'static str> {
 }
 
 /// The unordered type `ident` names, if it names one.
+///
+/// A suffix match rather than equality, because the workspace aliases these
+/// collections: `BuildGraph::actions` is an `IrHashMap`. No `src/ninja_gen`
+/// file names the alias today, which is exactly what makes equality look
+/// sufficient — the first one to do so would reach emitted bytes behind a green
+/// contract. Returning the matched spelling rather than the identifier keeps
+/// [`Hit::type_name`] one of [`UNORDERED_TYPES`], so the exemption list and the
+/// pinning test still name the collection rather than the alias.
+///
+/// [`HashMapLike`] does not end in a matched spelling and stays unremarked,
+/// which is the distinction [`path_unordered_name`] also draws.
+///
+/// [`Hit::type_name`]: Hit::type_name
 fn unordered_ident(ident: &syn::Ident) -> Option<&'static str> {
+    let spelled = ident.to_string();
     UNORDERED_TYPES
         .iter()
         .copied()
-        .find(|type_name| ident == *type_name)
+        .find(|type_name| spelled.ends_with(type_name))
 }
 
 /// Return whether any branch of `tree` is the type called `wanted`.
@@ -235,10 +249,18 @@ fn unordered_ident(ident: &syn::Ident) -> Option<&'static str> {
 /// Comparing identifiers against the parse tree makes `HashMapLike` a different
 /// name rather than a longer spelling of this one, and a comment quoting the
 /// same words is not a `use` at all.
+///
+/// Matching by [`unordered_ident`] rather than by equality is what finds
+/// `use crate::ir::graph::IrHashMap`, whose imported name is the alias rather
+/// than the collection. The rename arm is reached only by
+/// `use … as X`, so it keeps comparing `rename.ident`: the alias there is what
+/// the file subsequently writes, and the tree still names the original.
 fn names_segment(tree: &UseTree, wanted: &str) -> bool {
+    let names =
+        |ident: &syn::Ident| unordered_ident(ident).is_some_and(|matched| matched == wanted);
     match tree {
-        UseTree::Path(path) => path.ident == wanted || names_segment(&path.tree, wanted),
-        UseTree::Name(name) => name.ident == wanted,
+        UseTree::Path(path) => names(&path.ident) || names_segment(&path.tree, wanted),
+        UseTree::Name(name) => names(&name.ident),
         UseTree::Rename(rename) => rename.ident == wanted,
         UseTree::Glob(_) => false,
         UseTree::Group(group) => group

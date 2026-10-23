@@ -207,10 +207,10 @@ pub(super) fn action_strategy() -> impl Strategy<Value = Action> {
 
 /// One executable recipe.
 ///
-/// Every variant is drawn, including `Rule`, because the hasher serialises the
+/// Every variant is drawn, including `Rule`, because the hasher serializes the
 /// recipe as an enum tag plus payload and a wrong tag would be invisible if
 /// only one variant were generated. The two `Command` arms draw a scalar and a
-/// list separately: `StringOrList` serialises its *shape* as well as its
+/// list separately: `StringOrList` serializes its *shape* as well as its
 /// contents, so a scalar and a one-element list must not be conflated by the
 /// generator even though they render alike.
 fn recipe_strategy() -> impl Strategy<Value = Recipe> {

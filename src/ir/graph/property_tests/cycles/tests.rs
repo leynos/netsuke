@@ -102,7 +102,7 @@ fn a_long_case_is_never_truncated_to_a_short_chain() {
 /// An acyclic manifest with an unresolved dependency lowers.
 #[test]
 fn an_unresolved_dependency_is_not_a_cycle() {
-    let case = build_case(Shape::Acyclic, &vec![Vec::new(); 3]);
+    let case = build_case(Shape::AcyclicMissing, &vec![Vec::new(); 3]);
     BuildGraph::from_manifest_for_shell(&case.manifest, SHELL)
         .expect("an acyclic manifest must lower");
 }
