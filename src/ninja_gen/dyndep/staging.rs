@@ -14,7 +14,7 @@
 //! Why a sidecar reveals a relay phony instead of the real dependency is
 //! recorded in
 //! [ADR-0058](../../../docs/adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md),
-//! and summarised in [`super`]'s module documentation.
+//! and summarized in [`super`]'s module documentation.
 
 use super::{DYNDEP_NAMESPACE, GeneratedDyndep, SERIAL_NAMESPACE};
 use crate::hex;

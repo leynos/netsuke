@@ -252,16 +252,21 @@ fn unordered_ident(ident: &syn::Ident) -> Option<&'static str> {
 ///
 /// Matching by [`unordered_ident`] rather than by equality is what finds
 /// `use crate::ir::graph::IrHashMap`, whose imported name is the alias rather
-/// than the collection. The rename arm is reached only by
-/// `use … as X`, so it keeps comparing `rename.ident`: the alias there is what
-/// the file subsequently writes, and the tree still names the original.
+/// than the collection.
+///
+/// The rename arm is reached only by `use … as Y`, and **both** names it holds
+/// can matter, so both are read. In `UseRename`, `ident` is the original and
+/// `rename` is the alias: `use …::IrHashMap as Actions` names the collection on
+/// the left, and `use …::Actions as HashMap` puts the collection's own name into
+/// the file on the right. Comparing either one alone leaves a shape uncaught,
+/// which is why each direction carries its own case in `scan_coverage`.
 fn names_segment(tree: &UseTree, wanted: &str) -> bool {
     let names =
         |ident: &syn::Ident| unordered_ident(ident).is_some_and(|matched| matched == wanted);
     match tree {
         UseTree::Path(path) => names(&path.ident) || names_segment(&path.tree, wanted),
         UseTree::Name(name) => names(&name.ident),
-        UseTree::Rename(rename) => rename.ident == wanted,
+        UseTree::Rename(rename) => names(&rename.ident) || names(&rename.rename),
         UseTree::Glob(_) => false,
         UseTree::Group(group) => group
             .items

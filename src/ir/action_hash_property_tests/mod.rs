@@ -133,7 +133,7 @@ proptest! {
 ///
 /// # Errors
 ///
-/// Returns a test failure when the hasher cannot serialise the action.
+/// Returns a test failure when the hasher cannot serialize the action.
 fn hash(action: &Action) -> Result<String, TestCaseError> {
     ActionHasher::hash(action)
         .map_err(|error| TestCaseError::fail(format!("a generated action must serialize: {error}")))

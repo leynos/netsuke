@@ -54,12 +54,11 @@ finding 1 is rejected with clock evidence, and findings 2 through 6 are
 repaired. `docs/roadmap.md` shows the house pattern treats such a review as
 completion evidence.
 
-The branch tip is `f91f663a7`, rebased onto `origin/main` at `6572fb956`: 86
-commits, no merges, and the target verified as an ancestor. Ten gates passed
-sequentially against that exact candidate with the tree clean at both ends —
-`check-fmt`, `typecheck`, `lint`, `doc-coverage`, `test`, `proptest`,
-`markdownlint`, `nixie`, `test-documentation-contracts`, and
-`test-workflow-contracts`.
+The branch is rebased onto `origin/main` at `6572fb956`: 90 commits, no merges,
+and the target verified as an ancestor. Ten gates passed sequentially against
+that exact candidate with the tree clean at both ends — `check-fmt`,
+`typecheck`, `lint`, `doc-coverage`, `test`, `proptest`, `markdownlint`,
+`nixie`, `test-documentation-contracts`, and `test-workflow-contracts`.
 
 Note that this plan file is itself a tracked input:
 `tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`
@@ -67,11 +66,13 @@ from disk at test time, so a revision of this document is **not** a docs-only
 delta and is gated by the same ten targets, including `make test`. Each batch's
 result is recorded in the delivery ledger rather than restated here, so this
 document does not have to be rewritten — and re-gated — every time a gate runs;
-the revision of record is the one named in the ledger. What remains for `EP-M8`
-is the milestone `coderabbit review --agent` pass and the hosted CI it will be
-published to; both are external to the implementation.
+the revision of record is the one named in the ledger. The `EP-M8` milestone
+`coderabbit review --agent` pass has completed: it reviewed 88 files and
+returned nine findings, all verified against source and all repaired. What
+remains for `EP-M8` is the re-gate of that repair and the hosted CI the branch
+will be published to; both are external to the implementation.
 
-The `Scope` tolerance is **breached and not re-widened**: 87 files and 8,618
+The `Scope` tolerance is **breached and not re-widened**: 87 files and 8,727
 net added lines against a cap of 56 and 6,000. The derivation, the four causes,
 and the reason the cap was not moved a second time are in `Progress`.
 
@@ -706,7 +707,7 @@ question.
   finding for a separate item rather than fixing it here.
 - **The `Scope` tolerance is breached, open, and deliberately not re-widened.**
   *Severity: moderate. Likelihood: realized.* Measured against `origin/main`
-  (`6572fb956`) and excluding this ExecPlan, the branch is **87 files and 8,618
+  (`6572fb956`) and excluding this ExecPlan, the branch is **87 files and 8,727
   net added lines** against a cap of 56 and 6,000. The cap was widened once, on
   2026-10-17, from 34/2,600 on user direction; that widening's inventory missed
   the strategy modules entirely and undercosted four suites, which is why the
@@ -2451,6 +2452,57 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [x] (2026-10-23) **The two `EP-M8` review rounds are closed: all twenty
+      findings were verified against source and repaired, and the second review
+      confirmed the repairs rather than finding new ones.** The first round,
+      over `a8c5a85c8`, returned eleven findings, all `minor`, and the repairs
+      were committed as `5c1e759a0`. The second round, over that commit,
+      reviewed 88 files and returned nine more — one `major`, seven `minor`, one
+      `trivial` — and every one was valid too. The repairs are recorded in the
+      delivery ledger; the gates that validate them are the batch below.
+
+  - *Two of the nine were one defect, and the pair that disagreed about where
+    the fix belonged was the useful signal.* Both the `major` and one `minor`
+    finding pointed at the inline `mod scan_coverage` in
+    `tests/ninja_gen_hashmap_boundary.rs`, which had grown that file to 427
+    lines. No gate caught it: `module_max_lines` exempts crate roots, and nine
+    pre-existing `tests/*.rs` roots already exceed 400, so `make lint` stayed
+    green on a file `AGENTS.md` says must not exist. Accepted on the
+    `AGENTS.md` rule and moved to
+    `tests/hashmap_boundary/scan_coverage.rs` behind a `#[path]` declaration,
+    which is the shape 38 other crate roots already use. The crate root is now
+    324 lines, `scan.rs` 377, and the new module 159.
+  - *The `Rename` arm finding was right, and its remedy had to be widened.*
+    The review asked for the suffix matcher in `UseTree::Rename`. In syn 2,
+    `UseRename` holds `ident` as the **original** name and `rename` as the
+    alias, so the two directions are different cases: `use …::IrHashMap as
+    Actions` names the collection on the left, `use …::Actions as HashMap`
+    names it on the right. Comparing either alone leaves one shape uncaught.
+    Both are now read, and each direction carries its own case in
+    `scan_coverage` — the previous round's fix had covered only one, which is
+    why a second round found the other.
+  - *A spelling fix that would have broken a gate, caught before it did.*
+    `docs/verification/mutations/ir__action_hash_property_tests__equal_actions_hash_equally.patch`
+    contains `serialised` on a **context** line. That line is not branch
+    prose: it must match `src/hasher.rs` byte-for-byte for the patch to apply,
+    and `every_patch_applies_cleanly` enforces that. Only the branch-authored
+    `+` line (`canonicalising`) was corrected. The same review also prompted a
+    sweep of the `-ise` family across every changed file rather than only the
+    two cited sites, which found a tenth: `serialise` in
+    `src/ir/action_hash_property_tests/mod.rs`, the same class the previous
+    round had fixed in the same file.
+  - *Figures re-derived rather than restated.* The Status paragraph still said
+    86 commits and 8,618 net lines at `f91f663a7`; the branch is now 90 commits
+    and 8,727 net, still 87 files. The dated `Progress` entries that quote the
+    older figures are left as written, because each records what a named gate
+    measured on a named day, and rewriting them would destroy the record the
+    plan exists to keep.
+  - *No roadmap edit is owed.* `docs/roadmap.md` line 615 has carried `4.3.1`
+    checked with all three sub-items since `30f5ff48c`, and each of its claims
+    resolves to a live file. The Revision-note sentence that once described the
+    item as deliberately unchecked is a 2026-10-13 log entry, superseded
+    rather than wrong.
 
 - [x] (2026-10-23) **Ten gates passed sequentially against one frozen candidate,
       `f91f663a7`, and the tree did not move.** Candidate
@@ -5317,7 +5369,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 - (2026-10-21) **The upstream tracker locates the crash exactly, and the fix
   exists but is unmerged — which changes the escalation from "is this ours?" to
-  "which way do we route around it?".**
+  "which way to route around it?".**
   [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662)
   ("segfault in `Plan::NodeFinished`", opened 2025-08-26, still open) carries a
   valgrind report whose *invalid read* is at `build.cc:233` in `NodeFinished`
@@ -5336,8 +5388,8 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   [PR #2840](https://github.com/ninja-build/ninja/pull/2840) ("Invalidate
   Iterator in `Plan::EdgeFinished`", open since 2026-09-26, unmerged), which
   replaces the range-`for` over `out_edges()` with index access. *The
-  consequence for this plan:* we are not waiting on an unreported defect whose
-  shape is unknown. We hold a 13-line deterministic reproducer
+  consequence for this plan:* this branch is not waiting on an unreported
+  defect whose shape is unknown. It holds a 13-line deterministic reproducer
   (`/tmp/700-evidence/repro-build.ninja`) for a public issue whose fix is
   already written and awaiting review, which makes reporting it useful rather
   than merely polite — and it means a self-hosted patched `ninja` is a
@@ -7337,7 +7389,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `DyndepLoader::LoadDyndeps` (`dyndep.cc:118` → `graph.h:114`) and read in
   `Plan::NodeFinished` (`build.cc:233`), reported under
   [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662),
-  still open. Our instrumented build observed the reallocation from the
+  still open. The instrumented build observed the reallocation from the
   allocating end; the public report observes it from the freed-block end. Two
   independent observations of one mechanism, plus a 13-line deterministic
   reproducer the issue does not have.

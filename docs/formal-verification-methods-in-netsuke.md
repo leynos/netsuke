@@ -122,11 +122,13 @@ actions and 100 edges):
 - `path_key` invariance for equivalent output sets, and
 - action-hash stability for field-preserving permutations.[^6]
 
-All four now exist. The determinism suites live in
+All four now exist. The three emission-order obligations live in
 `src/ninja_gen/determinism/property_tests/`, one module per obligation in
 [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md), over a shared
 generator bounded at 50 actions and 100 edges; a real `ninja` binary provides
-the oracle for the emitted bundle.
+the oracle for the emitted bundle. The action-hash obligation lives with the
+type it hashes, in `src/ir/action_hash_property_tests/`, because it is stated
+over `Action` rather than over an emitted bundle.
 
 The manifest-expansion pipeline is also a strong Proptest target. The loader
 parses YAML first, expands `foreach` and `when`, deserializes into typed data,
