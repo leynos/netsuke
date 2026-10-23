@@ -10,9 +10,9 @@ mod gate;
 mod threads;
 
 use super::manifest_structure_telemetry::validate_manifest_structure_events;
-use anyhow::{Context, Result, anyhow, ensure};
+use anyhow::{Result, anyhow, ensure};
 use mockable::Env;
-use std::time::Duration;
+use std::{ffi::OsString, time::Duration};
 use threads::{CaptureMode, CaptureSnapshot, run_worker_threads};
 
 const MODE_ENV: &str = "NETSUKE_ISSUE_927_WORKER_MODE";
@@ -30,16 +30,35 @@ const EMPTY_MANIFEST_COUNTS: [(&str, usize); 6] = [
 #[test]
 #[ignore = "driven in a fresh process by the issue 927 parent test"]
 fn interest_worker() -> Result<()> {
-    let mode = mockable::DefaultEnv
-        .os_string(MODE_ENV)
-        .context("read the child-only schedule mode")?
-        .into_string()
-        .map_err(|mode| anyhow!("child-only schedule mode must be UTF-8: {mode:?}"))?;
+    let Some(mode) = worker_mode_from(mockable::DefaultEnv.os_string(MODE_ENV))? else {
+        return Ok(());
+    };
     match mode.as_str() {
         "unmitigated" => run_unmitigated_worker(),
         "mitigated" => run_mitigated_worker(),
         _ => Err(anyhow!("unexpected issue 927 worker mode {mode:?}")),
     }
+}
+
+/// Decode the optional child mode while accepting a direct ignored-test run.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert!(worker_mode_from(None)?.is_none());
+/// ```
+///
+/// # Errors
+///
+/// Returns an error when a supplied mode is not valid UTF-8.
+fn worker_mode_from(raw_mode: Option<OsString>) -> Result<Option<String>> {
+    raw_mode
+        .map(|mode| {
+            mode.into_string().map_err(|invalid_mode| {
+                anyhow!("child-only schedule mode must be UTF-8: {invalid_mode:?}")
+            })
+        })
+        .transpose()
 }
 
 /// Prove the original stale-interest schedule still fails without anchors.
@@ -126,4 +145,20 @@ fn write_marker(marker: &str) -> std::io::Result<()> {
     let mut output = std::io::stdout().lock();
     writeln!(output, "{marker}")?;
     output.flush()
+}
+
+#[cfg(test)]
+mod tests {
+    //! Exercise the optional child mode used by the fresh-process worker.
+
+    use super::worker_mode_from;
+
+    #[test]
+    fn absent_child_mode_is_accepted_as_a_no_op() {
+        assert!(
+            worker_mode_from(None)
+                .expect("an absent child-only mode is accepted")
+                .is_none()
+        );
+    }
 }

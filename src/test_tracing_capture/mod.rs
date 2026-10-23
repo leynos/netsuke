@@ -1,12 +1,14 @@
 //! Helpers for capturing structured tracing events in tests.
 
 use std::{
+    cell::RefCell,
     collections::BTreeMap,
-    sync::{Arc, Mutex, PoisonError},
+    sync::{Arc, Mutex, PoisonError, mpsc::Sender},
 };
 use tracing::{
-    Event, Subscriber,
+    Event, Metadata, Subscriber,
     field::{Field, Visit},
+    subscriber::Interest,
 };
 use tracing_subscriber::{
     Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*, registry::LookupSpan,
@@ -14,6 +16,61 @@ use tracing_subscriber::{
 
 /// Name of the bounded configuration-discovery span.
 const DISCOVERY_SPAN: &str = "collect_diag_file_layers";
+
+thread_local! {
+    static SUMMARY_REGISTRATION_SIGNAL: RefCell<Option<Sender<()>>> = const {
+        RefCell::new(None)
+    };
+}
+
+/// Observe the real registration callback for the manifest summary callsite.
+///
+/// The observer is scoped to one thread and one capture setup so the gated
+/// worker can tell when `tracing-core` actually reaches its callsite rebuild.
+/// It does not install or alter a dispatcher.
+///
+/// # Examples
+///
+/// ```ignore
+/// let captured = with_manifest_summary_registration_signal(sender, || {
+///     with_test_subscriber(LevelFilter::TRACE, |events| events.snapshot())
+/// });
+/// ```
+pub fn with_manifest_summary_registration_signal<T>(
+    sender: Sender<()>,
+    install_capture: impl FnOnce() -> T,
+) -> T {
+    let previous = SUMMARY_REGISTRATION_SIGNAL.with(|signal| signal.replace(Some(sender)));
+    let _scope = SummaryRegistrationSignalScope { previous };
+    install_capture()
+}
+
+/// Restore the prior callsite observer after a scoped capture setup finishes.
+struct SummaryRegistrationSignalScope {
+    previous: Option<Sender<()>>,
+}
+
+impl Drop for SummaryRegistrationSignalScope {
+    fn drop(&mut self) {
+        SUMMARY_REGISTRATION_SIGNAL.with(|signal| {
+            drop(signal.replace(self.previous.take()));
+        });
+    }
+}
+
+/// Match only the production manifest-summary event callsite.
+///
+/// # Examples
+///
+/// ```ignore
+/// assert!(is_manifest_summary_metadata(&summary_metadata));
+/// ```
+pub(crate) fn is_manifest_summary_metadata(metadata: &Metadata<'_>) -> bool {
+    metadata.is_event()
+        && metadata.level() == &tracing::Level::TRACE
+        && metadata.target() == "netsuke::runner::manifest_structure_telemetry"
+        && metadata.fields().field("message").is_some()
+}
 
 /// Captured tracing event fields.
 ///
@@ -91,6 +148,14 @@ impl<S> Layer<S> for CapturedEventsLayer
 where
     S: Subscriber + for<'span> LookupSpan<'span>,
 {
+    /// Signal the scoped observer when tracing registers the summary callsite.
+    fn register_callsite(&self, metadata: &'static Metadata<'static>) -> Interest {
+        if is_manifest_summary_metadata(metadata) {
+            signal_summary_registration();
+        }
+        Interest::always()
+    }
+
     /// Render `event`'s fields and append them to the shared buffer.
     fn on_event(&self, event: &Event<'_>, _ctx: LayerContext<'_, S>) {
         let mut visitor = FieldVisitor::default();
@@ -131,6 +196,14 @@ where
         let mut visitor = FieldVisitor::default();
         values.record(&mut visitor);
         self.capture_span_fields(span.metadata().name(), visitor.fields);
+    }
+}
+
+/// Notify the reproduction worker once the capture layer registers the summary.
+fn signal_summary_registration() {
+    let registration_sender = SUMMARY_REGISTRATION_SIGNAL.with(|signal| signal.borrow_mut().take());
+    if let Some(sender) = registration_sender {
+        sender.send(()).unwrap_or(());
     }
 }
 

@@ -45,7 +45,7 @@ mod observability;
 mod startup_tracing;
 
 #[cfg(test)]
-mod test_tracing_capture;
+pub mod test_tracing_capture;
 
 mod config_load;
 use startup_tracing::StartupWriter;

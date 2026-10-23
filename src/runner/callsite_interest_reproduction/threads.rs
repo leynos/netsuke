@@ -5,7 +5,7 @@
 //! subscriber installation boundaries.
 
 use super::super::manifest_structure_telemetry::record_manifest_structure;
-use super::gate::{GATE_DEADLINE, GatedSubscriber, RegistrationGate};
+use super::gate::{GATE_DEADLINE, GatedSubscriber, RegistrationGate, RegistrationGateOptions};
 use super::{EMPTY_MANIFEST_COUNTS, validate_manifest_structure_events};
 use crate::ast::NetsukeManifest;
 use crate::test_tracing_capture::CapturedEvents;
@@ -73,7 +73,7 @@ pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<CaptureSna
     );
     ensure!(
         gate.was_attempted(),
-        "T2 did not acknowledge its capture-dispatch installation attempt"
+        "T2 did not reach the capture layer's summary registration callback"
     );
     ensure!(
         gate.failure().is_none(),
@@ -126,37 +126,40 @@ fn spawn_capture_thread(
         paused_receiver
             .recv_timeout(THREAD_DEADLINE)
             .context("wait for T1 to pause the summary registration")?;
-        registration_attempt_sender
-            .send(())
-            .context("signal the capture-dispatch installation attempt")?;
-        match capture_mode {
-            CaptureMode::Unmitigated => {
-                let (trace_subscriber, captured) =
-                    crate::test_tracing_capture::uninstalled_test_subscriber(LevelFilter::TRACE);
-                tracing::subscriber::with_default(trace_subscriber, || {
-                    capture_manifest_after_install(
-                        &installed_sender,
-                        &finished_receiver,
-                        &manifest,
-                        &captured,
-                    )
-                })
-            }
-            CaptureMode::Mitigated => {
-                crate::test_tracing_capture::with_test_subscriber(LevelFilter::TRACE, |captured| {
-                    capture_manifest_after_install(
-                        &installed_sender,
-                        &finished_receiver,
-                        &manifest,
-                        &captured,
-                    )
-                })
-            }
-        }
+        crate::test_tracing_capture::with_manifest_summary_registration_signal(
+            registration_attempt_sender,
+            || match capture_mode {
+                CaptureMode::Unmitigated => {
+                    let (trace_subscriber, captured) =
+                        crate::test_tracing_capture::uninstalled_test_subscriber(
+                            LevelFilter::TRACE,
+                        );
+                    tracing::subscriber::with_default(trace_subscriber, || {
+                        capture_manifest_after_install(
+                            &installed_sender,
+                            &finished_receiver,
+                            &manifest,
+                            &captured,
+                        )
+                    })
+                }
+                CaptureMode::Mitigated => crate::test_tracing_capture::with_test_subscriber(
+                    LevelFilter::TRACE,
+                    |captured| {
+                        capture_manifest_after_install(
+                            &installed_sender,
+                            &finished_receiver,
+                            &manifest,
+                            &captured,
+                        )
+                    },
+                ),
+            },
+        )
     })
 }
 
-/// Signal T2's registration and snapshot the production emission after T1 ends.
+/// Signal dispatch installation and snapshot the production emission after T1 ends.
 fn capture_manifest_after_install(
     installed_sender: &Sender<()>,
     finished_receiver: &Receiver<()>,
@@ -230,6 +233,7 @@ impl WorkerChannels {
             CaptureMode::Unmitigated => THREAD_DEADLINE,
             CaptureMode::Mitigated => GATE_DEADLINE,
         };
+        let attempt_timeout_is_expected = matches!(capture_mode, CaptureMode::Mitigated);
         let (paused_sender, paused_receiver) = mpsc::channel();
         let (registration_attempt_sender, registration_attempt_receiver) = mpsc::channel();
         let (installed_sender, installed_receiver) = mpsc::channel();
@@ -239,7 +243,10 @@ impl WorkerChannels {
                 paused_sender,
                 registration_attempt_receiver,
                 installed_receiver,
-                gate_deadline,
+                RegistrationGateOptions {
+                    deadline: gate_deadline,
+                    attempt_timeout_is_expected,
+                },
             )),
             paused_receiver,
             registration_attempt_sender,
