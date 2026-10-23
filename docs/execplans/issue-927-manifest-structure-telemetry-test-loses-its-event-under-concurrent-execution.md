@@ -123,12 +123,17 @@ seeded duplicate.
   ADR-0009 link, used British spelling in ADR-057, and extended the unmitigated
   worker's installation window to ten seconds while keeping the mitigated gate
   at 250 ms. The fresh-process regression passed in both modes afterwards.
-- [x] (2026-10-23) Reran CodeRabbit on the complete staged patch after the
-      fixes;
-  it reviewed 17 files and returned zero findings.
-- [ ] Commit the validated implementation, push with SSH, set the named
-  upstream, attach the model and worker evidence to upstream PR #3614, create
-  the requested draft PR, and mark it ready after publication checks pass.
+- [x] (2026-10-23) The first post-fix CodeRabbit review returned zero findings.
+  A later review of the updated staged plan suggested two overlapping
+  extractions for the worker's duplicated orchestration and snapshot path. The
+  code is now in a private `threads` module; its two subscriber boundaries
+  remain distinct, and ADR-057 records the helper's scope.
+- [x] (2026-10-23) Committed the implementation as `ba17d7c` after the full
+  gate sequence passed. The separate worker refactor is being validated and
+  will be committed independently as required by the repository guidance.
+- [ ] Finish the refactor gates and commit, then push with SSH and set the
+  named upstream. Attach the model and worker evidence to upstream PR #3614,
+  create the requested draft PR, and mark it ready after publication checks.
 - [x] (2026-10-23) Passed `make check-fmt`, `make test` (4667 passed, 0
   failed, 7 skipped; workspace doctests passed), `make typecheck`, `make lint`
   (Clippy, Whitaker, Python lint, yamllint and actionlint), `make doc-coverage`
@@ -142,6 +147,15 @@ seeded duplicate.
   skipped; doctests passed), `make typecheck`, `make lint`, `make doc-coverage`
   (98.13%), `make markdownlint` (198 files, zero issues), and `make nixie` (all
   diagrams passed). This clean run completed without disk exhaustion.
+- [x] (2026-10-23) After extracting the reproduction worker orchestration into
+  its private `threads` module, reran `make fmt`, the focused fresh-process
+  regression, and all seven repository gates sequentially. The focused
+  regression reproduced the empty unmitigated capture and accepted the single
+  mitigated event. Final results: `make test` passed 4667 tests with 7 skipped
+  and all doctests passing; typecheck and lint passed; doc coverage was 98.13%;
+  Markdown lint found zero issues in 198 files; and all diagrams passed. The
+  first lint attempt identified one extra borrow in the extracted helper; that
+  was corrected before this passing run.
 
 ## Surprises & discoveries
 
@@ -423,11 +437,12 @@ PR whose title contains `(#927)`, summary says `Closes #927`, and terminal
   disabled-anchor control fails. The only remaining delivery work is commit,
   publication, and the upstream evidence comment.
 - **EP-M3 (implementation and validation complete):** Original tests,
-  supporting tests, docs, ADR, repeated measurements, and all seven final gates
-  are complete. Post-fix manifest runs are clean in the recorded
-  default/high-thread matrix; CodeRabbit has no outstanding findings. Remaining
-  work: commit, push, attach the evidence to upstream PR #3614, create and mark
-  the issue PR ready, then follow it to merge.
+  supporting tests, docs, ADR, repeated measurements, and the review-driven
+  worker refactor are complete. The implementation commit is validated, and the
+  separate refactor has passed the focused regression and all repository gates.
+  Post-fix manifest runs are clean in the recorded default/high-thread matrix.
+  Remaining work: commit the refactor, push, attach the evidence to upstream PR
+  #3614, create and mark the issue PR ready, then follow it to merge.
 
 ## Concrete steps
 
