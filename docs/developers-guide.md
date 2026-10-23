@@ -7116,10 +7116,11 @@ generators, so the child-command scanner treats it as build-capable and
 requires the exclusive group policy.
 
 The CLI configuration fixture remains in the serialized child-Cargo group
-because Cargo check can run build scripts and update generated outputs. It uses
-the ordinary 300-second allowance; it has no separate cold-graph timeout. The
-workflow contract rejects isolated target-directory overrides in these ambient
-UI harnesses.
+because Cargo check can run build scripts and update generated outputs. It
+shares the ambient public-API fixture family's 900-second allowance, because
+any member of the family can be the first to pay the cold check that the rest
+then reuse. The workflow contract rejects isolated target-directory overrides
+in these ambient UI harnesses.
 
 Generated completion contract tests share the `nested-cargo-builds` group with
 the preparations that may regenerate their target/profile staging files.

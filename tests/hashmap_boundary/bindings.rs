@@ -18,9 +18,22 @@
 //! repository applies everywhere: `scan.rs` is close to the line cap, and the
 //! two questions have different subjects. `scan.rs` asks what a tree *declares*;
 //! this asks how one named field is *read*.
+//!
+//! # What the exemption has to survive
+//!
+//! Three shapes would otherwise slip past a purely expression-shaped visitor.
+//! A macro body is tokens rather than a tree, so a field named inside
+//! `writeln!` or `format!` is not an expression node until something parses it.
+//! A destructuring pattern names a field without an [`ExprField`] existing at
+//! all. And a `#[cfg(test)]` item cannot reach an emitted byte, so a use inside
+//! one is not a use — the same strip `scan.rs` applies, since a rule that
+//! excused test code in one half of the contract and reported it in the other
+//! would be two rules.
 
+use super::macro_body;
+use super::test_only;
 use syn::{
-    Expr, ExprField, ExprMethodCall, Ident, Member,
+    Expr, ExprField, ExprMethodCall, FieldPat, Ident, Item, Macro, Member,
     visit::{self, Visit},
 };
 
@@ -73,6 +86,19 @@ impl Uses<'_> {
 }
 
 impl<'ast> Visit<'ast> for Uses<'_> {
+    /// Visit `item` unless it is compiled only for tests.
+    ///
+    /// `scan.rs` answers the same question with the same function for its own
+    /// visitor. Without this override the exempt field could be iterated inside
+    /// an inline `#[cfg(test)] mod` and reported as a production use, which
+    /// would be a finding no author could satisfy: the code it names is never
+    /// compiled into the artefact the contract protects.
+    fn visit_item(&mut self, item: &'ast Item) {
+        if !test_only::is_test_only(item) {
+            visit::visit_item(self, item);
+        }
+    }
+
     /// Classify a field access that is the receiver of a method call.
     ///
     /// The default descent would reach the receiver's [`ExprField`] and record
@@ -104,6 +130,42 @@ impl<'ast> Visit<'ast> for Uses<'_> {
             self.found.push(Use::AsValue);
         }
         visit::visit_expr_field(self, node);
+    }
+
+    /// Read a macro body, which the default descent sees only as tokens.
+    ///
+    /// A body that parses as an expression list is descended into like any
+    /// other code, so `writeln!(out, "{:?}", stages.staged_sidecars)` is caught
+    /// by the same [`ExprField`] rule as an ordinary field access. A body with a
+    /// grammar of its own — `matches!`, `vec![a; n]` — cannot be read that way,
+    /// so it is judged on whether it spells the field at all. Reporting a
+    /// spelling that turns out not to be a use is a failure a human can dismiss
+    /// from the message; missing a real one is the hole this guard exists to
+    /// close, and the two mistakes are not equally cheap.
+    fn visit_macro(&mut self, node: &'ast Macro) {
+        if let Some(arguments) = macro_body::arguments(node) {
+            for argument in &arguments {
+                self.visit_expr(argument);
+            }
+        } else if macro_body::spells(node, self.field) {
+            self.found.push(Use::AsValue);
+        }
+        visit::visit_path(self, &node.path);
+    }
+
+    /// Record a destructured binding whose field is the exempt one.
+    ///
+    /// `let SerialStages { staged_sidecars, .. } = stages;` moves the collection
+    /// out under a new name without ever writing an [`ExprField`], so the
+    /// expression rule above cannot see it. The pattern binds the *contents* of
+    /// the field to a local, which is a borrow of the field by another name, and
+    /// a later iteration over that local is exactly the use the exemption does
+    /// not cover.
+    fn visit_field_pat(&mut self, node: &'ast FieldPat) {
+        if self.names_field(&node.member) {
+            self.found.push(Use::AsValue);
+        }
+        visit::visit_field_pat(self, node);
     }
 }
 
@@ -203,6 +265,76 @@ mod tests {
             found(source, "staged_sidecars"),
             [Use::Method("insert_all".into())],
             "a method merely starting with the permitted spelling is a different method"
+        );
+    }
+
+    /// A field named inside a macro argument is a use.
+    ///
+    /// `writeln!` is the shape that matters here: six calls in `staging.rs` sit
+    /// beside the exempt field, and a format argument naming it would write a
+    /// hash iteration order into the sidecar. The macro body is tokens, so
+    /// without a reader for them this source reports nothing at all.
+    #[test]
+    fn a_macro_argument_that_reads_the_field_is_a_use() {
+        let source = r#"fn f(stages: &S, out: &mut String) { writeln!(out, "{:?}", stages.staged_sidecars); }"#;
+        assert_eq!(
+            found(source, "staged_sidecars"),
+            [Use::AsValue],
+            "the format argument reaches the exempt field through the macro body"
+        );
+    }
+
+    /// A macro body with its own grammar is still read for the field name.
+    ///
+    /// The body of `matches!` is not an expression list, so parsing it as one
+    /// fails. A reader that treated the failure as "nothing here" would make
+    /// every such macro a blind spot, which is the hole this guard exists to
+    /// close rather than a shape it may accept.
+    #[test]
+    fn an_unparseable_macro_body_is_still_read() {
+        let source =
+            "fn f(stages: &S) { assert!(matches!(stages, S { staged_sidecars: ref _s })); }";
+        assert!(
+            found(source, "staged_sidecars").contains(&Use::AsValue),
+            "a body that does not parse must still be judged on what it spells"
+        );
+    }
+
+    /// A destructuring pattern names the field without any field access.
+    ///
+    /// `let SerialStages { staged_sidecars, .. } = stages;` binds the collection
+    /// to a local, and a later `for` over that local is a borrow of the field
+    /// under another name. No `ExprField` exists for the pattern, so only the
+    /// pattern hook can see it.
+    #[test]
+    fn a_destructured_field_binding_is_a_use() {
+        let source = "fn f(stages: &S) { let S { staged_sidecars } = stages; }";
+        assert_eq!(
+            found(source, "staged_sidecars"),
+            [Use::AsValue],
+            "destructuring moves the collection out under a name the rule cannot follow"
+        );
+    }
+
+    /// A use inside a test-only item is not a use.
+    ///
+    /// The same strip `scan::collect` applies, for the same reason: a release
+    /// build never compiles the item, so nothing it does can reach an emitted
+    /// byte. A property test that iterated the exempt field would otherwise be
+    /// a finding no author could satisfy.
+    #[test]
+    fn a_test_only_use_is_ignored() {
+        let source = "
+            #[cfg(test)]
+            mod tests {
+                fn f(stages: &S) {
+                    for path in &stages.staged_sidecars { }
+                }
+            }
+        ";
+        assert!(
+            found(source, "staged_sidecars").is_empty(),
+            "test-only code cannot reach the emitted file"
         );
     }
 }

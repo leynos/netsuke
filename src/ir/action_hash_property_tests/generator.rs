@@ -123,14 +123,35 @@ impl Field {
     }
 }
 
-/// Return a recipe of a different variant from `recipe`.
+/// Return a recipe guaranteed to differ from `recipe`.
 ///
-/// Cycling the variant is the largest structural change available, so a digest
-/// would have to ignore the whole recipe — tag included — for the mutation to
-/// be invisible. Constructing a second value of the same variant would need a
-/// guaranteed-different payload, which some payloads do not offer.
+/// A command list is mutated by flipping its isolation mode, which keeps the
+/// variant and the payload and changes only how the entries run. That is the
+/// narrowest difference the recipe has, and it is the one that makes isolation
+/// observable to the hasher: if the digest ignored the mode, the flipped pair
+/// would intern together and
+/// [`super::unequal_generated_actions_are_observed_to_differ`] would fail.
+/// Every other shape cycles the variant instead, because a same-variant
+/// replacement would need a guaranteed-different payload and some payloads do
+/// not offer one. Cycling is the largest structural change available, so a
+/// digest would have to ignore the whole recipe — tag included — to miss it.
+///
+/// The scalar `Command` produced by cycling carries [`CommandIsolation::Shared`]
+/// because the manifest schema rejects an isolated scalar command
+/// (`COMMAND_ISOLATION_SCALAR_ERROR` in `src/ast/mod.rs`): an `Isolated` value
+/// there would describe a shape no manifest can hold.
 fn other_recipe(recipe: &Recipe) -> Recipe {
     match recipe {
+        Recipe::Command {
+            command: StringOrList::List(items),
+            isolation,
+        } => Recipe::Command {
+            command: StringOrList::List(items.clone()),
+            isolation: match isolation {
+                CommandIsolation::Shared => CommandIsolation::Isolated,
+                CommandIsolation::Isolated => CommandIsolation::Shared,
+            },
+        },
         Recipe::Command { .. } => Recipe::Script {
             script: "echo mutated".to_owned(),
         },
@@ -213,15 +234,29 @@ pub(super) fn action_strategy() -> impl Strategy<Value = Action> {
 /// list separately: `StringOrList` serializes its *shape* as well as its
 /// contents, so a scalar and a one-element list must not be conflated by the
 /// generator even though they render alike.
+///
+/// Only the list arm varies the isolation mode. `CommandIsolation::Isolated` is
+/// a legal value there and unreachable on a scalar, which the manifest schema
+/// enforces (`COMMAND_ISOLATION_SCALAR_ERROR` in `src/ast/mod.rs`); drawing it
+/// on the scalar arm would generate a manifest the parser rejects. Leaving the
+/// mode at `Shared` on the scalar arm still covers the *hasher's* input domain
+/// for that shape, because the scalar arm's job here is the serialized
+/// `StringOrList` shape rather than the mode.
 fn recipe_strategy() -> impl Strategy<Value = Recipe> {
+    let isolated = prop_oneof![
+        Just(CommandIsolation::Shared),
+        Just(CommandIsolation::Isolated),
+    ];
     prop_oneof![
         "[a-z ]{0,16}".prop_map(|command| Recipe::Command {
             command: StringOrList::String(command),
             isolation: CommandIsolation::Shared,
         }),
-        prop::collection::vec("[a-z ]{0,16}", 0..=3).prop_map(|items| Recipe::Command {
-            command: StringOrList::List(items),
-            isolation: CommandIsolation::Shared,
+        (prop::collection::vec("[a-z ]{0,16}", 0..=3), isolated).prop_map(|(items, isolation)| {
+            Recipe::Command {
+                command: StringOrList::List(items),
+                isolation,
+            }
         }),
         "[a-z ]{0,16}".prop_map(|script| Recipe::Script { script }),
         "[a-z-]{0,16}".prop_map(|rule| Recipe::Rule {

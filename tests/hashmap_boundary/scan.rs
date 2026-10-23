@@ -18,8 +18,10 @@
 //! reach an emitted byte. An allowlist of paths would say the same thing less
 //! precisely, and would excuse a production file that later took a listed name.
 
+use super::macro_body;
+use super::test_only::is_test_only;
 use syn::{
-    Attribute, Field, File, Item, Meta, Path, Type, UseTree,
+    Field, File, Item, Path, Type, UseTree,
     visit::{self, Visit},
 };
 
@@ -180,6 +182,31 @@ impl<'ast> Visit<'ast> for Scan {
         }
         visit::visit_expr_path(self, node);
     }
+
+    /// Read a macro body, which the default descent sees only as tokens.
+    ///
+    /// `vec![HashMap::new()]` is a real use of the collection: the `vec!` body
+    /// holds an expression, and nothing in the grammar's item or expression
+    /// hooks reaches it. A body that parses as an expression list is therefore
+    /// descended into like any other code. The rest have a grammar of their own,
+    /// so each is asked whether it spells a matched name at all; the same
+    /// err-towards-reporting choice [`any_segment_unordered`] makes for a bare
+    /// value path applies here.
+    fn visit_macro(&mut self, node: &'ast syn::Macro) {
+        if let Some(arguments) = macro_body::arguments(node) {
+            for argument in &arguments {
+                self.visit_expr(argument);
+            }
+        } else {
+            let spelled = UNORDERED_TYPES
+                .iter()
+                .copied()
+                .filter(|type_name| macro_body::spells(node, type_name));
+            for type_name in spelled {
+                self.record(Kind::Other, type_name);
+            }
+        }
+    }
 }
 
 /// The unordered type a field or binding declares, if it declares one.
@@ -273,105 +300,4 @@ fn names_segment(tree: &UseTree, wanted: &str) -> bool {
             .iter()
             .any(|branch| names_segment(branch, wanted)),
     }
-}
-
-/// Return whether `file` declares a child module called `name` only for tests.
-///
-/// The boundary walk calls this with a directory's own `mod.rs` and each of its
-/// children: the child's *contents* carry no attribute, so the parent is the
-/// only place the answer exists. A declaration the file does not carry, or one
-/// with no `cfg`, answers `false` — an undeclared child cannot be found here,
-/// and the walk has already restricted itself to files this repository's layout
-/// contract makes declarable.
-pub(super) fn declares_test_only_module(file: &File, name: &str) -> bool {
-    file.items.iter().any(|item| match item {
-        Item::Mod(module) => module.ident == name && is_test_only(item),
-        _ => false,
-    })
-}
-
-/// Return whether `item` is compiled only for tests.
-fn is_test_only(item: &Item) -> bool {
-    let attributes = match item {
-        Item::Mod(named) => &named.attrs,
-        Item::Use(named) => &named.attrs,
-        Item::Struct(named) => &named.attrs,
-        Item::Enum(named) => &named.attrs,
-        Item::Fn(named) => &named.attrs,
-        Item::Const(named) => &named.attrs,
-        Item::Static(named) => &named.attrs,
-        Item::Impl(named) => &named.attrs,
-        Item::Type(named) => &named.attrs,
-        Item::Trait(named) => &named.attrs,
-        _ => return false,
-    };
-    attributes.iter().any(implies_test)
-}
-
-/// Return whether one `cfg` attribute holds only in the test configuration.
-///
-/// The predicate is read as a tree rather than as text, and the question asked
-/// is whether it *implies* `test`:
-///
-/// - `test` does.
-/// - `all(a, b)` does when either conjunct does, since both must hold.
-/// - `any(a, b)` does only when both disjuncts do, since either may hold.
-/// - `not(..)` never does, and neither does any other predicate.
-///
-/// The distinction matters at the call site: `cfg(all(test, unix))` is never
-/// compiled in a release build, while `cfg(any(test, unix))` is.
-fn implies_test(attribute: &Attribute) -> bool {
-    if !names_cfg(attribute.path()) {
-        return false;
-    }
-    let Ok(meta) = attribute.parse_args::<Meta>() else {
-        return false;
-    };
-    meta_implies_test(&meta)
-}
-
-/// Return whether an attribute path is the `cfg` macro.
-fn names_cfg(path: &Path) -> bool {
-    path.segments
-        .last()
-        .is_some_and(|segment| segment.ident == "cfg")
-}
-
-/// Return whether one parsed `cfg` predicate implies the test configuration.
-fn meta_implies_test(meta: &Meta) -> bool {
-    match meta {
-        Meta::Path(path) => is_test_ident(path),
-        Meta::List(list) => list
-            .parse_args_with(syn::punctuated::Punctuated::<Meta, syn::Token![,]>::parse_terminated)
-            .is_ok_and(|operands| predicate_implies_test(&list.path, &operands)),
-        Meta::NameValue(_) => false,
-    }
-}
-
-/// Return whether a combinator's operands imply the test configuration.
-///
-/// `all` needs one conjunct to imply `test`; `any` needs every disjunct to.
-/// Anything else — `not(...)`, `target_os = "..."` — implies nothing.
-fn predicate_implies_test(
-    combinator: &Path,
-    operands: &syn::punctuated::Punctuated<Meta, syn::Token![,]>,
-) -> bool {
-    let Some(name) = combinator.segments.last() else {
-        return false;
-    };
-    let verdicts: Vec<bool> = operands.iter().map(meta_implies_test).collect();
-    match name.ident.to_string().as_str() {
-        "all" => verdicts.into_iter().any(|verdict| verdict),
-        "any" => verdicts.into_iter().all(|verdict| verdict),
-        _ => false,
-    }
-}
-
-/// Return whether a bare predicate path is the `test` configuration.
-fn is_test_ident(path: &Path) -> bool {
-    path.segments.len() == 1
-        && path
-            .segments
-            .last()
-            .is_some_and(|segment| segment.ident == "test")
 }
