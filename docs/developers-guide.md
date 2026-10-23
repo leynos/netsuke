@@ -13,16 +13,19 @@ The [CI performance evidence protocol](ci-performance/README.md) owns the
 attempt-scoped observations for issue #894. Its offline collector,
 `scripts/ci_test_evidence.py`, consumes saved GitHub API responses and logs; it
 does not call GitHub, dispatch CI, or change any gate. Its log, cache, doctest,
-Nextest, telemetry, cohort, validation, and serialization helpers
+Nextest, telemetry, cohort, validation, and type helpers
 (`scripts/ci_test_evidence_*.py`) are private to this collector. Application
 code and workflow execution must not import them. No equivalent collector
 exists in the release-operation observability helper, which instead measures
 its release phases from an injected environment.
 
-The collector's serialization module owns its fixed runner, outcome, and phase
-vocabularies, positive-integer API identity, and non-negative step-number
-validation. Only the offline collector may call those checks; application
-identity policies remain in their domain modules.
+The collector's types module (`scripts/ci_test_evidence_types.py`) owns its
+fixed runner, outcome, and phase vocabularies, positive-integer API identity,
+and non-negative step-number validation. Only the offline collector may call
+those checks; application identity policies remain in their domain modules.
+
+**Triage:** [type:docstyle] The explicit module name avoids implying a separate
+serialization layer for collector-internal types and validation.
 
 Keep parsing independent of filesystem delivery and retain unknown evidence as
 `null`. Validate optional inventory artefacts against the run, attempt, and job
