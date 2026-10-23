@@ -108,21 +108,37 @@ fn is_permitted(hit: &Hit) -> bool {
 /// loop names no collection, so there is no declaration for the list to judge.
 fn uncovered_uses(sources: &[Source]) -> Result<Vec<String>> {
     let mut uncovered = Vec::new();
-    for source in sources {
-        if source.declaration_is_test_only {
-            continue;
-        }
-        let parsed = scan::parse(&source.text).with_context(|| format!("parse {}", source.path))?;
-        for (field, owner) in PERMITTED_UNORDERED_FIELDS {
-            if owner != source.path {
-                continue;
-            }
-            for found in bindings::uses(&parsed, field) {
-                uncovered.push(format!("{}: {field} is {found:?}", source.path));
-            }
-        }
+    for source in sources
+        .iter()
+        .filter(|source| !source.declaration_is_test_only)
+    {
+        uncovered.extend(uncovered_in(source)?);
     }
     Ok(uncovered)
+}
+
+/// Every uncovered use of a permitted field in one source.
+///
+/// Only the fields the exemption pairs with *this* file are considered, so a
+/// permitted field in another module is judged where it is declared. The parse
+/// is shared across those fields because a source is read once, not once per
+/// exemption.
+///
+/// # Errors
+///
+/// Returns the parser's error when the source is not a Rust source file.
+fn uncovered_in(source: &Source) -> Result<Vec<String>> {
+    let parsed = scan::parse(&source.text).with_context(|| format!("parse {}", source.path))?;
+    let mut found = Vec::new();
+    for (field, owner) in PERMITTED_UNORDERED_FIELDS {
+        if owner != source.path {
+            continue;
+        }
+        for used in bindings::uses(&parsed, field) {
+            found.push(format!("{}: {field} is {used:?}", source.path));
+        }
+    }
+    Ok(found)
 }
 
 /// Join `name` to `prefix` with a forward slash.
