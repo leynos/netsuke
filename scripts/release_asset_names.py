@@ -1,7 +1,7 @@
-"""Judge whether a staged asset name is safe to publish as a bare file name.
+r"""Judge whether a staged asset name is safe to publish as a bare file name.
 
 An asset name is data, not a path on the host that produced it, so it is
-judged under both path flavours. ``C:\\Windows\\netsuke.exe`` is one ordinary
+judged under both path flavours. ``C:\Windows\netsuke.exe`` is one ordinary
 component to a POSIX parser and something else entirely to an uploader running
 on Windows; a name absolute under *either* reading is refused.
 

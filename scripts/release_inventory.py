@@ -134,16 +134,12 @@ def _require_usable_entries(assets: list[PublishedAsset]) -> dict[str, int]:
     dict[str, int]
         How many entries claim each staged name.
 
-    Raises
-    ------
-    EmptyAssetError
-        If a staged asset carries no bytes.
-    DuplicateAssetError
-        If two staged entries claim one name.
-
+    Notes
+    -----
     Emptiness is judged before duplication so a duplicated empty file is not
     reported as merely duplicated, which would hide that it could never be
-    used.
+    used. :class:`EmptyAssetError` is raised by :func:`_require_non_empty` and
+    :class:`DuplicateAssetError` by :func:`_require_unique`.
     """
     _require_non_empty(assets)
     counts = _name_counts(assets)
@@ -168,6 +164,11 @@ def _require_non_empty(assets: list[PublishedAsset]) -> None:
 
 def _name_counts(assets: cabc.Iterable[PublishedAsset]) -> dict[str, int]:
     """Return how many entries claim each staged name.
+
+    Returns
+    -------
+    dict[str, int]
+        Each staged name mapped to the number of entries claiming it.
 
     Examples
     --------
@@ -247,11 +248,6 @@ def validate_inventory(
     expected
         Asset names the release declared.
 
-    Raises
-    ------
-    InventoryError
-        Of whichever subclass the first failing check reports.
-
     Notes
     -----
     Checks run from the most local defect outward: name shape, then emptiness,
@@ -259,7 +255,9 @@ def validate_inventory(
     before set membership because ``..`` is both undeclared *and* escaping,
     and escaping is the diagnosis worth surfacing. Each check reports every
     offending name rather than the first, so one run describes the whole
-    shortfall. Nothing here catches the helpers' refusals.
+    shortfall. Nothing here catches the helpers' refusals: whichever subclass
+    of :class:`InventoryError` the first failing check reports reaches the
+    caller unchanged.
 
     Examples
     --------

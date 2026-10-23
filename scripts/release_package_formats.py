@@ -81,6 +81,11 @@ class DuplicatePackageError(StagedTreeError):
 def match_format(staged: cabc.Iterable[Path], package_format: str) -> list[Path]:
     """Return the staged packages carrying ``package_format`` as their suffix.
 
+    Returns
+    -------
+    list[Path]
+        The staged paths whose suffix is ``package_format``, in input order.
+
     Examples
     --------
     >>> from pathlib import Path

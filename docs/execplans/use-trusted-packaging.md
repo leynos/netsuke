@@ -1932,6 +1932,56 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `mdtablefix` rewrap of the entry above. Both are recorded here rather than
   smoothed away, because each is the kind of mechanical defect the freeze rule
   exists to force into the open instead of under a running gate.
+- [x] (2026-10-23) Repaired the two gate failures the module split exposed, and
+  a third the repair itself unmasked. The third batch of gates ran at
+  `a461c427` and returned two failures, both in tests the split had touched but
+  not caused. `make typecheck` reported four `invalid-argument-type`
+  diagnostics in `scripts/tests/test_release_candidate.py`: the split's own
+  `_facts` helper unpacked `{**base, **changes}` into `CandidateFacts`, and a
+  `dict[str, str | None]` widens *every* field to nullable, so the four
+  non-nullable fields no longer typechecked. Replaced with a fully tagged
+  `TAGGED_FACTS` value varied through `dataclasses.replace`, which checks each
+  replacement against the field it replaces and keeps the per-field agreement
+  the mapping form threw away. `make test-workflow-contracts` reported a
+  Hypothesis `DeadlineExceeded` at 296.71 ms against the 200 ms default in
+  `tests/workflow_contracts/local_reference_property_test.py`, whose examples
+  write, scan, and remove two synthetic workspaces on disk; the same example
+  re-ran in 5.95 ms, so the deadline measured scheduler contention rather than
+  the property. Disabled with `@settings(deadline=None)`, matching the 30 of 57
+  sibling `@given` tests in that suite that already do so. Both fixes were
+  verified in isolation — `make typecheck` exited 0 and the focused suite
+  reported `61 passed` — before being committed together as `880e98f82`. The
+  fourth batch then ran all ten gates at `880e98f82` and returned nine green;
+  `make lint` was the sole failure, and it failed only on the Python side, with
+  `cargo doc`, Clippy under `-D warnings`, and both Whitaker invocations
+  passing. Its Ruff stage reported 22 findings in the modules the split had
+  created or rewritten: 6 `docstring-extraneous-exception`, 9
+  `docstring-missing-returns`, and 4 `escape-sequence-in-docstring`, plus 3
+  auto-fixable import/`__all__` orderings. Every one is a defect the split
+  introduced, which is why the branch carries the fix rather than main. The
+  remedies were structural, never suppressive — there is no `noqa` precedent
+  for the `DOC` rules anywhere in the repository, and the repository's own
+  instruction is that lints are silenced only as a last resort. A `Raises`
+  entry naming an exception the function delegates to a helper now lives in
+  `Notes` prose, because Ruff's `DOC501` requires the `raise` to appear in the
+  documented function itself; genuine `Returns` sections were added where the
+  split lost them; and four docstrings carrying backslash escapes became raw
+  strings, with their doctest bodies adjusted so the examples still see a
+  newline rather than a literal `\n`. All eight files remain under the 400-line
+  cap, with `release_declaration.py` the largest at 384. Because `make lint`
+  stops at the first failing sub-target, the four stages behind Ruff — Pylint,
+  the df12 house lints, `ambrleaks`, and Interrogate — had never run at this
+  revision and are therefore unverified rather than passing; the next batch
+  establishes them, and their finding count is a lower bound on the first run.
+  Running that cascade directly unmasked one further finding: the df12 house
+  lint `R9109` (`prefer-snapshot-substring`) reported that
+  `release_package_tag_test.py` probed one subject — the action's `run` body —
+  with three substring assertions. The remedy was the one the rule asks for, a
+  table: the three fragments and their reasons became `SELECTOR_FRAGMENTS`, and
+  the test is now a `pytest.mark.parametrize` row per fragment, so the row that
+  fails names itself. That raises the case count from three to five — the `ids`
+  list keeps the two rewritten selectors readable — without weakening any
+  assertion.
 
 ## Surprises & discoveries
 

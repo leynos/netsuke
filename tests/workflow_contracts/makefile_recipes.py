@@ -66,6 +66,11 @@ def _opens_escaped_hash(text: str, index: int) -> bool:
     ``make`` treats ``\#`` as a literal hash. Masking from it would hide the
     command that follows, so the pair is stepped over rather than read.
 
+    Returns
+    -------
+    bool
+        True when ``index`` holds a backslash immediately followed by ``#``.
+
     Examples
     --------
     >>> _opens_escaped_hash(r"pkg\#subdir", 3)
@@ -77,14 +82,20 @@ def _opens_escaped_hash(text: str, index: int) -> bool:
 
 
 def _comment_ends_at(text: str, index: int) -> int:
-    """Return where the comment opening at ``index`` stops.
+    r"""Return where the comment opening at ``index`` stops.
 
     A comment runs to the end of its line; one on the final line with no
     newline runs to the end of the text.
 
+    Returns
+    -------
+    int
+        Index of the newline ending the comment, or the text's length when the
+        comment runs to the end.
+
     Examples
     --------
-    >>> _comment_ends_at("run: tool  # note\\nnext: x\\n", 12)
+    >>> _comment_ends_at("run: tool  # note\nnext: x\n", 12)
     17
     >>> _comment_ends_at("a:  # tail", 4)
     10

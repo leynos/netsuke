@@ -23,6 +23,7 @@ Run via ``make test-workflow-contracts``.
 
 import typing as typ
 
+import pytest
 import yaml
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
@@ -104,7 +105,24 @@ def test_the_action_accepts_a_tag_and_a_rehearsal() -> None:
     )
 
 
-def test_the_action_selects_the_selector_before_invoking_the_cli() -> None:
+#: Each fragment the action's ``run`` body must carry, with the reason it is
+#: required. A table rather than three similar assertions, so a reader sees the
+#: complete set of selectors the CLI's mutual exclusion depends on.
+SELECTOR_FRAGMENTS = (
+    ("--dry-run", "the action must be able to select a rehearsal"),
+    ('--tag "$RELEASE_TAG"', "the action must select the release tag"),
+    ("case", "the action must branch on the mode rather than pass both selectors"),
+)
+
+
+@pytest.mark.parametrize(
+    ("fragment", "reason"),
+    SELECTOR_FRAGMENTS,
+    ids=[row[0] for row in SELECTOR_FRAGMENTS],
+)
+def test_the_action_selects_the_selector_before_invoking_the_cli(
+    fragment: str, reason: str
+) -> None:
     """Give the CLI exactly one of ``--tag`` and ``--dry-run``, never both.
 
     The CLI refuses the pair, so an action that passed both would fail every
@@ -113,8 +131,4 @@ def test_the_action_selects_the_selector_before_invoking_the_cli() -> None:
     """
     run = _action_run_body()
 
-    assert "--dry-run" in run, "the action must be able to select a rehearsal"
-    assert '--tag "$RELEASE_TAG"' in run, "the action must select the release tag"
-    assert "case" in run, (
-        "the action must branch on the mode rather than pass both selectors"
-    )
+    assert fragment in run, reason

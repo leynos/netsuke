@@ -48,15 +48,14 @@ import typing as typ
 
 import hoist_binstall_discovery
 import release_inventory
-import release_package_formats
 from release_package_formats import (
+    PLATFORM_FORMATS,
     ConfigurationError,
     DeclarationError,
     DuplicatePackageError,
     MalformedTargetError,
     MissingPackageError,
     MissingTargetsError,
-    PLATFORM_FORMATS,
     StagedTreeError,
     UnknownPlatformError,
     match_format,
@@ -73,13 +72,13 @@ if typ.TYPE_CHECKING:
 #: :mod:`release_package_formats`, which owns them; the list is explicit so a
 #: name removed there fails here rather than silently disappearing.
 __all__ = [
+    "PLATFORM_FORMATS",
     "ConfigurationError",
     "DeclarationError",
     "DuplicatePackageError",
     "MalformedTargetError",
     "MissingPackageError",
     "MissingTargetsError",
-    "PLATFORM_FORMATS",
     "StagedTreeError",
     "UnknownPlatformError",
     "declared_asset_names",
@@ -227,20 +226,17 @@ def _packages_for_platform(
     list[str]
         Sorted published names, one per staged package file.
 
-    Raises
-    ------
-    MissingPackageError
-        If any format is represented by a number of files other than
-        ``target_count``.
-    DuplicatePackageError
-        If two staged files, wherever they sit in the tree, publish under one
-        name.
-
     Notes
     -----
     The count is checked per format before any name is mapped, so a shortfall
     is reported as the missing package rather than as whichever duplicate or
     surplus the mapping would have produced first.
+
+    Both refusals are raised by the helpers this composes:
+    :class:`MissingPackageError` by :func:`require_format_count` when any format
+    is represented by a number of files other than ``target_count``, and
+    :class:`DuplicatePackageError` by :func:`require_unique_names` when two
+    staged files, wherever they sit in the tree, publish under one name.
     """
     staged = hoist_binstall_discovery.walk_files(dist_dir)
     names: list[str] = []
@@ -280,8 +276,12 @@ def _declared_packages(
     ------
     UnknownPlatformError
         If the configuration declares a platform this build cannot package.
-    MissingPackageError, DuplicatePackageError
-        Propagated from :func:`_packages_for_platform`.
+
+    Notes
+    -----
+    :class:`MissingPackageError` and :class:`DuplicatePackageError` reach the
+    caller unchanged from :func:`_packages_for_platform`, which states which
+    each can produce.
     """
     packages: list[str] = []
     for platform, target_count in sorted(counts.items()):
@@ -317,12 +317,6 @@ def declared_asset_names(
         The archives and their sidecars followed by the operating-system
         packages, sorted so the declaration is stable between runs.
 
-    Raises
-    ------
-    UnknownPlatformError
-        If the configuration declares a target for a platform this build has
-        no package format for, so that platform's assets would be omitted.
-
     Notes
     -----
     The archive half is resolved before the package half, deliberately: it
@@ -331,6 +325,10 @@ def declared_asset_names(
     smaller release. Every :class:`DeclarationError` the helpers raise
     propagates unchanged; :func:`_declared_packages` and
     :func:`_packages_for_platform` state which each can produce.
+
+    :class:`UnknownPlatformError` is raised by :func:`_declared_packages` when
+    the configuration declares a target for a platform this build has no
+    package format for, so that platform's assets would be omitted.
 
     Examples
     --------
