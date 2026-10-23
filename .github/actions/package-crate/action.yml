@@ -1,0 +1,72 @@
+---
+name: Package crate
+description: >-
+  Resolve one release candidate's identity and package the crate it names,
+  producing the `.crate` archive and the record that vouches for it.
+
+inputs:
+  tag:
+    description: The release tag, for example `v0.1.0-beta4`.
+    required: true
+  commit:
+    description: >-
+      The full commit SHA the workflow checked out. Supplied by the caller from
+      `github.sha`, so the identity records the revision the bytes were built
+      from rather than one resolved separately and never observed.
+    required: true
+  package-name:
+    description: >-
+      The Cargo package name, which differs from the binary name. `Cargo.toml`
+      declares `package.name = "netsuke-build"` while the binary is `netsuke`.
+    required: true
+  version:
+    description: The crate version declared in the manifest.
+    required: true
+  bin-name:
+    description: The installed binary name.
+    required: true
+
+outputs:
+  identity-path:
+    description: The identity record the packaging stage wrote.
+    value: ${{ steps.package.outputs.identity-path }}
+  crate-path:
+    description: The packaged `.crate` archive, resolved from that record.
+    value: ${{ steps.package.outputs.crate-path }}
+  crate-name:
+    description: The archive's file name, as the record spells it.
+    value: ${{ steps.package.outputs.crate-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Package crate
+      id: package
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_PACKAGE_NAME: ${{ inputs['package-name'] }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_BIN_NAME: ${{ inputs['bin-name'] }}
+      run: |
+        set -euo pipefail
+        mkdir -p artifacts/package
+        uv run --no-project --python 3.14 scripts/package_crate_cli.py \
+          --tag "$RELEASE_TAG" \
+          --commit "$RELEASE_COMMIT" \
+          --package-name "$RELEASE_PACKAGE_NAME" \
+          --version "$RELEASE_VERSION" \
+          --bin-name "$RELEASE_BIN_NAME" \
+          --manifest Cargo.toml \
+          --target-dir target \
+          --output artifacts/package/identity.json
+        # The record stores the archive's *name*; `cargo package --target-dir`
+        # nests it one level down, so the directory is supplied here rather
+        # than read from the record.
+        crate_name="$(jq -r '.crate' artifacts/package/identity.json)"
+        {
+          printf 'identity-path=%s\n' 'artifacts/package/identity.json'
+          printf 'crate-name=%s\n' "$crate_name"
+          printf 'crate-path=%s\n' "target/package/$crate_name"
+        } >>"$GITHUB_OUTPUT"

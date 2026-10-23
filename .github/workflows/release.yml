@@ -78,6 +78,10 @@ jobs:
     outputs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs['bin-name'] }}
+      # The Cargo package name, which is `netsuke-build` while the *binary* is
+      # `netsuke`. The packaging and registry seams must address the package,
+      # so the two names are separate outputs rather than one reused value.
+      package_name: ${{ steps.ensure_version.outputs['crate-name'] }}
       package_maintainer: ${{ steps.package_metadata.outputs.maintainer }}
       package_homepage: ${{ steps.package_metadata.outputs.homepage }}
       package_license: ${{ steps.package_metadata.outputs.license }}
@@ -401,6 +405,47 @@ jobs:
         with:
           name: release-admission-traces
           path: ${{ env.NETSUKE_RELEASE_ADMISSION_TRACE_FILE }}
+          if-no-files-found: error
+
+  package-crate:
+    # Resolves one release candidate's identity and packages the crate it
+    # names. `cargo package` refuses to run inside a Git worktree, so the
+    # archive must be produced here and handed on rather than rebuilt later.
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install Rust
+        uses: >-
+          leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - name: Package the crate and record its identity
+        uses: ./.github/actions/package-crate
+        with:
+          tag: ${{ github.ref_name }}
+          commit: ${{ github.sha }}
+          package-name: ${{ needs.metadata.outputs.package_name }}
+          version: ${{ needs.metadata.outputs.version }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+      - name: Upload the packaged archive to regather
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-crate-package
+          path: |
+            artifacts/package/identity.json
+            target/package/*.crate
           if-no-files-found: error
 
   release:
