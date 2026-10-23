@@ -112,13 +112,6 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
     pathlib.Path
         The single ``.crate`` file the command produced.
 
-    Raises
-    ------
-    RuntimeError
-        If ``cargo package`` exits non-zero, exceeds
-        :data:`PACKAGING_TIMEOUT_SECONDS`, or if the directory does not hold
-        exactly one crate afterwards.
-
     Notes
     -----
     ``--no-verify`` is deliberately not passed: the command's own verification
@@ -135,7 +128,9 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
     from an earlier run would otherwise be published under this run's
     identity, which is the failure the digest record exists to prevent.
 
-    Both helpers raise ``RuntimeError`` so :func:`main` translates them into
+    Both helpers raise ``RuntimeError`` — if ``cargo package`` exits non-zero,
+    exceeds :data:`PACKAGING_TIMEOUT_SECONDS`, or if the directory does not
+    hold exactly one crate afterwards — so :func:`main` translates them into
     ``EXIT_PACKAGING_FAILED``. A ``TimeoutExpired`` escaping instead would
     surface as a traceback from a module whose whole contract is "exits with a
     code and a message".
@@ -191,6 +186,11 @@ def _run_package(manifest: pathlib.Path, destination: pathlib.Path) -> None:
 
 def _the_only_crate(staging: pathlib.Path) -> pathlib.Path:
     """Return the single crate in ``staging``, refusing any other count.
+
+    Returns
+    -------
+    pathlib.Path
+        The one ``.crate`` file ``staging`` holds.
 
     Raises
     ------

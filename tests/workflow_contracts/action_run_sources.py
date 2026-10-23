@@ -157,6 +157,11 @@ def _is_action_directory(path: pathlib.Path) -> bool:
     is: its content is not this tree's to vouch for, so a manifest reached
     through the link would assert a rule about code held elsewhere.
 
+    Returns
+    -------
+    bool
+        True when the path is a directory reached without a symlink.
+
     Examples
     --------
     >>> import tempfile
@@ -173,10 +178,15 @@ def _is_action_directory(path: pathlib.Path) -> bool:
 
 
 def _is_action_manifest(path: pathlib.Path) -> bool:
-    """Report whether ``path`` is a real manifest file rather than a link.
+    r"""Report whether ``path`` is a real manifest file rather than a link.
 
     Both halves are required: an absent ``action.yaml`` and a linked one are
     different facts, and only the first means the action does not carry one.
+
+    Returns
+    -------
+    bool
+        True when the path is a file reached without a symlink.
 
     Examples
     --------
@@ -184,7 +194,7 @@ def _is_action_manifest(path: pathlib.Path) -> bool:
     >>> from pathlib import Path
     >>> with tempfile.TemporaryDirectory() as root:
     ...     manifest = Path(root) / "action.yml"
-    ...     _ = manifest.write_text("runs:\\n", encoding="utf-8")
+    ...     _ = manifest.write_text("runs:\n", encoding="utf-8")
     ...     _is_action_manifest(manifest)
     ...     _is_action_manifest(Path(root) / "action.yaml")
     True

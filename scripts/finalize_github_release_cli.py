@@ -104,13 +104,6 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     dict[str, str]
         Asset name to its expected bare hexadecimal digest.
 
-    Raises
-    ------
-    InputUnreadableError
-        If the file cannot be read, is not a JSON object, carries no
-        ``assets`` member, or carries an ``assets`` value that is not a
-        non-empty mapping of name to digest.
-
     Notes
     -----
     Every refusal here exists for the same reason. A ``.get("assets", {})``
@@ -120,6 +113,11 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     vacuous success. An empty mapping is refused for the same reason: a release
     with no assets cannot be correct, and the verifier only writes this record
     after comparing a non-empty declaration.
+
+    :class:`InputUnreadableError` is raised through the two helpers below, when
+    the file cannot be read, is not a JSON object, carries no ``assets``
+    member, or carries an ``assets`` value that is not a non-empty mapping of
+    name to digest.
 
     Examples
     --------
@@ -147,6 +145,11 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
 def _record_object(identity_path: pathlib.Path) -> dict[str, object]:
     """Return the digest record's top-level JSON object.
 
+    Returns
+    -------
+    dict[str, object]
+        The object the record holds.
+
     Raises
     ------
     InputUnreadableError
@@ -165,6 +168,12 @@ def _record_object(identity_path: pathlib.Path) -> dict[str, object]:
 
 def _declared_assets(record: dict[str, object]) -> dict[object, object]:
     """Return the record's non-empty ``assets`` mapping.
+
+    Returns
+    -------
+    dict[object, object]
+        The declared mapping, before its names and digests are rendered as
+        strings.
 
     Raises
     ------
