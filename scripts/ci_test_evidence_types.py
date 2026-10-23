@@ -40,6 +40,19 @@ PHASES = {
     "Validate coverage artefact": "coverage_validation",
     "Upload coverage data to CodeScene": "codescene_upload",
 }
+
+
+def is_runner_label(label: object) -> bool:
+    """Recognize collector runner labels; ``is_runner_label(None)`` is false."""
+    match label:
+        case str() as runner_label if (
+            runner_label in RUNNER_LABELS or UBICLOUD_SHAPE.fullmatch(runner_label)
+        ):
+            return True
+        case _:
+            return False
+
+
 INVENTORY_FIELDS: typ.Final[dict[str, tuple[str, ...]]] = {
     "profiles": (
         "raw_count",
@@ -78,12 +91,18 @@ def validate_identities(identities: list[object]) -> None:
         If an integer identity is not positive.
     """
     for value in identities:
-        if not isinstance(value, int) or isinstance(value, bool):
-            message = "invalid integer identity"
-            raise TypeError(message)
-        if value <= 0:
-            message = "invalid positive identity"
-            raise ValueError(message)
+        match value:
+            case bool():
+                message = "invalid integer identity"
+                raise TypeError(message)
+            case int() if value <= 0:
+                message = "invalid positive identity"
+                raise ValueError(message)
+            case int():
+                continue
+            case _:
+                message = "invalid integer identity"
+                raise TypeError(message)
 
 
 def normalize_step_number(value: object) -> int | None:
