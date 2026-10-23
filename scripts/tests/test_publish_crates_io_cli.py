@@ -37,6 +37,8 @@ def _classify_argv(
         "classify",
         "--status",
         str(status),
+        "--version",
+        VERSION,
         "--sha256",
         DIGEST,
         "--output",
@@ -45,6 +47,28 @@ def _classify_argv(
     if body is not None:
         argv.extend(["--body", str(body)])
     return argv
+
+
+def _crate_body(*records: tuple[str, bool]) -> str:
+    """Render a crate-endpoint response describing :data:`VERSION`.
+
+    The endpoint answers with the crate's whole history, so a fixture that
+    omitted ``num`` would describe no version in particular and the CLI would
+    have nothing to classify against. The stated total matches the records
+    sent, which is what the live endpoint does.
+
+    Returns
+    -------
+    str
+        The response body, as JSON text.
+    """
+    return json.dumps({
+        "crate": {"num_versions": len(records)},
+        "versions": [
+            {"num": VERSION, "checksum": checksum, "yanked": is_yanked}
+            for checksum, is_yanked in records
+        ],
+    })
 
 
 def _verify_argv(archive: pathlib.Path, destination: pathlib.Path) -> list[str]:
@@ -89,10 +113,7 @@ def test_the_cli_records_the_action_the_registry_state_dictates(
     """Record both the state and the action, so the log explains the decision."""
     destination = tmp_path / "decision.json"
     body = tmp_path / "body.json"
-    _ = body.write_text(
-        json.dumps({"versions": [{"checksum": DIGEST, "yanked": False}]}),
-        encoding="utf-8",
-    )
+    _ = body.write_text(_crate_body((DIGEST, False)), encoding="utf-8")
 
     code = main(_classify_argv(destination, status=status, body=body))
 
@@ -106,10 +127,7 @@ def test_the_cli_refuses_a_conflicting_registry_entry(tmp_path: pathlib.Path) ->
     """Stop on a digest that disagrees, and record the state that stopped it."""
     destination = tmp_path / "decision.json"
     body = tmp_path / "body.json"
-    _ = body.write_text(
-        json.dumps({"versions": [{"checksum": "cd" * 32, "yanked": False}]}),
-        encoding="utf-8",
-    )
+    _ = body.write_text(_crate_body(("cd" * 32, False)), encoding="utf-8")
 
     code = main(_classify_argv(destination, status=200, body=body))
 
@@ -125,10 +143,7 @@ def test_the_cli_refuses_a_yanked_version(
     """Stop on a yanked version even when its checksum matches."""
     destination = tmp_path / "decision.json"
     body = tmp_path / "body.json"
-    _ = body.write_text(
-        json.dumps({"versions": [{"checksum": DIGEST, "yanked": True}]}),
-        encoding="utf-8",
-    )
+    _ = body.write_text(_crate_body((DIGEST, True)), encoding="utf-8")
 
     code = main(_classify_argv(destination, status=200, body=body))
 

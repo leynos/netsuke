@@ -15,6 +15,11 @@ identifier carries a letter, so it is alphanumeric, and Cargo's `semver` crate
 accepts it. A row asserting the opposite was written here first and failed,
 which is the whole reason this corpus is checked against the reference
 implementation rather than against intuition.
+
+The mirror case is ``0.1.0+001``, and it errs the other way: build
+metadata carries no ordering, and Cargo's parser applies the padding guard only
+to prerelease identifiers, so padding there is legal. A grammar that reused the
+prerelease predicate for both fields refused it, which is what these rows pin.
 """
 
 import pytest
@@ -37,6 +42,8 @@ _TAG = "v0.1.0-beta4"
         pytest.param("0.0.0", id="the-zero-version"),
         pytest.param("1.0.0-alpha-a.b-c-somethinglong", id="a-long-hyphenated-one"),
         pytest.param("0.1.0-beta04", id="padding-inside-an-alphanumeric-part"),
+        pytest.param("0.1.0+001", id="padding-in-numeric-build-metadata"),
+        pytest.param("0.1.0-beta4+01.002", id="padding-in-dotted-build-metadata"),
         pytest.param(
             "0.1.0-x7.z.92", id="a-part-that-is-neither-pure-digit-nor-letter"
         ),
@@ -72,6 +79,7 @@ def test_well_formed_versions_are_accepted(version: str) -> None:
         ),
         pytest.param("0.1.0-", "an empty prerelease", id="empty-prerelease"),
         pytest.param("0.1.0+", "an empty metadata field", id="empty-metadata"),
+        pytest.param("0.1.0+01..2", "an empty metadata part", id="metadata-double-dot"),
         pytest.param("0.1.0-beta..4", "an empty prerelease part", id="double-dot"),
         pytest.param("0.1.0 ", "trailing whitespace", id="trailing-space"),
         pytest.param(" 0.1.0", "leading whitespace", id="leading-space"),

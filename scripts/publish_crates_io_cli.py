@@ -71,6 +71,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="file holding the response body, omitted when the response had none",
     )
     classify.add_argument(
+        "--version",
+        required=True,
+        help=(
+            "the version this run intends to publish; the crate endpoint "
+            "answers with the whole history, so the state is only meaningful "
+            "for a named version"
+        ),
+    )
+    classify.add_argument(
         "--sha256", required=True, help="digest this run would publish"
     )
     classify.add_argument(
@@ -102,7 +111,10 @@ def _classify(arguments: argparse.Namespace) -> int:
         else None
     )
     state = release_reconcile_crates.classify_registry_state(
-        body, intended_sha256=arguments.sha256, http_status=arguments.status
+        body,
+        version=arguments.version,
+        intended_sha256=arguments.sha256,
+        http_status=arguments.status,
     )
     action = release_reconcile_crates.plan_crates_action(state)
     arguments.output.write_text(
@@ -181,8 +193,8 @@ def main(argv: list[str] | None = None) -> int:
     is to publish. ``/dev/null`` stands in for the destination, because a
     doctest may not leave a file behind:
 
-    >>> main(["classify", "--status", "404", "--sha256", "ab",
-    ...       "--output", "/dev/null"])
+    >>> main(["classify", "--status", "404", "--version", "1.0.0",
+    ...       "--sha256", "ab", "--output", "/dev/null"])
     0
     """
     arguments = build_parser().parse_args(argv)

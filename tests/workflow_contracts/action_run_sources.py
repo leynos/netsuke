@@ -43,6 +43,13 @@ def step_run_violations(
     The steps carry no job identifier of their own, so ``source_name`` labels
     the diagnostic and is the file the steps came from.
 
+    Parameters
+    ----------
+    source_name : str
+        Label for the diagnostic, naming the file the steps came from.
+    steps : cabc.Sequence[dict[str, object]]
+        Step mappings to inspect, in declaration order.
+
     Returns
     -------
     list[str]
@@ -76,6 +83,13 @@ def workflow_step_contexts(
     job must provide a list, including jobs with no run blocks, so an invalid
     shape cannot evade the contracts that read this.
 
+    Parameters
+    ----------
+    workflow_name : str
+        Label for diagnostics and for the shape errors raised here.
+    workflow : dict[str, object]
+        Parsed workflow document whose ``jobs`` are walked.
+
     Yields
     ------
     tuple[str, int, dict[str, object]]
@@ -101,6 +115,13 @@ def run_expression_violations(
     workflow_name: str, workflow: dict[str, object]
 ) -> list[str]:
     """Describe workflow run blocks containing GitHub expression source text.
+
+    Parameters
+    ----------
+    workflow_name : str
+        Label for the diagnostic, naming the workflow file.
+    workflow : dict[str, object]
+        Parsed workflow document whose job steps are inspected.
 
     Returns
     -------
@@ -129,6 +150,49 @@ def run_expression_violations(
     return violations
 
 
+def _is_action_directory(path: pathlib.Path) -> bool:
+    """Report whether ``path`` is a real action directory rather than a link.
+
+    A symlinked action directory is skipped for the same reason its manifest
+    is: its content is not this tree's to vouch for, so a manifest reached
+    through the link would assert a rule about code held elsewhere.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     _ = (Path(root) / "real").mkdir()
+    ...     _ = (Path(root) / "linked").symlink_to(Path(root) / "real")
+    ...     _is_action_directory(Path(root) / "real")
+    ...     _is_action_directory(Path(root) / "linked")
+    True
+    False
+    """
+    return path.is_dir() and not path.is_symlink()
+
+
+def _is_action_manifest(path: pathlib.Path) -> bool:
+    """Report whether ``path`` is a real manifest file rather than a link.
+
+    Both halves are required: an absent ``action.yaml`` and a linked one are
+    different facts, and only the first means the action does not carry one.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     manifest = Path(root) / "action.yml"
+    ...     _ = manifest.write_text("runs:\\n", encoding="utf-8")
+    ...     _is_action_manifest(manifest)
+    ...     _is_action_manifest(Path(root) / "action.yaml")
+    True
+    False
+    """
+    return path.is_file() and not path.is_symlink()
+
+
 def action_manifest_paths(
     repository_root: pathlib.Path = REPO_ROOT,
 ) -> list[pathlib.Path]:
@@ -139,27 +203,39 @@ def action_manifest_paths(
     Symlinks are skipped there for the same reason they are skipped here -- a
     linked manifest's content is not this tree's to vouch for.
 
+    Parameters
+    ----------
+    repository_root : pathlib.Path
+        Repository root holding the action directory.
+
     Returns
     -------
     list[pathlib.Path]
         Each manifest path, ordered by action directory then manifest name.
     """
     action_root = repository_root / ACTION_DIRECTORY
-    paths: list[pathlib.Path] = []
-    for directory in sorted(action_root.iterdir()):
-        if not directory.is_dir() or directory.is_symlink():
-            continue
-        for name in ACTION_MANIFEST_NAMES:
-            manifest = directory / name
-            if manifest.is_file() and not manifest.is_symlink():
-                paths.append(manifest)
-    return paths
+    directories = sorted(
+        directory
+        for directory in action_root.iterdir()
+        if _is_action_directory(directory)
+    )
+    return [
+        manifest
+        for directory in directories
+        for manifest in (directory / name for name in ACTION_MANIFEST_NAMES)
+        if _is_action_manifest(manifest)
+    ]
 
 
 def action_sources(
     repository_root: pathlib.Path = REPO_ROOT,
 ) -> dict[str, dict[str, object]]:
     """Load every composite action manifest into a repository-relative mapping.
+
+    Parameters
+    ----------
+    repository_root : pathlib.Path
+        Repository root holding the action directory.
 
     Returns
     -------
@@ -180,6 +256,13 @@ def action_steps(
 ) -> list[dict[str, object]]:
     """Return one composite action's ``runs.steps`` as mappings.
 
+    Parameters
+    ----------
+    action_name : str
+        Label for the shape errors raised while reading the steps.
+    document : dict[str, object]
+        Parsed composite-action manifest.
+
     Returns
     -------
     list[dict[str, object]]
@@ -196,6 +279,13 @@ def action_steps(
 
 def action_run_violations(action_name: str, document: dict[str, object]) -> list[str]:
     """Describe run blocks in one composite action containing expressions.
+
+    Parameters
+    ----------
+    action_name : str
+        Label for the diagnostic, naming the action manifest.
+    document : dict[str, object]
+        Parsed composite-action manifest whose steps are inspected.
 
     Returns
     -------
@@ -221,6 +311,15 @@ def require_action_step(
     A mutation that restores an unsafe body needs the location it restores it
     to. Returning the index keeps the caller from re-deriving it and silently
     asserting on ``-1`` when the name has moved.
+
+    Parameters
+    ----------
+    action_name : str
+        Label for the shape errors and for the absence diagnostic.
+    document : dict[str, object]
+        Parsed composite-action manifest to search.
+    step_name : str
+        The ``name`` the step must carry.
 
     Returns
     -------

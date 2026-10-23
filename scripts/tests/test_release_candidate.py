@@ -12,6 +12,7 @@ import json
 
 import pytest
 import release_candidate
+import release_identity_record
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
@@ -22,9 +23,9 @@ PACKAGE = "netsuke-build"
 BIN_NAME = "netsuke"
 
 
-def _facts(**changes: str) -> release_candidate.CandidateFacts:
+def _facts(**changes: str | None) -> release_candidate.CandidateFacts:
     """Return candidate facts with the named fields replaced."""
-    base = {
+    base: dict[str, str | None] = {
         "tag": TAG,
         "commit": COMMIT,
         "package_name": PACKAGE,
@@ -329,6 +330,38 @@ def test_only_the_exact_spelling_is_accepted(
     if left != right:
         with pytest.raises(release_candidate.TagVersionMismatchError):
             release_candidate.resolve_identity(_facts(tag=f"v{left}", version=right))
+
+
+def test_a_tagless_candidate_is_accepted_as_a_rehearsal() -> None:
+    """Accept an identity that records no tag, because a rehearsal has none.
+
+    A pull-request run is triggered by an event whose ref is a merge ref, so
+    there is no release tag whose spelling could agree with the manifest. The
+    alternative — inventing the version-shaped tag for the package — would
+    record a tag that does not point at the commit the bytes were built from,
+    which is the near-match this module exists to refuse. Absence is therefore
+    the rehearsal's marker.
+    """
+    identity = release_candidate.resolve_identity(_facts(tag=None))
+
+    assert identity.tag is None, "a rehearsal must record the absence of a tag"
+    assert identity.version == VERSION, "a rehearsal still records the version"
+    assert identity.is_prerelease is True, "the version still decides prerelease"
+
+
+def test_a_tagless_identity_round_trips_through_its_record() -> None:
+    """Read a rehearsal's ``tag: null`` back as absence, not as the text `None`.
+
+    ``str(None)`` would make the tag ``"None"``, which the tag validator would
+    then refuse — so a record written by this module could not be read by it.
+    """
+    identity = release_candidate.resolve_identity(_facts(tag=None))
+
+    rebuilt = release_identity_record.identity_from_mapping(
+        json.loads(identity.to_json())
+    )
+
+    assert rebuilt.tag is None, "absence must survive the round trip as absence"
 
 
 def test_a_malformed_tag_is_refused_as_malformed_not_merely_unmatched() -> None:

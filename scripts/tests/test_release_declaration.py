@@ -95,8 +95,18 @@ STAGED_PACKAGES = (
 )
 
 
-def _workspace(tmp_path: Path) -> dict[str, Path]:
+def _workspace(
+    tmp_path: Path, staging_config: str = STAGING_CONFIG
+) -> dict[str, Path]:
     """Write the configuration, manifest, and empty dist tree under ``tmp_path``.
+
+    Parameters
+    ----------
+    tmp_path
+        Directory the fixture files are created in.
+    staging_config
+        Staging configuration to write. The default declares every platform;
+        a refusal test passes the malformed configuration it wants refused.
 
     Returns
     -------
@@ -104,7 +114,7 @@ def _workspace(tmp_path: Path) -> dict[str, Path]:
         Paths keyed by ``staging``, ``manifest``, and ``dist``.
     """
     staging = tmp_path / "release-staging.toml"
-    _ = staging.write_text(STAGING_CONFIG, encoding="utf-8")
+    _ = staging.write_text(staging_config, encoding="utf-8")
     manifest = tmp_path / "Cargo.toml"
     _ = manifest.write_text(MANIFEST, encoding="utf-8")
     dist = tmp_path / "dist"
@@ -229,16 +239,29 @@ def test_two_packages_publishing_under_one_name_are_refused(tmp_path: Path) -> N
     Two staged names differing only in the tilde publish identically, and the
     upload step could then publish either one. The declaration cannot say
     which, so it says so.
+
+    The staged set is built to reach the duplicate check *specifically*. An
+    earlier version of this test appended a third ``.deb`` to the full fixture,
+    so the format count refused the tree first and
+    :class:`release_declaration.DuplicatePackageError` was never raised; the
+    test passed without exercising the rule its name claims. Two ``.deb`` files
+    that publish under one name satisfy the count and the collision at once, so
+    the refusal below can only come from the duplicate rule.
     """
     workspace = _workspace(tmp_path)
-    doubled = (
-        *STAGED_PACKAGES,
+    retired = "netsuke-0.1.0~beta4-1_arm64.deb"
+    colliding = (
+        *(name for name in STAGED_PACKAGES if name != retired),
         "netsuke-0.1.0.beta4-1_amd64.deb",
     )
-    _stage_packages(workspace["dist"], doubled)
+    _stage_packages(workspace["dist"], colliding)
 
-    with pytest.raises(release_declaration.MissingPackageError):
+    with pytest.raises(release_declaration.DuplicatePackageError) as refusal:
         _ = _declare(workspace)
+
+    assert "netsuke-0.1.0.beta4-1_amd64.deb" in str(refusal.value), (
+        f"the refusal must name the colliding asset, got {refusal.value}"
+    )
 
 
 def test_a_platform_with_no_declared_format_is_refused(tmp_path: Path) -> None:
@@ -247,46 +270,31 @@ def test_a_platform_with_no_declared_format_is_refused(tmp_path: Path) -> None:
     Silently ignoring it would declare a release missing that platform's
     packages, which is the failure the count is meant to prevent.
     """
-    staging = tmp_path / "release-staging.toml"
-    _ = staging.write_text(
+    workspace = _workspace(
+        tmp_path,
         '[targets.a]\nplatform = "solaris"\ntarget = "sparc-unknown-solaris"\n',
-        encoding="utf-8",
     )
-    manifest = tmp_path / "Cargo.toml"
-    _ = manifest.write_text(MANIFEST, encoding="utf-8")
-    dist = tmp_path / "dist"
-    dist.mkdir()
 
     with pytest.raises(release_declaration.UnknownPlatformError):
-        _ = release_declaration.declared_asset_names(dist, staging, manifest, VERSION)
+        _ = _declare(workspace)
 
 
 def test_a_configuration_without_targets_is_refused(tmp_path: Path) -> None:
     """Refuse a configuration that declares no target at all."""
-    staging = tmp_path / "release-staging.toml"
-    _ = staging.write_text("[common]\nbin_name = 'netsuke'\n", encoding="utf-8")
-    manifest = tmp_path / "Cargo.toml"
-    _ = manifest.write_text(MANIFEST, encoding="utf-8")
-    dist = tmp_path / "dist"
-    dist.mkdir()
+    workspace = _workspace(tmp_path, "[common]\nbin_name = 'netsuke'\n")
 
     with pytest.raises(release_declaration.MissingTargetsError):
-        _ = release_declaration.declared_asset_names(dist, staging, manifest, VERSION)
+        _ = _declare(workspace)
 
 
 def test_a_target_without_a_platform_is_refused(tmp_path: Path) -> None:
     """Refuse an uncountable target rather than counting it as its own platform."""
-    staging = tmp_path / "release-staging.toml"
-    _ = staging.write_text(
-        '[targets.a]\ntarget = "x86_64-unknown-linux-gnu"\n', encoding="utf-8"
+    workspace = _workspace(
+        tmp_path, '[targets.a]\ntarget = "x86_64-unknown-linux-gnu"\n'
     )
-    manifest = tmp_path / "Cargo.toml"
-    _ = manifest.write_text(MANIFEST, encoding="utf-8")
-    dist = tmp_path / "dist"
-    dist.mkdir()
 
     with pytest.raises(release_declaration.MalformedTargetError):
-        _ = release_declaration.declared_asset_names(dist, staging, manifest, VERSION)
+        _ = _declare(workspace)
 
 
 @pytest.mark.parametrize(

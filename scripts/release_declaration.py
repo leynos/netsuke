@@ -48,20 +48,45 @@ import typing as typ
 
 import hoist_binstall_discovery
 import release_inventory
+import release_package_formats
+from release_package_formats import (
+    ConfigurationError,
+    DeclarationError,
+    DuplicatePackageError,
+    MalformedTargetError,
+    MissingPackageError,
+    MissingTargetsError,
+    PLATFORM_FORMATS,
+    StagedTreeError,
+    UnknownPlatformError,
+    match_format,
+    require_format_count,
+    require_unique_names,
+)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
     from pathlib import Path
 
-#: The package formats the build stages, keyed by the ``platform`` value the
-#: staging configuration names. The list per platform is exhaustive: a platform
-#: absent from this mapping cannot be packaged at all, and one whose targets
-#: produce anything else is refused rather than silently under-declared.
-PLATFORM_FORMATS: dict[str, tuple[str, ...]] = {
-    "linux": (".deb", ".rpm"),
-    "macos": (".pkg",),
-    "windows": (".msi",),
-}
+#: Re-exported so this module remains the single name a release caller imports
+#: for the refusals and format policy. The definitions live in
+#: :mod:`release_package_formats`, which owns them; the list is explicit so a
+#: name removed there fails here rather than silently disappearing.
+__all__ = [
+    "ConfigurationError",
+    "DeclarationError",
+    "DuplicatePackageError",
+    "MalformedTargetError",
+    "MissingPackageError",
+    "MissingTargetsError",
+    "PLATFORM_FORMATS",
+    "StagedTreeError",
+    "UnknownPlatformError",
+    "declared_asset_names",
+    "platform_target_counts",
+    "published_name",
+    "write_declaration",
+]
 
 #: The table a configuration must carry for its targets to be declared at all.
 #: Read here rather than by :func:`hoist_binstall_discovery.expected_archive_names`
@@ -75,48 +100,6 @@ TARGETS_TABLE = "targets"
 #: produces: a prerelease version spells it between the version and the
 #: package revision, and GitHub republishes the name with ``.`` there.
 PUBLISHED_CHARACTERS = {"~": "."}
-
-
-class DeclarationError(ValueError):
-    """Report that the release cannot be declared from the given inputs."""
-
-
-class ConfigurationError(DeclarationError):
-    """Report a configuration the build cannot declare a release from.
-
-    This is the input-side half of :class:`DeclarationError`: the file was read,
-    but what it says cannot describe this release. An operator who sees this
-    reads the staging configuration, not the build jobs.
-    """
-
-
-class MissingTargetsError(ConfigurationError):
-    """Report a staging configuration that declares no release target."""
-
-
-class MalformedTargetError(ConfigurationError):
-    """Report a target table that does not name its platform."""
-
-
-class UnknownPlatformError(ConfigurationError):
-    """Report a configured platform this build stages no package format for."""
-
-
-class StagedTreeError(DeclarationError):
-    """Report a staged tree that disagrees with the release the build promised.
-
-    The build-side half: the configuration was understood, and the artefacts
-    that arrived do not match it. An operator who sees this reads the job that
-    was supposed to produce the missing asset.
-    """
-
-
-class MissingPackageError(StagedTreeError):
-    """Report that a platform's staged packages disagree with its formats."""
-
-
-class DuplicatePackageError(StagedTreeError):
-    """Report that two staged packages claim one published name."""
 
 
 def published_name(staged_name: str) -> str:
@@ -251,28 +234,62 @@ def _packages_for_platform(
         ``target_count``.
     DuplicatePackageError
         If two staged files, wherever they sit in the tree, publish under one
-        name. The declaration would then name one asset twice and the upload
-        step could publish either; refusing is the only honest answer.
+        name.
+
+    Notes
+    -----
+    The count is checked per format before any name is mapped, so a shortfall
+    is reported as the missing package rather than as whichever duplicate or
+    surplus the mapping would have produced first.
     """
-    formats = PLATFORM_FORMATS[platform]
     staged = hoist_binstall_discovery.walk_files(dist_dir)
     names: list[str] = []
-    for package_format in formats:
-        matches = [path for path in staged if path.suffix == package_format]
-        if len(matches) != target_count:
-            msg = (
-                f"platform {platform!r} must stage {target_count} "
-                f"{package_format} package(s), found {len(matches)}"
-            )
-            raise MissingPackageError(msg)
-        names.extend(published_name(path.name) for path in matches)
-    duplicated = sorted({name for name in names if names.count(name) > 1})
-    if duplicated:
-        msg = "staged packages publish under duplicated names: " + ", ".join(
-            repr(name) for name in duplicated
+    for package_format in PLATFORM_FORMATS[platform]:
+        matches = match_format(staged, package_format)
+        require_format_count(
+            matches,
+            platform=platform,
+            package_format=package_format,
+            target_count=target_count,
         )
-        raise DuplicatePackageError(msg)
+        names.extend(published_name(path.name) for path in matches)
+    require_unique_names(names)
     return sorted(names)
+
+
+def _declared_packages(
+    dist_dir: Path, staging_config: Path, counts: cabc.Mapping[str, int]
+) -> list[str]:
+    """Return every staged package's published name, across all platforms.
+
+    Parameters
+    ----------
+    dist_dir
+        Release staging root the workflow artefacts were downloaded into.
+    staging_config
+        Path to the staging configuration, named in the refusal below.
+    counts
+        How many targets each platform declares.
+
+    Returns
+    -------
+    list[str]
+        One published name per staged package file, all platforms together.
+
+    Raises
+    ------
+    UnknownPlatformError
+        If the configuration declares a platform this build cannot package.
+    MissingPackageError, DuplicatePackageError
+        Propagated from :func:`_packages_for_platform`.
+    """
+    packages: list[str] = []
+    for platform, target_count in sorted(counts.items()):
+        if platform not in PLATFORM_FORMATS:
+            msg = f"{staging_config} declares targets for unpackageable {platform!r}"
+            raise UnknownPlatformError(msg)
+        packages.extend(_packages_for_platform(dist_dir, platform, target_count))
+    return packages
 
 
 def declared_asset_names(
@@ -308,20 +325,12 @@ def declared_asset_names(
 
     Notes
     -----
-    The target counts are read before either half so that a configuration
-    declaring no target is diagnosed here rather than by the archive
-    authority, whose ``ValueError`` predates this module.
-
-    The helpers below can refuse as well, so every :class:`DeclarationError`
-    is a possible outcome: ``MissingTargetsError`` and ``MalformedTargetError``
-    from :func:`platform_target_counts`, and ``MissingPackageError``,
-    ``DuplicatePackageError`` from the package scan. They propagate unchanged
-    rather than being re-raised here.
-
-    The archive half is resolved before the package half, deliberately. It
+    The archive half is resolved before the package half, deliberately: it
     needs no staged file at all, so a tree holding no packages still declares
     the archives and then fails on the packages, rather than reporting a
-    smaller release.
+    smaller release. Every :class:`DeclarationError` the helpers raise
+    propagates unchanged; :func:`_declared_packages` and
+    :func:`_packages_for_platform` state which each can produce.
 
     Examples
     --------
@@ -334,34 +343,25 @@ def declared_asset_names(
     >>> from pathlib import Path
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     root = Path(tmp)
-    ...     staging = chr(10).join(
-    ...         [
-    ...             "[targets.a]",
-    ...             'platform = "linux"',
-    ...             'target = "x86_64-unknown-linux-gnu"',
-    ...         ]
-    ...     )
-    ...     _ = (root / "staging.toml").write_text(staging, encoding="utf-8")
-    ...     _ = (root / "Cargo.toml").write_text(
-    ...         chr(10).join(["[package]", 'name = "p"']), encoding="utf-8"
-    ...     )
+    ...     staging = chr(10).join([
+    ...         "[targets.a]",
+    ...         'platform = "linux"',
+    ...         'target = "x86_64-unknown-linux-gnu"',
+    ...     ])
+    ...     _ = (root / "s.toml").write_text(staging, encoding="utf-8")
+    ...     manifest = chr(10).join(["[package]", 'name = "p"'])
+    ...     _ = (root / "Cargo.toml").write_text(manifest, encoding="utf-8")
     ...     (root / "dist").mkdir()
-    ...     declared_asset_names(
-    ...         root / "dist", root / "staging.toml", root / "Cargo.toml", "1.0.0"
-    ...     )
+    ...     declared_asset_names(root / "dist", root / "s.toml",
+    ...                          root / "Cargo.toml", "1.0.0")
     Traceback (most recent call last):
         ...
-    release_declaration.MissingPackageError: platform 'linux' must stage 1 \
-.deb package(s), found 0
+    release_package_formats.MissingPackageError: platform 'linux' must stage \
+1 .deb package(s), found 0
     """
     counts = platform_target_counts(staging_config)
     archives = release_inventory.binstall_asset_names(staging_config, manifest, version)
-    packages: list[str] = []
-    for platform, target_count in sorted(counts.items()):
-        if platform not in PLATFORM_FORMATS:
-            msg = f"{staging_config} declares targets for unpackageable {platform!r}"
-            raise UnknownPlatformError(msg)
-        packages.extend(_packages_for_platform(dist_dir, platform, target_count))
+    packages = _declared_packages(dist_dir, staging_config, counts)
     return tuple(sorted([*archives, *packages]))
 
 

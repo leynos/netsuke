@@ -50,7 +50,15 @@ def _declaration(destination: pathlib.Path, names: list[str]) -> pathlib.Path:
 
 
 def test_verify_accepts_the_declared_assets(tmp_path: pathlib.Path) -> None:
-    """Accept an archive with a matching sidecar and report both digests."""
+    """Accept an archive with a matching sidecar and report each asset's own digest.
+
+    The sidecar entry is asserted separately and deliberately. Returning the
+    archive's digest under the sidecar's name type-checks and looks right in a
+    two-key mapping, but GitHub reports a digest for the sidecar file itself,
+    so the finalizer would compare the wrong value. Computing the two digests
+    from the staged files rather than from the CLI's own output keeps the
+    assertion independent of the code under test.
+    """
     staging = tmp_path / "dist"
     _stage(staging)
 
@@ -61,6 +69,14 @@ def test_verify_accepts_the_declared_assets(tmp_path: pathlib.Path) -> None:
     )
     assert verified[ARCHIVE] == release_digest.digest_of_file(staging / ARCHIVE), (
         "the archive's digest must be the digest of its bytes"
+    )
+    assert verified[SIDECAR] == release_digest.digest_of_file(staging / SIDECAR), (
+        "the sidecar's digest must be the digest of the sidecar file, not of "
+        "the archive it describes"
+    )
+    assert verified[SIDECAR] != verified[ARCHIVE], (
+        "the two entries must differ, or this assertion cannot tell the bug "
+        "from the fix"
     )
 
 

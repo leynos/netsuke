@@ -62,17 +62,26 @@ def verify(directory: pathlib.Path, *, expected: list[str]) -> dict[str, str]:
     sidecars. The finalizer compares exactly this mapping against what GitHub
     reports, so producing it in the shape that comparison consumes keeps the
     two stages from disagreeing about the release's identity.
+
+    Each entry is the digest of that asset's **own** bytes. A sidecar proves
+    the archive beside it, but the release also publishes the sidecar, and
+    GitHub reports a digest for the sidecar file just as it does for every
+    other upload. Recording the archive's digest under the sidecar's name would
+    make the finalizer compare the wrong value and either refuse a correct
+    release or accept a sidecar that had been swapped after upload.
     """
     present = release_inventory.read_inventory(directory)
     release_inventory.validate_inventory(present, expected=expected)
     verified: dict[str, str] = {}
     for asset in sorted(present, key=lambda entry: entry.name):
+        path = directory / asset.name
         if asset.name.endswith(release_inventory.SIDECAR_SUFFIX):
-            path = directory / asset.name[: -len(release_inventory.SIDECAR_SUFFIX)]
-            digest = release_digest.verify_file_against_sidecar(path)
-        else:
-            digest = release_digest.digest_of_file(directory / asset.name)
-        verified[asset.name] = digest
+            archive = path.with_name(
+                asset.name[: -len(release_inventory.SIDECAR_SUFFIX)]
+            )
+            # Verification only: the digest returned describes the archive.
+            _ = release_digest.verify_file_against_sidecar(archive)
+        verified[asset.name] = release_digest.digest_of_file(path)
     return verified
 
 

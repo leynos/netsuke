@@ -1875,6 +1875,40 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Verified each new number by printing the target's line at that offset, not by
   trusting an arithmetic shift alone.
 
+- [x] (2026-10-23) Repaired the first defect the new packaging lane showed on
+  its first real execution, which CI surfaced and no local suite could. The
+  hosted `release / package-crate` job failed on every pull-request run with
+  `tag '903/merge' is not a release tag: expected 'v' followed by a semantic
+  version such as 'v1.2.3'`
+  and exit `2`: on a `pull_request` event `github.ref_name` is the synthetic
+  merge ref, not a tag, and the packaging step forwarded it to a validator that
+  exists precisely to refuse a tag that does not name the commit the bytes came
+  from. The repair carries the mode explicitly instead of loosening that
+  validator: `release.yml` now passes
+  `dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}` — the same
+  expression `upload-release-assets` already receives — the composite action
+  selects exactly one of `--tag` and `--dry-run` before invoking the CLI, and
+  the CLI makes the two mutually exclusive so a *publishing* call site that
+  forgot its tag is an argument error rather than a silently tagless identity.
+  A rehearsal's record now stores `tag: null`, and
+  `_require_tag_version_agreement` accepts an absent tag as the recorded
+  absence of one. `tests/workflow_contracts/release_package_tag_test.py` pins
+  the wiring across the workflow and the action manifest. That repair pushed
+  `release_candidate.py` from 394 to 426 lines, past the 400-line cap
+  `pyproject.toml` sets for `too-many-lines`, and the module had only six lines
+  of headroom before it, so the overage was not avoidable by tightening the new
+  prose. The record *reader* — `identity_from_mapping`, its two error classes,
+  the field list, and `_recorded_tag` — moved to a new
+  `scripts/release_identity_record.py` (154 lines), leaving
+  `release_candidate.py` at 304. The seam is not arbitrary: a resolver sees
+  facts the workflow has just gathered, while a reader sees whatever is on
+  disk, which may be hand-edited, truncated, or stale, and that difference is
+  exactly why the stored flag is checked rather than trusted. The split follows
+  the precedent `release_semver.py` set when the same module was divided
+  before. Both files are in the `test-release-publication` recipe and its
+  `SOURCE_MODULES` contract, so the new module's doctests run and an unwired
+  module would fail the suite. Gates: see the next entry.
+
 ## Surprises & discoveries
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
@@ -2533,6 +2567,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `cache_ownership_test.test_each_job_calls_only_its_own_lane_cache_action`,
   which is table-driven. Date/Author: 2026-10-20, implementation agent.
 
+- Observation: **the packaging lane's only rehearsal defect was invisible to
+  every local suite and appeared on the first hosted pull-request run.**
+  Evidence: `release / package-crate` failed with a refusal quoting the merge
+  ref — ``tag '903/merge' is not a release tag: expected 'v' followed by a
+  semantic version such as 'v1.2.3'`` — and exit `2`. The mechanism is that
+  `release.yml` is a reusable workflow
+  invoked both from `push: tags: v*.*.*` and from `pull_request`, and on the
+  latter `github.ref_name` resolves to the synthetic merge ref rather than a
+  tag; the packaging step forwarded it unexamined. The existing jobs tolerate
+  the same event because `upload-release-assets` receives
+  `dry-run: needs.metadata.outputs.should_publish != 'true'`, so the mode is
+  already computed in this workflow — the packaging step simply did not receive
+  it. Every local suite passed while the defect was live, including both the
+  packaging CLI's unit tests and the workflow contracts, because all of them
+  supply a literal tag: the failing value comes from the hosting event and
+  cannot be produced by a local string literal. The rule to carry forward is
+  that a workflow expression whose value depends on the *event* needs a
+  contract that evaluates it in each trigger's context, not a test that
+  supplies the happy value. Date/Author: 2026-10-23, implementation agent.
+
 ## Decision log
 
 - Decision: keep the existing `release` job's name and identity.
@@ -3134,6 +3188,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   would put a `publish-release`-owned output on a mutually exclusive job and
   widen this change beyond the upload path. Flagged for Stage D rather than
   decided here. Date/Author: 2026-10-21, implementation agent.
+
+- Decision: give the packaging action an explicit rehearsal mode rather than
+  loosening the tag validator or inventing a tag for a pull-request run.
+  Rationale: `release_candidate._require_tag_version_agreement` exists to
+  refuse a tag that does not point at the commit the bytes were built from, and
+  a merge commit is exactly such a case — recording `v0.1.0-beta4` for a PR run
+  would name a tag that points at the release commit while the bytes were built
+  from the merge commit, which is the near-match that module was written to
+  reject. Weakening the check would trade the publication guard for a rehearsal
+  convenience, so the mode is carried instead, and the mode output already
+  exists in the same job: `ensure-cargo-version` has taken
+  `check-tag: fromJSON(steps.release_modes.outputs['should-publish'])` since
+  before this branch, so tag/version agreement as a *publication-time*
+  invariant is an established pattern here rather than an invention. The two
+  selectors are made mutually exclusive at the CLI rather than reconciled in
+  it, so a publishing call site that lost its tag reaches an argument error
+  instead of a record that names no release. `_recorded_tag` was added beside
+  the reader for the same reason in reverse: `str(None)` would read a
+  rehearsal's `null` back as the four-character tag `"None"`, so absence is
+  passed through as absence. Date/Author: 2026-10-23, implementation agent.
 
 ## Outcomes & retrospective
 

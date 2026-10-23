@@ -15,6 +15,7 @@ import release_reconcile_github
 from finalize_github_release_cli import (
     ACTION_EXITS,
     EXIT_CONFLICT,
+    EXIT_INPUT_UNREADABLE,
     EXIT_OK,
     EXIT_UPLOAD_REQUIRED,
     build_parser,
@@ -186,6 +187,84 @@ def test_the_cli_ignores_assets_the_record_does_not_declare(
     assert [name for name, _ in _plan(output)["actions"]] == [ARCHIVE], (
         "the plan must decide only the declared assets"
     )
+
+
+def test_the_cli_reports_a_conflict_ahead_of_a_missing_asset(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report the more urgent finding when a release holds both.
+
+    ``EXIT_UPLOAD_REQUIRED`` is numerically larger than ``EXIT_CONFLICT``, so a
+    verdict computed by taking the maximum over the exit table picks the upload
+    code. The step branches on this value: it would try to upload into a
+    release whose real problem is an asset that must never be overwritten, and
+    the conflict diagnostic would never print. Both findings must appear in one
+    run, with the conflict deciding the code.
+    """
+    identity = _identity(
+        tmp_path / "identity.json",
+        {ARCHIVE: ARCHIVE_DIGEST, SIDECAR: SIDECAR_DIGEST},
+    )
+    # The archive conflicts, the sidecar is simply absent.
+    assets = _reported(tmp_path / "assets.json", {ARCHIVE: f"sha256:{'ef' * 32}"})
+    output = tmp_path / "plan.json"
+
+    code = main(_argv(identity, assets, output))
+
+    assert code == EXIT_CONFLICT, f"a conflict must outrank a missing asset, got {code}"
+    assert _plan(output)["conflicts"] == [ARCHIVE], (
+        "the plan must still name the conflicting asset"
+    )
+    assert ARCHIVE in capsys.readouterr().err, (
+        "the conflict diagnostic must print even though an asset is also missing"
+    )
+    assert EXIT_CONFLICT < EXIT_UPLOAD_REQUIRED, (
+        "this test is only meaningful while the numeric order inverts the "
+        "intended precedence"
+    )
+
+
+@pytest.mark.parametrize(
+    ("record", "reason"),
+    [
+        pytest.param(None, "the record is absent", id="absent-file"),
+        pytest.param("not json", "the record is not JSON", id="malformed-json"),
+        pytest.param("[]", "the record is a list", id="not-an-object"),
+        pytest.param("{}", "the record carries no assets member", id="no-assets"),
+        pytest.param('{"assets": []}', "assets is a list", id="assets-not-a-mapping"),
+        pytest.param('{"assets": {}}', "assets declares nothing", id="assets-empty"),
+    ],
+)
+def test_the_cli_refuses_a_record_that_cannot_support_a_decision(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    record: str | None,
+    reason: str,
+) -> None:
+    """Refuse every unusable record, because the alternative is un-drafting.
+
+    A record read with ``.get("assets", {})`` turns a missing field into an
+    empty plan, and an empty plan is indistinguishable from a fully verified
+    release: every asset matches because there are no assets. The step reads
+    ``EXIT_OK`` as permission to un-draft, and un-drafting cannot be undone. So
+    absence of evidence must be an error, not a vacuous success.
+    """
+    identity = tmp_path / "identity.json"
+    if record is not None:
+        _ = identity.write_text(record, encoding="utf-8")
+    assets = _reported(tmp_path / "assets.json", {ARCHIVE: f"sha256:{ARCHIVE_DIGEST}"})
+    output = tmp_path / "plan.json"
+
+    code = main(_argv(identity, assets, output))
+
+    assert code == EXIT_INPUT_UNREADABLE, (
+        f"{reason} must be refused rather than read as an empty release, got {code}"
+    )
+    assert not output.exists(), (
+        "a record that supports no decision must leave no plan behind, or the "
+        "step could read a stale one"
+    )
+    assert capsys.readouterr().err, "the refusal must be diagnosed"
 
 
 def test_the_exit_table_covers_every_action_the_planner_declares() -> None:
