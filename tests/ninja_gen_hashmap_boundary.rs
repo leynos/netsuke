@@ -328,8 +328,12 @@ mod scan_coverage {
     //! emitter code closes. These cases name a shape and assert a hit, so
     //! narrowing the visitor fails here rather than silently widening what the
     //! contract permits.
+    //!
+    //! Aliased spellings are shapes here too. The workspace reaches `HashMap`
+    //! through `IrHashMap` as well as by its own name, so a scan comparing
+    //! identifiers by equality covers only part of the tree it claims to.
 
-    use super::scan::{Kind, collect, parse};
+    use super::scan::{Hit, Kind, collect, parse};
 
     /// Every unordered type named by a constructor is found, including one
     /// whose type is inferred and one written with a turbofish.
@@ -374,6 +378,50 @@ mod scan_coverage {
         assert!(
             collect("case.rs", &parsed).is_empty(),
             "a release build never compiles the test module"
+        );
+    }
+
+    /// A field typed with an aliased collection is a hit for the collection.
+    ///
+    /// The alias is how `BuildGraph` reaches `HashMap`, so a scan that reads
+    /// only unsuffixed spellings would leave the one production site the
+    /// contract was written for outside its own reach.
+    #[test]
+    fn an_aliased_field_reaches_the_scan() {
+        let source = "struct S { seen: IrHashMap<String, u8> }";
+        let parsed = parse(source).expect("the case is a valid source");
+        let hits = collect("case.rs", &parsed);
+        assert_eq!(
+            hits,
+            [Hit {
+                source: "case.rs".to_owned(),
+                type_name: "HashMap".to_owned(),
+                kind: Kind::Field(Some("seen".to_owned())),
+            }],
+            "the hit names the collection as the exemption list spells it"
+        );
+    }
+
+    /// An import of an aliased collection is a hit too.
+    ///
+    /// A `use` reaches the emitter's bytes on its own, so the alias has to be
+    /// recognised on the import path and not only where the field is declared.
+    #[test]
+    fn an_aliased_import_reaches_the_scan() {
+        let source = "use crate::ir::graph::IrHashMap;\nstruct S { seen: IrHashMap<String, u8> }";
+        let parsed = parse(source).expect("the case is a valid source");
+        let imports: Vec<Hit> = collect("case.rs", &parsed)
+            .into_iter()
+            .filter(|hit| hit.kind == Kind::Import)
+            .collect();
+        assert_eq!(
+            imports,
+            [Hit {
+                source: "case.rs".to_owned(),
+                type_name: "HashMap".to_owned(),
+                kind: Kind::Import,
+            }],
+            "an alias ending in HashMap is an unordered collection"
         );
     }
 }

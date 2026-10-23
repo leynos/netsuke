@@ -53,7 +53,7 @@ use std::cell::Cell;
 const COVERAGE_SEED: u64 = 0x4143_5449_4f4e; // "ACTION" in ASCII.
 
 proptest! {
-    // Hashing is a serialisation and a digest, so a case costs far more than a
+    // Hashing is a serialization and a digest, so a case costs far more than a
     // path comparison. The budget buys breadth over the field domain rather
     // than over sequence length: every case is one pair of `Action` values.
     #![proptest_config(ProptestConfig { cases: 512, .. ProptestConfig::default() })]

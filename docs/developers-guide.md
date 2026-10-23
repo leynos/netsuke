@@ -5647,7 +5647,6 @@ name a property a candidate source declares and match a committed patch. One
 obligation may not borrow another's stem: the contract compares sets, so a
 shared stem leaves the second obligation with no evidence at all. Where one
 fault demonstrates two obligations, commit the same hunk under two stems.
-discovery-diagnostic replays stay identical without re-reading the environment.
 
 ### Parametrized unit tests with rstest
 
@@ -9948,10 +9947,10 @@ The stub's compile-fail fixture instead uses `TestSupportRlib` to check
 `test_support --lib --all-features`, then invokes direct `rustc` for metadata.
 Its allowance covers potentially cold or contended ambient preparation;
 `cargo check` avoids linking executables. The CLI configuration fixture checks
-the `netsuke-build` library with all features and retains the 300 s default. A
-whole-run budget has to sit above the largest allowance in the file, so 900 s
-is the figure the ordering below is written against, not the 300 s most tests
-get.
+the `netsuke-build` library with all features and shares the ambient family's
+900 s allowance. A whole-run budget has to sit above the largest allowance in
+the file, so 900 s is the figure the ordering below is written against, not the
+300 s most tests get.
 
 The CLI configuration fixture's earlier nested `cargo check` spent 300 s
 waiting for the shared package-cache lock; earlier runs completed in 171.4 s on
@@ -9988,7 +9987,7 @@ in a tree whose `target/debug` held no `.fingerprint` or `deps/`, the child
 command took 455 s cold and 1 s warm, while
 `cli_configuration_fixture_compiles` was stopped at 300.024 s. The allowance is
 widened on the family override rather than on that one test, since any of the
-nine can be the first to run.
+ten can be the first to run.
 
 `stub_env_default_does_not_compile` uses `TestSupportRlib` to prepare the
 `test_support` library metadata with package-scoped `cargo check` before
@@ -10018,11 +10017,11 @@ latest cold-target run reached 600 s while compiler admission was saturated.
 The candidate gives this test fifteen warning periods, 900 s, which remains
 strictly below the 960 s whole-run budget. The ambient public-API fixture
 family, the stub-environment compile-fail fixture, and the split-build fixture
-share that allowance. The production module-slice check and the CLI fixture use
-the 300 s default after reusing the gate-built workspace graph. Each override
-binds only because its filter carries the test's module path; earlier passing
-runs did not prove the wider allowance was in force because the test completed
-inside the 300 s default. See "nextest configuration" for the rule.
+share that allowance. The production module-slice check uses the 300 s default,
+because it checks source text only. Each override binds only because its filter
+carries the test's module path; earlier passing runs did not prove the wider
+allowance was in force because the test completed inside the 300 s default. See
+"nextest configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
 
