@@ -201,9 +201,68 @@ fn is_gate(path: &str) -> bool {
 }
 
 /// Whether a serial-namespace path names a stage's relay phony.
+///
+/// The final component is taken on *either* separator, because `staging` builds
+/// the relay with `Utf8PathBuf::join` and that applies the host's separator: a
+/// Unix run renders `.netsuke/serial/<digest>/relay-000` while a Windows run
+/// renders `.netsuke/serial/<digest>\relay-000`. Splitting on `/` alone read
+/// every Windows relay as a gate, so the Windows lane counted six gates where
+/// the bundle declares three. See
+/// [`relay_and_gate_names_are_classified_on_both_separators`] for the
+/// host-independent regression coverage.
+///
+/// Accepting both separators cannot misclassify a real emitted path: the
+/// emitter writes this namespace itself, so the segment before the relay name
+/// is always a lower-hex digest, and the reserved-namespace check rejects a
+/// user path that tries to reach it.
 fn is_relay(path: &str) -> bool {
-    path.rsplit_once('/')
-        .is_some_and(|(_, name)| name.starts_with("relay-"))
+    path.rsplit(['/', '\\'])
+        .next()
+        .is_some_and(|name| name.starts_with("relay-"))
+}
+
+/// Pairs of gate and relay names differing only in path separator.
+///
+/// The emitter joins with the host separator, so a separator test that ran
+/// only on Unix would pass while the Windows lane failed — which is exactly
+/// what happened before [`is_relay`] learned to split on both. These literals
+/// let one Unix run cover the Windows shape.
+#[derive(Clone, Copy)]
+struct RelayNames {
+    /// A gate path in the emitted spelling for one platform.
+    gate: &'static str,
+    /// That platform's relay path for the same stage.
+    relay: &'static str,
+}
+
+#[test]
+fn relay_and_gate_names_are_classified_on_both_separators() -> Result<()> {
+    let unix = RelayNames {
+        gate: ".netsuke/serial/abc/000",
+        relay: ".netsuke/serial/abc/relay-000",
+    };
+    let windows = RelayNames {
+        gate: r".netsuke\serial\abc\000",
+        relay: r".netsuke\serial\abc\relay-000",
+    };
+    for names in [unix, windows] {
+        ensure!(
+            is_relay(names.relay),
+            "{} must be classified as a relay",
+            names.relay
+        );
+        ensure!(
+            is_gate(names.gate),
+            "{} must be classified as a gate, not a relay",
+            names.gate
+        );
+        ensure!(
+            !is_relay(names.gate),
+            "a gate must not be classified as a relay: {}",
+            names.gate
+        );
+    }
+    Ok(())
 }
 
 #[test]
