@@ -216,8 +216,9 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
     """Keep direct-rustc preparation within each fixture's dependency graph.
 
     The support fixture selects its library; the production fixtures select
-    the application library, which also prepares its build dependencies. None
-    needs Cargo to check every workspace target.
+    the application library, which also runs its build script and prepares its
+    build dependencies. None needs Cargo to check every workspace target
+    before compiling a small direct-rustc fixture.
     """
     # `lint` marks the all-features lane; the default lane must not add it.
     lanes = dict(
@@ -242,7 +243,9 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
             'manifest_dir().join("Cargo.toml")',
             '.arg("check")',
         )
-        missing = [part for part in required_composition if part not in text]
+        missing = [
+            fragment for fragment in required_composition if fragment not in text
+        ]
         assert not missing, (
             f"{source.relative_to(REPO_ROOT)} must compose Cargo check with "
             f"the {package} library selector and root manifest; missing {missing!r}"
@@ -351,3 +354,4 @@ def test_instrumented_lanes_budget_for_a_cold_build(
         f"{CARGO_WAIT_TIMEOUT}s for one instrumented cargo run, got "
         f"{env.get('RUN_RUST_CARGO_WAIT_TIMEOUT')!r}"
     )
+# weave: run 'weave explain tests/workflow_contracts/test_execution_coverage_test.py' for per-hunk detail, 'weave check' to verify your resolution
