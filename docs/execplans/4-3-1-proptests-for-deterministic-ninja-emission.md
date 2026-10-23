@@ -54,11 +54,13 @@ finding 1 is rejected with clock evidence, and findings 2 through 6 are
 repaired. `docs/roadmap.md` shows the house pattern treats such a review as
 completion evidence.
 
-The branch is rebased onto `origin/main` at `6572fb956`: 90 commits, no merges,
-and the target verified as an ancestor. Ten gates passed sequentially against
-that exact candidate with the tree clean at both ends — `check-fmt`,
-`typecheck`, `lint`, `doc-coverage`, `test`, `proptest`, `markdownlint`,
-`nixie`, `test-documentation-contracts`, and `test-workflow-contracts`.
+The branch is rebased onto `origin/main` at `6572fb956`, carries no merges, and
+has the target verified as an ancestor;
+`git rev-list --count origin/main..HEAD` gives the live commit count, which
+every commit necessarily advances. Ten gates passed sequentially against
+`5f5ab5110` with the tree clean at both ends — `check-fmt`, `typecheck`, `lint`,
+`doc-coverage`, `test`, `proptest`, `markdownlint`, `nixie`,
+`test-documentation-contracts`, and `test-workflow-contracts`.
 
 Note that this plan file is itself a tracked input:
 `tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`
@@ -67,10 +69,11 @@ delta and is gated by the same ten targets, including `make test`. Each batch's
 result is recorded in the delivery ledger rather than restated here, so this
 document does not have to be rewritten — and re-gated — every time a gate runs;
 the revision of record is the one named in the ledger. The `EP-M8` milestone
-`coderabbit review --agent` pass has completed: it reviewed 88 files and
-returned nine findings, all verified against source and all repaired. What
-remains for `EP-M8` is the re-gate of that repair and the hosted CI the branch
-will be published to; both are external to the implementation.
+`coderabbit review --agent` pass has completed: two rounds reviewed the branch,
+returned twenty findings between them, and all twenty were verified against
+source and repaired. The re-gate of that repair is the `5f5ab5110` batch above.
+What remains for `EP-M8` is the hosted CI the branch will be published to,
+which is external to the implementation.
 
 The `Scope` tolerance is **breached and not re-widened**: 88 files and 8,785
 net added lines against a cap of 56 and 6,000. The derivation, the four causes,
@@ -2452,6 +2455,64 @@ above; the placeholder survives only so that trace links written before
 allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
 
 ## Progress
+
+- [x] (2026-10-23) **A live commit count in the Status paragraph was replaced
+      with the command that produces it, because the count decayed faster than
+      the document could be re-gated.** The sentence read "90 commits"; that was
+      true at `5c1e759a0`, and it was already 91 at `a19d6781c`, 92 at
+      `5f5ab5110` and 93 at the commit recording the batch. Every commit
+      advances it — including a commit whose only purpose is to record a
+      measurement — so any figure written down is out of date before the gates
+      that validate it finish. The sentence now names
+      `git rev-list --count origin/main..HEAD` instead. The *scope* figures are
+      a different case and were re-measured rather than removed: 88 files and
+      8,785 net lines are unchanged across the last three commits, because the
+      only file those commits touch is this plan, which the measurement
+      excludes.
+
+- [x] (2026-10-23) **All ten gates passed sequentially against candidate
+      `5f5ab5110`, the commit that closed the two `EP-M8` review rounds.** The
+      tree was clean before and after the batch and the candidate did not move,
+      so the evidence binds to
+      `5f5ab51104cf663819af81f15cbcdb19f1a35eed` exactly. `check-fmt` (261
+      Python files formatted, 199 Markdown unchanged), `typecheck` (31 s),
+      `lint` (191 s; Pylint 10.00/10 across both trees, interrogate 100%,
+      yamllint and actionlint clean), `doc-coverage` (93 s; 5,977 of 6,091
+      items, 98.13% against the 80% bar), `test` (315 s; nextest **4,724 run,
+      4,724 passed**, 6 skipped; 39 doctests passed, 6 ignored), `proptest`
+      (133 s; 166 run, 166 passed, 4,564 skipped), `markdownlint` (20 s; 199
+      files, 0 issues), `nixie` (1 s), `test-documentation-contracts` (12 s; 14
+      run, 14 passed, 46 skipped), and `test-workflow-contracts` (113 s; 1,337
+      passed, 3 skipped, plus 27 script doctests). Wall clock 912 s.
+
+  *The test count moved because the repair added tests, and that is the check
+  worth naming.* The previous batch recorded 4,720 nextest passes; this one
+  records 4,724. The four are exactly the `hashmap_boundary` work: the crate
+  root carried four `#[test]` attributes at `f91f663a7`, two of them inline in a
+  `mod scan_coverage`; the root now carries two and
+  `tests/hashmap_boundary/scan_coverage.rs` carries six. Six added minus two
+  removed is the observed +4, and the six decompose as the two relocated and
+  four genuinely new — `an_aliased_field_reaches_the_scan` and
+  `an_aliased_import_reaches_the_scan` for the alias shapes, and
+  `a_renamed_aliased_import_reaches_the_scan` and
+  `a_rename_onto_an_unordered_name_reaches_the_scan` for the two `UseRename`
+  directions the first round had left uncaught. A count that had *not* moved
+  would have meant the new coverage was never scheduled — the failure mode
+  where a test exists but joins no target.
+
+  *Every gate queue was saturated and cleared without intervention.* The
+  admission pool reported capacity 4, held 4, with 15 to 29 waiting requests
+  across gates 5, 6 and 9, and `make lint` logged two
+  `Blocking waiting for file lock on package cache` lines plus a 1 m 16 s
+  Whitaker compile. The admission status probe exited 0 before and after the
+  batch, no `live_work` or `manager` fault appeared, and nothing was killed or
+  retried. A queued build is the pool working; waiting was the correct response.
+
+  *One harness trap was avoided rather than absorbed.* A foreground gate call
+  that outlives the 600 s cap is moved to the background by the harness and its
+  result is lost, so the four longest gates were driven with bounded polling
+  and each wrote its own exit code to a sidecar file. The durations above are
+  the gates' own measurements, not inferred from when a log stopped growing.
 
 - [x] (2026-10-23) **The two `EP-M8` review rounds are closed: all twenty
       findings were verified against source and repaired, and the second review
