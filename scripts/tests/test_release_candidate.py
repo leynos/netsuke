@@ -23,16 +23,22 @@ PACKAGE = "netsuke-build"
 BIN_NAME = "netsuke"
 
 
+#: A fully tagged candidate the refusal rows vary one field at a time. It is a
+#: value rather than a dict of overrides because :func:`dataclasses.replace`
+#: checks each replacement against the field it replaces; unpacking a mapping
+#: would widen `tag` to `str | None` and lose that per-field agreement.
+TAGGED_FACTS = release_candidate.CandidateFacts(
+    tag=TAG,
+    commit=COMMIT,
+    package_name=PACKAGE,
+    version=VERSION,
+    bin_name=BIN_NAME,
+)
+
+
 def _facts(**changes: str | None) -> release_candidate.CandidateFacts:
     """Return candidate facts with the named fields replaced."""
-    base: dict[str, str | None] = {
-        "tag": TAG,
-        "commit": COMMIT,
-        "package_name": PACKAGE,
-        "version": VERSION,
-        "bin_name": BIN_NAME,
-    }
-    return release_candidate.CandidateFacts(**{**base, **changes})
+    return dataclasses.replace(TAGGED_FACTS, **changes)
 
 
 @pytest.mark.parametrize(
