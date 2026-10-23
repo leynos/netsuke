@@ -31,6 +31,28 @@ use proptest::test_runner::{RngSeed, TestCaseError, TestRunner};
 /// inputs no earlier run has tried.
 pub(crate) const COVERAGE_SEED: u64 = 0x4e45_5453_4b45; // "NETSKE" in ASCII.
 
+/// The shrinking budget every graph-sized suite runs under, in milliseconds.
+///
+/// `EP-M0` question 4 measured why a wall is needed at all: a `GraphSpec` has
+/// roughly 1,500 shrink dimensions, so a counter-example of 50 actions and 100
+/// edges never reaches a minimum. The shrink loop completed about 940
+/// candidates per second, and 30 seconds therefore buys roughly 28,000
+/// candidates — enough to simplify a case, nowhere near enough to minimize one.
+/// Left unbounded, shrinking instead runs into `.config/nextest.toml`'s
+/// 300-second kill, and a killed process persists no regression seed, so the
+/// failure becomes unreproducible.
+///
+/// The stop is deliberate rather than a concession: a partially shrunk case is
+/// readable because `EP-M3` bounds the printed `Debug`, and a stable seed
+/// matters more than a minimal witness. Proptest's own default, `0`, is "no
+/// limit", so this constant is the whole mechanism.
+///
+/// The suites that draw a graph or a manifest and emit it all use this. The IR
+/// property suites do not: their cases are `Vec<Vec<usize>>` over at most
+/// thirty targets, which has a few dozen shrink dimensions rather than
+/// thousands, and they converge without a wall.
+pub(crate) const HEAVY_SHRINK_TIME_MS: u32 = 30_000;
+
 /// A `TestRunner` for a coverage tally: a fixed seed over `cases` samples.
 pub(crate) fn coverage_runner(cases: u32) -> TestRunner {
     TestRunner::new(ProptestConfig {

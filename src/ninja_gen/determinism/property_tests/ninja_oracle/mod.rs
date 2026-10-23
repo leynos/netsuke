@@ -131,7 +131,11 @@ fn ninja_is_available() -> bool {
 proptest! {
     // A case costs two `ninja` invocations per insertion order, measured at
     // about 1.6 ms and 1.9 ms each, so sixty-four cases is a few seconds.
-    #![proptest_config(ProptestConfig { cases: 64, .. ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig {
+        cases: 64,
+        max_shrink_time: super::support::HEAVY_SHRINK_TIME_MS,
+        ..ProptestConfig::default()
+    })]
 
     /// Real Ninja accepts both insertion orders of the emitted bundle.
     ///
