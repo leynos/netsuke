@@ -197,7 +197,7 @@ seeded duplicate.
   reproduced zero events in unmitigated mode, and accepted exactly one summary
   in mitigated mode; the malformed-token test passed. Logs:
   `/tmp/test-focused-b52a33dc-f184-4eef-82fc-038987db14c6-issue-927-manifest-structure-telemetry-test-loses-its-event-under-concurrent-execution-7.out`
-  and `...-8.out`. Full local gates and an assessment follow-up on the
+  and `...-8.out`.
 - [x] (2026-10-23) Recovered from the prior no-space failures and reran the
   complete gate sequence on the repaired candidate without cache cleanup or
   resource exhaustion. `make fmt`, `make check-fmt`,
