@@ -118,6 +118,15 @@ fn names_method(method: &Ident, wanted: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
+    //! Unit tests for the use classifier, written as source text.
+    //!
+    //! Each case parses a small function and states what the visitor found, so
+    //! the rule is read off syntax rather than off token spelling. Exactness is
+    //! asserted on both subjects the rule compares: a field whose name only
+    //! begins with the exempt one is a different field, and a method that only
+    //! begins with the permitted spelling is a different method. Either match
+    //! made lenient would excuse a use the exemption does not cover.
+
     use super::{Use, uses};
 
     /// Parse and collect, so each case reads as source text.
