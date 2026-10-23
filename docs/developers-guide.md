@@ -160,9 +160,9 @@ That is deliberate: query output must stay stable without observing the build
 environment, while build recipes must use the shell that will execute them.
 Authors who need the same rendered text in both contexts can name `dialect=`.
 `tests/stdlib_manifest_query_tests/dialect_probes.rs` pins both explicit
-dialects and verifies that omitted dialects use `sh` through the graph export
-on every platform. The child process also receives a malformed shell override,
-proving that help does not resolve it.
+dialects and verifies that omitted dialects use `sh` through the query
+catalogue on every platform. The child process also receives a malformed shell
+override, proving that help does not resolve it.
 
 Manifest rendering has two caller-selected modes. Full rendering evaluates all
 manifest fields, including recipe bodies, for build, generate, and manifest

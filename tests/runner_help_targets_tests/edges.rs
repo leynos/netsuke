@@ -79,6 +79,7 @@ fn run_edge_export(
     assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(current_dir)
         .env("NETSUKE_NINJA", "/definitely-not-a-ninja-binary")
+        .env_remove("NETSUKE_CONFIG")
         .arg("--json")
         .arg("--file")
         .arg(manifest_path)
