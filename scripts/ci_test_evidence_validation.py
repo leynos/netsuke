@@ -4,6 +4,8 @@ The collector rejects incomplete or cross-attempt records so every output row
 remains bound to the run attempt that produced it.
 """
 
+import typing as typ
+
 from ci_test_evidence_types import CollectorInputs, validate_identities
 
 
@@ -72,16 +74,26 @@ def validate_evidence_maps(values: CollectorInputs) -> None:
     """
     for key in ("logs", "inventories"):
         evidence_map = values.get(key, {})
-        if not isinstance(evidence_map, dict) or not all(
-            isinstance(job_id, str) for job_id in evidence_map
-        ):
-            message = f"{key} must be a string job-ID mapping"
-            raise TypeError(message)
+        match evidence_map:
+            case dict() as mapping if all(_is_string(job_id) for job_id in mapping):
+                continue
+            case _:
+                message = f"{key} must be a string job-ID mapping"
+                raise TypeError(message)
     _validate_log_values(values.get("logs", {}))
 
 
 def _validate_log_values(logs: dict[str, str]) -> None:
     """Require saved log values to be strings before parsing them."""
-    if not all(isinstance(log, str) for log in logs.values()):
+    if not all(_is_string(log) for log in logs.values()):
         message = "logs must map job IDs to text"
         raise TypeError(message)
+
+
+def _is_string(value: object) -> typ.TypeGuard[str]:
+    """Narrow arbitrary input to a string without coercion."""
+    match value:
+        case str():
+            return True
+        case _:
+            return False

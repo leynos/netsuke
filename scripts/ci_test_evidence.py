@@ -100,13 +100,15 @@ def duration_seconds(start: str | None, end: str | None) -> float | None:
 
 def _timestamp(value: object) -> str | None:
     """Keep aware times; ``_timestamp("bad")`` returns ``None``."""
-    if not isinstance(value, str):
-        return None
-    try:
-        parsed = dt.datetime.fromisoformat(value)
-    except ValueError:
-        return None
-    return value if parsed.utcoffset() is not None else None
+    match value:
+        case str():
+            try:
+                parsed = dt.datetime.fromisoformat(value)
+            except ValueError:
+                return None
+            return value if parsed.utcoffset() is not None else None
+        case _:
+            return None
 
 
 def _elapsed(
@@ -120,22 +122,30 @@ def _elapsed(
 
 def _outcome(value: object) -> str:
     """Normalize outcomes; ``_outcome("bad")`` returns ``"unknown"``."""
-    return value if isinstance(value, str) and value in OUTCOMES else "unknown"
+    match value:
+        case str() if value in OUTCOMES:
+            return value
+        case _:
+            return "unknown"
 
 
 def _event(value: object) -> str:
     """Normalize events; ``_event("bad")`` returns ``"other"``."""
     known = {"push", "pull_request", "schedule", "workflow_dispatch"}
-    return value if isinstance(value, str) and value in known else "other"
+    match value:
+        case str() if value in known:
+            return value
+        case _:
+            return "other"
 
 
 def _safe_sha(value: object) -> str | None:
     """Validate SHAs; ``_safe_sha("abc")`` returns ``None``."""
-    return (
-        value
-        if isinstance(value, str) and re.fullmatch(r"[a-f0-9]{40}", value)
-        else None
-    )
+    match value:
+        case str() if re.fullmatch(r"[a-f0-9]{40}", value):
+            return value
+        case _:
+            return None
 
 
 def _job_phases(job: dict) -> list[dict[str, object]]:
