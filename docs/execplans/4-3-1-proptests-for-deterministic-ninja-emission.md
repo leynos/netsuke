@@ -18,6 +18,14 @@ can be called complete, and both are reserved to others: the formal
 ready first, and the plan owner's ruling on the breached `Scope` tolerance. The
 `EP-M8` checkbox below is deliberately unchecked for that reason.
 
+A third condition that stood here — the Kani mutation compile guard reported
+**unrun** — is discharged. Hosted `kani-smoke` on run 39926096579 executed
+`make test-kani-mutations` at `d1093b137` and it passed in 500.50 s with
+`1 passed; 0 failed; 0 ignored`, so the `#[ignore]`-gated test did run rather
+than self-skip. The `libLLVM` loader fault recorded as the blocker does not
+reproduce on this host either: the same codegen over the real crate exits 0.
+Both results are in `Progress` and the reasoning is in `Decision log`.
+
 The `Scope` tolerance blocked this plan from 2026-10-16 until 2026-10-17, and
 the block is discharged: the user directed "Widen the cap", and the cap is now
 56 files and 6,000 net added lines against a measured 28 files and 2,597 lines,
@@ -2984,12 +2992,17 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
     `MUT-CYCLEDEPTH` adds a six-deep cap in `CycleDetector::visit`; measured,
     it fails only `Long` cases, with the eight-target long cycle as the minimal
     counter-example.
-  - **Kani itself cannot run on this host.** `cargo kani --only-codegen`
-    fails in `libc`'s build script because `kani-compiler` cannot load
-    `libLLVM.so.21.1-rust-1.93.0-nightly`. The patches were therefore validated
-    by ordinary compilation and by the property runs rather than by CBMC; the
-    compile guard in `tests/kani_mutation_evidence_tests` remains unrun for the
-    same reason and must be reported as such rather than counted as a pass.
+  - **Kani could not run on this host at the time of writing; that is no
+    longer true, and the observation is preserved as historical.** Then,
+    `cargo kani --only-codegen` failed in `libc`'s build script because
+    `kani-compiler` could not load `libLLVM.so.21.1-rust-1.93.0-nightly`, so
+    the patches were validated by ordinary compilation and by the property runs
+    rather than by CBMC, and the compile guard in
+    `tests/kani_mutation_evidence_tests` went unrun for the same reason and was
+    reported as such rather than counted as a pass. **Superseded on
+    2026-10-23:** the loader fault does not reproduce on the current host, and
+    the guard has since run green on a compatible one. See *Progress* for both
+    results; do not cite this bullet as current state.
   - `make proptest` selects both suites (14 tests, 138 total, all passing) and
     the four `kani_mutation_evidence_tests` contracts pass, including
     `every_patch_applies_cleanly` over both new patches.
@@ -5547,6 +5560,44 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   batch, because `tests/execplan_status_contract_tests.rs` reads
   `docs/execplans/*.md` at test time.
 
+- [x] (2026-10-23) **The Kani mutation compile guard is no longer unrun: a
+  compatible host executed it and it passed.** The condition recorded in the
+  Decision log was "until a compatible host executes `make
+  test-kani-mutations`", and the hosted `kani-smoke` job on run 39926096579 is
+  that host. It ran the target at `d1093b137` and Nextest reported
+  `1 passed; 0 failed; 0 ignored; 4 filtered out; finished in 500.50s`, with
+  eleven `SLOW` markers climbing from 60 s to 480 s and **no**
+  `skipping: source tree is not a git checkout` line. `0 ignored` is the
+  load-bearing figure: it says the test was scheduled and executed rather than
+  filtered out by its `#[ignore]` attribute, so the 500 s bought compiled
+  patched trees and not a skipped body.
+
+  *What that run did and did not cover.* The tree it compiled is `d1093b137`,
+  which holds 28 mutation patches; this branch's head holds 28 as well, and
+  `git diff --name-only d1093b137..HEAD` names exactly one file — this plan —
+  so no patch, no guard source, and no library source differs between the two.
+  The guard's evidence therefore transfers to the head rather than being
+  stranded on an earlier revision.
+
+  *The recorded blocker does not reproduce here either.* The `libLLVM` story
+  was that cargo exports the pinned `rustlib` directory onto `LD_LIBRARY_PATH`,
+  shadowing `libLLVM.so.21.1-rust-1.93.0-nightly`. Measured on this host:
+  `ldd` on `kani-compiler` resolves that library from
+  `~/.kani/kani-0.67.0/toolchain/lib` both with and without the `rustlib` path
+  prepended, `cargo kani --only-codegen --lib` succeeds on a minimal crate
+  both unpinned (23.99 s) and pinned to `nightly-2026-08-23` (27.44 s), and the
+  same codegen over the real `netsuke` crate finishes in 2 m 27 s with exit
+  status 0. `scripts/check-build-tools.sh` exits 0. The one part of the old
+  diagnosis that still holds is a genuine asymmetry worth knowing: the pinned
+  `rustlib/x86_64-unknown-linux-gnu/lib` holds no `libLLVM` files while the
+  toolchain's own `lib` holds both, so a loader that searched only the former
+  would fail. Nothing on this host searches only the former.
+
+  *Consequence for the gate claims.* The ten local gates still say nothing
+  about this test, and that part of the earlier decision was right: `make test`
+  does not run `#[ignore]` tests, so a green batch remains silent about them.
+  What changed is that the silence is no longer the whole story.
+
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [x] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -5569,9 +5620,12 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   `d1093b137`, and the batch was re-run in full after the CodeScene repair
   rather than carried over from the head it replaced.
 
-  The Kani mutation compile guard stays **unrun** on this host for the reason
-  the retrospective already records, and unrun is not a pass. The ten local
-  gates say nothing about that `#[ignore]`-gated test's result.
+  A third condition that stood here is now discharged: the Kani mutation
+  compile guard was reported **unrun** on this host, and unrun is not a pass.
+  It has since run, green, on a compatible host. The ten local gates exercise
+  the patch files only as data and so still say nothing about that
+  `#[ignore]`-gated test's result; the hosted `kani-smoke` run is what
+  establishes it. Both results are recorded in *Progress*.
 
 ## Surprises & discoveries
 
@@ -6879,6 +6933,28 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   the patch files only as data, never by compiling a patched tree, so they are
   not evidence about the guard. Date/Author: 2026-10-23 / lifecycle agent, from
   assessment `EPQ-700-20261023-A` and a source reading of the guard's gate.
+  **Superseded 2026-10-23.** The refusal to treat a green ten-gate batch as
+  evidence stands, and is restated below; the *unrun* verdict does not, because
+  the condition it rested on has been met.
+- Decision: report the Kani mutation compile guard as **run and passed**, and
+  record plainly that the premise for reporting it unrun has lapsed.
+  Rationale: the guard's `#[ignore]` gate was never a claim that it *could not*
+  run, only that it does not run by default, and its own recorded condition —
+  "until a compatible host executes `make test-kani-mutations`" — names the
+  runner as the arbiter rather than this workstation. The `kani-smoke` job on
+  hosted run 39926096579 executed `make test-kani-mutations` at `d1093b137`
+  and returned `1 passed; 0 failed; 0 ignored; 4 filtered out` in 500.50 s, with
+  eleven `SLOW` markers and no `skipping: source tree is not a git checkout`
+  line, so the test compiled the patched trees rather than self-skipping. The
+  tree the run compiled carries 28 patches, the same count as this branch's
+  head, and neither of the two commits the hosted run did not see touches a
+  source file. Independently, the `libLLVM` fault does not reproduce on this
+  host: `cargo kani --only-codegen --lib --all-features` over the real crate
+  completed in 2 m 27 s with exit status 0 and no loader error, and `ldd`
+  resolves `libLLVM` from the Kani toolchain's own `lib` directory whether or
+  not the pinned `rustlib` path is on `LD_LIBRARY_PATH`. Date/Author:
+  2026-10-23 / lifecycle agent, from the hosted job log, a local Kani codegen
+  run, and a mutation-patch census at both revisions.
 - Decision: `OBL-E2E`'s metamorphic transform **permutes the declared `defaults`
   list alongside `targets`**, and the obligation's statement is amended to say
   so, so that `MUT-DEFSORT` remains observable from this obligation. Date/
@@ -7948,12 +8024,15 @@ a CRLF transport fault in four context lines, not a defect in the evidence.
 Repairing it changed no patched byte: applying the old and the new patch to a
 pristine tree yields identical sources.
 
-Two things stay open and neither is a coding task. The plan owner's scope
+Two things stayed open and neither is a coding task. The plan owner's scope
 ruling is reserved to the owner: the endpoint exceeds the approved cap on both
-axes, and this plan does not re-widen the cap or trim the branch to fit it. And
-the Kani mutation compile guard remains **unrun** on this host for the
+axes, and this plan does not re-widen the cap or trim the branch to fit it.
+And the Kani mutation compile guard was **unrun** on this host for the
 `libLLVM` reason recorded below; unrun is not a pass, and the ten local gates
-do not stand in for it.
+did not stand in for it. *That second item is now discharged* — the hosted
+`kani-smoke` job ran `make test-kani-mutations` green at `d1093b137`, and the
+loader fault does not reproduce locally either. See *Progress*; the scope
+ruling remains the owner's alone.
 
 ### Did any property fail against current production code?
 
@@ -8062,11 +8141,17 @@ there), and
 `supplemental_property_location_resolves_directory_and_file_modules` pins the
 resolution directly.
 
-Two limits must travel with that "yes". **Kani itself cannot run on this host**
-— `cargo kani --only-codegen` fails in `libc`'s build script because
-`kani-compiler` cannot load `libLLVM.so.21.1-rust-1.93.0-nightly` — so the
-compile guard is *unrun* and must be reported as unrun rather than as a pass;
+Two limits were recorded against that "yes". The first has since been lifted.
+**Kani could not run on this host at the time of writing** —
+`cargo kani --only-codegen` failed in `libc`'s build script because
+`kani-compiler` could not load `libLLVM.so.21.1-rust-1.93.0-nightly` — so the
+compile guard was *unrun* and was reported as unrun rather than as a pass, and
 the patches were validated by ordinary compilation and by the property runs.
+**It has since run.** Hosted `kani-smoke` on run 39926096579 executed
+`make test-kani-mutations` at `d1093b137` and passed in 500.50 s with
+`1 passed; 0 failed; 0 ignored`, and the loader fault does not reproduce on the
+current host, where the same codegen over the real crate exits 0. The guard now
+stands on its own evidence rather than on the ten local gates.
 And the contract proves that evidence **exists and applies**, not that it is
 **specific**: every one of the ten patches did falsify its named test when
 measured, but that fact came from the sweep and the repair pass, not from the
