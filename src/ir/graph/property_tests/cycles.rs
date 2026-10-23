@@ -232,20 +232,26 @@ fn close_chain(deps: &mut [Vec<usize>], length: usize) {
     if nodes < 2 {
         return;
     }
-    for slot in 0..nodes {
-        if let Some(list) = deps.get_mut(slot) {
-            list.clear();
-        }
-    }
-    for slot in 0..nodes {
-        if slot > 0
-            && let Some(list) = deps.get_mut(slot)
-        {
-            list.push(slot - 1);
-        }
-    }
+    reset_slots(deps, nodes);
+    link_slots(deps, nodes);
     if let Some(first) = deps.first_mut() {
         first.push(nodes - 1);
+    }
+}
+
+/// Empty the first `nodes` slots, leaving any later target untouched.
+fn reset_slots(deps: &mut [Vec<usize>], nodes: usize) {
+    for list in deps.iter_mut().take(nodes) {
+        list.clear();
+    }
+}
+
+/// Point slot `i` at its predecessor, which is the chain the closing edge spans.
+fn link_slots(deps: &mut [Vec<usize>], nodes: usize) {
+    for (slot, list) in deps.iter_mut().enumerate().take(nodes) {
+        if let Some(predecessor) = slot.checked_sub(1) {
+            list.push(predecessor);
+        }
     }
 }
 
