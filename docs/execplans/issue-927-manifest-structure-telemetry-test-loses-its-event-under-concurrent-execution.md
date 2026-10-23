@@ -507,20 +507,19 @@ referenced from the design and developers' guides, and indexed from
 - **V2: Real callsite schedule is deterministic.** The first T1 registration
   for the summary event pauses while T2 installs a TRACE capture dispatch.
   Unmitigated mode must release on `installed`, capture the structural span,
-  and report zero summaries. Mitigated mode requires T2 to acknowledge its
-  registration attempt after T1 pauses and before the fixed installation
-  deadline begins. It must then release on the deadline because the registry
-  read lock blocks T2 registration, then capture the span and exactly one
-  summary. Retain the separate installation-completion signal inside
-  `with_default`. Method: ignored child worker driven by a parent test through
-  `current_exe()`, with a wall-clock deadline. The attempt phase uses the
-  existing 10-second thread deadline so loaded hosts can reach the capture
-  installation boundary; the mitigated installation gate retains its fixed 250
-  ms delay after that acknowledgement. The parent kills a child that exceeds
-  its 20-second deadline. Artefact:
-  `src/runner/callsite_interest_reproduction/`. Non-vacuity: require all phase
-  markers and the exact-cardinality oracle; removing the pre-registration
-  anchor must reproduce zero summaries and a validator error.
+  and report zero summaries. In mitigated mode, T1's registry read lock blocks
+  T2's registration, so the attempt phase times out at the fixed 250 ms
+  deadline and releases on `deadline`. T2 then captures the span and exactly
+  one summary, and its registration callback fires after T1 releases. An
+  acknowledgement within the deadline releases on `installed` and fails the
+  worker. Unmitigated mode uses the 10-second thread deadline for both phases.
+  Retain the separate installation-completion signal inside `with_default`.
+  Method: ignored child worker driven by a parent test through `current_exe()`,
+  with a wall-clock deadline. The parent kills a child that exceeds its
+  20-second deadline. Artefact: `src/runner/callsite_interest_reproduction/`.
+  Non-vacuity: require all phase markers and the exact-cardinality oracle;
+  removing the pre-registration anchor must reproduce zero summaries and a
+  validator error.
 - **V3: Summary oracle is exact and non-vacuous.** One exact summary with the
   six expected count tokens succeeds; zero or two summaries fail; wrong or
   duplicate count tokens, an additional count token, and `SENTINEL` fail.

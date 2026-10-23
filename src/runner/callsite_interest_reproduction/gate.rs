@@ -84,18 +84,12 @@ impl RegistrationGate {
                     );
                     "attempt-timeout"
                 };
-                *self
-                    .release_cause
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner) = Some(cause);
+                self.set_release_cause(cause);
                 return;
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
                 self.store_failure("the T2 registration-callback signal disconnected".to_owned());
-                *self
-                    .release_cause
-                    .lock()
-                    .unwrap_or_else(PoisonError::into_inner) = Some("attempt-disconnected");
+                self.set_release_cause("attempt-disconnected");
                 return;
             }
         }
@@ -112,15 +106,20 @@ impl RegistrationGate {
                 "disconnected"
             }
         };
-        *self
-            .release_cause
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner) = Some(cause);
+        self.set_release_cause(cause);
     }
 
     /// Store a fixture failure for the worker thread to report after the gate opens.
     fn store_failure(&self, message: String) {
         *self.failure.lock().unwrap_or_else(PoisonError::into_inner) = Some(message);
+    }
+
+    /// Record why T1 left the registration gate.
+    fn set_release_cause(&self, cause: &'static str) {
+        *self
+            .release_cause
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(cause);
     }
 
     /// Report whether the T1 registration gate was reached.
