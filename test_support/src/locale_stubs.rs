@@ -21,6 +21,23 @@ use std::collections::HashMap;
 /// mean "deny every read", so `StubEnv::default()` would compile and then
 /// panic at run time for the common "no locale set" case. Requiring
 /// [`StubEnv::without_locale`] makes that intent explicit at compile time.
+///
+/// # Examples
+///
+/// The builder constructors compile:
+///
+/// ```
+/// use test_support::locale_stubs::StubEnv;
+/// let _ = StubEnv::without_locale();
+/// ```
+///
+/// `StubEnv::default()` does not. Rustdoc checks this example against the
+/// compiled crate, so restoring `Default` fails the doctest run:
+///
+/// ```compile_fail,E0599
+/// use test_support::locale_stubs::StubEnv;
+/// let _ = StubEnv::default();
+/// ```
 #[derive(Debug, Clone)]
 pub struct StubEnv {
     /// Values the stub answers with, keyed by variable name.

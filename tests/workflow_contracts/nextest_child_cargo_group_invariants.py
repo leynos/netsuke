@@ -46,22 +46,7 @@ if typ.TYPE_CHECKING:  # pragma: no cover - imported for annotations only
 
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 CHILD_CARGO_GROUP = "nested-cargo-builds"
-NESTED_CARGO_BUILD_TESTS = (
-    "command_env_embedder_fixture_compiles",
-    "policy_from_str_embedder_fixture_compiles_without_clap",
-    "cli_configuration_fixture_compiles",
-    "command_list_public_api_fixture_compiles",
-    "ir_gen_error_public_api_fixture_compiles",
-    "legacy_recipe_telemetry_public_api_fixture_compiles",
-    "config_cached_discovery_embedder_fixture_compiles",
-    "verbose_timing_reporter_embedder_fixture_compiles",
-    "stub_env_default_does_not_compile",
-    "stub_env_builders_compile_under_the_same_harness",
-    "split_build_fixture_compiles_through_the_direct_rustc_harness",
-    "text_domains_cannot_be_swapped",
-    "document_and_needle_compile_together",
-    "packaged_manifest_retains_build_script_sources",
-)
+NESTED_CARGO_BUILD_TESTS = ("packaged_manifest_retains_build_script_sources",)
 # Nextest names a parameterized `#[rstest]` by its instances, `name::case_1_…`.
 # `test(=NAME)` compares the whole name, so it matches none of them and the test
 # silently leaves the group; `test(/^NAME($|::)/)` matches the plain name and

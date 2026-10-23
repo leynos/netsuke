@@ -89,6 +89,15 @@ impl<'a> GeneratedNinja<'a> {
     /// let document = GeneratedNinja::new("build out: echo\n");
     /// assert_eq!(document.detected_recipe_transports().len(), 1);
     /// ```
+    ///
+    /// A needle is not a document. Accepting one here would decode a whole
+    /// manifest as if it were a Base64 payload, so the swap must not compile:
+    ///
+    /// ```compile_fail,E0308
+    /// use test_support::ninja_semantics::{GeneratedNinja, RecipeNeedle};
+    /// let needle = RecipeNeedle::new("echo hi");
+    /// let _ = GeneratedNinja::new(needle);
+    /// ```
     #[must_use]
     pub const fn new(text: &'a str) -> Self {
         Self(text)
@@ -177,6 +186,16 @@ impl<'a> RecipeNeedle<'a> {
     /// let document = GeneratedNinja::new("  command = echo hi\n");
     /// let needle = RecipeNeedle::new("echo hi");
     /// assert!(matches!(document.recipe_contains(needle), Ok(true)));
+    /// ```
+    ///
+    /// A document is not a needle. Accepting one here would search encoded
+    /// payload text as if it were plaintext Ninja text, so the swap must not
+    /// compile:
+    ///
+    /// ```compile_fail,E0308
+    /// use test_support::ninja_semantics::{GeneratedNinja, RecipeNeedle};
+    /// let document = GeneratedNinja::new("  command = echo hi\n");
+    /// let _ = RecipeNeedle::new(document);
     /// ```
     #[must_use]
     pub const fn new(text: &'a str) -> Self {

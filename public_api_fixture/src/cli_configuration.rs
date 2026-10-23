@@ -1,14 +1,14 @@
-//! Compile-pass fixture for Netsuke's public cached configuration API.
+//! Type-check Netsuke's public cached configuration API.
 //!
-//! This verifies the public `ConfigEnvProvider` boundary exactly as an
-//! external embedder uses it: resolve diagnostics once, retain the discovered
-//! layers, then merge from the cached outcome.
+//! Exercises the `ConfigEnvProvider` boundary exactly as an external embedder
+//! uses it: resolve diagnostics once, retain the discovered layers, then merge
+//! from the cached outcome.
 
 use netsuke::{cli, cli_localization};
 use std::{ffi::OsString, sync::Arc};
 
 /// Supply an empty injected environment for the public configuration API.
-struct FixtureEnvProvider;
+pub struct FixtureEnvProvider;
 
 impl cli::ConfigEnvProvider for FixtureEnvProvider {
     fn get(&self, _: &str) -> Option<OsString> {
@@ -21,13 +21,12 @@ impl cli::ConfigEnvProvider for FixtureEnvProvider {
 }
 
 /// Compose diagnostic discovery and cached-layer merging as an external caller.
-fn compose_cached_configuration_flow() {
+pub fn compose_cached_configuration_flow() {
     let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (parsed, matches) =
-        match cli::parse_with_localizer_from(["netsuke", "generate"], &localizer) {
-            Ok(parsed) => parsed,
-            Err(_) => return,
-        };
+    let Ok((parsed, matches)) = cli::parse_with_localizer_from(["netsuke", "generate"], &localizer)
+    else {
+        return;
+    };
     let env = FixtureEnvProvider;
 
     drop(cli::resolve_merged_json_with_env(&parsed, &matches, &env));
@@ -35,11 +34,8 @@ fn compose_cached_configuration_flow() {
     outcome.emit_diagnostics();
     let layers = outcome.into_layers();
     drop(result);
-    drop(cli::merge_with_cached_file_layers(&parsed, &matches, &env, layers));
+    drop(cli::merge_with_cached_file_layers(
+        &parsed, &matches, &env, layers,
+    ));
     drop(cli::merge_with_config_and_env(&parsed, &matches, &env));
-}
-
-/// Reference the complete configuration flow in the compile-only fixture.
-fn main() {
-    compose_cached_configuration_flow();
 }
