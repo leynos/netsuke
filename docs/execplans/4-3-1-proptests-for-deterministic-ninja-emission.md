@@ -5393,18 +5393,126 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
     `make test-documentation-contracts` 14/14, and `make test` 4139/4139 with
     39 doctests passing.
 
+- **2026-10-23 — ExecPlan assessment `EPQ-700-20261023-A`, and the two
+  verification omissions it found.** CodeRabbit assessed `13e129ce4` against
+  base `6572fb956` and returned a substantive verdict: the implementation is
+  substantially complete and it found no new production-emission defect, but it
+  named two verification gaps and two bookkeeping conditions. Both gaps were
+  verified against source before being accepted, and both were real. They are
+  repaired here; the bookkeeping conditions are answered below.
+
+  - *`OBL-NOHASH` exemption was a declaration check, not a use check.* The
+    assessment's claim was exact: `is_permitted` classified the collection a
+    source *names*, so a loop over `&stages.staged_sidecars` that writes each
+    path into `out` names no collection and recorded no hit. The exemption
+    list permitted the field while the guard's own module header promised
+    "membership, never iteration" — a prose obligation the implementation did
+    not enforce. The repair adds `tests/hashmap_boundary/bindings.rs`, which
+    reads the exempt field's *uses*: `insert` is permitted and every other use
+    is reported, whether a `for` loop, a borrow, an iterator method, or an
+    alias. The name comparison is exact, so a field merely sharing a prefix is
+    a different field. Verified with the planted probe the assessment asked
+    for — an output-writing loop over the exempt field — which fails the
+    contract with `staged_sidecars is AsValue` and passes again once reverted.
+    The new module is a file of its own because `scan.rs` measures 377 lines,
+    and because the two questions have different subjects: one asks what a
+    tree declares, the other how one named field is read.
+  - *`max_shrink_time` was required and absent.* Tolerance 5 and the *Shrinking*
+    constraint require a 30-second shrink wall on the heavy properties, and the
+    identifier appeared nowhere outside this document. It is now
+    `HEAVY_SHRINK_TIME_MS` in `property_tests/support.rs`, stated once rather
+    than transcribed into each suite, and applied to all five graph- or
+    manifest-sized suites — `order`, `declaration`, `ninja_oracle`, `no_loss`,
+    and `defaults` — a wider set than the three the assessment named, because
+    the others carry the same 100-edge and 200-output domain and so the same
+    unbounded-shrink exposure. The two IR property suites are deliberately
+    excluded and the constant's doc says why: their cases are
+    `Vec<Vec<usize>>` over at most thirty targets, a few dozen shrink
+    dimensions rather than roughly 1,500, and they converge without a wall.
+    Proptest's own default is `0`, meaning no limit, so the constant is the
+    entire mechanism.
+  - *The failure path was validated, not inferred from passing-run timings.*
+    The assessment is right that a green run says nothing about shrinking. A
+    deliberate failure was planted at the head of a property body; shrinking
+    terminated in 0.02 s rather than running into the 300-second kill, and the
+    seed was persisted to
+    `proptest-regressions/ninja_gen/determinism/property_tests/order.txt` with
+    its compact `GraphSpec` diagnostic. Re-running without the case-budget
+    override replayed the persisted seed before generating anything, which is
+    the behaviour the requirement exists to secure. Probe and seed file were
+    then removed.
+
+- **Unlisted branch regression found and repaired alongside: the Windows lane
+  failed on a patch-transport defect, not on code.**
+  `every_patch_applies_cleanly` reported two mutation patches as
+  `corrupt patch at line 8` and `line 23` on the Windows runner while the same
+  patches applied cleanly on Linux. The discriminator is not the patch's
+  content but its *encoding*: a hunk context line written as a bare empty line
+  loses its leading space when a Windows checkout translates the file to CRLF,
+  and the hunk parser then rejects the patch. Reproduced exactly — the two
+  patches, CRLF-translated, fail with the same two line numbers the runner
+  reported, while a control patch with no bare empty context line fails
+  differently (`patch does not apply`) rather than as corrupt. Both patches
+  were rewritten to carry a single space on those four context lines, which is
+  the form sixteen of the repository's twenty-eight patches already use,
+  including several on `main`. The repair is purely transport: applying the old
+  and the new patch to a pristine tree yields byte-identical sources, so the
+  mutation evidence is semantically unchanged and still compiles under the
+  guard's `-D warnings`.
+
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [x] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
 - [x] `EP-M7`: `OBL-DUP`, `OBL-CYCLE`.
 - [ ] `EP-M8`: `OBL-NINJA`, documentation, evidence sweep, roadmap.
 
-  Code, documentation, and the evidence sweep are delivered. What remains
-  before the box can be ticked is external to the implementation: the full
-  sequential gate batch, the `coderabbit review --agent` pass, and the
-  roadmap/PR bookkeeping that depends on them.
+  Code, documentation, and the evidence sweep are delivered, and the two
+  verification omissions the `EPQ-700-20261023-A` assessment named are closed
+  above. Four conditions remain, and none of them is an implementation task:
+
+  - the full sequential gate batch against the repaired head;
+  - the `coderabbit review --agent` pass;
+  - the plan owner's scope ruling — the endpoint changes 89 files and adds 8,870
+    net lines against an approved 56-file and 6,000-line cap, which is a
+    decision reserved to the owner rather than one this plan may take;
+  - the hosted-checks result, which cannot be known before the push that
+    carries these repairs.
+
+  The Kani mutation compile guard stays **unrun** on this host for the reason
+  the retrospective already records, and unrun is not a pass. The ten local
+  gates say nothing about that `#[ignore]`-gated test's result.
 
 ## Surprises & discoveries
+
+- (2026-10-23) **A guard that checks a declaration is not a guard that checks
+  the claim.** The `OBL-NOHASH` boundary test read every emitter source and
+  classified the unordered collections each one *names*, which is a complete
+  answer to "does the emitter declare a hash collection?" and no answer at all
+  to the question the exemption actually rests on: "is the permitted one only
+  ever asked about membership?" A loop over the exempt field names no
+  collection, so the scan had no hit to judge and the guard passed over the
+  exact misuse it was written to prevent. The module header had asserted
+  "membership, never iteration" the whole time; the sentence was true of the
+  code and not of the check. *The general lesson:* when an exemption is
+  justified by how a value is *used*, the guard must read the uses. A
+  declaration check can only ever license a declaration.
+
+- (2026-10-23) **A "corrupt patch" on one operating system and nowhere else is
+  an encoding finding, not a diff finding.** Two mutation patches applied
+  cleanly on Linux and failed on the Windows runner, and the tempting reading —
+  that the patched production code had moved — was wrong: `git apply` would
+  then have said "patch does not apply", which is what it says after parsing.
+  "Corrupt" means the parser rejected the bytes, and the discriminator was a
+  bare empty context line losing its leading space as the checkout translated
+  the file to CRLF. Three controls separated the readings, and the third one
+  matters: a CRLF-translated patch *with* a bare empty context line fails as
+  corrupt at the exact line CI reported, while one *without* fails differently.
+  Had only the first patch been tested, "CRLF breaks patches" would have been
+  the wrong conclusion — the same trap as generalizing from a single probe.
+  *The general lesson:* reproduce the failure's exact message and line number
+  before believing a cause, and prove the fix by showing the old and new
+  artefacts produce identical output, which is what establishes that a
+  transport repair changed nothing semantic.
 
 - (2026-10-21) **`OBL-NINJA` earned its existence on its first red run: the
   real-`ninja` arm found a crash in a shipped feature, not a defect in the new
@@ -6551,6 +6659,50 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
 ## Decision log
 
+- Decision: enforce the `OBL-NOHASH` exemption on the exempt field's **uses**,
+  not only on its declaration, in a new `tests/hashmap_boundary/bindings.rs`.
+  Rationale: the exemption's stated justification is that `staged_sidecars` is
+  only asked whether a member is present, and a declaration check cannot
+  observe a use. The permitted method is stated as a constant
+  (`MEMBERSHIP_METHOD`) so the rule and its justification sit together, and the
+  comparison is exact in both directions — a field is matched by identifier and
+  a method by exact name — so neither a shared prefix nor a longer spelling
+  inherits the permission. The alternative, widening `scan.rs` to record
+  expression-level hits, was rejected: it would have made every field access in
+  the emitter a hit and turned a narrow exemption into a broad suppression.
+  Date/Author: 2026-10-23 / lifecycle agent, from assessment
+  `EPQ-700-20261023-A`.
+- Decision: state the 30-second shrink wall **once** as `HEAVY_SHRINK_TIME_MS`
+  and apply it to all five graph- and manifest-sized suites, rather than
+  transcribing `max_shrink_time: 30_000` into the three suites the assessment
+  named. Rationale: `order`, `declaration`, and `ninja_oracle` share the heavy
+  domain with `no_loss` and `defaults`, which reach 100 edges and 200 outputs
+  and carry the same unbounded-shrink exposure; applying the wall only where a
+  review happened to look would leave two suites able to run into the
+  300-second kill, and a killed process persists no regression seed. The IR
+  property suites are excluded with the reason recorded beside the constant:
+  their shrink dimensions number in the dozens, so the wall would bound a
+  process that already terminates. Date/Author: 2026-10-23 / lifecycle agent,
+  from assessment `EPQ-700-20261023-A`.
+- Decision: repair the Windows patch failure by rewriting four context lines to
+  carry a space, **not** by adding a `.gitattributes` rule that pins `*.patch`
+  to LF. Rationale: the `.gitattributes` route would have changed how every
+  patch in the repository is checked out in order to protect two files, and it
+  would have left the two files unable to survive any future translation. The
+  rewrite adopts the form sixteen of the twenty-eight patches already use,
+  including several on `main`, so it makes the outliers conform to the existing
+  convention rather than teaching the repository a new one. Proven equivalent:
+  applying the old and new patch to a pristine tree yields byte-identical
+  sources. Date/Author: 2026-10-23 / lifecycle agent, from the hosted Windows
+  run on `13e129ce4`.
+- Decision: report the Kani mutation compile guard as **unrun**, and refuse to
+  let a green ten-gate batch imply otherwise. Rationale: the guard is
+  `#[ignore]`-gated and runs only from `make test-kani-mutations`, which cannot
+  run here because `kani-compiler` cannot load
+  `libLLVM.so.21.1-rust-1.93.0-nightly`. The ten gates that do pass exercise
+  the patch files only as data, never by compiling a patched tree, so they are
+  not evidence about the guard. Date/Author: 2026-10-23 / lifecycle agent, from
+  assessment `EPQ-700-20261023-A` and a source reading of the guard's gate.
 - Decision: `OBL-E2E`'s metamorphic transform **permutes the declared `defaults`
   list alongside `targets`**, and the obligation's statement is amended to say
   so, so that `MUT-DEFSORT` remains observable from this obligation. Date/
@@ -7548,8 +7700,46 @@ accepted but deferred, so they are not lost:
 
 ## Outcomes & retrospective
 
-Completed 2026-10-23 against candidate `f91f663a7`. Each heading below is one
-of the questions this section was reserved to answer.
+Completed 2026-10-23 against candidate `f91f663a7`, and re-answered the same
+day against `13e129ce4` after the `EPQ-700-20261023-A` assessment. Each heading
+below is one of the questions this section was reserved to answer.
+
+### What did the independent assessment change?
+
+Two verification gaps, both real, and a set of bookkeeping conditions that are
+answered rather than deferred.
+
+The `OBL-NOHASH` exemption was enforced on a collection's *declaration* rather
+than on the uses its justification rests on, so a loop over the exempt field
+could have reached the emitted bytes untouched; that is repaired and proved
+with the planted probe the assessment asked for. The 30-second shrink wall the
+*Shrinking* constraint requires was absent from the implementation entirely,
+and is now stated once and applied to every suite that shares the heavy domain.
+Both were omissions of coverage, not of behaviour: the assessment found no new
+production-emission defect, and neither repair changes what the emitter does.
+
+Three bookkeeping points were checked rather than accepted. The scope figures
+it derived independently (89 files, 8,870 net lines excluding
+`docs/execplans/`) match this plan's own measurement. Its reading of the
+`MUT-HASHMETA` stem is right — the Decision log authorizes that naming, and the
+stem is not an accidental omission — and the assessment said so unprompted. Its
+statement that the Windows reserved-namespace check is unchanged from the base
+is also right, which is why `reject_reserved_paths` is recorded as pre-existing
+debt rather than repaired here.
+
+One finding it did not raise is worth recording because it was live. The
+`EP-M8` code was delivered and the *hosted* Windows lane was failing on a
+mutation patch that `git apply` parsed as corrupt there and cleanly on Linux —
+a CRLF transport fault in four context lines, not a defect in the evidence.
+Repairing it changed no patched byte: applying the old and the new patch to a
+pristine tree yields identical sources.
+
+Two things stay open and neither is a coding task. The plan owner's scope
+ruling is reserved to the owner: the endpoint exceeds the approved cap on both
+axes, and this plan does not re-widen the cap or trim the branch to fit it. And
+the Kani mutation compile guard remains **unrun** on this host for the
+`libLLVM` reason recorded below; unrun is not a pass, and the ten local gates
+do not stand in for it.
 
 ### Did any property fail against current production code?
 
