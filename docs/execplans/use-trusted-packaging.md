@@ -2046,6 +2046,20 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `make lint-python` clears all five stages, and `make test-workflow-contracts`
   reports 1419 passed with 3 skipped. Date/Author: 2026-10-23, implementation
   agent.
+- Repair: the CodeScene "Overall Code Complexity" advisory fired on
+  `release_digest_record.py` at 9.38, the only one of the six release modules
+  below 10.00, and it reproduced locally with `cs check`. The metric is the
+  mean cyclomatic complexity across the file, so the reported score names no
+  function; `require_record_matches_declaration` was carrying two independent
+  obligations, the empty-declaration premise and the set-coverage comparison.
+  The comparison and its diagnostic now live in `_require_complete_coverage`,
+  which is a cohesive decomposition rather than a dilution: each function
+  states one requirement and owns one error path, and the caller no longer
+  interleaves a premise guard with a coverage decision. Measured with
+  `cs check`, the file is 10.00 at 362 lines; the other five release modules
+  were already 10.00 and were not touched. The affected suites pass: 91 tests
+  across the five release test modules and the five modules' own doctests.
+  Date/Author: 2026-10-23, implementation agent.
 
 ## Surprises & discoveries
 
