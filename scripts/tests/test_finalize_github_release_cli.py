@@ -1,10 +1,17 @@
 """Exercise the release-finalizing CLI the finalizer job invokes.
 
 The reconciliation planner is proved in its own module. These tests pin the
-seam: that the declared set comes from the verifier's record rather than from
-whatever GitHub happens to hold, that a conflict stops the release with the
-offending names in the diagnosis, and that an incomplete release is reported as
-needing an upload rather than as a conflict. No test here contacts GitHub.
+seam: that the declared set comes from the build's trusted record rather than
+from whatever GitHub happens to hold, that a conflict stops the release with
+the offending names in the diagnosis, and that an incomplete release is reported
+as needing an upload rather than as a conflict. No test here contacts GitHub.
+
+Which record is read is the substance of that first claim. Reading the
+verifier's output would compare GitHub against a digest derived from GitHub,
+and the comparison would agree with itself however the upload was tampered
+with; reading the build's record is what makes an asset GitHub reports
+different from the one the build produced stop the release before it is
+un-drafted.
 """
 
 import json
@@ -32,7 +39,7 @@ SIDECAR_DIGEST = "cd" * 32
 
 
 def _identity(destination: pathlib.Path, assets: dict[str, str]) -> pathlib.Path:
-    """Write the verified-digest record the inventory job produced."""
+    """Write the trusted digest record the declaration stage produced."""
     _ = destination.write_text(json.dumps({"assets": assets}), encoding="utf-8")
     return destination
 
@@ -78,7 +85,7 @@ def _plan(output: pathlib.Path) -> _PlanRecord:
 def test_the_cli_permits_un_drafting_a_fully_verified_release(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Accept a draft whose assets all match the verified record."""
+    """Accept a draft whose assets all match the trusted record."""
     identity = _identity(
         tmp_path / "identity.json",
         {ARCHIVE: ARCHIVE_DIGEST, SIDECAR: SIDECAR_DIGEST},
@@ -233,6 +240,16 @@ def test_the_cli_reports_a_conflict_ahead_of_a_missing_asset(
         pytest.param("{}", "the record carries no assets member", id="no-assets"),
         pytest.param('{"assets": []}', "assets is a list", id="assets-not-a-mapping"),
         pytest.param('{"assets": {}}', "assets declares nothing", id="assets-empty"),
+        pytest.param(
+            '{"assets": {"a.tar.gz": 1}}',
+            "a digest is not a string",
+            id="digest-not-a-string",
+        ),
+        pytest.param(
+            '{"assets": {"a.tar.gz": "ab"}}',
+            "a digest is not a full SHA-256",
+            id="digest-too-short",
+        ),
     ],
 )
 def test_the_cli_refuses_a_record_that_cannot_support_a_decision(

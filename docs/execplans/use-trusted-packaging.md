@@ -702,7 +702,7 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
    ```
 
 3. `verify-release-inventory` —
-   `needs: [metadata, publish-crates-io, publish-release]`; `contents: read`;
+   `needs: [metadata, publish-crates-io, publish-release]`; `contents: write`;
    `if: … should_publish == 'true'`. The mode gate is stated directly rather
    than inherited. `release` and `publish-release` are mutually exclusive —
    `release` requires `dry_run == 'true'`, `publish-release` requires
@@ -710,6 +710,20 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
    job. Depending on `release` here would make this job unreachable in both
    lanes: on a tag push `release` is skipped, and on a pull-request dry run
    `publish-crates-io` is skipped.
+
+   The scope is `write` because the assets this job downloads belong to a
+   **draft** release, and a token needs write scope to see a draft's assets at
+   all: with `contents: read` the download returns nothing, the inventory check
+   compares an empty directory against a 20-name declaration, and the release
+   fails for a reason unrelated to its contents. The job's own operations
+   remain read-only — it downloads, hashes and compares — and the scope grants
+   reach it does not use for mutation. This is the third member of the writer
+   set recorded in the decision dated **Amended 2026-10-20** below: two
+   mutating writers plus one read-only holder that needs write scope to see a
+   draft. The `verify-release-inventory` composite action is required to
+   contain no `gh release` call at all, which is what keeps "holds write scope"
+   from drifting into "writes". `id-token: write` stays out, so this job
+   remains disjoint from the registry-exchange job's credentials.
 4. `finalize-github-release` — `needs: [verify-release-inventory]`;
    `contents: write`, no `id-token`. Named `finalize-` rather than
    `publish-github-` to keep it distinct from the existing `publish-release`,
@@ -792,7 +806,10 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Outcome: seven pure modules under `scripts/`, each with a focused suite, all
   runnable locally without network access. The plan first named six;
   `release_semver` was added during Stage B to hold the version grammar the
-  identity resolver and the inventory both consult.
+  identity resolver and the inventory both consult. Stage C added two more
+  under the same discipline — `release_digest_record` for the trusted record's
+  shape and `release_staged_digests` for hashing the staged tree — so the
+  milestone's count is seven and the tree's is nine.
 - Requirements: LEM-1, LEM-2, LEM-3, LEM-4 discharged.
 - Acceptance evidence: `make test-release-publication` passes; each module's
   reject rows fail before the module exists.
@@ -1983,6 +2000,53 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   list keeps the two rewritten selectors readable — without weakening any
   assertion.
 
+- Repair: **the trusted digests are now anchored before the upload, not read
+  back from the download.** The hosted completeness assessment of `f7168a6f2`
+  rejected the flow the plan had recorded: with
+  `verify_release_inventory_cli --output` writing `{"assets": {…}}` and
+  `finalize_github_release_cli` reading that same file, the expected digests
+  were a function of the bytes they were meant to check, so the comparison
+  could detect a missing asset and nothing else. The decision log's **Amended
+  2026-10-23** entry records the reversal. The implemented flow adds two
+  modules: `release_digest_record` owns the record's shape, its reader and
+  writer, and both comparisons made against it; `release_staged_digests` hashes
+  the staged tree and refuses a declared name that is unstaged or staged twice
+  under one published spelling. `release_declaration_cli` gained
+  `--digest-record` and now produces the trusted record from the staged bytes,
+  keyed by `published_name` so a prerelease package is recorded under the dot
+  spelling GitHub actually publishes; `verify_release_inventory_cli` gained a
+  required `--trusted` and compares every download against it through
+  `require_downloads_match_record`; `finalize_github_release_cli` reads the
+  build's record rather than the verifier's output. The two substitution cases
+  the assessment prescribed are
+  `test_verify_rejects_a_replaced_operating_system_package` and
+  `test_verify_rejects_a_replaced_archive_and_sidecar_pair` — the second
+  rewrites the sidecar to describe the substituted archive, so both older
+  agreements hold over the download and only the trusted record can refuse it.
+  `RecordedDigestMismatchError` derives from both `DigestRecordError` and
+  `release_digest.DigestMismatchError`, so a caller guarding either hierarchy
+  catches it. The 400-line Pylint cap fired on
+  `test_verify_release_inventory_cli.py` at 424 lines once the new cases
+  landed; rather than delete a case or suppress the lint, the duplicated
+  staging fixtures moved to `scripts/tests/release_staging_support.py`, which
+  both staging suites now import. That extraction is a genuine deduplication —
+  the two suites had carried near-identical five-function fixture sets — and it
+  removed exactly the overage. `release_staging_support.trusted_digests` hashes
+  the staged files with `release_digest.digest_of_file` directly instead of
+  reading back what the producer wrote, so a substitution test compares the
+  download against an independent account of the build's bytes; a record
+  obtained from the module under test would let a fault in that module vouch
+  for itself. `release_staging_support` is registered in neither the Makefile
+  recipe nor the contract tuples because it is not a test module and carries no
+  doctest, which is the same treatment `release_admission_test_support.py`
+  receives. Both new modules are registered in both contract tuples, in
+  Makefile-recipe order, because `SECTION_MODULES` is compared by list equality
+  and `SOURCE_MODULES` parameterizes the no-network and docstring-example
+  contracts. At this tree, `make test-release-publication` reports 377 passed,
+  `make lint-python` clears all five stages, and `make test-workflow-contracts`
+  reports 1419 passed with 3 skipped. Date/Author: 2026-10-23, implementation
+  agent.
+
 ## Surprises & discoveries
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
@@ -2723,14 +2787,19 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   not by the rebase's own "empty" verdict alone. Date/Author: 2026-10-11,
   planning agent.
 
-- Decision: build the crates.io exchange into #834's existing
-  `publish-release` job instead of adding a new publication job. Rationale:
-  #834 already isolated API-bound publication there and wrote
-  `release_publish_path_permissions_test.py` to hold the separation. A second
-  publication job would duplicate that boundary and split the permission story
-  across two places. This supersedes the plan's earlier job-layout sketch; the
-  `release` job keeps its name, as previously decided, and no third job is
-  introduced. Date/Author: 2026-10-11, planning agent.
+- **SUPERSEDED 2026-10-12** by the decision recorded further down this list
+  that begins "SUPERSEDES the 2026-10-11 decision above": the crates.io OIDC
+  exchange is declared in its own job, not inside `publish-release`, because
+  LEM-5 forbids one job holding both a registry credential path and GitHub
+  release-write authority. Retained for the history of why the placement was
+  first made and why that reason was overridden. Decision: build the crates.io
+  exchange into #834's existing `publish-release` job instead of adding a new
+  publication job. Rationale: #834 already isolated API-bound publication there
+  and wrote `release_publish_path_permissions_test.py` to hold the separation.
+  A second publication job would duplicate that boundary and split the
+  permission story across two places. This supersedes the plan's earlier
+  job-layout sketch; the `release` job keeps its name, as previously decided,
+  and no third job is introduced. Date/Author: 2026-10-11, planning agent.
 
 - Decision: record the `make test` timeouts as environmental and proceed,
   rather than re-running until green. Rationale: the two failures land on
@@ -2742,8 +2811,10 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   honest record is the two-run evidence above, including the residual risk.
   Date/Author: 2026-10-11, planning agent.
 
-- Decision: **SUPERSEDES the 2026-10-11 decision below.** Declare the crates.io
-  OIDC exchange in its own job in `release.yml`, not inside #834's existing
+- Decision: **SUPERSEDES the 2026-10-11 decision above**, the one beginning
+  "build the crates.io exchange into #834's existing `publish-release` job".
+  That entry is now annotated SUPERSEDED in place. Declare the crates.io OIDC
+  exchange in its own job in `release.yml`, not inside #834's existing
   `publish-release` job. Rationale: LEM-5 requires that no job holds both a
   registry credential path and GitHub release-write authority, and the plan's
   own Verification plan states that the registry-exchange job "is the only one
@@ -2921,7 +2992,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - Decision: resolve the verifier's network boundary as **orchestration
   downloads, the module decides**, and enforce EP-M2's no-network claim with a
   test rather than leaving it as conformance prose. Rationale: EP-M2 says the
-  six — now seven — modules perform no network I/O, while Stage B described
+  six — now seven, and more once Stage C's modules joined `SOURCE_MODULES` —
+  modules perform no network I/O, while Stage B described
   `verify_crates_io_bytes.py` as a "token-free download". The two cannot both
   be true, and the choice that keeps the property is the one that makes the
   policy testable without a socket: the workflow step issues the request and
@@ -2996,12 +3068,38 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   putting them in the same record would either delay the identity past the
   point it is useful or make the dataclass's own validity conditional on a
   later stage. The implemented flow is therefore `package_crate_cli --output`
-  writing the identity and the crate digest,
-  `verify_release_inventory_cli --output` writing `{"assets": {...}}`, and
-  `finalize_github_release_cli._expected()` reading that second record. Adding
-  the fields later is a schema change to a record the plan's own criterion
-  compares by exact set equality, so the separation is recorded now rather than
-  left as an apparent gap. Date/Author: 2026-10-19, implementation agent.
+  writing the identity and the crate digest, and two separate
+  `{"assets": {...}}` records written at two different points. Adding the
+  fields later is a schema change to a record the plan's own criterion compares
+  by exact set equality, so the separation is recorded now rather than left as
+  an apparent gap. Date/Author: 2026-10-19, implementation agent.
+
+  **Amended 2026-10-23**: the second half of that flow was backwards, and the
+  reversal is recorded here rather than left to be inferred from the code. It
+  read `verify_release_inventory_cli --output` writing `{"assets": {...}}` and
+  `finalize_github_release_cli._expected()` reading that record. That makes the
+  expected digests a function of the download: the verifier hashes what it was
+  handed, the finalizer compares GitHub against that hash, and the two agree
+  however the bytes were altered — because there is only one copy of the
+  evidence. It detects an incomplete upload and nothing else.
+
+  The flow is now anchored before the upload.
+  `release_declaration_cli --digest-record` writes the **trusted record** —
+  `release_staged_digests.staged_digests` hashes each declared asset in the
+  staged tree, keyed by `release_declaration.published_name` so a prerelease
+  package is recorded under the spelling GitHub publishes rather than the `~`
+  it is staged under. `verify_release_inventory_cli --trusted` reads that
+  record and `release_digest_record.require_downloads_match_record` compares
+  every download against it, which refuses a replaced operating-system package
+  and, because the record's archive digest does not move when both files are
+  rewritten, a replaced archive/sidecar pair.
+  `finalize_github_release_cli --identity` reads the same trusted record, not
+  the verifier's output. The record's shape and its refusals live in
+  `release_digest_record` so the two consumers cannot disagree about what a
+  usable record is, and both files are written by the declaration stage only on
+  success. The assessed head `f7168a6f2` had the old flow; this amendment
+  describes the code as it stands after the repair. Date/Author: 2026-10-23,
+  implementation agent.
 
 - Decision: the release publishes a **flat consumer set of twenty names** —
   the six binstall archives, their six `.sha256` sidecars, and the eight

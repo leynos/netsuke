@@ -4,8 +4,15 @@ Un-drafting makes a release public, and a release that is already public
 cannot be made private again. So the decision of whether to proceed is taken
 before anything is un-drafted, and it is taken from data the step records
 rather than from the live release: the step lists what GitHub already has,
-this module compares that against the verified-digest record, and the step
+this module compares that against the trusted digest record, and the step
 un-drafts only when the answer is that every asset is already the right one.
+
+The record read here is the one the *build* wrote, not the one the verifier
+wrote. Both carry the same shape, and for a correctly verified release they
+hold the same digests, so the distinction costs nothing when everything is
+right — and it is the whole check when something is wrong. Reading the
+verifier's output would compare GitHub against a record derived from GitHub,
+which agrees with itself however badly the upload was tampered with.
 
 The separation is what makes the check testable. A reconciler that asked
 GitHub and acted on the answer inline could only be exercised against a live
@@ -19,8 +26,9 @@ digest is a promise to whoever already downloaded it.
 An absent or unusable digest record is refused rather than read as "nothing
 declared". An empty expected set plans no actions, and no actions is the same
 shape as a fully verified release: the step would un-draft on no evidence at
-all. The record is written by the verifier only after it has compared a
-declaration, so a missing one is a wiring fault, not a release with no assets.
+all. The record is written by the declaration stage only after it has hashed a
+non-empty declaration, so a missing one is a wiring fault, not a release with
+no assets.
 """
 
 import argparse
@@ -28,6 +36,7 @@ import json
 import pathlib
 import sys
 
+import release_digest_record
 import release_reconcile_github
 
 EXIT_OK = 0
@@ -52,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     Returns
     -------
     argparse.ArgumentParser
-        A parser requiring the verified-digest record, the recorded asset
+        A parser requiring the trusted digest record, the recorded asset
         listing, and a destination for the plan.
     """
     parser = argparse.ArgumentParser(
@@ -64,8 +73,9 @@ def build_parser() -> argparse.ArgumentParser:
         required=True,
         type=pathlib.Path,
         help=(
-            "the verified-digest record the inventory stage wrote, mapping "
-            "each declared asset to the digest its bytes were verified against"
+            "the trusted digest record the declaration stage wrote before "
+            "upload, mapping each declared asset to the digest the build "
+            "produced for it"
         ),
     )
     parser.add_argument(
@@ -97,38 +107,46 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     Parameters
     ----------
     identity_path
-        The verified-digest record written by the inventory stage.
+        The trusted digest record the declaration stage wrote before upload.
 
     Returns
     -------
     dict[str, str]
         Asset name to its expected bare hexadecimal digest.
 
+    Raises
+    ------
+    InputUnreadableError
+        If the record cannot be read or does not map names to digests in a
+        shape that supports a decision.
+
     Notes
     -----
-    Every refusal here exists for the same reason. A ``.get("assets", {})``
-    default turns a missing field into an empty plan, and an empty plan returns
-    ``EXIT_OK`` — which the step reads as permission to un-draft. Un-drafting
-    cannot be undone, so absence of evidence must be an error rather than a
-    vacuous success. An empty mapping is refused for the same reason: a release
-    with no assets cannot be correct, and the verifier only writes this record
-    after comparing a non-empty declaration.
+    The record's parsing and its every refusal live in
+    :func:`release_digest_record.read_digest_record`, so the verifier and this
+    module cannot disagree about what a usable record is. What stays here is
+    the translation into :class:`InputUnreadableError`, because this CLI's exit
+    codes are its own: ``EXIT_INPUT_UNREADABLE`` tells the workflow step to
+    stop rather than to re-plan an upload.
 
-    :class:`InputUnreadableError` is raised through the two helpers below, when
-    the file cannot be read, is not a JSON object, carries no ``assets``
-    member, or carries an ``assets`` value that is not a non-empty mapping of
-    name to digest.
+    An absent or unusable record is refused rather than read as "nothing
+    declared". An empty expected set plans no actions, and no actions is the
+    same shape as a fully verified release: the step would un-draft on no
+    evidence at all. Un-drafting cannot be undone, so absence of evidence has
+    to be an error rather than a vacuous success.
 
     Examples
     --------
     >>> import json, tempfile
     >>> from pathlib import Path
+    >>> digest = "ab" * 32
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     good = Path(tmp) / "good.json"
-    ...     _ = good.write_text(json.dumps({"assets": {"a.tar.gz": "ab"}}),
-    ...                         encoding="utf-8")
-    ...     _expected(good)
-    {'a.tar.gz': 'ab'}
+    ...     _ = good.write_text(
+    ...         json.dumps({"assets": {"a.tar.gz": digest}}), encoding="utf-8"
+    ...     )
+    ...     _expected(good) == {"a.tar.gz": digest}
+    True
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     empty = Path(tmp) / "empty.json"
     ...     _ = empty.write_text(json.dumps({"assets": {}}), encoding="utf-8")
@@ -138,59 +156,10 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     ...         print("refused")
     refused
     """
-    declared = _declared_assets(_record_object(identity_path))
-    return {str(name): str(digest) for name, digest in declared.items()}
-
-
-def _record_object(identity_path: pathlib.Path) -> dict[str, object]:
-    """Return the digest record's top-level JSON object.
-
-    Returns
-    -------
-    dict[str, object]
-        The object the record holds.
-
-    Raises
-    ------
-    InputUnreadableError
-        If the file cannot be read or does not hold a JSON object.
-    """
     try:
-        record = json.loads(identity_path.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        msg = f"the digest record {identity_path} could not be read: {error}"
-        raise InputUnreadableError(msg) from error
-    if not isinstance(record, dict):
-        msg = f"the digest record must be a JSON object, got {type(record).__name__}"
-        raise InputUnreadableError(msg)
-    return record
-
-
-def _declared_assets(record: dict[str, object]) -> dict[object, object]:
-    """Return the record's non-empty ``assets`` mapping.
-
-    Returns
-    -------
-    dict[object, object]
-        The declared mapping, before its names and digests are rendered as
-        strings.
-
-    Raises
-    ------
-    InputUnreadableError
-        If ``assets`` is absent, is not a mapping, or is empty.
-    """
-    declared = record.get("assets")
-    if not isinstance(declared, dict):
-        msg = (
-            "the digest record must carry an 'assets' mapping, got "
-            f"{type(declared).__name__}"
-        )
-        raise InputUnreadableError(msg)
-    if not declared:
-        msg = "the digest record declares no assets, so there is nothing to verify"
-        raise InputUnreadableError(msg)
-    return declared
+        return release_digest_record.read_digest_record(identity_path)
+    except release_digest_record.DigestRecordError as error:
+        raise InputUnreadableError(str(error)) from error
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -234,10 +203,11 @@ def main(argv: list[str] | None = None) -> int:
 
     >>> import json, tempfile
     >>> from pathlib import Path
+    >>> digest = "ab" * 32
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     identity = Path(tmp) / "identity.json"
     ...     _ = identity.write_text(
-    ...         json.dumps({"assets": {"a.tar.gz": "ab"}}), encoding="utf-8"
+    ...         json.dumps({"assets": {"a.tar.gz": digest}}), encoding="utf-8"
     ...     )
     ...     assets = Path(tmp) / "assets.json"
     ...     _ = assets.write_text("{}", encoding="utf-8")
