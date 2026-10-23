@@ -8,6 +8,15 @@ proceeds.
 
 Status: IN PROGRESS
 
+Current position: the branch is published at `d1093b137`, the ten local gates
+passed sequentially against that exact head with a tree that did not move, and
+hosted checks on it are green (19 passed, 4 skipped by condition, none failed).
+Two conditions remain before this plan can be called complete, and both are
+reserved to others: the formal `coderabbit review --agent` pass, which requires
+the pull request to be marked ready first, and the plan owner's ruling on the
+breached `Scope` tolerance. The `EP-M8` checkbox below is deliberately
+unchecked for that reason.
+
 The `Scope` tolerance blocked this plan from 2026-10-16 until 2026-10-17, and
 the block is discharged: the user directed "Widen the cap", and the cap is now
 56 files and 6,000 net added lines against a measured 28 files and 2,597 lines,
@@ -5460,6 +5469,51 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   mutation evidence is semantically unchanged and still compiles under the
   guard's `-D warnings`.
 
+- [x] (2026-10-23) **A CodeScene regression introduced by the assessment repair
+  was found by the hosted analyser, repaired, and re-gated in full.** The
+  hosted run on `5aeb852ef` failed `CodeScene Code Health Review` with
+  `Bumpy Road Ahead` against `tests/ninja_gen_hashmap_boundary.rs` (score 9.84,
+  two nested blocks, threshold 2). The finding was
+  `"change-type": "introduced"` with `"old-score": null`, and the same file
+  scores 10.00 at `13e129ce4`, so it was created by the `uncovered_uses` helper
+  added for the assessment, not carried up the branch. `uncovered_uses`
+  filtered its sources and then looped over them in one body; splitting the
+  per-source work into `uncovered_in` restored 10.00 at `d1093b137`.
+
+  *Verified as a refactor rather than asserted.* The 14 boundary tests pass
+  unchanged, and the planted probe was re-applied to the repaired code: an
+  iteration over the exempt field that writes each member into the emitted text
+  still fails with the same message naming the use. A green suite alone would
+  also be what a collector that had stopped collecting produces, so the probe
+  is the evidence and the count is not.
+
+  *The batch was then re-run in full rather than reasoned about.* All ten gates
+  passed sequentially against `d1093b137` with HEAD and a clean tree identical
+  before and after: `check-fmt` (2 s), `typecheck` (68 s), `lint` (117 s, all
+  four prerequisites executed), `doc-coverage` (18 s; 98.13%), `test` (183 s;
+  nextest 4,731 passed, 6 skipped; 157 doctests, 33 ignored), `proptest` (104
+  s; 166 passed, 4,571 skipped), `markdownlint` (20 s), `nixie` (4 s),
+  `test-documentation-contracts` (6 s; 14 passed, 46 skipped),
+  `test-workflow-contracts` (108 s; 1,337 passed, 3 skipped, 27 script
+  doctests). Wall clock 630 s. Every count is identical to the previous batch;
+  only the durations moved, which is what a one-file repair should produce. The
+  batch was slower because the host's shared compiler pool was busier, not
+  because it did more work.
+
+- [x] (2026-10-23) **Hosted checks on `d1093b137` are green, with the two
+  checks that had failed on earlier heads now passing.** Nineteen checks passed
+  and four skipped, none failed. `CodeScene Code Health Review` passes, having
+  failed on `5aeb852ef` (the repair above); `Windows / build-test-windows`
+  passes, having failed on `13e129ce4` (the CRLF patch-transport repair); and
+  `Windows / lint-windows` passes. The four skipped — `Kody Code Review`,
+  `automerge`, `release / publish-release`, and
+  `release / windows-native-recipe-smoke` — are skipped by condition in the
+  workflows, not by error.
+
+  *This is not a claim about every head the branch has had.* Two heads were
+  observed to completion and are named above; the others were not run to a
+  verdict in this session, so nothing is asserted about them.
+
 - [x] `EP-M4`: `OBL-PATHKEY`, `OBL-NOLOSS`.
 - [x] `EP-M5`: `OBL-ORDER`, `OBL-DEFAULT`, `OBL-NOHASH`.
 - [x] `EP-M6`: `OBL-ACTION`, `OBL-E2E`, `OBL-PROCESS`.
@@ -5468,15 +5522,19 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
 
   Code, documentation, and the evidence sweep are delivered, and the two
   verification omissions the `EPQ-700-20261023-A` assessment named are closed
-  above. Four conditions remain, and none of them is an implementation task:
+  above. Two conditions remain, and neither is an implementation task:
 
-  - the full sequential gate batch against the repaired head;
-  - the `coderabbit review --agent` pass;
-  - the plan owner's scope ruling — the endpoint changes 89 files and adds 8,870
-    net lines against an approved 56-file and 6,000-line cap, which is a
-    decision reserved to the owner rather than one this plan may take;
-  - the hosted-checks result, which cannot be known before the push that
-    carries these repairs.
+  - the `coderabbit review --agent` pass, which can only run once the pull
+    request is marked ready;
+  - the plan owner's scope ruling — the endpoint changes 90 files and adds
+    9,182 net lines against an approved 56-file and 6,000-line cap, which is a
+    decision reserved to the owner rather than one this plan may take.
+
+  Two conditions that stood here have since been discharged, and both are
+  recorded in *Progress*: the full sequential gate batch against the repaired
+  head, and the hosted-checks result. Both were established against
+  `d1093b137`, and the batch was re-run in full after the CodeScene repair
+  rather than carried over from the head it replaced.
 
   The Kani mutation compile guard stays **unrun** on this host for the reason
   the retrospective already records, and unrun is not a pass. The ten local
@@ -6657,8 +6715,60 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   it appears, because a measurement claim must be copied from the line that
   printed it, not recomputed in transit.
 
+- (2026-10-23) **The local lint set and the hosted analyser measure different
+  quantities, so a green `make lint` says nothing about CodeScene.** The
+  `OBL-NOHASH` repair split correctly but nested its loop inside the filter,
+  and the hosted run failed with `Bumpy Road Ahead` on
+  `tests/ninja_gen_hashmap_boundary.rs` while every local gate was green.
+  `clippy.toml` does configure `excessive-nesting-threshold = 4`, which reads
+  like a guard against exactly this; it is inert, because `excessive_nesting`
+  is not enabled in `[workspace.lints.clippy]` and appears in no member
+  manifest. The `cognitive_complexity` deny that *is* enabled scores a
+  different shape and its threshold is 32. *The general lesson:* a threshold in
+  `clippy.toml` is a value the lint would use, not evidence that the lint runs,
+  and a configured threshold must be checked against the enabled-lint table
+  before it is cited as a safeguard.
+
+  **Second lesson, on admitting an error the gates could not catch.** The
+  finding was introduced by a repair made in response to a review, on a branch
+  whose local evidence was already green. Nothing local would ever have caught
+  it, so the correction is recorded rather than quietly folded in: the score at
+  the assessed head was 10.00, the repair scored 9.84, and the follow-up
+  refactor restored 10.00. The refactor was verified with the same planted
+  probe that justified the original repair, because a passing suite is also
+  what a collector that stopped collecting would produce.
+
 ## Decision log
 
+- Decision: repair the CodeScene `Bumpy Road Ahead` finding by **extracting**
+  the per-source work into `uncovered_in`, rather than by suppressing the rule
+  in `.codescene/code-health-rules.json` or by restructuring the exemption list
+  to avoid the loop. Rationale: the nesting was incidental to what the function
+  decides, so extraction leaves every judgement where it was; a scoped rule
+  exemption would have been durable permission to nest again in a file whose
+  whole subject is that a rule must not describe a tree this is not. The
+  refactor was proved behaviour-preserving by re-planting the output-writing
+  probe, not by the green suite. Date/Author: 2026-10-23 / lifecycle agent,
+  from the hosted CodeScene run on `5aeb852ef`.
+- Decision: re-run the **whole** ten-gate batch after the CodeScene repair
+  rather than re-running only the gates the change could plausibly affect.
+  Rationale: the change touched a tracked Rust source read by `make test`, and
+  the earlier batches on this branch had already shown that a gate which looks
+  unaffected can still be the one that aborts — the `lint` cascade left two
+  prerequisites unrun on `1f0b243ca` precisely because the first failing stage
+  stopped it. The cost was one 630 s batch; the alternative was a claim about
+  nine gates on a head that was never frozen and gated as one tree.
+  Date/Author: 2026-10-23 / lifecycle agent.
+- Decision: **not** to edit this plan while the hosted run on `d1093b137` was
+  still in flight, and to sequence the plan edit after the hosted verdict.
+  Rationale: the plan file is read at test time by
+  `tests/execplan_status_contract_tests.rs`, so editing it requires the full
+  ten-gate batch; spending one to supersede a CI run before that run had
+  produced a verdict would have discarded the only evidence about the code the
+  edit does not touch. The reordering cost nothing, because a red hosted lane
+  would have required another batch and another push anyway, and the plan edit
+  then rides along in that same batch. Date/Author: 2026-10-23 / lifecycle
+  agent.
 - Decision: enforce the `OBL-NOHASH` exemption on the exempt field's **uses**,
   not only on its declaration, in a new `tests/hashmap_boundary/bindings.rs`.
   Rationale: the exemption's stated justification is that `staged_sidecars` is
@@ -7701,8 +7811,29 @@ accepted but deferred, so they are not lost:
 ## Outcomes & retrospective
 
 Completed 2026-10-23 against candidate `f91f663a7`, and re-answered the same
-day against `13e129ce4` after the `EPQ-700-20261023-A` assessment. Each heading
-below is one of the questions this section was reserved to answer.
+day against `13e129ce4` after the `EPQ-700-20261023-A` assessment, and again
+against `d1093b137` after the CodeScene repair that assessment's fixes made
+necessary. Each heading below is one of the questions this section was reserved
+to answer.
+
+### What did the CodeScene repair change?
+
+One finding, introduced by the assessment repair and repaired here, and nothing
+that reaches the emitted bytes.
+
+`uncovered_uses` filtered the emitter sources and then looped over them in one
+body, which the hosted analyser scored at 9.84 against a 10.00 baseline and
+flagged as `Bumpy Road Ahead`. Extracting the per-source work into
+`uncovered_in` restored 10.00. The boundary contract still carries 14 tests,
+and its planted probe still fails on an output-writing iteration over the
+exempt field, so the guard discriminates exactly as it did before the split. No
+production file changed.
+
+The wider lesson is in *Surprises & discoveries*: the local lint set and the
+hosted analyser are not two views of one standard. `make lint` was green on the
+commit that the analyser scored 9.84, and the configured
+`excessive-nesting-threshold` in `clippy.toml` is inert because the lint it
+configures is enabled in no manifest.
 
 ### What did the independent assessment change?
 
