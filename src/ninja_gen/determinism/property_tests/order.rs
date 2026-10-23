@@ -28,13 +28,19 @@ use crate::ninja_gen::generate_bundle;
 use crate::ninja_gen::order::{ordered_actions, ordered_edges};
 use crate::ninja_gen::path_key;
 use proptest::prelude::*;
+
+use super::support::HEAVY_SHRINK_TIME_MS;
 use proptest::test_runner::TestCaseError;
 use std::cell::Cell;
 
 proptest! {
     // Emission is string building, but a case can hold 100 edges and 200 pool
     // paths, so the budget sits below the key suite's.
-    #![proptest_config(ProptestConfig { cases: 128, .. ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig {
+        cases: 128,
+        max_shrink_time: HEAVY_SHRINK_TIME_MS,
+        ..ProptestConfig::default()
+    })]
 
     /// The edge order rule ignores the order the edges arrive in.
     ///

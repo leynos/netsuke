@@ -31,12 +31,16 @@ use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
 use std::cell::Cell;
 
-use super::support::{coverage_runner, emit};
+use super::support::{HEAVY_SHRINK_TIME_MS, coverage_runner, emit};
 
 proptest! {
     // Emitting one of twenty single-output edges is string building over a
     // handful of `default` operands, so the key suite's budget is affordable.
-    #![proptest_config(ProptestConfig { cases: 128, .. ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig {
+        cases: 128,
+        max_shrink_time: HEAVY_SHRINK_TIME_MS,
+        ..ProptestConfig::default()
+    })]
 
     /// The `default` line's operands are the declared targets, sorted ascending.
     ///

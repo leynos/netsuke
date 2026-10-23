@@ -42,13 +42,17 @@ use proptest::prelude::*;
 use proptest::test_runner::TestCaseError;
 use std::cell::Cell;
 
-use super::support::coverage_runner;
+use super::support::{HEAVY_SHRINK_TIME_MS, coverage_runner};
 
 proptest! {
     // A case lowers and emits up to thirty targets and twelve rules, several
     // times, so the budget matches `order`'s end-to-end arm rather than the
     // cheaper rule-level suites.
-    #![proptest_config(ProptestConfig { cases: 128, .. ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig {
+        cases: 128,
+        max_shrink_time: HEAVY_SHRINK_TIME_MS,
+        ..ProptestConfig::default()
+    })]
 
     /// Lowering and emitting two declaration orders of one manifest agree.
     ///

@@ -26,7 +26,7 @@
 //! no gate or sidecar can ever supply a user output's left-hand side. A dropped
 //! edge's outputs disappear from the text and nothing puts them back.
 
-use super::support::{coverage_runner, emit, materialize};
+use super::support::{HEAVY_SHRINK_TIME_MS, coverage_runner, emit, materialize};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder, IrGenError};
 use crate::ninja_gen::determinism::strategy::graph::arb_graph_spec;
@@ -38,7 +38,11 @@ use std::collections::BTreeMap;
 proptest! {
     // Emission is string building rather than compilation, but a case can hold
     // 100 edges and 200 outputs, so the budget is below the key suite's.
-    #![proptest_config(ProptestConfig { cases: 128, .. ProptestConfig::default() })]
+    #![proptest_config(ProptestConfig {
+        cases: 128,
+        max_shrink_time: HEAVY_SHRINK_TIME_MS,
+        ..ProptestConfig::default()
+    })]
 
     /// Every output the graph declares appears exactly once in the emitted text.
     ///
