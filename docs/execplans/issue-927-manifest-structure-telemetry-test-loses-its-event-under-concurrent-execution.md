@@ -103,11 +103,17 @@ seeded duplicate.
 - [x] (2026-10-23) Add the two inert test-process anchors, both worker modes,
   the exact validator in both original tests, and the callsite transition and
   default-dispatch checks. Update the developers' guide and add ADR-057.
-- [x] (2026-10-23) Rebase the empty branch series onto verified `origin/main`
-  at `6572fb956379f47e70af914bfe4307b740a0b15e`. Reapplying the saved worktree
-  changes produced no conflicts. Rebuilt `Cargo.lock` from the target baseline;
-  metadata added Loom 0.7.2 and four transitive packages without unrelated
-  version upgrades.
+- [x] (2026-10-23) Rebased the 11-commit branch range from
+  `6572fb956379f47e70af914bfe4307b740a0b15e` onto `origin/main` at
+  `8a961000859c02862454338fda6c4dd65bda2aa1`. The replay completed without
+  conflicts; each commit passed `cargo check --workspace`, and `range-diff`
+  showed all 11 commits unchanged. The target did not change `Cargo.lock`, so
+  the branch lockfile was retained without regeneration. The three overlapping
+  documentation files preserve both branches' additions.
+- [ ] (2026-10-23) Revalidate the rebased candidate, including the source-doc
+  fix for Codex review finding 4357772141, then commit and publish it with
+  force-with-lease. The prior full gate results and hosted reviews refer to the
+  pre-rebase head and must be refreshed against the new head.
 - [x] (2026-10-23) Reran the corrected Loom model and both fresh-process modes.
   At bound 3, Loom explored 312 unanchored executions with 156 lost-interest
   outcomes and 99 anchored executions with none. The child markers showed the
@@ -570,8 +576,8 @@ PR whose title contains `(#927)`, summary says `Closes #927`, and terminal
   consolidation are complete. The latest source change passed the focused
   regression and all repository gates; local CodeScene delta found no issues.
   Post-fix manifest runs are clean in the recorded default/high-thread matrix.
-  Remaining work: complete hosted assessments, mark PR #943 ready when current
-  checks and replies clear, and follow it to merge.
+  Remaining work: complete exact-head hosted assessments and replies, then
+  follow ready-for-review PR #943 to merge.
 
 ## Concrete steps
 

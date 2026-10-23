@@ -49,28 +49,37 @@ pub fn ensure_test_interest_anchors_registered() {
 struct InterestAnchor;
 
 impl Subscriber for InterestAnchor {
+    /// Reject every callsite in this inert registrar.
     fn register_callsite(&self, _metadata: &'static Metadata<'static>) -> Interest {
         Interest::never()
     }
 
+    /// Report that this subscriber never enables events.
     fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
         false
     }
 
+    /// Return a placeholder identifier for an inert span.
     fn new_span(&self, _attributes: &span::Attributes<'_>) -> span::Id {
         span::Id::from_u64(1)
     }
 
+    /// Ignore values recorded on a span.
     fn record(&self, _span: &span::Id, _values: &span::Record<'_>) {}
 
+    /// Ignore span relationship updates.
     fn record_follows_from(&self, _span: &span::Id, _follows: &span::Id) {}
 
+    /// Ignore events delivered to this registrar.
     fn event(&self, _event: &Event<'_>) {}
 
+    /// Ignore span-entry notifications.
     fn enter(&self, _span: &span::Id) {}
 
+    /// Ignore span-exit notifications.
     fn exit(&self, _span: &span::Id) {}
 
+    /// Report that this subscriber accepts no tracing levels.
     fn max_level_hint(&self) -> Option<LevelFilter> {
         Some(LevelFilter::OFF)
     }
