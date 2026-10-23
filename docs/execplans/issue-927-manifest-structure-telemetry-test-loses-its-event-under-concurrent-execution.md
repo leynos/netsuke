@@ -118,7 +118,10 @@ seeded duplicate.
   Restored the anchors and reran the worker successfully.
 - [x] (2026-10-23) Repeated all three libtest filters sequentially at default
   and 16 threads: 37 and 22 runs, respectively. Every post-fix run passed.
-- [ ] Attach the evidence to upstream PR #3614 using an allocated bot identity.
+- [x] (2026-10-23) Attached the Loom and real-callsite schedule evidence to
+  [upstream PR #3614](https://github.com/tokio-rs/tracing/pull/3614#issuecomment-6357480721)
+  using the allocated `buzzybee-df12` identity, then verified the posted
+  comment's author, body, server timestamp, and URL.
 - [x] (2026-10-23) Resolved the three initial CodeRabbit findings: repaired the
   ADR-0009 link, used British spelling in ADR-057, and extended the unmitigated
   worker's installation window to ten seconds while keeping the mitigated gate
@@ -164,10 +167,14 @@ seeded duplicate.
   `with_test_subscriber` boundaries. Bundled T2's phase channels after Clippy
   flagged the initial argument count. The latest focused test and all gates
   passed; `cs delta origin/main` reported no issues.
-- [ ] Commit and push the CodeScene-driven consolidation. Attach the Loom and
-  real-callsite schedule evidence to upstream PR #3614, complete the separate
-  completeness and bounded-model assessments for PR #943, mark it ready only
-  after those replies and current checks clear, then follow it to merge.
+- [x] (2026-10-23) Committed the CodeScene-driven consolidation as `f0457010`
+  after the focused regression and all repository gates passed. Force-pushed
+  with a lease and verified that PR #943 now points to
+  `f0457010039bde5c75eb5cc089fc9caffcc5aecb` over base
+  `6572fb956379f47e70af914bfe4307b740a0b15e`.
+- [ ] Complete the separate completeness and bounded-model assessments for PR
+  #943, mark it ready only after those replies and current checks clear, then
+  follow it to merge.
 
 ## Surprises & discoveries
 
@@ -446,17 +453,15 @@ PR whose title contains `(#927)`, summary says `Closes #927`, and terminal
 - **EP-M2 (complete):** Test-process anchors prevent the selected stale
   schedule without global defaults or test serialization. Unmitigated mode
   fails validation, mitigated mode passes after its fixed deadline, and the
-  disabled-anchor control fails. The implementation and worker extraction are
-  committed and published; the CodeScene-driven worker consolidation is
-  validated and awaits its own commit.
+  disabled-anchor control fails. The implementation, worker extraction, and
+  CodeScene-driven consolidation are committed and published.
 - **EP-M3 (implementation and validation complete):** Original tests,
   supporting tests, docs, ADR, repeated measurements, and the worker
   consolidation are complete. The latest source change passed the focused
   regression and all repository gates; local CodeScene delta found no issues.
   Post-fix manifest runs are clean in the recorded default/high-thread matrix.
-  Remaining work: publish the consolidation, attach evidence to upstream PR
-  #3614, complete hosted assessments, mark PR #943 ready when current checks
-  and replies clear, and follow it to merge.
+  Remaining work: complete hosted assessments, mark PR #943 ready when current
+  checks and replies clear, and follow it to merge.
 
 ## Concrete steps
 
