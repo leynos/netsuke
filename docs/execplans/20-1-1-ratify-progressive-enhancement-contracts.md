@@ -27,22 +27,24 @@ support.
 
 After this work, four things are observable:
 
-1. Seven new ADRs exist and are accepted. ADR-041 fixes what
+1. Seven new ADRs exist and are accepted. ADR-0061 fixes what
    `netsuke_version` means, how schema versions are allocated over a release
-   lifecycle, and how unsupported syntax is rejected. ADR-042 records the
+   lifecycle, and how unsupported syntax is rejected. ADR-0062 records the
    cross-cutting contracts: the shallow end, feature and rule identifiers, the
    registered discriminators of the command operation union, persisted format
-   coordination, and one merge rule for operator ceilings. ADR-043 to ADR-047
+   coordination, and one merge rule for operator ceilings. ADR-0063 to ADR-0067
    record the schema decisions for RFCs 0021 to 0025, one ADR per RFC,
-   following the RFC 0011 and ADR-019 precedent.
+   following the RFC 0011 and ADR-0019 precedent.
 2. `docs/netsuke-design.md` contains the authoritative schema-version
    registry, which reserves every planned top-level key, node field, command
    discriminator, and closed vocabulary, and a resolution table that gives
    every outstanding item in RFCs 0021 to 0025 either a decision or a named
    owning task with a merge gate.
-3. RFCs 0021 to 0025 name their governing ADRs, and the few sentences in them
-   and in the 12.1.1 and 12.1.2 roadmap entries that contradict those ADRs are
-   amended, so no accepted decision is contradicted by live text.
+3. RFCs 0021 to 0025 name their governing ADRs, the few sentences in them
+   that contradict those ADRs are amended, and roadmap items 12.1.2, 16.1.1,
+   and 17.1.1 point at the allocation protocol, so no accepted decision is
+   contradicted by live text. The protocol honours ADR-0043, which already
+   reserves schema `1.1.0` for structured commands.
 4. Netsuke enforces the reader-side version gate that every later feature
    depends on. Today the binary accepts any valid SemVer string in
    `netsuke_version`, including `"2.0.0"`, and it only reads the version after
@@ -77,10 +79,16 @@ decision D-15.
 - Implement none of the syntax proposed by RFCs 0021 to 0025 or by RFCs 0001,
   0002, 0003, 0004, 0011, or 0029. Reserving names happens in documentation
   only. No feature registry type, capability-reporting JSON field, CLI flag,
-  configuration key, or `context`/`check` command is added; those belong to
-  12.1.2, 20.2.1, phase 5, and issue `#592` respectively.
+  configuration key, or `context` command is added, and `netsuke check`
+  (ADR-0056) is not changed; those belong to 12.1.2, 20.2.1, phase 5, and the
+  linter's owners respectively.
+- Conform to accepted ADR-0043, which reserves manifest-format minor `1.1.0`
+  for the consolidated structured-command surface. Any proposal to change that
+  reservation must go through an `Amended by ADR-nnnn` banner on ADR-0043, as
+  the documentation style guide prescribes, and only if the user chooses that
+  option at approval (decision D-19).
 - Keep RFCs 0021 to 0025 at `Status: Proposed`, as RFC 0011 remains while its
-  governing ADR-019 is accepted. Add `**Governing decisions:**` preamble
+  governing ADR-0019 is accepted. Add `**Governing decisions:**` preamble
   bullets instead. Do not change the status of RFCs 0001 to 0004, 0011, or
   0029; their ratification belongs to other roadmap items.
 - Amend RFC prose only where it contradicts a decision in this plan, and only
@@ -88,10 +96,10 @@ decision D-15.
 - The version gate must be pure policy with no I/O. It reads no environment,
   filesystem, or configuration, and it has no operator override, because an
   override would let an older reader evaluate a manifest it cannot understand.
-  Tests must not mutate the process environment (`AGENTS.md`, ADR-008).
+  Tests must not mutate the process environment (`AGENTS.md`, ADR-0008).
 - Keep semantic error facts typed and render them only at the diagnostics
-  boundary through Fluent, as ADR-035 requires. The gate never echoes arbitrary
-  manifest text; it renders only integer version components.
+  boundary through Fluent, as ADR-0035 requires. The gate never echoes
+  arbitrary manifest text; it renders only integer version components.
 - Do not change the public signature of `netsuke::manifest::from_str`,
   `from_str_with_env`, `from_path`, or `ManifestError`. The new diagnostic is
   the `source` of the existing `ManifestError::Parse` variant.
@@ -102,15 +110,19 @@ decision D-15.
   Every function, private item, enum variant, and field carries a `///`
   comment, because `missing_docs_in_private_items` is denied in `Cargo.toml`.
 - ADR numbers must be re-swept across every remote branch and open pull
-  request immediately before the files are created. At planning time ADR-039
-  and ADR-040 are taken on other branches and ADR-041 to ADR-047 are free.
-  Never renumber with a blind `sed`.
+  request immediately before the files are created. ADRs live at
+  `docs/adrs/adr-nnnn-title-slug.md` with four-digit numbers. On 2026-10-24 the
+  highest number minted on any branch was ADR-0059, no branch mentioned an
+  ADR-006x number, and ADR-0060 was provisionally claimed by the 3.12.3 plan,
+  so this plan takes ADR-0061 to ADR-0067. Never renumber with a blind `sed`.
 
 ## Tolerances (exception triggers)
 
-- Scope: if EP-M3 touches more than 20 files, excluding the 35 locale
-  catalogues and new snapshot files, or more than 600 net lines of Rust, stop
-  and escalate. The expected set is listed under `Concrete steps`.
+- Scope: if EP-M3 touches more than 32 files, excluding the 35 locale
+  catalogues and new snapshot files, or more than 700 net lines of Rust, stop
+  and escalate. The expected set is listed under `Concrete steps`; it is large
+  because `src/localization/keys.rs` is at the 400-line cap and the new keys
+  need a third key file wired through the localization audit.
 - Interface: if any public function signature or public enum variant must
   change, stop and escalate.
 - Compatibility: if any fixture, example, README fence, or snapshot other than
@@ -118,25 +130,27 @@ decision D-15.
   version the gate would reject, stop and list it before changing it. If a
   downstream canary manifest (issue `#598`, PR `#780`) declares anything other
   than `1.0.0`, stop and escalate.
-- Ordering: `evaluate_manifest` is at 68 of Clippy's 70 permitted lines, so
-  EP-M3 is pre-authorized to replace the YAML-parse block with one extracted
-  helper, `parse_admitted_document`. Any restructuring beyond that helper
-  triggers escalation.
-- Existing tests: if more than the three tests named under `Concrete steps`
-  need changed assertions, stop and list them.
+- Ordering: EP-M3 is pre-authorized to replace the YAML-parse block of
+  `evaluate_manifest` with one extracted helper, `parse_admitted_document`, so
+  the insertion does not lengthen a function that Clippy's 70-line
+  `too_many_lines` threshold already constrains. Any restructuring beyond that
+  helper triggers escalation.
+- Existing tests: if any existing test other than
+  `stage_callback_stops_after_final_rendering_failure` needs a changed
+  assertion, stop and list it.
 - Decisions: if the user amends or strikes a decision during ADR review,
   revise the affected ADR and this plan, and re-request acceptance; do not flip
   that ADR to `Accepted` until the amendment is accepted.
 - Iterations: if focused tests still fail after three fix attempts within one
   milestone, stop and escalate.
-- ADR numbering: if any of ADR-041 to ADR-047 is taken when EP-M1 starts,
+- ADR numbering: if any of ADR-0061 to ADR-0067 is taken when EP-M1 starts,
   take the next free numbers, update every reference in this plan, and record
   the change in `Decision log`; this needs no escalation.
 
 ## Risks
 
 - Risk: authors confuse the schema version with the Netsuke release version.
-  The crate is `0.1.0-beta3`, and the two `0.1.0` fixtures are in-repository
+  The crate is `0.1.0-beta4`, and the two `0.1.0` fixtures are in-repository
   evidence of that confusion. After a 1.x release, authors may write `1.3.0`.
   Severity: medium. Likelihood: medium. Mitigation: the diagnostic states that
   `netsuke_version` is the manifest schema version, not the release version,
@@ -145,7 +159,7 @@ decision D-15.
 
 - Risk: mixed fleets at the first schema-minor release. Binaries released
   before this gate still accept `1.1.0` and evaluate it. Severity: medium.
-  Likelihood: medium. Mitigation: ADR-041 states that the reader guarantee
+  Likelihood: medium. Mitigation: ADR-0061 states that the reader guarantee
   starts with the first release containing the gate, and forbids publishing the
   first schema minor in that same release.
 
@@ -155,25 +169,35 @@ decision D-15.
   requiring an ADR amendment before their implementation merges; nothing is
   admitted by code, so a superseding ADR before release needs no migration.
 
-- Risk: 12.1.1, 16.1.1, or 17.1.1 is planned concurrently and allocates
-  `1.1.0` independently. Severity: medium. Likelihood: medium. Mitigation:
-  ADR-041 allocates at admission, not at ratification, and EP-M2 amends the
-  12.1.1 and 12.1.2 roadmap text and adds pointers to 16.1.1 and 17.1.1.
+- Risk: 16.1.1 or 17.1.1 is planned concurrently and claims the next schema
+  minor independently of ADR-0043's `1.1.0` reservation. Severity: medium.
+  Likelihood: medium. Mitigation: ADR-0061 allocates every later minor at
+  admission, not at ratification, the registry and its contract test turn
+  ADR-0043's coordination convention into a checked mechanism, and EP-M2 adds
+  pointers to 12.1.2, 16.1.1, and 17.1.1.
+
+- Risk: honouring ADR-0043's `1.1.0` reservation with a contiguous supported
+  range (D-3 rule 8) delays admission of features that do not depend on
+  structured commands, such as typed inputs (phase 21) or contention classes
+  (phase 22), until 12.1.2 admits `1.1`. Severity: low. Likelihood: low,
+  because phases 21 and 22 also depend on 20.2.1 and phase 12 is further
+  advanced. Mitigation: D-19 offers the alternative of amending ADR-0043.
 
 - Risk: new template vocabulary slips past the version. A new Jinja global or
   filter is not a manifest key, so a `1.0.0` manifest could depend on a newer
-  reader. Severity: medium. Likelihood: medium. Mitigation: ADR-041 classifies
+  reader. Severity: medium. Likelihood: medium. Mitigation: ADR-0061 classifies
   template vocabulary introduced by a registered feature (such as the `inputs`
   namespace or host facts) as part of that feature's admission; general stdlib
-  growth remains under RFC 0006's policy, and ADR-041 records this as a known
+  growth remains under RFC 0006's policy, and ADR-0061 records this as a known
   limitation.
 
 - Risk: moving the check earlier changes existing diagnostics. Severity: low.
   Likelihood: high. Mitigation: non-mapping roots (empty, whitespace-only, or
   comment-only files) bypass the gate and keep today's structural error, so
-  `tests/yaml_error_tests.rs` and `src/diagnostic_json_excerpt_tests.rs` are
-  unchanged; `src/manifest/tests/stages.rs`'s final-rendering test, which uses
-  a missing version as its trigger, moves to an unknown-field trigger.
+  `tests/yaml_error_tests.rs` and
+  `src/diagnostic_json/tests/shape_tests/excerpt_tests.rs` are unchanged;
+  `src/manifest/tests/stages.rs`'s final-rendering test, which uses a missing
+  version as its trigger, moves to an unknown-field trigger.
 
 - Risk: 140 new translated catalogue entries are machine-assisted and not
   reviewed by native speakers. Severity: low. Likelihood: high. Mitigation:
@@ -198,10 +222,15 @@ decision D-15.
   were "revise" or "approve with revisions".
 - [x] (2026-09-27) Second draft addressing every panel finding; see
   `Revision note`.
+- [x] (2026-10-24) Rebased onto `origin/main` at `8a9610008` (three commits
+  replayed patch-identically) and force-pushed with lease; a Wyvern inventory
+  of stale citations and a fresh ADR sweep drove a third draft reconciling the
+  plan with ADR-0043, the merged `netsuke check`, the ADR and RFC renames, and
+  the `keys.rs` size cap.
 - [ ] Plan approved by the user.
 - [ ] EP-M0: re-sweep ADR numbers; record baseline gates.
-- [ ] EP-M1: ADR-041 (Proposed) and the schema-version registry.
-- [ ] EP-M2: ADR-042 to ADR-047 (Proposed), resolution table, RFC and roadmap
+- [ ] EP-M1: ADR-0061 (Proposed) and the schema-version registry.
+- [ ] EP-M2: ADR-0062 to ADR-0067 (Proposed), resolution table, RFC and roadmap
   amendments.
 - [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
 - [ ] EP-M4: developers' guide and documentation clean-up.
@@ -224,10 +253,10 @@ decision D-15.
   deserialized into `NetsukeManifest`. Evidence: the call order in
   `evaluate_manifest`; every entry point (`from_path*`, `parse_with_config`,
   `query.rs`, the runner, graph, and help paths) funnels through
-  `budget_adapter::from_str_named` into it. Impact: the gate belongs directly
+  `budget::adapter::from_str_named` into it. Impact: the gate belongs directly
   after YAML parsing. The only bypass is library use of the public
-  `Deserialize` implementation on `NetsukeManifest`, which ADR-041 records as a
-  limitation.
+  `Deserialize` implementation on `NetsukeManifest`, which ADR-0061 records as
+  a limitation.
 
 - Observation: YAML shapes reaching the gate. Unquoted `netsuke_version: 1.0.0`
   (used in about 40 fixtures) arrives as a JSON string; unquoted `1.0` and `1`
@@ -240,7 +269,7 @@ decision D-15.
 
 - Observation: the JSON diagnostic's top-level `code` is always
   `netsuke::manifest::parse` for manifest failures; inner codes appear only in
-  `causes[*]` text. Evidence: `src/diagnostic_json.rs` and the
+  `causes[*]` text. Evidence: `src/diagnostic_json/mod.rs` and the
   `manifest_parse_error` snapshot. Impact: the gate's code is carried inside
   the Fluent message text, as for existing template diagnostics, and OBL-4
   asserts on `causes`.
@@ -252,17 +281,73 @@ decision D-15.
   design-only document is left alone.
 
 - Observation: no RFC has ever left `Proposed`; RFC 0011 records its
-  accepted governing decision with a `**Governing decision:** ADR-019` preamble
-  bullet while remaining `Proposed`. Evidence: RFC preambles;
-  `docs/rfcs/0011-allow-listed-structured-command-shells.md`. Impact:
+  accepted governing decision with a `**Governing decision:** ADR-0019`
+  preamble bullet while remaining `Proposed`. Evidence: RFC preambles;
+  `docs/rfcs/rfc-0011-allow-listed-structured-command-shells.md`. Impact:
   ratification uses that precedent rather than inventing a new RFC status
   transition.
 
-- Observation: `context` and `check` do not exist; `Commands` in
-  `src/cli/command.rs` has `build`, `clean`, `graph`, `generate`, and `help`.
-  `netsuke check` is in open PR `#621` for issue `#592`. Impact: capability
-  reporting is specified here but first surfaces through diagnostics; the JSON
-  reporting shape stays with 20.2.1.
+- Observation (draft 2, superseded on rebase): `context` and `check` did not
+  exist at `ebcedaef`. After rebasing onto `8a9610008`, `Commands` in
+  `src/cli/command.rs` has `Build`, `Check(CheckArgs)` (behind the `lint`
+  feature, off by default, ADR-0056), `Clean`, `Graph`, `Generate`, and `Help`;
+  `context` still does not exist. `netsuke check` loads manifests through
+  `from_path_for_manifest_query_with_source`, which reaches
+  `evaluate_manifest`, so the gate covers it; its own `granit-parser` pass in
+  `src/lint/document/build/mod.rs` builds a span index and evaluates no
+  templates. Impact: capability reporting is specified here but first surfaces
+  through diagnostics; the JSON reporting shape stays with 20.2.1. OBL-4 gains a
+  `netsuke check` case, and RFC 0025's inventory boundary now has an
+  implemented owner (ADR-0056).
+
+- Observation: ADR-0043 (Accepted 2026-10-03, roadmap 12.1.1 done) reserves
+  manifest-format minor `1.1.0` for the consolidated structured-command surface
+  (RFCs 0001, 0009, 0010, and 0011 together), tells 16.1.1 and 17.1.1 to
+  coordinate the next number, versions persisted action plans by the variants
+  they contain, and admits that "version coordination is a convention, not a
+  mechanism". RFC 0001 section 19.2 now cites ADR-0043. Evidence:
+  `docs/adrs/adr-0043-consolidated-structured-command-execution-contract.md`,
+  "Version allocation"; `docs/roadmap.md` item 12.1.1. Impact: draft 2's D-3
+  ("ratification allocates no number", provisional numbers "illustrative")
+  contradicted accepted architecture. D-3 now honours the reservation, D-9
+  defers action-plan versioning to ADR-0043, and D-19 records the alternative
+  of amending ADR-0043.
+
+- Observation: ADR-0045 added the optional recipe key `command_isolation`
+  with "no manifest version bump", before any gate existed. Evidence:
+  `docs/adrs/adr-0045-isolate-command-list-entries.md`. Impact: D-4 makes new
+  keys admission events from the gate onwards; the registry records
+  `command_isolation` as part of the `1.0` core rather than a gated feature.
+
+- Observation: `src/localization/keys.rs` is 398 lines and
+  `src/localization/check_keys.rs` says it is at the 400-line module cap.
+  Evidence: `src/localization/check_keys.rs` header. Impact: EP-M3 adds a third
+  key file, `src/localization/schema_keys.rs`, wired through `build.rs`,
+  `build_l10n_audit/mod.rs` (`KEY_SOURCES`), `src/localization/mod.rs`, the
+  localization audit tests, the packaging smoke test, and both guides,
+  following the `check_keys.rs` precedent.
+
+- Observation: the Rust module-layout contract
+  (`tests/workflow_contracts/rust_module_layout_test.py`) rejects sibling files
+  that share a first `_` prefix, so `schema_version.rs` beside
+  `schema_version_tests.rs` would fail. Impact: the gate module is
+  `src/manifest/schema_version/mod.rs` with `tests.rs` beside it, as in
+  `src/manifest/render/tests.rs`.
+
+- Observation: path-based loads report `ManifestIngestion` before
+  `InitialYamlParsing`; the existing parse-failure stage test asserts
+  `[ManifestIngestion, InitialYamlParsing]`. Evidence: `src/manifest/query.rs`;
+  `src/manifest/tests/stages.rs`. Impact: OBL-2's expected stage record is
+  `[ManifestIngestion, InitialYamlParsing]`.
+
+- Observation: every fence in `docs/users-guide.md` needs a
+  `<!-- tested-example: id -->` marker and a consumer test
+  (`tests/documentation_examples/mod.rs`, `FencePolicy::RequireMarkers`).
+  Impact: the new users' guide section uses inline code only, with no fence.
+
+- Observation: `docs/terms-of-reference.md` now exists and states that after
+  1.0 the manifest schema version (`netsuke_version`) governs compatibility.
+  Impact: it joins the conformance basis and supports D-1.
 
 - Observation: Ninja 1.11.1 treats `depth = 0` as an unlimited pool, rejects
   negative depths and undeclared pool names, and refuses a build file whose
@@ -274,17 +359,18 @@ decision D-15.
   `script` as command-list discriminators and forbids `rule` and `script` as a
   direct `command:` value, while RFCs 0021 and 0023 use `ensure_state` and
   `clean_owned` as direct values. Evidence:
-  `docs/rfcs/0001-structured-command-blocks.md` section 15.1; RFC 0021 section
-  3; RFC 0023 section 3. Impact: D-8 registers the new discriminators and
-  decides the direct-value question explicitly.
+  `docs/rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md` section
+  15.1; RFC 0021 section 3; RFC 0023 section 3. Impact: D-8 registers the new
+  discriminators and decides the direct-value question explicitly.
 
 ## Decision log
 
 Decisions D-1 to D-14 are proposed content for the ADRs. They take effect only
 when the user accepts the corresponding ADR in EP-M5. D-15 to D-18 are planning
-decisions that take effect on plan approval.
+decisions that take effect on plan approval. D-19 is a choice the approver
+makes at approval.
 
-- Decision D-1 (ADR-041), schema version semantics. `netsuke_version` is the
+- Decision D-1 (ADR-0061), schema version semantics. `netsuke_version` is the
   manifest schema version, not the Netsuke release version. It keeps SemVer
   spelling because the whole corpus and RFC 0003's `requires.manifest` ranges
   use it, but its canonical form is exactly `MAJOR.MINOR.0` with no prerelease
@@ -299,7 +385,7 @@ decisions that take effect on plan approval.
   removes ambiguity. Date/Author: 2026-09-27, planning agent, revised after
   panel review.
 
-- Decision D-2 (ADR-041), admission point. When the parsed YAML root is a
+- Decision D-2 (ADR-0061), admission point. When the parsed YAML root is a
   mapping, its literal `netsuke_version` entry is checked immediately after
   YAML parsing and before variable registration, macro registration, `foreach`/
   `when` expansion, or any other template evaluation. A missing entry, a
@@ -312,8 +398,13 @@ decisions that take effect on plan approval.
   filesystem, run commands, and fetch URLs. Date/Author: 2026-09-27, planning
   agent, revised after panel review.
 
-- Decision D-3 (ADR-041), allocation lifecycle. Ratification reserves names in
-  the design-document registry; it allocates no number.
+- Decision D-3 (ADR-0061), allocation lifecycle. Ratification reserves names in
+  the design-document registry. It allocates a number only where an accepted
+  ADR already has: ADR-0043 reserves `1.1.0` for the consolidated
+  structured-command surface (feature identifiers `structured-commands` and
+  `named-shells`, carrying RFCs 0001, 0009, 0010, and 0011 in one increment),
+  and the registry records that reservation as accepted architecture. Every
+  later minor is allocated at admission under these rules:
   1. Only `main` allocates. A schema minor is allocated by the change that
      makes a feature's syntax admissible (its "admission change"), which is
      the last change in that feature's delivery.
@@ -331,20 +422,31 @@ decisions that take effect on plan approval.
      introduces the reader gate.
   7. For unpublished `main` builds, the feature-identifier capability report,
      not the number, is authoritative.
-  Provisional numbers in RFC 0001 section 19.2 and RFC 0003's descriptor
-  example are illustrative. The registry records, per feature, its status
-  (`reserved`, `admitted`, or `released`), its schema minor, and the first tag
-  that shipped it; a contract test binds the registry to the reader's maximum.
-  Rationale: 12.1.1, 16.1.1, 17.1.1, and phases 21 to 25 can ratify and deliver
-  in any order without renumbering, and bundle work need not exist first. Tags,
-  including betas, are what users install. Date/Author: 2026-09-27, planning
-  agent, revised after panel review.
+  8. The supported range stays contiguous: the reader's maximum may not rise
+     past a reserved minor that has not been admitted. While ADR-0043's `1.1`
+     is unadmitted, a later feature's admission change waits for 12.1.2 to
+     admit `1.1`, then takes the next minor under rule 2.
+  RFC 0001 section 19.2's `1.1.0` is therefore binding through ADR-0043. RFC
+  0003's `manifest: ">=1.1.0, <2.0.0"` descriptor example is illustrative of
+  syntax, not an allocation for bundles. The registry records, per feature, its
+  status (`reserved`, `admitted`, or `released`), its schema minor where one is
+  reserved or allocated, and the first tag that shipped it; a contract test
+  binds the registry to the reader's maximum and checks rule 8. This supplies
+  the mechanism whose absence ADR-0043 lists as a known limitation. Rationale:
+  16.1.1, 17.1.1, and phases 21 to 25 can ratify in any order without
+  renumbering, bundle work need not exist first, and the accepted
+  structured-command reservation is respected. Tags, including betas, are what
+  users install. Date/Author: 2026-09-27, planning agent; revised 2026-10-24
+  after rebasing onto ADR-0043.
 
-- Decision D-4 (ADR-041), rejection ladder. Schema admission events are: a
+- Decision D-4 (ADR-0061), rejection ladder. Schema admission events are: a
   new key, a new command discriminator, a new value in a closed vocabulary
   (such as a state `kind`, probe `protocol`, or maturity rule identifier), and
-  new template vocabulary introduced by a registered feature. Unsupported
-  syntax is rejected in this order and never ignored:
+  new template vocabulary introduced by a registered feature. This applies from
+  the gate's introduction onwards; keys added before it without a version bump,
+  such as ADR-0045's optional `command_isolation`, are recorded in the registry
+  as part of the `1.0` core. Unsupported syntax is rejected in this order and
+  never ignored:
   1. Rung 1: the declared version is outside the reader's supported range.
      Reject before evaluation, leading with "upgrade Netsuke", naming the
      supported range, and noting that the field is the schema version.
@@ -362,10 +464,10 @@ decisions that take effect on plan approval.
   12.1.2, or whichever feature is admitted first, implements rungs 2 and 2b.
   Date/Author: 2026-09-27, planning agent, revised after panel review.
 
-- Decision D-5 (ADR-041), opt-in mechanism. Raising `netsuke_version` is the
+- Decision D-5 (ADR-0061), opt-in mechanism. Raising `netsuke_version` is the
   only opt-in. There is no per-feature list in the style of Cargo's
   `cargo-features`, because Netsuke's minors are additive and a list would
-  duplicate the version signal. Options considered and rejected in ADR-041: a
+  duplicate the version signal. Options considered and rejected in ADR-0061: a
   version floor plus reserved-key rejection with no version bump (cannot catch
   shape changes such as RFC 0001's string-to-mapping `command`, cannot catch
   unreserved keys, and lets declarations drift from actual use, as Cargo's
@@ -375,7 +477,7 @@ decisions that take effect on plan approval.
   fields; unsuitable for a tool that runs commands and deletes files).
   Date/Author: 2026-09-27, planning agent, revised after panel review.
 
-- Decision D-6 (ADR-041), nested and composed documents. Each document a
+- Decision D-6 (ADR-0061), nested and composed documents. Each document a
   reader loads is admitted against its own declared version. Whether an
   included fragment or bundle entry manifest must declare a version, and how it
   relates to its importer's, is assigned to 16.1.1 and 17.1.1, with the
@@ -385,19 +487,20 @@ decisions that take effect on plan approval.
   to, never a substitute for, the manifest minor. Date/Author: 2026-09-27,
   planning agent, added after panel review.
 
-- Decision D-7 (ADR-042), identifiers and capability reporting. Feature
+- Decision D-7 (ADR-0062), identifiers and capability reporting. Feature
   identifiers and maturity rule identifiers are separate namespaces. The
   design-document registry is the open list of feature identifiers; its initial
   rows are `structured-commands`, `named-shells`, `includes`, `bundles`,
   `host-facts`, `inputs`, `contention`, `states`, `artefacts`, and `maturity`.
-  ADR-047 holds the rule-to-feature table (for example, `owned-cleanup` requires
-  `artefacts`). Capability reporting is keyed by feature identifier; the JSON
-  shape belongs to 20.2.1 and its command surface to phase 5's `context`. A
-  policy selecting a rule whose feature the reader lacks fails with a version
-  or capability remedy. Date/Author: 2026-09-27, planning agent, revised after
-  panel review.
+  ADR-0067 holds the rule-to-feature table (for example, `owned-cleanup`
+  requires `artefacts`). Capability reporting is keyed by feature identifier;
+  the JSON shape belongs to 20.2.1, its configuration-context surface to phase
+  5's `context`, and maturity findings to the existing `netsuke check` report
+  (ADR-0056). A policy selecting a rule whose feature the reader lacks fails
+  with a version or capability remedy. Date/Author: 2026-09-27, planning agent,
+  revised after panel review.
 
-- Decision D-8 (ADR-042), the command operation union. Phase 12 (RFC 0001)
+- Decision D-8 (ADR-0062), the command operation union. Phase 12 (RFC 0001)
   owns the one closed union: its abstract syntax tree (AST), parser,
   action-plan codec, and runner dispatch. The union's discriminator set is
   registered: `invoke`, `rule`, and `script` from RFC 0001, plus
@@ -412,44 +515,48 @@ decisions that take effect on plan approval.
   and phases 23 and 24 depend on 12.1.2 and 12.3.1. Date/Author: 2026-09-27,
   planning agent, revised after panel review.
 
-- Decision D-9 (ADR-042), shallow end and persisted formats. RFC 0025 section
+- Decision D-9 (ADR-0062), shallow end and persisted formats. RFC 0025 section
   2 is a release acceptance requirement for every schema-1 release: optional
   top-level keys default to empty, their absence produces no message at any
   verbosity, and one node's feature never requires declarations elsewhere
   (fixtures belong to 20.1.2). Persisted formats are versioned independently of
   the schema; this plan records coordination constraints, not their final
-  design. For 12.1.1 and 12.3.1: the action plan carries its own integer format
-  version, changed with any change to its encoding or meaning, and replay fails
-  closed before spawning on any mismatch, with a "regenerate" remedy. For
-  23.2.2: state records live under a versioned namespace; a record whose
-  version the reader does not know is no evidence; with `identity` declared,
-  missing evidence yields `not_ready` only after the resource has been
-  inspected successfully, and otherwise `unknown`, which never authorizes
-  repair; lease identity lives outside the versioned namespace so two Netsuke
-  versions cannot prepare one path concurrently; and retention covers stale
-  namespaces. The JSON output envelope evolves additively within version 1,
-  owned by 20.2.1. Dyndep sidecars keep ADR-012. Date/Author: 2026-09-27,
-  planning agent, revised after panel review.
+  design. Action-plan versioning is owned by ADR-0043: plans are versioned
+  independently, by the variants they contain, and a runner that cannot
+  represent a variant rejects the plan. This plan adds only that the state and
+  cleanup operations of D-8 enter that vocabulary through phase 12's codec
+  (12.3.1), never through a feature-private format. For 23.2.2: state records
+  live under a versioned namespace; a record whose version the reader does not
+  know is no evidence; with `identity` declared, missing evidence yields
+  `not_ready` only after the resource has been inspected successfully, and
+  otherwise `unknown`, which never authorizes repair; lease identity lives
+  outside the versioned namespace so two Netsuke versions cannot prepare one
+  path concurrently; and retention covers stale namespaces. The JSON output
+  envelope evolves additively within version 1, owned by 20.2.1. Dyndep
+  sidecars keep ADR-0012. Date/Author: 2026-09-27, planning agent, revised
+  after panel review.
 
-- Decision D-10 (ADR-042), operator ceilings. Operator limits introduced by
+- Decision D-10 (ADR-0062), operator ceilings. Operator limits introduced by
   these RFCs follow one rule: a numeric ceiling set by a trusted layer is a
-  maximum; the primary project `.netsuke.toml` (ADR-021's untrusted project
+  maximum; the primary project `.netsuke.toml` (ADR-0021's untrusted project
   layer) may lower it but never raise it; the effective value is the minimum,
-  and provenance records both. Boolean denials follow ADR-021's tightening
-  rule. Names follow `<feature>_<quantity>_ceiling[_<unit>]` for ceilings and
+  and provenance records both. ADR-0026 (environment policy) and ADR-0050
+  (template evaluation bounds) already apply the same operator-ceiling shape.
+  Boolean denials follow ADR-0021's tightening rule. Names follow
+  `<feature>_<quantity>_ceiling[_<unit>]` for ceilings and
   `<feature>_<capability>_deny` for denials. Implementation uses OrthoConfig
   through the existing configuration seams; `docs/ortho-config-users-guide.md`
   governs field declaration. Date/Author: 2026-09-27, planning agent, added
   after panel review.
 
-- Decision D-11 (ADR-046, RFC 0024). `capacity` is an integer from 1 to a
+- Decision D-11 (ADR-0066, RFC 0024). `capacity` is an integer from 1 to a
   schema-owned maximum of 1024, independent of the CLI `jobs` limit so that
   raising `jobs` never changes the schema; zero is rejected because Ninja treats
   `depth = 0` as unlimited. The effective capacity is the minimum of the
   declared value and the operator's `contention_capacity_ceiling`, and
   inspection reports both. Public class names never reach Ninja text directly:
   22.1.2 replaces the IR's raw `pool: Option<String>` with a typed class
-  identity and lowers it through ADR-014's escaping seam to a reserved
+  identity and lowers it through ADR-0014's escaping seam to a reserved
   `netsuke_pool_` prefix with an injective, declaration-order-independent
   encoding that 22.1.2 fixes and property-tests. An edge requiring both a
   contention class and Ninja's `console` pool is rejected; no current surface
@@ -457,7 +564,7 @@ decisions that take effect on plan approval.
   field on a rule is rejected in the first version. Date/Author: 2026-09-27,
   planning agent, revised after panel review.
 
-- Decision D-12 (ADR-045, RFC 0023). The canonical spellings are `artefacts`
+- Decision D-12 (ADR-0065, RFC 0023). The canonical spellings are `artefacts`
   and `--artefact`; there is no `artifacts` alias, and 24.1.1 adds a suggestion
   for it. `kind` defaults to `file`, `role` to `generated`, and `create_parent`
   to `false`. An artefact root may not equal, contain, or lie inside another
@@ -474,9 +581,9 @@ decisions that take effect on plan approval.
   remote delivery: no owner until a separate RFC). Date/Author: 2026-09-27,
   planning agent, revised after panel review.
 
-- Decision D-13 (ADR-044, RFC 0022). Integer inputs use the signed 64-bit
+- Decision D-13 (ADR-0064, RFC 0022). Integer inputs use the signed 64-bit
   range and reject overflow rather than widening or wrapping.
-  `--input NAME=VALUE` is a repeatable option registered once in ADR-016's
+  `--input NAME=VALUE` is a repeatable option registered once in ADR-0016's
   canonical command metadata and attached to every subcommand that loads a
   manifest; it is not a top-level global. The `inputs` Jinja namespace exists
   only when a manifest declares `inputs`, and it is admitted with the `inputs`
@@ -486,7 +593,7 @@ decisions that take effect on plan approval.
   (not before 21.3.1's canary shows demand). Date/Author: 2026-09-27, planning
   agent, narrowed after panel review.
 
-- Decision D-14 (ADR-043 and ADR-047, RFCs 0021 and 0025). For states: `kind`
+- Decision D-14 (ADR-0063 and ADR-0067, RFCs 0021 and 0025). For states: `kind`
   is the closed set `directory`, `file`, `python-venv`, and `custom`; when
   `probe.external` is present, `probe.protocol` is required and is the closed
   set `nagios`; `probe.timeout_seconds` and `probe.max_output_bytes` are
@@ -502,17 +609,19 @@ decisions that take effect on plan approval.
   strengthen but never weaken a trusted operator floor; severity is
   `off < warn < error` and combines monotonically. Deferred with owners: the
   operator-floor configuration shape (25.2.1), selected-closure inspection
-  metadata (25.2.2), and the semantic linter's inventory boundary (25.1.1 with
-  issue `#592`). Date/Author: 2026-09-27, planning agent, revised after panel
-  review.
+  metadata (25.2.2), and the reuse of the merged linter's typed inventory
+  (ADR-0056) as the policy inventory (25.1.1). Date/Author: 2026-09-27,
+  planning agent, revised after panel review.
 
 - Decision D-15 (scope): EP-M3 is in scope. It implements rung 1 of D-4 only.
-  EP-M2 narrows roadmap item 12.1.2 to "extend ADR-041's reader gate with rungs
-  2 and 2b", so the gate has exactly one owner at a time. If the reviewer
-  strikes EP-M3, ADR-041 names 12.1.2 as the owner of rung 1 as well, and EP-M2
-  leaves 12.1.2's title unchanged. EP-M3 may ship as a separate pull request
-  from the documentation milestones; they do not depend on it. Date/Author:
-  2026-09-27, planning agent, revised after panel review.
+  Roadmap item 12.1.2 keeps its title ("Add the closed structured-command AST
+  and schema version gate"); EP-M2 adds one sub-bullet saying that 12.1.2
+  extends ADR-0061's reader gate by admitting ADR-0043's `1.1` and implementing
+  rungs 2 and 2b, so each part of the gate has exactly one owner. If the
+  reviewer strikes EP-M3, the sub-bullet instead makes 12.1.2 the owner of rung
+  1 as well. EP-M3 may ship as a separate pull request from the documentation
+  milestones; they do not depend on it. Date/Author: 2026-09-27, planning
+  agent, revised after panel review.
 
 - Decision D-16 (verification): no Kani harness and no Verus proof. The
   admission predicate is a loop-free comparison over `semver::Version`, whose
@@ -534,8 +643,22 @@ decisions that take effect on plan approval.
   string. `Unsupported` renders only the integer major and minor. `Invalid` and
   `NotAString` render no value. This keeps unbounded, possibly
   control-character-bearing manifest text out of terminal and CI output, as
-  `src/manifest/env_reader.rs` already does for environment values.
+  `src/manifest/env/reader.rs` already does for environment values.
   Date/Author: 2026-09-27, planning agent, added after panel review.
+
+- Decision D-19 (choice at approval): how to treat ADR-0043's `1.1.0`
+  reservation. Option A, recommended and assumed throughout this plan: honour
+  it, keep the supported range contiguous (D-3 rule 8), and let later features
+  take the minors after `1.1` at admission. It conforms to accepted
+  architecture and costs at most a wait for 12.1.2 by features that do not need
+  structured commands. Option B: draft ADR-0061 so that it amends ADR-0043,
+  through an `Amended by ADR-0061 (date)` banner and an `## Amendments`
+  section, replacing the fixed `1.1.0` with "the structured-command surface
+  takes the next minor at its admission, as one increment". It removes the wait
+  but changes accepted architecture and leaves RFC 0001 section 19.2 and RFC
+  0003's example to be re-amended. If the approver chooses Option B, EP-M1 adds
+  the amendment banner and section to ADR-0043, and rule 8 and the related risk
+  are removed. Date/Author: 2026-10-24, planning agent, added on rebase.
 
 ## Outcomes & retrospective
 
@@ -570,15 +693,16 @@ Terms used in this plan:
 
 The proposals under ratification:
 
-- `docs/rfcs/0021-managed-states-and-probes.md`: optional `states`, built-in
-  probes, Nagios-style external probes, and three state operations.
-- `docs/rfcs/0022-typed-task-inputs.md`: optional typed root `inputs` and
-  `--input NAME=VALUE`.
-- `docs/rfcs/0023-artefact-ownership-and-scoped-cleanup.md`: optional
+- `docs/rfcs/rfc-0021-managed-states-and-functional-probes.md`: optional
+  `states`, built-in probes, Nagios-style external probes, and three state
+  operations.
+- `docs/rfcs/rfc-0022-optional-typed-task-inputs.md`: optional typed root
+  `inputs` and `--input NAME=VALUE`.
+- `docs/rfcs/rfc-0023-artefact-ownership-and-scoped-cleanup.md`: optional
   `artefacts`, `produces`, `clean_owned`, and `clean --artefact`.
-- `docs/rfcs/0024-named-contention-classes.md`: optional `contention_classes`
-  lowered to Ninja pools.
-- `docs/rfcs/0025-progressive-enhancement-and-maturity-policies.md`: the
+- `docs/rfcs/rfc-0024-named-contention-classes.md`: optional
+  `contention_classes` lowered to Ninja pools.
+- `docs/rfcs/rfc-0025-progressive-enhancement-and-maturity-policies.md`: the
   shallow-end contract and opt-in `maturity` policies.
 
 Each ends with an "Alternatives and outstanding decisions" section. Its final
@@ -594,19 +718,32 @@ Code touched by EP-M3:
 - `src/manifest/diagnostics/mod.rs`: `ManifestError::Parse { source, message }`
   carries a boxed `miette::Diagnostic`; `DataDiagnostic` and `map_data_error`
   show the pattern for a coded source diagnostic.
-- `src/localization/keys.rs`: the `define_keys!` block (384 lines today).
+- `src/localization/keys.rs`: the `define_keys!` block, 398 lines and at the
+  400-line cap; `src/localization/check_keys.rs` is the precedent for a second
+  key file and is wired through `build.rs`, `build_l10n_audit/mod.rs`
+  (`KEY_SOURCES`), and `src/localization/mod.rs`.
 - `locales/*/messages.ftl`: 35 catalogues, audited at build time for
   matching keys and variables (`tests/build_l10n_audit_tests.rs`).
 - `src/manifest/tests/stages.rs`: stage-observer tests; the pattern of
-  `stage_callback_stops_after_parse_failure` is reused for OBL-2.
+  `stage_callback_stops_after_parse_failure`, which expects
+  `[ManifestIngestion, InitialYamlParsing]`, is reused for OBL-2.
 - `tests/features/manifest.feature` and `tests/bdd/steps/manifest/mod.rs`:
   manifest scenarios, including the `the error message contains` step.
-- `tests/assert_cmd_tests.rs`: subprocess tests (157 lines);
-  `src/diagnostic_json_tests.rs`: in-process JSON diagnostic snapshots.
+- `tests/assert_cmd_tests.rs`: subprocess tests (157 lines, including
+  existing `generate --output` cases); `src/diagnostic_json/tests/mod.rs`:
+  in-process JSON diagnostic snapshots, including
+  `render_manifest_parse_diagnostic_matches_snapshot`.
+- `src/cli/command.rs`: `Commands`, including `Check(CheckArgs)` behind the
+  `lint` feature (ADR-0056), which `make test` enables through `--all-features`.
+- `tests/workflow_contracts/rust_module_layout_test.py`: the module-layout
+  contract that forbids prefix-sharing sibling files.
+- `tests/documentation_examples/mod.rs`: requires a tested-example marker on
+  every fence in `docs/users-guide.md`.
 
 ## Conformance basis
 
-Upstream artefacts, at `main` commit `ebcedaef`:
+Upstream artefacts, at `main` commit `8a9610008` (the rebase target on
+2026-10-24; draft 2 was written against `ebcedaef`):
 
 - `docs/roadmap-progressive-enhancement.md` item 20.1.1, whose sub-bullets are
   RM-a (review, resolve, record through ADRs), RM-b (coordinate manifest and
@@ -617,23 +754,28 @@ Upstream artefacts, at `main` commit `ebcedaef`:
   0022 section 9), OD-23 (RFC 0023 section 9), OD-24 (RFC 0024 sections 4 and
   9), and OD-25 (RFC 0025 sections 8 and 10).
 - RFC 0001 sections 15.1, 17.4, and 19.2; RFC 0003's descriptor
-  `requires.manifest`; RFC 0011 and ADR-019 (precedent); RFC 0029's
+  `requires.manifest`; RFC 0011 and ADR-0019 (precedent); RFC 0029's
   `host_facts` version statement.
+- ADR-0043 (Accepted): the consolidated structured-command contract, its
+  `1.1.0` reservation, and independent action-plan versioning. ADR-0045
+  (Accepted): `command_isolation` added without a version bump. ADR-0056:
+  `netsuke check`.
 - Roadmap items 12.1.1, 12.1.2, and 12.3.1 (`docs/roadmap.md`); 16.1.1 and
   17.1.1 (`docs/roadmap-composition.md`); 20.1.2 and 20.2.1.
-- ADR-008, ADR-012, ADR-014, ADR-016, ADR-021, ADR-035 (proposed), ADR-036
-  (proposed).
+- ADR-0008, ADR-0012, ADR-0014, ADR-0016, ADR-0021, ADR-0026, ADR-0050,
+  ADR-0035 (proposed), and ADR-0036 (proposed), all under `docs/adrs/`.
 - Standards: `AGENTS.md`, `docs/documentation-style-guide.md`,
   `docs/translators-guide.md`, `docs/formal-verification-methods-in-netsuke.md`.
-- There is no Terms of Reference on `main`; PR `#786` proposes one. This plan
-  does not depend on it.
+- `docs/terms-of-reference.md`, which states that after 1.0 the manifest
+  schema version (`netsuke_version`) governs compatibility (TOR-COMPAT).
 
 Trace links:
 
 ```plaintext
-RM-a -> OD-21..OD-25 -> D-11..D-14, D-17 -> ADR-043..ADR-047 + design resolution table -> EP-M2 -> EP-M5 acceptance
-RM-b -> RFC0001-19.2, RFC0003, RFC0029 -> D-1, D-3, D-6, D-9 -> ADR-041/ADR-042 -> EP-M1/EP-M2 -> registry + roadmap edits
-RM-c -> RFC0025-2/3, RFC0001-15.1 -> D-4, D-7, D-8 -> ADR-041/ADR-042 -> EP-M1/EP-M2
+RM-a -> OD-21..OD-25 -> D-11..D-14, D-17 -> ADR-0063..ADR-0067 + design resolution table -> EP-M2 -> EP-M5 acceptance
+RM-b -> ADR-0043 (1.1.0), RFC0003, RFC0029 -> D-1, D-3, D-6, D-9, D-19 -> ADR-0061/0062 -> EP-M1/M2 -> OBL-5
+TOR-COMPAT -> D-1 -> ADR-0061 -> EP-M3
+RM-c -> RFC0025-2/3, RFC0001-15.1 -> D-4, D-7, D-8 -> ADR-0061/ADR-0062 -> EP-M1/EP-M2
 OLD-READER -> D-1, D-2, D-4 rung 1, D-15, D-18 -> EP-M3 -> OBL-1..OBL-5
 SE -> D-9 -> OBL-3 regression evidence -> 20.1.2 fixtures (later)
 ```
@@ -643,7 +785,7 @@ SE -> D-9 -> OBL-3 regression evidence -> 20.1.2 fixtures (later)
 EP-M1, EP-M2, EP-M4, and EP-M5 change documentation only and introduce no
 runtime invariant. Their verification is the Markdown gates plus two review
 checks: every sentence matched by
-`grep -nE 'ratif|allocate|Allocate' docs/rfcs/002[1-5]-*.md` in an
+`grep -nE 'ratif|allocate|Allocate' docs/rfcs/rfc-002[1-5]-*.md` in an
 outstanding-decision or compatibility section maps to a resolution-table row,
 and every row with a deferral names an owning task and the D-17 merge gate.
 EP-M3 introduces the obligations below.
@@ -659,7 +801,8 @@ Axioms:
   EP-M3 confirms the feature set in `Cargo.toml`.
 - AXIOM-3: `evaluate_manifest` reports `ManifestLoadStage` transitions
   through the optional observer before entering each stage, so an observer that
-  records only `InitialYamlParsing` proves no later stage began.
+  records only `ManifestIngestion` and `InitialYamlParsing` (the path-based
+  load's first two stages, `src/manifest/query.rs`) proves no later stage began.
 
 Obligations:
 
@@ -673,31 +816,33 @@ Obligations:
   `1.1.0-alpha`, `2.0.0`, `0.1.0`, `0.0.0` (all reject); generated versions
   with each numeric part from `0..=3` or `any::<u64>()`, prerelease and build
   metadata present or absent; `cases = 512`. Artefact:
-  `src/manifest/schema_version_tests.rs`, a `#[path]` child of
-  `src/manifest/schema_version.rs`. Evidence:
+  `src/manifest/schema_version/tests.rs`, declared as `mod tests;` inside
+  `src/manifest/schema_version/mod.rs`, which satisfies the module-layout
+  contract. Evidence:
   `cargo nextest run --workspace --all-features schema_version` passes. The
   oracle is: some `m` in `0..=SUPPORTED.max_minor` has
   `VersionReq::parse(&format!("=1.{m}.0"))` matching `v`, and `v.build` is
   empty. Non-vacuity: a deterministic test draws 1 000 values from the same
-  strategy with a fixed seed through `proptest::test_runner::TestRunner` and
-  asserts that at least 10% are admitted and 10% rejected. Negative controls:
-  changing `<=` to `<` rejects `1.0.0` and fails row one; dropping the patch
-  check admits `1.0.3`; dropping the prerelease check admits `1.0.0-rc.1`.
+  strategy through `proptest::test_runner::TestRunner::deterministic()` (not
+  `TestRunner::new`, which seeds from the operating system) and asserts that at
+  least 10% are admitted and 10% rejected. Negative controls: changing `<=` to
+  `<` rejects `1.0.0` and fails row one; dropping the patch check admits
+  `1.0.3`; dropping the prerelease check admits `1.0.0-rc.1`.
 
 - Obligation OBL-2, rejection precedes evaluation: for any mapping-rooted
   manifest whose `netsuke_version` is missing, non-string, invalid, or
   unsupported, loading fails with a diagnostic whose text contains
-  `netsuke::manifest::schema_version`, the stage observer records exactly
-  `[InitialYamlParsing]`, and the injected environment reader is called zero
-  times, whatever the rest of the document contains. Method: named red tests,
-  then a `proptest` property. Rationale: this is the safety property behind
-  D-2; examples alone cannot show that arbitrary bodies never win. Domain: a
-  generated rejected version (or none, or a non-string), a body containing
-  `foreach: "[env('NETSUKE_SENTINEL')]"` on one target, and up to three
-  generated unknown top-level keys drawn from identifiers excluding
-  `netsuke_version`, `vars`, `macros`, `rules`, `targets`, `actions`, and
-  `defaults`; an extra row supplies the version through a YAML anchor and merge
-  key. Artefact: `tests/schema_version_gate_tests.rs`, using
+  `netsuke::manifest::schema_version`, the stage observer of a path-based load
+  records exactly `[ManifestIngestion, InitialYamlParsing]`, and the injected
+  environment reader is called zero times, whatever the rest of the document
+  contains. Method: named red tests, then a `proptest` property. Rationale:
+  this is the safety property behind D-2; examples alone cannot show that
+  arbitrary bodies never win. Domain: a generated rejected version (or none, or
+  a non-string), a body containing `foreach: "[env('NETSUKE_SENTINEL')]"` on
+  one target, and up to three generated unknown top-level keys drawn from
+  identifiers excluding `netsuke_version`, `vars`, `macros`, `rules`, `targets`,
+  `actions`, and `defaults`; an extra row supplies the version through a YAML
+  anchor and merge key. Artefact: `tests/schema_version_gate_tests.rs`, using
   `from_str_with_env` with a counting reader that returns `Ok` and
   `from_path_with_policy` with a stage observer. Evidence: red first. For
   `"1.1.0"` today the load succeeds; for a missing or invalid version today's
@@ -712,42 +857,49 @@ Obligations:
   before, and non-mapping roots keep today's structural errors. Method: the
   existing suite as a regression oracle. Artefact: existing tests and
   snapshots, including `tests/yaml_error_tests.rs` and
-  `src/diagnostic_json_excerpt_tests.rs`; only the new snapshot files may
-  appear. Evidence: `make test` passes; `git status --porcelain -- '*.snap'`
-  lists only new files. Non-vacuity: the corpus holds more than 150 manifests
-  declaring `1.0.0` (quoted and unquoted); the empty-file cases exercise the
-  non-mapping path.
+  `src/diagnostic_json/tests/shape_tests/excerpt_tests.rs`; only the new
+  snapshot files may appear. Evidence: `make test` passes;
+  `git status --porcelain -- '*.snap'` lists only new files. Non-vacuity: the
+  corpus holds more than 150 manifests declaring `1.0.0` (quoted and unquoted);
+  the empty-file cases exercise the non-mapping path.
 
 - Obligation OBL-4, command-line behaviour:
   `netsuke generate --output out.ninja` against a manifest declaring `1.1.0`
   exits non-zero, prints the localized diagnostic, and leaves `out.ninja`
   absent; the JSON diagnostic has top-level `code` `netsuke::manifest::parse`
   and a `causes` entry whose text contains `netsuke::manifest::schema_version`.
-  Method: an `assert_cmd` subprocess test and an in-process `insta` snapshot.
-  Artefact: a new case in `tests/assert_cmd_tests.rs`; a new snapshot test in
-  `src/diagnostic_json_tests.rs`. Evidence: red before EP-M3 (generation
-  succeeds); green after. Non-vacuity: a paired `1.0.0` run in the same test
-  creates `out.ninja`.
+  `netsuke check` against the same manifest also exits non-zero with the same
+  code, because the linter loads through the gated path. Method: `assert_cmd`
+  subprocess tests and an in-process `insta` snapshot. Artefact: new cases in
+  `tests/assert_cmd_tests.rs`, the `check` case gated per test with
+  `#[cfg(feature = "lint")]` rather than per module; a new snapshot test in
+  `src/diagnostic_json/tests/mod.rs`. Evidence: red before EP-M3 (generation
+  and checking succeed); green after. Non-vacuity: a paired `1.0.0` run in the
+  same test creates `out.ninja`, and a paired `netsuke check` on `1.0.0` exits
+  zero.
 
 - Obligation OBL-5, registry and reader agree: the highest admitted minor in
-  the design-document registry equals `SUPPORTED.max_minor`. Method: a contract
+  the design-document registry equals `SUPPORTED.max_minor`, and no admitted
+  minor exceeds an unadmitted reserved minor (D-3 rule 8). Method: a contract
   test that parses the registry table. Artefact:
   `tests/schema_version_registry_tests.rs`, reading the table between marker
   comments in `docs/netsuke-design.md`. Evidence: passes with the core `1.0`
-  row admitted and every other row reserved. Non-vacuity: the parser is
-  exercised on an in-memory table with an admitted `1.1` row, which must report
-  a mismatch against a maximum of `0`.
+  row admitted, ADR-0043's `1.1` row reserved, and every other row reserved
+  without a minor. Non-vacuity: the parser is exercised on two in-memory
+  tables, one with an admitted `1.1` row (must report a mismatch against a
+  maximum of `0`) and one with an admitted `1.2` row while `1.1` is reserved
+  (must report a contiguity violation).
 
 Residual gaps: rungs 2, 2b, and 4 are not implemented here. General stdlib
 vocabulary is not version-gated (Risks). Library callers that deserialize
-`NetsukeManifest` directly bypass the gate (ADR-041 limitation).
+`NetsukeManifest` directly bypass the gate (ADR-0061 limitation).
 
 ## Plan of work
 
 Stage A (EP-M0) re-sweeps ADR numbers and records baseline gates.
 
-Stage B (EP-M1, EP-M2) drafts ADR-041 and the registry, then ADR-042 to
-ADR-047, the resolution table, and the RFC and roadmap amendments. All ADRs are
+Stage B (EP-M1, EP-M2) drafts ADR-0061 and the registry, then ADR-0062 to
+ADR-0067, the resolution table, and the RFC and roadmap amendments. All ADRs are
 `Proposed`. Each milestone ends with the full gate set and a commit.
 
 Stage C (EP-M3) adds red tests, observes them fail, implements the pure
@@ -772,9 +924,9 @@ roadmap item done, and completes this plan.
 - Remaining gaps: all later milestones.
 - Compatibility decision: none.
 
-### EP-M1: ADR-041 and the schema-version registry
+### EP-M1: ADR-0061 and the schema-version registry
 
-- Outcome: `docs/adr-041-manifest-schema-versions-and-admission.md`
+- Outcome: `docs/adrs/adr-0061-manifest-schema-versions-and-admission.md`
   (`Proposed`) records D-1 to D-6, the options considered under D-5, the prior
   art listed under `Artefacts and notes`, and the limitations (library bypass,
   stdlib vocabulary, pre-gate binaries). `docs/netsuke-design.md` section 2.2
@@ -783,28 +935,33 @@ roadmap item done, and completes this plan.
   `<!-- schema-registry:end -->` markers, with columns: feature identifier,
   owning RFC and roadmap task, reserved keys, reserved fields, reserved
   discriminators and closed vocabularies, status, schema minor, first tag. The
-  core `1.0` row is `admitted`/`released`; every other row is `reserved`. The
-  `netsuke_version` bullet links to the subsection.
+  core `1.0` row (including ADR-0045's `command_isolation`) is
+  `admitted`/`released`; the `structured-commands` and `named-shells` rows are
+  `reserved` at minor `1.1` per ADR-0043; every other row is `reserved` with no
+  minor. The `netsuke_version` bullet links to the subsection. If the approver
+  chose D-19 Option B, ADR-0043 also gains its amendment banner and section in
+  this milestone.
 - Requirements: RM-b, RM-c (rejection), OLD-READER.
 - Acceptance evidence: the registry reserves `includes`, `bundles`,
   `host_facts`, `inputs`, `contention_classes`, `states`, `artefacts`, and
   `maturity`; the fields `contention` and `produces`; the discriminators
   `require_state`, `ensure_state`, `prepare_state`, and `clean_owned`; and the
   closed vocabularies of D-11 to D-14. Gates pass.
-- Conformance check: no code or RFC changed.
+- Conformance check: no code or RFC changed; the `1.1` reservation matches
+  ADR-0043 (or its accepted amendment).
 - Recovery: revert the milestone commit.
-- Remaining gaps: ADR-042 to ADR-047; the gate.
+- Remaining gaps: ADR-0062 to ADR-0067; the gate.
 - Compatibility decision: none.
 
 ### EP-M2: contract ADRs, resolution table, RFC and roadmap amendments
 
 - Outcome: all `Proposed`:
-  `docs/adr-042-progressive-enhancement-contract-boundaries.md` (D-7 to D-10),
-  `docs/adr-043-managed-state-schema.md` (D-14, states),
-  `docs/adr-044-typed-task-input-schema.md` (D-13),
-  `docs/adr-045-artefact-ownership-schema.md` (D-12),
-  `docs/adr-046-contention-class-schema.md` (D-11), and
-  `docs/adr-047-maturity-policy-schema.md` (D-14, maturity, and the
+  `docs/adrs/adr-0062-progressive-enhancement-contract-boundaries.md` (D-7 to
+  D-10), `docs/adrs/adr-0063-managed-state-schema.md` (D-14, states),
+  `docs/adrs/adr-0064-typed-task-input-schema.md` (D-13),
+  `docs/adrs/adr-0065-artefact-ownership-schema.md` (D-12),
+  `docs/adrs/adr-0066-contention-class-schema.md` (D-11), and
+  `docs/adrs/adr-0067-maturity-policy-schema.md` (D-14, maturity, and the
   rule-to-feature table). `docs/netsuke-design.md` gains
   `### 2.9 Progressive-enhancement contracts`, holding the resolution table:
   one row per outstanding item from OD-21 to OD-25, with the RFC section, the
@@ -813,43 +970,50 @@ roadmap item done, and completes this plan.
   section 10's sentence "Allocate the manifest and persisted-plan versions
   during acceptance alongside RFC 0001" and RFC 0022 section 8's "Allocate the
   manifest version with the shared schema acceptance work" are each replaced by
-  a sentence stating that ADR-041 allocates schema versions at admission. In
-  `docs/roadmap.md`, 12.1.1's third bullet drops "the next available manifest
-  minor version" and cites ADR-041 and ADR-042's action-plan constraint;
-  12.1.2's title and first bullet say it extends ADR-041's reader gate with
-  rungs 2 and 2b and reserves D-8's discriminators. In
-  `docs/roadmap-composition.md`, 16.1.1 and 17.1.1 each gain one sentence
-  citing ADR-041 and D-6. `docs/roadmap-progressive-enhancement.md`'s ownership
-  section links the seven ADRs. `docs/contents.md` lists them in ascending
-  order.
+  a sentence stating that ADR-0043 and ADR-0061 govern schema-version
+  allocation. In `docs/roadmap.md`, completed item 12.1.1 is not edited; 12.1.2
+  keeps its title and gains one sub-bullet saying that it extends ADR-0061's
+  reader gate by admitting ADR-0043's `1.1`, implements rungs 2 and 2b, and
+  reserves D-8's discriminators. In `docs/roadmap-composition.md`, 16.1.1 and
+  17.1.1 each gain one sentence citing ADR-0061 and D-6.
+  `docs/roadmap-progressive-enhancement.md`'s ownership section links the seven
+  ADRs. `docs/contents.md` gains the seven entries beside the existing ADR
+  index entries; that index is not strictly ascending (ADR-0056 sits between
+  0045 and 0046), so place each entry by hand and keep its label matched to its
+  filename.
 - Requirements: RM-a, RM-b (persisted-plan coordination), RM-c
   (operation-union ownership, capability reporting), SE.
 - Acceptance evidence: the two review checks in `Verification plan` pass;
   gates pass.
 - Conformance check: RFCs 0001 to 0004, 0011, and 0029 unchanged; no RFC
-  status changed; no code changed.
+  status changed; no code changed; roadmap item 12.1.1 unchanged.
 - Recovery: revert the milestone commit.
 - Remaining gaps: the gate; acceptance.
 - Compatibility decision: none.
 
 ### EP-M3: reader-side schema version gate
 
-- Outcome: `src/manifest/schema_version.rs` holds the pure policy and typed
-  rejection facts; `parse_admitted_document` in `src/manifest/mod.rs` parses
-  and admits; rejections render through four new Fluent keys in all 35
-  catalogues; two fixtures declare `1.0.0`; `src/manifest/tests/stages.rs`'s
-  final-rendering test uses an unknown-field trigger; the users' guide gains
-  `### Declare the schema version` under "Author a manifest"; the CHANGELOG's
-  `Unreleased` section records a **Breaking** entry; design section 3.3 lists
-  admission as the first ingestion stage.
+- Outcome: `src/manifest/schema_version/mod.rs` holds the pure policy and typed
+  rejection facts, with its unit tests in
+  `src/manifest/schema_version/tests.rs`; `parse_admitted_document` in
+  `src/manifest/mod.rs` parses and admits; rejections render through four new
+  Fluent keys, declared in a new `src/localization/schema_keys.rs` and present
+  in all 35 catalogues; two fixtures declare `1.0.0`;
+  `src/manifest/tests/stages.rs`'s final-rendering test uses an unknown-field
+  trigger; the users' guide gains `### Declare the schema version` under
+  "Author a manifest", using inline code only because every fence there needs a
+  tested-example marker; the CHANGELOG's `Unreleased` section gains a
+  `### Changed` heading with a `- **Breaking:**` entry; design section 3.3
+  lists admission as the first ingestion stage; the developers' and
+  translators' guides name the third key file.
 - Requirements: OLD-READER, D-1, D-2, D-4 rung 1, D-15, D-18.
 - Acceptance evidence: OBL-1 to OBL-5 discharged; the BDD scenario passes;
   `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
   `make test`, `make markdownlint`, and `make nixie` pass.
 - Conformance check: no public signature changed; no dependency added; no RFC
   syntax admitted; the gate reads no environment or filesystem.
-- Recovery: revert the milestone commit; per D-15, ADR-041 then names 12.1.2
-  as the owner of rung 1.
+- Recovery: revert the milestone commit; per D-15, 12.1.2's sub-bullet then
+  makes it the owner of rung 1.
 - Remaining gaps: rungs 2, 2b, and 4.
 - Compatibility decision: the deployed state is users' manifests. Those
   declaring `1.0.0` are unaffected; others receive a diagnostic with a remedy.
@@ -858,7 +1022,7 @@ roadmap item done, and completes this plan.
 ### EP-M4: developers' guide and documentation clean-up
 
 - Outcome: `docs/developers-guide.md` gains a section on reserving, admitting,
-  and allocating a schema feature under ADR-041 (the D-3 lifecycle, the
+  and allocating a schema feature under ADR-0061 (the D-3 lifecycle, the
   registry, the contract test, and the ladder rungs a new feature must
   implement). `docs/snapshot-testing-in-netsuke-using-insta.md` uses `"1.0.0"`.
 - Requirements: `AGENTS.md` documentation obligations.
@@ -870,7 +1034,7 @@ roadmap item done, and completes this plan.
 
 ### EP-M5: acceptance and completion
 
-- Precondition: the user has explicitly accepted ADR-041 to ADR-047 in
+- Precondition: the user has explicitly accepted ADR-0061 to ADR-0067 in
   review, possibly with amendments. Until then this plan stays `IN PROGRESS`
   with a sentence beneath the status naming the pending acceptance.
 - Outcome: each accepted ADR reads `Accepted` with its date and a one-line
@@ -898,14 +1062,21 @@ EP-M0. Sweep ADR numbers on every branch:
 
 ```bash
 git fetch origin
-for b in $(git branch -r | grep -v HEAD); do
-  git ls-tree --name-only "$b" docs/ | grep -oE 'adr-0[0-9]{2}'
-done | sort -u | tail -5
+for ref in $(git for-each-ref --format='%(refname)' refs/remotes/origin); do
+  git ls-tree -r --name-only "$ref" -- docs/ 2>/dev/null \
+    | grep -oE '(^|/)adr-[0-9]{3,4}-' | grep -oE '[0-9]{3,4}' \
+    | sed "s|\$| ${ref#refs/remotes/origin/}|"
+done | awk '{ printf "%04d %s\n", $1, $2 }' | sort -u | awk '$1 >= "0056"'
+git grep -hoE 'ADR-006[0-9]' $(git for-each-ref --format='%(refname)' refs/remotes/origin) -- docs | sort -u
 ```
 
-Expected at planning time: the last three lines are `adr-038`, `adr-039`, and
-`adr-040`. Then ask `scrutineer` for a baseline run of check-fmt, typecheck,
-lint, doc-coverage, test, markdownlint, and nixie.
+The first command prints `number branch` pairs for both the old three-digit
+`docs/adr-nnn-` layout and the current `docs/adrs/adr-nnnn-` layout; the second
+finds prose reservations. Expected on 2026-10-24: the highest number is `0059`
+(`module-slice-timeout-audit`), and the second command prints nothing. ADR-0060
+is held back for the 3.12.3 plan's provisional claim. Then ask `scrutineer` for
+a baseline run of check-fmt, typecheck, lint, doc-coverage, test, markdownlint,
+and nixie.
 
 EP-M1 and EP-M2. Write each ADR from the ADR template in
 `docs/documentation-style-guide.md` (Status, Date, Context and problem
@@ -917,7 +1088,7 @@ intended files, then ask `scrutineer` for the full gate set. Run the review
 check:
 
 ```bash
-grep -nE 'ratif|allocate|Allocate' docs/rfcs/002[1-5]-*.md
+grep -nE 'ratif|allocate|Allocate' docs/rfcs/rfc-002[1-5]-*.md
 ```
 
 and confirm every hit in an outstanding-decision or compatibility paragraph has
@@ -925,7 +1096,7 @@ a resolution-table row. Commit each milestone separately.
 
 EP-M3, red. Without production changes, add:
 
-1. `src/manifest/schema_version_tests.rs` with the OBL-1 table, property, and
+1. `src/manifest/schema_version/tests.rs` with the OBL-1 table, property, and
    class-coverage test, written against the intended `admit` signature. A
    compile failure is the expected red for a new unit.
 2. `tests/schema_version_gate_tests.rs` with
@@ -940,7 +1111,8 @@ EP-M3, red. Without production changes, add:
    ```
 
    Expected: both named tests fail, the first because loading succeeds, the
-   second because the observer records stages beyond `InitialYamlParsing`.
+   second because the observer records stages beyond
+   `[ManifestIngestion, InitialYamlParsing]`.
 3. The OBL-4 subprocess test and JSON snapshot test, expected to fail because
    generation succeeds.
 4. `tests/schema_version_registry_tests.rs` for OBL-5, expected to fail
@@ -963,8 +1135,9 @@ EP-M3, red. Without production changes, add:
 
 EP-M3, green:
 
-1. Create `src/manifest/schema_version.rs` with a `//!` header, declaring the
-   module in `src/manifest/mod.rs`:
+1. Create `src/manifest/schema_version/mod.rs` with a `//!` header, declaring
+   it as `mod schema_version;` in `src/manifest/mod.rs` and declaring
+   `#[cfg(test)] mod tests;` inside it:
 
    ```rust
    /// The schema versions this reader admits: one major and its highest minor.
@@ -976,7 +1149,7 @@ EP-M3, green:
        pub(crate) max_minor: u64,
    }
 
-   /// Schema versions admitted by this release (ADR-041).
+   /// Schema versions admitted by this release (ADR-0061).
    pub(crate) const SUPPORTED: SupportedSchema = SupportedSchema { major: 1, max_minor: 0 };
 
    /// Reasons a declared schema version cannot be admitted.
@@ -1007,14 +1180,23 @@ EP-M3, green:
    delegates to `admit`.
 2. In `src/manifest/diagnostics/mod.rs`, add `SchemaVersionDiagnostic` with
    `#[diagnostic(code(netsuke::manifest::schema_version))]` and a `#[help]`
-   remedy, and a mapping from each rejection variant: `Missing` to
+   remedy. Unlike `DataDiagnostic`, it carries no `serde_json::Error` source,
+   because the rejection is a typed fact rather than a decode error. Add a
+   mapping from each rejection variant: `Missing` to
    `MANIFEST_SCHEMA_VERSION_MISSING`; `NotAString` and `Invalid` to
    `MANIFEST_SCHEMA_VERSION_INVALID`; `Unsupported` to
    `MANIFEST_SCHEMA_VERSION_UNSUPPORTED` with `$declared` rendered as
    `major.minor` and `$supported` as `1.0`; and the help text to
    `MANIFEST_SCHEMA_VERSION_HELP`. Every variant field is read by this mapping.
-3. Declare the four keys in `src/localization/keys.rs` and add messages to
-   every `locales/*/messages.ftl`, following `docs/translators-guide.md`, with
+3. Declare the four keys in a new `src/localization/schema_keys.rs`, because
+   `src/localization/keys.rs` is at the 400-line cap. Follow the
+   `src/localization/check_keys.rs` precedent exactly: re-export it from
+   `keys.rs`, register it in `src/localization/mod.rs`, add it to `build.rs`
+   and to `KEY_SOURCES` in `build_l10n_audit/mod.rs` (raising the array
+   length), and extend `tests/build_l10n_audit_tests.rs`,
+   `tests/build_l10n_keys_tests.rs`, and `tests/packaging_smoke_tests.rs` where
+   they enumerate key sources. Then add messages to every
+   `locales/*/messages.ftl`, following `docs/translators-guide.md`, with
    `[netsuke::manifest::schema_version]` inside each message's text and
    identifiers and numbers untranslated. The `en-US` unsupported message,
    wrapped here for width but one line in the catalogue:
@@ -1040,23 +1222,41 @@ EP-M3, green:
    (`src/manifest/tests/stages.rs`) from a missing version to an unknown
    top-level key, and update its comment.
 6. Confirm `serde-saphyr`'s enabled features in `Cargo.toml` (AXIOM-2).
-7. Add the users' guide section, the CHANGELOG entry, and the design section
-   3.3 stage; run `make fmt`.
+7. Add the users' guide section (inline code only, no fenced block), the
+   CHANGELOG `### Changed` heading and `- **Breaking:**` entry under
+   `Unreleased`, the design section 3.3 stage, and the third key file to the
+   key-file paragraphs of `docs/developers-guide.md` and
+   `docs/translators-guide.md`; run `make fmt`.
 8. Re-run the focused tests, review new snapshots with `cargo insta review`,
    then ask `scrutineer` for the full gate set.
 
 Expected file set for EP-M3, excluding the 35 catalogues and new snapshots:
-`src/manifest/schema_version.rs`, `src/manifest/schema_version_tests.rs`,
-`src/manifest/mod.rs`, `src/manifest/diagnostics/mod.rs`,
-`src/localization/keys.rs`, `src/manifest/tests/stages.rs`,
-`src/diagnostic_json_tests.rs`, `tests/schema_version_gate_tests.rs`,
-`tests/schema_version_registry_tests.rs`, `tests/assert_cmd_tests.rs`,
-`tests/features/manifest.feature`, `tests/data/unsupported_schema_version.yml`,
-`tests/data/jinja_is.yml`, `tests/data/jinja_is_missing.yml`,
-`docs/users-guide.md`, `CHANGELOG.md`, and `docs/netsuke-design.md`: seventeen
-files. If a new integration-test file must be registered with a Cargo
-`[[test]]` entry or nextest group, that adds one file (see the repository's
-integration-test wiring contract).
+
+- gate and diagnostics: `src/manifest/schema_version/mod.rs`,
+  `src/manifest/schema_version/tests.rs`, `src/manifest/mod.rs`, and
+  `src/manifest/diagnostics/mod.rs`;
+- localization wiring: `src/localization/schema_keys.rs`,
+  `src/localization/keys.rs`, `src/localization/mod.rs`, `build.rs`,
+  `build_l10n_audit/mod.rs`, `tests/build_l10n_audit_tests.rs`,
+  `tests/build_l10n_keys_tests.rs`, and `tests/packaging_smoke_tests.rs`;
+- tests and fixtures: `src/manifest/tests/stages.rs`,
+  `src/diagnostic_json/tests/mod.rs`, `tests/schema_version_gate_tests.rs`,
+  `tests/schema_version_registry_tests.rs`, `tests/assert_cmd_tests.rs`,
+  `tests/features/manifest.feature`,
+  `tests/data/unsupported_schema_version.yml`, `tests/data/jinja_is.yml`, and
+  `tests/data/jinja_is_missing.yml`;
+- documentation: `docs/users-guide.md`, `CHANGELOG.md`,
+  `docs/netsuke-design.md`, `docs/developers-guide.md`, and
+  `docs/translators-guide.md`.
+
+That is twenty-six files. Top-level `tests/*.rs` files are auto-discovered (see
+the integration-test wiring contract in `docs/developers-guide.md`), so the new
+test files need no `Cargo.toml` entry. The existing consumers of
+`tests/data/invalid_version.yml` (`tests/runner_tests.rs`,
+`tests/runner_graph_tests.rs`, `tests/runner_help_targets_tests.rs`,
+`tests/runner_tool_subcommands_tests.rs`, and
+`tests/ast_tests/manifest_files.rs`) assert only the generic parse summary,
+which the gate preserves; they are regression evidence, not edits.
 
 EP-M3, refactor: keep `src/manifest/mod.rs` and every new file under 400 lines
 and every function under Clippy's 70-line ceiling; re-run the focused tests and
@@ -1102,7 +1302,7 @@ supported schema `1.0`, a non-zero exit, and `absent`. Replacing `1.1.0` with
 Every step is repeatable; re-running `make fmt` reapplies Markdown formatting.
 Each milestone is one commit, so any milestone can be reverted with
 `git revert` without disturbing earlier ones. If EP-M3 is reverted, amend
-ADR-041's D-15 paragraph in the same revert series. The `/tmp` probe
+ADR-0061's D-15 paragraph in the same revert series. The `/tmp` probe
 directories may be deleted at any time.
 
 ## Artefacts and notes
@@ -1116,7 +1316,7 @@ ninja: error: build.ninja:2: invalid pool depth
 ninja: fatal: ninja version (1.11.1) incompatible with build file ninja_required_version version (99.0).
 ```
 
-Prior art consulted through Firecrawl, for ADR-041's options section:
+Prior art consulted through Firecrawl, for ADR-0061's options section:
 
 - Ninja manual: pools arrived in 1.1; the `console` pool in 1.5 has depth 1;
   `ninja_required_version` makes an older Ninja refuse a newer build file.
@@ -1170,7 +1370,7 @@ Signposts for the implementer:
   `docs/rust-doctest-dry-guide.md`, `docs/ortho-config-users-guide.md` (D-10),
   `docs/snapshot-testing-in-netsuke-using-insta.md`,
   `docs/translators-guide.md`,
-  `docs/formal-verification-methods-in-netsuke.md`, and ADR-019 with RFC 0011
+  `docs/formal-verification-methods-in-netsuke.md`, and ADR-0019 with RFC 0011
   as the ratification precedent.
 - Skills: `execplans` (keeping this plan current); `rust-router`, then
   `rust-errors` for the rejection type, `rust-unit-testing` and `proptest` for
@@ -1191,8 +1391,8 @@ changed:
   `Proposed` and accepted only by explicit user acceptance (new EP-M5). RFCs
   stay `Proposed` with governing-decision bullets, as RFC 0011 does.
   Contradicting RFC and roadmap sentences are amended.
-- The single large ADR-042 is split: ADR-042 keeps cross-cutting contracts,
-  and ADR-043 to ADR-047 hold one RFC each. The resolution table moves to the
+- The single large ADR-0062 is split: ADR-0062 keeps cross-cutting contracts,
+  and ADR-0063 to ADR-0067 hold one RFC each. The resolution table moves to the
   design document.
 - D-1 now requires canonical `MAJOR.MINOR.0` and holds the supported range as
   data. D-3 gains a full release lifecycle. D-4 defines what counts as syntax
@@ -1211,5 +1411,33 @@ changed:
   manifest text. OBL-1 gains an explicit class-coverage test and OBL-5 binds
   the registry to the reader.
 
-Effect on remaining work: the plan awaits user approval. Implementation follows
-EP-M0 to EP-M5.
+Effect on remaining work (second draft): the plan awaits user approval.
+Implementation follows EP-M0 to EP-M5.
+
+2026-10-24, third draft, after rebasing onto `origin/main` at `8a9610008`. The
+three plan commits replayed without conflict; the incoming 79 commits
+invalidated several premises. What changed:
+
+- ADR-0043 (accepted under completed roadmap item 12.1.1) already reserves
+  schema minor `1.1.0` for the structured-command surface. D-3 now honours it
+  and adds a contiguity rule; D-9 defers action-plan versioning to ADR-0043;
+  new D-19 offers amending ADR-0043 instead; EP-M2 no longer edits 12.1.1 and
+  adds a sub-bullet to 12.1.2 rather than retitling it.
+- ADRs moved to `docs/adrs/adr-nnnn-*.md` with four-digit numbers, and
+  ADR-0041 to ADR-0056 are taken; this plan's ADRs become ADR-0061 to ADR-0067,
+  with the sweep command rewritten for both layouts. RFC files gained an `rfc-`
+  prefix and some new slugs.
+- `netsuke check` merged (ADR-0056): constraints, D-7, D-14, and OBL-4 now
+  cover it; ADR-0045's version-free `command_isolation` key is recorded as part
+  of the `1.0` core.
+- EP-M3 now places the gate in `src/manifest/schema_version/` to satisfy the
+  module-layout contract, adds `src/localization/schema_keys.rs` because
+  `keys.rs` is at the 400-line cap (raising the file set to twenty-six and the
+  tolerance to thirty-two), expects `[ManifestIngestion, InitialYamlParsing]`
+  from path-based loads, keeps fences out of the users' guide section, adds a
+  `### Changed` CHANGELOG heading, and uses `TestRunner::deterministic()`.
+- Paths moved by the module regrouping are updated, and
+  `docs/terms-of-reference.md` joins the conformance basis.
+
+Effect on remaining work: the plan still awaits user approval, now including
+the D-19 choice.
