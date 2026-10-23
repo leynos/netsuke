@@ -378,6 +378,18 @@ production emission remains synchronous in `record_manifest_structure`.
   invokes its delegated DEBUG `register_callsite` callback for the target
   event. The actual delegated interest remains restrictive; the hint only
   ensures the registration callback can be gated.
+- Follow-up review (2026-10-23): CodeRabbit identified that the same live
+  DEBUG subscriber can receive repeated `register_callsite` callbacks while
+  other libtest threads register dispatchers. The transition test now requires
+  at least one observation and verifies every observed interest is `never`,
+  without assuming a single callback. The review found no other concern.
+- The first stop-hook rerun hit a transient full filesystem while Cargo wrote
+  build metadata and Nixie created a temporary directory. After space became
+  available, all seven gates passed sequentially: `make check-fmt`, `make test`
+  (4,669 passed, 7 skipped; 40 doctests passed, 6 ignored), `make typecheck`,
+  `make lint`, `make doc-coverage` (98.13%), `make markdownlint` (zero issues),
+  and `make nixie`. The available space was 188 GiB at the beginning of the
+  rerun and remained ample throughout.
 
 The mutation baseline used libtest. Nextest runs each test in its own process,
 so it does not expose this in-process race in the same way; the required
