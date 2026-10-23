@@ -35,9 +35,13 @@
 //! The environment perturbation uses `Command::env`, which mutates only the
 //! child's environment; nothing here touches this process's own.
 
-use anyhow::{Context, Result, anyhow, bail, ensure};
+#[path = "ninja_determinism_process_tests/diagnostics.rs"]
+mod diagnostics;
+
+use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use diagnostics::assert_identical;
 use std::io::ErrorKind;
 use tempfile::TempDir;
 
@@ -223,97 +227,4 @@ fn distinct_action_count(build_file: &str) -> usize {
         .lines()
         .filter(|line| line.starts_with("rule "))
         .count()
-}
-
-/// Assert that two runs produced the same bundle.
-///
-/// A sidecar is identified by its content-addressed path as well as its body:
-/// two bundles differing only in a sidecar name are still different artefacts,
-/// and comparing bodies alone would miss it.
-fn assert_identical(fixture: &str, first: &Bundle, second: &Bundle) -> Result<()> {
-    if first.build_file != second.build_file {
-        bail!(
-            "{fixture}: two processes emitted different build files\n{}",
-            describe_difference(&first.build_file, &second.build_file)
-        );
-    }
-    if first.sidecars.len() != second.sidecars.len() {
-        bail!(
-            "{fixture}: two processes staged {} and {} dyndep sidecars: {:?} vs {:?}",
-            first.sidecars.len(),
-            second.sidecars.len(),
-            sidecar_paths(first),
-            sidecar_paths(second),
-        );
-    }
-    for (left, right) in first.sidecars.iter().zip(&second.sidecars) {
-        if left.path != right.path {
-            bail!(
-                "{fixture}: two processes staged sidecars at different paths: {} vs {}",
-                left.path,
-                right.path
-            );
-        }
-        if left.content != right.content {
-            bail!(
-                "{fixture}: two processes staged different content for {}\n{}",
-                left.path,
-                describe_difference(&left.content, &right.content)
-            );
-        }
-    }
-    Ok(())
-}
-
-/// The sidecar paths of one bundle, for a diagnostic.
-fn sidecar_paths(bundle: &Bundle) -> Vec<&str> {
-    bundle
-        .sidecars
-        .iter()
-        .map(|sidecar| sidecar.path.as_str())
-        .collect()
-}
-
-/// Describe the first line on which two texts differ.
-///
-/// Lines are truncated because an emitted command can run to hundreds of
-/// characters, and the reader needs the location and a recognizable fragment
-/// rather than the whole wrapper.
-fn describe_difference(first: &str, second: &str) -> String {
-    for (index, (left, right)) in first.lines().zip(second.lines()).enumerate() {
-        if left != right {
-            return format!(
-                "first difference at line {}:\n  first:  {}\n  second: {}",
-                index + 1,
-                truncate(left),
-                truncate(right),
-            );
-        }
-    }
-    format!(
-        "one text is a prefix of the other: {} and {} lines",
-        first.lines().count(),
-        second.lines().count(),
-    )
-}
-
-/// Shorten one line to a diagnostic-friendly length.
-///
-/// The prefix is rebuilt character by character rather than sliced at a byte
-/// offset: the line may contain non-ASCII text, and a byte slice would panic
-/// if its end fell inside a multi-byte character.
-fn truncate(line: &str) -> String {
-    const LIMIT: usize = 200;
-    if line.len() <= LIMIT {
-        return line.to_owned();
-    }
-    let mut prefix = String::with_capacity(LIMIT + '…'.len_utf8());
-    for character in line.chars() {
-        if prefix.len() + character.len_utf8() > LIMIT {
-            break;
-        }
-        prefix.push(character);
-    }
-    prefix.push('…');
-    prefix
 }
