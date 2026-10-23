@@ -288,6 +288,9 @@ operator, user, and contributor references are easier to find.
   Manifest-linting decision record, placing the linter under `netsuke check`,
   treating findings as data with a threshold-selected success or failure
   document, and fixing the rule-identifier and rule-text ownership rules.
+- [ADR-057](adrs/adr-0057-anchor-tracing-test-callsite-interest-rebuilds.md):
+  Retaining two inert test dispatches to prevent stale single-registrar
+  callsite-interest writes during concurrent capture setup.
 - [ADR-0046-agent-consistent-human-first-cli.md](adrs/adr-0046-agent-consistent-human-first-cli.md):
   Human-first, agent-consistent CLI doctrine decision record.
 - [ADR-0047: Kani IR harnesses](adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md):

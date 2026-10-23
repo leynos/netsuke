@@ -9,6 +9,8 @@ mod dispatch;
 mod dyndep;
 mod error;
 mod manifest_structure_telemetry;
+#[cfg(test)]
+mod manifest_structure_telemetry_reproduction;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::keys;

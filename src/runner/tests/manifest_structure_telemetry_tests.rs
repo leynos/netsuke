@@ -1,8 +1,9 @@
 //! Integration coverage for runner-owned manifest-structure telemetry.
 
 use super::{GraphGenerationFixture, generate_ninja_with_shell, graph_generation_fixture};
+use crate::runner::manifest_structure_telemetry::validate_manifest_structure_events;
 use crate::test_tracing_capture::with_test_subscriber;
-use anyhow::{Context, Result, ensure};
+use anyhow::{Result, ensure};
 use metrics_util::{
     MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
@@ -28,23 +29,17 @@ fn runner_generation_records_one_unlabelled_manifest_structure_counter(
     });
     generation?;
 
-    let summary = events
-        .iter()
-        .find(|event| event.contains("message=manifest structure summary"))
-        .context("runner generation should emit the manifest-structure trace event")?;
-    for expected in [
-        "variable_count=0",
-        "macro_count=0",
-        "rule_count=0",
-        "action_count=0",
-        "target_count=1",
-        "default_count=0",
-    ] {
-        ensure!(
-            summary.contains(expected),
-            "runner manifest-structure summary should report {expected}"
-        );
-    }
+    validate_manifest_structure_events(
+        &events,
+        &[
+            ("variable_count", 0),
+            ("macro_count", 0),
+            ("rule_count", 0),
+            ("action_count", 0),
+            ("target_count", 1),
+            ("default_count", 0),
+        ],
+    )?;
 
     let summaries = snapshotter
         .snapshot()
