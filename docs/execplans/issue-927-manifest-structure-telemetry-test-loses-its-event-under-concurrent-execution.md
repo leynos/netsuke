@@ -204,15 +204,14 @@ seeded duplicate.
   current-head hosted checks must pass after publishing this repair.
 - [x] (2026-10-23) The first completeness assessment for the published head
   identified two in-scope coverage gaps: the mitigated schedule did not
-  acknowledge T2's registration attempt before starting its fixed release
-  interval, and V3 lacked wrong-value, duplicate-token, and extra-token
-  controls. The response is recorded at
+  acknowledge T2 reaching the pre-registration boundary before starting its
+  fixed release interval, and V3 lacked wrong-value, duplicate-token, and
+  extra-token controls. The response is recorded at
   [CodeRabbit assessment](https://github.com/leynos/netsuke/pull/943#issuecomment-6358510181).
-- [x] (2026-10-23) Add a T2 attempt-phase acknowledgement before starting the
-      fixed
+- [x] (2026-10-23) Add a T2 boundary acknowledgement before starting the fixed
   installation deadline, retain the completed-installation signal, and add
   wrong-value, duplicate-token, and additional-token controls. Focused tests
-  passed: the fresh-process worker printed the attempt marker in both modes,
+  passed: the fresh-process worker printed the boundary marker in both modes,
   reproduced zero events in unmitigated mode, and accepted exactly one summary
   in mitigated mode; the malformed-token test passed. Logs:
   `/tmp/test-focused-b52a33dc-f184-4eef-82fc-038987db14c6-issue-927-manifest-structure-telemetry-test-loses-its-event-under-concurrent-execution-7.out`
@@ -306,22 +305,24 @@ seeded duplicate.
   completed with disk space and compiler admission healthy.
 - [x] (2026-10-23) CodeRabbit found that a post-join callback check could accept
   a T2 registration signal that arrived after T1's deadline. The worker now
-  records a boundary signal immediately before `Dispatch::new`, which enters
-  `tracing-core`'s `callsite::register_dispatch`, and separately records the
-  capture layer's actual summary callback. T1 requires the boundary signal
-  before release. Unmitigated mode requires the callback before release;
+  records a boundary signal immediately before `Dispatch::new` and separately
+  records the capture layer's actual summary callback. T1 requires the boundary
+  signal before release. Unmitigated mode requires the callback before release;
   anchored mode requires it only after release. A unit negative control
   withholds the boundary signal until after release and requires
-  `registration-start-timeout`. The parent requires all phase markers. The
-  boundary signal is the closest test seam before tracing-core registration;
-  the later layer callback confirms the actual callback phase. Both focused
-  worker modes and all seven candidate gates passed after this correction:
-  4,688 tests passed, 7 skipped; doctests had 40 passed and 6 ignored;
-  typecheck and lint passed; doc coverage was 98.15%; Markdown lint found zero
-  issues; and Nixie validated every diagram. The disk-full stop-hook failures
-  did not recur after filesystem space recovered. Logs use the `-3.out` suffix
-  for focused and documentation checks, `-4.out` for tests, and `-3.out` for
-  typecheck and lint.
+  `registration-start-timeout`. The parent requires all phase markers.
+  `Dispatch::new` allocates the subscriber `Arc` before calling the private
+  `callsite::register_dispatch` write-lock path. T2 can be preempted after the
+  boundary signal and before that path, so the signal is not proof of lock
+  contention in every execution; the negative control rejects a late signal but
+  not pre-emption after an on-time signal. The later layer callback confirms
+  the actual callback phase. Both focused worker modes and all seven candidate
+  gates passed after this correction: 4,688 tests passed, 7 skipped; doctests
+  had 40 passed and 6 ignored; typecheck and lint passed; doc coverage was
+  98.15%; Markdown lint found zero issues; and Nixie validated every diagram.
+  The disk-full stop-hook failures did not recur after filesystem space
+  recovered. Logs use the `-3.out` suffix for focused and documentation checks,
+  `-4.out` for tests, and `-3.out` for typecheck and lint.
 - [x] (2026-10-23) Confirmed PR #943 remains ready for review after the
   candidate-bound assessments and checks passed; it stays ready.
 - [x] (2026-10-23) Recovered from the stop-hook disk-full failure. The
@@ -337,6 +338,22 @@ seeded duplicate.
   boundary from the 250-millisecond callback window. Focused regression passed
   with both schedule modes. Logs use the current `-4.out` through `-7.out`
   suffixes under `/tmp`.
+- [x] (2026-10-23) Reran `make lint` and `make nixie` after the stop-hook
+  storage failure. Both passed on unchanged head
+  `30e81e0185ee8ecae4a38c7a00f824e3ec8b31af`; the filesystem had 124 GiB free
+  before lint and 108 GiB after both gates. Whitaker waited on the shared Cargo
+  package-cache lock, and two status queries timed out, but lint completed with
+  exit 0 and no disk error. Nixie validated all diagrams and `/tmp` accepted a
+  temporary directory. This confirms the original disk and temporary-directory
+  failures are resolved.
+- [x] (2026-10-23) CodeRabbit accepted the registration-boundary repair and
+  resolved the thread at
+  [CodeRabbit's ordering response](https://github.com/leynos/netsuke/pull/943#discussion_r4363520093).
+  It clarified that the worker checks the pre-registration boundary and
+  callback ordering; T2 can be preempted between that signal and the private
+  write-lock attempt, so the worker does not prove contention in every run.
+  Updated ADR-057 and V2 below to preserve that limit; the bounded Loom model
+  supplies separate ordering coverage.
 - [ ] Resolve current-head review concerns, follow checks to equilibrium, and
   merge PR #943 with the verified head commit.
 
@@ -537,18 +554,22 @@ referenced from the design and developers' guides, and indexed from
   are live at the witness and include a second-anchor control. Residual: this
   model omits allocator timing, real tracing TLS, and full subscriber stacks;
   validate the same ordering through V2.
-- **V2: Real callsite schedule is deterministic.** The first T1 registration
+- **V2: Real callsite schedule is explicitly gated.** The first T1 registration
   for the summary event pauses while T2 installs a TRACE capture dispatch.
   Unmitigated mode must release on `installed`, capture the structural span,
-  and report zero summaries. In mitigated mode, T1's registry read lock blocks
-  T2's registration, so no callback arrives before the fixed 250 ms deadline;
-  T1 releases on `deadline`, then T2's callback arrives after that release. T2
-  captures the span and exactly one summary. The worker records the
-  pre-registration boundary and callback phases separately. T1 first requires
-  T2's boundary signal before release; a late signal cannot satisfy this check.
-  In the anchored run the real capture-layer callback remains blocked until T1
-  releases the registry lock and is then observed afterwards. An
-  acknowledgement within the callback deadline releases on `installed` and
+  and report zero summaries. In mitigated mode, if T2 reaches `Dispatch::new`
+  while T1 holds the registry read lock, its registration waits until T1
+  releases on the fixed 250 ms deadline. The capture callback is then observed
+  after release, and T2 captures the span and exactly one summary. The worker
+  records the pre-registration boundary and callback phases separately. T1
+  requires T2's boundary signal before release; a late signal cannot satisfy
+  this check. There is a scheduler pre-emption window after that signal and
+  before `Dispatch::new` reaches tracing-core's private write-lock attempt, so
+  the worker does not prove lock contention in every execution. The boundary
+  signal and callback ordering are the observable checks; the bounded Loom
+  model supplies separate ordering coverage. In the anchored run the real
+  capture-layer callback is observed only after T1 releases the registry lock.
+  An acknowledgement within the callback deadline releases on `installed` and
   fails the worker. Unmitigated mode uses the 10-second thread deadline for the
   boundary and callback phases. Retain the separate installation-completion
   signal inside `with_default`. Method: ignored child worker driven by a parent
@@ -680,10 +701,14 @@ after T1 releases its gate.
 The focused red control is the unmitigated child: after the gated DEBUG
 registration races T2's TRACE dispatch registration, T1 must overwrite the
 callsite to `never`; T2 then captures the span but no summary, and the exact
-validator rejects the empty list. The green control is the anchored child: T1
-holds the registry read lock while paused, T2 cannot publish until the fixed
-deadline releases T1, and T2's subsequent write-locked rebuild restores the
-interest before the capture emits.
+validator rejects the empty list. The green control is the anchored child: on
+the recorded run, T2's summary callback arrived only after T1 released the
+registry read lock, and the captured event passed the exact validator. The
+worker's pre-registration boundary is immediately before `Dispatch::new`, but
+T2 can be preempted after that signal and before the private write-lock
+attempt. The worker therefore checks the boundary and callback order; it does
+not establish lock contention for every execution. The bounded model separately
+explores the stale-interest ordering.
 
 The negative oracle control is a real TRACE capture containing the production
 summary plus a seeded duplicate summary. It must fail for cardinality two. The
