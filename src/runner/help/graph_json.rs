@@ -7,7 +7,9 @@ use std::collections::HashSet;
 
 use serde::Serialize;
 
-use crate::ast::{DependencyOrder, NetsukeManifest, Recipe, StringOrList, Target};
+use crate::ast::{
+    CommandIsolation, DependencyOrder, NetsukeManifest, Recipe, StringOrList, Target,
+};
 
 /// The stable v1 graph payload nested inside the versioned help result.
 #[derive(Debug, Serialize)]
@@ -104,6 +106,8 @@ enum RecipeJson {
         form: CommandForm,
         /// Raw command strings in execution order.
         commands: Vec<String>,
+        /// Whether ordered command entries share shell state.
+        isolation: CommandIsolationJson,
     },
     /// Raw script body.
     Script {
@@ -127,6 +131,16 @@ enum CommandForm {
     String,
     /// The manifest supplied an ordered command list.
     List,
+}
+
+/// The command-list state-sharing mode carried by the graph wire format.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "lowercase")]
+enum CommandIsolationJson {
+    /// Entries run in one shell and share state.
+    Shared,
+    /// Each entry starts from the action's original process state.
+    Isolated,
 }
 
 impl GraphJson {
@@ -193,17 +207,19 @@ fn recipe_json(recipe: &Recipe) -> RecipeJson {
     match recipe {
         Recipe::Command {
             command: StringOrList::String(command),
-            ..
+            isolation,
         } => RecipeJson::Command {
             form: CommandForm::String,
             commands: vec![command.clone()],
+            isolation: command_isolation_json(*isolation),
         },
         Recipe::Command {
             command: StringOrList::List(commands),
-            ..
+            isolation,
         } => RecipeJson::Command {
             form: CommandForm::List,
             commands: commands.clone(),
+            isolation: command_isolation_json(*isolation),
         },
         Recipe::Command {
             command: StringOrList::Empty,
@@ -215,5 +231,13 @@ fn recipe_json(recipe: &Recipe) -> RecipeJson {
         Recipe::Rule { rule } => RecipeJson::Rule {
             names: rule.to_string_vec(),
         },
+    }
+}
+
+/// Project the command-list state policy into its closed wire vocabulary.
+const fn command_isolation_json(isolation: CommandIsolation) -> CommandIsolationJson {
+    match isolation {
+        CommandIsolation::Shared => CommandIsolationJson::Shared,
+        CommandIsolation::Isolated => CommandIsolationJson::Isolated,
     }
 }

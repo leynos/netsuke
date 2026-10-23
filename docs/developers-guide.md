@@ -172,6 +172,21 @@ script recipe bodies untouched. This boundary is what permits a recipe to
 contain a build-only helper without causing `help targets` to execute or
 otherwise evaluate that helper; it does not alter full-render behaviour.
 
+The opt-in `HelpTargetsArgs.edges` flag adds graph JSON to
+`netsuke --json help targets` while preserving the existing catalogue when the
+flag is absent. Dispatch passes the flag through the Help early return, and the
+runner projects the already-loaded restricted query manifest into the separate
+`GraphJson` wire model only after the normal name checks, catalogue collection,
+`BuildGraph` construction, and default-reference validation succeed. It does
+not reload the manifest or serialize AST types. The projection copies authored
+edge lists and defaults, and retains legacy command, script, and rule recipe
+bodies as raw text; it performs no recipe interpolation or execution. Keep
+query metadata registration independent of `StdlibConfig`: the query surface
+uses fixed `ShellDialect::Sh` defaults for `shell_quote` and `shell_join`,
+while full rendering continues to use the selected recipe-shell dialect. This
+keeps the export hermetic without changing the configuration default used by
+builds.
+
 The standard-library registration boundary owns MiniJinja's value formatter. It
 preserves the historical lowercase `true` and `false` spelling when a Boolean
 helper result is interpolated into a string field, while delegating all

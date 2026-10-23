@@ -77,7 +77,8 @@ expression: rendered
             "form": "string",
             "commands": [
               "cc {{ ins }} -o {{ outs }}"
-            ]
+            ],
+            "isolation": "shared"
           }
         }
       ],
@@ -109,7 +110,8 @@ expression: rendered
             "form": "string",
             "commands": [
               "command_available(\"cargo\") {{ ins }} {{ outs }}"
-            ]
+            ],
+            "isolation": "shared"
           }
         },
         {
@@ -136,7 +138,8 @@ expression: rendered
             "commands": [
               "echo {{ ins }}",
               "echo {{ outs }}"
-            ]
+            ],
+            "isolation": "isolated"
           }
         },
         {
@@ -240,7 +243,8 @@ expression: rendered
             "form": "string",
             "commands": [
               "echo first"
-            ]
+            ],
+            "isolation": "shared"
           }
         },
         {
@@ -266,7 +270,8 @@ expression: rendered
             "form": "string",
             "commands": [
               "echo second"
-            ]
+            ],
+            "isolation": "shared"
           }
         }
       ]

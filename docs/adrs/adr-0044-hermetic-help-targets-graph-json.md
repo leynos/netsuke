@@ -66,11 +66,15 @@ the authored defaults list.
 
 Recipe values use an internally tagged, closed `kind` vocabulary:
 
-- `command` has `form` (`string` or `list`) and a `commands` array containing
-  the raw legacy text;
+- `command` has `form` (`string` or `list`), a `commands` array containing the
+  raw legacy text, and an explicit `isolation` value (`shared` or `isolated`);
 - `script` has raw `script` text;
 - `rule` has rendered selector `names`;
 - `dependency_only` represents the internal empty-command marker.
+
+The `isolation` value preserves the state-sharing policy of ordered command
+lists for static readers. It is emitted for every command recipe, including the
+default `shared` value and scalar commands, which cannot be isolated.
 
 The wire model is separate from AST serialization. It has no variables, macros,
 shell, argv, or `cwd` fields. Structured-command recipes are deferred until
