@@ -9938,7 +9938,7 @@ frontend into a target directory no cache restores.
 `production_build_module_slice_has_expected_boundary` uses the default 300 s
 allowance because it checks source text only; Cargo compiles the production
 slice in the workspace library build, before the test's timed execution. The
-nine ambient public-API fixtures, `stub_env_default_does_not_compile`,
+ten ambient public-API fixtures, `stub_env_default_does_not_compile`,
 `split_build_fixture_compiles_through_the_direct_rustc_harness`, and the
 packaging smoke test each get fifteen periods, 900 s. The split-build fixture
 uses a private fixture workspace. Packaging verifies fresh extracted crate
@@ -9970,7 +9970,7 @@ the supported `cli::Cli` surface and reject runtime-only `cli::discovery`
 through the already-built library. No child Cargo command or test-specific
 timeout is needed.
 
-The nine ambient public-API fixtures are the family declared in
+The ten ambient public-API fixtures are the family declared in
 `tests/command_env_ui_tests.rs`, and they share one override because they share
 one cost. Each reaches `NetsukeRlib::build()`, which runs `cargo check` over
 the workspace with the gate's targets and features against the ambient target

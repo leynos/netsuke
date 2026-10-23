@@ -443,7 +443,7 @@ preparation nor `make typecheck`'s workspace-less `cargo check` satisfies, so
 the child build is cold whenever a gate starts. Measured on 2026-10-17, the
 child command took 455 s against an ambient target with no `.fingerprint` or
 `deps/`, 1 s when immediately repeated, and the fixture was stopped at
-`TIMEOUT [300.024s]`. The nine ambient fixtures share that cost and the
+`TIMEOUT [300.024s]`. The ten ambient fixtures share that cost and the
 `nested-cargo-builds` group serializes them, so the allowance now sits on their
 shared override at 900 s rather than on this one test. See "Test timeouts: the
 tiers this repository sets" in `docs/developers-guide.md`.

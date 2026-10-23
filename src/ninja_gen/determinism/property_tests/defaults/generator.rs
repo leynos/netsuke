@@ -125,8 +125,17 @@ fn picks_from(
         // indexing: the workspace denies `integer_division_remainder_used` and
         // `indexing_slicing`. Picking by parity stays a function of the slot
         // drawn, so shrinking still moves one number at a time.
+        //
+        // The fallback is an already-drawn slot, never `repeat_of`: the point
+        // of the repeat term is to append a *duplicate*, and `repeat_of` need
+        // not equal any drawn slot. `picks` is non-empty here because the
+        // branch above seeds it, so `first` always yields a real duplicate.
         let index = usize::from(!repeat_of.is_multiple_of(2));
-        let repeated = picks.get(index).copied().unwrap_or(repeat_of);
+        let repeated = picks
+            .get(index)
+            .or_else(|| picks.first())
+            .copied()
+            .unwrap_or(repeat_of);
         picks.resize(picks.len() + repeat_count, repeated);
     }
     picks

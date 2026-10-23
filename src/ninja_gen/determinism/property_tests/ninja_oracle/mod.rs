@@ -34,7 +34,12 @@
 //!
 //! # The domain
 //!
-//! One to eight actions over one to twelve edges, as the obligation states.
+//! Two to eight actions over one to twelve edges. The obligation states one to
+//! eight; the floor is raised here by one, because a single action cannot be
+//! both dependency-only (which [`GraphBounds::min_phony_actions`] requires) and
+//! executable (which the oracle needs in order to have a command list to
+//! compare). A one-action draw emits no command at all, so the permutation
+//! property would be vacuous on it rather than merely thin.
 //! The shared [`GraphSpec`] generator supplies it through [`GraphBounds`], so
 //! the well-formedness argument is stated once rather than copied. Only the
 //! sampling bounds and the pool-slot ceiling differ, and the ceiling is
@@ -66,8 +71,14 @@ use test_support::ninja::{NinjaWorkspaceError, ninja_integration_workspace};
 use workspace::BundleWorkspace;
 
 /// The obligation's stated domain, with a pool ceiling it can actually reach.
+///
+/// `min_actions` is two rather than one. A one-action draw leaves no room for
+/// both a dependency-only action and an executable one: `min_phony_actions`
+/// forces the sole action to be a `phony`, so every edge loses its rule and
+/// `-t commands` prints nothing. The permutation property would then compare
+/// two empty lists and establish nothing on exactly those cases.
 const NINJA_BOUNDS: GraphBounds = GraphBounds {
-    min_actions: 1,
+    min_actions: 2,
     max_actions: 8,
     min_edges: 1,
     max_edges: 12,

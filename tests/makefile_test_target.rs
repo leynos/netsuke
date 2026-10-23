@@ -394,4 +394,3 @@ fn behavioural_nextest_config_does_not_serialize_environment_tests() -> Result<(
     );
     Ok(())
 }
-// weave: run 'weave explain tests/makefile_test_target.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -39,7 +39,7 @@ correctly and by design.
 **Implementers cannot cite it.** `#[cfg(kani)]` replaces the IR's map type with
 a bounded ordered map (`src/ir/graph/kani_map.rs`), so the Kani harnesses are
 structurally incapable of observing the `HashMap` nondeterminism the roadmap
-item names. `ADR-004` records the hand-off: the larger-N graph property "is
+item names. `ADR-0047` records the hand-off: the larger-N graph property "is
 handed off to the future Proptest roadmap item `4.3.1`". A hand-off needs a
 specification to hand off _to_, and there is none.
 
@@ -61,7 +61,7 @@ read.
 - The guarantee is already user-visible in the README and the design document.
   An unverified published guarantee is worse than an unpublished one, because
   it is relied upon.
-- `ADR-004`'s deferred obligation cannot be discharged against an unstated
+- `ADR-0047`'s deferred obligation cannot be discharged against an unstated
   property: a property test needs a specification, not a hope.
 - Users' real requirement is incremental caching and reproducible artefacts,
   which the _process-level_ statement supports directly. `HashMap` iteration
@@ -91,7 +91,7 @@ read.
 - Give every planned property a numbered precondition it can cite, so that a
   generator's domain and a test's skip conditions have one authority.
 - Record why Kani cannot discharge the ordering obligation, so the hand-off in
-  `ADR-004` is not re-attempted the same way.
+  `ADR-0047` is not re-attempted the same way.
 - Record the two places where the domain model is not pure, without repairing
   either: both are in use and neither is on this work's critical path.
 
@@ -102,7 +102,7 @@ read.
 Rejected. The README already publishes it, the design document states it more
 strongly still, and users cache against it. Withdrawing the claim would be a
 behavioural regression in the only sense that matters to a user, and it would
-leave `ADR-004`'s deferral pointing nowhere.
+leave `ADR-0047`'s deferral pointing nowhere.
 
 ### Option B: Promise byte stability across Netsuke versions
 
@@ -479,7 +479,7 @@ reconciles to.
 - Path and namespace preconditions:
   [`src/ninja_gen/path_syntax.rs`](../../src/ninja_gen/path_syntax.rs)
 - The deferred obligation this discharges:
-  [ADR-004](adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md)
+  [ADR-0047](adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md)
 - Prior art for order-invariance testing:
   [`src/graph_view/tests/property.rs`](../../src/graph_view/tests/property.rs)
 - ExecPlan:
@@ -487,12 +487,12 @@ reconciles to.
 
 ## Related decisions
 
-- [ADR-004: Bound Kani IR harnesses to small N][adr-004]
-- [ADR-011: Use Ninja dyndep for serial dependency ordering][adr-011]
-- [ADR-012: Bound dyndep sidecar retention][adr-012]
-- [ADR-019: Structured command shell selection][adr-019]
+- [ADR-0047: Bound Kani IR harnesses to small N][adr-0047]
+- [ADR-0011: Use Ninja dyndep for serial dependency ordering][adr-0011]
+- [ADR-0012: Bound dyndep sidecar retention][adr-0012]
+- [ADR-0019: Select allow-listed structured command shells][adr-0019]
 
-[adr-004]: adr-004-bound-kani-ir-harnesses-to-small-n.md
-[adr-011]: adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md
-[adr-012]: adr-012-bound-dyndep-sidecar-retention.md
-[adr-019]: adr-019-structured-command-shell-selection.md
+[adr-0047]: adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md
+[adr-0011]: adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md
+[adr-0012]: adr-0012-bound-dyndep-sidecar-retention.md
+[adr-0019]: adr-0019-select-allow-listed-structured-command-shells.md
