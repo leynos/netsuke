@@ -72,7 +72,7 @@ returned nine findings, all verified against source and all repaired. What
 remains for `EP-M8` is the re-gate of that repair and the hosted CI the branch
 will be published to; both are external to the implementation.
 
-The `Scope` tolerance is **breached and not re-widened**: 87 files and 8,727
+The `Scope` tolerance is **breached and not re-widened**: 88 files and 8,785
 net added lines against a cap of 56 and 6,000. The derivation, the four causes,
 and the reason the cap was not moved a second time are in `Progress`.
 
@@ -707,7 +707,7 @@ question.
   finding for a separate item rather than fixing it here.
 - **The `Scope` tolerance is breached, open, and deliberately not re-widened.**
   *Severity: moderate. Likelihood: realized.* Measured against `origin/main`
-  (`6572fb956`) and excluding this ExecPlan, the branch is **87 files and 8,727
+  (`6572fb956`) and excluding this ExecPlan, the branch is **88 files and 8,785
   net added lines** against a cap of 56 and 6,000. The cap was widened once, on
   2026-10-17, from 34/2,600 on user direction; that widening's inventory missed
   the strategy modules entirely and undercosted four suites, which is why the
@@ -2494,7 +2494,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
     round had fixed in the same file.
   - *Figures re-derived rather than restated.* The Status paragraph still said
     86 commits and 8,618 net lines at `f91f663a7`; the branch is now 90 commits
-    and 8,727 net, still 87 files. The dated `Progress` entries that quote the
+    and 8,785 net across 88 files. The dated `Progress` entries that quote the
     older figures are left as written, because each records what a named gate
     measured on a named day, and rewriting them would destroy the record the
     plan exists to keep.
