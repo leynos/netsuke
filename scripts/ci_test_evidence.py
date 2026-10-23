@@ -176,16 +176,27 @@ def _step_phase(name: object) -> str:
             return "other"
 
 
+def _is_ubicloud_label(label: object) -> bool:
+    """Recognize paid labels; ``_is_ubicloud_label("ubicloud-x")`` is true."""
+    match label:
+        case str() if label.startswith("ubicloud-"):
+            return True
+        case _:
+            return False
+
+
+def _ubicloud_labels(job: dict) -> list[str]:
+    """Return paid runner labels; ``_ubicloud_labels({})`` is ``[]``."""
+    return [label for label in job.get("labels", []) if _is_ubicloud_label(label)]
+
+
 def _attempt_cost(jobs: list[dict]) -> AttemptCost:
     """Sum jobs; one unknown duration makes the complete total ``None``."""
     durations = [_elapsed(job) for job in jobs]
     paid = [
         elapsed
         for job, elapsed in zip(jobs, durations, strict=True)
-        if any(
-            isinstance(label, str) and label.startswith("ubicloud-")
-            for label in job.get("labels", [])
-        )
+        if _ubicloud_labels(job)
     ]
     return {
         "attempt_runner_seconds": _sum_complete(durations),
@@ -205,11 +216,7 @@ def _paid_by_shape(jobs: list[dict]) -> dict[str, float | None]:
     """Group paid shapes; ``_paid_by_shape([])`` returns ``{}``."""
     groups: dict[str, list[float | None]] = {}
     for job in jobs:
-        labels = [
-            label
-            for label in job.get("labels", [])
-            if isinstance(label, str) and label.startswith("ubicloud-")
-        ]
+        labels = _ubicloud_labels(job)
         if not labels:
             continue
         label = next(

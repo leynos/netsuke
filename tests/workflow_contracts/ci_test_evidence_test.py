@@ -346,6 +346,23 @@ def test_cost_preserves_runner_shapes(attempt: tuple[dict, dict]) -> None:
     )
 
 
+def test_non_ubicloud_labels_do_not_enter_paid_cost_proxy(
+    attempt: tuple[dict, dict],
+) -> None:
+    """Exclude non-string and non-Ubicloud labels from paid runner time."""
+    run, jobs = attempt
+    jobs["jobs"][0]["labels"] = ["ubuntu-latest", None, 42]
+
+    record = collect_attempt(run, jobs)[0]
+
+    assert record["attempt_ubicloud_runner_seconds"] == 0, (
+        "Only Ubicloud labels may contribute to the paid runner proxy"
+    )
+    assert record["attempt_ubicloud_seconds_by_shape"] == {}, (
+        "Unpaid runner labels must not create paid runner shape totals"
+    )
+
+
 def test_non_trunk_push_is_not_a_trusted_writer(attempt: tuple[dict, dict]) -> None:
     """Require the trusted branch before assigning a trunk cohort."""
     run, jobs = attempt

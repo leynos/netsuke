@@ -53,6 +53,24 @@ def test_malformed_version_lines_remain_unknown() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("line", "expected_version"),
+    [
+        ('{"stats":{"version":"0.8.9"}}', "0.8.9"),
+        ('{"stats":{"version":"0.8.9"},"version":42}', None),
+    ],
+)
+def test_sccache_version_uses_present_top_level_value_first(
+    line: str, expected_version: str | None
+) -> None:
+    """Use nested stats only when the top-level version is absent."""
+    evidence = parse_log(line)
+
+    assert evidence["versions"]["sccache"] == expected_version, (
+        "A malformed top-level version must not fall back to a nested version"
+    )
+
+
 def test_coverage_selection_records_all_flags_and_doctests() -> None:
     """Record all selected coverage flags and the separate doctest pass."""
     evidence = parse_log(
