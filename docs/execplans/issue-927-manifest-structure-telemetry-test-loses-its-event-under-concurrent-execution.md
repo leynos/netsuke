@@ -241,10 +241,10 @@ seeded duplicate.
   `a7b662da28644c1ebc10a5ad091872408136ef5f`. The subsequent post-cooldown
   `coderabbit review --agent` found three trivial concerns, two overlapping on
   the DEBUG-to-TRACE test. The transition test now proves that the TRACE
-  callsite registers once with `Interest::never()` under the DEBUG filter
-  before the TRACE capture proves the same callsite emits. The reproduction
-  worker now iterates `EMPTY_MANIFEST_COUNTS` rather than duplicating its six
-  entries. Its focused test passed.
+  callsite registers at least once and every observed interest remains `never`
+  under the DEBUG filter before the TRACE capture proves the same callsite
+  emits. The reproduction worker now iterates `EMPTY_MANIFEST_COUNTS` rather
+  than duplicating its six entries. Its focused test passed.
 - [x] (2026-10-23) The first gate run on those review fixes exposed denied
   Clippy lints for a deprecated `drop_span` allowance and a shadowed closure
   binding. Removed the unnecessary override and renamed the binding. The fresh
@@ -252,8 +252,22 @@ seeded duplicate.
   40 doctests passed, 6 ignored), `make typecheck`, `make lint`,
   `make doc-coverage` (98.13%), `make markdownlint` (zero issues), and
   `make nixie` (all diagrams).
-- [ ] Commit and push the CodeRabbit corrections and updated plan, then request
-  a new local review and the proof-assessment follow-up for the new head.
+- [x] (2026-10-23) The next local CodeRabbit review found that concurrent
+  dispatcher registrations can repeat `register_callsite` on a live DEBUG
+  subscriber. Relaxed only the callback-count assertion: it now requires an
+  observation and checks every result is `never`. The full seven-gate sequence
+  passed (4,669 tests, 7 skipped; 40 doctests passed, 6 ignored); after the
+  plan update, `make check-fmt`, `make markdownlint`, and `make nixie` passed.
+- [x] (2026-10-23) Committed this correction and its plan evidence as
+  `e571df4c69912c6cab397f1a2d3dbd85a488e9c0`, pushed with a lease over the
+  verified prior head, and confirmed local, tracking, and remote refs match.
+  The exact-head local review returned zero findings.
+- [x] (2026-10-23) The candidate-bound Loom proof follow-up confirmed that the
+  fixed builder settings prevent successful partial searches and checkpoint
+  resumes. It found no issue with the stated three-thread, 10,000-branch, and
+  three-preemption bounds. Malformed numeric `LOOM_*` values can still fail
+  builder construction, but cannot silently truncate a passing search. Reply:
+  [CodeRabbit proof follow-up](https://github.com/leynos/netsuke/pull/943#issuecomment-6361053063).
 - [ ] Mark the PR ready after the candidate-bound assessments and checks clear,
   then follow PR #943 through merge.
 
