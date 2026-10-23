@@ -9,6 +9,8 @@ import json
 import math
 import typing as typ
 
+from ci_test_evidence_types import INVENTORY_FIELDS, validate_identities
+
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
@@ -17,22 +19,7 @@ if typ.TYPE_CHECKING:
 MAX_BYTES = 10 * 1024 * 1024
 INVENTORY_IDENTITY_FIELDS = ("run_id", "run_attempt", "job_id")
 NUMERIC_FIELDS = {
-    "profiles": frozenset({
-        "raw_count",
-        "raw_bytes",
-        "profdata_bytes",
-        "object_count",
-        "merge_seconds",
-        "export_seconds",
-    }),
-    "resources": frozenset({"peak_rss_mib", "cpu_seconds", "io_bytes"}),
-    "nested_cargo": frozenset({
-        "invocations",
-        "fresh_artifacts",
-        "rebuilt_artifacts",
-        "lock_wait_seconds",
-        "exclusive_tail_seconds",
-    }),
+    section: frozenset(fields) for section, fields in INVENTORY_FIELDS.items()
 }
 
 
@@ -95,10 +82,10 @@ def validate_inventory(
     ------
     TypeError
         If ``inventory`` is not a JSON object, or ``identity`` does not
-        contain three positive integers.
+        contain three integers.
     ValueError
-        If the schema is unsupported, or the inventory belongs to another
-        run attempt or job.
+        If an identity is not positive, the schema is unsupported, or the
+        inventory belongs to another run attempt or job.
 
     """
     if not _is_inventory_object(inventory):
@@ -121,12 +108,10 @@ def _is_inventory_object(value: object) -> typ.TypeGuard[dict[str, object]]:
 
 def _require_valid_identity(identity: tuple[int, int, int]) -> None:
     """Require positive integer run, attempt, and job identifiers."""
-    valid = len(identity) == len(INVENTORY_IDENTITY_FIELDS) and all(
-        type(value) is int and value > 0 for value in identity
-    )
-    if not valid:
-        message = "inventory identity must contain three positive integers"
+    if len(identity) != len(INVENTORY_IDENTITY_FIELDS):
+        message = "inventory identity must contain three integers"
         raise TypeError(message)
+    validate_identities(list(identity))
 
 
 def _has_supported_schema(inventory: dict[str, object]) -> bool:

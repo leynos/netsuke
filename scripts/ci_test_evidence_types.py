@@ -40,6 +40,24 @@ PHASES = {
     "Validate coverage artefact": "coverage_validation",
     "Upload coverage data to CodeScene": "codescene_upload",
 }
+INVENTORY_FIELDS: typ.Final[dict[str, tuple[str, ...]]] = {
+    "profiles": (
+        "raw_count",
+        "raw_bytes",
+        "profdata_bytes",
+        "object_count",
+        "merge_seconds",
+        "export_seconds",
+    ),
+    "resources": ("peak_rss_mib", "cpu_seconds", "io_bytes"),
+    "nested_cargo": (
+        "invocations",
+        "fresh_artifacts",
+        "rebuilt_artifacts",
+        "lock_wait_seconds",
+        "exclusive_tail_seconds",
+    ),
+}
 
 
 def validate_identities(identities: list[object]) -> None:
@@ -301,33 +319,18 @@ def _empty_resources() -> dict[str, int | float | None]:
         "vcpus",
         "disk_used_peak_mib",
         "disk_least_free_mib",
-        "peak_rss_mib",
-        "cpu_seconds",
-        "io_bytes",
+        *INVENTORY_FIELDS["resources"],
     ))
 
 
 def _empty_nested_cargo() -> dict[str, int | float | None]:
     """Create unknown nested-Cargo measurements."""
-    return _unknown_fields((
-        "invocations",
-        "fresh_artifacts",
-        "rebuilt_artifacts",
-        "lock_wait_seconds",
-        "exclusive_tail_seconds",
-    ))
+    return _unknown_fields(INVENTORY_FIELDS["nested_cargo"])
 
 
 def _empty_profiles() -> dict[str, int | float | None]:
     """Create unknown coverage-profile measurements."""
-    return _unknown_fields((
-        "raw_count",
-        "raw_bytes",
-        "profdata_bytes",
-        "object_count",
-        "merge_seconds",
-        "export_seconds",
-    ))
+    return _unknown_fields(INVENTORY_FIELDS["profiles"])
 
 
 def _unknown_fields[T](fields: tuple[str, ...]) -> dict[str, T | None]:

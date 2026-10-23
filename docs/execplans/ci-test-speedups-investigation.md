@@ -4,10 +4,11 @@ Status: IN PROGRESS
 
 The investigation is under way. The implementation snapshot exercised by the
 earlier local gates was based on `origin/main` at
-`051358ee360a97fcbebe2a836e25e106917ed845`. The branch still needs replay onto
-the latest target observed on 20 October,
-`f16c31760aff94a1d91bbbbfac4d024873942ce5`. The earlier investigation base was
-`c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`. The 10 October 2026 reference
+`051358ee360a97fcbebe2a836e25e106917ed845`. The branch was replayed on 23
+October onto the fetched PR target, `origin/main` at
+`6572fb956379f47e70af914bfe4307b740a0b15e`. Its previous target on 20 October
+was `37fc364a3caf6845dc4550666dea779d8b9328e2`; the earlier investigation base
+was `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`. The 10 October 2026 reference
 snapshot is `24293a1b3616872100d379e277540bb1df89203c`. These states remain
 distinct. No current performance baseline or candidate result is claimed.
 
@@ -382,8 +383,15 @@ fidelity comparisons block adoption.
 - [x] Validate the collector with the full local gates on the candidate based
   on `051358ee360a97fcbebe2a836e25e106917ed845`; retain earlier failures as
   dated history rather than current gate status.
-- [ ] Replay onto the latest `origin/main` target, resolve any conflicts, and
-  rerun the full local gates on the exact rebased candidate.
+- [x] Replay onto the fetched PR target `origin/main` at
+  `6572fb956379f47e70af914bfe4307b740a0b15e`; no conflicts occurred.
+- [x] On the corrected rebased candidate, pass `make check-fmt`, `make test`,
+  `make typecheck`, `make lint`, `make test-workflow-contracts`,
+  `make doc-coverage`, and `make markdownlint`.
+- [x] Complete the separate doctest pass with the existing selection and
+  ignore policy.
+- [x] Confirm `make nixie` exits successfully on the final documentation
+  revision; the follow-up gate returned exit 0 and validated every diagram.
 - [x] Keep default CI execution unchanged and defer in-watchdog telemetry to the
   separately reviewed EP-2 milestone.
 - [ ] Propose separate bounded telemetry only after phase-one review.
@@ -503,9 +511,7 @@ or adopted. Update progress and decisions as evidence lands.
 ## Outcomes & retrospective
 
 The offline collector, observation set and dated supplement form the current
-code milestone in draft PR #918. The earlier implementation snapshot was based
-on `origin/main` at `051358ee360a97fcbebe2a836e25e106917ed845`; it has not yet
-been validated on the latest target. The collector does not change default CI
+code milestone in draft PR #918. The collector does not change default CI
 execution or add telemetry inside the Cargo watchdog. It emits schema 2 with
 attempt-scoped start latency, while the published observations remain their
 original schema 1 records. Nextest parsing accepts singular and plural start
@@ -518,8 +524,31 @@ tests with six skips and 136 doctests with 32 ignored; documentation coverage
 was 98.89%. Workflow contracts passed 1,380 tests with three skips, followed by
 27 passing script tests. The test run compiled without the managed sccache
 service and still passed; that is local correctness evidence, not a CI timing
-observation or candidate saving. These results do not validate the latest
-`origin/main` target or the review corrections below.
+observation or candidate saving.
+
+On the 20 October candidate based on
+`37fc364a3caf6845dc4550666dea779d8b9328e2`, formatting, lint, typecheck,
+documentation coverage, workflow contracts, Markdown lint, and Mermaid
+validation passed. Workflow contracts passed 1,407 tests with three skips,
+followed by 27 passing script tests. Documentation coverage was 98.92%.
+`make test` passed 4,275 tests and skipped six, but one nested Cargo fixture
+timed out after waiting on the shared package-cache lock for 900 seconds; 24
+tests did not run. This remains dated history and was not treated as a green
+full local Rust suite.
+
+On the 23 October candidate replayed onto
+`6572fb956379f47e70af914bfe4307b740a0b15e`, the final serial local gate
+sequence passed. `make test` completed all 4,658 Nextest cases (six configured
+skips) and the separate doctest pass. Typecheck passed for Python and Rust;
+lint passed Rustdoc, Clippy, both Whitaker suites, Ruff, Pylint, df12 lints,
+ambrleaks, Interrogate, yamllint, and actionlint. Workflow contracts passed
+1,424 tests with three skips plus 27 supplemental tests. Documentation coverage
+was 98.13%, and Markdown lint found no issues across 199 files. A
+documentation-only follow-up returned exit 0 for `make check-fmt`,
+`make markdownlint`, and `make nixie`; every diagram validated. The added
+inventory tests preserve malformed runtime identity cases through a type-only
+cast and enumerate the fixed evidence sections explicitly. These are local
+correctness results, not CI timing or cost evidence.
 
 The retained observations remain observational, not a controlled baseline. No
 paid CI run was dispatched for this code milestone. A comparable baseline,
@@ -541,16 +570,28 @@ occurred for the offline collector milestone.
 
 ## Revision note
 
-Revised 2026-10-20 against the current PR target `origin/main` at
-`360d475b44df45fb08106c6f01da5242a04e38aa`. The earlier local gate sequence and
-review evidence cover the previous base at
-`051358ee360a97fcbebe2a836e25e106917ed845`; they do not validate this target. A
-fresh CodeRabbit review also identified that a Nextest `SKIP` record has no
-duration and is excluded from the summary's executed count. The parser now
-retains that identity and compares only non-skip outcomes with the executed
-count. The review also identified partial `finished/selected` summary counts;
-the parser now retains those counts and refuses to call a fail-fast run's
-selected identity inventory complete. The latest review also caught the
+Revised 2026-10-23 after replaying the ten-commit issue series onto the current
+PR target `origin/main` at `6572fb956379f47e70af914bfe4307b740a0b15e`. No
+conflicts occurred. `range-diff` maps all ten issue commits; eight patches are
+identical, while two documentation patches differ only because the target
+renumbered ADR references and added linter guidance. The target's `Cargo.lock`
+is preserved; the issue series does not change it. Five local review fixes were
+restored from a verified stash. The first rebased typecheck found three typing
+errors in the inventory contract test; its runtime cases are unchanged and the
+static checks now pass. The corrected candidate passed the final serial gate
+sequence; a documentation-only follow-up also captured successful format,
+Markdown, and diagram gate exits.
+
+The 20 October revision replayed onto the then-current PR target `origin/main`
+at `37fc364a3caf6845dc4550666dea779d8b9328e2`. The earlier local gate sequence
+and review evidence cover the previous base at
+`051358ee360a97fcbebe2a836e25e106917ed845`; the post-rebase results are
+recorded above. A fresh CodeRabbit review also identified that a Nextest `SKIP`
+record has no duration and is excluded from the summary's executed count. The
+parser now retains that identity and compares only non-skip outcomes with the
+executed count. The review also identified partial `finished/selected` summary
+counts; the parser now retains those counts and refuses to call a fail-fast
+run's selected identity inventory complete. The latest review also caught the
 private-module list, missing CLI usage, and dropped non-default Ubicloud
 shapes; the guide, collector entrypoint, and runner-provenance contract now
 cover those cases. The 20 October hosted PR run passed its Linux coverage,
@@ -558,11 +599,13 @@ Windows, and release checks, but the CodeScene check failed on collector
 complexity. CodeScene CLI 1.0.52 reproduced those findings against the current
 base; the collector has since been decomposed by parsing and validation
 responsibility, with no rule suppressions. Its current local delta reports no
-new findings, and the four added helper modules each score 10.0. Local gates,
-fresh review, and hosted confirmation of that repair remain pending. Earlier
-hosted validation, H4 monitoring, and local supervisor evidence remain dated
-history. The controlled baseline, bounded telemetry, and candidate decisions
-remain outstanding.
+new findings, and the four added helper modules each score 10.0. The 20 October
+candidate's full Rust suite hit the documented shared-lock timeout. The 23
+October rebased candidate passed the complete local gate sequence, as recorded
+above. A fresh CodeRabbit review and hosted confirmation on that rebased head
+remain pending. Earlier hosted validation, H4 monitoring, and local supervisor
+evidence remain dated history. The controlled baseline, bounded telemetry, and
+candidate decisions remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

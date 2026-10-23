@@ -12,8 +12,9 @@ records the release-operation observability decision.
 The [CI performance evidence protocol](ci-performance/README.md) owns the
 attempt-scoped observations for issue #894. Its offline collector,
 `scripts/ci_test_evidence.py`, consumes saved GitHub API responses and logs; it
-does not call GitHub, dispatch CI, or change any gate. Its log, Nextest,
-telemetry, and serialization helpers are private to this collector. Application
+does not call GitHub, dispatch CI, or change any gate. Its log, cache, doctest,
+Nextest, telemetry, cohort, validation, and serialization helpers
+(`scripts/ci_test_evidence_*.py`) are private to this collector. Application
 code and workflow execution must not import them. No equivalent collector
 exists in the release-operation observability helper, which instead measures
 its release phases from an injected environment.
