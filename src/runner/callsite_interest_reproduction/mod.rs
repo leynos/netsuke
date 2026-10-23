@@ -118,6 +118,7 @@ fn print_capture_markers(
     oracle: &str,
 ) -> Result<()> {
     write_marker("ISSUE927_GATE_PAUSED=true")?;
+    write_marker("ISSUE927_REGISTRATION_ATTEMPT=true")?;
     write_marker(&format!("ISSUE927_RELEASE_CAUSE={release_cause}"))?;
     write_marker(&format!("ISSUE927_SPAN_FIELDS={:?}", captured.span_fields))?;
     write_marker(&format!("ISSUE927_EVENT_SNAPSHOT={:?}", captured.events))?;

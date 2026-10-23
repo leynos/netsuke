@@ -286,6 +286,30 @@ defaults:
         Ok(())
     }
 
+    /// Reject wrong, duplicated, and additional count tokens.
+    #[test]
+    fn summary_validator_rejects_malformed_count_tokens() -> Result<()> {
+        let summary = synthetic_summary();
+        let wrong_value = summary.replace("variable_count=2", "variable_count=3");
+        ensure!(
+            validate_manifest_structure_events(&[wrong_value], &KNOWN_SHAPE_COUNTS).is_err(),
+            "the validator must reject an incorrect count value"
+        );
+
+        let duplicate_name = summary.replace("macro_count=1", "variable_count=2");
+        ensure!(
+            validate_manifest_structure_events(&[duplicate_name], &KNOWN_SHAPE_COUNTS).is_err(),
+            "the validator must reject a duplicated required count token"
+        );
+
+        let extra_count = format!("{summary} extra_count=1");
+        ensure!(
+            validate_manifest_structure_events(&[extra_count], &KNOWN_SHAPE_COUNTS).is_err(),
+            "the validator must reject an additional count token"
+        );
+        Ok(())
+    }
+
     /// Reject a message-like substring that is not the exact summary field.
     #[test]
     fn summary_validator_requires_the_exact_message_field() -> Result<()> {

@@ -10,31 +10,37 @@ use tracing::{Event, Metadata, Subscriber, dispatcher::Dispatch, span};
 use tracing_subscriber::filter::LevelFilter;
 
 pub(super) const GATE_DEADLINE: Duration = Duration::from_millis(250);
+const ATTEMPT_DEADLINE: Duration = Duration::from_secs(10);
 
 /// Hold the gate outcome and phase channels for the reproduction worker.
 pub(super) struct RegistrationGate {
     paused_sender: Sender<()>,
+    attempted_receiver: Mutex<Receiver<()>>,
     installed_receiver: Mutex<Receiver<()>>,
     deadline: Duration,
     first_summary_registration: AtomicBool,
     was_paused: AtomicBool,
+    was_attempted: AtomicBool,
     release_cause: Mutex<Option<&'static str>>,
     failure: Mutex<Option<String>>,
 }
 
 impl RegistrationGate {
-    /// Build a gate that releases T1 when T2 installs TRACE or after its deadline.
+    /// Build a gate that waits for T2's attempt before timing the installation.
     pub(super) fn new(
         paused_sender: Sender<()>,
+        attempted_receiver: Receiver<()>,
         installed_receiver: Receiver<()>,
         deadline: Duration,
     ) -> Self {
         Self {
             paused_sender,
+            attempted_receiver: Mutex::new(attempted_receiver),
             installed_receiver: Mutex::new(installed_receiver),
             deadline,
             first_summary_registration: AtomicBool::new(false),
             was_paused: AtomicBool::new(false),
+            was_attempted: AtomicBool::new(false),
             release_cause: Mutex::new(None),
             failure: Mutex::new(None),
         }
@@ -48,6 +54,30 @@ impl RegistrationGate {
         self.was_paused.store(true, Ordering::Release);
         if let Err(error) = self.paused_sender.send(()) {
             self.store_failure(format!("signal the paused phase: {error}"));
+        }
+        let attempt = self
+            .attempted_receiver
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .recv_timeout(ATTEMPT_DEADLINE);
+        match attempt {
+            Ok(()) => self.was_attempted.store(true, Ordering::Release),
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                self.store_failure("T2 did not begin capture-dispatch installation".to_owned());
+                *self
+                    .release_cause
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner) = Some("attempt-timeout");
+                return;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                self.store_failure("the T2 installation-attempt signal disconnected".to_owned());
+                *self
+                    .release_cause
+                    .lock()
+                    .unwrap_or_else(PoisonError::into_inner) = Some("attempt-disconnected");
+                return;
+            }
         }
         let result = self
             .installed_receiver
@@ -76,6 +106,11 @@ impl RegistrationGate {
     /// Report whether the T1 registration gate was reached.
     pub(super) fn was_paused(&self) -> bool {
         self.was_paused.load(Ordering::Acquire)
+    }
+
+    /// Report whether T2 acknowledged its capture-dispatch installation attempt.
+    pub(super) fn was_attempted(&self) -> bool {
+        self.was_attempted.load(Ordering::Acquire)
     }
 
     /// Return the recorded release cause after both worker threads finish.
