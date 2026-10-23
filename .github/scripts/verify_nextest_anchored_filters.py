@@ -222,16 +222,26 @@ def main(argv: list[str] | None = None) -> int:
         for selector, name in anchored_selectors()
         if name in parameterized
     ]
-    if not wanted:
+    # An empty read is a fault in this script, not in the configuration: a
+    # discovery that found no anchored filter or no parameterized test has
+    # read nothing, and every check below would pass vacuously over it.
+    if not anchored or not parameterized:
         fail(
-            f"no anchored filter names a parameterized test; the anchored "
-            f"filters name {sorted(anchored)!r} and the parameterized tests "
-            f"are {sorted(parameterized)!r}. The runtime check exists to hold "
-            f"a filtered parameterized test to its case instances, so there is "
-            f"nothing here to verify"
+            f"read {len(anchored)} anchored filter(s) and {len(parameterized)} "
+            f"parameterized test(s); both corpora must be non-empty, or the "
+            f"checks below verify nothing"
         )
     env = instrumented_environment()
     _check_every_filter_selects_something(env)
+    # Both corpora were read, so an empty intersection means only that no
+    # filter currently names a parameterized test. That is a legitimate
+    # configuration (ADR-0059 removed the last grouped one), and the replay
+    # above still holds every filter to selecting a test.
+    if not wanted:
+        print(
+            f"no anchored filter names a parameterized test (anchored: "
+            f"{sorted(anchored)!r}); the per-instance check has no subject"
+        )
     for name, selector in sorted(wanted):
         _check(env, selector, name, parameterized[name])
     names = len({name for name, _ in wanted})
