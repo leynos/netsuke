@@ -145,16 +145,18 @@ def nextest_phase_marker(body: str) -> str | None:
     return None
 
 
+def _skipped_test_count(start: re.Match[str]) -> int | None:
+    """Return skipped tests, or ``None`` when only binaries are reported."""
+    skipped_text = start["skipped_tests"]
+    if skipped_text is not None:
+        return int(skipped_text)
+    return 0 if start["skipped_binaries"] is None else None
+
+
 def _record_start(result: NextestEvidence, start: re.Match[str]) -> None:
     """Record selected and discovered counts from a Nextest start line."""
     selected = int(start["selected"])
-    skipped_text = start["skipped_tests"]
-    if skipped_text is not None:
-        skipped = int(skipped_text)
-    elif start["skipped_binaries"] is None:
-        skipped = 0
-    else:
-        skipped = None
+    skipped = _skipped_test_count(start)
     result.update(
         seconds=None,
         selected_count=selected,
