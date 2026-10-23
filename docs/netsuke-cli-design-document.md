@@ -129,8 +129,9 @@ the optional descriptions.
 The opt-in `netsuke --json help targets --edges` form also exports a versioned
 graph projection from the same restricted query. It records declaration-level
 nodes, authored edge arrays and defaults, rules, conditional flags, and raw
-legacy recipe text. [ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md)
-defines its v1 schema and inherited validation limits.
+legacy recipe text.
+[ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md) defines its v1
+schema and inherited validation limits.
 
 Intuitive **defaults** further contribute to a smooth UX. As noted, if no
 subcommand is given, `netsuke build` is assumed by default. Similarly, common

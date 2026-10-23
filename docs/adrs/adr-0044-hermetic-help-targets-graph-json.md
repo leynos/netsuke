@@ -113,6 +113,30 @@ command text should pin the helper dialect. The graph export preserves recipe
 text as authored and does not claim that future recipe rendering is
 host-independent.
 
+### Configuration-default disposition
+
+The host-default dialect in `StdlibConfig` remains the default for full build
+rendering. The runner resolves its selected `RecipeShell` once and passes it
+through the full manifest-load inputs; full registration stores that shell's
+dialect with `StdlibConfig::with_recipe_shell`. The restricted query loader
+selects `StdlibRegistration::ManifestQuery` directly; it does not construct
+`StdlibConfig`, and query helper registration pins `shell_quote` and
+`shell_join` to `ShellDialect::Sh`. The help early return also happens before
+the runner resolves a recipe shell. Changing the configuration default would
+therefore alter fallback behaviour for full rendering without affecting query
+metadata, so the query-specific registration is the correct boundary for
+host-independent metadata.
+
+The manifest-facing `ShellSelection` vocabulary added on `main` belongs to the
+future structured-command contract
+([ADR-0019](adr-0019-select-allow-listed-structured-command-shells.md),
+milestone 11.2.1). It is deliberately separate from legacy `RecipeShell`
+selection and MiniJinja helpers. Graph v1 exports raw legacy command text and
+has no structured command or selected-shell field; it does not infer that
+vocabulary from a legacy recipe. When structured commands are added under
+milestone 12.1.2, their export should use the established selection vocabulary
+without changing the query metadata dialect or `StdlibConfig` default.
+
 ## Alternatives considered
 
 ### Extend `netsuke graph` with JSON

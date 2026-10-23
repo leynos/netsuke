@@ -32,8 +32,7 @@ actions:
     command: touch conditional-ran
     when: not command_available("netsuke-graph-export-missing")
 targets:
-  - name: input
-    command: touch input-ran
+  - {name: input, command: 'touch input-ran'}
   - name: ready
     command: touch ready-ran
   - name: serial
@@ -233,8 +232,8 @@ fn assert_action_recipes(nodes: &[Value]) -> Result<()> {
     Ok(())
 }
 
-/// Check edge classes, ordering, scripts, rules, and dependency-only recipes.
-fn assert_target_graph_metadata(graph: &Value, nodes: &[Value]) -> Result<()> {
+/// Check each authored edge class and the selected dependency order.
+fn assert_target_dependency_edges_and_ordering(nodes: &[Value]) -> Result<()> {
     let serial = graph_node(nodes, "serial")?;
     ensure!(
         serial.pointer("/dependency_order").and_then(Value::as_str) == Some("serial")
@@ -246,6 +245,12 @@ fn assert_target_graph_metadata(graph: &Value, nodes: &[Value]) -> Result<()> {
                 == Some("ready"),
         "serial nodes should preserve each authored edge kind"
     );
+    Ok(())
+}
+
+/// Check that target script placeholders remain unrendered.
+fn assert_raw_target_scripts(nodes: &[Value]) -> Result<()> {
+    let serial = graph_node(nodes, "serial")?;
     ensure!(
         serial.pointer("/recipe/kind").and_then(Value::as_str) == Some("script")
             && serial
@@ -254,6 +259,11 @@ fn assert_target_graph_metadata(graph: &Value, nodes: &[Value]) -> Result<()> {
                 .is_some_and(|script| script.contains("{{ ins }}") && script.contains("{{ outs }}")),
         "script bodies should remain raw"
     );
+    Ok(())
+}
+
+/// Check rule selectors and raw command and script recipes.
+fn assert_rule_references_and_raw_recipes(graph: &Value, nodes: &[Value]) -> Result<()> {
     ensure!(
         graph_node(nodes, "built")?
             .pointer("/recipe/names/0")
@@ -279,6 +289,11 @@ fn assert_target_graph_metadata(graph: &Value, nodes: &[Value]) -> Result<()> {
         helper_script.contains("{{ shell(") && helper_script.contains("touch shell-ran"),
         "rule scripts should preserve disabled helper calls verbatim"
     );
+    Ok(())
+}
+
+/// Check the closed recipe kind used by targets with dependencies only.
+fn assert_dependency_only_recipes(nodes: &[Value]) -> Result<()> {
     ensure!(
         graph_node(nodes, "aggregate")?
             .pointer("/recipe/kind")
@@ -287,6 +302,14 @@ fn assert_target_graph_metadata(graph: &Value, nodes: &[Value]) -> Result<()> {
         "dependency-only targets should use their closed recipe kind"
     );
     Ok(())
+}
+
+/// Check target edge, script, rule, and dependency-only metadata contracts.
+fn assert_target_graph_metadata(graph: &Value, nodes: &[Value]) -> Result<()> {
+    assert_target_dependency_edges_and_ordering(nodes)?;
+    assert_raw_target_scripts(nodes)?;
+    assert_rule_references_and_raw_recipes(graph, nodes)?;
+    assert_dependency_only_recipes(nodes)
 }
 
 /// Preserve all alternatives whose conditions cannot be evaluated by the query.

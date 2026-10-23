@@ -193,18 +193,21 @@ fn recipe_json(recipe: &Recipe) -> RecipeJson {
     match recipe {
         Recipe::Command {
             command: StringOrList::String(command),
+            ..
         } => RecipeJson::Command {
             form: CommandForm::String,
             commands: vec![command.clone()],
         },
         Recipe::Command {
             command: StringOrList::List(commands),
+            ..
         } => RecipeJson::Command {
             form: CommandForm::List,
             commands: commands.clone(),
         },
         Recipe::Command {
             command: StringOrList::Empty,
+            ..
         } => RecipeJson::DependencyOnly,
         Recipe::Script { script } => RecipeJson::Script {
             script: script.clone(),

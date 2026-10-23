@@ -45,6 +45,19 @@ fn render_localized_long_help(locale: &str, subcommand: Option<&str>) -> String 
     normalized
 }
 
+/// Render localized long help for the nested `help targets` topic.
+fn render_localized_help_targets_long_help(locale: &str) -> String {
+    let localizer: Arc<dyn Localizer> = Arc::from(build_localizer(Some(locale)));
+    let mut command = configured_command(Some(&localizer));
+    let help = command
+        .find_subcommand_mut("help")
+        .expect("help subcommand should exist");
+    let targets = help
+        .find_subcommand_mut("targets")
+        .expect("targets topic should exist");
+    normalize_fluent_isolates(&targets.render_long_help().to_string())
+}
+
 /// Verifies localized long help includes `--config <FILE>` and its Fluent-resolved description.
 #[rstest]
 #[case::en_us(

@@ -248,6 +248,5 @@ fn render_manifest_renders_script_and_rule_ref_recipes() -> Result<()> {
     Ok(())
 }
 
-
 #[path = "tests/query.rs"]
 mod query;

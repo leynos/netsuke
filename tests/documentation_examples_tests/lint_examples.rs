@@ -7,7 +7,6 @@ use super::*;
 /// The documented command is run as written, then its result is read from
 /// the JSON document rather than from localized prose, so a wording change
 /// cannot break the test and a broken report cannot pass it.
-#[cfg(feature = "lint")]
 #[test]
 fn check_example_reports_a_clean_manifest() -> Result<()> {
     let example = documented_example("guide-check-command")?;
@@ -42,7 +41,6 @@ fn check_example_reports_a_clean_manifest() -> Result<()> {
 /// policy example for the effect its selectors claim: a `clarity=off` category
 /// selector followed by a rule selector that promotes one of that category's
 /// rules to `error` must still report that rule.
-#[cfg(feature = "lint")]
 #[test]
 fn check_explain_and_policy_examples_run() -> Result<()> {
     let workspace = manifest_workspace("guide-first-build-manifest")?;
@@ -97,7 +95,6 @@ fn check_explain_and_policy_examples_run() -> Result<()> {
 /// fails on warnings. A manifest with an unreachable target therefore passes
 /// without the file and fails with it, naming that rule: asserting only that
 /// the file is accepted would pass just as well if it were ignored.
-#[cfg(feature = "lint")]
 #[test]
 fn check_configuration_example_is_accepted() -> Result<()> {
     documented_configuration_example_is_accepted(
@@ -149,7 +146,6 @@ fn check_configuration_example_is_accepted() -> Result<()> {
 /// Without the directive the manifest reports `background-job`; with it, the
 /// run is clean. Asserting both directions is what proves the example teaches
 /// a working suppression rather than a manifest that never had a finding.
-#[cfg(feature = "lint")]
 #[test]
 fn check_suppression_example_silences_its_finding() -> Result<()> {
     let workspace = manifest_workspace("guide-check-suppression")?;

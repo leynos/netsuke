@@ -5,6 +5,7 @@ mod documentation_examples;
 #[path = "documentation_examples_tests/cli_examples.rs"]
 mod cli_examples;
 
+#[cfg(feature = "lint")]
 #[path = "documentation_examples_tests/lint_examples.rs"]
 mod lint_examples;
 
