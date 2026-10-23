@@ -65,6 +65,11 @@ def validate_identities(identities: list[object]) -> None:
 
     For example, ``validate_identities([True])`` raises ``TypeError``.
 
+    Parameters
+    ----------
+    identities
+        Values that must each be a positive integer; booleans are rejected.
+
     Raises
     ------
     TypeError
@@ -82,7 +87,19 @@ def validate_identities(identities: list[object]) -> None:
 
 
 def normalize_step_number(value: object) -> int | None:
-    """Normalize a step number; ``normalize_step_number(True)`` returns ``None``."""
+    """Normalize a step number; booleans and negative values return ``None``.
+
+    Parameters
+    ----------
+    value
+        Raw ``number`` field from a saved GitHub step record.
+
+    Returns
+    -------
+    int | None
+        The non-negative integer value, or ``None`` for booleans, negative
+        numbers, and values of another type.
+    """
     match value:
         case bool():
             return None
@@ -215,7 +232,13 @@ class CollectorInputs(typ.TypedDict, total=False):
 
 
 def empty_evidence() -> LogEvidence:
-    """Create unknown fields; for example, ``tested_merge_sha`` is ``None``."""
+    """Create unknown fields; for example, ``tested_merge_sha`` is ``None``.
+
+    Returns
+    -------
+    LogEvidence
+        A fresh mapping in which every unobserved measurement is ``None``.
+    """
     return {
         "versions": _empty_versions(),
         "runner": _empty_runner(),

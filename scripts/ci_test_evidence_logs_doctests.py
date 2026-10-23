@@ -16,10 +16,10 @@ RESULT = re.compile(
 )
 
 
-def closes_doctest_scope(body: str, target: str | None, completed: str | None) -> bool:
+def _closes_doctest_scope(body: str, target: str | None, completed: str | None) -> bool:
     """Close a command or completed target while retaining a new target.
 
-    For example, ``closes_doctest_scope("$ cargo test", None, None)`` is true.
+    For example, ``_closes_doctest_scope("$ cargo test", None, None)`` is true.
 
     Returns
     -------
@@ -62,7 +62,7 @@ class _DoctestAccumulator:
 
     def consume(self, timestamp: str | None, body: str) -> None:
         """Apply one native log line to the active doctest section."""
-        if closes_doctest_scope(body, self.target, self.completed_target):
+        if _closes_doctest_scope(body, self.target, self.completed_target):
             self.reset_scope()
         self.announce_target(body)
         self.start_batch(timestamp, body)
