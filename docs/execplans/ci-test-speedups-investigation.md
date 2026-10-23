@@ -12,6 +12,20 @@ was `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`. The 10 October 2026 reference
 snapshot is `24293a1b3616872100d379e277540bb1df89203c`. These states remain
 distinct. No current performance baseline or candidate result is claimed.
 
+While review was pending, `main` advanced to
+`8a961000859c02862454338fda6c4dd65bda2aa1`. The branch was rebased again from
+`b2a5117e495be9149b63c2a2fa054be2c49facdb`; the replay had no conflicts and
+`git range-diff` matched all 21 commits. The target-only delta did not change
+`.github/workflows/ci.yml`, `.github/actions/linux-gate-cache/action.yml`,
+`tests/command_env_ui_tests.rs` or `.config/nextest.toml`. At rebased head
+`b1840c2f2542b60caf74432cc13e5edf7eed5c22`, `make check-fmt`, `make test`,
+`make typecheck` and `make lint` passed. Ordinary PR workflows completed
+successfully on that head:
+
+- [CI](https://github.com/leynos/netsuke/actions/runs/39930296912)
+- [Netsukefile](https://github.com/leynos/netsuke/actions/runs/39930296876)
+- [Release](https://github.com/leynos/netsuke/actions/runs/39930297113)
+
 ## Purpose / big picture
 
 Reduce the elapsed time of Netsuke's existing CI test gate while preserving
