@@ -51,26 +51,18 @@ fn dependency_only_graph(dependencies: &[String], order: DependencyOrder) -> Bui
 /// Resolve each sidecar to the real dependency it reaches, in staged order.
 ///
 /// A sidecar names a relay phony rather than the dependency itself, so the
-/// dependency is read from the relay's own build line. See
+/// dependency is read from the relay's own build line. The parse lives in
+/// [`super::resolved_dependency`] rather than here because the sibling serial
+/// suite resolves the same indirection; one copy means a change to the staging
+/// format cannot leave the two suites disagreeing about what a sidecar reveals,
+/// which is a divergence no gate would catch. See
 /// [`super::super::dyndep`]'s module documentation for why the indirection
-/// exists; a sidecar whose relay line is missing resolves to `None` rather than
-/// to an arbitrary name.
+/// exists.
 fn staged_dependencies(bundle: &GeneratedNinja) -> Vec<Option<String>> {
     bundle
         .dyndep_files()
         .iter()
-        .map(|sidecar| {
-            let relay = sidecar
-                .content()
-                .lines()
-                .find_map(|line| line.split_once(" | ").map(|(_, path)| path.trim()))?;
-            let prefix = format!("build {relay}: phony | ");
-            bundle
-                .build_file()
-                .lines()
-                .find_map(|line| line.strip_prefix(prefix.as_str()))
-                .map(str::to_owned)
-        })
+        .map(|sidecar| super::resolved_dependency(bundle.build_file(), sidecar.content()))
         .collect()
 }
 

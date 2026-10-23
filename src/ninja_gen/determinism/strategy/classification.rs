@@ -180,7 +180,7 @@ const fn combination_bit(always: bool, restat: bool) -> u8 {
 /// Split into the scalar flags and the path vectors rather than written as one
 /// nine-clause conjunction. The two halves fail for different reasons — a flag
 /// differs because the generator drew a different shape, a path list differs
-/// because a permutation was not normalised — and a reader diagnosing a
+/// because a permutation was not normalized — and a reader diagnosing a
 /// counter-example needs to know which.
 fn same_content(left: &BuildEdge, right: &BuildEdge) -> bool {
     same_flags(left, right) && same_path_lists(left, right)

@@ -31,9 +31,12 @@ Reachability was measured rather than reasoned about, on Ninja 1.11.1 and on
 the debug build of 1.11.1. The measurement used the *emitted* bundle for the
 crashing shape, rewritten into the pre-relay form, not a hand-built model of
 it; the same bundle as the emitter now produces is accepted. Which targets
-Ninja is asked about is itself a variable: the pre-relay bundle dies when the
-invocation names the graph's full explicit-output set and survives when asked
-about one output alone. Three conditions are needed together:
+Ninja is asked about is itself a variable, and the deciding question is whether
+the request reaches the staged gate at all: the pre-relay bundle dies when the
+invocation names the graph's full explicit-output set, and dies when it names
+the staged gate on its own, while the requests that never reach the gate — an
+output lying outside it, such as one of the ordinary outputs — exit 0. Three
+conditions are needed together:
 
 1. a node revealed by a later sidecar, not the first one;
 2. an **order-only** edge naming that node, loaded earlier in the file — an

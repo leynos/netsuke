@@ -4,7 +4,7 @@
      ///
      /// Returns an error if the action cannot be serialised to JSON.
      pub fn hash(action: &Action) -> Result<String, serde_json::Error> {
-+        // MUT-HASHMETA: drop `pool` before canonicalising, so two actions
++        // MUT-HASHMETA: drop `pool` before canonicalizing, so two actions
 +        // differing only in their throttling pool intern to one identifier.
 +        let mut value = serde_json::to_value(action)?;
 +        if let serde_json::Value::Object(fields) = &mut value {
