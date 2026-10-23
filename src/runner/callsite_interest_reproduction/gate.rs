@@ -6,11 +6,21 @@ use std::sync::{
     mpsc::{self, Receiver, Sender},
 };
 use std::time::Duration;
+
+use crate::test_tracing_capture::is_manifest_summary_metadata;
 use tracing::{Event, Metadata, Subscriber, dispatcher::Dispatch, span};
 use tracing_subscriber::filter::LevelFilter;
 
 pub(super) const GATE_DEADLINE: Duration = Duration::from_millis(250);
-const ATTEMPT_DEADLINE: Duration = Duration::from_secs(10);
+
+/// Configure the bounded wait for T2's real registration callback.
+#[derive(Clone, Copy)]
+pub(super) struct RegistrationGateOptions {
+    /// Maximum time T1 waits for registration or installation.
+    pub(super) deadline: Duration,
+    /// Whether reaching the deadline before T2 registers is the expected path.
+    pub(super) attempt_timeout_is_expected: bool,
+}
 
 /// Hold the gate outcome and phase channels for the reproduction worker.
 pub(super) struct RegistrationGate {
@@ -18,6 +28,7 @@ pub(super) struct RegistrationGate {
     attempted_receiver: Mutex<Receiver<()>>,
     installed_receiver: Mutex<Receiver<()>>,
     deadline: Duration,
+    attempt_timeout_is_expected: bool,
     first_summary_registration: AtomicBool,
     was_paused: AtomicBool,
     was_attempted: AtomicBool,
@@ -26,18 +37,19 @@ pub(super) struct RegistrationGate {
 }
 
 impl RegistrationGate {
-    /// Build a gate that waits for T2's attempt before timing the installation.
+    /// Build a gate that waits for the real registration callback or deadline.
     pub(super) fn new(
         paused_sender: Sender<()>,
         attempted_receiver: Receiver<()>,
         installed_receiver: Receiver<()>,
-        deadline: Duration,
+        options: RegistrationGateOptions,
     ) -> Self {
         Self {
             paused_sender,
             attempted_receiver: Mutex::new(attempted_receiver),
             installed_receiver: Mutex::new(installed_receiver),
-            deadline,
+            deadline: options.deadline,
+            attempt_timeout_is_expected: options.attempt_timeout_is_expected,
             first_summary_registration: AtomicBool::new(false),
             was_paused: AtomicBool::new(false),
             was_attempted: AtomicBool::new(false),
@@ -59,19 +71,27 @@ impl RegistrationGate {
             .attempted_receiver
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .recv_timeout(ATTEMPT_DEADLINE);
+            .recv_timeout(self.deadline);
         match attempt {
             Ok(()) => self.was_attempted.store(true, Ordering::Release),
             Err(mpsc::RecvTimeoutError::Timeout) => {
-                self.store_failure("T2 did not begin capture-dispatch installation".to_owned());
+                let cause = if self.attempt_timeout_is_expected {
+                    "deadline"
+                } else {
+                    self.store_failure(
+                        "T2 did not reach summary callsite registration before the deadline"
+                            .to_owned(),
+                    );
+                    "attempt-timeout"
+                };
                 *self
                     .release_cause
                     .lock()
-                    .unwrap_or_else(PoisonError::into_inner) = Some("attempt-timeout");
+                    .unwrap_or_else(PoisonError::into_inner) = Some(cause);
                 return;
             }
             Err(mpsc::RecvTimeoutError::Disconnected) => {
-                self.store_failure("the T2 installation-attempt signal disconnected".to_owned());
+                self.store_failure("the T2 registration-callback signal disconnected".to_owned());
                 *self
                     .release_cause
                     .lock()
@@ -108,9 +128,21 @@ impl RegistrationGate {
         self.was_paused.load(Ordering::Acquire)
     }
 
-    /// Report whether T2 acknowledged its capture-dispatch installation attempt.
+    /// Report whether T2 reached the capture layer's summary registration callback.
     pub(super) fn was_attempted(&self) -> bool {
-        self.was_attempted.load(Ordering::Acquire)
+        if self.was_attempted.load(Ordering::Acquire) {
+            return true;
+        }
+        let observed = self
+            .attempted_receiver
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .try_recv()
+            .is_ok();
+        if observed {
+            self.was_attempted.store(true, Ordering::Release);
+        }
+        observed
     }
 
     /// Return the recorded release cause after both worker threads finish.
@@ -152,7 +184,7 @@ where
         &self,
         metadata: &'static Metadata<'static>,
     ) -> tracing::subscriber::Interest {
-        if is_manifest_summary(metadata) {
+        if is_manifest_summary_metadata(metadata) {
             self.gate.pause_first_summary_registration();
         }
         self.inner.register_callsite(metadata)
@@ -220,12 +252,4 @@ where
     fn max_level_hint(&self) -> Option<LevelFilter> {
         Some(LevelFilter::TRACE)
     }
-}
-
-/// Match only the fixed production summary-event callsite.
-fn is_manifest_summary(metadata: &Metadata<'_>) -> bool {
-    metadata.is_event()
-        && metadata.level() == &tracing::Level::TRACE
-        && metadata.target() == "netsuke::runner::manifest_structure_telemetry"
-        && metadata.fields().field("message").is_some()
 }

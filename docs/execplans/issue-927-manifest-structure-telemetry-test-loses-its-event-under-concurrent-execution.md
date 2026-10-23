@@ -110,10 +110,23 @@ seeded duplicate.
   showed all 11 commits unchanged. The target did not change `Cargo.lock`, so
   the branch lockfile was retained without regeneration. The three overlapping
   documentation files preserve both branches' additions.
-- [ ] (2026-10-23) Revalidate the rebased candidate, including the source-doc
-  fix for Codex review finding 4357772141, then commit and publish it with
-  force-with-lease. The prior full gate results and hosted reviews refer to the
-  pre-rebase head and must be refreshed against the new head.
+- [x] (2026-10-23) Revalidated candidate
+  `e8acacc4b462da7b0eae2fe49d816b416264b804`, including the source-doc fix for
+  Codex finding 4357772141. Formatting, lint, typecheck, doc coverage (98.15%),
+  tests (4,686 passed, 7 skipped; 40 doctests passed, 6 ignored), Markdown
+  lint, and Mermaid validation passed. Local CodeRabbit review found no
+  findings. Published with force-with-lease after confirming `origin/main` at
+  `8a961000859c02862454338fda6c4dd65bda2aa1`; refreshed upstream tracking and
+  verified remote parity. Prior hosted reviews and Actions were on the old
+  head, so current-head review and Actions evidence remain outstanding.
+- [x] (2026-10-23) Verified CodeRabbit findings 4357879835 and 4357879842 on
+  the rebased source. The registration signal now originates in the capture
+  layer's actual summary `register_callsite` callback, and an absent child mode
+  makes a direct ignored-worker invocation a no-op. The fresh-process parent
+  test passed both modes with the required markers; directly invoking the
+  ignored worker without its mode also passed. Full candidate gates and a
+  managed current-head review remain outstanding because automatic reviews
+  paused after the rebase.
 - [x] (2026-10-23) Reran the corrected Loom model and both fresh-process modes.
   At bound 3, Loom explored 312 unanchored executions with 156 lost-interest
   outcomes and 99 anchored executions with none. The child markers showed the
@@ -274,6 +287,23 @@ seeded duplicate.
   three-preemption bounds. Malformed numeric `LOOM_*` values can still fail
   builder construction, but cannot silently truncate a passing search. Reply:
   [CodeRabbit proof follow-up](https://github.com/leynos/netsuke/pull/943#issuecomment-6361053063).
+- [x] (2026-10-23) Reproduced and repaired CodeRabbit findings 4357879835 and
+  4357879842. T2 now signals from the capture layer's actual summary
+  `register_callsite` callback, and a direct ignored-worker invocation without
+  its child-only mode exits as a no-op. The scoped hook is reachable only in
+  test builds; the binary's test-only capture module is public within that test
+  crate so dead-code lint does not reject a helper used by library tests. The
+  focused parent test passed both child modes, and the direct worker invocation
+  passed.
+- [x] (2026-10-23) Repeated the complete sequential validation on working tree
+  `e8acacc4b462da7b0eae2fe49d816b416264b804` plus the six review-fix files.
+  Both focused worker checks and all seven gates passed: 4,687 tests passed, 7
+  skipped; doctests had 40 passed and 6 ignored; typecheck and lint passed; doc
+  coverage was 98.15%; Markdown lint found zero issues; and Nixie validated
+  every diagram. Logs use the `/tmp/*-review-fixes-5.out` suffix, with focused
+  logs ending in `-focused-reproduction-5.out` and `-focused-worker-5.out`. The
+  previous stop-hook failures were caused by a full filesystem; the final run
+  completed with disk space and compiler admission healthy.
 - [ ] Mark the PR ready after the candidate-bound assessments and checks clear,
   then follow PR #943 through merge.
 
