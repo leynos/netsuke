@@ -1,14 +1,16 @@
 //! Packaging smoke tests that guard Cargo's publish boundary.
 //!
-//! These tests verify the packaged crate builds for publication and ensure
-//! build-script sources remain in its manifest, where an omission would
-//! otherwise fail only during release.
+//! These tests ensure build-script sources remain in the packaged crate's
+//! manifest, where an omission would otherwise fail only during release. The
+//! file-list assertions below are derived from the source tree rather than
+//! listed, so a narrowed `include` that dropped a platform-gated module is
+//! caught on every platform rather than only by the platform that compiles it.
 //!
-//! The verification build runs on the Linux lane only; Windows passes
-//! `--no-verify` (see `PUBLISH_DRY_RUN_ARGS`). The file-list assertions below
-//! are derived from the source tree rather than listed, so a narrowed
-//! `include` that dropped a platform-gated module is caught on every platform
-//! rather than only by the platform that compiles it.
+//! `cargo package --list` compiles nothing, so this test spawns no build. The
+//! verification build that `cargo publish --dry-run` performs runs outside the
+//! test suite, through `make test-package-verify`, because its cost is a cold
+//! compile of the packaged crate that no per-test allowance can bound (see
+//! ADR-0059).
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
@@ -70,39 +72,6 @@ fn required_readme_paths() -> Result<Vec<String>> {
     );
     Ok(readmes)
 }
-
-/// The `cargo publish --dry-run` arguments this platform runs.
-///
-/// Windows omits the verification build. That build compiles the packaged
-/// crate and its whole dependency graph from scratch, and on the four-vCPU
-/// GitHub-hosted `windows-latest` gate it measured a median of 240.8s and a
-/// maximum of 265.6s across the 58 runs between run 33890685806 and run
-/// 34064668331; the same work costs about 25s on the cached Linux lane.
-///
-/// This relocates the contract rather than dropping it. What Cargo puts in a
-/// package does not vary by operating system, so the Linux coverage lane runs
-/// this same test with the verification build and keeps "the packaged crate
-/// builds for publication" covered, while every platform still reads
-/// `cargo package --list` below for the manifest-inclusion assertion that this
-/// test is named for. See leynos/netsuke#673.
-const PUBLISH_DRY_RUN_ARGS: &[&str] = if cfg!(windows) {
-    &[
-        "publish",
-        "--dry-run",
-        "--no-verify",
-        "--allow-dirty",
-        "-p",
-        "netsuke-build",
-    ]
-} else {
-    &[
-        "publish",
-        "--dry-run",
-        "--allow-dirty",
-        "-p",
-        "netsuke-build",
-    ]
-};
 
 /// Roots whose Rust sources the crate compiles and must therefore package.
 const COMPILED_SOURCE_ROOTS: [&str; 2] = ["src", "build_l10n_audit"];
@@ -174,25 +143,6 @@ fn packaged_manifest_retains_build_script_sources() {
     let subscriber = tracing_subscriber::fmt().with_test_writer().finish();
     tracing::subscriber::with_default(subscriber, || {
         let cargo_binary = env::var_os("CARGO").unwrap_or_else(|| "cargo".into());
-        // Cargo verifies freshly extracted package sources while reusing the
-        // caller's build directory for matching dependency artefacts.
-        let publish_started_at = Instant::now();
-        let publish_output = cargo_subprocess(&cargo_binary)
-            .args(PUBLISH_DRY_RUN_ARGS)
-            .current_dir(env!("CARGO_MANIFEST_DIR"))
-            .output()
-            .unwrap_or_else(|error| panic!("run cargo publish --dry-run: {error}"));
-        tracing::info!(
-            elapsed_seconds = publish_started_at.elapsed().as_secs_f64(),
-            "cargo publish --dry-run completed"
-        );
-
-        assert!(
-            publish_output.status.success(),
-            "cargo publish --dry-run should succeed: {}",
-            String::from_utf8_lossy(&publish_output.stderr)
-        );
-
         let package_started_at = Instant::now();
         let list_output = cargo_subprocess(&cargo_binary)
             .args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])
@@ -223,40 +173,6 @@ fn packaged_manifest_retains_build_script_sources() {
         assert_required_paths_present(&packaged_paths, &readme_paths, &source_paths);
         assert_forbidden_roots_absent(&packaged_paths);
     });
-}
-
-/// The verification build is skipped on Windows and run everywhere else.
-///
-/// Scenario: read the publish arguments this build was compiled with.
-/// Invariant: `--no-verify` appears exactly on Windows, while the dry run and
-/// the package selection are unconditional, so relocating the verification can
-/// never silently relocate the dry run or widen it to another package.
-#[test]
-fn publish_dry_run_skips_verification_only_on_windows() {
-    assert_eq!(
-        PUBLISH_DRY_RUN_ARGS.first().copied(),
-        Some("publish"),
-        "the subcommand should stay `publish`"
-    );
-    assert!(
-        PUBLISH_DRY_RUN_ARGS.contains(&"--dry-run"),
-        "the dry run is unconditional; a real publish must never run from a test"
-    );
-    assert_eq!(
-        PUBLISH_DRY_RUN_ARGS
-            .iter()
-            .position(|argument| *argument == "-p")
-            .and_then(|index| PUBLISH_DRY_RUN_ARGS.get(index + 1))
-            .copied(),
-        Some("netsuke-build"),
-        "the packaged crate should stay `netsuke-build`"
-    );
-    assert_eq!(
-        PUBLISH_DRY_RUN_ARGS.contains(&"--no-verify"),
-        cfg!(windows),
-        "Windows relocates the verification build to the Linux lane; \
-         every other platform runs it here"
-    );
 }
 
 #[test]

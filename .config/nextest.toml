@@ -20,8 +20,11 @@
 # after 60s; terminate a test that has run for five warning periods (300s).
 #
 # This is the profile's own allowance, and it governs every test no override
-# matches. The mutation compile gate widens it to ten periods, and the cold
-# package-publish check gets fifteen. The largest allowance is 900 s.
+# matches. The mutation compile gate widens it to ten periods, which makes 600 s
+# the largest allowance. Apart from that `#[ignore]`d gate, no test in this
+# profile starts a Cargo build: ADR-0059 moved compile-time contracts into the
+# build and doctest passes, and package verification into
+# `make test-package-verify`.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -49,26 +52,10 @@ max-threads = 1
 # through `filter` and no `test-group`, the same field carrying the same defect,
 # and a guard reading only the group's filters could not see it.
 [[profile.default.overrides]]
-# `cargo publish --dry-run` verifies fresh package sources while reusing the
-# caller's build directory for matching dependency artefacts. Allow fifteen
-# periods for cold dependencies and compiler-queue delays without widening
-# unrelated tests or adding retries.
-#
-# Previous full-suite runs passed at 208.921 s and reached the default cap at
-# 300.017 s during concurrent Cargo work. Runs with the former private-target
-# harness later reached 600 s and 720 s while compiler admission was saturated;
-# the latest was still running when Nextest stopped it at 720.021 s. Fifteen
-# periods allow another three minutes for cold or contended package builds,
-# with the override kept scoped to this one test.
-filter = 'test(/^packaged_manifest_retains_build_script_sources($|::)/)'
-test-group = "nested-cargo-builds"
-success-output = "immediate"
-slow-timeout = { period = "60s", terminate-after = 15 }
-
-[[profile.default.overrides]]
-# Compiles one patched tree per mutation patch, so it belongs in the same
-# serialized group as the other child-Cargo tests. It is `#[ignore]`-gated
-# and run by `make test-kani-mutations`, not by the default profile.
+# Compiles one patched tree per mutation patch, so it belongs in the
+# serialized child-Cargo group, of which it is the only member. It is
+# `#[ignore]`-gated and run by `make test-kani-mutations`, not by the default
+# profile.
 filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
@@ -102,13 +89,6 @@ slow-timeout = { period = "60s", terminate-after = 10 }
 filter = 'test(/^coverage_map_status_is_reported($|::)/)'
 success-output = "immediate"
 
-[[profile.default.overrides]]
-# These readers inspect the shared target/profile completion files that nested
-# Cargo preparations can regenerate. Keep readers and writers mutually exclusive.
-filter = 'test(/^generated_completion_exposes_the_clap_command_tree($|::)/)'
-test-group = "nested-cargo-builds"
-success-output = "immediate"
-
 [profile.ci]
 # The CI-only profile. It exists solely to carry the whole-run budget, and
 # inherits everything else from `default`, including that profile's
@@ -135,18 +115,16 @@ success-output = "immediate"
 # pass the coverage action runs after it is not a nextest run, so nothing in
 # this file bounds it and its own cargo watchdog does.
 #
-# The 16-minute global timeout is above the 900s largest per-test allowance.
-# The mutation compile gate keeps its 600s budget. The stub-environment
-# compile-fail, split-build, and cold package-publish
-# checks each get 900s. Both comparisons hold:
+# The 16-minute global timeout is above the 600s largest per-test allowance,
+# the mutation compile gate's. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
-#   960 s          > 900 s
+#   960 s          > 600 s
 #
-# The margin is 60s rather than 480s, and it is not slack to be spent: a
-# per-test allowance at or above the whole-run budget would make the run end
-# before the test it contains could use its budget, so the largest targeted
-# allowance stays at 900s -- fifteen 60s periods, strictly below 960s.
+# The margin is not slack to be spent: a per-test allowance at or above the
+# whole-run budget would make the run end before the test it contains could
+# use its budget, so any targeted allowance must stay strictly below 960s, at
+# most fifteen 60s periods (900s).
 #
 # The 1,980s cargo watchdog covers the full nextest termination, cold-build,
 # and report window with 50s to spare: 960s + 70s + 600s + 300s is 1,930s.

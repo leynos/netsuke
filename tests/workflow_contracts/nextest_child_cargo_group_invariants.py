@@ -46,7 +46,11 @@ if typ.TYPE_CHECKING:  # pragma: no cover - imported for annotations only
 
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 CHILD_CARGO_GROUP = "nested-cargo-builds"
-NESTED_CARGO_BUILD_TESTS = ("packaged_manifest_retains_build_script_sources",)
+# The only test permitted to start a build-capable child Cargo command. It is
+# `#[ignore]`-gated and runs through `make test-kani-mutations`, never in the
+# default suite; ADR-0059 moved every other such test's compiler work into the
+# build phase, the doctest pass, or `make test-package-verify`.
+NESTED_CARGO_BUILD_TESTS = ("every_patched_tree_compiles_under_denied_warnings",)
 # Nextest names a parameterized `#[rstest]` by its instances, `name::case_1_…`.
 # `test(=NAME)` compares the whole name, so it matches none of them and the test
 # silently leaves the group; `test(/^NAME($|::)/)` matches the plain name and
