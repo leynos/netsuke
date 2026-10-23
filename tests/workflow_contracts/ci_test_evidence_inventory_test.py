@@ -6,7 +6,12 @@ import typing as typ
 import pytest
 from ci_test_evidence import CollectorInputs, collect_attempt
 from ci_test_evidence_logs import parse_log
-from ci_test_evidence_telemetry import apply_inventory, load_inventory
+from ci_test_evidence_telemetry import (
+    NUMERIC_FIELDS,
+    apply_inventory,
+    load_inventory,
+    validate_inventory,
+)
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -40,6 +45,31 @@ def test_inventory_accepts_matching_attempt(tmp_path: Path) -> None:
     assert load_inventory(path, (123, 2, 456))["run_attempt"] == 2, (
         "An inventory must retain its validated attempt identity"
     )
+
+
+@pytest.mark.parametrize(
+    ("identity", "error", "message"),
+    [
+        ((123, True, 456), TypeError, "invalid integer identity"),
+        ((0, 2, 456), ValueError, "invalid positive identity"),
+        ((123, 2), TypeError, "three integers"),
+    ],
+    ids=["boolean-identity", "non-positive-identity", "wrong-arity"],
+)
+def test_inventory_rejects_invalid_expected_identity(
+    identity: tuple[object, ...], error: type[Exception], message: str
+) -> None:
+    """Retain type, positivity, and tuple-length identity failure semantics."""
+    with pytest.raises(error, match=message):
+        validate_inventory(
+            {
+                "schema": 1,
+                "run_id": 123,
+                "run_attempt": 2,
+                "job_id": 456,
+            },
+            typ.cast("tuple[int, int, int]", identity),
+        )
 
 
 def test_collect_attempt_rejects_inventory_from_another_attempt(
@@ -152,3 +182,26 @@ def test_inventory_ignores_invalid_numbers_and_private_fields() -> None:
     assert "SUPERSECRET" not in json.dumps(evidence), (
         "Private inventory fields must never be exported"
     )
+
+
+def test_allowlisted_inventory_fields_default_to_unknown() -> None:
+    """Keep every allow-listed measure explicit when telemetry is absent."""
+    evidence = parse_log("")
+    evidence_sections = {
+        "profiles": evidence["profiles"],
+        "resources": evidence["resources"],
+        "nested_cargo": evidence["nested_cargo"],
+    }
+
+    assert evidence_sections.keys() == NUMERIC_FIELDS.keys(), (
+        "The evidence shape must cover every allow-listed inventory section"
+    )
+
+    for section, fields in NUMERIC_FIELDS.items():
+        section_evidence = evidence_sections[section]
+        assert set(fields) <= section_evidence.keys(), (
+            f"Missing inventory defaults for {section}"
+        )
+        assert all(section_evidence[field] is None for field in fields), (
+            f"Unobserved inventory fields must stay null in {section}"
+        )
