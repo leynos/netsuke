@@ -1920,6 +1920,9 @@ path quoting, and the large-recipe response-file transport. Neither step sets
 remains an ordinary PowerShell session. The rest of `build-test-windows`
 continues to use Git Bash only for the repository's POSIX Makefile quality
 gates, exactly as `Lint (Whitaker)` already overrides the default to `pwsh`.
+The smoke harness keeps process environment capture and restoration in
+`scripts/windows-recipe-smoke/environment.ps1`, separate from its scenario
+orchestration and path-placeholder fixture helpers.
 
 These steps were in a second job, `windows-native-recipe-smoke`, that `needs`-ed
 `build-test-windows`. That made it a strict serial tail on every pull request:
@@ -5741,9 +5744,12 @@ general shell parser, and is not intended for reuse outside that boundary. The
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
 tracks raw native-command arguments, and `tokens/mod.rs` recognizes the token
-boundaries and syntax used by those scanners. They share a shell-specific
-boundary but keep distinct state responsibilities. `PowerShellSourceCharacter`
-binds a Unicode-scalar index to the borrowed source buffer and provides checked
+boundaries and syntax used by those scanners. The private
+`tokens/member_expressions.rs` helper recognizes variable roots through member
+and index chains; keep it within the PowerShell token scanner rather than
+reusing it as a general expression parser. They share a shell-specific boundary
+but keep distinct state responsibilities. `PowerShellSourceCharacter` binds a
+Unicode-scalar index to the borrowed source buffer and provides checked
 lookaround only within the PowerShell scanner; it is not a shared shell
 abstraction. The sibling `src/ir/cmd_interpolate/command_substitution.rs` owns
 the local quote and parenthesis state needed to keep protected `$()` bodies

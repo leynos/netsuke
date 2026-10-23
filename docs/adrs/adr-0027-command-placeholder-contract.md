@@ -43,8 +43,7 @@ pipeline terminator; a semicolon does not end it.
 Amended on 2026-10-18 to document the quoted PowerShell script placeholder
 security fix for issue #846.
 
-Amended on 2026-10-18 after review of PowerShell comment and stop-parsing
-edges.
+Amended on 2026-10-18 after review of PowerShell comment and stop-parsing edges.
 
 Amended on 2026-10-19 for issue #846. The PowerShell script insertion-site
 contract and scanner review corrections are recorded in the addenda below.
@@ -157,9 +156,10 @@ Netsuke-owned values: `quote_double_quoted_path` in
 `src/ir/cmd_interpolate/mod.rs` backslash-escapes a backtick that falls inside
 a *Netsuke-substituted path* landing in a double-quoted context.
 
-**Route and recipe-kind scope.** PowerShell sits outside the backtick half of
-the invariant, because a backtick is its escape character rather than a
-command-substitution delimiter, and outside the parity check entirely:
+**Route and recipe-kind scope.** PowerShell has no backtick
+command-substitution region, but it rejects a marker immediately after a
+backtick because that escape character would escape the path literal's opening
+quote. PowerShell is outside the parity check entirely:
 `is_valid_command_for_shell` returns `true` unconditionally for
 `RecipeShell::PowerShell`. It is **inside** the `$( … )` half. The PowerShell
 traversal treats a marker inside a command substitution, or inside any quoted

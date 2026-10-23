@@ -81,15 +81,28 @@ fn has_numeric_expression_boundary(literal_start: PowerShellSourceCharacter<'_>)
     let Some(previous) = literal_start.previous() else {
         return true;
     };
-    if previous.is_token_separator() || previous.value() == '=' {
-        return true;
-    }
-    if !matches!(previous.value(), '+' | '-') {
+    previous.is_token_separator()
+        || previous.value() == '='
+        || has_unary_sign_boundary(previous)
+        || has_binary_operator_boundary(previous)
+}
+
+/// Recognize a signed literal after a separator or another numeric operator.
+fn has_unary_sign_boundary(sign: PowerShellSourceCharacter<'_>) -> bool {
+    if !matches!(sign.value(), '+' | '-') {
         return false;
     }
-    previous.previous().is_none_or(|before_sign| {
-        before_sign.is_token_separator() || matches!(before_sign.value(), '=' | '(')
+    sign.previous().is_none_or(|before_sign| {
+        before_sign.is_token_separator()
+            || matches!(before_sign.value(), '=' | '(')
+            || has_binary_operator_boundary(before_sign)
     })
+}
+
+/// Recognize a numeric operand immediately after an arithmetic operator.
+fn has_binary_operator_boundary(operator: PowerShellSourceCharacter<'_>) -> bool {
+    matches!(operator.value(), '+' | '-' | '*' | '/' | '%')
+        && operator_follows_numeric_literal(operator)
 }
 
 /// Include exponent signs only when they belong to the numeric token.

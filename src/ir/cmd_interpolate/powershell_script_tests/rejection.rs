@@ -17,6 +17,9 @@ use super::*;
 #[case::double_quoted_here_string_crlf(power_shell_rejection_case!(format!("@\"\r\nbody \" quote {OUTS_TOKEN}\r\n\"@")))]
 #[case::single_quoted_here_string_after_literal_quote(power_shell_rejection_case!(format!("@'\nbody ' quote {INS_TOKEN}\n'@")))]
 #[case::double_quoted_here_string_after_literal_quote(power_shell_rejection_case!(format!("@\"\nbody \" quote {OUTS_TOKEN}\n\"@")))]
+#[case::subexpression_hides_double_here_string_terminator(power_shell_rejection_case!(format!(
+    "@\"\n$('\n\"@\nWrite-Output {INS_TOKEN}\n')\n\"@"
+)))]
 #[case::stop_parsing_after_hash_in_argument(power_shell_rejection_case!(format!("cmd /c echo prefix#suffix --% {INS_TOKEN}")))]
 #[case::stop_parsing_after_at_hash_in_argument(power_shell_rejection_case!(format!("cmd /c echo prefix@#suffix --% {INS_TOKEN}")))]
 #[case::stop_parsing_after_semicolon(power_shell_rejection_case!(format!("cmd /c --% literal; Write-Output {INS_TOKEN}")))]

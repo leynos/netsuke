@@ -18,6 +18,7 @@ param(
 
 $smokeScriptDirectory = Join-Path $PSScriptRoot 'windows-recipe-smoke'
 . (Join-Path $smokeScriptDirectory 'bash.ps1')
+. (Join-Path $smokeScriptDirectory 'environment.ps1')
 . (Join-Path $smokeScriptDirectory 'powershell-paths.ps1')
 
 function Assert-Equal {
@@ -50,34 +51,6 @@ function Invoke-Netsuke {
     if ($LASTEXITCODE -ne 0) {
         throw "Netsuke failed for '$($Arguments -join ' ')' with exit code $LASTEXITCODE."
     }
-}
-
-function Get-EnvironmentVariableState {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Name
-    )
-
-    $value = [System.Environment]::GetEnvironmentVariable($Name, 'Process')
-    [pscustomobject]@{
-        Name = $Name
-        Exists = $null -ne $value
-        Value = $value
-    }
-}
-
-function Restore-EnvironmentVariableState {
-    param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$State
-    )
-
-    if ($State.Exists) {
-        Set-Item -LiteralPath "Env:$($State.Name)" -Value $State.Value
-        return
-    }
-
-    Remove-Item -LiteralPath "Env:$($State.Name)" -ErrorAction SilentlyContinue
 }
 
 function Test-PowerShellCoreHost {
@@ -346,19 +319,7 @@ function Invoke-WindowsRecipeSmoke {
 
     $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
     $workspace = Join-Path $tempRoot "netsuke-windows-recipe-smoke-$PID"
-    $environmentState = @(
-        Get-EnvironmentVariableState -Name 'NETSUKE_WINDOWS_SHELL'
-        Get-EnvironmentVariableState -Name 'NETSUKE_SMOKE_OPTION'
-        Get-EnvironmentVariableState -Name 'NETSUKE_SMOKE_VALUE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATION_ROOT'
-        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATED_ENV'
-        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATED_LARGE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_BASELINE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_ENV'
-        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_VARIABLE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_NINJA'
-        Get-EnvironmentVariableState -Name 'PATH'
-    )
+    $environmentState = Get-WindowsRecipeEnvironmentState
 
     try {
         New-Item -ItemType Directory -Path $workspace | Out-Null

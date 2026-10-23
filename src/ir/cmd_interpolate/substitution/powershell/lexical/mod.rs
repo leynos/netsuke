@@ -90,6 +90,11 @@ impl PowerShellLexicalState {
         if is_typographic_here_string_terminator(character, quote) {
             self.note_unmodelled_syntax();
         }
+        if is_expandable_here_string_subexpression_start(character, quote) {
+            // Expandable here-strings parse `$()` bodies, whose nested strings
+            // can hide a line-start terminator from this partial scanner.
+            self.note_unmodelled_syntax();
+        }
         if has_marker {
             return HereStringCharacter::Placeholder;
         }
@@ -369,4 +374,14 @@ fn is_typographic_here_string_terminator(
         && position.value() != quote
         && is_same_quote_family
         && position.next().is_some_and(|next| next.value() == '@')
+}
+
+/// Detect a subexpression opener inside an expandable here-string.
+fn is_expandable_here_string_subexpression_start(
+    character: PowerShellSourceCharacter<'_>,
+    quote: char,
+) -> bool {
+    quote == '"'
+        && character.value() == '$'
+        && character.next().is_some_and(|next| next.value() == '(')
 }

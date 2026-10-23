@@ -11,6 +11,8 @@ struct TokenScenario {
 
 #[rstest]
 #[case::after_space(TokenScenario { source: " #", position: 1, expected: true })]
+#[case::after_automatic_variable(TokenScenario { source: "$$#", position: 2, expected: false })]
+#[case::after_escaped_automatic_variable(TokenScenario { source: "`$$#", position: 3, expected: false })]
 #[case::after_nonbreaking_space(TokenScenario { source: "\u{00a0}#", position: 1, expected: true })]
 #[case::after_ideographic_space(TokenScenario { source: "\u{3000}#", position: 1, expected: true })]
 #[case::after_line_separator(TokenScenario { source: "\u{2028}#", position: 1, expected: true })]
@@ -45,6 +47,20 @@ fn classify_here_string_boundaries(#[case] scenario: TokenScenario) {
 }
 
 #[rstest]
+#[case::ascii_space("@' \n", true)]
+#[case::nonbreaking_space("@'\u{00a0}\n", true)]
+#[case::ideographic_space("@'\u{3000}\n", true)]
+#[case::line_break_without_space("@'\n", true)]
+#[case::missing_line_break("@'\u{00a0}'", false)]
+fn classify_here_string_headers(#[case] source: &str, #[case] expected: bool) {
+    let characters = source.chars().collect::<Vec<_>>();
+    let opener = PowerShellSourceCharacter::new(&characters, 0)
+        .expect("the here-string header begins with a source character");
+
+    assert_eq!(opener.here_string_opener().is_some(), expected);
+}
+
+#[rstest]
 #[case::after_postfix_increment(TokenScenario { source: "$i++#", position: 4, expected: true })]
 #[case::after_postfix_decrement(TokenScenario { source: "$i--#", position: 4, expected: true })]
 #[case::after_member_postfix_increment(TokenScenario { source: "$obj.Value++#", position: 12, expected: true })]
@@ -64,6 +80,11 @@ fn classify_here_string_boundaries(#[case] scenario: TokenScenario) {
 #[case::binary_literal(TokenScenario { source: "$x=0b101#", position: 8, expected: true })]
 #[case::invalid_binary_literal(TokenScenario { source: "$x=0b102#", position: 8, expected: false })]
 #[case::size_suffixed_literal(TokenScenario { source: "$x=1kb#", position: 6, expected: true })]
+#[case::numeric_operand_after_addition(TokenScenario { source: "$x=1+5#", position: 6, expected: true })]
+#[case::numeric_operand_after_multiplication(TokenScenario { source: "$x=1*5#", position: 6, expected: true })]
+#[case::negative_operand_after_multiplication(TokenScenario { source: "$x=1*-5#", position: 7, expected: true })]
+#[case::after_automatic_variable(TokenScenario { source: "$$#", position: 2, expected: true })]
+#[case::after_escaped_automatic_variable(TokenScenario { source: "`$$#", position: 3, expected: false })]
 #[case::spaced_numeric_literal(TokenScenario { source: "Write-Output 5#", position: 14, expected: true })]
 #[case::redirection_operator(TokenScenario { source: "Write-Output value >#", position: 20, expected: true })]
 #[case::numeric_argument_suffix(TokenScenario { source: "foo5#", position: 4, expected: false })]

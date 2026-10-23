@@ -4,9 +4,9 @@ use crate::shell_word::{is_power_shell_double_quote, is_power_shell_single_quote
 
 mod comments;
 mod index_expressions;
+mod member_expressions;
 mod numeric_literals;
 pub(super) use comments::comment_character_changes_scanner_state;
-use index_expressions::PowerShellExpressionEnd;
 
 /// Bind a character index to the source slice used for PowerShell lookaround.
 ///
@@ -89,8 +89,8 @@ impl<'source> PowerShellSourceCharacter<'source> {
             return None;
         }
         let mut line_break = quote_position.next()?;
-        // PowerShell permits horizontal whitespace before the header newline.
-        while matches!(line_break.value(), ' ' | '\t') {
+        // A line break ends the header; other PowerShell whitespace may precede it.
+        while line_break.is_power_shell_whitespace() && !line_break.is_line_break() {
             line_break = line_break.next()?;
         }
         line_break.is_line_break_sequence().then_some(quote)
@@ -139,7 +139,20 @@ impl<'source> PowerShellSourceCharacter<'source> {
 
     /// Report whether a hash follows an unescaped unbraced variable.
     fn hash_follows_unbraced_variable(self) -> bool {
-        self.unescaped_variable_before().is_some()
+        self.unescaped_variable_before().is_some() || self.hash_follows_automatic_variable()
+    }
+
+    /// Report whether a hash follows the complete `$$` automatic variable.
+    fn hash_follows_automatic_variable(self) -> bool {
+        let Some(variable_end) = self.previous() else {
+            return false;
+        };
+        let Some(variable_start) = variable_end.previous() else {
+            return false;
+        };
+        variable_end.value() == '$'
+            && variable_start.value() == '$'
+            && !variable_start.is_escaped_by_backtick()
     }
 
     /// Report whether a hash follows a property on a variable expression.
@@ -165,50 +178,6 @@ impl<'source> PowerShellSourceCharacter<'source> {
         member_separator
             .previous()
             .is_some_and(Self::ends_with_unescaped_variable_expression)
-    }
-
-    /// Recognize an unescaped variable through chained member and index accessors.
-    fn ends_with_unescaped_variable_expression(self) -> bool {
-        let mut expression_end = self;
-        loop {
-            let Some(name_end_position) = expression_end.expression_end_before_member_name() else {
-                return false;
-            };
-            let name_end = match name_end_position {
-                PowerShellExpressionEnd::Character(character) => character,
-                PowerShellExpressionEnd::VariableInIndex => return true,
-            };
-            if !name_end.is_variable_name_character() {
-                return false;
-            }
-
-            let name_start = name_end.variable_name_start();
-            if name_start.is_unescaped_variable_name_start() {
-                return true;
-            }
-            let Some(member_separator) = name_start
-                .previous()
-                .filter(|previous| previous.value() == '.')
-            else {
-                return false;
-            };
-            let Some(previous_expression_end) = member_separator.previous() else {
-                return false;
-            };
-            expression_end = previous_expression_end;
-        }
-    }
-
-    /// Find the first character of the variable name ending at this position.
-    fn variable_name_start(self) -> Self {
-        let mut name_start = self;
-        while let Some(previous) = name_start.previous() {
-            if !previous.is_variable_name_character() {
-                break;
-            }
-            name_start = previous;
-        }
-        name_start
     }
 
     /// Report whether this variable name immediately follows an unescaped `$`.
