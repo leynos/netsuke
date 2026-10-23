@@ -1,17 +1,14 @@
 """Exercise the inventory-verification CLI the verifier job invokes.
 
 The three agreements it checks are proved in their own modules. These tests pin
-the composition: that the declared set is read from the file the packaging
-stage wrote, that the trusted record is read from the file the declaration
-stage wrote, that a missing archive is reported as a missing archive rather
-than as a malformed sidecar, and that an asset whose bytes nobody vouched for
-stops the run. Everything runs against a temporary directory; no test here
-opens a socket.
+the composition: the declared set and the trusted record are read from the
+files their stages wrote, a missing archive is reported as a missing archive
+rather than as a malformed sidecar, and an asset whose bytes nobody vouched
+for stops the run. No test here opens a socket.
 
-The two substitution cases are the reason the trusted record exists, so they
-are written to be honest about it: each replaces bytes *and* leaves every
-sidecar in agreement, which is exactly the shape the older two-agreement check
-could not see.
+The two substitution cases are the reason the trusted record exists: each
+replaces bytes *and* leaves every sidecar in agreement, the shape the older
+two-agreement check could not see.
 """
 
 import json
@@ -313,21 +310,47 @@ def test_the_cli_reports_an_unreadable_declaration_separately(
     ])
 
     assert code == EXIT_INPUT_UNREADABLE, (
-        f"an unreadable declaration must not be reported as a rejected "
-        f"release, got {code}"
+        f"an unreadable declaration must not be a rejection, got {code}"
     )
     assert not destination.exists(), "nothing was verified, so nothing is recorded"
+
+
+def test_the_cli_reports_an_unreadable_trusted_record_as_unreadable(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Distinguish an absent trusted record from a malformed one.
+
+    An absent path is a wiring fault while a malformed record is something the
+    build wrote. The declaration is readable on purpose so this test reaches
+    the trusted record; the other unreadable-input test makes both absent and
+    returns at the declaration.
+    """
+    staging = tmp_path / "dist"
+    _stage(staging)
+    declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
+    destination = tmp_path / "verified.json"
+
+    code = main([
+        "--directory",
+        str(staging),
+        "--expected",
+        str(declaration),
+        "--trusted",
+        str(tmp_path / "absent.json"),
+        "--output",
+        str(destination),
+    ])
+
+    assert code == EXIT_INPUT_UNREADABLE, (
+        f"an absent trusted record is an input fault, not a rejection, got {code}"
+    )
+    assert not destination.exists(), "nothing verified, so nothing is recorded"
 
 
 def test_the_cli_reports_a_malformed_trusted_record_as_a_rejection(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Reject a record that parses but cannot support a decision.
-
-    Kept distinct from the unreadable-path case above: a path typo is a wiring
-    fault an operator fixes, while a malformed record is something the build
-    wrote and the verifier must not act on.
-    """
+    """Reject a record that parses but cannot support a decision."""
     staging = tmp_path / "dist"
     _stage(staging)
     declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])

@@ -21,10 +21,11 @@ either substitution visible.
 Nothing here reaches the network, and nothing here decides. A record that
 cannot be read, does not map names to digests, or does not cover the
 declaration is refused rather than interpreted, because every consumer reads
-this record as permission to act on a release.
+this record as permission to act on a release. An unreadable file is refused
+as :class:`UnreadableDigestRecordError`, a :class:`DigestRecordError`, so a
+consumer reports the wiring fault without losing the catch-all clause.
 
-Run via ``scripts/release_declaration_cli.py`` in the release workflow;
-behavioural coverage lives in ``scripts/tests/test_release_digest_record.py``.
+Run via ``scripts/release_declaration_cli.py`` in the release workflow.
 """
 
 import json
@@ -48,6 +49,17 @@ ASSETS_MEMBER = "assets"
 
 class DigestRecordError(ValueError):
     """Report a digest record that cannot support a verification decision."""
+
+
+class UnreadableDigestRecordError(DigestRecordError):
+    """Report a digest record whose file could not be read at all.
+
+    Split from :class:`DigestRecordError` so a caller can tell a path fault
+    from a content fault: an unreadable path is the workflow wiring the wrong
+    file, while a record that parses and is structurally wrong is the build
+    writing something no consumer may act on. Deriving from the base class
+    keeps every existing guard working.
+    """
 
 
 class RecordedDigestMismatchError(
@@ -116,13 +128,12 @@ def read_digest_record(source: pathlib.Path) -> dict[str, str]:
 
     Notes
     -----
-    Every refusal is a :class:`DigestRecordError`, raised by the three helpers
-    below and propagated unchanged: the file cannot be read, is not a JSON
-    object, carries no ``assets`` member, carries an empty or non-mapping one,
-    or maps something that is not an asset name to something that is not a
-    hexadecimal SHA-256 digest. The hierarchy is named here rather than in a
-    ``Raises`` section because nothing in this function raises it; Ruff's
-    DOC501 reserves that section for exceptions the function itself raises.
+    Every refusal is a :class:`DigestRecordError`, raised by the helpers below
+    and propagated unchanged: the file is not a JSON object, carries no
+    ``assets`` member, carries an empty or non-mapping one, or maps something
+    that is not an asset name to something that is not a hexadecimal SHA-256
+    digest. A file that cannot be read at all raises the narrower
+    :class:`UnreadableDigestRecordError`, so one clause guards both.
 
     Every refusal here exists because the alternative is a vacuous success. A
     ``.get("assets", {})`` default turns a missing field into an empty mapping,
@@ -162,17 +173,44 @@ def _record_object(source: pathlib.Path) -> dict[str, object]:
     Raises
     ------
     DigestRecordError
-        If the file cannot be read or does not hold a JSON object.
+        If the file is readable but is not UTF-8 JSON describing an object,
+        which is a fault in what the build wrote rather than in its path.
     """
-    try:
-        record = json.loads(source.read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        msg = f"the digest record {source} could not be read: {error}"
-        raise DigestRecordError(msg) from error
+    record = _parsed_record(source)
     if not isinstance(record, dict):
         msg = f"the digest record must be a JSON object, got {type(record).__name__}"
         raise DigestRecordError(msg)
     return record
+
+
+def _parsed_record(source: pathlib.Path) -> object:
+    """Return the record file parsed as JSON.
+
+    Bytes go to :func:`json.loads` rather than decoded text, so a file that is
+    not UTF-8 and one that is not JSON are refused together: either way no
+    mapping is left to compare, and the chained exception names which it was.
+
+    Returns
+    -------
+    object
+        Whatever the bytes parse to, before the caller checks its shape.
+
+    Raises
+    ------
+    UnreadableDigestRecordError
+        If the file cannot be opened or read at all, which is a wiring fault.
+    DigestRecordError
+        If the bytes are not UTF-8, or the text is not JSON. Both are faults in
+        what the build wrote rather than in the path the workflow supplied.
+    """
+    try:
+        return json.loads(source.read_bytes())
+    except OSError as error:
+        msg = f"the digest record {source} could not be read: {error}"
+        raise UnreadableDigestRecordError(msg) from error
+    except (UnicodeDecodeError, ValueError) as error:
+        msg = f"the digest record {source} is not usable JSON text: {error}"
+        raise DigestRecordError(msg) from error
 
 
 def _declared_assets(

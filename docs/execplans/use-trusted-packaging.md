@@ -2060,6 +2060,32 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   were already 10.00 and were not touched. The affected suites pass: 91 tests
   across the five release test modules and the five modules' own doctests.
   Date/Author: 2026-10-23, implementation agent.
+- Repair: CodeRabbit's follow-up (comment `6360956632`) found one LOW defect
+  the `173c6ff4a`/`fc9aa9ea9` revisions still carried.
+  `verify_release_inventory_cli` reported an absent `--trusted` record as
+  `EXIT_INVENTORY_REJECTED`, because `read_digest_record` raised the single
+  `DigestRecordError` for both "this path does not exist" and "this file parses
+  and is not a record". The CLI's own docstring at lines 199-203 already
+  promised `EXIT_INPUT_UNREADABLE` for an unreadable trusted record, so the
+  code, not the contract, was wrong. `UnreadableDigestRecordError` now derives
+  from `DigestRecordError` and is raised only when the file cannot be read at
+  all; the verifier maps it to exit 2 and keeps exit 1 for a record that parses
+  but is malformed. Deriving from the base class means every existing catcher
+  is unchanged. The first attempt at this fix scored 9.09 on CodeScene, because
+  putting the read and the parse in one `_record_object` pushed it to `cc = 9`;
+  reading moved into `_parsed_record`, which is a cohesive split (get the
+  bytes; parse them as JSON) rather than a dilution, and
+  `release_digest_record.py` is back to 10.00. Two files landed at exactly the
+  400-line cap, so the test module's duplicated rationale and the record
+  module's repeated prose were consolidated rather than any coverage dropped.
+  `scripts/tests/` gained
+  `test_the_cli_reports_an_unreadable_trusted_record_as_unreadable`, whose
+  declaration is readable on purpose: the pre-existing unreadable-input test
+  makes the declaration absent too and returns before the trusted record is
+  opened, so it could not have reached this branch. Verified by probe under the
+  3.14 baseline: absent path gives `UnreadableDigestRecordError`; non-UTF-8
+  bytes, non-JSON text, a JSON array, and an empty `assets` mapping all give
+  `DigestRecordError`. Date/Author: 2026-10-23, implementation agent.
 
 ## Surprises & discoveries
 
