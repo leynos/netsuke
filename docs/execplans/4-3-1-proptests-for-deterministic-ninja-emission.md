@@ -1415,9 +1415,12 @@ permutations.
 - **Rationale:** byte equality could in principle be preserved by an emitter
   producing identical garbage. An independent oracle closes that, and exercises
   the `AXIOM-NINJA` interactions.
-- **Domain:** 1 to 8 actions, 1 to 12 edges, paths legal on POSIX and Windows.
-  The domain **must** generate serial edges with at least two implicit
-  dependencies, or the dyndep path is never reached.
+- **Domain:** 2 to 8 actions, 1 to 12 edges, paths legal on POSIX and Windows.
+  The floor is two rather than one: `min_phony_actions` forces the leading
+  action to be dependency-only, so a one-action draw emits no command at all and
+  the command-list comparison would be vacuous. The domain **must** generate
+  serial edges with at least two implicit dependencies, or the dyndep path is
+  never reached.
 - **Oracle:** the `ninja` binary. Two invocations are required, not one:
   `-t commands` for the command list, **and** `-n`, because `-t commands` does
   not load dyndep sidecars — a graph referencing a missing sidecar exits 0 under
@@ -2705,7 +2708,7 @@ allocation keep resolving. Read every remaining `ADR-NNN` as `ADR-030`.
       matrix are in `Risks` and in the delivery ledger, and the shape repair is
       **escalated, not applied**.
 
-  *Batch-integrity defect, mine.* The scrutineer detected a peer session
+  *Batch-integrity defect, authored in this session.* The scrutineer detected a peer session
   authoring `graph/spec.rs` at 02:26:09Z while the batch's
   `test-workflow-contracts` was still running; that peer is this session, and
   the finding is correct. The batch therefore cannot be read as a verdict on
@@ -5212,7 +5215,7 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
     under that patch and required it to **pass**; it does, which is the direct
     evidence that a fixed-manifest fault is invisible to a two-run comparison.
 
-  - *Two of my own errors, recorded rather than dropped.* The first follow-up
+  - *Two session errors, recorded rather than dropped.* The first follow-up
     invoked `--package netsuke`, which exits `101` with "cannot specify
     features for packages outside of workspace" — the binary is `netsuke` but
     the package is `netsuke-build`, and the only workspace member is

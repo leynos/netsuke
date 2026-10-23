@@ -684,9 +684,10 @@ dependencies, and generated builds containing staged serial ordering require
 Ninja 1.10 or newer. Each staged dependency appears in the generated file as a
 relay phony that carries the real dependency, alongside the gate phony and the
 sidecar-producing phony. The indirection is deliberate: it keeps the generated
-build clear of a Ninja scheduler crash that unreliable dyndep revelation can
-reach on affected Ninja releases. You do not need to name or reason about relay
-paths; they are generated state beneath `.netsuke/serial` like the gates.
+build clear of an upstream Ninja scheduler crash that revealing a real
+dependency directly can trigger, depending on graph shape rather than Ninja
+version. Relay paths are generated state beneath `.netsuke/serial`, like the
+gates; manifest authors need not name them.
 
 `netsuke generate`, `build`, and `clean` materialize the generated sidecars
 under `.netsuke/dyndep` in the effective working directory before writing or
@@ -1473,8 +1474,8 @@ renders each path vector in declaration order, so permuting the entries of one
 target's `sources`, `deps`, `order_only_deps`, or `name` list can change the
 bytes while both graphs are correct.
 
-Emission is deterministic, not idempotent under arbitrary text edits: if you
-hand-edit a generated file, regenerating replaces it. Treat `build.ninja` and
+Emission is deterministic, not idempotent under arbitrary text edits: a
+hand-edited generated file is replaced when it is regenerated. Treat `build.ninja` and
 its sidecars as build artefacts.
 
 [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) records the

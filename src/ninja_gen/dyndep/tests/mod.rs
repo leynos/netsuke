@@ -175,6 +175,26 @@ fn serial_paths(file: &str, predicate: fn(&str) -> bool) -> Vec<String> {
         .collect()
 }
 
+/// Every `build` line declaring a serial-namespace output matching `predicate`.
+///
+/// [`serial_paths`] answers *which paths* were declared; a caller that needs to
+/// read a line's dependency tail needs the lines themselves. Both select on the
+/// left-hand side only, so a dependency containing `/` cannot be mistaken for
+/// part of an output name — the reason a test must never hand a whole `build`
+/// line to [`is_relay`], which splits at the last `/`.
+fn serial_build_lines<'a>(file: &'a str, predicate: fn(&str) -> bool) -> Vec<&'a str> {
+    file.lines()
+        .filter(|line| {
+            line.strip_prefix("build ")
+                .and_then(|rest| rest.split_once(": "))
+                .is_some_and(|(lhs, _)| {
+                    lhs.split_whitespace()
+                        .any(|path| path.starts_with(".netsuke/serial/") && predicate(path))
+                })
+        })
+        .collect()
+}
+
 /// Whether a serial-namespace path names a gate rather than a relay.
 fn is_gate(path: &str) -> bool {
     !is_relay(path)
@@ -252,7 +272,7 @@ fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
         "each stage needs its own sidecar, got {}",
         bundle.dyndep_files().len()
     );
-    let relay_lines: Vec<&str> = file.lines().filter(|line| is_relay(line)).collect();
+    let relay_lines = serial_build_lines(file, is_relay);
     ensure!(
         relay_lines.iter().all(|line| line.ends_with("| same")),
         "every relay must carry the shared dependency, got {relay_lines:?}"
