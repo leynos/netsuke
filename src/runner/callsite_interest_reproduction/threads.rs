@@ -51,8 +51,20 @@ pub(super) struct WorkerSnapshot {
     pub(super) registration_timing: RegistrationAttemptTiming,
 }
 
+/// Keep the gate and both worker handles together until the schedule completes.
+struct RunningWorkers {
+    gate: Arc<RegistrationGate>,
+    emission_thread: JoinHandle<Result<()>>,
+    capture_thread: JoinHandle<Result<CaptureSnapshot>>,
+}
+
 /// Run the shared thread schedule with the selected T2 capture boundary.
 pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<WorkerSnapshot> {
+    finish_worker_threads(capture_mode, start_worker_threads(capture_mode)?)
+}
+
+/// Start both workers after constructing their inputs and shared gate.
+fn start_worker_threads(capture_mode: CaptureMode) -> Result<RunningWorkers> {
     let channels = WorkerChannels::new(capture_mode);
     let WorkerChannels {
         gate,
@@ -80,27 +92,67 @@ pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<WorkerSnap
     );
     let emission_thread = spawn_emission_thread(gated_subscriber, finished_sender, t1_manifest);
 
-    join_worker(emission_thread, "T1")?;
-    let captured = join_worker(capture_thread, "T2")?;
+    Ok(RunningWorkers {
+        gate,
+        emission_thread,
+        capture_thread,
+    })
+}
+
+/// Join both workers and validate their observed registration phases.
+fn finish_worker_threads(
+    capture_mode: CaptureMode,
+    workers: RunningWorkers,
+) -> Result<WorkerSnapshot> {
+    join_worker(workers.emission_thread, "T1")?;
+    let captured = join_worker(workers.capture_thread, "T2")?;
+    let registration_timing = validate_registration_timing(&workers.gate, capture_mode)?;
+    validate_gate_outcome(&workers.gate, capture_mode, &captured)?;
+    Ok(WorkerSnapshot {
+        capture: captured,
+        registration_timing,
+    })
+}
+
+/// Require each callback to occur on the side of release expected by its mode.
+fn validate_registration_timing(
+    gate: &RegistrationGate,
+    capture_mode: CaptureMode,
+) -> Result<RegistrationAttemptTiming> {
     ensure!(
         gate.was_paused(),
         "T1 did not reach the summary-event registration gate"
     );
-    let dispatch_started_before_release = gate.registration_started_before_release();
-    let summary_callback_before_release = gate.summary_callback_before_release();
-    let summary_callback_after_release = gate.take_summary_callback_after_release();
+    let timing = RegistrationAttemptTiming {
+        dispatch_started_before_release: gate.registration_started_before_release(),
+        summary_callback_before_release: gate.summary_callback_before_release(),
+        summary_callback_after_release: gate.take_summary_callback_after_release(),
+    };
     ensure!(
-        dispatch_started_before_release,
+        timing.dispatch_started_before_release,
         "T2 did not enter Dispatch::new before T1 released its registration gate"
     );
     ensure!(
-        summary_callback_before_release == matches!(capture_mode, CaptureMode::Unmitigated),
-        "T2 summary callback had the wrong timing relative to T1's gate: before release={summary_callback_before_release}, after release={summary_callback_after_release}"
+        timing.summary_callback_before_release == matches!(capture_mode, CaptureMode::Unmitigated),
+        "T2 summary callback had the wrong timing relative to T1's gate: before release={}, after release={}",
+        timing.summary_callback_before_release,
+        timing.summary_callback_after_release
     );
     ensure!(
-        summary_callback_after_release == matches!(capture_mode, CaptureMode::Mitigated),
-        "T2 summary callback had the wrong timing relative to T1's gate: before release={summary_callback_before_release}, after release={summary_callback_after_release}"
+        timing.summary_callback_after_release == matches!(capture_mode, CaptureMode::Mitigated),
+        "T2 summary callback had the wrong timing relative to T1's gate: before release={}, after release={}",
+        timing.summary_callback_before_release,
+        timing.summary_callback_after_release
     );
+    Ok(timing)
+}
+
+/// Require the gate to complete without fixture errors and with the expected cause.
+fn validate_gate_outcome(
+    gate: &RegistrationGate,
+    capture_mode: CaptureMode,
+    captured: &CaptureSnapshot,
+) -> Result<()> {
     ensure!(
         gate.failure().is_none(),
         "gate fixture failed: {:?}",
@@ -115,14 +167,7 @@ pub(super) fn run_worker_threads(capture_mode: CaptureMode) -> Result<WorkerSnap
         captured.events,
         validate_manifest_structure_events(&captured.events, &EMPTY_MANIFEST_COUNTS)
     );
-    Ok(WorkerSnapshot {
-        capture: captured,
-        registration_timing: RegistrationAttemptTiming {
-            dispatch_started_before_release,
-            summary_callback_before_release,
-            summary_callback_after_release,
-        },
-    })
+    Ok(())
 }
 
 impl CaptureMode {
