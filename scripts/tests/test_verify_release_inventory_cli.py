@@ -1,11 +1,17 @@
 """Exercise the inventory-verification CLI the verifier job invokes.
 
-The two agreements it checks are proved in their own modules. These tests pin
+The three agreements it checks are proved in their own modules. These tests pin
 the composition: that the declared set is read from the file the packaging
+stage wrote, that the trusted record is read from the file the declaration
 stage wrote, that a missing archive is reported as a missing archive rather
-than as a malformed sidecar, and that a sidecar describing different bytes
+than as a malformed sidecar, and that an asset whose bytes nobody vouched for
 stops the run. Everything runs against a temporary directory; no test here
 opens a socket.
+
+The two substitution cases are the reason the trusted record exists, so they
+are written to be honest about it: each replaces bytes *and* leaves every
+sidecar in agreement, which is exactly the shape the older two-agreement check
+could not see.
 """
 
 import json
@@ -13,7 +19,20 @@ import typing as typ
 
 import pytest
 import release_digest
+import release_digest_record
 import release_inventory
+from release_staging_support import (
+    ARCHIVE,
+    PACKAGE,
+    SIDECAR,
+)
+from release_staging_support import (
+    stage_archive as _stage,
+)
+from release_staging_support import stage_package as _stage_package
+from release_staging_support import trusted_digests as _trusted
+from release_staging_support import write_declaration as _declaration
+from release_staging_support import write_trusted_record as _write_record
 from verify_release_inventory_cli import (
     EXIT_INPUT_UNREADABLE,
     EXIT_INVENTORY_REJECTED,
@@ -25,28 +44,6 @@ from verify_release_inventory_cli import (
 
 if typ.TYPE_CHECKING:
     import pathlib
-
-ARCHIVE = "netsuke-build-0.1.0-x86_64-unknown-linux-gnu.tar.gz"
-SIDECAR = f"{ARCHIVE}.sha256"
-BODY = b"netsuke archive bytes"
-
-
-def _stage(directory: pathlib.Path, *, sidecar_body: bytes | None = None) -> None:
-    """Write the archive and a sidecar describing it."""
-    directory.mkdir(parents=True, exist_ok=True)
-    archive = directory / ARCHIVE
-    _ = archive.write_bytes(BODY)
-    digest = release_digest.digest_of_file(archive).encode()
-    recorded = sidecar_body if sidecar_body is not None else digest
-    _ = (directory / SIDECAR).write_text(
-        f"{recorded.decode()}  dist/{ARCHIVE}\n", encoding="utf-8"
-    )
-
-
-def _declaration(destination: pathlib.Path, names: list[str]) -> pathlib.Path:
-    """Write the declared asset list the packaging stage produces."""
-    _ = destination.write_text("\n".join(names) + "\n", encoding="utf-8")
-    return destination
 
 
 def test_verify_accepts_the_declared_assets(tmp_path: pathlib.Path) -> None:
@@ -62,7 +59,7 @@ def test_verify_accepts_the_declared_assets(tmp_path: pathlib.Path) -> None:
     staging = tmp_path / "dist"
     _stage(staging)
 
-    verified = verify(staging, expected=[ARCHIVE, SIDECAR])
+    verified = verify(staging, expected=[ARCHIVE, SIDECAR], trusted=_trusted(staging))
 
     assert sorted(verified) == [ARCHIVE, SIDECAR], (
         f"both assets must be keyed by name, got {sorted(verified)}"
@@ -92,7 +89,11 @@ def test_verify_reports_a_missing_archive(tmp_path: pathlib.Path) -> None:
     _ = (staging / SIDECAR).write_text("ab  dist/x\n", encoding="utf-8")
 
     with pytest.raises(release_inventory.MissingAssetError):
-        _ = verify(staging, expected=[ARCHIVE, SIDECAR])
+        _ = verify(
+            staging,
+            expected=[ARCHIVE, SIDECAR],
+            trusted={ARCHIVE: "ab" * 32, SIDECAR: "ab" * 32},
+        )
 
 
 def test_verify_reports_an_unexpected_archive(tmp_path: pathlib.Path) -> None:
@@ -102,7 +103,7 @@ def test_verify_reports_an_unexpected_archive(tmp_path: pathlib.Path) -> None:
     _ = (staging / "extra.tar.gz").write_bytes(b"extra")
 
     with pytest.raises(release_inventory.UnexpectedAssetError):
-        _ = verify(staging, expected=[ARCHIVE, SIDECAR])
+        _ = verify(staging, expected=[ARCHIVE, SIDECAR], trusted=_trusted(staging))
 
 
 def test_verify_rejects_a_sidecar_describing_different_bytes(
@@ -113,7 +114,70 @@ def test_verify_rejects_a_sidecar_describing_different_bytes(
     _stage(staging, sidecar_body=b"cd" * 32)
 
     with pytest.raises(release_digest.DigestMismatchError):
-        _ = verify(staging, expected=[ARCHIVE, SIDECAR])
+        _ = verify(staging, expected=[ARCHIVE, SIDECAR], trusted=_trusted(staging))
+
+
+def test_verify_rejects_a_replaced_operating_system_package(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Stop when a downloaded package differs from the bytes the build staged.
+
+    The package is replaced outright. Nothing inside the download disagrees —
+    a package has no sidecar — so this is the case only the trusted record can
+    see, and it is the reason that record exists.
+    """
+    staged = tmp_path / "staged"
+    _stage_package(staged, b"the package the build produced")
+    trusted = _trusted(staged)
+
+    downloaded = tmp_path / "downloaded"
+    _stage_package(downloaded, b"a package somebody else produced")
+
+    with pytest.raises(release_digest_record.RecordedDigestMismatchError):
+        _ = verify(downloaded, expected=[PACKAGE], trusted=trusted)
+
+
+def test_verify_rejects_a_replaced_archive_and_sidecar_pair(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Stop when an archive and its sidecar are replaced together.
+
+    Both files are rewritten so the sidecar still describes the archive beside
+    it. The two older agreements — inventory exactness and sidecar agreement —
+    both hold over this download, which is what makes the pair-swap the case
+    those agreements cannot detect and the trusted record must.
+    """
+    staged = tmp_path / "staged"
+    _stage(staged)
+    trusted = _trusted(staged)
+
+    downloaded = tmp_path / "downloaded"
+    _stage(downloaded)
+    replaced = b"a different archive entirely"
+    _ = (downloaded / ARCHIVE).write_bytes(replaced)
+    digest = release_digest.digest_of_file(downloaded / ARCHIVE)
+    _ = (downloaded / SIDECAR).write_text(
+        f"{digest}  dist/{ARCHIVE}\n", encoding="utf-8"
+    )
+
+    with pytest.raises(release_digest_record.RecordedDigestMismatchError):
+        _ = verify(downloaded, expected=[ARCHIVE, SIDECAR], trusted=trusted)
+
+
+def test_verify_rejects_a_record_that_omits_a_declared_asset(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a trusted record that leaves an asset uncompared.
+
+    A record covering only part of the declaration would let the omitted asset
+    through whatever its bytes are, so the omission is the failure.
+    """
+    staging = tmp_path / "dist"
+    _stage(staging)
+    partial = {ARCHIVE: _trusted(staging)[ARCHIVE]}
+
+    with pytest.raises(release_digest_record.DigestRecordError):
+        _ = verify(staging, expected=[ARCHIVE, SIDECAR], trusted=partial)
 
 
 def test_the_cli_records_the_verified_digests(tmp_path: pathlib.Path) -> None:
@@ -121,6 +185,7 @@ def test_the_cli_records_the_verified_digests(tmp_path: pathlib.Path) -> None:
     staging = tmp_path / "dist"
     _stage(staging)
     declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
+    trusted = _write_record(tmp_path / "trusted.json", _trusted(staging))
     destination = tmp_path / "verified.json"
 
     code = main([
@@ -128,6 +193,8 @@ def test_the_cli_records_the_verified_digests(tmp_path: pathlib.Path) -> None:
         str(staging),
         "--expected",
         str(declaration),
+        "--trusted",
+        str(trusted),
         "--output",
         str(destination),
     ])
@@ -139,6 +206,39 @@ def test_the_cli_records_the_verified_digests(tmp_path: pathlib.Path) -> None:
     )
 
 
+def test_the_cli_rejects_a_replaced_package_and_writes_no_record(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Fail closed on a substituted package, naming it, leaving no record."""
+    staged = tmp_path / "staged"
+    _stage_package(staged, b"the package the build produced")
+    trusted = _write_record(tmp_path / "trusted.json", _trusted(staged))
+    declaration = _declaration(tmp_path / "declared.txt", [PACKAGE])
+
+    downloaded = tmp_path / "downloaded"
+    _stage_package(downloaded, b"a package somebody else produced")
+    destination = tmp_path / "verified.json"
+
+    code = main([
+        "--directory",
+        str(downloaded),
+        "--expected",
+        str(declaration),
+        "--trusted",
+        str(trusted),
+        "--output",
+        str(destination),
+    ])
+
+    assert code == EXIT_INVENTORY_REJECTED, (
+        f"a substituted package must be refused, got {code}"
+    )
+    assert not destination.exists(), "a rejected inventory must leave no record"
+    assert PACKAGE in capsys.readouterr().err, (
+        "the diagnostic must name the substituted asset"
+    )
+
+
 def test_the_cli_rejects_an_incomplete_release_and_writes_no_record(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -147,6 +247,9 @@ def test_the_cli_rejects_an_incomplete_release_and_writes_no_record(
     staging.mkdir()
     _ = (staging / SIDECAR).write_text("ab  dist/x\n", encoding="utf-8")
     declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
+    trusted = _write_record(
+        tmp_path / "trusted.json", {ARCHIVE: "ab" * 32, SIDECAR: "ab" * 32}
+    )
     destination = tmp_path / "verified.json"
 
     code = main([
@@ -154,6 +257,8 @@ def test_the_cli_rejects_an_incomplete_release_and_writes_no_record(
         str(staging),
         "--expected",
         str(declaration),
+        "--trusted",
+        str(trusted),
         "--output",
         str(destination),
     ])
@@ -173,6 +278,7 @@ def test_the_declaration_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
     _stage(staging)
     declaration = tmp_path / "declared.txt"
     _ = declaration.write_text(f"\n{ARCHIVE}\n\n{SIDECAR}\n\n", encoding="utf-8")
+    trusted = _write_record(tmp_path / "trusted.json", _trusted(staging))
     destination = tmp_path / "verified.json"
 
     code = main([
@@ -180,6 +286,8 @@ def test_the_declaration_ignores_blank_lines(tmp_path: pathlib.Path) -> None:
         str(staging),
         "--expected",
         str(declaration),
+        "--trusted",
+        str(trusted),
         "--output",
         str(destination),
     ])
@@ -198,6 +306,8 @@ def test_the_cli_reports_an_unreadable_declaration_separately(
         str(tmp_path / "dist"),
         "--expected",
         str(tmp_path / "absent.txt"),
+        "--trusted",
+        str(tmp_path / "absent.json"),
         "--output",
         str(destination),
     ])
@@ -209,12 +319,51 @@ def test_the_cli_reports_an_unreadable_declaration_separately(
     assert not destination.exists(), "nothing was verified, so nothing is recorded"
 
 
-@pytest.mark.parametrize("missing", ["--directory", "--expected", "--output"])
-def test_the_cli_requires_a_directory_a_declaration_and_an_output(missing: str) -> None:
-    """Refuse to guess any of the three, since each names a different file."""
+def test_the_cli_reports_a_malformed_trusted_record_as_a_rejection(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Reject a record that parses but cannot support a decision.
+
+    Kept distinct from the unreadable-path case above: a path typo is a wiring
+    fault an operator fixes, while a malformed record is something the build
+    wrote and the verifier must not act on.
+    """
+    staging = tmp_path / "dist"
+    _stage(staging)
+    declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
+    trusted = tmp_path / "trusted.json"
+    _ = trusted.write_text('{"assets": {}}\n', encoding="utf-8")
+    destination = tmp_path / "verified.json"
+
+    code = main([
+        "--directory",
+        str(staging),
+        "--expected",
+        str(declaration),
+        "--trusted",
+        str(trusted),
+        "--output",
+        str(destination),
+    ])
+
+    assert code == EXIT_INVENTORY_REJECTED, (
+        f"an empty trusted record must be refused, not accepted, got {code}"
+    )
+    assert not destination.exists(), "a rejected record must leave no record"
+    assert "trusted digest record" in capsys.readouterr().err, (
+        "the diagnostic must name the trusted record as the fault"
+    )
+
+
+@pytest.mark.parametrize(
+    "missing", ["--directory", "--expected", "--trusted", "--output"]
+)
+def test_the_cli_requires_its_four_inputs(missing: str) -> None:
+    """Refuse to guess any of the four, since each names a different file."""
     complete = {
         "--directory": "dist",
         "--expected": "declared.txt",
+        "--trusted": "trusted.json",
         "--output": "verified.json",
     }
     argv = [

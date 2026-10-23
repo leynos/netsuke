@@ -1,6 +1,6 @@
 """Compare a published release's assets against the identity it was built from.
 
-Two separate agreements are checked, and they fail for different reasons, so
+Three separate agreements are checked, and they fail for different reasons, so
 each gets its own diagnosis:
 
 1. The staged directory holds exactly the declared archives and sidecars. This
@@ -10,6 +10,17 @@ each gets its own diagnosis:
 2. Every staged file's bytes match the digest its sidecar records. A sidecar
    is only evidence when it is checked against the file beside it; otherwise it
    is a claim about bytes nobody read.
+3. Every staged file's bytes match the digest the build recorded for the staged
+   candidate before upload. This is the trusted comparison, and it is the only
+   one of the three that a replaced asset cannot satisfy.
+
+The third agreement is what makes the other two worth making. A sidecar travels
+with its archive, so replacing both together leaves agreement 2 intact and the
+release self-consistent — the download would vouch for itself. Agreement 3 is
+anchored outside the download, in a record produced from the build's own tree,
+so a substituted operating-system package or a replaced archive/sidecar pair
+both fail it. ``--trusted`` names that record, and it is written by
+``release_declaration_cli --digest-record`` before the upload step runs.
 
 The verifier reaches no network. The workflow step downloads the assets and
 hands this module a directory, which keeps the whole comparison testable
@@ -20,17 +31,27 @@ import argparse
 import json
 import pathlib
 import sys
+import typing as typ
 
 import release_digest
+import release_digest_record
 import release_inventory
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 EXIT_OK = 0
 EXIT_INVENTORY_REJECTED = 1
 EXIT_INPUT_UNREADABLE = 2
 
 
-def verify(directory: pathlib.Path, *, expected: list[str]) -> dict[str, str]:
-    """Verify the inventory and every sidecar, returning the digests read.
+def verify(
+    directory: pathlib.Path,
+    *,
+    expected: list[str],
+    trusted: cabc.Mapping[str, str],
+) -> dict[str, str]:
+    """Verify the inventory, every sidecar, and every trusted digest.
 
     Parameters
     ----------
@@ -38,19 +59,38 @@ def verify(directory: pathlib.Path, *, expected: list[str]) -> dict[str, str]:
         Staging directory holding the release's assets.
     expected
         Asset names the release declared.
+    trusted
+        Published name to the digest the build recorded for the staged
+        candidate before upload.
 
     Returns
     -------
     dict[str, str]
-        Asset name to its verified bare hexadecimal digest, sorted by name.
+        Asset name to its bare hexadecimal digest, sorted by name.
 
     Notes
     -----
-    Failures propagate from the policy modules rather than being translated
-    here: :class:`release_inventory.InventoryError` when the staged set
-    disagrees with the declaration, and :class:`release_digest.DigestError`
-    when a sidecar is malformed or describes different bytes. Both stop the
-    release, and :func:`main` is where they are turned into exit codes.
+    Four refusals reach the caller, one per agreement plus the record's own
+    coverage check, and each is a distinct type so :func:`main` can report it
+    without parsing a message: :class:`release_inventory.InventoryError` when
+    the staged set disagrees with the declaration,
+    :class:`release_digest.DigestError` when a sidecar is malformed or
+    describes different bytes than the archive beside it,
+    :class:`release_digest_record.DigestRecordError` when the trusted record
+    does not cover exactly the declared assets, and
+    :class:`release_digest_record.RecordedDigestMismatchError` when an asset's
+    bytes differ from the digest recorded for it.
+
+    All four propagate from the policy modules rather than being translated
+    here, so :func:`main` is the single place they become exit codes. That is
+    also why none appears in a ``Raises`` section: nothing in this function
+    raises one, and Ruff's DOC501 reserves that section for exceptions the
+    function raises itself.
+
+    The trusted record is checked against the declaration before any download
+    is hashed. A record that misses a declared asset would leave that asset
+    uncompared, so there is no useful work to do on the files until the record
+    is known to cover the release.
 
     Archives and sidecars are verified in one pass rather than sidecars alone.
     Verifying a sidecar against its archive already proves both, and taking the
@@ -58,21 +98,38 @@ def verify(directory: pathlib.Path, *, expected: list[str]) -> dict[str, str]:
     by a consumer — so the inventory check runs first and the digest pass then
     assumes every name has a partner.
 
-    The result is keyed by name and holds every declared asset, including the
-    sidecars. The finalizer compares exactly this mapping against what GitHub
-    reports, so producing it in the shape that comparison consumes keeps the
-    two stages from disagreeing about the release's identity.
-
-    Each entry is the digest of that asset's **own** bytes. A sidecar proves
-    the archive beside it, but the release also publishes the sidecar, and
-    GitHub reports a digest for the sidecar file just as it does for every
-    other upload. Recording the archive's digest under the sidecar's name would
-    make the finalizer compare the wrong value and either refuse a correct
-    release or accept a sidecar that had been swapped after upload.
+    The result holds every asset's **own** digest, sidecars included. A sidecar
+    proves the archive beside it, but the release publishes the sidecar too, so
+    recording the archive's digest under the sidecar's name would make the
+    finalizer compare the wrong value.
     """
     present = release_inventory.read_inventory(directory)
     release_inventory.validate_inventory(present, expected=expected)
-    verified: dict[str, str] = {}
+    release_digest_record.require_record_matches_declaration(trusted, expected=expected)
+    computed = _digests_of_downloads(directory, present)
+    release_digest_record.require_downloads_match_record(computed, trusted=trusted)
+    return computed
+
+
+def _digests_of_downloads(
+    directory: pathlib.Path,
+    present: cabc.Iterable[release_inventory.PublishedAsset],
+) -> dict[str, str]:
+    """Hash each downloaded asset and check every sidecar against its archive.
+
+    Returns
+    -------
+    dict[str, str]
+        Asset name to the digest of that asset's own bytes, sorted by name.
+
+    Notes
+    -----
+    A sidecar is verified against its neighbour *and* hashed in its own right.
+    The first proves the archive, the second proves the sidecar file that is
+    also published, and skipping either leaves one of the two able to be
+    swapped unnoticed.
+    """
+    computed: dict[str, str] = {}
     for asset in sorted(present, key=lambda entry: entry.name):
         path = directory / asset.name
         if asset.name.endswith(release_inventory.SIDECAR_SUFFIX):
@@ -81,8 +138,8 @@ def verify(directory: pathlib.Path, *, expected: list[str]) -> dict[str, str]:
             )
             # Verification only: the digest returned describes the archive.
             _ = release_digest.verify_file_against_sidecar(archive)
-        verified[asset.name] = release_digest.digest_of_file(path)
-    return verified
+        computed[asset.name] = release_digest.digest_of_file(path)
+    return computed
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -111,6 +168,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="the file listing the declared asset names, one per line",
     )
     parser.add_argument(
+        "--trusted",
+        required=True,
+        type=pathlib.Path,
+        help=(
+            "the digest record the build wrote for the staged candidate before "
+            "upload; every downloaded asset is compared against it"
+        ),
+    )
+    parser.add_argument(
         "--output",
         required=True,
         type=pathlib.Path,
@@ -130,10 +196,11 @@ def main(argv: list[str] | None = None) -> int:
     Returns
     -------
     int
-        ``EXIT_OK`` when every declared asset is present and matches its
-        sidecar, ``EXIT_INVENTORY_REJECTED`` when the assets disagree with the
-        declaration, or ``EXIT_INPUT_UNREADABLE`` when the declaration itself
-        could not be read.
+        ``EXIT_OK`` when every declared asset is present, matches its sidecar,
+        and matches the digest the build recorded before upload;
+        ``EXIT_INVENTORY_REJECTED`` when any of those agreements fails; or
+        ``EXIT_INPUT_UNREADABLE`` when the declaration or the trusted record
+        could not be read at all.
 
     Notes
     -----
@@ -142,10 +209,16 @@ def main(argv: list[str] | None = None) -> int:
     one an operator cannot compare against anything; the file is the same list
     the packaging stage produced.
 
-    An unreadable declaration is reported separately from a rejected
-    inventory. Both stop the release, but they send an operator to different
-    places: one to the download that failed, the other to a path that was
-    wrong before any asset was compared.
+    An unreadable input is reported separately from a rejected inventory. Both
+    stop the release, but they send an operator to different places: one to the
+    download that failed, the other to a path that was wrong before any asset
+    was compared.
+
+    A *malformed* trusted record is different again, and it is rejected rather
+    than treated as unreadable. The distinction is deliberate: an unreadable
+    path means the workflow wired the wrong file, while a record that parses
+    and is structurally wrong means the build wrote something the verifier
+    cannot trust. Only the first is an operator's typo.
 
     Examples
     --------
@@ -154,19 +227,28 @@ def main(argv: list[str] | None = None) -> int:
     does not compare:
 
     >>> main(["--directory", "/nonexistent", "--expected", "/nonexistent",
+    ...       "--trusted", "/nonexistent/trusted.json",
     ...       "--output", "/nonexistent/record.json"])
     2
     """
     arguments = build_parser().parse_args(argv)
     try:
         declared_text = arguments.expected.read_text(encoding="utf-8")
+        trusted = release_digest_record.read_digest_record(arguments.trusted)
     except OSError as error:
         print(f"declaration unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
+    except release_digest_record.DigestRecordError as error:
+        print(f"trusted digest record rejected: {error}", file=sys.stderr)
+        return EXIT_INVENTORY_REJECTED
     expected = [line.strip() for line in declared_text.splitlines() if line.strip()]
     try:
-        verified = verify(arguments.directory, expected=expected)
-    except (release_inventory.InventoryError, release_digest.DigestError) as error:
+        verified = verify(arguments.directory, expected=expected, trusted=trusted)
+    except (
+        release_inventory.InventoryError,
+        release_digest.DigestError,
+        release_digest_record.DigestRecordError,
+    ) as error:
         print(f"release inventory rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
     arguments.output.write_text(

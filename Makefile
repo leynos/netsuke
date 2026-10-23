@@ -377,6 +377,8 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_reconcile_github.py \
 		scripts/tests/test_release_declaration.py \
 		scripts/tests/test_release_declaration_cli.py \
+		scripts/tests/test_release_digest_record.py \
+		scripts/tests/test_release_staged_digests.py \
 		scripts/release_candidate.py scripts/release_candidate_cli.py \
 		scripts/release_identity_record.py \
 		scripts/package_crate_cli.py scripts/publish_crates_io_cli.py \
@@ -390,6 +392,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_reconcile_github.py \
 		scripts/release_asset_names.py scripts/release_package_formats.py \
 		scripts/release_declaration.py scripts/release_declaration_cli.py \
+		scripts/release_digest_record.py scripts/release_staged_digests.py \
 		-c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules
 

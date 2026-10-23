@@ -13,6 +13,14 @@ would be checked against itself. Here the archive half comes from configuration
 and the operating-system half is held to a per-platform count, so both halves
 can disagree with the tree.
 
+The same run also writes the trusted digest record, because this is the only
+stage holding both the declared names and the staged bytes, and it is the last
+point before upload at which the bytes are still the build's own. The verifier
+compares the download against that record, so a substituted package or a
+replaced archive/sidecar pair is caught. Both files are written only on
+success; a partial record would be worse than none, because it would read as
+permission to verify less.
+
 Nothing here reaches the network. Every job that runs this has already
 downloaded the artefacts; this module lists what should be there.
 
@@ -25,6 +33,8 @@ import pathlib
 import sys
 
 import release_declaration
+import release_digest_record
+import release_staged_digests
 
 EXIT_OK = 0
 EXIT_MISSING_ASSETS = 1
@@ -74,6 +84,15 @@ def build_parser() -> argparse.ArgumentParser:
         type=pathlib.Path,
         help="where to write the declared asset names, one per line",
     )
+    parser.add_argument(
+        "--digest-record",
+        required=True,
+        type=pathlib.Path,
+        help=(
+            "where to write the trusted digest record the inventory verifier "
+            "compares the download against"
+        ),
+    )
     return parser
 
 
@@ -102,9 +121,10 @@ def main(argv: list[str] | None = None) -> int:
     ``EXIT_INPUT_UNUSABLE`` means the configuration or manifest was wrong
     before any asset was considered, so no build job is at fault.
 
-    The declaration is written only on success. A partial file would let a
-    later stage compare against a shorter list and call the release verified,
-    which is the defect this module exists to make impossible.
+    Neither file is written until both are computed. A partial declaration
+    would let a later stage compare against a shorter list and call the release
+    verified; a partial record would leave assets uncompared, which is the same
+    defect wearing the other hat.
 
     Examples
     --------
@@ -116,9 +136,11 @@ def main(argv: list[str] | None = None) -> int:
     >>> from pathlib import Path
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     output = Path(tmp) / "declared.txt"
+    ...     record = Path(tmp) / "record.json"
     ...     main(["--dist-dir", tmp, "--staging-config", str(Path(tmp) / "s.toml"),
     ...           "--manifest", str(Path(tmp) / "absent.Cargo.toml"),
-    ...           "--version", "1.0.0", "--output", str(output)])
+    ...           "--version", "1.0.0", "--output", str(output),
+    ...           "--digest-record", str(record)])
     2
     """
     arguments = build_parser().parse_args(argv)
@@ -128,6 +150,9 @@ def main(argv: list[str] | None = None) -> int:
             arguments.staging_config,
             arguments.manifest,
             arguments.version,
+        )
+        digests = release_staged_digests.staged_digests(
+            arguments.dist_dir, expected=names
         )
     except release_declaration.ConfigurationError as error:
         print(f"release declaration inputs unusable: {error}", file=sys.stderr)
@@ -139,6 +164,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"release declaration inputs unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNUSABLE
     release_declaration.write_declaration(names, arguments.output)
+    release_digest_record.write_digest_record(digests, arguments.digest_record)
     return EXIT_OK
 
 

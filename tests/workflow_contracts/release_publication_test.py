@@ -67,6 +67,8 @@ SECTION_MODULES = (
     "scripts/tests/test_release_reconcile_github.py",
     "scripts/tests/test_release_declaration.py",
     "scripts/tests/test_release_declaration_cli.py",
+    "scripts/tests/test_release_digest_record.py",
+    "scripts/tests/test_release_staged_digests.py",
 )
 
 #: The modules under test, named on the command line so `--doctest-modules`
@@ -93,6 +95,8 @@ SOURCE_MODULES = (
     "scripts/release_package_formats.py",
     "scripts/release_declaration.py",
     "scripts/release_declaration_cli.py",
+    "scripts/release_digest_record.py",
+    "scripts/release_staged_digests.py",
 )
 
 #: Fragments any sibling script-test target carries. The three that matter

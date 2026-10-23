@@ -2,15 +2,17 @@
 
 The declaration itself is proved in :mod:`test_release_declaration`. These
 tests pin the seam the workflow depends on: that the written file is the format
-the inventory verifier reads, that a refused declaration leaves no file behind,
-and that an unreadable input is reported separately from a refused release.
-Nothing here opens a socket.
+the inventory verifier reads, that the written digest record is the one the
+verifier compares against, that a refused declaration leaves neither file
+behind, and that an unreadable input is reported separately from a refused
+release. Nothing here opens a socket.
 """
 
 import typing as typ
 
 import pytest
 import release_digest
+import release_digest_record
 import release_inventory
 from release_declaration_cli import (
     EXIT_INPUT_UNUSABLE,
@@ -19,6 +21,8 @@ from release_declaration_cli import (
     build_parser,
     main,
 )
+from release_staging_support import ARCHIVE, SIDECAR
+from release_staging_support import stage_archive as _stage_archive
 from verify_release_inventory_cli import verify
 
 if typ.TYPE_CHECKING:
@@ -36,17 +40,21 @@ name = "netsuke-build"
 version = "0.1.0"
 """
 
-ARCHIVE = "netsuke-build-0.1.0-x86_64-unknown-linux-gnu.tar.gz"
-SIDECAR = f"{ARCHIVE}.sha256"
-
 
 def _workspace(tmp_path: Path, *, stage_packages: bool = True) -> dict[str, Path]:
     """Write the inputs the CLI reads and the tree it inspects.
 
+    The archive and its sidecar are staged whenever the packages are, because
+    the declaration names them from configuration rather than from the tree. A
+    tree holding no archive cannot yield the digest record the verifier reads,
+    so a fixture that declared without staging one would be asserting against a
+    release the producer refuses.
+
     Returns
     -------
     dict[str, Path]
-        Paths keyed by ``staging``, ``manifest``, ``dist``, and ``output``.
+        Paths keyed by ``staging``, ``manifest``, ``dist``, ``output``, and
+        ``record``.
     """
     staging = tmp_path / "release-staging.toml"
     _ = staging.write_text(STAGING_CONFIG, encoding="utf-8")
@@ -54,6 +62,7 @@ def _workspace(tmp_path: Path, *, stage_packages: bool = True) -> dict[str, Path
     _ = manifest.write_text(MANIFEST, encoding="utf-8")
     dist = tmp_path / "dist"
     dist.mkdir()
+    _stage_archive(dist)
     if stage_packages:
         for name in ("netsuke-0.1.0-1.x86_64.rpm", "netsuke_0.1.0-1_amd64.deb"):
             _ = (dist / name).write_bytes(f"package:{name}".encode())
@@ -62,6 +71,7 @@ def _workspace(tmp_path: Path, *, stage_packages: bool = True) -> dict[str, Path
         "manifest": manifest,
         "dist": dist,
         "output": tmp_path / "declared.txt",
+        "record": tmp_path / "trusted.json",
     }
 
 
@@ -78,6 +88,8 @@ def _argv(workspace: dict[str, Path]) -> list[str]:
         "0.1.0",
         "--output",
         str(workspace["output"]),
+        "--digest-record",
+        str(workspace["record"]),
     ]
 
 
@@ -128,6 +140,10 @@ def test_a_refused_declaration_writes_no_file(tmp_path: Path) -> None:
     assert not workspace["output"].exists(), (
         "a refused declaration must leave no file for a later stage to read"
     )
+    assert not workspace["record"].exists(), (
+        "a refused declaration must leave no digest record either, or the "
+        "verifier would compare the download against a record nothing vouched for"
+    )
 
 
 def test_the_diagnosis_names_the_under_counted_format(
@@ -174,16 +190,24 @@ def test_a_configuration_without_targets_is_an_input_fault(tmp_path: Path) -> No
 
 @pytest.mark.parametrize(
     "missing",
-    ["--dist-dir", "--staging-config", "--manifest", "--version", "--output"],
+    [
+        "--dist-dir",
+        "--staging-config",
+        "--manifest",
+        "--version",
+        "--output",
+        "--digest-record",
+    ],
 )
 def test_the_cli_requires_every_input(missing: str) -> None:
-    """Refuse to guess any of the five, since each names a different file."""
+    """Refuse to guess any of the six, since each names a different file."""
     complete = {
         "--dist-dir": "dist",
         "--staging-config": "staging.toml",
         "--manifest": "Cargo.toml",
         "--version": "0.1.0",
         "--output": "declared.txt",
+        "--digest-record": "trusted.json",
     }
     argv = [
         part
@@ -208,13 +232,40 @@ def test_the_written_declaration_is_what_the_verifier_checks(
     _stage_archive(workspace["dist"])
     _ = main(_argv(workspace))
     declared = workspace["output"].read_text(encoding="utf-8").splitlines()
+    trusted = release_digest_record.read_digest_record(workspace["record"])
 
-    verified = verify(workspace["dist"], expected=declared)
+    verified = verify(workspace["dist"], expected=declared, trusted=trusted)
 
     assert sorted(verified) == sorted(declared), (
         "every declared asset must verify, or the producer and the verifier "
         "disagree about the release"
     )
+
+
+def test_the_producer_records_a_digest_for_every_declared_asset(
+    tmp_path: Path,
+) -> None:
+    """Record the staged bytes of every declared name, and nothing else.
+
+    This is the round trip the trusted comparison rests on: the record the
+    producer writes is read by the verifier, so a name in one and not the other
+    would make every release fail its verification.
+    """
+    workspace = _workspace(tmp_path)
+    _stage_archive(workspace["dist"])
+    _ = main(_argv(workspace))
+    declared = workspace["output"].read_text(encoding="utf-8").splitlines()
+
+    recorded = release_digest_record.read_digest_record(workspace["record"])
+
+    assert sorted(recorded) == sorted(declared), (
+        "the record must cover exactly the declared assets, or the verifier's "
+        f"exact-set check will refuse a correct release: {sorted(recorded)}"
+    )
+    for name in declared:
+        assert recorded[name] == release_digest.digest_of_file(
+            workspace["dist"] / name
+        ), f"the recorded digest for {name} must describe its staged bytes"
 
 
 def test_the_verifier_rejects_a_tree_the_declaration_names(
@@ -230,16 +281,8 @@ def test_the_verifier_rejects_a_tree_the_declaration_names(
     _stage_archive(workspace["dist"])
     _ = main(_argv(workspace))
     declared = workspace["output"].read_text(encoding="utf-8").splitlines()
+    trusted = release_digest_record.read_digest_record(workspace["record"])
     _ = (workspace["dist"] / SIDECAR).unlink()
 
     with pytest.raises(release_inventory.MissingAssetError):
-        _ = verify(workspace["dist"], expected=declared)
-
-
-def _stage_archive(dist: Path) -> None:
-    """Create the archive and a sidecar describing it below ``dist``."""
-    archive = dist / ARCHIVE
-    _ = archive.write_bytes(b"netsuke archive bytes")
-    _ = (dist / SIDECAR).write_text(
-        f"{release_digest.digest_of_file(archive)}  {ARCHIVE}\n", encoding="utf-8"
-    )
+        _ = verify(workspace["dist"], expected=declared, trusted=trusted)
