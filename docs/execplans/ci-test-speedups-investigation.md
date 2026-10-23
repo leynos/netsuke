@@ -2,25 +2,17 @@
 
 Status: IN PROGRESS
 
-The investigation is under way. The implementation snapshot exercised by the
-earlier local gates was based on `origin/main` at
-`051358ee360a97fcbebe2a836e25e106917ed845`. The branch was replayed on 23
-October onto the fetched PR target, `origin/main` at
-`6572fb956379f47e70af914bfe4307b740a0b15e`. Its previous target on 20 October
-was `37fc364a3caf6845dc4550666dea779d8b9328e2`; the earlier investigation base
-was `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`. The 10 October 2026 reference
-snapshot is `24293a1b3616872100d379e277540bb1df89203c`. These states remain
-distinct. No current performance baseline or candidate result is claimed.
-
-While review was pending, `main` advanced to
-`8a961000859c02862454338fda6c4dd65bda2aa1`. The branch was rebased again from
+The investigation is under way. The current PR target is `origin/main` at
+`8a961000859c02862454338fda6c4dd65bda2aa1`. On 23 October the branch was
+rebased from prior target `6572fb956379f47e70af914bfe4307b740a0b15e` and head
 `b2a5117e495be9149b63c2a2fa054be2c49facdb`; the replay had no conflicts and
-`git range-diff` matched all 21 commits. The target-only delta did not change
-`.github/workflows/ci.yml`, `.github/actions/linux-gate-cache/action.yml`,
-`tests/command_env_ui_tests.rs` or `.config/nextest.toml`. At rebased head
+`git range-diff` matched all 21 commits in that full branch replay. The
+target-only delta did not change `.github/workflows/ci.yml`,
+`.github/actions/linux-gate-cache/action.yml`, `tests/command_env_ui_tests.rs`
+or `.config/nextest.toml`. At rebased head
 `b1840c2f2542b60caf74432cc13e5edf7eed5c22`, `make check-fmt`, `make test`,
 `make typecheck` and `make lint` passed. Ordinary PR workflows completed
-successfully on that head:
+successfully on head `99522c517c13e0414370df408f2648ee0bb7312a`:
 
 - [CI](https://github.com/leynos/netsuke/actions/runs/39930296912)
 - [Netsukefile](https://github.com/leynos/netsuke/actions/runs/39930296876)
@@ -419,8 +411,10 @@ fidelity comparisons block adoption.
 - [x] Validate the collector with the full local gates on the candidate based
   on `051358ee360a97fcbebe2a836e25e106917ed845`; retain earlier failures as
   dated history rather than current gate status.
-- [x] Replay onto the fetched PR target `origin/main` at
-  `6572fb956379f47e70af914bfe4307b740a0b15e`; no conflicts occurred.
+- [x] Replay from historical target
+  `6572fb956379f47e70af914bfe4307b740a0b15e` onto current target
+  `8a961000859c02862454338fda6c4dd65bda2aa1`; no conflicts occurred and the
+  full branch range-diff matched all 21 commits.
 - [x] On the corrected rebased candidate, pass `make check-fmt`, `make test`,
   `make typecheck`, `make lint`, `make test-workflow-contracts`,
   `make doc-coverage`, and `make markdownlint`.
@@ -596,30 +590,39 @@ evaluations and adoption follow-through remain outstanding. Candidate adoption
 still requires ordinary-run evidence under the predeclared cost and fidelity
 gates.
 
-The documentation checkpoint and evidence summaries are published through draft
-PR #918 and issue #894. A focused review found parser documentation and Nextest
-start-line coverage gaps. The collector now recognizes the documented
+The documentation checkpoint and evidence summaries are published through pull
+request 918 and issue #894. A focused review found parser documentation and
+Nextest start-line coverage gaps. The collector now recognizes the documented
 skipped-binary and filter-source suffixes, preserves unknown skipped-test
 counts when only binary counts are available, and resets test identities at
 each new run. Regression tests cover those forms and multiple runs in one log.
 A fresh review found additional runner-provenance, crashed-test, and
-test-clarity cases. The current candidate includes corrections and regression
-tests for them; fresh review confirmation remains pending. No CI dispatch
-occurred for the offline collector milestone.
+test-clarity cases. The candidate includes corrections and regression tests for
+them. Confirmation of that parser pass was pending at this checkpoint; a later
+review on 23 October is recorded below. No CI dispatch occurred for the offline
+collector milestone.
 
-## Revision note
+## Revision history
 
-Revised 2026-10-23 after replaying the ten-commit issue series onto the current
-PR target `origin/main` at `6572fb956379f47e70af914bfe4307b740a0b15e`. No
-conflicts occurred. `range-diff` maps all ten issue commits; eight patches are
-identical, while two documentation patches differ only because the target
-renumbered ADR references and added linter guidance. The target's `Cargo.lock`
-is preserved; the issue series does not change it. Five local review fixes were
+On 23 October, the full branch range from prior target
+`6572fb956379f47e70af914bfe4307b740a0b15e` and head
+`b2a5117e495be9149b63c2a2fa054be2c49facdb` was replayed onto the then-current
+PR target `origin/main` at `8a961000859c02862454338fda6c4dd65bda2aa1`. No
+conflicts occurred; `range-diff` matched all 21 commits. The prior target is
+historical, not the current PR base.
+
+An earlier replay note called its issue series ten commits. Rechecking the
+saved ranges shows seven old issue commits, five unchanged and two with
+documentation-only differences; four additional issue commits were present
+after that replay, for eleven issue commits in total. The earlier ten-commit
+count and its eight-identical/two-different summary were inaccurate and are
+superseded by this range accounting. The current target's `Cargo.lock` is
+preserved; the issue series does not change it. Five local review fixes were
 restored from a verified stash. The first rebased typecheck found three typing
 errors in the inventory contract test; its runtime cases are unchanged and the
 static checks now pass. The corrected candidate passed the final serial gate
-sequence; a documentation-only follow-up also captured successful format,
-Markdown, and diagram gate exits.
+sequence; documentation-only follow-ups captured successful format, Markdown,
+and diagram gate exits.
 
 The 20 October revision replayed onto the then-current PR target `origin/main`
 at `37fc364a3caf6845dc4550666dea779d8b9328e2`. The earlier local gate sequence
@@ -641,10 +644,14 @@ responsibility, with no rule suppressions. Its current local delta reports no
 new findings, and the four added helper modules each score 10.0. The 20 October
 candidate's full Rust suite hit the documented shared-lock timeout. The 23
 October rebased candidate passed the complete local gate sequence, as recorded
-above. A fresh CodeRabbit review and hosted confirmation on that rebased head
-remain pending. Earlier hosted validation, H4 monitoring, and local supervisor
-evidence remain dated history. The controlled baseline, bounded telemetry, and
-candidate decisions remain outstanding.
+above. Ordinary PR workflows passed on head
+`99522c517c13e0414370df408f2648ee0bb7312a`. A subsequent CodeRabbit review on
+`4a38dc13f961ddeef915c4d4b0c2a5ab2fee1e83` identified stale branch-state prose;
+the current-source comparison, range accounting, retained-record caveat, and
+Python pattern-match validation were added in response. Earlier hosted
+validation, H4 monitoring, and local supervisor evidence remain dated history.
+The controlled baseline, bounded telemetry, and candidate decisions remain
+outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

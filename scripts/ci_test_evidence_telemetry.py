@@ -51,10 +51,12 @@ def load_inventory(path: Path, identity: tuple[int, int, int]) -> dict:
         message = "inventory exceeds metadata budget"
         raise ValueError(message)
     inventory = json.loads(data)
-    if not isinstance(inventory, dict):
-        message = "inventory must be a JSON object"
-        raise TypeError(message)
-    return validate_inventory(inventory, identity)
+    match inventory:
+        case dict():
+            return validate_inventory(inventory, identity)
+        case _:
+            message = "inventory must be a JSON object"
+            raise TypeError(message)
 
 
 def validate_inventory(
@@ -103,7 +105,20 @@ def validate_inventory(
 
 def _is_inventory_object(value: object) -> typ.TypeGuard[dict[str, object]]:
     """Narrow decoded inventory to an object with JSON string keys."""
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    match value:
+        case dict() as inventory:
+            return all(_is_string(key) for key in inventory)
+        case _:
+            return False
+
+
+def _is_string(value: object) -> bool:
+    """Recognize JSON string keys without coercing their values."""
+    match value:
+        case str():
+            return True
+        case _:
+            return False
 
 
 def _require_valid_identity(identity: tuple[int, int, int]) -> None:
@@ -140,19 +155,31 @@ def _is_measurement(value: object) -> typ.TypeGuard[int | float]:
             return False
 
 
+def _is_integer_measurement(value: object) -> typ.TypeGuard[int]:
+    """Accept integers but exclude booleans, which subclass ``int``."""
+    match value:
+        case bool():
+            return False
+        case int():
+            return True
+        case _:
+            return False
+
+
 def _measurements(inventory: dict) -> dict[str, dict[str, int | float]]:
     """Select valid values; ``_measurements({})`` gives empty sections."""
     result = {}
     for section, fields in NUMERIC_FIELDS.items():
-        observed = inventory.get(section, {})
-        if not isinstance(observed, dict):
-            continue
-        result[section] = {
-            field: value
-            for field in fields
-            if _is_measurement(value := observed.get(field))
-            and (field.endswith("_seconds") or isinstance(value, int))
-        }
+        match inventory.get(section, {}):
+            case dict() as observed:
+                result[section] = {
+                    field: value
+                    for field in fields
+                    if _is_measurement(value := observed.get(field))
+                    and (field.endswith("_seconds") or _is_integer_measurement(value))
+                }
+            case _:
+                continue
     return result
 
 
