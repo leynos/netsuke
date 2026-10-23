@@ -32,11 +32,11 @@ from ci_test_evidence_telemetry import (
 from ci_test_evidence_types import (
     OUTCOMES,
     PHASES,
-    RUNNER_LABELS,
     UBICLOUD_SHAPE,
     AttemptCost,
     CollectorInputs,
     JobRecord,
+    is_runner_label,
     normalize_step_number,
 )
 from ci_test_evidence_validation import (
@@ -308,10 +308,7 @@ def _job_record(run: dict, job: dict, inputs: CollectorInputs) -> JobRecord:
         "comparison": "observational",
         "cohort": classify_cohort(run, job),
         "runner_labels": [
-            label
-            for label in job.get("labels", [])
-            if isinstance(label, str)
-            and (label in RUNNER_LABELS or UBICLOUD_SHAPE.fullmatch(label))
+            label for label in job.get("labels", []) if is_runner_label(label)
         ],
         "outcome": _outcome(job.get("conclusion")),
         "attempt_outcome": _outcome(run.get("conclusion")),

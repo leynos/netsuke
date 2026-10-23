@@ -149,10 +149,12 @@ def _record_sccache_json(body: str, result: dict[str, int | None]) -> None:
         stats = json.loads(body).get("stats", {})
     except json.JSONDecodeError:
         return
-    if not isinstance(stats, dict):
-        return
-    result.update({
-        key: scalar
-        for key, scalar in stats.items()
-        if key in result and type(scalar) is int and scalar >= 0
-    })
+    match stats:
+        case dict() as counters:
+            result.update({
+                key: scalar
+                for key, scalar in counters.items()
+                if key in result and type(scalar) is int and scalar >= 0
+            })
+        case _:
+            return
