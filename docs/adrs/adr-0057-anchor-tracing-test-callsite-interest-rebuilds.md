@@ -90,8 +90,9 @@ count remains at least two and `has_just_one` remains false.
 Both implementations of `with_test_subscriber` call the anchor function before
 constructing capture state. The private span-capture helper in
 `runner/dyndep/generation_telemetry.rs` does the same. The root helper's
-uninstalled constructor remains crate-private and is used only by the
-fresh-process reproduction worker.
+uninstalled constructor remains crate-private: the capture wrapper and the
+fresh-process reproduction worker use it directly, while ordinary callers use
+`with_test_subscriber`.
 
 The worker keeps thread orchestration and event snapshots in its private
 `threads` module. Those helpers exist only to keep the issue 927 canary and
@@ -115,6 +116,16 @@ snapshot rejected by the exact-cardinality oracle; the mitigated worker requires
 `deadline`, the same span fields, and exactly one validated event. Synthetic
 zero/one/two-event controls and a seeded duplicate TRACE capture keep the
 oracle non-vacuous.
+
+The worker records two separate phases. T2 signals immediately before
+`Dispatch::new`, which enters `tracing-core`'s `callsite::register_dispatch`,
+and the capture layer separately signals its actual summary `register_callsite`
+callback. T1 requires the first signal before releasing its gate. Without
+anchors, the callback must arrive before release; with anchors, the callback
+must arrive only after T1 releases the registry read lock. A callback drained
+after both workers join is never accepted as evidence of overlap. A unit
+negative control withholds the pre-registration signal until after release and
+requires the gate to report `registration-start-timeout`.
 
 ## Consequences and removal criteria
 

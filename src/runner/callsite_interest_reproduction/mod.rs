@@ -13,7 +13,9 @@ use super::manifest_structure_telemetry::validate_manifest_structure_events;
 use anyhow::{Result, anyhow, ensure};
 use mockable::Env;
 use std::{ffi::OsString, time::Duration};
-use threads::{CaptureMode, CaptureSnapshot, run_worker_threads};
+use threads::{
+    CaptureMode, CaptureSnapshot, RegistrationAttemptTiming, WorkerSnapshot, run_worker_threads,
+};
 
 const MODE_ENV: &str = "NETSUKE_ISSUE_927_WORKER_MODE";
 const CHILD_DEADLINE: Duration = Duration::from_secs(20);
@@ -63,17 +65,17 @@ fn worker_mode_from(raw_mode: Option<OsString>) -> Result<Option<String>> {
 
 /// Prove the original stale-interest schedule still fails without anchors.
 fn run_unmitigated_worker() -> Result<()> {
-    let captured = run_worker_threads(CaptureMode::Unmitigated)?;
-    validate_unmitigated_capture(&captured)?;
-    print_capture_markers(&captured, "installed", "zero-rejected")
+    let snapshot = run_worker_threads(CaptureMode::Unmitigated)?;
+    validate_unmitigated_capture(&snapshot.capture)?;
+    print_capture_markers(&snapshot, "installed", "zero-rejected")
 }
 
 /// Prove anchors prevent the stale-interest schedule from dropping the event.
 fn run_mitigated_worker() -> Result<()> {
     test_support::tracing_capture::ensure_test_interest_anchors_registered();
-    let captured = run_worker_threads(CaptureMode::Mitigated)?;
-    validate_mitigated_capture(&captured)?;
-    print_capture_markers(&captured, "deadline", "one-accepted")
+    let snapshot = run_worker_threads(CaptureMode::Mitigated)?;
+    validate_mitigated_capture(&snapshot.capture)?;
+    print_capture_markers(&snapshot, "deadline", "one-accepted")
 }
 
 /// Require the unmitigated schedule to retain the span and lose the event.
@@ -125,15 +127,32 @@ fn validate_mitigated_capture(captured: &CaptureSnapshot) -> Result<()> {
 
 /// Print the release, span, event, and oracle markers required by the parent.
 fn print_capture_markers(
-    captured: &CaptureSnapshot,
+    snapshot: &WorkerSnapshot,
     release_cause: &str,
     oracle: &str,
 ) -> Result<()> {
+    let WorkerSnapshot {
+        capture,
+        registration_timing:
+            RegistrationAttemptTiming {
+                dispatch_started_before_release,
+                summary_callback_before_release,
+                summary_callback_after_release,
+            },
+    } = snapshot;
     write_marker("ISSUE927_GATE_PAUSED=true")?;
-    write_marker("ISSUE927_REGISTRATION_ATTEMPT=true")?;
+    write_marker(&format!(
+        "ISSUE927_DISPATCH_REGISTRATION_STARTED_BEFORE_RELEASE={dispatch_started_before_release}"
+    ))?;
+    write_marker(&format!(
+        "ISSUE927_SUMMARY_CALLBACK_BEFORE_RELEASE={summary_callback_before_release}"
+    ))?;
+    write_marker(&format!(
+        "ISSUE927_SUMMARY_CALLBACK_AFTER_RELEASE={summary_callback_after_release}"
+    ))?;
     write_marker(&format!("ISSUE927_RELEASE_CAUSE={release_cause}"))?;
-    write_marker(&format!("ISSUE927_SPAN_FIELDS={:?}", captured.span_fields))?;
-    write_marker(&format!("ISSUE927_EVENT_SNAPSHOT={:?}", captured.events))?;
+    write_marker(&format!("ISSUE927_SPAN_FIELDS={:?}", capture.span_fields))?;
+    write_marker(&format!("ISSUE927_EVENT_SNAPSHOT={:?}", capture.events))?;
     write_marker(&format!("ISSUE927_ORACLE={oracle}"))?;
     Ok(())
 }

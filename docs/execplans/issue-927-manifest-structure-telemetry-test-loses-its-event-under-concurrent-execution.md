@@ -304,8 +304,28 @@ seeded duplicate.
   logs ending in `-focused-reproduction-5.out` and `-focused-worker-5.out`. The
   previous stop-hook failures were caused by a full filesystem; the final run
   completed with disk space and compiler admission healthy.
-- [ ] Mark the PR ready after the candidate-bound assessments and checks clear,
-  then follow PR #943 through merge.
+- [x] (2026-10-23) CodeRabbit found that a post-join callback check could accept
+  a T2 registration signal that arrived after T1's deadline. The worker now
+  records a boundary signal immediately before `Dispatch::new`, which enters
+  `tracing-core`'s `callsite::register_dispatch`, and separately records the
+  capture layer's actual summary callback. T1 requires the boundary signal
+  before release. Unmitigated mode requires the callback before release;
+  anchored mode requires it only after release. A unit negative control
+  withholds the boundary signal until after release and requires
+  `registration-start-timeout`. The parent requires all phase markers. The
+  boundary signal is the closest test seam before tracing-core registration;
+  the later layer callback confirms the actual callback phase. Both focused
+  worker modes and all seven candidate gates passed after this correction:
+  4,688 tests passed, 7 skipped; doctests had 40 passed and 6 ignored;
+  typecheck and lint passed; doc coverage was 98.15%; Markdown lint found zero
+  issues; and Nixie validated every diagram. The disk-full stop-hook failures
+  did not recur after filesystem space recovered. Logs use the `-3.out` suffix
+  for focused and documentation checks, `-4.out` for tests, and `-3.out` for
+  typecheck and lint.
+- [x] (2026-10-23) Confirmed PR #943 remains ready for review after the
+  candidate-bound assessments and checks passed; it stays ready.
+- [ ] Resolve current-head review concerns, follow checks to equilibrium, and
+  merge PR #943 with the verified head commit.
 
 ## Surprises & discoveries
 
@@ -508,18 +528,22 @@ referenced from the design and developers' guides, and indexed from
   for the summary event pauses while T2 installs a TRACE capture dispatch.
   Unmitigated mode must release on `installed`, capture the structural span,
   and report zero summaries. In mitigated mode, T1's registry read lock blocks
-  T2's registration, so the attempt phase times out at the fixed 250 ms
-  deadline and releases on `deadline`. T2 then captures the span and exactly
-  one summary, and its registration callback fires after T1 releases. An
-  acknowledgement within the deadline releases on `installed` and fails the
-  worker. Unmitigated mode uses the 10-second thread deadline for both phases.
-  Retain the separate installation-completion signal inside `with_default`.
-  Method: ignored child worker driven by a parent test through `current_exe()`,
-  with a wall-clock deadline. The parent kills a child that exceeds its
-  20-second deadline. Artefact: `src/runner/callsite_interest_reproduction/`.
-  Non-vacuity: require all phase markers and the exact-cardinality oracle;
-  removing the pre-registration anchor must reproduce zero summaries and a
-  validator error.
+  T2's registration, so no callback arrives before the fixed 250 ms deadline;
+  T1 releases on `deadline`, then T2's callback arrives after that release. T2
+  captures the span and exactly one summary. The worker records the
+  pre-registration boundary and callback phases separately. T1 first requires
+  T2's boundary signal before release; a late signal cannot satisfy this check.
+  In the anchored run the real capture-layer callback remains blocked until T1
+  releases the registry lock and is then observed afterwards. An
+  acknowledgement within the callback deadline releases on `installed` and
+  fails the worker. Unmitigated mode uses the 10-second thread deadline for the
+  boundary and callback phases. Retain the separate installation-completion
+  signal inside `with_default`. Method: ignored child worker driven by a parent
+  test through `current_exe()`, with a wall-clock deadline. The parent kills a
+  child that exceeds its 20-second deadline. Artefact:
+  `src/runner/callsite_interest_reproduction/`. Non-vacuity: require all phase
+  markers and the exact-cardinality oracle; removing the pre-registration
+  anchor must reproduce zero summaries and a validator error.
 - **V3: Summary oracle is exact and non-vacuous.** One exact summary with the
   six expected count tokens succeeds; zero or two summaries fail; wrong or
   duplicate count tokens, an additional count token, and `SENTINEL` fail.
@@ -629,9 +653,14 @@ make nixie
 ```
 
 Expected verification output includes a model witness in Variant A, no witness
-in Variant B, `RELEASE_CAUSE=installed` in the unmitigated child,
-`RELEASE_CAUSE=deadline` in the mitigated child, a span snapshot in both modes,
-and one exact summary only in mitigated mode.
+in Variant B, `ISSUE927_DISPATCH_REGISTRATION_STARTED_BEFORE_RELEASE=true` in
+both children, `RELEASE_CAUSE=installed` and summary callback markers
+`BEFORE_RELEASE=true, AFTER_RELEASE=false` in the unmitigated child,
+`RELEASE_CAUSE=deadline` and callback markers
+`BEFORE_RELEASE=false, AFTER_RELEASE=true` in the mitigated child, a span
+snapshot in both modes, and one exact summary only in mitigated mode. The
+delayed-boundary negative control must reject a registration signal sent only
+after T1 releases its gate.
 
 ## Validation and acceptance
 
