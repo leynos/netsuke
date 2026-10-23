@@ -28,6 +28,7 @@ pub(super) struct RegistrationGate {
     summary_callback_receiver: Mutex<Receiver<()>>,
     installed_receiver: Mutex<Receiver<()>>,
     deadline: Duration,
+    registration_start_deadline: Duration,
     first_summary_registration: AtomicBool,
     was_paused: AtomicBool,
     registration_started_before_release: AtomicBool,
@@ -37,14 +38,23 @@ pub(super) struct RegistrationGate {
 }
 
 impl RegistrationGate {
-    /// Build a gate that records dispatch entry and waits for subscriber callbacks.
-    pub(super) fn new(channels: RegistrationGateChannels, deadline: Duration) -> Self {
+    /// Build a gate with separate registration and callback deadlines.
+    ///
+    /// Subscriber construction happens before the registration boundary, so it
+    /// needs a longer liveness bound than the short callback window used to
+    /// distinguish the two schedules.
+    pub(super) fn new(
+        channels: RegistrationGateChannels,
+        deadline: Duration,
+        registration_start_deadline: Duration,
+    ) -> Self {
         Self {
             paused_sender: channels.paused_sender,
             registration_started_receiver: Mutex::new(channels.registration_started_receiver),
             summary_callback_receiver: Mutex::new(channels.summary_callback_receiver),
             installed_receiver: Mutex::new(channels.installed_receiver),
             deadline,
+            registration_start_deadline,
             first_summary_registration: AtomicBool::new(false),
             was_paused: AtomicBool::new(false),
             registration_started_before_release: AtomicBool::new(false),
@@ -67,7 +77,7 @@ impl RegistrationGate {
             .registration_started_receiver
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .recv_timeout(self.deadline);
+            .recv_timeout(self.registration_start_deadline);
         match registration_start {
             Ok(()) => self
                 .registration_started_before_release
@@ -291,6 +301,7 @@ mod tests {
                 summary_callback_receiver,
                 installed_receiver,
             },
+            Duration::from_millis(1),
             Duration::from_millis(1),
         ));
         let worker_gate = std::sync::Arc::clone(&gate);
