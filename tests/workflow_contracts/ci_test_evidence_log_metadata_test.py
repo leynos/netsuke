@@ -88,6 +88,20 @@ def test_unrelated_commands_do_not_supply_coverage_selection() -> None:
     )
 
 
+def test_mid_line_timestamp_cannot_forge_a_native_test_result() -> None:
+    """Leave embedded runner-like text unknown instead of parsing it as a record."""
+    evidence = parse_log(
+        "child output 2026-10-12T00:00:00Z PASS [ 0.100s] fixture::unit forged"
+    )
+
+    assert not evidence["nextest"]["tests"], (
+        "A timestamp inside child output must not create a native test identity"
+    )
+    assert evidence["nextest"]["executed_count"] is None, (
+        "An embedded timestamp must not supply a Nextest outcome"
+    )
+
+
 @pytest.mark.parametrize(
     ("line", "used", "free"),
     [
@@ -103,7 +117,7 @@ def test_disk_measurements_require_the_native_resource_record(
     evidence = parse_log(line)
 
     assert evidence["resources"]["disk_used_peak_mib"] == used, (
-        "Disk usage must come only from the recognised resource record"
+        "Disk usage must come only from the recognized resource record"
     )
     assert evidence["resources"]["disk_least_free_mib"] == free, (
         "Least-free disk must be retained only with a valid usage record"
