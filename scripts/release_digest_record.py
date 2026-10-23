@@ -282,7 +282,23 @@ declaration disagree: record omits ['b'], record adds []
     if not declared:
         msg = "the declaration names no asset, so there is nothing to verify"
         raise DigestRecordError(msg)
-    recorded = set(digests)
+    _require_complete_coverage(declared, set(digests))
+
+
+def _require_complete_coverage(declared: set[str], recorded: set[str]) -> None:
+    """Require the record to name exactly the assets the declaration names.
+
+    This is a separate obligation from the empty-declaration guard above, and
+    it carries its own diagnostic, so it is stated as one requirement here
+    rather than as a second error path inside the caller. Both offenders are
+    reported together: an operator repairing a record wants to see everything
+    that disagrees, not the first name found.
+
+    Raises
+    ------
+    DigestRecordError
+        If either side names an asset the other does not.
+    """
     missing = sorted(declared - recorded)
     extra = sorted(recorded - declared)
     if not missing and not extra:
