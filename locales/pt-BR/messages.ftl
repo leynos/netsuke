@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Sem tópico, isto corresponde a `--help`. Use `
 cli.help.actions_heading = Ações:
 cli.help.targets_heading = Alvos:
 cli.help.targets.about = Listar alvos e ações no manifesto selecionado.
+cli.help.targets.flag.edges.help = Incluir arestas de dependência e receitas sem processamento na saída JSON.
 cli.help.default_marker = padrão
 cli.help.conditional_marker = condicional
 
@@ -101,6 +102,7 @@ runner.context.load_manifest = Não foi possível carregar o manifesto em { $pat
 runner.context.build_graph = Não foi possível construir o grafo a partir do manifesto.
 runner.context.generate_ninja = Não foi possível gerar o manifesto do Ninja.
 runner.context.render_graph = Não foi possível renderizar o artefato do grafo.
+runner.help.targets_edges_require_json = A opção --edges requer --json no nível raiz.
 
 runner.io.create_temp_file = Não foi possível criar o arquivo Ninja temporário.
 runner.io.write_temp_ninja = Não foi possível gravar o arquivo Ninja temporário.

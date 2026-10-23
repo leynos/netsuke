@@ -146,39 +146,23 @@ inspection to `runner::process`.
 
 The recipe-text quoting filters `shell_quote` and `shell_join` are on that
 shared query path, registered by `recipe_text::register_filters` alongside the
-collection filters. They take a `dialect` keyword argument, and with it given
-they read no host state at all, so a query that names its dialect is fully
-deterministic. With `dialect` omitted they resolve through
-`RecipeShell::host_default`, which is the value `register_query_helpers` passes.
+collection filters. An omitted `dialect` uses the fixed `sh` dialect in query
+mode, so rendered metadata does not vary with the host or the build-shell
+setting. An explicit `dialect=` remains available for metadata that requests a
+specific dialect. The query path neither constructs `StdlibConfig` nor resolves
+`NETSUKE_WINDOWS_SHELL`; malformed build-shell configuration therefore does not
+make a read-only query fail.
 
-The two surfaces agree on an explicitly named dialect, on every host, and that
-is what `tests/stdlib_manifest_query_tests.rs` pins. Their *defaults* are a
-different matter, and the difference is wider than "the same value reached
-twice". The query surface takes `host_default()`; the build surface takes the
-shell the runner resolves, which on Windows honours `NETSUKE_WINDOWS_SHELL`. So
-a Windows host configured for Bash renders `sh` quoting for the build and
-PowerShell quoting for `help targets` from the same manifest expression — the
-divergence `register_query_helpers` and `ManifestLoadMode::ManifestQuery` each
-document as deliberate. What keeps that divergence unobservable today is only
-that `execute_help` returns before `resolve_recipe_shell()` is reached
-(`src/runner/mod.rs:149-153`); it is masked, not absent. On a non-Windows host
-`resolve_recipe_shell_with` returns `Posix` before it reads the environment at
-all, so the two defaults genuinely coincide there.
-
-Keep the masked divergence rather than closing it. Threading the resolution
-through would mean hoisting a fallible environment read above that early
-return, where a malformed `NETSUKE_WINDOWS_SHELL` would start failing a
-metadata query that never uses it — and the query renders discovery metadata
-that is never executed. A resolved shell is also not query-reachable for the
-metadata-only load, which does not construct `StdlibConfig` at all.
-
-The explicit-dialect agreement is pinned twice over. A probe that *names* its
-dialect is the case the keyword overrides the registration's default, so it can
-never catch a wrong default in `register_query_helpers` — the dialect-omitting
-probes do that, comparing each against the twin `host_default_field` selects
-for this host rather than against a hardcoded `sh`, because the file runs on
-Windows too. `assert_full_stdlib_renders` is the negative control on the
-explicit comparison: without it, two identical failures would satisfy it.
+Full manifest rendering uses the recipe shell selected by the runner, or its
+host default when no shell is selected. Consequently, an expression that omits
+`dialect` may render differently in a build and in query metadata on Windows.
+That is deliberate: query output must stay stable without observing the build
+environment, while build recipes must use the shell that will execute them.
+Authors who need the same rendered text in both contexts can name `dialect=`.
+`tests/stdlib_manifest_query_tests/dialect_probes.rs` pins both explicit
+dialects and verifies that omitted dialects use `sh` through the query
+catalogue on every platform. The child process also receives a malformed shell
+override, proving that help does not resolve it.
 
 Manifest rendering has two caller-selected modes. Full rendering evaluates all
 manifest fields, including recipe bodies, for build, generate, and manifest
@@ -187,6 +171,21 @@ structural selectors needed to validate the graph, but leaves command and
 script recipe bodies untouched. This boundary is what permits a recipe to
 contain a build-only helper without causing `help targets` to execute or
 otherwise evaluate that helper; it does not alter full-render behaviour.
+
+The opt-in `HelpTargetsArgs.edges` flag adds graph JSON to
+`netsuke --json help targets` while preserving the existing catalogue when the
+flag is absent. `--edges` requires root-level `--json`. Dispatch passes the
+flag through the Help early return, and the runner constructs the optional
+`GraphJson` projection from the already-loaded restricted query manifest after
+name checks and catalogue collection. It returns the projection only after
+`BuildGraph` construction and default-reference validation succeed. It does not
+reload the manifest or serialize AST types. The projection copies authored edge
+lists and defaults, and retains legacy command, script, and rule recipe bodies
+as raw text; it performs no recipe interpolation or execution. Keep query
+metadata registration independent of `StdlibConfig`: the query surface uses
+fixed `ShellDialect::Sh` defaults for `shell_quote` and `shell_join`, while
+full rendering continues to use the selected recipe-shell dialect. This keeps
+the export hermetic without changing the configuration default used by builds.
 
 The standard-library registration boundary owns MiniJinja's value formatter. It
 preserves the historical lowercase `true` and `false` spelling when a Boolean

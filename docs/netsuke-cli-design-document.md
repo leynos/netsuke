@@ -126,6 +126,13 @@ its full standard library and behaviour; these restrictions apply only to
 manifest-query rendering. Existing manifests remain compatible when they omit
 the optional descriptions.
 
+The opt-in `netsuke --json help targets --edges` form also exports a versioned
+graph projection from the same restricted query. It records declaration-level
+nodes, authored edge arrays and defaults, rules, conditional flags, and raw
+legacy recipe text.
+[ADR-0044](adrs/adr-0044-hermetic-help-targets-graph-json.md) defines its v1
+schema and inherited validation limits.
+
 Intuitive **defaults** further contribute to a smooth UX. As noted, if no
 subcommand is given, `netsuke build` is assumed by default. Similarly, common
 options have sensible defaults: by default, Netsuke looks for `Netsukefile` in
@@ -348,13 +355,13 @@ detail how Netsuke’s CLI will meet key accessibility criteria:
   by default, but `netsuke graph --html` (shipped in milestone 3.4.5) produces
   a self-contained HTML visualization for sighted users; the HTML page also
   embeds a `<details>` textual outline so screen-reader users get a structured
-  fallback. A `--json` view of the same graph data is the open follow-up
-  (roadmap item `3.15.6`); when it ships, screen-reader users will be able to
-  take that JSON and navigate the structure with a JSON viewer, or script
-  custom queries, rather than parsing the visually-structured DOT text dump.
-  Documentation describes the structure of such outputs clearly so users know
-  what to expect (e.g., which fields appear in the JSON), per Recommendation 3
-  about documenting output structure in advance.
+  fallback. A `--json` view of the same graph data is the open follow-up while
+  `netsuke --json help targets --edges` provides a hermetic, versioned
+  manifest-query projection with raw recipes (ADR-0044). The graph subcommand
+  itself remains a full-loader DOT/HTML renderer; a JSON form of that rendered
+  graph is a separate design question. Documentation describes the help-targets
+  schema, so users know what to expect, per Recommendation 3 about documenting
+  output structure in advance.
 
 - **Accessible Documentation:** Netsuke ensures that all documentation is
   available in an accessible format, not solely within the CLI. Unix release

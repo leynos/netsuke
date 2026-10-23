@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = With no topic this matches `--help`. Use `help 
 cli.help.actions_heading = Actions:
 cli.help.targets_heading = Targets:
 cli.help.targets.about = List targets and actions in the selected manifest.
+cli.help.targets.flag.edges.help = Include dependency edges and raw recipes in JSON output.
 cli.help.default_marker = default
 cli.help.conditional_marker = conditional
 
@@ -101,6 +102,7 @@ runner.context.load_manifest = Failed to load manifest at { $path }.
 runner.context.build_graph = Failed to build graph from the manifest.
 runner.context.generate_ninja = Failed to generate the Ninja manifest.
 runner.context.render_graph = Failed to render the graph artefact.
+runner.help.targets_edges_require_json = The --edges option requires root-level --json.
 
 runner.io.create_temp_file = Failed to create temporary Ninja file.
 runner.io.write_temp_ninja = Failed to write temporary Ninja file.

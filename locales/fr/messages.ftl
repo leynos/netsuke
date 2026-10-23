@@ -49,6 +49,7 @@ cli.subcommand.help.long_about = Sans sujet, ceci correspond à `--help`. Utilis
 cli.help.actions_heading = Actions :
 cli.help.targets_heading = Cibles :
 cli.help.targets.about = Lister les cibles et actions du manifeste sélectionné.
+cli.help.targets.flag.edges.help = Inclure les arêtes de dépendance et les recettes brutes dans la sortie JSON.
 cli.help.default_marker = par défaut
 cli.help.conditional_marker = conditionnel
 
@@ -101,6 +102,7 @@ runner.context.load_manifest = Impossible de charger le manifeste depuis { $path
 runner.context.build_graph = Impossible de construire le graphe à partir du manifeste.
 runner.context.generate_ninja = Impossible de générer le manifeste Ninja.
 runner.context.render_graph = Impossible de restituer l'artefact de graphe.
+runner.help.targets_edges_require_json = L’option --edges nécessite --json au niveau racine.
 
 runner.io.create_temp_file = Impossible de créer le fichier Ninja temporaire.
 runner.io.write_temp_ninja = Impossible d'écrire le fichier Ninja temporaire.

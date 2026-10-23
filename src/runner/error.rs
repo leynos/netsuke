@@ -51,6 +51,14 @@ pub enum RunnerError {
         help: LocalizedMessage,
     },
 
+    /// The graph-bearing help catalogue requires machine-readable output.
+    #[error("{message}")]
+    #[diagnostic(code(netsuke::runner::help_targets_edges_require_json))]
+    HelpTargetsEdgesRequireJson {
+        /// Localized diagnostic explaining the required root flag.
+        message: LocalizedMessage,
+    },
+
     /// Lint findings reached the configured failure threshold.
     ///
     /// The findings travel as related diagnostics rather than as a formatted

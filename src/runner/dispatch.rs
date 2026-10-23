@@ -45,7 +45,9 @@ pub(super) fn execute_help(
 ) -> Result<()> {
     match args.topic.as_ref() {
         None => help::render_root_help(),
-        Some(HelpTopic::Targets) => help::handle_help_targets(cli, reporter),
+        Some(HelpTopic::Targets(target_args)) => {
+            help::handle_help_targets(cli, target_args.edges, reporter)
+        }
         Some(HelpTopic::Build) => help::render_subcommand_help("build"),
         #[cfg(feature = "lint")]
         Some(HelpTopic::Check) => help::render_subcommand_help("check"),
