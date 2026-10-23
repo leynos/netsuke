@@ -20,9 +20,9 @@ index a3a549f8..468b833d 100644
  #[cfg(not(kani))]
 -use std::collections::{HashMap, HashSet};
 +use std::collections::HashMap;
-
+ 
  use crate::ast::Recipe;
-
+ 
 @@ -216,11 +216,10 @@ impl BuildGraph {
      /// vector would make a single wide edge quadratic.
      #[cfg(not(kani))]
@@ -35,4 +35,4 @@ index a3a549f8..468b833d 100644
 +            .find(|&output| self.targets.contains_key(output))
      }
  }
-
+ 

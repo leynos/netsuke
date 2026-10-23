@@ -5,7 +5,7 @@ index 2de8038d..de259dfc 100644
 @@ -15,6 +15,9 @@ use super::analyse;
  use super::support::path_cmp;
  use super::support::{canonicalize_cycle, path_eq, state_for_path, target_entry_for_path};
-
+ 
 +/// Greatest DFS depth at which a back edge is still recognized.
 +const CYCLE_SEARCH_DEPTH_LIMIT: usize = 6;
 +
