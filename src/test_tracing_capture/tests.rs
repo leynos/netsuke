@@ -158,7 +158,14 @@ fn callsite_interest_refreshes_when_capture_level_becomes_trace() {
         tracing::trace!(transition = true, "interest transition");
     }
 
-    let debug_events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
+    test_support::tracing_capture::ensure_test_interest_anchors_registered();
+    let (subscriber, captured) = uninstalled_test_subscriber(LevelFilter::DEBUG);
+    let transition_interests = Arc::new(Mutex::new(Vec::new()));
+    let debug_subscriber = InterestObservingSubscriber {
+        inner: subscriber,
+        transition_interests: Arc::clone(&transition_interests),
+    };
+    let debug_events = tracing::subscriber::with_default(debug_subscriber, || {
         emit_transition_event();
         captured.snapshot()
     });
@@ -166,16 +173,100 @@ fn callsite_interest_refreshes_when_capture_level_becomes_trace() {
         debug_events.is_empty(),
         "DEBUG capture must filter the TRACE event: {debug_events:?}"
     );
+    assert_eq!(
+        transition_interests
+            .lock()
+            .expect("callsite interest observations should remain available")
+            .as_slice(),
+        &[true],
+        "the DEBUG subscriber must register the transition callsite exactly once with never interest"
+    );
 
-    let trace_events = with_test_subscriber(LevelFilter::TRACE, |captured| {
+    let trace_events = with_test_subscriber(LevelFilter::TRACE, |trace_capture| {
         emit_transition_event();
-        captured.snapshot()
+        trace_capture.snapshot()
     });
     assert_eq!(
         trace_events.len(),
         1,
         "TRACE capture must observe the same callsite after the level transition"
     );
+}
+
+/// Delegate capture behaviour while observing the transition callsite's interest.
+struct InterestObservingSubscriber<S> {
+    inner: S,
+    transition_interests: Arc<Mutex<Vec<bool>>>,
+}
+
+impl<S: Subscriber> Subscriber for InterestObservingSubscriber<S> {
+    fn on_register_dispatch(&self, dispatch: &tracing::dispatcher::Dispatch) {
+        self.inner.on_register_dispatch(dispatch);
+    }
+
+    fn register_callsite(
+        &self,
+        metadata: &'static tracing::Metadata<'static>,
+    ) -> tracing::subscriber::Interest {
+        let interest = self.inner.register_callsite(metadata);
+        if metadata.target() == module_path!() && metadata.fields().field("transition").is_some() {
+            self.transition_interests
+                .lock()
+                .expect("callsite interest observations should remain available")
+                .push(interest.is_never());
+        }
+        interest
+    }
+
+    fn enabled(&self, metadata: &tracing::Metadata<'_>) -> bool {
+        self.inner.enabled(metadata)
+    }
+
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        // Keep TRACE callsites eligible for registration while the filter
+        // records their DEBUG-phase `never` interest.
+        Some(LevelFilter::TRACE)
+    }
+
+    fn new_span(&self, span: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        self.inner.new_span(span)
+    }
+
+    fn record(&self, span: &tracing::span::Id, values: &tracing::span::Record<'_>) {
+        self.inner.record(span, values);
+    }
+
+    fn record_follows_from(&self, span: &tracing::span::Id, follows: &tracing::span::Id) {
+        self.inner.record_follows_from(span, follows);
+    }
+
+    fn event_enabled(&self, event: &tracing::Event<'_>) -> bool {
+        self.inner.event_enabled(event)
+    }
+
+    fn event(&self, event: &tracing::Event<'_>) {
+        self.inner.event(event);
+    }
+
+    fn enter(&self, span: &tracing::span::Id) {
+        self.inner.enter(span);
+    }
+
+    fn exit(&self, span: &tracing::span::Id) {
+        self.inner.exit(span);
+    }
+
+    fn clone_span(&self, id: &tracing::span::Id) -> tracing::span::Id {
+        self.inner.clone_span(id)
+    }
+
+    fn try_close(&self, id: tracing::span::Id) -> bool {
+        self.inner.try_close(id)
+    }
+
+    // The test emits only an event, so the wrapper keeps the trait's default
+    // unknown current-span state rather than exposing tracing-core's private
+    // re-exported return type just to delegate an unused query.
 }
 
 /// Anchoring test registrars leaves the thread's default no-op dispatch intact.

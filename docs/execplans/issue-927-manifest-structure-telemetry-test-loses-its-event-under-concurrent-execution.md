@@ -236,9 +236,24 @@ seeded duplicate.
   `make doc-coverage` (98.13%), `make markdownlint` (zero issues), and
   `make nixie` (all diagrams). Logs are
   `/tmp/{check-fmt,test,typecheck,lint,doc-coverage,markdownlint,nixie}-issue-927-post-assessment-fix.out`.
-- [ ] Commit and push the Loom configuration repair, then ask CodeRabbit to
-  confirm the proof concern is resolved for the new head. Run the rate-limited
-  local review after its required cooldown.
+- [x] (2026-10-23) Recovered from the stop-hook disk-full condition: the
+  filesystem had 203 GiB free, and the seven gates passed on head
+  `a7b662da28644c1ebc10a5ad091872408136ef5f`. The subsequent post-cooldown
+  `coderabbit review --agent` found three trivial concerns, two overlapping on
+  the DEBUG-to-TRACE test. The transition test now proves that the TRACE
+  callsite registers once with `Interest::never()` under the DEBUG filter
+  before the TRACE capture proves the same callsite emits. The reproduction
+  worker now iterates `EMPTY_MANIFEST_COUNTS` rather than duplicating its six
+  entries. Its focused test passed.
+- [x] (2026-10-23) The first gate run on those review fixes exposed denied
+  Clippy lints for a deprecated `drop_span` allowance and a shadowed closure
+  binding. Removed the unnecessary override and renamed the binding. The fresh
+  sequential run passed `make check-fmt`, `make test` (4,669 passed, 7 skipped;
+  40 doctests passed, 6 ignored), `make typecheck`, `make lint`,
+  `make doc-coverage` (98.13%), `make markdownlint` (zero issues), and
+  `make nixie` (all diagrams).
+- [ ] Commit and push the CodeRabbit corrections and updated plan, then request
+  a new local review and the proof-assessment follow-up for the new head.
 - [ ] Mark the PR ready after the candidate-bound assessments and checks clear,
   then follow PR #943 through merge.
 

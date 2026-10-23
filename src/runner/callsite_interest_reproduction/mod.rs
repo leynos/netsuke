@@ -64,14 +64,7 @@ fn validate_unmitigated_capture(captured: &CaptureSnapshot) -> Result<()> {
         "the independent structural span callsite must be captured: {:?}",
         captured.span_fields
     );
-    for (name, value) in [
-        ("variable_count", 0),
-        ("macro_count", 0),
-        ("rule_count", 0),
-        ("action_count", 0),
-        ("target_count", 0),
-        ("default_count", 0),
-    ] {
+    for (name, value) in EMPTY_MANIFEST_COUNTS {
         let expected = format!("{name}={value}");
         ensure!(
             captured
