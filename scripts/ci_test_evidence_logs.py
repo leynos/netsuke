@@ -39,8 +39,10 @@ ENVIRONMENT = frozenset({
     "LINUX_LANE_VCPUS",
 })
 ACTION = re.compile(
-    r"(?:Download action repository ')?"
-    r"([A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)@([a-f0-9]{40})"
+    r"Download action repository "
+    r"'(?P<action>[A-Za-z0-9_.-]+/[A-Za-z0-9_./-]+)@"
+    r"(?P<sha>[a-f0-9]{40})'"
+    r"(?: \(SHA:(?P<resolved_sha>[a-f0-9]{40})\))?"
 )
 
 
@@ -95,9 +97,12 @@ def _tested_sha_record(
 
 
 def _action_pin_records(body: str, evidence: LogEvidence) -> None:
-    """Record immutable action references present in a runner log line."""
-    for action, sha in ACTION.findall(body):
-        evidence["action_pins"][action] = sha
+    """Record an immutable SHA only from a native runner download record."""
+    match = ACTION.fullmatch(body)
+    if match is None or match["resolved_sha"] not in {None, match["sha"]}:
+        return
+    reference = f"{match['action']}@{match['sha']}"
+    evidence["action_pins"][reference] = match["sha"]
 
 
 def _environment_record(

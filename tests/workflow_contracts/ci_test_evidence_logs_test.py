@@ -73,6 +73,60 @@ def test_native_results_and_cache_fallback_are_not_guessed() -> None:
     )
 
 
+def test_action_pins_require_native_download_records_and_matching_shas() -> None:
+    """Keep every distinct immutable reference from runner download records."""
+    checkout_sha = "3d3c42e5aac5ba805825da76410c181273ba90b1"
+    shared_action_shas = (
+        "6cec89bac47a21cf756d68d638a9a510998e57f8",
+        "7d751eded578e48dacf43ab173d5820e6437c474",
+    )
+    evidence = parse_log(
+        "\n".join([
+            (
+                "2026-10-12T00:00:00Z Download action repository "
+                f"'actions/checkout@{checkout_sha}' (SHA:{checkout_sha})"
+            ),
+            *(
+                "2026-10-12T00:00:01Z Download action repository "
+                f"'leynos/shared-actions@{sha}' (SHA:{sha})"
+                for sha in shared_action_shas
+            ),
+        ])
+    )
+
+    expected = {f"actions/checkout@{checkout_sha}": checkout_sha}
+    expected.update({f"leynos/shared-actions@{sha}": sha for sha in shared_action_shas})
+    assert evidence["action_pins"] == expected, (
+        "Each immutable download reference must retain its SHA"
+    )
+
+
+def test_action_pins_ignore_git_dependencies_and_workflow_references() -> None:
+    """Do not turn pinned Git inputs or `uses` lines into action evidence."""
+    sha = "3754876bc4e94dc65c83af3def37828934f8f65e"
+    evidence = parse_log(
+        "\n".join([
+            f"Updating https://github.com/leynos/shared-actions ({sha})",
+            (
+                "Building df12-python-lints @ "
+                "git+https://github.com/leynos/df12-python-lints.git@"
+                "4cf41736cce2f7ba2778882a5c629c044568a0e5"
+            ),
+            f"##[group]Run leynos/shared-actions/.github/actions/setup-rust@{sha}",
+            (f"Download action repository 'actions/checkout@v4' (SHA:{sha})"),
+            (
+                "Download action repository 'actions/checkout@"
+                f"{sha}' (SHA:4cf41736cce2f7ba2778882a5c629c044568a0e5)"
+            ),
+            (f"##[debug]Download action repository 'actions/cache@{sha}' (SHA:{sha})"),
+        ])
+    )
+
+    assert not evidence["action_pins"], (
+        "Only complete native download records with immutable refs are action pins"
+    )
+
+
 def test_runner_image_facts_are_scoped_to_the_runner_image_group() -> None:
     """Ignore similarly named fields outside the Runner Image log group."""
     evidence = parse_log(

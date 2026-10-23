@@ -135,6 +135,10 @@ Each record should include run/job links or IDs, attempt, event, source and
 tested merge SHAs, variant and relevant diff, runner label/image/architecture/
 capacity, Rust/Cargo/LLVM/Nextest/cargo-llvm-cov versions, shared action SHAs,
 feature and target selection, compiler flags, profile and worker limits.
+Extract action pins only from native runner `Download action repository` log
+records with immutable SHA references. Each `action_pins` key is the full
+`repository@sha` reference, so multiple revisions of one repository remain
+distinct. A pinned Git dependency is not an action pin.
 
 Keep cache keys and exact/fallback/miss state separate for Cargo downloads,
 installed tools, Whitaker and sccache. Include sccache hits/misses and compiler
@@ -224,7 +228,9 @@ IQR used for adoption has not been measured.
 
 The 81 source records retain per-job outcomes, phases, action pins,
 environment, cache evidence and available test/resource facts. Use them for
-detail; the table is an attempt-level summary.
+detail; the table is an attempt-level summary. Their action-pin fields were
+reconstructed from the retained job logs using only native runner download
+records; Git dependency revisions were removed.
 
 ## Workflow edits and installed-tool misses
 
