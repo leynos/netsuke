@@ -68,6 +68,79 @@ pub fn record_manifest_structure(manifest: &NetsukeManifest) {
 }
 
 #[cfg(test)]
+const SENTINEL: &str = "CI-SECRET-7f3a9c2b5e1d4f60";
+
+/// Require one structural-summary event with the expected count fields.
+///
+/// The event message is matched as a phrase because tracing renders its words
+/// with spaces, while each count must remain one exact `name=value` token.
+///
+/// # Errors
+///
+/// Returns an error if the summary is absent or duplicated, any count token is
+/// absent or duplicated, or captured event data contains [`SENTINEL`].
+#[cfg(test)]
+pub(crate) fn validate_manifest_structure_events(
+    events: &[String],
+    expected_counts: &[(&str, usize)],
+) -> anyhow::Result<()> {
+    use anyhow::{Context, ensure};
+
+    ensure!(
+        events.iter().all(|event| !event.contains(SENTINEL)),
+        "trace events must not contain rendered manifest values: {events:?}"
+    );
+    let summaries = events
+        .iter()
+        .filter(|event| is_manifest_structure_summary(event))
+        .collect::<Vec<_>>();
+    ensure!(
+        summaries.len() == 1,
+        "a structural summary must emit exactly one trace event: {events:?}"
+    );
+    let summary = summaries
+        .first()
+        .context("the exact-cardinality check found no summary")?;
+    let tokens = summary.split_whitespace().collect::<Vec<_>>();
+    ensure!(
+        tokens.len() == expected_counts.len() + 3,
+        "a structural summary must contain its message and six count fields only: {summary:?}"
+    );
+    validate_count_tokens(&tokens, expected_counts)?;
+    ensure!(
+        tokens.iter().filter(|token| token.contains('=')).count() == expected_counts.len() + 1,
+        "a structural summary must contain only its message and count fields: {summary:?}"
+    );
+    Ok(())
+}
+
+/// Match the exact rendered message-field token sequence for the summary.
+#[cfg(test)]
+fn is_manifest_structure_summary(event: &str) -> bool {
+    event
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .windows(3)
+        .any(|tokens| tokens == ["message=manifest", "structure", "summary"])
+}
+
+/// Require each expected count token to appear exactly once.
+#[cfg(test)]
+fn validate_count_tokens(tokens: &[&str], expected_counts: &[(&str, usize)]) -> anyhow::Result<()> {
+    use anyhow::ensure;
+
+    for (name, count) in expected_counts {
+        let expected = format!("{name}={count}");
+        let matches = tokens.iter().filter(|token| **token == expected).count();
+        ensure!(
+            matches == 1,
+            "trace fields must contain {expected:?} exactly once: {tokens:?}"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
 mod tests {
     //! Tests for bounded manifest-structure telemetry at the runner boundary.
 
@@ -80,8 +153,20 @@ mod tests {
     };
     use tracing_subscriber::filter::LevelFilter;
 
-    /// Distinctive value standing in for a recipe value rendered from `env()`.
-    const SENTINEL: &str = "CI-SECRET-7f3a9c2b5e1d4f60";
+    /// Collection sizes for the manifest fixture used by the telemetry tests.
+    const KNOWN_SHAPE_COUNTS: [(&str, usize); 6] = [
+        ("variable_count", 2),
+        ("macro_count", 1),
+        ("rule_count", 1),
+        ("action_count", 1),
+        ("target_count", 2),
+        ("default_count", 2),
+    ];
+
+    /// Build a synthetic summary event for exercising the exact-cardinality oracle.
+    fn synthetic_summary() -> String {
+        "variable_count=2 macro_count=1 rule_count=1 action_count=1 target_count=2 default_count=2 message=manifest structure summary".to_owned()
+    }
 
     /// Build a manifest whose collection sizes and text are both known.
     ///
@@ -155,37 +240,85 @@ defaults:
         let manifest = manifest_with_known_shape()?;
         let recorder = DebuggingRecorder::new();
 
-        let fields = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        let (events, span_fields) = with_test_subscriber(LevelFilter::TRACE, |captured| {
             metrics::with_local_recorder(&recorder, || {
+                record_manifest_structure(&manifest);
+            });
+            (
+                captured.snapshot(),
+                captured.span_fields("runner.manifest.structure"),
+            )
+        });
+
+        validate_manifest_structure_events(&events, &KNOWN_SHAPE_COUNTS)?;
+        let span_tokens = span_fields.iter().map(String::as_str).collect::<Vec<_>>();
+        ensure!(
+            span_tokens.len() == KNOWN_SHAPE_COUNTS.len(),
+            "the structural span must carry exactly six count fields: {span_fields:?}"
+        );
+        validate_count_tokens(&span_tokens, &KNOWN_SHAPE_COUNTS)?;
+        Ok(())
+    }
+
+    /// Reject zero and duplicate summary events while accepting one exact event.
+    #[test]
+    fn summary_validator_has_zero_one_and_duplicate_controls() -> Result<()> {
+        let summary = synthetic_summary();
+        let one = vec![summary.clone()];
+        validate_manifest_structure_events(&one, &KNOWN_SHAPE_COUNTS)?;
+        ensure!(
+            validate_manifest_structure_events(&[], &KNOWN_SHAPE_COUNTS).is_err(),
+            "the validator must reject an empty capture"
+        );
+        ensure!(
+            validate_manifest_structure_events(
+                &[summary.clone(), summary.clone()],
+                &KNOWN_SHAPE_COUNTS
+            )
+            .is_err(),
+            "the validator must reject duplicate summaries"
+        );
+        let seeded_secret = vec![format!("{summary} {SENTINEL}")];
+        ensure!(
+            validate_manifest_structure_events(&seeded_secret, &KNOWN_SHAPE_COUNTS).is_err(),
+            "the validator must reject rendered manifest values"
+        );
+        Ok(())
+    }
+
+    /// Reject a message-like substring that is not the exact summary field.
+    #[test]
+    fn summary_validator_requires_the_exact_message_field() -> Result<()> {
+        let summary = synthetic_summary().replace(
+            "message=manifest structure summary",
+            "prefix=message=manifest structure summary",
+        );
+        ensure!(
+            validate_manifest_structure_events(&[summary], &KNOWN_SHAPE_COUNTS).is_err(),
+            "the validator must reject a summary phrase embedded in another field"
+        );
+        Ok(())
+    }
+
+    /// Reject two summaries emitted through the real TRACE callsite.
+    #[test]
+    fn summary_validator_rejects_a_seeded_duplicate_trace_event() -> Result<()> {
+        let manifest = manifest_with_known_shape()?;
+        let recorder = DebuggingRecorder::new();
+        let events = with_test_subscriber(LevelFilter::TRACE, |captured| {
+            metrics::with_local_recorder(&recorder, || {
+                record_manifest_structure(&manifest);
                 record_manifest_structure(&manifest);
             });
             captured.snapshot()
         });
-
         ensure!(
-            fields.len() == 1,
-            "a structural summary must emit exactly one trace event: {fields:?}"
+            events.len() == 2,
+            "the seeded duplicate control must capture two real events: {events:?}"
         );
-        let event = fields
-            .first()
-            .context("the event field set was asserted above")?;
-        for expected in [
-            "message=manifest structure summary",
-            "variable_count=2",
-            "macro_count=1",
-            "rule_count=1",
-            "action_count=1",
-            "target_count=2",
-            "default_count=2",
-        ] {
-            ensure!(
-                event.contains(expected),
-                "trace event should report {expected:?}, got {event:?}"
-            );
-        }
         ensure!(
-            !event.contains(SENTINEL),
-            "trace event must not carry rendered manifest values, got {event:?}"
+            validate_manifest_structure_events(&events, &KNOWN_SHAPE_COUNTS).is_err(),
+            "the exact-cardinality validator must reject the real duplicate"
         );
         Ok(())
     }

@@ -1309,7 +1309,9 @@ reaches a span or a metric label.
 [ADR-0009](adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md)
 records this decision; see the
 [developer's guide](developers-guide.md#manifest-telemetry-template-render-and-macro-invocation)
-for the metric names, bounded label vocabulary, and redaction rules.
+for the metric names, bounded label vocabulary, and redaction rules. The
+separate test-process callsite-interest workaround is recorded in
+[ADR-0057](adrs/adr-0057-anchor-tracing-test-callsite-interest-rebuilds.md).
 
 ### 4.4 Essential Custom Functions
 

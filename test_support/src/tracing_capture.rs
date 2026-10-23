@@ -2,11 +2,16 @@
 //!
 //! The capture layer is deliberately local to the calling thread, allowing
 //! observability assertions without installing or replacing a global subscriber.
+//! Two inert dispatches remain registered to keep concurrent test callsite
+//! interest rebuilds conservative; they are never installed as defaults.
 
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use tracing::{
-    Event, Subscriber,
+    Event, Metadata, Subscriber,
+    dispatcher::Dispatch,
     field::{Field, Visit},
+    span,
+    subscriber::Interest,
 };
 use tracing_subscriber::{
     Layer, filter::LevelFilter, layer::Context as LayerContext, prelude::*, registry::LookupSpan,
@@ -17,6 +22,58 @@ use tracing_subscriber::{
 pub struct CapturedEvents {
     /// Shared rendered event fields captured by the thread-local subscriber.
     fields: Arc<Mutex<Vec<String>>>,
+}
+
+/// Register two permanent inert dispatches to keep test callsite interests conservative.
+///
+/// `tracing-core` can cache a single registrar's `never` interest while another
+/// thread registers a more permissive dispatch. Two retained inert dispatches
+/// keep test registrations out of that single-registrar path. They are held as
+/// registrars only and are never installed as scoped or global defaults.
+///
+/// # Examples
+///
+/// ```
+/// use test_support::tracing_capture::ensure_test_interest_anchors_registered;
+///
+/// ensure_test_interest_anchors_registered();
+/// ```
+pub fn ensure_test_interest_anchors_registered() {
+    static ANCHORS: OnceLock<[Dispatch; 2]> = OnceLock::new();
+    let _anchors =
+        ANCHORS.get_or_init(|| [Dispatch::new(InterestAnchor), Dispatch::new(InterestAnchor)]);
+}
+
+/// Subscriber retained only to keep the callsite registrar set above one.
+#[derive(Debug)]
+struct InterestAnchor;
+
+impl Subscriber for InterestAnchor {
+    fn register_callsite(&self, _metadata: &'static Metadata<'static>) -> Interest {
+        Interest::never()
+    }
+
+    fn enabled(&self, _metadata: &Metadata<'_>) -> bool {
+        false
+    }
+
+    fn new_span(&self, _attributes: &span::Attributes<'_>) -> span::Id {
+        span::Id::from_u64(1)
+    }
+
+    fn record(&self, _span: &span::Id, _values: &span::Record<'_>) {}
+
+    fn record_follows_from(&self, _span: &span::Id, _follows: &span::Id) {}
+
+    fn event(&self, _event: &Event<'_>) {}
+
+    fn enter(&self, _span: &span::Id) {}
+
+    fn exit(&self, _span: &span::Id) {}
+
+    fn max_level_hint(&self) -> Option<LevelFilter> {
+        Some(LevelFilter::OFF)
+    }
 }
 
 impl CapturedEvents {
@@ -87,6 +144,8 @@ impl Visit for FieldVisitor {
 ///
 /// Events emitted by threads spawned within `test` are not captured because
 /// `tracing::subscriber::with_default` scopes the subscriber to this thread.
+/// The two inert interest anchors protect concurrent callsite registration but
+/// do not change that thread-local capture boundary or install a global default.
 ///
 /// # Examples
 ///
@@ -104,6 +163,7 @@ pub fn with_test_subscriber<T>(
     level_filter: LevelFilter,
     test: impl FnOnce(CapturedEvents) -> T,
 ) -> T {
+    ensure_test_interest_anchors_registered();
     let layer = CapturedEventsLayer::default();
     let captured = CapturedEvents {
         fields: Arc::clone(&layer.events),
