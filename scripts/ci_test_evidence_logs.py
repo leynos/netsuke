@@ -50,7 +50,7 @@ def _lines(log: str) -> cabc.Iterator[tuple[str | None, str]]:
     """Split native lines; ``_lines("noise")`` yields ``(None, "noise")``."""
     for line in log.splitlines():
         clean = ANSI.sub("", line).lstrip("\ufeff")
-        match = TIMESTAMP.search(clean)
+        match = TIMESTAMP.match(clean)
         yield (match["time"], match["body"]) if match else (None, clean)
 
 
