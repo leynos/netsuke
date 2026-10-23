@@ -3,14 +3,14 @@
 //! Provides execution orchestration; build work streams through Ninja (default
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
+#[cfg(test)]
+mod callsite_interest_reproduction;
 #[cfg(feature = "lint")]
 mod check;
 mod dispatch;
 mod dyndep;
 mod error;
 mod manifest_structure_telemetry;
-#[cfg(test)]
-mod manifest_structure_telemetry_reproduction;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::keys;

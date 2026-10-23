@@ -172,6 +172,17 @@ seeded duplicate.
   with a lease and verified that PR #943 now points to
   `f0457010039bde5c75eb5cc089fc9caffcc5aecb` over base
   `6572fb956379f47e70af914bfe4307b740a0b15e`.
+- [x] The subsequent hosted CI run found that the new reproduction directory
+  formed an unrecorded `runner/manifest` prefix group under the repository's
+  module-layout contract. Renamed the test-only module to
+  `callsite_interest_reproduction`. The repaired candidate passed
+  `make test-workflow-contracts` (1337 passed, 3 skipped, plus 27 script
+  contracts), `make test` (4667 passed, 7 skipped, all doctests passed),
+  `make typecheck`, `make lint`, `make doc-coverage` (98.13%),
+  `make markdownlint` (zero issues), `make nixie`, and `cs delta origin/main`
+  (no issues). `make fmt` and `make check-fmt` also passed before these gates.
+  The hosted failure log was `/tmp/issue-927-build-test-job-120243674734.zip`;
+  current-head hosted checks must pass after publishing this repair.
 - [ ] Complete the separate completeness and bounded-model assessments for PR
   #943, mark it ready only after those replies and current checks clear, then
   follow it to merge.
@@ -372,9 +383,9 @@ referenced from the design and developers' guides, and indexed from
   construct and register the TRACE capture; the mitigated gate retains its
   fixed 250 ms delay because T2 cannot install while T1 holds the registry read
   lock. The parent kills a child that exceeds its 20-second deadline. Artefact:
-  `src/runner/manifest_structure_telemetry_reproduction/`. Non-vacuity: require
-  all phase markers and the exact-cardinality oracle; removing the
-  pre-registration anchor must reproduce zero summaries and a validator error.
+  `src/runner/callsite_interest_reproduction/`. Non-vacuity: require all phase
+  markers and the exact-cardinality oracle; removing the pre-registration
+  anchor must reproduce zero summaries and a validator error.
 - **V3: Summary oracle is exact and non-vacuous.** One exact summary with the
   six expected count tokens succeeds; zero or two summaries fail; wrong or
   duplicate count tokens and `SENTINEL` fail. Method: synthetic controls plus a
