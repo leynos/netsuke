@@ -1908,6 +1908,30 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   before. Both files are in the `test-release-publication` recipe and its
   `SOURCE_MODULES` contract, so the new module's doctests run and an unwired
   module would fail the suite. Gates: see the next entry.
+- [x] (2026-10-23) Cleared every CodeScene finding on the pull-request delta
+  and brought every changed file back under the 400-line module cap, as two
+  commits. `cs delta origin/main --include-metadata` now reports
+  `status: no-issues-found` across 37 eligible files, and `--error-on-warnings`
+  exits `0`. The remediation was decomposition, not metric gaming: the
+  asset-name predicates moved to a new `scripts/release_asset_names.py` (152
+  lines) and the platform/format policy with its eight refusals moved to a new
+  `scripts/release_package_formats.py` (133 lines), leaving
+  `release_inventory.py` at 341 and `release_declaration.py` at 386.
+  `release_declaration` re-exports the moved names through an explicit
+  `__all__`, verified to preserve exception identity
+  (`release_declaration.MissingPackageError is
+  release_package_formats.MissingPackageError`),
+  so `release_declaration_cli.py`'s `except` clauses still catch what the
+  moved code raises. `package_crate`, `finalize_github_release_cli`'s record
+  reading, and `classify_registry_state` were decomposed into named helpers,
+  and the workflow-contract scans split their path predicates from their
+  comment/escape handling. Both new modules are named in the
+  `test-release-publication` recipe and its `SOURCE_MODULES` contract. The
+  first gate batch caught a genuine `ruff format` failure in the declaration
+  suite's `_workspace` signature, fixed separately; the second caught an
+  `mdtablefix` rewrap of the entry above. Both are recorded here rather than
+  smoothed away, because each is the kind of mechanical defect the freeze rule
+  exists to force into the open instead of under a running gate.
 
 ## Surprises & discoveries
 
@@ -2570,9 +2594,10 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - Observation: **the packaging lane's only rehearsal defect was invisible to
   every local suite and appeared on the first hosted pull-request run.**
   Evidence: `release / package-crate` failed with a refusal quoting the merge
-  ref — ``tag '903/merge' is not a release tag: expected 'v' followed by a
-  semantic version such as 'v1.2.3'`` — and exit `2`. The mechanism is that
-  `release.yml` is a reusable workflow
+  ref —
+  ``tag '903/merge' is not a release tag: expected 'v' followed by a
+  semantic version such as 'v1.2.3'`` —
+  and exit `2`. The mechanism is that `release.yml` is a reusable workflow
   invoked both from `push: tags: v*.*.*` and from `pull_request`, and on the
   latter `github.ref_name` resolves to the synthetic merge ref rather than a
   tag; the packaging step forwarded it unexamined. The existing jobs tolerate
@@ -2586,6 +2611,30 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   that a workflow expression whose value depends on the *event* needs a
   contract that evaluates it in each trigger's context, not a test that
   supplies the happy value. Date/Author: 2026-10-23, implementation agent.
+
+- Observation: **`cs delta` does not analyse untracked files, so a clean delta
+  over an unstaged new module is not evidence about it.** The delta reported
+  `total-modified-file-count: 42` / `checked-file-count: 35` both before and
+  after `release_asset_names.py` and `release_package_formats.py` were created,
+  which reads as "clean" but actually means "not looked at":
+  `git diff origin/main` cannot see a path Git is not tracking. After
+  `git add`, the same command reported `44` modified and `37` checked — exactly
+  the two new files. Impact: a CodeScene verdict obtained before staging is a
+  verdict about a different file set. `cs check <file>` also accepts only its
+  first path argument, so `cs check a.py b.py` silently scores `a.py` alone;
+  score new files one at a time, then stage them and re-run the delta as the
+  real check. Date/Author: 2026-10-23, implementation agent.
+- Observation: **the 400-line module cap is enforced by a lint that a targeted
+  test run will not surface.** `pyproject.toml` disables nearly all of Pylint
+  and then explicitly re-enables `too-many-lines` at `max-module-lines = 400`,
+  so a file of 464 or 460 lines fails `make lint`'s Pylint stage while every
+  behavioural suite over the same file passes. Confirmed by running the pinned
+  Pylint directly (`C0302: Too many lines in module (454/400)`), which is the
+  cheap way to check a suspected overage without waiting for the full gate. The
+  cap forced genuine decomposition here rather than docstring trimming: the
+  first attempt at trimming prose moved 464 to 454 and no further, because the
+  modules genuinely owned two responsibilities. Date/Author: 2026-10-23,
+  implementation agent.
 
 ## Decision log
 
