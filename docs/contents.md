@@ -302,6 +302,28 @@ operator, user, and contributor references are easier to find.
 - [ADR-0051](adrs/adr-0051-compile-the-build-script-module-slice-in-the-workspace-graph.md):
   Compiling the build-script module slice in the Cargo workspace graph rather
   than inside a timed test body.
+- [ADR-0061: Manifest schema versions and admission][adr61]: Schema-version
+  meaning, feature admission, and allocation lifecycle.
+- [ADR-0062: Progressive enhancement contract boundaries][adr62]: Shared
+  feature identifiers, operation ownership, shallow-end, and operator ceilings.
+- [ADR-0063: Managed state schema][adr63]: Optional state declarations and
+  readiness-operation contracts.
+- [ADR-0064: Typed task input schema][adr64]: Optional typed root inputs and
+  their shared value contract.
+- [ADR-0065: Artefact ownership schema][adr65]: Explicit output ownership and
+  bounded cleanup declarations.
+- [ADR-0066: Contention class schema][adr66]: Optional named contention classes
+  lowered through the existing scheduler.
+- [ADR-0067: Maturity policy schema][adr67]: Shallow-end policy composition
+  and rule-to-feature requirements.
+
+[adr61]: adrs/adr-0061-manifest-schema-versions-and-admission.md
+[adr62]: adrs/adr-0062-progressive-enhancement-contract-boundaries.md
+[adr63]: adrs/adr-0063-managed-state-schema.md
+[adr64]: adrs/adr-0064-typed-task-input-schema.md
+[adr65]: adrs/adr-0065-artefact-ownership-schema.md
+[adr66]: adrs/adr-0066-contention-class-schema.md
+[adr67]: adrs/adr-0067-maturity-policy-schema.md
 
 ## Proposals
 
