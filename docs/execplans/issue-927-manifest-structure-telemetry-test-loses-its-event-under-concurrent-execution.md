@@ -368,6 +368,13 @@ seeded duplicate.
   Dependabot runner and PowerShell placeholder guidance alongside this plan's
   tracing documentation. The saved tracing patch was reapplied and its SHA-256
   is `d993eb85c8921d16c1daea18d5b1e752405ac35193a71a428c325bb98b6ca9ef`.
+- [x] (2026-10-24) Rebased the 19-commit range from base
+  `018b81b4311ac5dd99ac4182c51301eeca0dfc55` onto `main` at
+  `f8df5d808f1bee4eb8554df0160119864ade6f39`, which advances the pinned
+  toolchain to `nightly-2026-10-22`. The replay completed without conflicts;
+  `git range-diff` matched all 19 commits. The overlapping developers' guide
+  retains both the toolchain history updates and this change's tracing
+  documentation. All gates must be rerun on the rebased candidate.
 - [x] (2026-10-24) Re-ran the sequential gates after correcting the Clippy
   borrows. Formatting, lint, typecheck, doc coverage (98.19%), Markdown lint,
   Nixie, and local CodeScene checks passed. Nextest passed 4,852 tests with
