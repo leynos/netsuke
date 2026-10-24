@@ -7,6 +7,7 @@
 - **Created:** 2026-09-19
 - **Scope:** Optional owned-output declarations and bounded deletion
 - **Implementation:** [Progressive-enhancement roadmap, phase 24][roadmap]
+- **Governing decisions:** [ADR-0062][d62] and [ADR-0065][d65]
 
 ## 1. Summary
 
@@ -255,5 +256,7 @@ cleanup implementation, and transparent scope. Preserve ordinary recipes and
 existing cleaning while giving annotated outputs stronger, testable guarantees.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#24-owned-artefacts-and-bounded-cleanup
+[d62]: ../adrs/adr-0062-progressive-enhancement-contract-boundaries.md
+[d65]: ../adrs/adr-0065-artefact-ownership-schema.md
 [maturity]: rfc-0025-progressive-enhancement-and-maturity-policies.md
 [states]: rfc-0021-managed-states-and-functional-probes.md

@@ -246,8 +246,10 @@ decision D-15.
   node fields, command discriminators, and the closed vocabularies settled by
   D-11 to D-14. `make check-fmt`, `make markdownlint` (including spelling), and
   `make nixie` passed after formatting.
-- [ ] EP-M2: ADR-0062 to ADR-0067 (Proposed), resolution table, RFC and roadmap
-  amendments.
+- [x] (2026-10-24) EP-M2: drafted ADR-0062 to ADR-0067 as Proposed; added the
+  OD-21 to OD-25 resolution table and amended the RFC and roadmap references.
+  `make check-fmt`, `make markdownlint` (including spelling), `make nixie`, and
+  both resolution-table review checks passed.
 - [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
 - [ ] EP-M4: developers' guide and documentation clean-up.
 - [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
@@ -1013,12 +1015,12 @@ roadmap item done, and completes this plan.
   filename.
 - Requirements: RM-a, RM-b (persisted-plan coordination), RM-c
   (operation-union ownership, capability reporting), SE.
-- Acceptance evidence: the two review checks in `Verification plan` pass;
-  gates pass.
+- Acceptance evidence: both resolution-table review checks pass, along with
+  `make check-fmt`, `make markdownlint` (including spelling), and `make nixie`.
 - Conformance check: RFCs 0001 to 0004, 0011, and 0029 unchanged; no RFC
   status changed; no code changed; roadmap item 12.1.1 unchanged.
 - Recovery: revert the milestone commit.
-- Remaining gaps: the gate; acceptance.
+- Remaining gaps: none for EP-M2; explicit ADR acceptance remains at EP-M5.
 - Compatibility decision: none.
 
 ### EP-M3: reader-side schema version gate
