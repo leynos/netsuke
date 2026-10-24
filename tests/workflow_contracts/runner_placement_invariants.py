@@ -87,6 +87,7 @@ REQUIRED_RUNNER_ASSIGNMENTS = {
     "ci-windows.build-test-windows": "windows-latest",
     "ci-windows.windows-msi-upgrade": "windows-latest",
     "ci.kani-smoke": UBICLOUD_DEFAULT_LABEL,
+    "ci-default-features.default-features": UBICLOUD_LARGE_LABEL,
     "coverage-main.coverage-upload": UBICLOUD_LARGE_LABEL,
     "delayed-pr-comment.delay_and_comment": "ubuntu-latest",
     "netsukefile-test.netsukefile": UBICLOUD_COMPAT_LABEL,

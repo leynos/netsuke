@@ -232,6 +232,7 @@ def owned_runner(declaration: object) -> str:
 FORK_FALLBACK_RUNNERS: typ.Final[dict[str, str]] = {
     "ci.build-test": FORK_FALLBACK_RUNNER,
     "ci.kani-smoke": FORK_FALLBACK_RUNNER,
+    "ci-default-features.default-features": FORK_FALLBACK_RUNNER,
     "netsukefile-test.netsukefile": "ubuntu-22.04",
 }
 

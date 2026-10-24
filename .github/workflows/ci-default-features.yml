@@ -42,8 +42,12 @@ jobs:
     name: Default features
     # A pull request from a fork cannot obtain a Ubicloud runner, so the fork
     # arm falls back to a GitHub-hosted one, as in `ci.yml`'s `build-test`.
+    # Dependabot pull requests run on the hosted pool too (free on a public
+    # repository). The author is tested, not the actor, which changes when
+    # someone else pushes to the branch.
     runs-on: >-
-      ${{ github.event.pull_request.head.repo.fork
+      ${{ (github.event.pull_request.head.repo.fork
+      || github.event.pull_request.user.login == 'dependabot[bot]')
       && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}
     # A cold build of both feature sets' worth of targets, rustdoc, Clippy, and
     # the full suite: measured well under this ceiling, which exists so a hung
