@@ -303,6 +303,10 @@ jobs:
           # Compare changed-line coverage against the baseline written by
           # coverage-main.yml (caches saved on main are readable by every PR).
           with-ratchet: 'true'
+          # A new path starts a new baseline: the cache entry's version hashes
+          # this path, so the restore misses the figure measured on the previous
+          # toolchain and the committed file sets the baseline.
+          baseline-rust-file: .coverage-baseline-v2.rust
           # This lane measures and compares; it does not publish. The action
           # archives the report it generated under a step of its own, which no
           # scanner over this file's steps can see, so declining that archive
