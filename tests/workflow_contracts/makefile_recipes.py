@@ -60,6 +60,101 @@ def load_makefile() -> str:
     return text
 
 
+def _opens_escaped_hash(text: str, index: int) -> bool:
+    r"""Report whether a backslash at ``index`` escapes the ``#`` after it.
+
+    ``make`` treats ``\#`` as a literal hash. Masking from it would hide the
+    command that follows, so the pair is stepped over rather than read.
+
+    Returns
+    -------
+    bool
+        True when ``index`` holds a backslash immediately followed by ``#``.
+
+    Examples
+    --------
+    >>> _opens_escaped_hash(r"pkg\#subdir", 3)
+    True
+    >>> _opens_escaped_hash("plain # comment", 5)
+    False
+    """
+    return text[index] == "\\" and text[index + 1 : index + 2] == "#"
+
+
+def _comment_ends_at(text: str, index: int) -> int:
+    r"""Return where the comment opening at ``index`` stops.
+
+    A comment runs to the end of its line; one on the final line with no
+    newline runs to the end of the text.
+
+    Returns
+    -------
+    int
+        Index of the newline ending the comment, or the text's length when the
+        comment runs to the end.
+
+    Examples
+    --------
+    >>> _comment_ends_at("run: tool  # note\nnext: x\n", 12)
+    17
+    >>> _comment_ends_at("a:  # tail", 4)
+    10
+    """
+    end = text.find("\n", index)
+    return len(text) if end < 0 else end
+
+
+def mask_makefile_comments(text: str) -> str:
+    r"""Blank every Makefile comment, keeping line and column positions.
+
+    A comment is text `make` never runs as a command: the rest of a line after
+    an unescaped ``#``, whether it sits on a line of its own or trails a rule.
+    A contract that searches the raw file finds a missing name in an
+    explanatory comment and reports it as wired, which is the difference
+    between a gate and a paragraph agreeing with itself.
+
+    An escaped ``\#`` is data, not a comment opener — a recipe may carry one
+    in a URL, and masking from it would hide the command that follows.
+
+    ``local_references.strip_makefile_comments`` is a different tool for a
+    different question: it drops whole comment lines and joins what remains,
+    which is right for matching a path across a recipe but loses the offsets
+    that make a report name a line.
+
+    Parameters
+    ----------
+    text : str
+        Whole Makefile text to scan.
+
+    Returns
+    -------
+    str
+        ``text`` with comment characters replaced by spaces. Newlines are
+        kept, so an offset or line number taken from the result still names
+        the original source.
+
+    Examples
+    --------
+    >>> mask_makefile_comments("run: tool.py  # test_hidden.py\n").rstrip()
+    'run: tool.py'
+    >>> mask_makefile_comments("url: 'pkg\\#subdir'\n").rstrip()
+    "url: 'pkg\\#subdir'"
+    """
+    characters = list(text)
+    index = 0
+    while index < len(text):
+        if _opens_escaped_hash(text, index):
+            index += 2
+            continue
+        if text[index] == "#":
+            end = _comment_ends_at(text, index)
+            characters[index:end] = [" "] * (end - index)
+            index = end
+            continue
+        index += 1
+    return "".join(characters)
+
+
 def makefile_recipe(target: str) -> str:
     """Return the recipe lines of one Makefile target.
 

@@ -2267,6 +2267,266 @@ ADR and updated workflow-contract tests. See
 [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md) for the
 durable decision.
 
+## Release publication
+
+Publishing a release is split in two, and the split is the design rather than
+an accident of layering. The workflow is the only place that touches a network:
+it checks out, builds, packages, uploads artefacts, and calls the GitHub
+release API. Everything that decides *what* a published byte is lives in a
+Python module under `scripts/` that reads files and returns a value, so
+identity resolution, asset declaration, inventory checking, and re-run
+reconciliation can be exercised without a release existing. The boundary is
+held by a contract test rather than by convention; see
+[Offline policy modules](#offline-policy-modules).
+
+### The release job graph
+
+`release.yml` runs one build set for both modes and then branches into exactly
+one publication job.
+
+| Job                           | Needs                                                       | `contents` | Mode                       |
+| ----------------------------- | ----------------------------------------------------------- | ---------- | -------------------------- |
+| `metadata`                    | —                                                           | `read`     | always                     |
+| `build-linux`                 | `metadata`                                                  | `read`     | always                     |
+| `build-windows`               | `metadata`                                                  | `read`     | always                     |
+| `build-macos`                 | `metadata`                                                  | `read`     | always                     |
+| `windows-native-recipe-smoke` | `metadata`, the three builds                                | `read`     | always                     |
+| `release-admission-canaries`  | `metadata`                                                  | `read`     | always                     |
+| `package-crate`               | `metadata`                                                  | `read`     | always                     |
+| `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `read`     | `dry_run == 'true'`        |
+| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `write`    | `should_publish == 'true'` |
+
+*Table 1: `release.yml` jobs, their dependencies, their `contents` scope, and
+the mode each runs in.*
+
+The workflow denies the default grant at the top (`permissions: {}`), so each
+job's token scope is the whole of what it holds. Only `publish-release` takes
+`contents: write`, because only it calls the release API;
+`release-admission-canaries` additionally takes `actions: read` to inspect
+prior runs.
+
+`release` and `publish-release` carry the same five-job dependency list and
+mutually exclusive guards, so a run is a rehearsal or a publication and never
+both. The guards are derived from `determine-release-modes`, which also supplies
+`should_publish` to the artefact upload so the upload stage and the jobs agree
+about the mode.
+
+`package-crate` is deliberately absent from both publication jobs' `needs`. It
+packages the crate, records its identity, and uploads the pair as the
+`release-crate-package` artefact; the job that consumes that artefact is the
+registry publisher, which is not yet part of the workflow. Adding it to
+`publish-release` today would make GitHub publication wait for a package
+nothing downstream reads.
+
+### Package and asset identity
+
+The Cargo package and the binary it installs are different names, and every
+seam that addresses one of them has to address the right one. `Cargo.toml`
+declares `package.name = "netsuke-build"`; the library and the binary are both
+`netsuke`. The `metadata` job therefore exposes `package_name` and `bin_name`
+as separate outputs, and the packaging action takes both rather than deriving
+one from the other.
+
+| Name             | Value                           | Declared in      |
+| ---------------- | ------------------------------- | ---------------- |
+| Cargo package    | `netsuke-build`                 | `[package] name` |
+| Library crate    | `netsuke`                       | `[lib] name`     |
+| Installed binary | `netsuke`                       | `[[bin]] name`   |
+| Packaged archive | `netsuke-build-<version>.crate` | `cargo package`  |
+
+*Table 2: The package-versus-binary identity contract.* (ADR-0007 records why
+the crate cannot be called `netsuke`.)
+
+The release publishes a flat set of twenty names: the six cargo-binstall
+archives, one `.sha256` sidecar for each, and eight operating-system packages.
+No name is hard-coded in the workflow. Archives and sidecars are derived from
+`.github/release-staging.toml` through
+`release_inventory.binstall_asset_names`, while the packages are counted from
+the staged tree against the per-platform format list in
+`release_package_formats.PLATFORM_FORMATS` — two `.deb` and two `.rpm` for
+Linux, two `.pkg` for macOS, two `.msi` for Windows.
+
+| Source                                          | Names it contributes                |
+| ----------------------------------------------- | ----------------------------------- |
+| `release_inventory.binstall_asset_names`        | six archives and their six sidecars |
+| `PLATFORM_FORMATS` held against the staged tree | eight operating-system packages     |
+
+*Table 3: The two sources of the twenty-name declaration.*
+
+Holding the staged tree to a count is what makes a failed package build a
+refusal rather than a smaller declaration. `release_declaration.published_name`
+normalizes the single character that differs between staging and publication: a
+`~` in a `.deb` or `.rpm` prerelease name becomes `.`. Every other name is
+published as staged.
+
+### Trusted digest records
+
+A release has to state, before anything is uploaded, which bytes it intends to
+publish. That statement is the digest record: `{"assets": {name: digest}}`,
+written by `release_declaration_cli --digest-record` from the staged tree in
+the same run that declares the names, and read by both later consumers.
+
+The provenance chain has three links and each one refuses rather than
+interpolates.
+
+1. `release_staged_digests` hashes each declared name in the staged tree.
+2. `release_declaration_cli --digest-record` writes those digests to the record.
+3. `verify_release_inventory_cli --trusted` compares every downloaded asset
+   against the record, and refuses a record that does not cover exactly the
+   declared set.
+4. `finalize_github_release_cli --identity` reads the same record to decide what
+   a re-run should do.
+
+The record is never derived from downloaded bytes, and that is the whole point.
+A record derived from the download proves only that GitHub agrees with itself:
+replace an operating-system package, or replace an archive together with the
+sidecar beside it, and the download still agrees perfectly. Comparing each
+downloaded asset against a record written before upload is what makes either
+substitution visible.
+
+`release_digest_record` owns the record's shape and every refusal, so the
+producer and both consumers cannot disagree about what a usable record is. A
+record that is unreadable, is not a JSON object, carries no `assets` member,
+carries an empty or non-mapping one, or maps a name to something that is not a
+hexadecimal SHA-256 digest is refused. An unreadable path raises the narrower
+`UnreadableDigestRecordError` so a consumer can tell a wiring fault from a
+content fault. A vacuous default — reading a missing `assets` member as an
+empty mapping — would plan no work and refuse nothing, and every consumer reads
+this record as permission to act on a release.
+
+The inventory verifier records each asset's **own** digest, sidecars included.
+A sidecar is first checked against the archive beside it, which proves the
+pair, and then hashed in its own right, because the sidecar is published too
+and GitHub reports the digest of the bytes uploaded under that name.
+
+### Re-running a partial publication
+
+Publication can stop half-way: some assets are attached, some are not, and one
+may disagree with the record. Un-drafting a release makes it public and cannot
+be undone, so the decision to proceed is taken from recorded state before
+anything is un-drafted.
+
+`release_reconcile_github.plan_asset_actions` assigns each declared name one of
+three actions — upload, skip-verified, or conflict — and
+`finalize_github_release_cli` turns the plan into an exit status.
+
+| Exit constant           | Code | Meaning                                                  |
+| ----------------------- | ---- | -------------------------------------------------------- |
+| `EXIT_OK`               | 0    | every asset is attached with the recorded digest         |
+| `EXIT_CONFLICT`         | 1    | an attached asset disagrees, or reports no usable digest |
+| `EXIT_UPLOAD_REQUIRED`  | 2    | assets are missing and nothing conflicts                 |
+| `EXIT_INPUT_UNREADABLE` | 3    | the record cannot support a decision at all              |
+
+*Table 4: `finalize_github_release_cli` exit statuses.*
+
+Conflict outranks upload when a draft holds both kinds of finding. The
+precedence is stated in `_verdict` rather than taken from the numeric maximum,
+because `2 > 1` would report a missing asset and skip the conflict diagnostic
+for a release whose real problem is an asset that must not be overwritten. A
+published digest is a promise to whoever already downloaded it, so
+reconciliation never clobbers: a conflicting asset stops the release.
+
+On the registry side the equivalent question is per version, not per crate.
+`release_reconcile_crates.classify_registry_state` takes the intended version
+and returns one of five states: absent, identical, conflict, yanked, or
+indeterminate. It has to select by version because the crate endpoint answers
+with a crate's entire publication history — the 2026-10-23 probe of `serde`
+returned all 316 versions — so asking "is this version yanked?" of the whole
+list would make one old yank decide every future release. Guessing absence from
+an unrecognized response would publish over a version that already exists, so
+an unreadable body is indeterminate rather than absent.
+
+Reading the status is not uniform across the two hosts. Both crates.io API
+endpoints answer a 404 with different prose, while an absent object on
+`static.crates.io` answers **403** rather than 404. `verify_crates_io_bytes`
+therefore accepts both as absence; a verifier that treated 403 as an error
+would report a healthy unpublished crate as broken.
+
+`publish_crates_io_cli` exposes the same decision as two subcommands.
+`classify` reads a registry response and says what to do next, and `verify`
+checks downloaded crate bytes against a recorded digest. Each exits 0 on
+success, 1 when an action is required, 2 when verification failed, and 64 on a
+usage error.
+
+### Offline policy modules
+
+The twenty modules that make up the release-policy surface must not reach the
+network. `tests/workflow_contracts/release_publication_imports.py` decides that
+property from the import list, and the behaviour is deliberate:
+`import urllib.request`, `from urllib import request`, and
+`import urllib.request as fetch` all reach the same client, while
+`import release_digest` reaches nothing. `NETWORK_MODULES` bans the clients
+and, by naming a package, bans its submodules with it.
+
+`test_policy_modules_import_no_network_client` applies that predicate to every
+module the `test-release-publication` target names, and the check is
+mutation-tested: `test_the_no_network_check_would_notice_an_offender` supplies
+four offenders and three clean imports, so a predicate that never fired cannot
+pass by having nothing to check. The boundary is what keeps a decision testable
+without a release, and adding a network client to one of those modules is a
+design change rather than a small convenience.
+
+### The `package-crate` composite action
+
+`package-crate` moved its step body into `.github/actions/package-crate` so the
+job and its contract test read the same manifest. The action takes the release
+mode as two optional inputs and selects exactly one CLI flag from them, so a
+caller cannot present the CLI with a tag and a rehearsal at once — which the
+CLI also refuses, so the mistake surfaces as the input that caused it.
+
+| Input          | Required | Purpose                                               |
+| -------------- | -------- | ----------------------------------------------------- |
+| `tag`          | no       | the release tag; empty in a rehearsal                 |
+| `dry-run`      | no       | `true` records the absence of a tag; defaults `false` |
+| `commit`       | yes      | the checked-out SHA the archive was built from        |
+| `package-name` | yes      | `netsuke-build`, not the binary name                  |
+| `version`      | yes      | the crate version from the manifest                   |
+| `bin-name`     | yes      | `netsuke`, the installed binary name                  |
+
+*Table 5: `package-crate` action inputs.*
+
+The action publishes three outputs — `identity-path`, `crate-name`, and
+`crate-path` — and resolves the archive name from the record it just wrote
+rather than from a second calculation, so the name it hands on is the name the
+identity describes.
+
+A pull-request rehearsal is the case that makes the mode input necessary:
+`github.ref_name` resolves to a merge ref such as `903/merge`, which is not a
+release tag and must not be recorded as one. `release_candidate` exists to
+refuse a tag that does not point at the commit the bytes were built from, and
+the merge commit is exactly that case, so the repair was to carry the mode
+explicitly rather than to loosen the validator.
+
+`.github/actions` is also swept by
+`tests/workflow_contracts/composite_action_contract_test.py`, which applies the
+release workflows' rule — no `${{ }}` expression in a `run` block — to every
+composite action manifest in the tree, with no allowlist. An expression reaches
+the shell as source text when it is written into a body and as a substituted
+value when it arrives through `env:`, and moving a step into its own file does
+not move it out of harm's way.
+
+### Release publication test targets
+
+Two targets cover this surface, and neither runs the other.
+
+`make test-release-publication` runs the sixteen `scripts/tests/test_*.py`
+modules for the release-policy CLIs and their library modules, then runs the
+same source modules under `--doctest-modules`, so the examples in their
+docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,
+and passes `-c /dev/null --rootdir=. -p no:cacheprovider`: without the isolated
+configuration a root `pyproject.toml` supplies plugins and options and the
+command stops describing what it runs. It requires `PYTHONPATH=scripts` because
+the suites import their modules by bare name.
+
+`make test-workflow-contracts` holds the wiring. It runs the CV-005 contract
+suite, the workflow contracts under `tests/workflow_contracts`, and a selected
+set of `scripts/tests` modules including the release helpers. Among those
+contracts, `release_publication_test` pins the target's command line, the CI
+step that invokes it, that step's position after the workflow-contract gate,
+and — the check that closes the real hazard — that no `scripts/tests` module is
+left uncollected by any recipe. A suite nothing collects passes `make test`,
+passes review, and reports nothing.
+
 ## GitHub Actions runner placement
 
 Ubicloud offers Linux runners only. The estate therefore splits along one line:

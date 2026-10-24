@@ -78,6 +78,10 @@ jobs:
     outputs:
       version: ${{ steps.ensure_version.outputs['crate-version'] }}
       bin_name: ${{ steps.bin_name.outputs['bin-name'] }}
+      # The Cargo package name, which is `netsuke-build` while the *binary* is
+      # `netsuke`. The packaging and registry seams must address the package,
+      # so the two names are separate outputs rather than one reused value.
+      package_name: ${{ steps.ensure_version.outputs['crate-name'] }}
       package_maintainer: ${{ steps.package_metadata.outputs.maintainer }}
       package_homepage: ${{ steps.package_metadata.outputs.homepage }}
       package_license: ${{ steps.package_metadata.outputs.license }}
@@ -402,6 +406,108 @@ jobs:
           name: release-admission-traces
           path: ${{ env.NETSUKE_RELEASE_ADMISSION_TRACE_FILE }}
           if-no-files-found: error
+
+  package-crate:
+    # Resolves one release candidate's identity and packages the crate it
+    # names. `cargo package` refuses to run inside a Git worktree, so the
+    # archive must be produced here and handed on rather than rebuilt later.
+    needs: metadata
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - id: release_operation_start
+        name: Start release operation timing
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Install Rust
+        uses: >-
+          leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - id: crate_packaging_start
+        name: Start crate packaging timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: package_crate
+        name: Package the crate and record its identity
+        uses: ./.github/actions/package-crate
+        with:
+          tag: ${{ github.ref_name }}
+          commit: ${{ github.sha }}
+          # A rehearsal runs on a pull request, where `github.ref_name` is the
+          # merge ref (`903/merge`), not a release tag. The same mode output
+          # that tells `upload-release-assets` it is not publishing tells this
+          # action to record the absence of a tag; the archive is still built
+          # and digested, which is what the rehearsal is for.
+          dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
+          package-name: ${{ needs.metadata.outputs.package_name }}
+          version: ${{ needs.metadata.outputs.version }}
+          bin-name: ${{ needs.metadata.outputs.bin_name }}
+      - id: crate_packaging_end
+        name: Finish crate packaging timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: artifact_upload_start
+        name: Start artefact upload timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: upload_crate_package
+        name: Upload the packaged archive to regather
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-crate-package
+          path: |
+            artifacts/package/identity.json
+            target/package/*.crate
+          if-no-files-found: error
+      - id: artifact_upload_end
+        name: Finish artefact upload timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: release_package
+          RELEASE_DRY_RUN: ${{ needs.metadata.outputs.should_publish != 'true' }}
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
+          CRATE_PACKAGING_OUTCOME: ${{ steps.package_crate.outcome }}
+          CRATE_PACKAGING_STARTED_NS: ${{ steps.crate_packaging_start.outputs.started_ns }}
+          CRATE_PACKAGING_ENDED_NS: ${{ steps.crate_packaging_end.outputs.ended_ns }}
+          ARTIFACT_UPLOAD_OUTCOME: ${{ steps.upload_crate_package.outcome }}
+          ARTIFACT_UPLOAD_STARTED_NS: ${{ steps.artifact_upload_start.outputs.started_ns }}
+          ARTIFACT_UPLOAD_ENDED_NS: ${{ steps.artifact_upload_end.outputs.ended_ns }}
+          # The upload plan's own error output is a staging and publication
+          # concept; this operation has no asset-upload action to report one.
+          UPLOAD_ERROR_PRESENT: 'false'
+          OBSERVABILITY_PATH: >-
+            ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+      - name: Upload release operation observability
+        if: always()
+        uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-operation-observability-${{ github.job }}
+          path: ${{ runner.temp }}/release-operation-observability.jsonl
 
   release:
     if: >-

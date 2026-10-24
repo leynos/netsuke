@@ -1,8 +1,14 @@
-"""Contracts for bounded observability on release staging and publication.
+"""Contracts for bounded observability on the release workflow's jobs.
 
-Both release paths write an always-run summary and fixed-label local JSONL
-metrics and phase events; only publication uploads the JSONL. The helper tests
-below pin the record shape and ensure no free-form release data enters telemetry.
+Each release path writes an always-run summary and fixed-label local JSONL
+metrics and phase events. Staging writes the summary only; publication and
+packaging also upload the JSONL, because both hand an outcome to a later job or
+to an operator after the runner is gone. The helper tests below pin the record
+shape and ensure no free-form release data enters telemetry.
+
+The wiring tables and step assertions live in
+:mod:`release_operation_observability_support` so both files stay inside the
+repository's 400-line cap.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -16,23 +22,22 @@ from release_operation_observability import (
     observation_from_environment,
     render_observation,
 )
-from workflow_loading import (
-    RELEASE_WORKFLOW_PATH,
-    job_steps,
-    load_workflow,
-    named_step,
-    require_mapping,
-    step_index_by_key,
+from release_operation_observability_support import (
+    DRY_RUN_INPUT,
+    PACKAGING_PHASES,
+    STAGED_PHASES,
+    assert_draft_outcome_policy,
+    assert_packaging_steps_expose_outcomes,
+    assert_retained_telemetry_policy,
+    assert_staged_steps_expose_outcomes,
+    assert_staging_telemetry_policy,
+    assert_summary_environment,
+    assert_summary_phase_timings,
+    assert_timing_markers_run_after_failures,
+    staging_observation,
+    timed_phases,
 )
-
-PHASES = (
-    "draft_release",
-    "artifact_download",
-    "archive_hoist",
-    "upload_plan_validation",
-)
-OBSERVABILITY_SUMMARY_STEP = "Record release operation observability"
-OBSERVABILITY_ARTIFACT_STEP = "Upload release operation observability"
+from workflow_loading import RELEASE_WORKFLOW_PATH, job_steps, load_workflow
 
 
 @pytest.fixture(scope="module")
@@ -45,173 +50,40 @@ def release_workflow() -> dict[str, object]:
     ("job_name", "operation", "dry_run"),
     [
         ("release", "release_staging", "true"),
-        (
-            "publish-release",
-            "release_publication",
-            "${{ needs.metadata.outputs.should_publish != 'true' }}",
-        ),
+        ("publish-release", "release_publication", DRY_RUN_INPUT),
+        ("package-crate", "release_package", DRY_RUN_INPUT),
     ],
 )
 def test_release_jobs_emit_always_run_bounded_observability(
     release_workflow: dict[str, object], job_name: str, operation: str, dry_run: str
 ) -> None:
-    """Both release paths must retain fixed-label outcomes and durations."""
+    """Every release path must retain fixed-label outcomes and durations."""
     steps = job_steps(release_workflow, job_name)
-    _assert_operation_steps_expose_outcomes(steps)
-    env = _assert_summary_environment(steps, operation, dry_run)
-    _assert_summary_phase_timings(env)
+    staged = job_name != "package-crate"
+    phases = STAGED_PHASES if staged else PACKAGING_PHASES
+
+    if staged:
+        assert_staged_steps_expose_outcomes(steps)
+    else:
+        assert_packaging_steps_expose_outcomes(steps)
+
+    env = assert_summary_environment(steps, operation, dry_run, staged=staged)
+    # Draft creation carries no timing markers — its outcome is the step's own —
+    # so it is asserted through the per-job policy below rather than here.
+    assert_summary_phase_timings(env, timed_phases(phases))
 
     if job_name == "release":
-        _assert_staging_telemetry_policy(steps, env)
+        assert_staging_telemetry_policy(steps, env)
     else:
-        _assert_publication_telemetry_policy(steps, env)
+        assert_draft_outcome_policy(env, creates_draft=job_name == "publish-release")
+        assert_retained_telemetry_policy(steps)
 
-    _assert_timing_markers_run_after_failures(steps)
-
-
-def _assert_operation_steps_expose_outcomes(steps: list[dict[str, object]]) -> None:
-    """Require timing anchors and staged phases to expose their outcomes."""
-    named_step(steps, "Start release operation timing")
-    download = steps[step_index_by_key(steps, "id", "download_artifacts")]
-    hoist = steps[step_index_by_key(steps, "id", "archive_hoist")]
-    upload = steps[step_index_by_key(steps, "id", "upload_assets")]
-    for step, label in (
-        (download, "artifact download"),
-        (hoist, "archive hoist"),
-        (upload, "upload plan"),
-    ):
-        assert step.get("id"), f"{label} must expose a step outcome"
-
-
-def _assert_summary_environment(
-    steps: list[dict[str, object]], operation: str, dry_run: str
-) -> dict[str, object]:
-    """Check fixed summary labels and reject raw upload error data."""
-    summary = named_step(steps, OBSERVABILITY_SUMMARY_STEP)
-    assert summary.get("if") == "always()", (
-        "release observability must run after a failed operation"
-    )
-    env = require_mapping(summary.get("env"), "release observability environment")
-    assert env.get("RELEASE_OPERATION") == operation, (
-        "the summary must identify the fixed release operation"
-    )
-    assert env.get("RELEASE_DRY_RUN") == dry_run, (
-        "the summary must record the operation's dry-run mode"
-    )
-    assert env.get("UPLOAD_ERROR_PRESENT") == (
-        "${{ steps.upload_assets.outputs.upload-error == 'true' }}"
-    ), "the summary must record only whether the action reports an upload error"
-    assert "ERROR_MESSAGE" not in env, "the summary must not receive raw error text"
-    assert "error-message" not in env, "the summary must not receive raw error text"
-    assert "python3 scripts/release_operation_observability.py" in str(
-        summary.get("run", "")
-    ), "the summary helper must run without depending on a prior setup step"
-    return env
-
-
-def _assert_summary_phase_timings(env: dict[str, object]) -> None:
-    """Require outcomes and start/end times for every staged phase."""
-    for phase in ("artifact_download", "archive_hoist", "upload_plan_validation"):
-        assert env.get(f"{phase.upper()}_OUTCOME"), (
-            f"the summary must record the {phase} outcome"
-        )
-        assert env.get(f"{phase.upper()}_STARTED_NS"), (
-            f"the summary must record the {phase} start time"
-        )
-        assert env.get(f"{phase.upper()}_ENDED_NS"), (
-            f"the summary must record the {phase} end time"
-        )
-
-
-def _assert_staging_telemetry_policy(
-    steps: list[dict[str, object]], env: dict[str, object]
-) -> None:
-    """Keep draft data and diagnostic artifact uploads out of dry-run staging."""
-    assert "DRAFT_RELEASE_OUTCOME" not in env, (
-        "staging telemetry must not model draft creation"
-    )
-    assert not any(step.get("name") == OBSERVABILITY_ARTIFACT_STEP for step in steps), (
-        "dry-run staging must not upload a diagnostic telemetry artifact"
-    )
-
-
-def _assert_publication_telemetry_policy(
-    steps: list[dict[str, object]], env: dict[str, object]
-) -> None:
-    """Retain publication telemetry after recording the draft outcome."""
-    assert env.get("DRAFT_RELEASE_OUTCOME") == "${{ steps.draft_release.outcome }}", (
-        "publication telemetry must record draft creation"
-    )
-    artifact = named_step(steps, OBSERVABILITY_ARTIFACT_STEP)
-    assert artifact.get("if") == "always()", (
-        "publication telemetry upload must run after failures"
-    )
-    assert str(artifact.get("uses", "")).startswith("actions/upload-artifact@"), (
-        "publication telemetry must be retained as an Actions artifact"
-    )
-    artifact_with = require_mapping(
-        artifact.get("with"), "observability artifact inputs"
-    )
-    assert artifact_with.get("name") == (
-        "release-operation-observability-${{ github.job }}"
-    ), "publication telemetry must use a job-specific artifact name"
-    assert artifact_with.get("path") == (
-        "${{ runner.temp }}/release-operation-observability.jsonl"
-    ), "the uploaded artifact must contain the bounded JSONL records"
-    assert "retention-days" not in artifact_with, (
-        "telemetry must use the repository's default artifact retention"
-    )
-    assert step_index_by_key(
-        steps, "name", OBSERVABILITY_SUMMARY_STEP
-    ) < step_index_by_key(steps, "name", OBSERVABILITY_ARTIFACT_STEP), (
-        "the summary file must be written before publication telemetry is uploaded"
-    )
-
-
-def _assert_timing_markers_run_after_failures(
-    steps: list[dict[str, object]],
-) -> None:
-    """Require timing markers to run after a failure in the preceding phase."""
-    for marker_id in (
-        "artifact_download_start",
-        "artifact_download_end",
-        "archive_hoist_start",
-        "archive_hoist_end",
-        "upload_plan_start",
-        "upload_plan_end",
-    ):
-        marker = steps[step_index_by_key(steps, "id", marker_id)]
-        assert marker.get("if") == "always()", (
-            f"{marker_id} must run after a failed preceding phase"
-        )
-
-
-def _staging_observation() -> OperationObservation:
-    """Create a representative successful dry-run staging observation."""
-    steps = {
-        phase: StepState(
-            "skipped" if phase == "draft_release" else "success",
-            1_000_000_000,
-            2_000_000_000,
-        )
-        for phase in PHASES
-    }
-    return OperationObservation(
-        operation="release_staging",
-        dry_run=True,
-        job_status="success",
-        started_ns=1_000_000_000,
-        ended_ns=5_000_000_000,
-        steps=steps,
-        upload_error_present=False,
-    )
+    assert_timing_markers_run_after_failures(steps, phases)
 
 
 def test_observability_records_fixed_metrics_without_unbounded_data() -> None:
     """Render bounded operation and phase metrics for staging."""
-    observation = _staging_observation()
-
-    summary, jsonl = render_observation(observation)
+    summary, jsonl = render_observation(staging_observation())
     records = [json.loads(line) for line in jsonl.splitlines()]
     metrics = [record for record in records if record["record_type"] == "metric"]
 
@@ -232,7 +104,7 @@ def test_observability_records_fixed_metrics_without_unbounded_data() -> None:
         sum(record["metric"] == "release_phase_duration_seconds" for record in metrics)
         == 3
     ), "telemetry must record durations for each executed phase"
-    expected_phases = set(PHASES) - {"draft_release"}
+    expected_phases = set(STAGED_PHASES) - {"draft_release"}
     assert {
         record["phase"] for record in metrics if "phase" in record
     } == expected_phases, "phase metrics must use only fixed release phase labels"
@@ -240,10 +112,10 @@ def test_observability_records_fixed_metrics_without_unbounded_data() -> None:
 
 def test_observability_records_bounded_phase_events() -> None:
     """Render phase start and completion events without unbounded data."""
-    _, jsonl = render_observation(_staging_observation())
+    _, jsonl = render_observation(staging_observation())
     records = [json.loads(line) for line in jsonl.splitlines()]
     traces = [record for record in records if record["record_type"] == "trace_event"]
-    expected_phases = set(PHASES) - {"draft_release"}
+    expected_phases = set(STAGED_PHASES) - {"draft_release"}
 
     assert {record["event"] for record in traces} == {
         "release_phase_started",
@@ -258,7 +130,7 @@ def test_observability_records_bounded_phase_events() -> None:
 
 def test_observability_maps_upload_action_errors_to_a_fixed_category() -> None:
     """Record a failing upload plan without copying its error payload."""
-    steps = {phase: StepState("success", None, None) for phase in PHASES}
+    steps = {phase: StepState("success", None, None) for phase in STAGED_PHASES}
     observation = OperationObservation(
         operation="release_publication",
         dry_run=False,
@@ -323,7 +195,7 @@ def test_observability_reads_fixed_step_values_from_the_environment() -> None:
 
 def test_observability_closes_a_cancelled_phase_with_a_bounded_event() -> None:
     """Record an interrupted phase without losing the cancellation outcome."""
-    steps = {phase: StepState("skipped", None, None) for phase in PHASES}
+    steps = {phase: StepState("skipped", None, None) for phase in STAGED_PHASES}
     steps["artifact_download"] = StepState("cancelled", 1_000_000_000, None)
     observation = OperationObservation(
         operation="release_staging",
@@ -359,9 +231,73 @@ def test_observability_rejects_unknown_operation_names() -> None:
         job_status="success",
         started_ns=None,
         ended_ns=1,
-        steps={phase: StepState("skipped", None, None) for phase in PHASES},
+        steps={phase: StepState("skipped", None, None) for phase in STAGED_PHASES},
         upload_error_present=False,
     )
 
     with pytest.raises(ValueError, match="unsupported release operation"):
         render_observation(observation)
+
+
+def test_observability_reports_only_the_phases_of_its_operation() -> None:
+    """Require each operation to report its own phases and no other's.
+
+    Shared phase labels across operations would make packaging report four
+    phases it never runs, each permanently ``skipped``. A phase that can never
+    fail reads as one that always passes, and a reader of the summary is given
+    no way to tell that from a phase the job simply does not have.
+    """
+    packaging = OperationObservation(
+        operation="release_package",
+        dry_run=True,
+        job_status="success",
+        started_ns=1_000_000_000,
+        ended_ns=2_000_000_000,
+        steps={
+            "crate_packaging": StepState("success", 1_000_000_000, 1_500_000_000),
+            "artifact_upload": StepState("success", 1_500_000_000, 2_000_000_000),
+        },
+        upload_error_present=False,
+    )
+
+    summary, jsonl = render_observation(packaging)
+    records = [json.loads(line) for line in jsonl.splitlines()]
+
+    assert {record.get("phase") for record in records if "phase" in record} == set(
+        PACKAGING_PHASES
+    ), "packaging telemetry must report only the phases packaging runs"
+    phase_lines = [line for line in summary.splitlines() if "`crate_packaging`" in line]
+    assert len(phase_lines) == 1, "the summary must report crate packaging exactly once"
+    assert not any(f"`{phase}`" in summary for phase in STAGED_PHASES), (
+        "packaging telemetry must not report a release phase it never runs"
+    )
+
+
+def test_observability_reads_packaging_values_from_the_environment() -> None:
+    """Parse the packaging job's own fixed environment into an observation."""
+    environment = {
+        "RELEASE_OPERATION": "release_package",
+        "RELEASE_DRY_RUN": "false",
+        "JOB_STATUS": "failure",
+        "OPERATION_STARTED_NS": "1000000000",
+        "CRATE_PACKAGING_OUTCOME": "failure",
+        "CRATE_PACKAGING_STARTED_NS": "1100000000",
+        "CRATE_PACKAGING_ENDED_NS": "1200000000",
+        "ARTIFACT_UPLOAD_OUTCOME": "skipped",
+        "ARTIFACT_UPLOAD_STARTED_NS": "",
+        "ARTIFACT_UPLOAD_ENDED_NS": "",
+        "UPLOAD_ERROR_PRESENT": "false",
+    }
+
+    observation = observation_from_environment(environment)
+    summary, _ = render_observation(observation)
+
+    assert set(observation.steps) == set(PACKAGING_PHASES), (
+        "the environment must be read for exactly the packaging phases"
+    )
+    assert observation.steps["crate_packaging"].outcome == "failure", (
+        "a failed package step must be recorded as the crate packaging outcome"
+    )
+    assert "Error category: `crate_packaging`" in summary, (
+        "a failed packaging step must map to the fixed crate-packaging category"
+    )
