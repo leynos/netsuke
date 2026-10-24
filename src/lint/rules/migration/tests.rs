@@ -19,12 +19,10 @@ fn script(body: &str) -> String {
 #[case("\"printf %s $${HOME} > {{ outs }}\"")]
 #[case("\"echo $$_private > {{ outs }}\"")]
 fn manual_ninja_escape_reports_a_doubled_dollar(#[case] command: &str) {
-    let findings = crate::lint::test_support::lint_only_with_shell(
-        &manifest(command),
-        "manual-ninja-escape",
-        RecipeShell::Posix,
-    )
-    .expect("POSIX migration fixture should compile");
+    let findings =
+        crate::lint::test_support::Fixture::for_shell(&manifest(command), RecipeShell::Posix)
+            .only("manual-ninja-escape")
+            .expect("POSIX migration fixture should compile");
     assert_eq!(findings.len(), 1, "the doubled dollar should be reported");
 }
 

@@ -1,10 +1,15 @@
 //! Shared helpers for the linter's unit tests.
 //!
-//! Every rule test starts from manifest text, so the helpers here run the real
-//! pipeline — parse, expand, render, lower — and then lint the result. A rule
+//! Every rule test starts from manifest text, so a [`Fixture`] runs the real
+//! pipeline — parse, expand, render, lower — and then lints the result. A rule
 //! test therefore exercises the same artefacts the command does.
 //!
-//! The functions are fallible and the assertions are macros. A fixture that
+//! A fixture names the recipe shell its text is written in. The host default is
+//! PowerShell on Windows and POSIX elsewhere, so a body holding shell syntax
+//! only one dialect parses would otherwise be a different test on each
+//! platform.
+//!
+//! The methods are fallible and the assertions are macros. A fixture that
 //! cannot be built is a broken test rather than a verdict, so it propagates;
 //! the macros expand in the calling test, which keeps a failure's line number
 //! pointing at the case that failed rather than at this file.
@@ -14,141 +19,150 @@ use anyhow::{Context, Result};
 use crate::ir::BuildGraph;
 use crate::lint::finding::Finding;
 use crate::lint::policy::Policy;
-use crate::lint::{Outcome, Request, analyse};
+use crate::lint::{Category, Outcome, Request, analyse};
 use crate::manifest;
 use crate::recipe_shell::RecipeShell;
 
-/// Lint `yaml` under the registry defaults.
+/// Manifest text under test, with the interpreter its recipes are lowered for.
 ///
-/// # Errors
+/// The two travel together: a body is only meaningful once a dialect has read
+/// it, and lowering for the wrong one fails closed rather than falling back.
+/// Holding them in one value keeps the choice visible at the call site instead
+/// of leaving it to a default the reader has to look up.
 ///
-/// Returns an error when the fixture does not parse, lower, or index.
-pub fn lint(yaml: &str) -> Result<Outcome> {
-    lint_with(yaml, &Policy::defaults())
+/// # Examples
+///
+/// ```rust,ignore
+/// let findings = Fixture::for_shell(manifest, RecipeShell::Posix)
+///     .only("manual-ninja-escape")?;
+/// assert_eq!(findings.len(), 1);
+/// ```
+pub struct Fixture<'a> {
+    /// Manifest source the rule under test reads.
+    yaml: &'a str,
+    /// Interpreter that receives completed recipe text.
+    shell: RecipeShell,
 }
 
-/// Lint `yaml` under `policy`.
-///
-/// # Errors
-///
-/// Returns an error when the fixture does not parse, lower, or index.
-pub fn lint_with(yaml: &str, policy: &Policy) -> Result<Outcome> {
-    lint_with_shell(yaml, policy, RecipeShell::host_default())
+impl<'a> Fixture<'a> {
+    /// Hold `yaml` for lowering under the host's default recipe shell.
+    ///
+    /// Use this when the rule under test is indifferent to the dialect.
+    pub fn new(yaml: &'a str) -> Self {
+        Self {
+            yaml,
+            shell: RecipeShell::host_default(),
+        }
+    }
+
+    /// Hold `yaml` for lowering under `shell`.
+    ///
+    /// Use this when the recipe text is itself the subject, as it is for a rule
+    /// that scans shell syntax or for a fixture containing syntax only one
+    /// dialect accepts.
+    pub fn for_shell(yaml: &'a str, shell: RecipeShell) -> Self {
+        Self { yaml, shell }
+    }
+
+    /// Lint the fixture under `policy`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the fixture does not parse, lower, or index.
+    pub fn lint(&self, policy: &Policy) -> Result<Outcome> {
+        let parsed = manifest::from_str(self.yaml).context("fixture manifest should parse")?;
+        let graph = BuildGraph::from_manifest_for_shell(&parsed, self.shell)
+            .context("fixture manifest should lower")?;
+        analyse(
+            Request {
+                source: self.yaml.to_owned(),
+                manifest: &parsed,
+                graph: &graph,
+            },
+            policy,
+        )
+        .map_err(|failure| anyhow::anyhow!("fixture manifest should index: {}", failure.message))
+    }
+
+    /// Lint the fixture with only `rule` enabled.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `rule` is not registered or the fixture does not
+    /// compile.
+    pub fn only(&self, rule: &str) -> Result<Vec<Finding>> {
+        let policy = Policy::resolve(&rule_policy(rule))
+            .map_err(|error| anyhow::anyhow!("selectors should resolve: {}", error.message()))?;
+        Ok(self.lint(&policy)?.findings)
+    }
+
+    /// Report the messages `rule` produced.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `rule` is not registered or the fixture does not
+    /// compile.
+    pub fn messages(&self, rule: &str) -> Result<Vec<String>> {
+        Ok(self
+            .only(rule)?
+            .iter()
+            .map(Finding::display_message)
+            .collect())
+    }
+
+    /// Report the source text each finding of `rule` points at.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when `rule` is not registered or the fixture does not
+    /// compile.
+    pub fn spans(&self, rule: &str) -> Result<Vec<String>> {
+        Ok(self
+            .only(rule)?
+            .iter()
+            .map(|finding| {
+                finding.span().map_or_else(
+                    || "<no span>".to_owned(),
+                    |span| {
+                        self.yaml
+                            .get(span.start..span.end)
+                            .unwrap_or_default()
+                            .to_owned()
+                    },
+                )
+            })
+            .collect())
+    }
+
+    /// Report the rules that fired under the registry defaults.
+    ///
+    /// A rule that reasons about other rules' findings — `unused-suppression`
+    /// — must be measured with the default policy rather than in isolation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the fixture does not compile.
+    pub fn rules_fired(&self) -> Result<Vec<&'static str>> {
+        Ok(self
+            .lint(&Policy::defaults())?
+            .findings
+            .iter()
+            .map(|finding| finding.meta.name)
+            .collect())
+    }
 }
 
-/// Lint `yaml` under `policy` after lowering recipes for `shell`.
+/// Selectors that silence every category and then enable only `rule`.
 ///
-/// The host default is PowerShell on Windows and POSIX elsewhere, so a
-/// fixture holding shell syntax only one dialect parses would otherwise be a
-/// different test on each platform. Name a shell when the recipe text is
-/// itself the subject, and keep the host default when the rule under test is
-/// indifferent to it.
-///
-/// # Errors
-///
-/// Returns an error when the fixture does not parse, lower, or index.
-pub fn lint_with_shell(yaml: &str, policy: &Policy, shell: RecipeShell) -> Result<Outcome> {
-    let parsed = manifest::from_str(yaml).context("fixture manifest should parse")?;
-    let graph = BuildGraph::from_manifest_for_shell(&parsed, shell)
-        .context("fixture manifest should lower")?;
-    analyse(
-        Request {
-            source: yaml.to_owned(),
-            manifest: &parsed,
-            graph: &graph,
-        },
-        policy,
-    )
-    .map_err(|failure| anyhow::anyhow!("fixture manifest should index: {}", failure.message))
-}
-
-/// Every category selector, set to `off`.
-///
-/// Isolating one rule means disabling every category and then re-enabling that
-/// rule, so a finding cannot arrive from a neighbour.
-fn silence_every_category() -> Vec<String> {
-    crate::lint::Category::ALL
+/// Isolating one rule means disabling every category before re-enabling it, so
+/// a finding cannot arrive from a neighbour.
+fn rule_policy(rule: &str) -> Vec<String> {
+    let mut selectors: Vec<String> = Category::ALL
         .into_iter()
         .map(|category| format!("{}=off", category.as_str()))
-        .collect()
-}
-
-/// Lint `yaml` with only `rule` enabled.
-///
-/// # Errors
-///
-/// Returns an error when `rule` is not registered or the fixture does not
-/// compile.
-pub fn lint_only(yaml: &str, rule: &str) -> Result<Vec<Finding>> {
-    lint_only_with_shell(yaml, rule, RecipeShell::host_default())
-}
-
-/// Lint `yaml` with only `rule` enabled after lowering for `shell`.
-///
-/// See [`lint_with_shell`] for when to name a shell rather than accept the
-/// host default.
-///
-/// # Errors
-///
-/// Returns an error when `rule` is not registered or the fixture does not
-/// compile.
-pub fn lint_only_with_shell(yaml: &str, rule: &str, shell: RecipeShell) -> Result<Vec<Finding>> {
-    let mut selectors = silence_every_category();
+        .collect();
     selectors.push(format!("{rule}=warning"));
-    let policy = Policy::resolve(&selectors)
-        .map_err(|error| anyhow::anyhow!("selectors should resolve: {}", error.message()))?;
-    Ok(lint_with_shell(yaml, &policy, shell)?.findings)
-}
-
-/// Report the messages `rule` produced for `yaml`.
-///
-/// # Errors
-///
-/// Returns an error when `rule` is not registered or the fixture does not
-/// compile.
-pub fn messages_for(yaml: &str, rule: &str) -> Result<Vec<String>> {
-    Ok(lint_only(yaml, rule)?
-        .iter()
-        .map(Finding::display_message)
-        .collect())
-}
-
-/// Report the source text each finding of `rule` points at.
-///
-/// # Errors
-///
-/// Returns an error when `rule` is not registered or the fixture does not
-/// compile.
-pub fn spans_for(yaml: &str, rule: &str) -> Result<Vec<String>> {
-    Ok(lint_only(yaml, rule)?
-        .iter()
-        .map(|finding| {
-            finding.span().map_or_else(
-                || "<no span>".to_owned(),
-                |span| {
-                    yaml.get(span.start..span.end)
-                        .unwrap_or_default()
-                        .to_owned()
-                },
-            )
-        })
-        .collect())
-}
-
-/// Report the rules that fired for `yaml` under the registry defaults.
-///
-/// A rule that reasons about other rules' findings — `unused-suppression` —
-/// must be measured with the default policy rather than in isolation.
-///
-/// # Errors
-///
-/// Returns an error when the fixture does not compile.
-pub fn rules_fired(yaml: &str) -> Result<Vec<&'static str>> {
-    Ok(lint(yaml)?
-        .findings
-        .iter()
-        .map(|finding| finding.meta.name)
-        .collect())
+    selectors
 }
 
 /// Lint a fixture under the registry defaults, failing the calling test when
@@ -156,7 +170,9 @@ pub fn rules_fired(yaml: &str) -> Result<Vec<&'static str>> {
 #[macro_export]
 macro_rules! lint_fixture {
     ($yaml:expr $(,)?) => {
-        $crate::lint::test_support::lint($yaml).expect("fixture should compile")
+        $crate::lint::test_support::Fixture::new($yaml)
+            .lint(&$crate::lint::policy::Policy::defaults())
+            .expect("fixture should compile")
     };
 }
 
@@ -164,7 +180,9 @@ macro_rules! lint_fixture {
 #[macro_export]
 macro_rules! lint_fixture_with {
     ($yaml:expr, $policy:expr $(,)?) => {
-        $crate::lint::test_support::lint_with($yaml, $policy).expect("fixture should compile")
+        $crate::lint::test_support::Fixture::new($yaml)
+            .lint($policy)
+            .expect("fixture should compile")
     };
 }
 
@@ -172,7 +190,9 @@ macro_rules! lint_fixture_with {
 #[macro_export]
 macro_rules! lint_messages {
     ($yaml:expr, $rule:expr $(,)?) => {
-        $crate::lint::test_support::messages_for($yaml, $rule).expect("fixture should compile")
+        $crate::lint::test_support::Fixture::new($yaml)
+            .messages($rule)
+            .expect("fixture should compile")
     };
 }
 
@@ -180,7 +200,9 @@ macro_rules! lint_messages {
 #[macro_export]
 macro_rules! lint_spans {
     ($yaml:expr, $rule:expr $(,)?) => {
-        $crate::lint::test_support::spans_for($yaml, $rule).expect("fixture should compile")
+        $crate::lint::test_support::Fixture::new($yaml)
+            .spans($rule)
+            .expect("fixture should compile")
     };
 }
 
@@ -188,7 +210,8 @@ macro_rules! lint_spans {
 #[macro_export]
 macro_rules! lint_count {
     ($yaml:expr, $rule:expr $(,)?) => {
-        $crate::lint::test_support::lint_only($yaml, $rule)
+        $crate::lint::test_support::Fixture::new($yaml)
+            .only($rule)
             .expect("fixture should compile")
             .len()
     };
@@ -198,7 +221,9 @@ macro_rules! lint_count {
 #[macro_export]
 macro_rules! lint_rules_fired {
     ($yaml:expr $(,)?) => {
-        $crate::lint::test_support::rules_fired($yaml).expect("fixture should compile")
+        $crate::lint::test_support::Fixture::new($yaml)
+            .rules_fired()
+            .expect("fixture should compile")
     };
 }
 

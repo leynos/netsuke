@@ -993,23 +993,26 @@ whose meaning changes materially takes a new name, because the name is
 simultaneously a configuration key, a suppression token, a documentation
 anchor, and a field in machine output.
 
-#### Choosing the recipe shell in a lint fixture
+### Choosing the recipe shell in a lint fixture
 
-`test_support` lowers a fixture for `RecipeShell::host_default()`, which is
-PowerShell on Windows and POSIX elsewhere, so a rule test exercises whichever
-recipe dialect the runner happens to have. That default is right for a rule
-that reads recipe text without interpreting it. It is wrong for a fixture whose
-recipe text is itself the subject, because PowerShell and POSIX interpolation
-accept different marker sites: a body such as `"printf %s $${HOME}"` lowers
-under POSIX and fails closed under PowerShell.
+`test_support::Fixture::new` lowers a fixture for
+`RecipeShell::host_default()`, which is PowerShell on Windows and POSIX
+elsewhere, so a rule test exercises whichever recipe dialect the runner happens
+to have. That default is right for a rule that reads recipe text without
+interpreting it. It is wrong for a fixture whose recipe text is itself the
+subject, because PowerShell and POSIX interpolation accept different marker
+sites: a body such as `"printf %s $${HOME}"` lowers under POSIX and fails
+closed under PowerShell.
 
-Pass the shell explicitly with `lint_with_shell` or `lint_only_with_shell` when
-the fixture asserts shell-specific behaviour, and keep the host default
-otherwise. Pinning a shell makes the fixture's own dialect a stated part of the
-test rather than a property of the machine, so a Windows runner and a Linux
-runner reach the same verdict. The same rule applies to a fixture that happens
-to contain shell syntax the rule does not care about: if the text would not
-lower on both platforms, name the shell whose lexis it uses.
+Use `Fixture::for_shell` when the fixture asserts shell-specific behaviour, and
+keep `Fixture::new` otherwise. Pinning a shell makes the fixture's own dialect
+a stated part of the test rather than a property of the machine, so a Windows
+runner and a Linux runner reach the same verdict. The same rule applies to a
+fixture that happens to contain shell syntax the rule does not care about: if
+the text would not lower on both platforms, name the shell whose lexis it uses.
+The macros (`assert_lint_silent!` and friends) take fixture text alone and are
+for the indifferent case; a test that needs a pinned shell calls `Fixture`
+directly.
 
 ### Linter pipeline interfaces
 
