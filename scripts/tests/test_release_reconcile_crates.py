@@ -17,6 +17,8 @@ Run via ``make test-release-publication``.
 import json
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from release_reconcile_crates import (
     NOT_FOUND,
     OK,
@@ -35,6 +37,16 @@ OTHER = "e" * 64
 #: The version under test, and one the registry has already published.
 VERSION = "1.0.0"
 EARLIER = "0.9.0"
+
+#: One SHA-256 digest, lowercase hexadecimal, generated rather than fixed.
+#:
+#: LEM-3's non-vacuity clause asks for generated digests specifically, so a
+#: conflict cannot be produced by a classifier that merely compares against a
+#: constant this file happens to contain. The alphabet is narrowed to
+#: hexadecimal because the record is a digest; the *values* are not narrowed,
+#: which is what makes the matching and the non-matching case both reachable
+#: from one draw.
+_DIGEST = st.text(alphabet="0123456789abcdef", min_size=64, max_size=64)
 
 
 def _version_body(*, checksum: str, yanked: bool, num: str = VERSION) -> str:
@@ -67,11 +79,28 @@ def _truncated_body(*records: tuple[str, str, bool]) -> str:
     return json.dumps(parsed)
 
 
+def _classify(
+    body: str | None, *, intended: str = INTENDED, status: int = OK
+) -> RegistryState:
+    """Classify a response for this release's own version and digest.
+
+    Every test here asks about the same version, so repeating that argument at
+    each call site only obscures which part of the input the test varies. The
+    parameters that a test does vary stay explicit at the call site.
+
+    Returns
+    -------
+    RegistryState
+        The state the response was classified as.
+    """
+    return classify_registry_state(
+        body, version=VERSION, intended_sha256=intended, http_status=status
+    )
+
+
 def test_absent_version_is_absent() -> None:
     """Require a 404 to classify as absent, so the release proceeds to publish."""
-    state = classify_registry_state(
-        None, version=VERSION, intended_sha256=INTENDED, http_status=NOT_FOUND
-    )
+    state = _classify(None, status=NOT_FOUND)
     assert state is RegistryState.ABSENT, "a 404 must classify as absent"
     assert plan_crates_action(state) == "publish", (
         "an absent version must be planned for publication"
@@ -80,12 +109,7 @@ def test_absent_version_is_absent() -> None:
 
 def test_identical_version_is_identical() -> None:
     """Require a published version with the intended digest to be identical."""
-    state = classify_registry_state(
-        _version_body(checksum=INTENDED, yanked=False),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_version_body(checksum=INTENDED, yanked=False))
     assert state is RegistryState.IDENTICAL, (
         "a published version with the intended digest must classify as identical"
     )
@@ -100,12 +124,7 @@ def test_crate_endpoint_shape_is_also_understood() -> None:
     The release calls both endpoints. Handling one shape only would raise on
     the other, which is a failure the singular-shape tests cannot see.
     """
-    state = classify_registry_state(
-        _crate_body((VERSION, INTENDED, False)),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_crate_body((VERSION, INTENDED, False)))
     assert state is RegistryState.IDENTICAL, (
         "the plural versions shape must classify the same way as the singular"
     )
@@ -117,12 +136,7 @@ def test_published_version_with_a_different_digest_conflicts() -> None:
     This is the case that must never skip: the version exists, but it is not
     what this release intends to publish.
     """
-    state = classify_registry_state(
-        _version_body(checksum=OTHER, yanked=False),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_version_body(checksum=OTHER, yanked=False))
     assert state is RegistryState.CONFLICT, (
         "a published version carrying other bytes must conflict"
     )
@@ -138,12 +152,7 @@ def test_yanked_version_is_yanked_not_identical() -> None:
     to carry the intended digest is still withdrawn, and reporting it as
     "identical" would let the release treat a withdrawn crate as complete.
     """
-    state = classify_registry_state(
-        _version_body(checksum=INTENDED, yanked=True),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_version_body(checksum=INTENDED, yanked=True))
     assert state is RegistryState.YANKED, (
         "a yank must be judged before the digest and reported as a yank"
     )
@@ -160,12 +169,7 @@ def test_the_intended_record_is_found_wherever_it_sits_in_the_history() -> None:
     reading only the leading record would report a conflict for a release
     whose version is present but not first.
     """
-    state = classify_registry_state(
-        _crate_body((EARLIER, OTHER, False), (VERSION, INTENDED, False)),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_crate_body((EARLIER, OTHER, False), (VERSION, INTENDED, False)))
     assert state is RegistryState.IDENTICAL, (
         "a matching record must be found wherever it sits in the list"
     )
@@ -181,11 +185,8 @@ def test_a_yanked_older_version_does_not_poison_a_newer_release() -> None:
     scanned for a digest would likewise let an older release's bytes answer for
     a newer version.
     """
-    state = classify_registry_state(
-        _crate_body((VERSION, INTENDED, False), (EARLIER, INTENDED, True)),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
+    state = _classify(
+        _crate_body((VERSION, INTENDED, False), (EARLIER, INTENDED, True))
     )
     assert state is RegistryState.IDENTICAL, (
         "a yank on an older release must not be reported as this one's state"
@@ -199,11 +200,8 @@ def test_the_yank_of_the_intended_version_is_still_reported() -> None:
     answer unreachable. The same body classifies ``YANKED`` when the intended
     version is the withdrawn one.
     """
-    state = classify_registry_state(
-        _crate_body((EARLIER, INTENDED, False), (VERSION, INTENDED, True)),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
+    state = _classify(
+        _crate_body((EARLIER, INTENDED, False), (VERSION, INTENDED, True))
     )
     assert state is RegistryState.YANKED, (
         "the intended version's own yank must still stop the release"
@@ -217,12 +215,7 @@ def test_a_version_the_history_does_not_list_is_absent() -> None:
     version is not in it. That is the ordinary first publication of a new
     version, and reading it as a conflict would stop every release.
     """
-    state = classify_registry_state(
-        _crate_body((EARLIER, OTHER, False)),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_crate_body((EARLIER, OTHER, False)))
     assert state is RegistryState.ABSENT, (
         "a history without the intended version must classify as absent"
     )
@@ -239,12 +232,7 @@ def test_a_truncated_history_is_indeterminate() -> None:
     published, which plans a publish over whatever the registry holds. The
     stated count is what tells the two apart.
     """
-    state = classify_registry_state(
-        _truncated_body((EARLIER, OTHER, False)),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_truncated_body((EARLIER, OTHER, False)))
     assert state is RegistryState.INDETERMINATE, (
         "a history whose record count contradicts its stated total must not "
         "be read as evidence that the version is absent"
@@ -261,12 +249,7 @@ def test_a_version_answer_about_another_number_conflicts() -> None:
     A record for another number means the response does not describe what was
     asked about, and nothing may be concluded about the intended version.
     """
-    state = classify_registry_state(
-        _version_body(checksum=INTENDED, yanked=False, num=EARLIER),
-        version=VERSION,
-        intended_sha256=INTENDED,
-        http_status=OK,
-    )
+    state = _classify(_version_body(checksum=INTENDED, yanked=False, num=EARLIER))
     assert state is RegistryState.CONFLICT, (
         "an answer about a different version must not be read as this one's"
     )
@@ -279,9 +262,7 @@ def test_an_unrecognised_body_is_indeterminate() -> None:
     unexpected has not told us the version is absent, and treating silence as
     absence is how a release publishes over existing bytes.
     """
-    state = classify_registry_state(
-        "not json at all", version=VERSION, intended_sha256=INTENDED, http_status=OK
-    )
+    state = _classify("not json at all")
     assert state is RegistryState.INDETERMINATE, (
         "an unreadable answer must be indeterminate, not absent"
     )
@@ -303,20 +284,13 @@ def test_a_version_with_no_checksum_is_refused() -> None:
     wrong, and a state would swallow that.
     """
     with pytest.raises(RegistryResponseError):
-        classify_registry_state(
-            json.dumps({"version": {"num": VERSION, "yanked": False}}),
-            version=VERSION,
-            intended_sha256=INTENDED,
-            http_status=OK,
-        )
+        _classify(json.dumps({"version": {"num": VERSION, "yanked": False}}))
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, 429])
 def test_a_server_error_is_indeterminate(status: int) -> None:
     """Require a retryable server status not to be read as absence."""
-    state = classify_registry_state(
-        None, version=VERSION, intended_sha256=INTENDED, http_status=status
-    )
+    state = _classify(None, status=status)
     assert state is RegistryState.INDETERMINATE, (
         "a retryable server status must not be read as absence"
     )
@@ -365,11 +339,36 @@ def test_a_digest_the_registry_does_not_report_conflicts(
     split one validation across two places.
     """
     assert (
-        classify_registry_state(
-            _version_body(checksum=INTENDED, yanked=False),
-            version=VERSION,
-            intended_sha256=intended,
-            http_status=OK,
-        )
+        _classify(_version_body(checksum=INTENDED, yanked=False), intended=intended)
         is state
     ), "any intended digest the registry does not report must conflict"
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(published=_DIGEST, intended=_DIGEST)
+def test_identity_turns_on_the_digest_alone(published: str, intended: str) -> None:
+    """Require identity to follow digest equality for any pair of digests.
+
+    LEM-3 says only an identical checksum permits a skip. Stated over generated
+    digests, that is one two-sided claim: equal digests must classify
+    ``IDENTICAL`` and unequal ones must classify ``CONFLICT``. Both directions
+    are asserted in one test on purpose. Splitting them would let a classifier
+    that always answers ``IDENTICAL`` pass the matching half, and one that
+    always answers ``CONFLICT`` pass the other, so neither half alone is
+    evidence that the comparison happens at all.
+
+    The published checksum and the intended digest are drawn independently, so
+    Hypothesis supplies both equal and unequal pairs. ``derandomize`` keeps the
+    shrink reproducible in CI, and ``deadline=None`` because the first example
+    pays the import cost of the JSON reader.
+    """
+    state = _classify(
+        _version_body(checksum=published, yanked=False), intended=intended
+    )
+    expected = (
+        RegistryState.IDENTICAL if published == intended else RegistryState.CONFLICT
+    )
+    assert state is expected, (
+        f"identity must turn on digest equality alone: published {published!r} "
+        f"against intended {intended!r} gave {state!r}"
+    )
