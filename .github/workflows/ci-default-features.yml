@@ -76,7 +76,7 @@ jobs:
           install --mode=0755 "$(command -v gawk)" "${test_shell_bin}/awk"
           echo "${test_shell_bin}" >> "${GITHUB_PATH}"
       - name: Setup Rust
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@2aed718022775671809f8c85a2c10547dfb1ae13
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
