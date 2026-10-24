@@ -27,8 +27,13 @@ previously timed-out fixture in 22.476 seconds, in 208.778 seconds overall; all
 workspace doctests passed. CI reported 91.79% coverage against the 91.7%
 baseline. Netsukefile Build Test and Release Dry Run passed, and local and
 hosted CodeScene reported no issues. The local timeout's cause remains unknown.
-Current-head CI after this plan-only update and CodeRabbit assessments/review
-remain pending.
+The later published checkpoint `52bbd367cf8b059baa2404d6357e6dd3e2c973d9`
+passed CI run 40114633754: Nextest ran 4,864 tests (all passed, six skipped) in
+74.154 seconds, the workspace doctests passed, and the previously timed-out
+fixture passed in 6.246 seconds. Netsukefile run 40114633693 and Release Dry
+Run 40114633743 passed. CodeScene reported no issues on that checkpoint. This
+hosted success still does not explain the local timeout. The controlled
+baseline, bounded telemetry, and candidate decisions remain outstanding.
 
 ## Purpose / big picture
 
@@ -513,6 +518,11 @@ fidelity comparisons block adoption.
   (zero issues across 200 files), and `make nixie` after this plan update.
 - [x] Confirm hosted CI run 40112221490, Netsukefile run 40112221417, Release
   Dry Run 40112221464, and CodeScene passed on published head `282d99e`.
+- [x] Confirm hosted CI run 40114633754, Netsukefile run 40114633693, Release
+  Dry Run 40114633743, and CodeScene passed on published head `52bbd36`. The
+  4,864-test Nextest suite passed with six skips, workspace doctests passed, and
+  `cli_configuration_fixture_compiles::case_1_public_api` passed in 6.246
+  seconds. This does not explain the earlier local timeout.
 - [ ] Revalidate hosted checks after this plan-only update, obtain current-head
   assessments/review, reconcile findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
@@ -788,11 +798,13 @@ Exact-head hosted CI run 40112221490 later passed 4,864 tests (six skipped, one
 slow) in 208.778 seconds, including the timed-out fixture in 22.476 seconds;
 workspace doctests passed. CI reported 91.79% coverage against the 91.7%
 baseline. Netsukefile run 40112221417 and Release Dry Run 40112221464 also
-passed, and local and hosted CodeScene found no issues. This evidence does not
-establish why the local fixture timed out. Current-head checks after this
-plan-only update and CodeRabbit assessments/review remain pending. The
-controlled baseline, bounded telemetry, and candidate decisions remain
-outstanding.
+passed, and local and hosted CodeScene found no issues. On the later published
+checkpoint `52bbd36`, CI 40114633754 passed all 4,864 Nextest tests with six
+skips and the workspace doctests; the previously timed-out fixture passed in
+6.246 seconds. Netsukefile 40114633693, Release Dry Run 40114633743, and
+CodeScene also passed. This evidence does not establish why the local fixture
+timed out. The controlled baseline, bounded telemetry, and candidate decisions
+remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
