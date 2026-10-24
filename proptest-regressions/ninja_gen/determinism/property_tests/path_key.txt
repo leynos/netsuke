@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 182623db2c26524a2942f24e1aca8a69406499bb021613e179aa76d206b19dc9 # shrinks to (paths, permuted) = (["\u{43a5f}\u{b}h\u{adb20}{\u{7f}>\u{66fce}", "\u{feff}i🕴:", "\u{feff}i🕴:", "\u{feff}i🕴:", "\u{feff}i🕴:", "\u{feff}i🕴:"], ["\u{feff}i🕴:", "\u{feff}i🕴:", "\u{feff}i🕴:", "\u{43a5f}\u{b}h\u{adb20}{\u{7f}>\u{66fce}", "\u{feff}i🕴:", "\u{feff}i🕴:"])

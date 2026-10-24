@@ -122,10 +122,16 @@ before execution, a critical requirement for compatibility with Ninja.
    is written, Netsuke invokes the `ninja` executable as a subprocess, passing
    control to it for the final dependency checking and command-execution phase.
 
-   Netsuke's pipeline is **deterministic**. Given the same `Netsukefile` and
-   environment variables, the generated `build.ninja` will be byte-for-byte
-   identical. This property is essential for reproducible builds and makes the
-   output suitable for caching or source control.
+   Netsuke's pipeline is **deterministic** as a process-level statement: given
+   the same manifest, environment, platform, recipe-shell selection, and
+   Netsuke version, the generated `build.ninja` and its dyndep sidecars are
+   byte-for-byte identical. Byte stability is not promised across Netsuke
+   versions, across platforms, or across recipe-shell selections; the platform
+   and shell qualifications are load-bearing, because PowerShell and POSIX are
+   different renderers. This property is essential for reproducible builds and
+   makes the output suitable for caching or source control.
+   [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) states the
+   guarantee, its preconditions, and its exclusions.
 
 ```mermaid
 flowchart TD
@@ -2722,12 +2728,24 @@ structures to the Ninja file syntax.
    A `BuildEdge` whose `dependency_order` is `serial` and has more than one
    implicit dependency is an exception to this direct rendering. The generator
    lowers it into staged phony gates, with one content-addressed Ninja dyndep
-   sidecar per dependency. A gate can reveal exactly one real dependency; the
-   gate edge associated with the next sidecar depends on the preceding gate.
-   This makes each later dependency unavailable to Ninja until the previous one
-   succeeds, while preserving one Ninja scheduler and its shared-work
-   memoization. The runner materializes every sidecar file before Ninja starts;
-   no Ninja edge produces sidecar content.
+   sidecar per dependency. A gate reveals exactly one *relay* phony, and that
+   relay carries the real dependency; the gate edge associated with the next
+   sidecar depends on the preceding gate. This makes each later dependency
+   unavailable to Ninja until the previous one succeeds, while preserving one
+   Ninja scheduler and its shared-work memoization. The runner materializes
+   every sidecar file before Ninja starts; no Ninja edge produces sidecar
+   content.
+
+   A sidecar reveals a relay rather than the dependency itself because of an
+   upstream Ninja scheduler defect
+   ([ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662)).
+   Loading a sidecar appends an edge to the revealed node's out-edge vector,
+   and Ninja does that while iterating the same vector when the revealed node
+   is already scheduled — reachable when a user edge is an order-only
+   dependency of a node a later sidecar reveals. Revealing a relay means the
+   append belongs to a node created for the purpose, which no user edge names,
+   so no iteration is ever in progress over it. See
+   [ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md).
 
    The generated result is a bundle, not merely a string: generation is an
    effect-free query that returns the main Ninja text and its `.netsuke/dyndep`
@@ -2812,10 +2830,13 @@ to keep the representation portable.
   path twice results in `IrGenError::DuplicateOutput`.
 - The Ninja generator sorts canonical arena edges before output. Output indexing
   no longer requires generator-side value recovery or deduplication. Sorting
-  uses the joined path strings to keep ordering stable across platforms,
-  ensuring deterministic `build.ninja` files. Small macros reduce formatting
-  boilerplate when writing optional key-value pairs or flags, keeping the
-  generator easy to scan.
+  uses the joined path strings to keep ordering stable across platforms, which
+  is the insertion-order invariant behind the guarantee
+  [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) publishes.
+  Actions and default targets are sorted the same way, and each of the three
+  sorts is the mutation target its property is validated against. Small macros
+  reduce formatting boilerplate when writing optional key-value pairs or flags,
+  keeping the generator easy to scan.
 - Integration tests snapshot the generated Ninja file with `insta` and
   execute the Ninja binary to validate structure and no-op behaviour.
   Serial-ordering tests additionally use real Ninja to prove declaration order,

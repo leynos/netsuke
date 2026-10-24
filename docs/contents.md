@@ -241,6 +241,10 @@ operator, user, and contributor references are easier to find.
   `mold` and the parallel `rustc` front end as the committed default build,
   with the release and coverage exclusions, the Cranelift refusal, and the
   toolchain-versus-tools boundary.
+- [ADR-0030](adrs/adr-0030-ninja-emission-determinism-contract.md): The
+  published process-level determinism guarantee for Ninja emission, its
+  parameter tuple and preconditions, what is explicitly not promised, and why
+  Kani cannot discharge insertion-order invariance.
 - [ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md):
   Windows final component validation through a same-handle reparse-point open.
 - [ADR-0033](adrs/adr-0033-record-split-build-cargo-messages.md): Recorded Cargo
@@ -302,6 +306,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0051](adrs/adr-0051-compile-the-build-script-module-slice-in-the-workspace-graph.md):
   Compiling the build-script module slice in the Cargo workspace graph rather
   than inside a timed test body.
+- [ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md):
+  Revealing a relay phony per staged serial dependency, to keep emitted bundles
+  out of the Ninja out-edge reallocation crash.
 
 ## Proposals
 

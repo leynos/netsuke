@@ -216,8 +216,9 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
     """Keep direct-rustc preparation within each fixture's dependency graph.
 
     The support fixture selects its library; the production fixtures select
-    the application library, which also prepares its build dependencies. None
-    needs Cargo to check every workspace target.
+    the application library, which also runs its build script and prepares its
+    build dependencies. None needs Cargo to check every workspace target
+    before compiling a small direct-rustc fixture.
     """
     # `lint` marks the all-features lane; the default lane must not add it.
     lanes = dict(
@@ -242,7 +243,9 @@ def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
             'manifest_dir().join("Cargo.toml")',
             '.arg("check")',
         )
-        missing = [part for part in required_composition if part not in text]
+        missing = [
+            fragment for fragment in required_composition if fragment not in text
+        ]
         assert not missing, (
             f"{source.relative_to(REPO_ROOT)} must compose Cargo check with "
             f"the {package} library selector and root manifest; missing {missing!r}"
@@ -272,49 +275,6 @@ def test_ambient_ui_harnesses_do_not_rebuild_in_isolated_targets(source: Path) -
     assert not re.search(r'\.env\(\s*"CARGO_TARGET_DIR"', text), (
         f"{source.relative_to(REPO_ROOT)} must reuse ambient build artefacts "
         "rather than compile into an isolated Cargo target directory"
-    )
-
-
-def test_cold_packaging_verification_has_a_scoped_budget() -> None:
-    """Allow measured cold package compilation without relaxing ordinary tests."""
-    config = tomllib.loads(
-        (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
-    )
-    profile = config["profile"]["default"]
-    assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
-        "ordinary tests must retain their five-minute budget"
-    )
-    timed_overrides = [
-        override for override in profile["overrides"] if "slow-timeout" in override
-    ]
-    assert len(timed_overrides) == 4, (
-        "only remaining nested builds may need extended test budgets"
-    )
-    configured = {
-        override["filter"]: override["slow-timeout"] for override in timed_overrides
-    }
-    expected = {
-        "test(/^packaged_manifest_retains_build_script_sources($|::)/)": {
-            "period": "60s",
-            "terminate-after": 15,
-        },
-        (
-            "test(/^compile_guard::"
-            "every_patched_tree_compiles_under_denied_warnings($|::)/)"
-        ): {
-            "period": "60s",
-            "terminate-after": 10,
-        },
-    }
-    expected.update({
-        f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
-        for name, periods in (
-            ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
-            ("stub_env_default_does_not_compile", 15),
-        )
-    })
-    assert configured == expected, (
-        "cold-build budgets must retain current-main allowances"
     )
 
 

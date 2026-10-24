@@ -14,6 +14,7 @@ use crate::{
     recipe_shell::BashExecutable,
 };
 
+use super::order::ordered_actions;
 use super::{NamedAction, NinjaGenError, RecipeShell, path_syntax, validation};
 
 /// Write executable rules in stable action-ID order, omitting dependency-only `phony` nodes.
@@ -28,9 +29,15 @@ pub(crate) fn write_action_rules<W: Write>(
     shell: RecipeShell,
     bash_executable: Option<&BashExecutable>,
 ) -> Result<(), NinjaGenError> {
-    let mut actions: Vec<_> = graph.actions.iter().collect();
-    actions.sort_by_key(|(id, _)| *id);
-    for (zero_based_action_index, (id, action)) in actions.into_iter().enumerate() {
+    for (zero_based_action_index, (id, action)) in ordered_actions(
+        graph
+            .actions
+            .iter()
+            .map(|(id, action)| (id.as_str(), action)),
+    )
+    .into_iter()
+    .enumerate()
+    {
         if action.recipe.is_dependency_only() {
             continue;
         }

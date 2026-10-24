@@ -295,4 +295,7 @@ pub struct BuildEdge {
 
 mod error;
 
+#[cfg(test)]
+mod property_tests;
+
 pub use error::IrGenError;

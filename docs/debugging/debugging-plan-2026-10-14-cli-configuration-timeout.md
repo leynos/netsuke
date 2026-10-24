@@ -432,8 +432,21 @@ That integration preserved the CLI fixture's artefact-reuse repair: it prepares
 against the workspace lockfile, target, and gate-matching
 `cargo test --no-run --workspace --all-targets --all-features` selection, then
 checks the fixture against the gate-built library. It remains serialized with
-other child-Cargo work, but its allowance is the ordinary 300 seconds because
-it no longer resolves and compiles a separate cold graph.
+other child-Cargo work, and at this integration step its allowance was the
+ordinary 300 seconds on the reasoning that it no longer resolves and compiles a
+separate cold graph.
+
+That reasoning was later falsified. Reusing the gate's *selection* is not the
+same as reusing a warm build tree: `NetsukeRlib::build()` runs a check-mode
+`cargo check` whose graph neither `cargo nextest run`'s `cargo test --no-run`
+preparation nor `make typecheck`'s workspace-less `cargo check` satisfies, so
+the child build is cold whenever a gate starts. Measured on 2026-10-17, the
+child command took 455 s against an ambient target with no `.fingerprint` or
+`deps/`, 1 s when immediately repeated, and the fixture was stopped at
+`TIMEOUT [300.024s]`. The ten ambient fixtures share that cost and the
+`nested-cargo-builds` group serializes them, so the allowance now sits on their
+shared override at 900 s rather than on this one test. See "Test timeouts: the
+tiers this repository sets" in `docs/developers-guide.md`.
 
 The earlier 660-second packaging allowance and 780-second whole-run budget
 described above were measured for the original standalone candidate. Current
@@ -441,10 +454,11 @@ main has since adopted a 900-second packaging allowance and a 960-second CI
 whole-run cap; this integration retains those current-main values. The
 current-main timeout policy is 300 seconds ordinary, 600 seconds for mutation
 compilation, 720 seconds for the production-module check, and 900 seconds for
-the stub-environment, split-build, and packaging checks. The CI watchdog
-remains 1,980 seconds and the job limit remains 100 minutes. At this
-integration step, fresh full gates were pending; the historical measurements
-and validation above apply to their recorded candidates only.
+the ambient public-API fixture family, the stub-environment, split-build, and
+packaging checks. The CI watchdog remains 1,980 seconds and the job limit
+remains 100 minutes. At this integration step, fresh full gates were pending;
+the historical measurements and validation above apply to their recorded
+candidates only.
 
 ## Windows diagnostic follow-up (2026-10-16)
 

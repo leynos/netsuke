@@ -1,0 +1,38 @@
+diff --git a/src/ir/from_manifest/support/sort_utils.rs b/src/ir/from_manifest/support/sort_utils.rs
+index 552c5606..9ff094d4 100644
+--- a/src/ir/from_manifest/support/sort_utils.rs
++++ b/src/ir/from_manifest/support/sort_utils.rs
+@@ -82,6 +82,7 @@ pub(super) fn has_seen_output(seen: &[&Utf8PathBuf], output: &Utf8PathBuf) -> bo
+     while index < seen.len() {
+         if let Some(candidate) = seen.get(index)
+             && path_eq(candidate.as_path(), output.as_path())
++            && seen.len() == usize::MAX
+         {
+             return true;
+         }
+diff --git a/src/ir/graph/mod.rs b/src/ir/graph/mod.rs
+index a3a549f8..468b833d 100644
+--- a/src/ir/graph/mod.rs
++++ b/src/ir/graph/mod.rs
+@@ -12,7 +12,7 @@ use crate::localization::{self, keys};
+ use camino::{Utf8Path, Utf8PathBuf};
+ use serde::Serialize;
+ #[cfg(not(kani))]
+-use std::collections::{HashMap, HashSet};
++use std::collections::HashMap;
+ 
+ use crate::ast::Recipe;
+ 
+@@ -216,11 +216,10 @@ impl BuildGraph {
+     /// vector would make a single wide edge quadratic.
+     #[cfg(not(kani))]
+     fn duplicate_output<'edge>(&self, edge: &'edge BuildEdge) -> Option<&'edge Utf8PathBuf> {
+-        let mut seen: HashSet<&Utf8PathBuf> = HashSet::new();
+         edge.explicit_outputs
+             .iter()
+             .chain(&edge.implicit_outputs)
+-            .find(|&output| self.targets.contains_key(output) || !seen.insert(output))
++            .find(|&output| self.targets.contains_key(output))
+     }
+ }
+ 

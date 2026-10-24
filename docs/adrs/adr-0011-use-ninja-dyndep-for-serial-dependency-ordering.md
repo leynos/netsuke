@@ -2,7 +2,9 @@
 
 ## Status
 
-Accepted.
+Accepted. Amended by ADR-0058 (2026-10-23): each sidecar now reveals a relay
+phony rather than the real dependency, and the `## Amendments` section below
+records the correction. The ordering decision itself is unchanged.
 
 ## Date
 
@@ -117,6 +119,26 @@ can execute a shared dependency more than once.
 Rejected for this feature. It would change the execution architecture and
 global reachability semantics rather than implement the requested scoped
 manifest policy. It requires a separately approved design.
+
+## Amendments
+
+### Amendment 1: each sidecar reveals a relay, not the real dependency
+
+Recorded 2026-10-23 by
+[ADR-0058](adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md).
+
+The decision above says a sidecar reveals "one direct dependency at a time".
+That is now one step indirect: the sidecar reveals a relay phony, and the relay
+carries the real dependency. Revealing the real dependency directly reaches a
+scheduler crash in Ninja
+([ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662))
+in which loading the sidecar reallocates the revealed node's out-edge vector
+while `Plan::NodeFinished` iterates it.
+
+Nothing else changes. The ordering guarantee, the Ninja 1.10 floor, the
+reserved namespaces, content addressing, bundle ownership, and one-scheduler
+semantics all stand as written. The per-edge statement count becomes `1 + 3N`
+for `N` implicit dependencies rather than `1 + 2N`.
 
 ## Implementation references
 

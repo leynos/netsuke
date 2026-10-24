@@ -82,8 +82,14 @@ Netsuke accepts small bounded Kani harnesses for roadmap item `4.2.1`.
 - Manifest-to-IR harnesses use fixed, minimal manifests.
 - Cycle harnesses target self-edge, two-node, and, if solver budget permits,
   three-node cycles.
-- The larger-N graph property is handed off to the future Proptest roadmap
-  item `4.3.1`.
+- The larger-N graph property was handed off to Proptest roadmap item `4.3.1`.
+  **Discharged 2026-10-20:** roadmap 4.3.1 delivers the larger-N properties
+  under the emission-determinism contract
+  ([ADR-030](adr-0030-ninja-emission-determinism-contract.md)), which states
+  the domains and preconditions the bounded `4.2.1` harnesses cannot cover. The
+  two layers are complementary rather than duplicative: Kani is exhaustive
+  within its bound and cannot see the nondeterminism, and Proptest samples but
+  reaches the larger graphs.
 - Kani harnesses are declared from the production modules they verify and
   stored in sibling `*_verification.rs` files.
 - Harness helpers stay private unless reuse pressure justifies a narrower
@@ -134,8 +140,10 @@ exercise path-bearing canonicalization up to the larger randomized bounds.
   is preserved.
 - The cycle harnesses prove the production cycle detector's boolean traversal,
   not the full report-building path. Existing unit tests keep cycle path
-  canonicalization and missing-dependency reporting covered until roadmap item
-  `4.3.1` expands generated graph coverage.
+  canonicalization and missing-dependency reporting covered. Roadmap item
+  `4.3.1` does not take that coverage over: its cycle suite asserts rejection
+  only, because the canonical content of a reported cycle belongs to roadmap
+  item `4.2.2` and is proved over `canonicalize_cycle_by`.
 - The cycle-canonicalization harnesses prove the private production kernel over
   small `u8` cycles, not all direct `Utf8PathBuf` inputs. The wrapper adapter
   harness and Proptest suite are the documented connection back to the
@@ -144,8 +152,9 @@ exercise path-bearing canonicalization up to the larger randomized bounds.
   not a public collection port. If future Kani versions model `HashMap`
   efficiently enough for these harnesses, the compatibility layer should be
   removed.
-- Graph coverage beyond one to three nodes remains a tracked future obligation
-  for Proptest.
+- Graph coverage beyond one to three nodes is sampled rather than exhaustive:
+  the Proptest suites delivered by roadmap item `4.3.1` reach those graphs
+  under the determinism contract in ADR-030. Kani's own bound is unchanged.
 - If the production IR representation changes away from `HashMap` or owned
   strings, the Kani bound should be re-evaluated instead of copied forward.
 - The sibling-file harness layout is a project-local constraint caused by the

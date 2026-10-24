@@ -169,6 +169,15 @@ Le compilateur de système de build principal de Netsuke v0.1.0-beta4 fournit :
 - une couverture de tests unitaires, comportementaux, d'intégration, par
   propriétés, par snapshot, et une couverture initiale de vérification Kani.
 
+L'émission déterministe est une garantie publiée : pour un manifeste, un
+environnement, une plateforme, une sélection de shell de recette et une version
+de Netsuke fixes, `netsuke generate` produit une sortie identique octet pour
+octet, y compris chaque fichier annexe dyndep. La stabilité des octets entre
+versions de Netsuke, entre plateformes ou entre sélections de shell n'est
+**pas** garantie. Le
+[contrat de déterminisme](docs/adrs/adr-0030-ninja-emission-determinism-contract.md)
+énonce la garantie, ses préconditions et ses exclusions.
+
 Depuis la beta3, Netsuke prend également en charge les agrégats d'actions et de
 cibles ne comportant que des dépendances : les nœuds dotés d'une liste `deps`
 non vide peuvent omettre une recette.

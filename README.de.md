@@ -166,6 +166,15 @@ Der zentrale Build-System-Compiler von Netsuke v0.1.0-beta4 bietet:
 - Unit-, Verhaltens-, Integrations-, Property-, Snapshot- und erste
   Kani-Verifikationsabdeckung.
 
+Deterministische Emission ist eine zugesicherte Eigenschaft: Bei festem
+Manifest, fester Umgebung, fester Plattform, fester Rezept-Shell-Auswahl und
+fester Netsuke-Version erzeugt `netsuke generate` byte-identische Ausgabe,
+einschließlich aller Dyndep-Begleitdateien. Byte-Stabilität über
+Netsuke-Versionen, über Plattformen oder über Shell-Auswahlen hinweg wird
+**nicht** zugesichert. Der
+[Determinismus-Vertrag](docs/adrs/adr-0030-ninja-emission-determinism-contract.md)
+nennt die Zusicherung, ihre Vorbedingungen und ihre Ausnahmen.
+
 Seit beta3 unterstützt Netsuke außerdem reine Abhängigkeits-Aggregate für
 Aktionen und Ziele: Knoten mit einer nicht leeren `deps`-Liste können ein
 Rezept auslassen.

@@ -21,8 +21,9 @@
 #
 # This is the profile's own allowance, and it governs every test no override
 # matches. The mutation compile gate widens it to ten periods; the
-# stub-environment, split-build, and cold package-publish
-# checks get fifteen. The largest allowance is 900 s.
+# ambient public-API fixtures, the stub-environment check, the split-build
+# check, and the cold package-publish check get fifteen. The largest
+# allowance is 900 s.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -67,9 +68,20 @@ success-output = "immediate"
 slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
+# Every fixture here reaches `NetsukeRlib::build()`, which runs `cargo check`
+# over the gate's workspace, targets, and features in the ambient target
+# directory. The group serializes them, so the first to run pays a cold
+# metadata build the whole family then reuses; measured at 455 s cold against
+# 1 s warm in this tree, and `cli_configuration_fixture_compiles` was stopped
+# at 300.024 s. The cost belongs to the family rather than to whichever name
+# the scheduler started first, so the allowance is widened here and not on one
+# test. Fifteen periods (900 s) matches the stub-environment check, which pays
+# the same workspace-root `cargo check`, and stays below the 960 s whole-run
+# budget.
 filter = 'test(/^command_env_embedder_fixture_compiles($|::)/) | test(/^manifest_environment_embedder_fixture_compiles($|::)/) | test(/^policy_from_str_embedder_fixture_compiles_without_clap($|::)/) | test(/^cli_configuration_fixture_compiles($|::)/) | test(/^command_list_public_api_fixture_compiles($|::)/) | test(/^ir_gen_error_public_api_fixture_compiles($|::)/) | test(/^legacy_recipe_telemetry_public_api_fixture_compiles($|::)/) | test(/^config_cached_discovery_embedder_fixture_compiles($|::)/) | test(/^verbose_timing_reporter_embedder_fixture_compiles($|::)/) | test(/^lint_public_api_fixture_compiles($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
 filter = 'test(/^stub_env_default_does_not_compile($|::)/) | test(/^stub_env_builders_compile_under_the_same_harness($|::)/) | test(/^split_build_fixture_compiles_through_the_direct_rustc_harness($|::)/) | test(/^text_domains_cannot_be_swapped($|::)/) | test(/^document_and_needle_compile_together($|::)/)'
@@ -164,9 +176,9 @@ success-output = "immediate"
 # this file bounds it and its own cargo watchdog does.
 #
 # The 16-minute global timeout is above the 900s largest per-test allowance.
-# The mutation compile gate keeps its 600s budget. The stub-environment
-# compile-fail, split-build, and cold package-publish
-# checks each get 900s. Both comparisons hold:
+# The mutation compile gate keeps its 600s budget. The ambient public-API
+# fixtures, the stub-environment compile-fail, split-build, and cold
+# package-publish checks each get 900s. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
 #   960 s          > 900 s
