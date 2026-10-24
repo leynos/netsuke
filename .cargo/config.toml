@@ -31,3 +31,6 @@ rustflags = ["-Zthreads=8"]
 # platform default linker.
 [target.'cfg(target_os = "linux")']
 rustflags = ["-Zthreads=8", "-Clink-arg=-fuse-ld=mold"]
+
+[unstable]
+embed-metadata = false
