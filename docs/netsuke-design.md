@@ -198,6 +198,9 @@ level keys.
   Netsuke schema the manifest conforms to (e.g., `"1.0.0"`). This allows for
   future evolution of the schema while maintaining backward compatibility. This
   version string should be parsed and validated using the `semver` crate.[^4]
+  See
+  [Schema versions and feature admission](#schema-versions-and-feature-admission)
+  for the registry and allocation rules.
 
 - `vars`: A mapping of global key-value pairs. Keys must be strings. Values may
   be strings, numbers, booleans, or sequences. These variables seed the Jinja
@@ -227,6 +230,52 @@ level keys.
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
+
+#### Schema versions and feature admission
+
+The manifest schema version is separate from the Netsuke release version. Its
+canonical spelling is `MAJOR.MINOR.0`. The registry reserves syntax names
+before implementation and records which feature owns them. A `reserved` row
+does not make syntax admissible; an `admitted` row is available to the current
+reader but has not shipped in a tag; a `released` row has shipped. The first
+tag column identifies the first tag containing the registered schema feature.
+An em dash means that no tag has shipped it.
+
+| Feature identifier    | Owning RFC and roadmap task           | Reserved keys                                                                  | Reserved fields                                                                                                                                       | Reserved discriminators and closed vocabularies                                                                                              | Status   | Schema minor | First tag                 |
+| --------------------- | ------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ | ------------------------- |
+| `core`                | Existing schema; ADR-0045             | `netsuke_version`, `vars`, `macros`, `rules`, `targets`, `actions`, `defaults` | `command_isolation`                                                                                                                                   | `command_isolation`: `shared`, `isolated`                                                                                                    | released | 1.0          | `vTEST`[^schema-core-tag] |
+| `structured-commands` | RFCs 0001, 0009, 0010; 12.1.1, 12.1.2 | `command` (structured mapping and sequence forms)                              | Structured command fields, including `invoke`, `env`, `cwd`, `stdin`, `stdout`, `stderr`, `tee`, `pipe`, `capture_stdout`, and `temp_dir`             | Command discriminators: `invoke`, `rule`, `script`                                                                                           | reserved | 1.1          | —                         |
+| `named-shells`        | RFC 0011; 12.1.1, 12.2.4              | `command`                                                                      | `shell`                                                                                                                                               | Built-in shell names `sh`, `bash`, `pwsh`, `powershell`; configured names come from trusted configuration                                    | reserved | 1.1          | —                         |
+| `includes`            | RFC 0002; 16.1.1                      | `includes`                                                                     | To be fixed by 16.1.1                                                                                                                                 | —                                                                                                                                            | reserved | —            | —                         |
+| `bundles`             | RFCs 0003, 0004; 17.1.1               | `bundles`                                                                      | To be fixed by 17.1.1                                                                                                                                 | —                                                                                                                                            | reserved | —            | —                         |
+| `host-facts`          | RFC 0029; 30.1.1                      | `host_facts`                                                                   | To be fixed by 30.1.1                                                                                                                                 | —                                                                                                                                            | reserved | —            | —                         |
+| `inputs`              | RFC 0022; 21.1.2                      | `inputs`                                                                       | `type`, `default`, `description`, `expose`, `minimum`, `maximum`, `choices`                                                                           | `type`: `string`, `bool`, `integer`, `path`, `sequence<string>`, `sequence<path>`, `mapping<string, string>`; `expose`: `non-secret`         | reserved | —            | —                         |
+| `contention`          | RFC 0024; 22.1.1                      | `contention_classes`                                                           | `capacity`, action/target `contention` (rule annotations are unsupported)                                                                             | `capacity`: integer from 1 through 1024                                                                                                      | reserved | —            | —                         |
+| `states`              | RFC 0021; 23.1.1                      | `states`                                                                       | `kind`, `path`, `identity.files`, `prepare`, `probe.external`, `probe.protocol`, `probe.timeout_seconds`, `probe.max_output_bytes`, `accept_degraded` | `require_state`, `ensure_state`, `prepare_state`; `kind`: `directory`, `file`, `python-venv`, `custom`; `probe.protocol`: `nagios`           | reserved | —            | —                         |
+| `artefacts`           | RFC 0023; 24.1.1                      | `artefacts`                                                                    | `path`, `kind`, `role`, `create_parent`, producer `produces`                                                                                          | `clean_owned`; `kind`: `file`, `directory`; `role`: `generated`, `report`, `cache`, `environment`                                            | reserved | —            | —                         |
+| `maturity`            | RFC 0025; 25.1.1                      | `maturity`                                                                     | `rules`, `id`, `severity`, `select`, optional `subjects`                                                                                              | Rule IDs: `structured-commands`, `typed-inputs`, `owned-cleanup`, `verified-states`, `contention-declared`; severity: `off`, `warn`, `error` | reserved | —            | —                         |
+
+*Table 2: Schema features and their allocation status.*
+
+The `1.1` reservation is the consolidated structured-command surface in
+[ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md);
+`structured-commands` and `named-shells` share it. Later minors are allocated
+by the change that admits a feature on `main`. The first such admission after
+the latest published tag raises the maximum minor by one; later admissions
+before the next tag reuse it. A tag freezes its feature set, and the maximum
+must not skip a reserved minor. See
+[ADR-0061](adrs/adr-0061-manifest-schema-versions-and-admission.md) for the
+full lifecycle and the rejection rules.
+
+RFC 0029's `host_facts.schema` is an additional nested schema version, not a
+replacement for the manifest version. RFCs 0002 and 0003 own the exact version
+relationship between a document and its included or bundled documents.
+
+[^schema-core-tag]: `vTEST` is the first tagged tree containing the schema 1.0
+    core; it is an unversioned test tag. `v0.1.0-beta1` is the first versioned
+    release tag containing that schema. The optional `command_isolation` field
+    was added later by ADR-0045, before the admission gate existed, so it
+    remains part of the 1.0 core row; no release tag contains it yet.
 
 The E-R diagram below summarizes the structure of a `Netsukefile` and the
 relationships between its components.

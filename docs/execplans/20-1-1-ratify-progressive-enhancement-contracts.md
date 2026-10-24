@@ -239,8 +239,13 @@ decision D-15.
   shared compiler admission. Its log is recorded below; no retry was made.
 - [x] (2026-10-24) EP-M0: scanned all 74 live remote branches and all 20 open
   PR heads; recorded the ADR-number and baseline-gate evidence below.
-- [ ] Publish the rebased branch with an explicit lease.
-- [ ] EP-M1: ADR-0061 (Proposed) and the schema-version registry.
+- [x] (2026-10-24) Published the rebased baseline with an explicit lease;
+  local, tracking, and remote heads matched at `8de685cd5`.
+- [x] (2026-10-24) EP-M1: drafted ADR-0061 as Proposed and added the
+  schema-version registry. The registry reserves the planned top-level keys,
+  node fields, command discriminators, and the closed vocabularies settled by
+  D-11 to D-14. `make check-fmt`, `make markdownlint` (including spelling), and
+  `make nixie` passed after formatting.
 - [ ] EP-M2: ADR-0062 to ADR-0067 (Proposed), resolution table, RFC and roadmap
   amendments.
 - [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
@@ -329,6 +334,16 @@ decision D-15.
   `docs/adrs/adr-0045-isolate-command-list-entries.md`. Impact: D-4 makes new
   keys admission events from the gate onwards; the registry records
   `command_isolation` as part of the `1.0` core rather than a gated feature.
+
+- Observation: remote tag `vTEST` is the first tagged tree containing a
+  schema `1.0.0` manifest, but it is an unversioned test tag; `v0.1.0-beta1` is
+  the first versioned release tag containing that schema. ADR-0045's later
+  `command_isolation` field is absent from `v0.1.0-beta4` but was accepted
+  without a version bump before this gate existed. Evidence: `git show` on
+  `vTEST`, `v0.1.0-beta1`, and `v0.1.0-beta4`, plus the GitHub release list.
+  Impact: the registry records both the first tag and first release tag, and
+  notes that `command_isolation` remains part of the 1.0 core without having
+  shipped in a release.
 
 - Observation: `src/localization/keys.rs` is 398 lines and
   `src/localization/check_keys.rs` says it is at the 400-line module cap.
@@ -1495,8 +1510,8 @@ invalidated several premises. What changed:
 - Paths moved by the module regrouping are updated, and
   `docs/terms-of-reference.md` joins the conformance basis.
 
-Effect on remaining work: the plan still awaits user approval, now including
-the D-19 choice.
+Effect on remaining work: the plan is approved with D-19 Option A. Acceptance
+of the drafted ADRs remains scheduled for EP-M5.
 
 2026-10-24, approval and EP-M0 baseline: the user approved D-19 Option A, and
 PR #808 was rebased onto `main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`.
@@ -1507,6 +1522,15 @@ had no local tracking ref. The formatter, lint, typecheck, doc-coverage,
 Markdown, and Mermaid gates passed. `make test` recorded one timeout while its
 nested Cargo check waited for compiler admission; this plan records the result
 without retrying or hiding it. Cargo's `rust-version` wording was corrected to
-describe its enforced compiler floor rather than manifest-syntax admission. The
-plan is in progress; ADR acceptance remains pending at EP-M5, and publishing
-the rebased branch remains outstanding.
+describe its enforced compiler floor rather than manifest-syntax admission.
+
+2026-10-24, EP-M1: drafted ADR-0061 as Proposed and documented the feature
+registry in `docs/netsuke-design.md`. The registry records the reserved
+structured-command `1.1` minor, leaves other planned features unallocated, and
+lists the source-backed fields, discriminators, and closed vocabularies. Tag
+history confirms `vTEST` as the first tagged tree with a schema `1.0.0`
+manifest and `v0.1.0-beta1` as the first versioned release; the
+`command_isolation` field was accepted later under the pre-gate `1.0` schema
+and remains absent from release tags. `make fmt`, `make check-fmt`,
+`make markdownlint`, and `make nixie` passed. No code changed. The plan remains
+in progress; ADR acceptance is pending at EP-M5.
