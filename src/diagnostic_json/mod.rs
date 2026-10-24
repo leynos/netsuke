@@ -50,7 +50,6 @@ pub fn render_error_json(error: &(dyn StdError + 'static)) -> serde_json::Result
 
 /// Emit a rendered JSON diagnostic document to `stderr`, falling back to a
 /// minimal schema-compatible payload when serialization fails.
-#[must_use]
 pub fn emit_or_fallback(result: serde_json::Result<String>) -> ExitCode {
     let payload = result.unwrap_or_else(|err| fallback_payload(&err));
     drop(writeln!(io::stderr(), "{payload}"));
@@ -127,10 +126,9 @@ impl DiagnosticEntry {
     /// Build an entry from a miette diagnostic, capturing its spans and causes.
     fn from_diagnostic(diagnostic: &dyn Diagnostic) -> Self {
         let (source, primary_span, labels) = extract_source_and_labels(diagnostic);
-        let related = diagnostic
-            .related()
-            .map(|items| items.map(Self::from_diagnostic).collect())
-            .unwrap_or_default();
+        let related = diagnostic.related().map_or_else(Default::default, |items| {
+            items.map(Self::from_diagnostic).collect()
+        });
         Self {
             message: diagnostic.to_string(),
             code: diagnostic.code().map(|value| value.to_string()),

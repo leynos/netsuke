@@ -118,10 +118,9 @@ fn module_path_for_source(relative: &Utf8Path) -> Result<String> {
     let stem = relative
         .file_stem()
         .with_context(|| format!("source path {relative} should have a file stem"))?;
-    let mut segments: Vec<&str> = relative
-        .parent()
-        .map(|parent| parent.components().map(|c| c.as_str()).collect())
-        .unwrap_or_default();
+    let mut segments: Vec<&str> = relative.parent().map_or_else(Default::default, |parent| {
+        parent.components().map(|c| c.as_str()).collect()
+    });
     if let Some(parent_module) = stem.strip_suffix("_verification") {
         segments.push(parent_module);
         segments.push("verification");

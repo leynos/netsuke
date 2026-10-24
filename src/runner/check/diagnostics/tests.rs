@@ -61,8 +61,7 @@ fn a_spanned_finding_carries_the_rule_metadata() {
     assert!(diagnostic.source_code().is_some());
     let labels: Vec<_> = diagnostic
         .labels()
-        .map(Iterator::collect::<Vec<_>>)
-        .unwrap_or_default();
+        .map_or_else(Default::default, Iterator::collect::<Vec<_>>);
     let label = labels
         .first()
         .expect("the diagnostic should carry one label");

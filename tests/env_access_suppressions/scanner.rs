@@ -288,8 +288,7 @@ fn allow_attribute_bodies(source: &str) -> Vec<String> {
             AttributeKind::Allow => bodies.extend(read_attribute_body(&masked, open)),
             AttributeKind::CfgAttr => bodies.extend(
                 read_attribute_body(&masked, open)
-                    .map(|body| cfg_attr_allow_bodies(&body))
-                    .unwrap_or_default(),
+                    .map_or_else(Default::default, |body| cfg_attr_allow_bodies(&body)),
             ),
         }
     }

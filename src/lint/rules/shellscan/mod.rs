@@ -65,11 +65,7 @@ impl Mask {
     /// Report whether the byte at `offset` is shell-active.
     #[must_use]
     pub fn is_active(&self, offset: usize) -> bool {
-        self.active
-            .as_slice()
-            .get(offset)
-            .copied()
-            .unwrap_or_default()
+        self.active.get(offset).copied().unwrap_or_default()
     }
 }
 

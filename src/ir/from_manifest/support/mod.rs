@@ -365,8 +365,7 @@ fn find_duplicate_graph_outputs(
 pub(super) fn get_target_display_name(paths: &[Utf8PathBuf]) -> String {
     paths
         .first()
-        .map(|p: &Utf8PathBuf| p.to_string())
-        .unwrap_or_default()
+        .map_or_else(Default::default, |p: &Utf8PathBuf| p.to_string())
 }
 
 #[cfg(test)]

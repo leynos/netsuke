@@ -42,7 +42,9 @@ pub(super) fn with_suffix(
         ));
     }
     let mut base = path.to_path_buf();
-    let name = base.file_name().map(str::to_owned).unwrap_or_default();
+    let name = base
+        .file_name()
+        .map_or_else(Default::default, str::to_owned);
     if !name.is_empty() {
         base.pop();
     }
