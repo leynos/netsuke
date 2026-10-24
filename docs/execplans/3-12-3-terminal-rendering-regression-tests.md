@@ -5,11 +5,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: APPROVED
 
 On 2026-10-23 the user accepted the recommended outcomes of decisions `D3`,
-`D4` (Option A), `D8`, `D9`, and `D11`, and asked that implementation not begin
-yet. The plan stays a draft until the user explicitly approves implementation.
+`D4` (Option A), `D8`, `D9`, and `D11`, and deferred implementation. The user
+approved implementation on 2026-10-24.
 
 ## Purpose / big picture
 
@@ -214,11 +214,11 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   verification, architecture, terminal systems, plan quality); revised the plan
   (see `Revision note`).
 - [x] (2026-10-23) User accepted decisions `D3`, `D4` (Option A), `D8`, `D9`,
-  and `D11` as recommended; implementation is not yet authorized.
+  and `D11` as recommended; implementation was not yet authorized.
+- [x] (2026-10-24) User approved implementation.
 - [x] (2026-10-23) Merged `origin/main` (`8a9610008`) into the branch,
   re-verified the plan's code and documentation references against it, and
   remapped moved paths and renumbered ADRs (see `Surprises & discoveries`).
-- [ ] User approval to begin implementation.
 - [ ] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour.
 - [ ] EP-M2: display-plan core and single resolution.
