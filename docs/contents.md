@@ -245,7 +245,7 @@ operator, user, and contributor references are easier to find.
   Windows final component validation through a same-handle reparse-point open.
 - [ADR-0033](adrs/adr-0033-record-split-build-cargo-messages.md): Recorded Cargo
   messages for split-build artefact discovery, preserving parser coverage
-  without an always-cold nested workspace build.
+  without an always-cold nested workspace build. Superseded by ADR-0059.
 - [ADR-0034](adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md):
   Script `$in` and `$out` shell-variable semantics and marker-token separation.
 - [ADR-0035](adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md):
@@ -302,6 +302,10 @@ operator, user, and contributor references are easier to find.
 - [ADR-0051](adrs/adr-0051-compile-the-build-script-module-slice-in-the-workspace-graph.md):
   Compiling the build-script module slice in the Cargo workspace graph rather
   than inside a timed test body.
+- [ADR-0059](adrs/adr-0059-keep-compile-time-contracts-out-of-timed-tests.md):
+  Compiling public-API contracts as a workspace library and rejections as
+  pinned compile-fail doctests, retiring the direct-`rustc` test harness and
+  moving package verification into `make test-package-verify`.
 
 ## Proposals
 

@@ -33,8 +33,15 @@ RUST_FUNCTION = re.compile(
     r"fn\s+(?P<name>[a-z0-9_]+)\b[^\{]*)\{"
 )
 CARGO_COMMAND = re.compile(r"Command::new\([^)]*cargo\w*[^)]*\)", re.IGNORECASE)
+# `cargo package --list` prints the package's file list and compiles nothing,
+# so the `package` subcommand counts as build-capable only when `--list` does
+# not follow it. Every other listed subcommand can compile in any form.
+BUILD_CAPABLE_OPERATION = (
+    rf'"(?:{"|".join(BUILD_CAPABLE_SUBCOMMANDS)})"(?<!"package")'
+    r'|"package"(?!\s*,\s*"--list")'
+)
 CARGO_OPERATION = re.compile(
-    rf'\.(?:arg|args)\(\s*(?:\[\s*)?"(?:{"|".join(BUILD_CAPABLE_SUBCOMMANDS)})"'
+    rf"\.(?:arg|args)\(\s*(?:\[\s*)?(?:{BUILD_CAPABLE_OPERATION})"
 )
 # A `#[case]` attribute, with or without a `::name`, in either the parenthesised
 # or the bracketed spelling. It multiplies its test into instances at run time.
@@ -42,6 +49,7 @@ CASE_ATTRIBUTE = re.compile(r"#\[case(?:::[a-z0-9_]+)?[\(\[]")
 RETAINED_RUST_LITERALS = {
     *(f'"{operation}"' for operation in BUILD_CAPABLE_SUBCOMMANDS),
     '"cargo"',
+    '"--list"',
 }
 # A free function named `build` is reached as a bare `build()`. The `::` and `.`
 # forms are excluded because an associated `Fixture::build()` is already traced
@@ -124,10 +132,7 @@ def _operation_constants(source: str) -> set[str]:
         r"(?P<value>.*?);"
     )
     for match in pattern.finditer(source):
-        if any(
-            f'"{operation}"' in match.group("value")
-            for operation in BUILD_CAPABLE_SUBCOMMANDS
-        ):
+        if re.search(BUILD_CAPABLE_OPERATION, match.group("value")):
             constants.add(match.group("name"))
     return constants
 

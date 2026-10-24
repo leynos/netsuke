@@ -1,8 +1,7 @@
-//! Compile-pass fixture for public manifest environment loader APIs.
+//! Type-check the public manifest environment loader APIs.
 //!
-//! The direct-rustc harness type-checks this as an external crate. It covers
-//! the legacy loader adapters, the policy-aware environment bundle, and the
-//! string-loading policy variant without reading a manifest at run time.
+//! Covers the legacy loader adapters, the policy-aware environment bundle, and
+//! the string-loading policy variant without reading a manifest.
 
 use netsuke::{
     manifest::{
@@ -15,7 +14,7 @@ use netsuke::{
 use std::sync::Arc;
 
 /// Reference the legacy and explicit loader APIs as an external embedder.
-fn reference_manifest_loader_apis() {
+pub fn reference_manifest_loader_apis() {
     let reader: EnvReader = Arc::new(|_| Err(EnvReadError::NotPresent));
     let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
 
@@ -41,8 +40,4 @@ fn reference_manifest_loader_apis() {
         &reader,
         &EnvAccessPolicy::default(),
     ));
-}
-
-fn main() {
-    reference_manifest_loader_apis();
 }

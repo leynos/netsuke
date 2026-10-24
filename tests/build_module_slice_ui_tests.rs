@@ -307,6 +307,45 @@ fn build_script_rerun_directives_match_the_compiled_module_slice() -> io::Result
     Ok(())
 }
 
+/// The only environment variable `build.rs` may watch for reruns.
+///
+/// Cargo already tracks package metadata, `TARGET`, and `PROFILE` through
+/// `Cargo.toml` and its own build units, so watching their ambient values
+/// would only invalidate artefacts whenever a caller's environment differs.
+/// `SOURCE_DATE_EPOCH` is the one external input: it stamps the manual page.
+const ENVIRONMENT_RERUN_INPUTS: &[&str] = &["SOURCE_DATE_EPOCH"];
+
+/// Verify `build.rs` reruns for exactly the documented environment input.
+///
+/// Every mention of the directive must be a literal `println!` line, so a
+/// computed directive cannot add an input this source reading never sees.
+#[test]
+fn build_script_watches_only_its_documented_environment_input() -> io::Result<()> {
+    let build_script = test_support::fs::read_to_string(manifest_dir().join("build.rs"))?;
+    let mut watched = Vec::new();
+    for line in build_script
+        .lines()
+        .map(str::trim)
+        .filter(|line| line.contains("cargo:rerun-if-env-changed="))
+    {
+        let name = line
+            .strip_prefix("println!(\"cargo:rerun-if-env-changed=")
+            .and_then(|directive| directive.strip_suffix("\");"))
+            .ok_or_else(|| {
+                io::Error::other(format!(
+                    "build.rs has a non-literal environment rerun directive: {line}",
+                ))
+            })?;
+        watched.push(name);
+    }
+    if watched != ENVIRONMENT_RERUN_INPUTS {
+        return Err(io::Error::other(format!(
+            "build.rs must watch only {ENVIRONMENT_RERUN_INPUTS:?} in the environment; found {watched:?}",
+        )));
+    }
+    Ok(())
+}
+
 /// Reject build-script rerun directives that track runtime-only modules.
 fn reject_runtime_only_rerun_paths(rerun_paths: &[&str]) -> io::Result<()> {
     for &path in RUNTIME_ONLY_RERUN_PATHS {

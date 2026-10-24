@@ -1,0 +1,26 @@
+[package]
+name = "netsuke-public-api-fixture"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+test = false
+doctest = false
+
+[lints]
+workspace = true
+
+# The fixture is an external embedder of `netsuke`, so it forwards only the
+# host features that change the public surface it type-checks. `lint` gates
+# `netsuke::lint`; the gates enable it through `--all-features`, and a
+# default-features build compiles every other fixture module without it.
+[features]
+lint = ["netsuke-build/lint"]
+
+# `netsuke` is the only dependency, so each module sees exactly what an
+# external crate sees: the library's public API and nothing it re-exports by
+# accident through a shared dependency. Clap is deliberately absent, which is
+# what lets `policy_from_str` prove that policy parsing needs no Clap import.
+[dependencies]
+netsuke-build = { path = ".." }
