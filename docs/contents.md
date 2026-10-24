@@ -325,6 +325,21 @@ operator, user, and contributor references are easier to find.
 - [ADR-0061](adrs/adr-0061-select-ninja-console-pool-per-build-edge.md):
   Select Ninja's console pool on individual build edges while preserving action
   identity and rejecting incompatible scheduling annotations.
+- [ADR-0061: Manifest schema versions and admission](adrs/adr-0061-manifest-schema-versions-and-admission.md):
+  Schema-version meaning, feature admission, and allocation lifecycle.
+- [ADR-0062: Progressive enhancement contract boundaries](adrs/adr-0062-progressive-enhancement-contract-boundaries.md):
+  Shared feature identifiers, operation ownership, shallow-end, and operator
+  ceilings.
+- [ADR-0063: Managed state schema](adrs/adr-0063-managed-state-schema.md):
+  Optional state declarations and readiness-operation contracts.
+- [ADR-0064: Typed task input schema](adrs/adr-0064-typed-task-input-schema.md):
+  Optional typed root inputs and their shared value contract.
+- [ADR-0065: Artefact ownership schema](adrs/adr-0065-artefact-ownership-schema.md):
+  Explicit output ownership and bounded cleanup declarations.
+- [ADR-0066: Contention class schema](adrs/adr-0066-contention-class-schema.md):
+  Optional named contention classes lowered through the existing scheduler.
+- [ADR-0067: Maturity policy schema](adrs/adr-0067-maturity-policy-schema.md):
+  Shallow-end policy composition and rule-to-feature requirements.
 - [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md):
   Include every prerequisite kind in whole-manifest cycle detection while
   keeping output aliases and serial scheduling semantics explicit.
