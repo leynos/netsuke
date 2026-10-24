@@ -2,19 +2,26 @@
 
 Status: IN PROGRESS
 
-The investigation is under way. On 24 October, the branch was rebased from
-`8a961000859c02862454338fda6c4dd65bda2aa1` onto `origin/main` at
-`596cf74c2850c1d2088f5822828dfe556aad717e`, then rebased again when `main`
-advanced to `018b81b4311ac5dd99ac4182c51301eeca0dfc55`. All 27 issue commits
-replayed without conflicts and the range-diff matched. The current pre-commit
-worktree candidate passed `make check-fmt`, `make test`, `make typecheck`, and
-`make lint`, as well as the required workflow-contract, documentation-coverage,
-Markdown, and diagram gates. `make test` passed all 4,864 Nextest tests (six
-skipped) and the workspace doctests. Documentation coverage is 98.19% against
-the 80% threshold; workflow contracts passed 1,458 tests (three skipped) and 27
+The investigation is under way. On 24 October, the 28-commit branch was rebased
+onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
+base advanced from `018b81b4311ac5dd99ac4182c51301eeca0dfc55`. The replay had
+no conflicts and the range-diff matched all commits. The preceding candidate at
+`018b81b` passed `make check-fmt`, `make test`, `make typecheck`, and
+`make lint`, plus the workflow-contract, documentation-coverage, Markdown, and
+diagram gates. `make test` passed all 4,864 Nextest tests (six skipped) and the
+workspace doctests. Documentation coverage was 98.19% against the 80%
+threshold; workflow contracts passed 1,458 tests (three skipped) and 27
 supplementary script doctests. Markdownlint found zero issues across 200 files,
-and Nixie validated every diagram. Earlier failures and hosted checks belong to
-older heads and remain historical only.
+and Nixie validated every diagram. Those results predate the latest toolchain
+update; the new head passed `make check-fmt`, `make lint`, and
+`make doc-coverage` (98.19%). Its `make test` run passed 4,839 tests, skipped
+six, and timed out `cli_configuration_fixture_compiles::case_1_public_api` at
+300 seconds; 24 tests were not run and doctests were not reached. The captured
+log has no underlying Cargo diagnostic, so the timeout cause is unresolved. The
+same candidate passed `make typecheck` and `make test-workflow-contracts`
+(1,460 passed, 3 skipped, plus 27 supplementary script tests), and
+`make markdownlint` (zero issues across 200 files) and `make nixie` (all
+diagrams validated). Hosted CI and review on the new head are pending.
 
 ## Purpose / big picture
 
@@ -138,26 +145,27 @@ every installation input is immutable.
 
 ### Current target source at the rebased base
 
-The current base `018b81b4311ac5dd99ac4182c51301eeca0dfc55` includes the
-workflow-contract changes from pull request 932 and later
-PowerShell-placeholder hardening from pull request 924. It keeps the eligible
-same-repository Linux PR gate on `ubicloud-standard-4-ubuntu-2404`, with four
-Cargo workers and four Nextest workers, and sends both fork PRs and Dependabot
-PRs to `ubuntu-latest`. The workflow checks the PR author's `user.login` for
-Dependabot because the actor can change when another person pushes to that PR.
-The collector now keeps `fork_hosted` and `dependabot_hosted` separate using
-saved workflow-run `pull_requests[].user.login` and base/head repository
-identities. If the saved run lacks enough provenance to identify either case,
-it emits `other` rather than guessing from the runner label. The required run
-fields are documented in GitHub's
-[Get a workflow run response][workflow-run-response].
+The current base `f8df5d808f1bee4eb8554df0160119864ade6f39` includes the
+workflow-contract changes from pull request 932, PowerShell-placeholder
+hardening from pull request 924, and the nightly toolchain update from pull
+request 947. It pins `nightly-2026-10-22` and starts coverage baseline v2. The
+eligible same-repository Linux PR gate remains on
+`ubicloud-standard-4-ubuntu-2404`, with four Cargo workers and four Nextest
+workers, and sends both fork PRs and Dependabot PRs to `ubuntu-latest`. The
+workflow checks the PR author's `user.login` for Dependabot because the actor
+can change when another person pushes to that PR. The collector now keeps
+`fork_hosted` and `dependabot_hosted` separate using saved workflow-run
+`pull_requests[].user.login` and base/head repository identities. If the saved
+run lacks enough provenance to identify either case, it emits `other` rather
+than guessing from the runner label. The required run fields are documented in
+GitHub's [Get a workflow run response][workflow-run-response].
 
 The current base retains pull request 932's workflow-contract changes and
-documentation. The intervening pull request 924 change is unrelated to the CI
-source comparison. The cache action and test selection remain unchanged by
-these upstream commits; no candidate optimization has been enabled. The
-original 10 October reference and the earlier 8a961 comparison above remain
-historical snapshots, not the current source baseline.
+documentation. Pull request 924's change is unrelated to the CI source
+comparison. Pull request 947 changes the compiler toolchain and coverage
+baseline, but reports no test-selection changes. No candidate optimization has
+been enabled. The original 10 October reference and the earlier 8a961
+comparison above remain historical snapshots, not the current source baseline.
 
 The original offline evidence set contains 81 job records from 21 distinct
 run-attempt pairs: six main-branch coverage jobs, six main-branch cache-writer
@@ -455,8 +463,9 @@ fidelity comparisons block adoption.
   including generated properties for retry and post-summary isolation.
 - [x] Rebase the 27-commit issue series from the initial
   `596cf74c` target onto current `origin/main` at `018b81b`; the range-diff
-  matched and no conflicts occurred. Revalidate the Dependabot hosted-runner
-  cohort against saved PR-author and repository data.
+  matched and no conflicts occurred. This is the preceding candidate;
+  revalidate the Dependabot hosted-runner cohort against saved PR-author and
+  repository data on the current base.
 - [x] Complete the separate doctest pass with the existing selection and
   ignore policy.
 - [x] Confirm `make nixie` exits successfully on the final documentation
@@ -468,7 +477,7 @@ fidelity comparisons block adoption.
   and malformed inventory values, within a fixed 80-example budget per case.
 - [x] Keep default CI execution unchanged and defer in-watchdog telemetry to the
   separately reviewed EP-2 milestone.
-- [x] On the rebased worktree, pass `make check-fmt`,
+- [x] On the candidate based on `018b81b`, pass `make check-fmt`,
   `make test-workflow-contracts` (1,458 passed, 3 skipped, plus 27
   supplementary script doctests), and `make typecheck`.
 - [x] Resolve the Ruff boolean-expression finding and pass `make lint` on the
@@ -481,6 +490,21 @@ fidelity comparisons block adoption.
 - [x] Pass local `make test`: 4,864 Nextest tests passed, six were skipped,
   and all workspace doctests passed. The previously slow public-API and
   locale-stub compile fixtures completed within their configured timeouts.
+- [x] Rebase all 28 commits onto `origin/main` at `f8df5d8`; the range-diff
+  matched and no conflicts occurred.
+- [x] After the nightly toolchain update, pass `make check-fmt`, `make lint`,
+  and `make doc-coverage` (98.19%).
+- [ ] Resolve the `make test` timeout in
+  `cli_configuration_fixture_compiles::case_1_public_api`; the 300-second
+  timeout left 24 tests unrun and prevented doctests from starting. The log
+  contains no diagnostic from the fixture's child Cargo command, so its cause
+  is not established.
+- [x] Pass `make typecheck` and `make test-workflow-contracts` on the new base
+  (1,460 passed, 3 skipped, plus 27 supplementary script tests).
+- [x] Validate final documentation with `make check-fmt`, `make markdownlint`
+  (zero issues across 200 files), and `make nixie` after this plan update.
+- [ ] Validate current-head hosted checks and reviews, reconcile findings, and
+  merge the PR when it reaches equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -734,13 +758,24 @@ overlong boolean condition in the repository-ID predicate; extracting the ID
 check preserved the exclusion of booleans and passed the rerun. The final
 workflow-contract run includes the hosted-cohort, late-summary, and phase
 boundary regressions. On 24 October, `main` advanced to
-`018b81b4311ac5dd99ac4182c51301eeca0dfc55`, so the branch was rebased again.
-All 27 issue commits still match the original range and no conflicts occurred.
-The complete post-rebase gate sequence passed: format, lint, typecheck,
+`018b81b4311ac5dd99ac4182c51301eeca0dfc55`, and the branch was rebased again.
+All 28 commits matched the prior range and no conflicts occurred. That
+candidate passed the complete local gate sequence: format, lint, typecheck,
 documentation coverage at 98.19%, workflow contracts (1,458 passed, 3 skipped,
 plus 27 script doctests), the full Rust suite (4,864 passed, six skipped,
-doctests passed), Markdownlint, and Nixie. The controlled baseline, bounded
-telemetry, and candidate decisions remain outstanding.
+doctests passed), Markdownlint, and Nixie. Hosted CI also passed on that head.
+The base then advanced to `f8df5d808f1bee4eb8554df0160119864ade6f39` with pull
+request 947's nightly toolchain update. The 28-commit replay onto this target
+had no conflicts and matched the range-diff. On the new candidate,
+`make check-fmt`, `make lint`, and `make doc-coverage` passed; coverage is
+98.19%. `make test` passed 4,839 tests and skipped six before
+`cli_configuration_fixture_compiles::case_1_public_api` timed out at 300
+seconds. Twenty-four tests were not run, doctests did not start, and the log
+contains no diagnostic from the fixture's child Cargo command. Typecheck and
+workflow contracts passed (1,460 passed, 3 skipped, plus 27 supplementary
+script tests), as did Markdownlint (zero issues across 200 files) and Nixie.
+Hosted checks and review for this head remain pending. The controlled baseline,
+bounded telemetry, and candidate decisions remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
