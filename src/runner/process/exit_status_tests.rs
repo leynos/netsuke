@@ -35,6 +35,7 @@ fn captured_exit_result(status: ExitStatus) -> (io::Result<()>, Vec<String>) {
         operation: "clean",
         stderr_mode: StderrMode::Suppress,
         command_list_failure: None,
+        command_list_targets: None,
         clock: &clock,
         started_at: Instant::now(),
     };

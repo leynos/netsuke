@@ -10,15 +10,29 @@ const COMMAND_LIST_FAILURES_TOTAL: &str = "netsuke_ninja_command_list_failures_t
 pub(super) const COMMAND_LIST_FAILURE_DURATION: &str =
     "netsuke_ninja_command_list_failure_duration_seconds";
 
-/// Record the only observable per-entry outcome: a safely attributed failure.
-pub(super) fn record_failure(failure: &CommandListFailure, elapsed: Duration) {
+/// Record bounded tracing context and metrics for an attributed failure.
+pub(super) fn record_failure(
+    failure: &CommandListFailure,
+    elapsed: Duration,
+    target_clause: Option<&str>,
+) {
     describe_metrics();
-    tracing::warn!(
-        command_list_action = failure.action_identity(),
-        command_list_entry = failure.entry_index(),
-        command_list_failure = %failure,
-        "Ninja command-list entry failed"
-    );
+    if let Some(target) = target_clause {
+        tracing::warn!(
+            command_list_action = failure.action_identity(),
+            command_list_entry = failure.entry_index(),
+            command_list_failure = %failure,
+            command_list_target = target,
+            "Ninja command-list entry failed"
+        );
+    } else {
+        tracing::warn!(
+            command_list_action = failure.action_identity(),
+            command_list_entry = failure.entry_index(),
+            command_list_failure = %failure,
+            "Ninja command-list entry failed"
+        );
+    }
     counter!(COMMAND_LIST_FAILURES_TOTAL, "outcome" => "failure").increment(1);
     histogram!(COMMAND_LIST_FAILURE_DURATION, "outcome" => "failure").record(elapsed);
 }
@@ -68,7 +82,7 @@ mod tests {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
         metrics::with_local_recorder(&recorder, || {
-            record_failure(&failure, Duration::from_millis(1));
+            record_failure(&failure, Duration::from_millis(1), None);
         });
         let snapshot = snapshotter.snapshot().into_vec();
         let has_counter = snapshot.iter().any(|(key, _, _, value)| {

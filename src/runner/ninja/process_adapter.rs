@@ -5,6 +5,7 @@
 //! a `Cli` use these wrappers; process requests remain parser-independent and
 //! callers without CLI state construct `NinjaProcessOptions` directly.
 
+use super::super::process::command_list_targets::CommandListTargetIndex;
 use super::super::{BuildTargets, CommandEnv, StderrMode, process};
 use crate::cli::Cli;
 use camino::Utf8Path;
@@ -47,6 +48,18 @@ pub fn run_ninja(
         env: &CommandEnv::inherit(),
         stderr_mode: StderrMode::from_json_enabled(cli.json),
     })
+}
+
+/// Invoke Ninja while retaining target names for command-list failure reports.
+///
+/// # Errors
+///
+/// Returns an [`std::io::Error`] if Ninja cannot execute successfully.
+pub(in crate::runner) fn run_ninja_with_command_list_targets(
+    request: process::NinjaBuildRequest<'_>,
+    command_list_targets: &CommandListTargetIndex,
+) -> std::io::Result<()> {
+    process::run_ninja_with_command_list_targets(request, command_list_targets)
 }
 
 /// Invoke a Ninja tool with the provided CLI settings.

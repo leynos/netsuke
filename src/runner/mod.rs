@@ -215,12 +215,13 @@ fn execute_build(
     context: &ExecutionContext<'_>,
     graph_generation: &GraphGenerationContext<'_>,
 ) -> Result<()> {
-    let bundle = generate_ninja_with_shell(
+    let generated = generate_ninja_with_shell(
         cli,
         context.reporter,
         Some(keys::STATUS_TOOL_BUILD.into()),
         graph_generation,
     )?;
+    let (bundle, command_list_targets) = generated.into_build_parts();
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);
@@ -239,23 +240,27 @@ fn execute_build(
             context.ninja_program, build_path
         )
     };
+    let options = ninja::ninja_process_options(cli)?;
+    let env = CommandEnv::inherit();
+    let build_request = process::NinjaBuildRequest {
+        program: context.ninja_program,
+        options: &options,
+        build_file: build_path,
+        targets: &targets,
+        env: &env,
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
+    };
     if context.progress_enabled {
-        let options = ninja::ninja_process_options(cli)?;
         let mut on_task_progress = on_task_progress_callback(context.reporter);
-        process::run_ninja_with_status(
-            process::NinjaBuildRequest {
-                program: context.ninja_program,
-                options: &options,
-                build_file: build_path,
-                targets: &targets,
-                env: &CommandEnv::inherit(),
-                stderr_mode: StderrMode::from_json_enabled(cli.json),
-            },
+        process::run_ninja_with_status_and_command_list_targets(
+            build_request,
             &mut on_task_progress,
+            &command_list_targets,
         )
         .with_context(ctx)?;
     } else {
-        run_ninja(context.ninja_program, cli, build_path, &targets).with_context(ctx)?;
+        ninja::run_ninja_with_command_list_targets(build_request, &command_list_targets)
+            .with_context(ctx)?;
     }
     context
         .reporter
@@ -317,7 +322,8 @@ fn execute_ninja_tool(
         "Preparing Ninja tool invocation"
     );
     let bundle =
-        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?;
+        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?
+            .into_bundle();
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);

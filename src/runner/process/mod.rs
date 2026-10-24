@@ -2,11 +2,13 @@
 //! Internal to `runner`; public API is defined in `runner.rs`.
 
 use super::BuildTargets;
+use command_list_targets::CommandListTargetIndex;
 use monotony::{MonotonicClock, StdMonotonicClock};
 use std::{io, process::Command};
 
 use camino::Utf8Path;
 mod child_exit;
+pub(in crate::runner) mod command_list_targets;
 mod list_failure_telemetry;
 mod logging;
 
@@ -54,6 +56,8 @@ struct CommandExecutionContext<'a, Clock> {
     captures_ninja_failure_output: bool,
     /// Monotonic clock measuring the child run.
     clock: &'a Clock,
+    /// Invocation-local output-name lookup for command-list fingerprints.
+    command_list_targets: Option<&'a CommandListTargetIndex>,
 }
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
@@ -106,6 +110,7 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
         operation: execution.operation,
         stderr_mode: execution.stderr_mode,
         command_list_failure: command_list_failure.as_ref(),
+        command_list_targets: execution.command_list_targets,
         clock: execution.clock,
         started_at,
     };
@@ -168,6 +173,23 @@ fn run_ninja_with_clock(
     run_ninja_build_internal(*request, None, clock)
 }
 
+/// Run a Ninja build with the invocation-local command-list target lookup.
+///
+/// # Errors
+///
+/// Returns an error when Ninja cannot be spawned or exits unsuccessfully.
+pub(in crate::runner) fn run_ninja_with_command_list_targets(
+    request: NinjaBuildRequest<'_>,
+    command_list_targets: &CommandListTargetIndex,
+) -> io::Result<()> {
+    run_ninja_build_internal_with_targets(
+        request,
+        None,
+        Some(command_list_targets),
+        &StdMonotonicClock,
+    )
+}
+
 /// Invoke a Ninja tool with an explicit child-process environment.
 ///
 /// # Examples
@@ -199,7 +221,7 @@ pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
 }
 
 /// Caller-supplied parameters shared across Ninja invocation variants.
-struct NinjaInternalRequest<'request, 'observer> {
+struct NinjaInternalRequest<'request, 'observer, 'targets> {
     /// Ninja executable to invoke.
     program: &'request Utf8Path,
     /// Child stderr policy controlling forwarding and attribution.
@@ -210,6 +232,8 @@ struct NinjaInternalRequest<'request, 'observer> {
     operation: &'request str,
     /// Whether stdout forwarding should retain the bounded failure tail.
     captures_ninja_failure_output: bool,
+    /// Invocation-local output-name lookup for command-list fingerprints.
+    command_list_targets: Option<&'targets CommandListTargetIndex>,
 }
 
 /// Build, spawn, and stream a Ninja invocation through a shared core.
@@ -220,7 +244,7 @@ struct NinjaInternalRequest<'request, 'observer> {
 /// cannot be spawned, a child standard stream is unavailable, or Ninja
 /// reports a non-zero exit status.
 fn run_ninja_internal<F, Clock>(
-    request: NinjaInternalRequest<'_, '_>,
+    request: NinjaInternalRequest<'_, '_, '_>,
     clock: &Clock,
     configure: F,
 ) -> io::Result<()>
@@ -235,6 +259,7 @@ where
         stderr_mode: request.stderr_mode,
         captures_ninja_failure_output: request.captures_ninja_failure_output,
         clock,
+        command_list_targets: request.command_list_targets,
     };
     run_command_and_stream_with_context(cmd, request.status_observer, &execution)
 }
@@ -249,6 +274,20 @@ fn run_ninja_build_internal(
     status_observer: Option<StatusObserver<'_>>,
     clock: &impl MonotonicClock,
 ) -> io::Result<()> {
+    run_ninja_build_internal_with_targets(request, status_observer, None, clock)
+}
+
+/// Run a Ninja build with optional progress observation and target attribution.
+///
+/// # Errors
+///
+/// Returns an error when Ninja cannot be spawned or exits unsuccessfully.
+fn run_ninja_build_internal_with_targets(
+    request: NinjaBuildRequest<'_>,
+    status_observer: Option<StatusObserver<'_>>,
+    command_list_targets: Option<&CommandListTargetIndex>,
+    clock: &impl MonotonicClock,
+) -> io::Result<()> {
     run_ninja_internal(
         NinjaInternalRequest {
             program: request.program,
@@ -256,6 +295,7 @@ fn run_ninja_build_internal(
             status_observer,
             operation: "build",
             captures_ninja_failure_output: true,
+            command_list_targets,
         },
         clock,
         |cmd| configure_ninja_build_command(cmd, &request),
@@ -280,23 +320,29 @@ fn run_ninja_tool_internal(
             status_observer,
             operation: request.tool,
             captures_ninja_failure_output: false,
+            command_list_targets: None,
         },
         clock,
         |cmd| configure_ninja_tool_command(cmd, &request),
     )
 }
 
-/// Invoke `ninja` build and stream parsed task updates from status lines.
+/// Run a progress-aware build with the invocation-local target lookup.
 ///
 /// # Errors
 ///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub(crate) fn run_ninja_with_status(
+/// Returns an error when Ninja cannot be spawned or exits unsuccessfully.
+pub(in crate::runner) fn run_ninja_with_status_and_command_list_targets(
     request: NinjaBuildRequest<'_>,
     status_observer: StatusObserver<'_>,
+    command_list_targets: &CommandListTargetIndex,
 ) -> io::Result<()> {
-    run_ninja_build_internal(request, Some(status_observer), &StdMonotonicClock)
+    run_ninja_build_internal_with_targets(
+        request,
+        Some(status_observer),
+        Some(command_list_targets),
+        &StdMonotonicClock,
+    )
 }
 
 /// Invoke `ninja -t` and stream parsed task updates from status lines.

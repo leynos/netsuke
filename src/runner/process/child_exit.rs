@@ -25,6 +25,9 @@ pub(super) struct ExitFailureContext<'failure, 'clock, Clock> {
     pub(super) stderr_mode: StderrMode,
     /// Bounded command-list attribution recovered from child output.
     pub(super) command_list_failure: Option<&'failure CommandListFailure>,
+    /// Invocation-local output-name lookup retained by the build runner.
+    pub(super) command_list_targets:
+        Option<&'failure super::command_list_targets::CommandListTargetIndex>,
     /// Monotonic clock used to measure the child run.
     pub(super) clock: &'clock Clock,
     /// Instant the child was spawned, for failure-duration telemetry.
@@ -40,6 +43,11 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
     if status.success() {
         Ok(())
     } else {
+        let target_clause = failure_context.command_list_failure.and_then(|failure| {
+            failure_context
+                .command_list_targets
+                .and_then(|targets| targets.clause(failure.action_identity()))
+        });
         tracing::Span::current().record("failure_category", "exit_status");
         log_command_exit_failure(
             context,
@@ -54,9 +62,14 @@ pub(super) fn check_exit_status_with_context<Clock: MonotonicClock>(
                     .clock
                     .now()
                     .duration_since(failure_context.started_at),
+                target_clause.as_deref(),
             );
         }
-        ninja_exit_error(status, failure_context.command_list_failure)
+        ninja_exit_error(
+            status,
+            failure_context.command_list_failure,
+            target_clause.as_deref(),
+        )
     }
 }
 
@@ -74,10 +87,16 @@ pub(super) fn terminate_child(child: &mut Child, context: &str) {
 pub(super) fn ninja_exit_error(
     status: ExitStatus,
     command_list_failure: Option<&CommandListFailure>,
+    target_clause: Option<&str>,
 ) -> io::Result<()> {
     let message = command_list_failure.map_or_else(
         || format!("ninja exited with {status}"),
-        |failure| format!("ninja exited with {status}: {failure}"),
+        |failure| {
+            target_clause.map_or_else(
+                || format!("ninja exited with {status}: {failure}"),
+                |clause| format!("ninja exited with {status}: {failure} ({clause})"),
+            )
+        },
     );
     Err(io::Error::other(message))
 }

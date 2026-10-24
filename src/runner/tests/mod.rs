@@ -264,7 +264,7 @@ fn runner_reports_the_complete_generation_stage_sequence(
     let graph_generation = fixture.graph_generation_context();
     let generated =
         generate_ninja_with_shell(&fixture.cli, &fixture.reporter, None, &graph_generation)?;
-    let (ninja_text, _) = generated.into_parts();
+    let (ninja_text, _) = generated.into_bundle().into_parts();
 
     let stages = fixture.reporter.stages();
     ensure!(

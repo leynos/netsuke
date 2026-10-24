@@ -12,8 +12,9 @@ use super::super::{
     load_manifest_with_stage_reporting, path_helpers, report_pipeline_stage,
 };
 use crate::localization::{self, keys};
-use crate::ninja_gen;
+use crate::ninja_gen::GeneratedNinja;
 use crate::recipe_shell::BashExecutable;
+use crate::runner::process::command_list_targets::CommandListTargetIndex;
 use monotony::MonotonicClock;
 
 /// Supply the dependencies that select and measure graph generation.
@@ -44,6 +45,31 @@ impl GraphGenerationContext<'_> {
     }
 }
 
+/// Own a generated Ninja bundle and its invocation-local target lookup.
+///
+/// The lookup contains only bounded output names and fingerprints; it does not
+/// keep the build graph alive after generation. CLI builds retain it through
+/// their synchronous Ninja call, while generate and Ninja-tool operations
+/// discard it with [`Self::into_bundle`].
+pub(in crate::runner) struct GeneratedNinjaWithTargets {
+    /// Main Ninja file and any sidecars produced for this invocation.
+    bundle: GeneratedNinja,
+    /// Bounded output names keyed by the generated command-list fingerprint.
+    command_list_targets: CommandListTargetIndex,
+}
+
+impl GeneratedNinjaWithTargets {
+    /// Return the generated Ninja bundle and discard its lookup.
+    pub(in crate::runner) fn into_bundle(self) -> GeneratedNinja {
+        self.bundle
+    }
+
+    /// Return the bundle and lookup for one synchronous CLI build.
+    pub(in crate::runner) fn into_build_parts(self) -> (GeneratedNinja, CommandListTargetIndex) {
+        (self.bundle, self.command_list_targets)
+    }
+}
+
 /// Generate a Ninja bundle from the manifest referenced by `cli`.
 ///
 /// # Errors
@@ -62,7 +88,7 @@ pub(in crate::runner) fn generate_ninja_with_shell(
     reporter: &dyn StatusReporter,
     tool_key: Option<LocalizationKey>,
     graph_generation: &GraphGenerationContext<'_>,
-) -> Result<ninja_gen::GeneratedNinja> {
+) -> Result<GeneratedNinjaWithTargets> {
     let manifest_path = path_helpers::resolve_manifest_path(cli)?;
     path_helpers::ensure_manifest_exists_or_error(cli, reporter, &manifest_path)?;
 
@@ -77,18 +103,23 @@ pub(in crate::runner) fn generate_ninja_with_shell(
         || generation::build_graph_for_shell(&manifest, graph_generation.recipe_shell),
     )
     .context(localization::message(keys::RUNNER_CONTEXT_BUILD_GRAPH))?;
+    let command_list_targets = CommandListTargetIndex::from_graph(&graph);
 
     report_pipeline_stage(
         reporter,
         PipelineStage::NinjaSynthesisAndExecution,
         tool_key,
     );
-    dyndep::generation_telemetry::instrument_bundle_generation(&graph, || {
+    let bundle = dyndep::generation_telemetry::instrument_bundle_generation(&graph, || {
         generation::ninja_text_for_shell_with_bash(
             &graph,
             graph_generation.recipe_shell,
             graph_generation.bash_executable.as_ref(),
         )
     })
-    .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))
+    .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;
+    Ok(GeneratedNinjaWithTargets {
+        bundle,
+        command_list_targets,
+    })
 }
