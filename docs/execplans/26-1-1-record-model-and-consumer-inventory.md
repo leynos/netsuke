@@ -6,35 +6,36 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: IN PROGRESS
 
-Revision 4. See `Revision note` at the foot of this document. This plan was
+Revision 5. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
-("Set v0.1.0-beta4 release version and status (#804)"). It must not be
-implemented until it is approved and the approver has chosen an entry-gate
-option in decision D-6.
+("Set v0.1.0-beta4 release version and status (#804)"). It was approved on
+2026-10-23 with D-6 Option B and is being implemented against the pin
+`8a961000859c02862454338fda6c4dd65bda2aa1`.
 
 ## Purpose / big picture
 
 Netsuke compiles a YAML manifest (a `Netsukefile`) into a Ninja build file and
-then runs Ninja. [RFC 0026][rfc-0026] and [ADR-035][adr-035] propose hardening
-the semantic core of that compiler: successful lowering should yield resolved
-operations that cannot contain unresolved rule references (finding H1), a
-lowered recipe should carry the interpreter that gives its quoting meaning
-(H2), the runner should stop orchestrating Ninja through the command-line type
-`Cli` (H3), and compiler errors should be typed facts rather than values paired
-with independently supplied localized messages (H4).
+then runs Ninja. [RFC 0026][rfc-0026] and [ADR-0035][adr-0035] propose
+hardening the semantic core of that compiler: successful lowering should yield
+resolved operations that cannot contain unresolved rule references (finding
+H1), a lowered recipe should carry the interpreter that gives its quoting
+meaning (H2), the runner should stop orchestrating Ninja through the
+command-line type `Cli` (H3), and compiler errors should be typed facts rather
+than values paired with independently supplied localized messages (H4).
 
 Every later task in phases 26 and 27 of the
 [hexagonal hardening roadmap][roadmap] changes types that other code
 constructs, mutates, and consumes. Before anyone changes them, the project
 needs one trustworthy answer to "what exists today, who builds it, who changes
 it, who reads it, and what must not break?". RFC 0026 recorded its audit
-against an older baseline (`79545e12`, 2026-09-19), and 34 commits have landed
-since, six of them in `src/`. Roadmap task 26.1.1 replaces that snapshot with
-an inventory pinned to the implementation head.
+against an older baseline (`79545e12`, 2026-09-19); by the pin, 113 commits had
+landed since, 17 of them touching `src/`
+(`git rev-list --count 79545e12..8a961000 [-- src]`). Roadmap task 26.1.1
+replaces that snapshot with an inventory pinned to the implementation head.
 
 After this change:
 
@@ -81,52 +82,64 @@ plan reads or edits.
 ### The pipeline being inventoried
 
 Netsuke processes a manifest in stages (see `docs/netsuke-design.md`, Section
-1.2, "The Six Stages of a Netsuke Build"):
+1.2, "The Six Stages of a Netsuke Build"). Paths below are at the pin,
+`8a961000`; #811 regrouped prefix-named modules under directory modules, so
+older plans and documents may cite the previous flat paths.
 
 1. **Authored types.** `src/ast/mod.rs`, `src/ast/target.rs`,
-   `src/ast/string_or_list.rs`, and `src/ast/dependency_order.rs` define the
-   deserialized manifest: `NetsukeManifest`, `MacroDefinition`, `Rule`,
-   `Target`, the `Recipe` enumeration (`Command`, `Script`, `Rule` variants,
-   read through a private `RawRecipe`), `StringOrList`, and `DependencyOrder`.
-   They are created by `serde` deserialization and by `From` conversions on
-   `StringOrList`. `src/manifest/**` defines no further authored recipe types,
-   but it is a major *mutator* of them: `src/manifest/render.rs` renders Jinja
-   in place through `&mut` borrows of targets, rules, recipes, and string lists
-   (including the `rule:` selector), and `src/manifest/mod.rs` exposes the
-   library entry points `manifest::from_str` and (via
-   `src/manifest/path_loaders.rs`) `from_path`.
-2. **Lowering.** `src/ir/from_manifest.rs` (entry points
+   `src/ast/string_or_list.rs`, `src/ast/dependency_order.rs`, and
+   `src/ast/command_isolation.rs` define the deserialized manifest:
+   `NetsukeManifest`, `MacroDefinition`, `Rule`, `Target`, the `Recipe`
+   enumeration (`Command { isolation, command }`, `Script`, and `Rule`, read
+   through a private `RawRecipe`), `StringOrList`, `DependencyOrder`, and
+   `CommandIsolation`. They are created by `serde` deserialization and by
+   `From` conversions on `StringOrList`. `src/manifest/**` defines no further
+   authored recipe types but is a major *mutator* of them:
+   `src/manifest/render/mod.rs` renders Jinja in place through `&mut` borrows
+   of targets, rules, recipes, and string lists (including the `rule:`
+   selector), in both build and manifest-query modes. `src/manifest/mod.rs`,
+   `src/manifest/path_loaders.rs`, `src/manifest/query.rs`, and
+   `src/manifest/parse_with_config.rs` expose the library loaders
+   (`manifest::from_str`, `from_str_with_env`, `from_path`, and their policy,
+   environment, budget, and manifest-query variants).
+2. **Lowering.** `src/ir/from_manifest/mod.rs` (entry points
    `BuildGraph::from_manifest` and the `#[doc(hidden)] pub`
-   `BuildGraph::from_manifest_for_shell`) and `src/ir/from_manifest_support.rs`
-   (`register_action`, `resolve_rule`, `resolve_recipe`, `ActionBindings`) turn
-   the manifest into the intermediate representation (IR).
-   `src/ir/cmd_interpolate/**` substitutes and shell-quotes input and output
-   paths for a chosen interpreter through `CommandBindings`.
-3. **Graph storage.** `src/ir/graph.rs` defines `BuildGraph`, `Action`,
+   `BuildGraph::from_manifest_for_shell`) and
+   `src/ir/from_manifest/support/mod.rs` (`register_action`, `resolve_rule`,
+   `resolve_recipe`, `ActionBindings`) turn the manifest into the intermediate
+   representation (IR). `src/ir/cmd_interpolate/**` substitutes and
+   shell-quotes input and output paths for a chosen interpreter through
+   `CommandBindings`.
+3. **Graph storage.** `src/ir/graph/mod.rs` defines `BuildGraph`, `Action`,
    `BuildEdge`, `EdgeId`, and the IR `DependencyOrder`. `Action.recipe` stores
    an `ast::Recipe`: this is H1. `src/hasher.rs` derives each action's identity
-   by hashing the serialized `Action`.
-4. **Backend consumers.** `src/ninja_gen/**` (including `dyndep.rs` and
-   `explicit_shell.rs`), `src/ninja_gen_validation.rs`,
-   `src/ninja_gen_recipe_shell.rs`, `src/ninja_gen_escape.rs` (`ShellText`,
-   `NinjaValue`), and `src/ninja_gen_command_list*.rs` render Ninja text;
-   `src/graph_view/**` projects the graph for the `graph` subcommand.
+   by hashing the canonical (RFC 8785, sorted-key) JSON of the `Action`.
+4. **Backend consumers.** `src/ninja_gen/**` (including `dyndep/mod.rs`,
+   `explicit_shell.rs`, `rule_utils.rs`, `validation.rs`, `recipe_shell.rs`,
+   `escape.rs` with `ShellText` and `NinjaValue`, and `command_list/**`)
+   renders Ninja text; `src/graph_view/**` projects the graph for the `graph`
+   subcommand; `src/runner/help/graph_json.rs` projects the *authored* manifest
+   for the graph JSON export (`netsuke --json help targets --edges`, ADR-0044);
+   and `src/lint/**`, compiled only with the non-default `lint` feature, reads
+   both the manifest and the `BuildGraph` for `netsuke check` (ADR-0056).
 5. **CLI orchestration.** `src/main.rs` calls `runner::run` in
    `src/runner/mod.rs`, which dispatches through `src/runner/dispatch.rs`,
-   generates through `src/runner/graph_generation.rs` and
+   generates through `src/runner/graph/generation/mod.rs` and
    `src/runner/generation.rs`, and spawns Ninja through
-   `src/runner/ninja_process_adapter.rs` and `src/runner/process/**`.
-   `src/runner/graph.rs` and `src/runner/help_query.rs` also lower manifests.
-   Layered configuration is merged by `ortho_config` in `src/cli/config.rs` and
-   `src/cli/merge/**`. `build.rs` compiles parts of `src/cli` and
-   `src/localization/mod.rs` through `#[path]`, so it is a consumer too.
-6. **Diagnostics.** `src/ir/graph_error.rs` (`IrGenError`),
-   `src/ninja_gen_error.rs` (`NinjaGenError`), `src/manifest/diagnostics/**`
-   (`ManifestError`), `src/runner/error.rs` (`RunnerError`),
-   `src/localization/mod.rs` (`LocalizedMessage`, the process-global
-   `set_localizer`), `src/localization/keys.rs`, `src/diagnostic_json.rs`,
-   `src/result_json.rs`, `src/json_envelope.rs`, and the error rendering and
-   exit-code paths in `src/main.rs`.
+   `src/runner/ninja/process_adapter.rs` and `src/runner/process/**`.
+   `src/runner/graph/mod.rs`, `src/runner/help/query.rs`, and
+   `src/runner/check/mod.rs` also lower manifests. Layered configuration is
+   merged by `ortho_config` in `src/cli/config/mod.rs` and `src/cli/merge/**`.
+   `build.rs` compiles parts of `src/cli` and `src/localization/mod.rs` through
+   `#[path]`, so it is a consumer too.
+6. **Diagnostics.** `src/ir/graph/error.rs` (`IrGenError`),
+   `src/ninja_gen/error.rs` (`NinjaGenError`), `src/manifest/diagnostics/**`
+   (`ManifestError`), `src/runner/error.rs` (`RunnerError`, now including the
+   linter and graph-export variants), `src/localization/mod.rs`
+   (`LocalizedMessage`, the process-global `set_localizer`),
+   `src/localization/keys.rs`, `src/diagnostic_json/**`, `src/result_json.rs`,
+   `src/json_envelope.rs`, and the error rendering and exit-code paths in
+   `src/main.rs`.
 
 ### Terms used in this plan
 
@@ -167,7 +180,7 @@ Netsuke processes a manifest in stages (see `docs/netsuke-design.md`, Section
 - **Compatibility obligation.** A behaviour a later migration must preserve,
   or change deliberately with an explained rationale. Netsuke is pre-1.0
   (`0.1.0-beta4` on `main` since #804) and publishes to crates.io as
-  `netsuke-build` with library target `netsuke` (ADR-007, Accepted). Rust
+  `netsuke-build` with library target `netsuke` (ADR-0007, Accepted). Rust
   source APIs therefore carry no compatibility commitment, which the
   developers' guide states outright ("Unstable Rust API for embedders": the
   Netsukefile format and the graph export are the only committed surfaces), but
@@ -179,21 +192,23 @@ Netsuke processes a manifest in stages (see `docs/netsuke-design.md`, Section
 ### Governing documents
 
 - `docs/roadmap-hexagonal-hardening.md`, section 26.1, defines the task.
-- `docs/rfcs/0026-hexagonal-domain-hardening.md`, "Current state and audit
-  reconciliation", defines H1 to H6 against baseline `79545e12`.
-- `docs/adr-035-semantic-compiler-boundaries.md` records the direction.
-- `docs/rfcs/0027-executable-architecture-contract.md`, "Proposed checker"
-  and "Inventory and coverage", assigns automated root, configuration, and
-  import coverage to the phase-28 checker. This plan builds no such checker.
-- `docs/adr-014-backend-text-escaping-seam.md`,
-  `docs/adr-019-structured-command-shell-selection.md`,
-  `docs/adr-027-command-placeholder-contract.md`,
-  `docs/adr-034-preserve-script-in-out-as-shell-variables.md`,
-  `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md`,
-  `docs/adr-012-bound-dyndep-sidecar-retention.md`,
-  `docs/adr-008-environment-seam-taxonomy.md`, and
-  `docs/adr-007-publish-as-netsuke-build.md` define contracts the inventory
-  names as obligations.
+- `docs/rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md`,
+  "Current state and audit reconciliation", defines H1 to H6 against baseline
+  `79545e12`.
+- `docs/adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md`
+  records the direction.
+- `docs/rfcs/rfc-0027-check-an-executable-architecture-contract.md`, "Proposed
+  checker" and "Inventory and coverage", assigns automated root, configuration,
+  and import coverage to the phase-28 checker. This plan builds no such checker.
+- `docs/adrs/adr-0014-use-a-typed-ninja-text-escaping-seam.md`,
+  `docs/adrs/adr-0019-select-allow-listed-structured-command-shells.md`,
+  `docs/adrs/adr-0027-command-placeholder-contract.md`,
+  `docs/adrs/adr-0034-preserve-script-in-and-out-as-shell-variables.md`,
+  `docs/adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md`,
+  `docs/adrs/adr-0012-bound-dyndep-sidecar-retention.md`,
+  `docs/adrs/adr-0008-environment-seam-taxonomy.md`, and
+  `docs/adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md` define
+  contracts the inventory names as obligations.
 - `docs/polonius.md` classifies borrow-centric sites, including
   `POLONIUS-REFUSED(id-is-data)` in `register_action`.
 
@@ -204,9 +219,10 @@ Read these before starting, in this order:
 1. `AGENTS.md` (repository rules, gates, Markdown rules, test rules).
 2. `docs/roadmap-hexagonal-hardening.md`, "Existing work and ownership" and
    phases 26 to 29.
-3. `docs/rfcs/0026-hexagonal-domain-hardening.md` and
-   `docs/adr-035-semantic-compiler-boundaries.md`.
-4. `docs/rfcs/0027-executable-architecture-contract.md`, "Proposed checker".
+3. `docs/rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md` and
+   `docs/adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md`.
+4. `docs/rfcs/rfc-0027-check-an-executable-architecture-contract.md`, "Proposed
+   checker".
 5. `docs/netsuke-design.md`, Sections 1.2, 3.2, 5, 6.1, and 7.
 6. `docs/developers-guide.md`, "Unstable Rust API for embedders" (the
    documented, tested embedder surfaces), "Test suite map", "IR dependency
@@ -249,11 +265,11 @@ Upstream artefacts at planning time (`ebcedaef`):
   ("Explain any necessary hash change and its rebuild consequences");
   `RFC26-OD` (Outstanding decisions: delegation and duplicate precedence are
   settled by characterization, that is, 26.1.2).
-- ADR-035, status **Proposed**: `ADR35-RISK` ("Rule delegation, declaration
+- ADR-0035, status **Proposed**: `ADR35-RISK` ("Rule delegation, declaration
   precedence, action identity, and diagnostic shape need characterization
   before refactoring").
 - RFC 0027, `RFC27-INV`, as a boundary only.
-- ADR-007 (Accepted): the published package and library target names.
+- ADR-0007 (Accepted): the published package and library target names.
 - No Terms of Reference document exists; the roadmap and RFC 0026 serve that
   role. The technical design is `docs/netsuke-design.md` at `ebcedaef`.
 
@@ -289,7 +305,7 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   edge arena from `#652` / PR `#714`. Record it once as landed with its merge
   commit and preservation obligations.
 - Record observed behaviour only. Rule-delegation and duplicate-declaration
-  policy belongs to 26.1.2; placeholder semantics to ADR-027, ADR-034, and
+  policy belongs to 26.1.2; placeholder semantics to ADR-0027, ADR-0034, and
   `#699`; diagnostic contract changes to 27.1.3.
 - One pin for the whole inventory; no mixed revisions.
 - Prescribe no source-compatibility machinery (aliases, facades, deprecated
@@ -382,8 +398,23 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - [x] (2026-09-27) Rebased onto `origin/main` at `b0e8547f` (#728, #804);
   the three plan commits replayed unchanged. Folded in #804's developers' guide
   section "Unstable Rust API for embedders" (D-10).
-- [ ] Plan approved by the user, with a D-6 option chosen.
-- [ ] EP-M0: entry gate passed and pin declared.
+- [x] (2026-10-23) Plan approved by the user, choosing D-6 Option B.
+- [x] (2026-10-23) EP-M0: pin declared as `origin/main` at
+  `8a961000859c02862454338fda6c4dd65bda2aa1` ("Add a hermetic, versioned JSON
+  export of the build graph with unrendered recipes (#858) (#923)"). ADR-0035
+  and RFC 0026 still read `Proposed` at the pin, which Option B permits until
+  EP-M4. The branch was rebased onto the pin; the four plan commits replayed
+  unchanged. Between `ebcedaef` and the pin, 79 commits landed, 45 touching
+  in-scope paths, so the Drift tolerance applies: every sweep is re-run at the
+  pin and the planning-time observations are re-verified, not copied.
+- [x] (2026-10-23) Followed the documentation migration on `main` (#937):
+  ADRs now live under `docs/adrs/adr-nnnn-slug.md` and RFCs under
+  `docs/rfcs/rfc-nnnn-slug.md`. Every cited path and link was rewritten from
+  Git's rename detection, and ADR numbers use the four-digit form.
+- [x] (2026-10-23) EP-M0 follow-up: re-baselined the orientation paths, the
+  register area lists (A1, A4, A5, and A6 gained items), the seeds, and the
+  obligations at the pin (revision 6, D-11). OBS-9 was withdrawn as wrong from
+  the start; OBS-17 to OBS-19 and CO-15 were added.
 - [ ] EP-M1: contract test red, then green against a skeleton inventory.
 - [ ] EP-M2: register recorded; EV-ORACLE, EV-SWEEP, EV-REVERSE, EV-SEEDED.
 - [ ] EP-M3: landed work, findings, obligations, and trace matrix.
@@ -394,9 +425,9 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - Observation: both governing records are still `Proposed`, and every RFC in
   `docs/rfcs/` reads `Proposed`, including RFCs whose roadmap tasks are
   checked. ADRs are the documents the project actually accepts. Evidence: RFC
-  preambles at `ebcedaef`; ADR-001 to ADR-034 are mostly `Accepted`; roadmap
+  preambles at `ebcedaef`; ADR-0001 to ADR-0034 are mostly `Accepted`; roadmap
   11.1.1 says "Accept the governing ADR before implementation". Impact: EP-M0's
-  gate is ADR-035, and D-6 asks the approver how to satisfy `RM-26.1.1-D`.
+  gate is ADR-0035, and D-6 asks the approver how to satisfy `RM-26.1.1-D`.
 - Observation: a rule whose own recipe is `rule: other` lowers and reaches the
   Ninja backend. `resolve_recipe` passes `Recipe::Rule` through
   (`src/ir/from_manifest_support.rs:89`); `validate_action_recipe` returns
@@ -416,12 +447,29 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   reading at `ebcedaef`. Impact: with a non-default shell (for example, a Bash
   override on Windows) the action identifiers shown by `graph` can differ from
   those in generated Ninja. An H2 observation for 26.3.1.
-- Observation: the hash comment in `src/hasher.rs` says canonical JSON with
-  sorted keys, but `serde_json` is built with `preserve_order`
-  (`Cargo.toml:135`), so field declaration order is part of the hash input.
-  Evidence: `Cargo.toml` and `src/hasher.rs:58-66` at `ebcedaef`. Impact: the
-  action-identity obligation must name field order, variant tag names,
-  `skip_serializing_if` attributes, and interpolated shell text.
+- Observation (withdrawn 2026-10-23, revision 6): revisions 2 to 5 claimed
+  that the `src/hasher.rs` comment ("Canonical JSON: compact formatting with
+  sorted keys") was false because `serde_json` is built with `preserve_order`,
+  making field declaration order part of the hash input. That was wrong when
+  written. `ActionHasher::hash` writes through
+  `serde_json_canonicalizer::to_writer` (0.3.2 in `Cargo.lock`), an RFC 8785
+  implementation that sorts object properties itself (`jcs.rs`, "Writes out the
+  whole object with sorted properties"), so `preserve_order` does not reach the
+  hash. Evidence: `git show ebcedaef:src/hasher.rs` and the registry source of
+  `serde_json_canonicalizer-0.3.2`. Impact: OBS-9 is withdrawn, CO-3 now states
+  the real hash inputs, and the PR description's matching claim was corrected.
+  Lesson: a claim that a library ignores a feature flag needs the library's own
+  source, not the flag's presence in `Cargo.toml`.
+- Observation: by the implementation pin, `main` had moved 79 commits past
+  `ebcedaef`, 45 touching in-scope paths
+  (`git log --oneline ebcedaef..8a961000 -- src build.rs tests test_support
+  benches`).
+  `#811` moved most cited files into directory modules, `#857` added
+  `CommandIsolation` to `Recipe::Command`, `#858` added the graph JSON export,
+  `#592` added the `lint`-feature linter, and `#937` moved ADRs and RFCs.
+  Evidence: four read-only reconnaissance passes at `8a961000` and Git's rename
+  detection. Impact: revision 6 re-baselined the orientation, register area
+  lists, seeds, and obligations; see D-11.
 - Observation: text sweeps alone are unsound for this acceptance criterion. The
   review ran revision 1's patterns and found that they miss generic trait
   implementations (`impl<'de> Deserialize<'de> for Recipe`, three
@@ -494,17 +542,17 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `ortho_config` is untouched (no configuration change), though configuration
   precedence is recorded as an obligation for 27.2.1. Date/Author: 2026-09-27,
   planning agent.
-- Decision D-6 (open, for the approver): how to satisfy `RM-26.1.1-D`.
-  Option A: the maintainer sets ADR-035 to `Accepted` (with a date and summary,
-  per the style guide) before implementation starts; all milestones then run.
-  Option B (recommended): EP-M1 to EP-M3 run now and produce the inventory as
-  the pre-acceptance characterization RFC 0026 itself asks for; EP-M4's roadmap
-  checkbox and RFC pointer wait until ADR-035 is `Accepted`, and the plan is
-  `BLOCKED` at that point if it is not. Option B respects the roadmap's
-  dependency for *completion* while letting the evidence inform acceptance.
-  Either way, RFC 0026's own status line is not the gate, because no RFC in
-  this repository has ever been moved out of `Proposed`. Date/Author:
-  2026-09-27, planning agent. Awaiting the approver.
+- Decision D-6 (resolved 2026-10-23: Option B, chosen by the user): how to
+  satisfy `RM-26.1.1-D`. Option A: the maintainer sets ADR-0035 to `Accepted`
+  (with a date and summary, per the style guide) before implementation starts;
+  all milestones then run. Option B (recommended): EP-M1 to EP-M3 run now and
+  produce the inventory as the pre-acceptance characterization RFC 0026 itself
+  asks for; EP-M4's roadmap checkbox and RFC pointer wait until ADR-0035 is
+  `Accepted`, and the plan is `BLOCKED` at that point if it is not. Option B
+  respects the roadmap's dependency for *completion* while letting the evidence
+  inform acceptance. Either way, RFC 0026's own status line is not the gate,
+  because no RFC in this repository has ever been moved out of `Proposed`.
+  Date/Author: 2026-09-27, planning agent; resolved by the user on 2026-10-23.
 - Decision D-7: the compiler is the primary site oracle; a text sweep covers
   only what the build does not compile. Rationale: marking each inventoried
   field, variant, and inherent function `#[deprecated]` in a disposable export
@@ -543,6 +591,21 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   types, and its snippets are executable, so later tasks that change those APIs
   must update it. Date/Author: 2026-09-27, planning agent, after rebasing onto
   `b0e8547f`.
+
+- Decision D-11: re-baseline the plan at the pin before EP-M1 rather than
+  carrying `ebcedaef` seeds into the inventory. The orientation now cites
+  pin-time paths; A1 adds `CommandIsolation`, the isolation error constants,
+  and the new loader and render variants; A4 adds the Bash-aware emission
+  functions, the isolated command-list renderer, the graph JSON export, and the
+  `lint` consumers; A5 adds `check`, the help-targets query, and the Bash
+  runtime; A6 adds the linter and graph-export errors and codes. CO-3 and CO-4
+  are corrected, CO-15 records ADR-0045, OBS-9 is withdrawn, and OBS-17 to
+  OBS-19 are new. The `lint` feature is off by default, so the oracle's
+  `--all-features` build is what brings `src/lint/**` into scope. Rationale:
+  the Drift tolerance requires re-sweeping rather than patching, and a seed
+  list that is four weeks stale would mislead the classifier. This changes no
+  approved design element, method, or milestone. Date/Author: 2026-10-23,
+  implementing agent.
 
 ## Outcomes & retrospective
 
@@ -677,16 +740,24 @@ Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
    API-reachable. Areas and the enclosing symbols each must cover at minimum
    (anticipated sites for the Register-size tolerance):
    - A1 authored types: `ast::{NetsukeManifest, MacroDefinition, Rule, Target,
-     Recipe, RawRecipe, StringOrList, DependencyOrder}`; `Recipe`'s
+     Recipe, RawRecipe, StringOrList, DependencyOrder, CommandIsolation}`, the
+     `pub(crate)` constants `EMPTY_COMMAND_LIST_ERROR`,
+     `COMMAND_ISOLATION_RECIPE_ERROR`, and `COMMAND_ISOLATION_SCALAR_ERROR`, and
+     `StringOrList::{is_empty_marker, is_blank_content}`; `Recipe`'s
      `Deserialize`; `StringOrList`'s three `From` impls; `deserialize_actions`
      (forces `phony = true`); `NetsukeManifest::validate_recipes`;
      `Recipe::is_dependency_only`; `manifest::from_str`,
      `manifest::from_str_with_env`, and `manifest::process_env_reader`;
-     `from_path`;
-     `render_manifest` and every `&mut` helper in `src/manifest/render.rs`;
-     `serde_json::from_value` into `NetsukeManifest` in `src/manifest/mod.rs`;
-     `help_query::manifest_for_graph_validation` (`retain` on `actions` and
-     `targets`).
+     `from_path` and its policy, environment, and budget variants in
+     `src/manifest/path_loaders.rs`; `from_str_with_env_and_config` and
+     `from_str_with_env_and_policy`; the manifest-query loaders in
+     `src/manifest/query.rs` (`from_path_for_manifest_query*`,
+     `LoadedManifest`, `ManifestLoadMode`); `render_manifest`,
+     `render_manifest_with_budget`, `render_manifest_for_manifest_query*`,
+     `RenderMode`, and every `&mut` helper in `src/manifest/render/mod.rs`;
+     `serde_json::from_value` into `NetsukeManifest` in `evaluate_manifest`
+     (`src/manifest/mod.rs`); and `help::query::manifest_for_graph_validation`
+     (`retain` on `actions` and `targets`).
    - A2 lowering: `from_manifest`, `from_manifest_for_shell`,
      `TargetLoweringContext`, `process_rules`, `process_targets`,
      `process_defaults`, `detect_cycles`, `register_action`, `ActionBindings`,
@@ -711,24 +782,47 @@ Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
      `RenderedAction`, `RecipeShell::command_value`, `ShellText::new`,
      `NinjaValue::from_encoded`, `escape_ninja_value`, `escape_metadata_value`,
      and `GraphView::from_build_graph`, recording the model fields each reads
-     and every debug-only panic path.
+     and every debug-only panic path. At the pin, also:
+     `dyndep::generate_bundle_for_shell_with_bash`,
+     `RecipeShell::{command_value_with_bash, isolated_command_list_value}`
+     (`command_value` is now test-only), `command_list::{render, entry,
+     scanner}` including `command_list_shell_text`, the `CommandIsolation`
+     handling in `validate_action_recipe` and `write_into_with_bash`; the graph
+     JSON export `help::graph_json::{GraphJson::from_manifest, recipe_json}`,
+     which reads the authored manifest rather than `BuildGraph`; and the
+     `lint`-feature consumers in `src/lint/**` (rule contexts holding
+     `&NetsukeManifest` and `&BuildGraph`, and the rules that read
+     `Action.recipe` or follow `Recipe::Rule` delegation).
    - A5 CLI orchestration: `runner::{run, run_with_ninja_program}`,
      `run_with_ninja_program_resolver`, `ExecutionContext`, `dispatch::execute`
      and its `execute_build`, `execute_generate`, `execute_clean`, and
-     `execute_help`; `runner::{execute_build, execute_ninja_tool}`;
-     `graph_generation::{GraphGenerationContext, generate_ninja_with_shell}`;
-     `generation::{ManifestLoadInputs::from_cli, build_graph,
-     build_graph_for_shell, ninja_text_for_shell}`;
-     `ninja_process_adapter::{ninja_process_options, run_ninja,
-     run_ninja_tool}`; `resolve_recipe_shell`; `StderrMode::from_json_enabled`;
-     `create_temp_ninja_file`; `materialize_dyndep_bundle`;
-     `prune_dyndep_bundle`; `open_effective_dir`; `graph::handle_graph`;
-     `help_query`; the `Commands`, `BuildArgs`, and `BuildTargets` types
-     (`Deserialize` and `Default` derives); and every `Cli` field each reads,
-     classified as semantic or presentation.
+     `execute_help`, and `execute_check`; `runner::{handle_build,
+     execute_build, handle_ninja_tool, execute_ninja_tool, NinjaToolSpec}` and
+     `instrument_legacy_recipe_operation`;
+     `graph::generation::{GraphGenerationContext, generate_ninja_with_shell}`
+     (the context now carries `bash_executable`);
+     `generation::{ManifestLoadInputs::from_cli, load_manifest_with_source,
+     build_graph, build_graph_for_shell, ninja_text_for_shell_with_bash}`
+     (`ninja_text_for_shell` is now test-only);
+     `ninja::process_adapter::{ninja_process_options, run_ninja,
+     run_ninja_tool}`; `recipe_shell::{resolve_recipe_shell,
+     resolve_bash_runtime}`; `StderrMode::from_json_enabled`;
+     `create_temp_ninja_file`; `dyndep::publication::{materialize_dyndep_bundle,
+     prune_dyndep_bundle, open_effective_dir}`; `graph::handle_graph`;
+     `help::{handle_help_targets, query::query_help_targets}`;
+     `check::{handle_check, analyse}` (feature `lint`); the `Commands`,
+     `BuildArgs`, `CheckArgs`, `HelpTargetsArgs`, and `BuildTargets` types and
+     their derives (at the pin `Commands` derives `Deserialize` only, `BuildArgs`
+     derives `Deserialize` and `Default`, and `BuildTargets` has a manual
+     `Default`); and every `Cli` field each reads, classified as semantic or
+     presentation.
    - A6 diagnostics: per variant of `IrGenError` (including `InvalidManifest`),
      `NinjaGenError` (including the variants with fixed English `#[error]`
-     text), `ManifestError`, and `RunnerError`; whether each enum is
+     text, such as `InvalidCommandIsolation` and
+     `PowerShellCommandLineTooLong`), `ManifestError`, and `RunnerError`
+     (including `CheckPolicy`, `CheckSourceIndex`, `LintThresholdExceeded`, and
+     `HelpTargetsEdgesRequireJson`); the dynamic per-rule codes
+     `netsuke::lint::<rule>` and `FindingDiagnostic`; whether each enum is
      `#[non_exhaustive]`; `LocalizedMessage` and `set_localizer`;
      `localize_recipe_error`; the keys used in `src/localization/keys.rs`; the
      diagnostic codes; `DiagnosticDocument` and `DiagnosticEntry`; the success
@@ -746,12 +840,19 @@ Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
 5. **Landed work.** One entry each, with merge commit (short SHA permitted
    here) and the preservation obligation it creates: `#652` / PR `#714` (edge
    arena, `2c030fd1`); `#705` (typed redirect boundary, closed; H6 context);
-   `#699` / ADR-027; `#753` / ADR-034; `#754` (JSON excerpt guard); `#696`
-   (clock seam); and any further in-scope commit between `79545e12` and the pin.
+   `#699` / ADR-0027; `#753` / ADR-0034; `#754` (JSON excerpt guard); `#696`
+   (clock seam); `#811` (directory-module regrouping, which moved most cited
+   files); `#857` / ADR-0045 (isolated command-list entries and
+   `CommandIsolation`); ADR-0041 (canonical recipe-shell quoting surface for
+   `shell_quote` and `shell_join`); `#778` (manifest-facing shell-selection
+   vocabulary in `src/shell_selection/`, not yet wired into authored types or
+   lowering, and deliberately separate from `RecipeShell` per ADR-0044); `#858`
+   / ADR-0044 (graph JSON export); `#592` / ADR-0056 (`netsuke check`); and any
+   further in-scope commit between `79545e12` and the pin.
 6. **Findings.** The remaining parts of H1 to H4 as observed facts with
    citations, and numbered observations `OBS-n`, each labelled *observed* with
    an owning task. Seed from `Artefacts and notes`; re-verify each at the pin.
-7. **Compatibility obligations.** `CO-1` to `CO-14` as listed under
+7. **Compatibility obligations.** `CO-1` to `CO-15` as listed under
    `Artefacts and notes`, each with its evidence (existing tests, snapshots,
    ADRs) and the tasks it binds.
 8. **Trace matrix.** Two tables. "Changes": one row per task that changes an
@@ -790,7 +891,14 @@ each with a `///` comment:
 - `roadmap_tasks(roadmap) -> BTreeMap<String, BTreeSet<String>>` parses each
   `- [ ] N.N.N.` or `- [x] N.N.N.` task and the identifiers named in its
   `Dependencies:` bullet, including continuation lines, up to the next bullet
-  at the same or lower indentation.
+  at the same or lower indentation. The real roadmap at the pin exercises three
+  shapes that the fixtures must reproduce: a two-part token that is not a task
+  (28.3.2: "may proceed independently of 28.2 implementation"), slash-joined
+  identifiers (29.2.3: "the applicable 29.2.1/29.2.2 policy"), and a bullet
+  whose prose breaks mid-sentence onto an indented continuation line (27.3.2).
+  The dependency closure of 26.1.1 at the pin is 25 tasks (26.1.2 to 26.3.2,
+  27.1.1 to 27.2.3, all of phase 28, and 29.2.1, 29.2.3, 29.3.2, 29.4.1, and
+  29.4.2); 27.3.1, 27.3.2, 29.1.1, 29.1.2, 29.2.2, and 29.3.1 are outside it.
 - `dependents_of(tasks, root) -> BTreeSet<String>` computes the transitive
   closure of tasks whose dependencies reach `root`.
 - `register_ids(text) -> Vec<String>` returns the first-column identifiers of
@@ -810,10 +918,10 @@ top-level test files automatically; confirm it passes.
   Option B, recorded as pending for EP-M4); the pin is declared; the branch is
   rebased onto it.
 - Requirements and gaps: `RM-26.1.1-D`, `RM-26.1.1-S1`.
-- Acceptance evidence: EV-ENTRY: the ADR-035 status read with
-  `git show "$PIN":docs/adr-035-semantic-compiler-boundaries.md`; the pin's
-  SHA, subject, and date; and the in-scope commits between `ebcedaef` and the
-  pin.
+- Acceptance evidence: EV-ENTRY: the ADR-0035 status read with
+  `git show "$PIN":docs/adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md`;
+  the pin's SHA, subject, and date; and the in-scope commits between
+  `ebcedaef` and the pin.
 - Conformance check: no file changed except this plan.
 - Recovery: if the gate fails, set `Status: BLOCKED` and stop.
 - Remaining gaps: everything else.
@@ -871,7 +979,8 @@ top-level test files automatically; confirm it passes.
     `roadmap-hexagonal-hardening.md` entry.
   - `docs/roadmap-hexagonal-hardening.md`: `- [ ] 26.1.1.` becomes
     `- [x] 26.1.1.`, with a link to the inventory; wording otherwise unchanged.
-  - `docs/rfcs/0026-hexagonal-domain-hardening.md`: one sentence in "Current
+  - `docs/rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md`: one
+    sentence in "Current
     state and audit reconciliation" naming the pinned inventory as the
     implementation baseline; the `79545e12` audit text stays.
   - `docs/netsuke-design.md`: a pointer from the Stage 5 "FUTURE" note to the
@@ -883,8 +992,8 @@ top-level test files automatically; confirm it passes.
   - This plan: `Status: COMPLETE`; `Outcomes & retrospective`.
 - Acceptance evidence: EV-GATES on the final tree.
 - Conformance check: `docs/users-guide.md` unchanged; no ADR added; under D-6
-  Option B, ADR-035 reads `Accepted` in
-  `git fetch origin && git show origin/main:docs/adr-035-semantic-compiler-boundaries.md`
+  Option B, ADR-0035 reads `Accepted` in
+  `git fetch origin && git show origin/main:docs/adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md`
   before the checkbox is ticked, otherwise set `Status: BLOCKED` and stop.
 - Recovery: revert the integration commit.
 - Remaining gaps: none; 26.1.2 starts from the inventory.
@@ -901,13 +1010,13 @@ EP-M0:
 ```bash
 git fetch origin
 PIN="$(git rev-parse origin/main)"; echo "$PIN"
-git show "$PIN":docs/adr-035-semantic-compiler-boundaries.md | sed -n '1,8p'
+git show "$PIN":docs/adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md | sed -n '1,8p'
 git log --oneline "ebcedaef..$PIN" -- src build.rs tests test_support benches
 git rebase "$PIN" 26-1-1-record-model-and-consumer-inventory
 ```
 
-Expected: ADR-035 reads `Accepted` under Option A, or either value under Option
-B. Record `PIN` in `Decision log`.
+Expected: ADR-0035 reads `Accepted` under Option A, or either value under
+Option B. Record `PIN` in `Decision log`.
 
 EP-M1, red:
 
@@ -1061,101 +1170,168 @@ commit instead.
 
 ## Artefacts and notes
 
-Planning-time observations at `ebcedaef`, to re-verify at the pin.
+Seeds re-verified at the pin `8a961000` on 2026-10-23 by four read-only
+reconnaissance passes and spot-checked with `rg`. They still seed EP-M2 and
+EP-M3; the oracle and sweeps remain the evidence, and EP-M2 must re-cite every
+line it uses. Revision 1's seeds at `ebcedaef` are superseded.
 
-Remaining H1: `Action` (`src/ir/graph.rs:252-270`) derives
+Remaining H1: `Action` (`src/ir/graph/mod.rs:251-269`) derives
 `Debug, Clone, PartialEq, Serialize`, has all-`pub` fields, and stores
-`recipe: Recipe` from `crate::ast`; its only production literal is in
-`register_action` (`src/ir/from_manifest_support.rs:54-61`). `BuildEdge`
-(`src/ir/graph.rs:273-295`) has all-`pub` fields and one production literal in
-`process_targets` (`src/ir/from_manifest.rs:165-175`). `BuildGraph`
-(`src/ir/graph.rs:39-49`) derives `Default` and exposes `pub actions` and
-`pub default_targets`. The dependency-only sentinel is
-`Recipe::Command { command: StringOrList::Empty }` (`src/ast/mod.rs:222`),
-recognized by `Recipe::is_dependency_only` (`src/ast/mod.rs:180-186`).
+`recipe: Recipe` from `crate::ast` (`:254`); its only production literal is in
+`register_action` (`src/ir/from_manifest/support/mod.rs:53-60`). `BuildEdge`
+(`src/ir/graph/mod.rs:272-294`) has all-`pub` fields and one production literal
+in `process_targets` (`src/ir/from_manifest/mod.rs:164-174`). `BuildGraph`
+(`src/ir/graph/mod.rs:38-48`) derives `Default` and exposes `pub actions` and
+`pub default_targets`. The dependency-only sentinel is now
+`Recipe::Command { isolation: CommandIsolation::Shared, command:
+StringOrList::Empty }`,
+produced by `Recipe`'s `Deserialize` (`src/ast/mod.rs:266-269`) and recognized
+by `Recipe::is_dependency_only` (`src/ast/mod.rs:200-208`), which now also
+requires shared isolation.
 
-Remaining H2: `BuildGraph` retains no interpreter. `from_manifest_for_shell`
-(`src/ir/from_manifest.rs:63-67`, `#[doc(hidden)] pub`) and
+Remaining H2: `BuildGraph` and `Action` retain no interpreter; neither ADR-0041
+nor `#778` added one. `from_manifest_for_shell`
+(`src/ir/from_manifest/mod.rs:62-66`, `#[doc(hidden)] pub`) and
 `ninja_gen::generate_with_shell` (`src/ninja_gen/explicit_shell.rs:17-24`,
 re-exported at `src/ninja_gen/mod.rs:37`) take the interpreter independently;
-`generate` and `generate_into` use `RecipeShell::host_default()`. The runner's
-`build` and `generate` paths thread one value through both stages
-(`src/runner/graph_generation.rs:23,56-69`); `graph` and `help targets` do not
-(see `Surprises & discoveries`).
+`generate`, `generate_into`, and `dyndep::generate_bundle` use
+`RecipeShell::host_default()`. The runner's `build` and `generate` paths thread
+one value, and now an optional `BashExecutable`, through both stages
+(`src/runner/graph/generation/mod.rs:23-30,69-91`). `graph`
+(`src/runner/graph/mod.rs:59` via `generation::build_graph`), `help targets`
+(`src/runner/help/query.rs:111`), and `check` (`src/runner/check/mod.rs:87`) do
+not (OBS-8).
 
 Remaining H3: `runner::execute_build` and `runner::execute_ninja_tool`
-(`src/runner/mod.rs:192-240,275-328`) interleave generation, dyndep
+(`src/runner/mod.rs:210-263,306-356`) interleave generation, dyndep
 publication, temporary-manifest creation, and Ninja spawn, reading `Cli`
 throughout. `NinjaBuildRequest` and `NinjaToolRequest`
-(`src/runner/process/request.rs:21-54`) are already free of `Cli`.
-`StderrMode::from_json_enabled(cli.json)` lets a presentation flag decide
-stream routing. `open_effective_dir(cli)` re-derives directory authority from
-`cli.directory` on each call.
+(`src/runner/process/request.rs:21-54`) are still free of `Cli`.
+`StderrMode::from_json_enabled(cli.json)` still lets a presentation flag decide
+stream routing, and `open_effective_dir(cli)`
+(`src/runner/dyndep/publication.rs:58-71`) still re-derives directory authority
+from `cli.directory` on each call.
 
-Remaining H4: `IrGenError` (`src/ir/graph_error.rs:39-231`) pairs structured
+Remaining H4: `IrGenError` (`src/ir/graph/error.rs:40-231`) pairs structured
 fields with a `LocalizedMessage` in `RuleNotFound`, `MultipleRules`,
 `EmptyRule`, `DuplicateOutput`, `CircularDependency`, `ActionSerialisation`, and
 `InvalidCommand`; `InvalidManifest` carries a `&'static str`. `NinjaGenError`
-mixes `LocalizedMessage` variants with fixed English `#[error]` text. Neither
-enum is `#[non_exhaustive]` or carries a `miette` code, so the JSON `code` is
-null for them. `localize_recipe_error` classifies by
-`to_string().starts_with(EMPTY_COMMAND_LIST_ERROR)`
-(`src/manifest/registration.rs:15-23`).
+(`src/ninja_gen/error.rs`) mixes five `LocalizedMessage` variants with ten
+fixed-English `#[error]` variants. Neither enum is `#[non_exhaustive]` or
+carries a `miette` code, so the JSON `code` is null for them.
+`localize_recipe_error` (`src/manifest/registration.rs:118-136`) now classifies
+by three `starts_with` prefix matches: `EMPTY_COMMAND_LIST_ERROR`,
+`COMMAND_ISOLATION_RECIPE_ERROR`, and `COMMAND_ISOLATION_SCALAR_ERROR`.
 
-Seed observations (`OBS-n`): OBS-1 rule-to-rule delegation reaches the backend
-(26.1.2, 26.2.2). OBS-2 duplicate rule names are silently last-wins in
-`process_rules` (`src/ir/from_manifest.rs:99-103`) (26.1.2). OBS-3
-`DuplicateOutput` is built at two sites with different argument shapes
-(`src/ir/graph.rs:66-70`; `src/ir/from_manifest_support.rs:156-162`) (27.1.1).
-OBS-4 `MissingAction` is built at two sites (`src/ninja_gen/mod.rs`,
-`src/ninja_gen/dyndep.rs`) (27.1.1). OBS-5 the `EMPTY_COMMAND_LIST_ERROR`
-string match (27.1.2). OBS-6 IR and Ninja errors have no diagnostic code
-(27.1.3). OBS-7 `generate_with_shell` and the host-default `generate` paths
-accept an unchecked shell (26.3.1). OBS-8 `graph` and `help targets` lower with
-the host default shell (26.3.1). OBS-9 the `src/hasher.rs` comment claims
-sorted keys (26.2.3). OBS-10 public fields, `Default`, `insert_edge` without an
-action-existence check, and `replace_edge_for_output` can create dangling or
-swapped `action_id` values (26.2.1). OBS-11 `assert_shell_command` panics only
-in debug builds (26.2.2). OBS-12 `render.rs` renders the `rule:` selector and
-mutates authored types in place (26.1.2, 26.2.1). OBS-13 the `cfg(kani)`
-`insert_edge` returns `EdgeId` unconditionally (26.2.3). OBS-14 the error enums
-are exhaustive and publicly constructible (27.1.1). OBS-15 `StderrMode` follows
-`cli.json` (27.2.1). OBS-16 `open_effective_dir` re-derives authority per call
-(27.2.2).
+Seed observations (`OBS-n`), each owned by the task in parentheses:
 
-Seed obligations (`CO-n`): CO-1 manifest acceptance and rejection, including
-`MISSING_RECIPE_ERROR`, `EMPTY_COMMAND_LIST_ERROR`, and the mutual-exclusion
-message. CO-2 generated Ninja bytes and repeated-run determinism on both
-emission paths (`generate*` and the dyndep bundle). CO-3 action identity: the
-hash covers field declaration order (`preserve_order`), variant tag names,
-`skip_serializing_if`, and interpolated shell text; any change needs a rebuild
-rationale. CO-4 graph rendering (DOT and HTML golden snapshots; the developers'
-guide names the graph export as one of Netsuke's two committed surfaces) and
-the success-result JSON envelope (`schema_version` 1) for `build`, `generate`,
-`clean`, and `graph`; there is no JSON graph export. CO-5 diagnostics: existing
-codes, today's null codes, the JSON diagnostic schema, the `#754` excerpt
-guard, human-mode printing of the outermost context, and exit codes (1 for
-runtime errors; for argument errors, 2 in human mode and 1 on the JSON path).
-CO-6 localization: `src/localization/keys.rs` and the Fluent catalogues stay in
-sync (audited by `build.rs`). CO-7 ADR-014 separation of shell quoting and
-Ninja escaping, and the ADR-027 and ADR-034 placeholder contract. CO-8 ADR-011
-and ADR-012 dyndep publication and retention, with the lease spanning spawn and
-pruning. CO-9 `POLONIUS-REFUSED(id-is-data)`. CO-10 Kani harness
-synchronization across every `cfg(kani)` file (at planning time:
-`src/ast/mod.rs`, `src/ir/cmd_interpolate/mod.rs`, `src/ir/cycle_detector.rs`,
-`src/ir/cycle.rs`, `src/ir/cycle_support.rs`, `src/ir/from_manifest.rs`,
-`src/ir/from_manifest_support.rs`, `src/ir/graph_kani_map.rs`,
-`src/ir/graph.rs`, `src/ir/sort_utils.rs`, and the `*verification.rs` modules).
-CO-11 configuration layering precedence, keys, and `NETSUKE_*` variables through
-`ortho_config`. CO-12 the quickstart and unannotated manifests. CO-13 library
-API: pre-1.0 and published as `netsuke-build`; every changed or removed `pub`
-item gets a CHANGELOG "**Breaking:**" entry, with no shims; and a change to an
-API described in the developers' guide's "Unstable Rust API for embedders"
-section (for example `BuildGraph::insert_edge`, `manifest::from_str_with_env`,
-or the Ninja request types) updates that section and its tested `devguide-*`
-snippets registered in `tests/documentation_examples_tests.rs` in the same
-change. CO-14 canonical edge arena invariants from `#652`: alias identity,
-atomic duplicate rejection, and no per-output cloning.
+- OBS-1: a rule whose recipe is `rule: other` still lowers and reaches the
+  backend: `resolve_recipe` passes `Recipe::Rule` through
+  (`src/ir/from_manifest/support/mod.rs:91`), `validate_action_recipe` returns
+  `Ok(())` for it (`src/ninja_gen/validation.rs:41`), and
+  `NamedAction::reject_rule_recipe` (`src/ninja_gen/mod.rs:266-271`) panics in
+  debug builds and returns `UnsafeNinjaValue` in release. The linter's own tests
+  (`src/lint/rules/graph/tests.rs`) record that lowering accepts one-hop
+  delegation and a delegation cycle (26.1.2, 26.2.2).
+- OBS-2: duplicate rule names are silently last-wins in `process_rules`
+  (`src/ir/from_manifest/mod.rs:100`) (26.1.2).
+- OBS-3: `DuplicateOutput` is built at two sites with different argument shapes
+  (`src/ir/graph/mod.rs:65-70`; `src/ir/from_manifest/support/mod.rs:158-173`)
+  (27.1.1).
+- OBS-4: `MissingAction` is built at two sites (`src/ninja_gen/mod.rs:185-189`,
+  `src/ninja_gen/dyndep/mod.rs:195-199`) (27.1.1).
+- OBS-5: `localize_recipe_error` classifies three recipe-validation failures by
+  string prefix (27.1.2).
+- OBS-6: IR and Ninja errors have no diagnostic code (27.1.3).
+- OBS-7: `generate_with_shell` and the host-default `generate*` and
+  `generate_bundle` paths accept an unchecked interpreter (26.3.1).
+- OBS-8: `graph`, `help targets`, and `check` lower with the host-default
+  interpreter, not the resolved one used by `build` and `generate` (26.3.1).
+- OBS-9: withdrawn; see `Surprises & discoveries`.
+- OBS-10: public fields, `Default`, `insert_edge` without an action-existence
+  check (`src/ir/graph/mod.rs:62-72`), and `replace_edge_for_output` (`:161`,
+  `pub`, test-only callers, preserves output aliases but not `action_id`) can
+  create dangling or swapped `action_id` values (26.2.1).
+- OBS-11: `assert_shell_command` (`src/ninja_gen/mod.rs:247-254`) panics only in
+  debug builds and is now also called from
+  `src/ninja_gen/command_list/render.rs` (26.2.2).
+- OBS-12: `src/manifest/render/mod.rs` renders the `rule:` selector and mutates
+  authored types in place, in both build and manifest-query modes (26.1.2,
+  26.2.1).
+- OBS-13: the `cfg(kani)` `insert_edge` (`src/ir/graph/mod.rs:75-78`) returns
+  `EdgeId` unconditionally (26.2.3).
+- OBS-14: the error enums are exhaustive and publicly constructible (27.1.1).
+- OBS-15: `StderrMode` follows `cli.json` (27.2.1).
+- OBS-16: `open_effective_dir` re-derives authority per call (27.2.2).
+- OBS-17: the graph JSON export's `recipe_json`
+  (`src/runner/help/graph_json.rs:206-235`) maps every
+  `Recipe::Command { command: Empty, .. }` to `dependency_only` regardless of
+  isolation, a second interpretation of the sentinel that differs from
+  `Recipe::is_dependency_only` (26.2.1).
+- OBS-18: `lint` rules (`src/lint/rules/{graph,caching,hygiene}/mod.rs`) follow
+  `Recipe::Rule` delegation through `manifest.rules` themselves, so a change to
+  delegation semantics in 26.2.x has a second consumer to migrate (26.2.2).
+- OBS-19: `#592` has landed, and `docs/netsuke-linter-design.md` records that
+  the linter reconstructs source origins heuristically because
+  `NetsukeManifest` retains none. That bears on 27.3.1's entry condition, which
+  this task records but does not decide (27.3.1).
+
+Seed obligations (`CO-n`):
+
+- CO-1: manifest acceptance and rejection, including `MISSING_RECIPE_ERROR`,
+  `EMPTY_COMMAND_LIST_ERROR`, the two command-isolation errors, and the
+  mutual-exclusion message.
+- CO-2: generated Ninja bytes and repeated-run determinism on both emission
+  paths (`generate*` and the dyndep bundle), including isolated command lists.
+- CO-3: action identity. `ActionHasher::hash` (`src/hasher.rs`) hashes the RFC
+  8785 canonical JSON of the whole `Action` through `serde_json_canonicalizer`,
+  which sorts object keys, so the hash covers field and variant names, values,
+  and `skip_serializing_if` behaviour (for example, `command_isolation` is
+  omitted when shared, and `tests/hasher_tests.rs` pins that isolated and
+  shared hashes differ), plus interpolated shell text. Field declaration order
+  does not affect it. Any change needs a rebuild rationale.
+- CO-4: graph rendering (DOT and HTML golden snapshots); the graph JSON export
+  `netsuke --json help targets --edges` (ADR-0044, Accepted), under
+  `result.graph` in the success envelope (`schema_version` 1), pinned by the
+  `graph_v1_schema` snapshot and `tests/runner_help_targets_tests/edges*`; and
+  the success-result envelope for `build`, `generate`, `clean`, and `graph`.
+  The developers' guide names the graph export as one of Netsuke's two
+  committed surfaces.
+- CO-5: diagnostics: existing codes (including the `netsuke::lint::*` and
+  `netsuke::runner::help_targets_edges_require_json` codes), today's null
+  codes, the JSON diagnostic schema, the `#754` excerpt guard, human-mode
+  printing of the outermost context, and exit codes (1 for runtime errors; for
+  argument errors, 2 in human mode and 1 on the JSON path).
+- CO-6: localization: `src/localization/keys.rs` and the Fluent catalogues stay
+  in sync (audited by `build.rs`).
+- CO-7: ADR-0014 separation of shell quoting and Ninja escaping, the ADR-0027
+  and ADR-0034 placeholder contract, and the ADR-0041 canonical quoting surface.
+- CO-8: ADR-0011 and ADR-0012 dyndep publication and retention, with the lease
+  spanning spawn and pruning.
+- CO-9: `POLONIUS-REFUSED(id-is-data)`.
+- CO-10: Kani harness synchronization across every `cfg(kani)` file. At the
+  pin: `src/ast/mod.rs`, `src/ir/cmd_interpolate/mod.rs`,
+  `src/ir/cycle/{mod,detector,support}.rs`, `src/ir/from_manifest/mod.rs`,
+  `src/ir/from_manifest/support/{mod,sort_utils}.rs`, and
+  `src/ir/graph/{mod,kani_map}.rs`, plus the Kani modules
+  `src/ir/{cmd_interpolate,cycle,from_manifest}/verification.rs`.
+- CO-11: configuration layering precedence, keys, and `NETSUKE_*` variables
+  through `ortho_config`.
+- CO-12: the quickstart and unannotated manifests.
+- CO-13: library API: pre-1.0 and published as `netsuke-build`; every changed
+  or removed `pub` item gets a CHANGELOG "**Breaking:**" entry, with no shims;
+  and a change to an API described in the developers' guide's "Unstable Rust
+  API for embedders" section (for example `BuildGraph::insert_edge`,
+  `manifest::from_str_with_env`, or the Ninja request types) updates that
+  section and its tested `devguide-*` snippets registered in
+  `tests/documentation_examples_tests.rs` in the same change. The public-API
+  pass fixtures `tests/ui/command_list_public_api_pass.rs` and
+  `tests/ui/lint_public_api_pass.rs` are the observable external-style
+  consumers.
+- CO-14: canonical edge arena invariants from `#652`: alias identity, atomic
+  duplicate rejection, and no per-output cloning.
+- CO-15: ADR-0045 command isolation: isolated command-list entries render and
+  validate separately from shared ones, on every interpreter.
 
 ## Interfaces and dependencies
 
@@ -1181,10 +1357,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   library entry points, `ShellText`, `NinjaValue`, runner contexts,
   `build.rs`), tightened the definitions (no `Clone` constructor; visibility
   classes; `&mut T` functions as mutators), corrected the obligations (no JSON
-  graph export; `preserve_order` hashing; exit codes; CHANGELOG practice), and
-  added observations OBS-8 to OBS-16. Moved scratch builds from `/tmp` to the
-  ignored `target/` directory and made every command self-contained. The
-  remaining work is unchanged in kind: approval, then EP-M0 to EP-M4.
+  graph export; hashing; exit codes; CHANGELOG practice; the hashing claim was
+  later withdrawn in revision 6), and added observations OBS-8 to OBS-16. Moved
+  scratch builds from `/tmp` to the ignored `target/` directory and made every
+  command self-contained. The remaining work is unchanged in kind: approval,
+  then EP-M0 to EP-M4.
 
 - Revision 3 (2026-09-27): closing review of revision 2. Record that
   `#[deprecated]` cannot be placed on trait implementations and that derive
@@ -1205,6 +1382,20 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   Updated the crate version to `0.1.0-beta4`. The remaining work is unchanged:
   approval, then EP-M0 to EP-M4.
 
-[rfc-0026]: ../rfcs/0026-hexagonal-domain-hardening.md
-[adr-035]: ../adr-035-semantic-compiler-boundaries.md
+- Revision 5 (2026-10-23): approved with D-6 Option B; status set to
+  `IN PROGRESS`. EP-M0 declared the pin `8a961000` and rebased onto it. Followed
+  `main`'s documentation migration: every ADR and RFC path and link now points
+  at `docs/adrs/` or `docs/rfcs/rfc-nnnn-*`, and ADR numbers use four digits.
+  Revision 6 will re-baseline the area lists, observations, and obligations at
+  the pin before EP-M1.
+
+- Revision 6 (2026-10-23): re-baselined at the pin `8a961000` (D-11):
+  pin-time paths after `#811`, wider A1, A4, A5, and A6 lists for `#857`,
+  `#858`, `#592`, and the Bash runtime, pin-time seeds, OBS-17 to OBS-19,
+  CO-15, and corrected CO-3 and CO-4. Withdrew OBS-9, which was wrong from the
+  start: the action hash is RFC 8785 canonical JSON with sorted keys. The
+  remaining work is EP-M1 to EP-M3, then EP-M4 once ADR-0035 is `Accepted`.
+
+[rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
+[adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
 [roadmap]: ../roadmap-hexagonal-hardening.md
