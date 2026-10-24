@@ -48,6 +48,7 @@ impl<'a> Fixture<'a> {
     /// Hold `yaml` for lowering under the host's default recipe shell.
     ///
     /// Use this when the rule under test is indifferent to the dialect.
+    #[must_use]
     pub fn new(yaml: &'a str) -> Self {
         Self {
             yaml,
@@ -60,6 +61,7 @@ impl<'a> Fixture<'a> {
     /// Use this when the recipe text is itself the subject, as it is for a rule
     /// that scans shell syntax or for a fixture containing syntax only one
     /// dialect accepts.
+    #[must_use]
     pub fn for_shell(yaml: &'a str, shell: RecipeShell) -> Self {
         Self { yaml, shell }
     }
