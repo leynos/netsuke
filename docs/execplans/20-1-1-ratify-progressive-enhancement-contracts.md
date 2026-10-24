@@ -5,13 +5,13 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: APPROVED
+Status: IN PROGRESS
 
-This plan is approval-gated. Do not begin implementation until the user
-explicitly approves it. Approving the plan authorizes drafting the decision
-records it describes. It does not accept them: acceptance happens through the
-normal Architectural Decision Record (ADR) process, when the user explicitly
-accepts the drafted ADRs during pull-request review (milestone EP-M5).
+The user approved this plan on 2026-10-24 and selected D-19 Option A. Approval
+authorizes drafting the decision records it describes. It does not accept them:
+acceptance happens through the normal Architectural Decision Record (ADR)
+process, when the user explicitly accepts the drafted ADRs during pull-request
+review (milestone EP-M5).
 
 ## Purpose / big picture
 
@@ -232,9 +232,14 @@ decision D-15.
 - [x] (2026-10-24) Rebased PR #808 from its recorded base `8a9610008` onto
   remote `main` at `f8df5d808`; all five commits replayed patch-identically and
   no conflicts occurred.
-- [ ] Run the requested gates on the rebased candidate, then publish it with
-  an explicit lease.
-- [ ] EP-M0: re-sweep ADR numbers; record baseline gates.
+- [x] (2026-10-24) Rebased-candidate baseline: `make check-fmt`, `make lint`,
+  `make typecheck`, `make doc-coverage`, `make markdownlint`, and `make nixie`
+  passed. `make test` had 4,839 passes, 6 skips, one 300-second timeout, and 24
+  tests not run; the timed-out fixture's nested Cargo check was waiting for
+  shared compiler admission. Its log is recorded below; no retry was made.
+- [x] (2026-10-24) EP-M0: scanned all 74 live remote branches and all 20 open
+  PR heads; recorded the ADR-number and baseline-gate evidence below.
+- [ ] Publish the rebased branch with an explicit lease.
 - [ ] EP-M1: ADR-0061 (Proposed) and the schema-version registry.
 - [ ] EP-M2: ADR-0062 to ADR-0067 (Proposed), resolution table, RFC and roadmap
   amendments.
@@ -476,12 +481,12 @@ makes at approval.
   duplicate the version signal. Options considered and rejected in ADR-0061: a
   version floor plus reserved-key rejection with no version bump (cannot catch
   shape changes such as RFC 0001's string-to-mapping `command`, cannot catch
-  unreserved keys, and lets declarations drift from actual use, as Cargo's
-  unchecked `rust-version` does); tying the field to the Netsuke release
-  version (would break every existing manifest under a 0.x binary); an
-  informative-only version (Docker Compose's approach, which warns on unknown
-  fields; unsuitable for a tool that runs commands and deletes files).
-  Date/Author: 2026-09-27, planning agent, revised after panel review.
+  unreserved keys, and leaves the declaration's relationship to used syntax
+  unverifiable); tying the field to the Netsuke release version (would break
+  every existing manifest under a 0.x binary); an informative-only version
+  (Docker Compose's approach, which warns on unknown fields; unsuitable for a
+  tool that runs commands and deletes files). Date/Author: 2026-09-27, planning
+  agent, revised after panel review.
 
 - Decision D-6 (ADR-0061), nested and composed documents. Each document a
   reader loads is admitted against its own declared version. Whether an
@@ -751,8 +756,8 @@ Code touched by EP-M3:
 
 ## Conformance basis
 
-Upstream artefacts, at `main` commit `8a9610008` (the rebase target on
-2026-10-24; draft 2 was written against `ebcedaef`):
+Upstream artefacts, at `main` commit `f8df5d808f1bee4eb8554df0160119864ade6f39`
+(the rebase target on 2026-10-24; draft 2 was written against `ebcedaef`):
 
 - `docs/roadmap-progressive-enhancement.md` item 20.1.1, whose sub-bullets are
   RM-a (review, resolve, record through ADRs), RM-b (coordinate manifest and
@@ -926,9 +931,10 @@ roadmap item done, and completes this plan.
 
 - Outcome: ADR numbers confirmed; baseline gate logs recorded.
 - Requirements: none; this protects later attribution.
-- Acceptance evidence: sweep output and `scrutineer` log paths recorded under
+- Acceptance evidence: sweep results and `scrutineer` log paths recorded under
   `Artefacts and notes`.
-- Conformance check: no file changed except this plan's `Progress`.
+- Conformance check: only this ExecPlan changed; no ADR, RFC, source, or test
+  files changed.
 - Recovery: none needed.
 - Remaining gaps: all later milestones.
 - Compatibility decision: none.
@@ -1316,6 +1322,46 @@ directories may be deleted at any time.
 
 ## Artefacts and notes
 
+EP-M0 evidence (2026-10-24): `git ls-remote` reported 74 live branches, and all
+20 open pull-request heads matched those branches. ADR filenames were scanned
+across every remote branch. ADR-0059 is the highest minted number; ADR-0060 is
+provisionally claimed by the open 3.12.3 plan in PR #809, whose ADR file is not
+yet present. The only ADR-006x prose reference outside this plan is that claim.
+The previously missing local tracking ref `dev-build-footprint` was fetched to
+a scratch ref and scanned; it contains ADR-0056 and no later reservation.
+ADR-0061 to ADR-0067 remain available for EP-M1, subject to the required fresh
+sweep immediately before file creation.
+
+Baseline gate results:
+
+- `make check-fmt`, `make lint`, and `make typecheck` passed.
+- `make doc-coverage` passed at 6,178/6,292 items (98.19%).
+- `make test` had 4,839 passes, 6 skips, one test timeout after 300 seconds,
+  and 24 tests not run; doctests did not start. The timed-out
+  `cli_configuration_fixture_compiles::case_1_public_api` nested Cargo check
+  was waiting for compiler admission. No retry was made.
+- `make markdownlint` passed with 198 files and zero issues; `make nixie`
+  passed.
+
+Logs (each path is relative to `/tmp`):
+
+```text
+check-fmt:
+  check-fmt-5fe5acf9-eb2b-4b75-9130-bc62cb51da74-20-1-1-ratify-progressive-enhancement-contracts.out
+lint:
+  lint-5fe5acf9-eb2b-4b75-9130-bc62cb51da74-20-1-1-ratify-progressive-enhancement-contracts.out
+typecheck:
+  typecheck-5fe5acf9-eb2b-4b75-9130-bc62cb51da74-20-1-1-ratify-progressive-enhancement-contracts.out
+doc-coverage:
+  doc-coverage-5fe5acf9-eb2b-4b75-9130-bc62cb51da74-20-1-1-ratify-progressive-enhancement-contracts.out
+test:
+  test-5fe5acf9-eb2b-4b75-9130-bc62cb51da74-20-1-1-ratify-progressive-enhancement-contracts.out
+markdownlint:
+  markdownlint-5fe5acf9-eb2b-4b75-9130-bc62cb51da74-20-1-1-ratify-progressive-enhancement-contracts.out
+nixie:
+  nixie-5fe5acf9-eb2b-4b75-9130-bc62cb51da74-20-1-1-ratify-progressive-enhancement-contracts.out
+```
+
 Ninja behaviour probe (Ninja 1.11.1), supporting D-11:
 
 ```plaintext
@@ -1333,7 +1379,8 @@ Prior art consulted through Firecrawl, for ADR-0061's options section:
   codes outside that range are out of range; plugins should finish within about
   ten seconds; performance data follows `|`. Supports D-14's defaults.
 - Cargo: unstable syntax is opted into with `cargo-features`; `rust-version`
-  is an unchecked tool floor
+  declares the minimum supported compiler version, which Cargo enforces, but it
+  is not a manifest-syntax admission contract
   (<https://doc.rust-lang.org/cargo/reference/rust-version.html>); editions
   carry breaking changes.
 - Docker Compose: the top-level `version` is informative only and unknown
@@ -1450,3 +1497,16 @@ invalidated several premises. What changed:
 
 Effect on remaining work: the plan still awaits user approval, now including
 the D-19 choice.
+
+2026-10-24, approval and EP-M0 baseline: the user approved D-19 Option A, and
+PR #808 was rebased onto `main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`.
+The original five commits replayed patch-identically with no conflicts. The
+remote-branch sweep found ADR-0060 provisionally claimed by open PR #809 and
+left ADR-0061 to ADR-0067 available; this sweep includes the live branch that
+had no local tracking ref. The formatter, lint, typecheck, doc-coverage,
+Markdown, and Mermaid gates passed. `make test` recorded one timeout while its
+nested Cargo check waited for compiler admission; this plan records the result
+without retrying or hiding it. Cargo's `rust-version` wording was corrected to
+describe its enforced compiler floor rather than manifest-syntax admission. The
+plan is in progress; ADR acceptance remains pending at EP-M5, and publishing
+the rebased branch remains outstanding.
