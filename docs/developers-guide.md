@@ -3746,6 +3746,18 @@ whenever the build-script slice changes.
 
 ## The build standard
 
+The Concordat `rust-dev-build-footprint` rule keeps default development builds
+small. `Cargo.toml` sets `incremental = false` and `debug = 0` in
+`[profile.dev]`, and the test profile inherits both, so builds keep no
+incremental compilation state and no debug information. The trade-off is that a
+debugger sees no source-level debug information or line tables in a default
+development build and every rebuild recompiles whole crates. To debug, run with
+`CARGO_PROFILE_DEV_DEBUG=true`; to rebuild incrementally, set
+`CARGO_INCREMENTAL=1`. The pinned nightly uses Cargo's `[unstable]` setting
+`embed-metadata = false`, committed to `.cargo/config.toml`, to coordinate
+separate metadata emission; no raw rustc metadata flag is used.
+`tests/build_tools_cargo_config_tests.rs` holds all three settings.
+
 The [`mold`] linker and the parallel `rustc` frontend (`-Zthreads=8`) are the
 **defaults** for development, test, lint, and typecheck builds. They are
 committed to `.cargo/config.toml`, which Cargo auto-discovers, so a bare
