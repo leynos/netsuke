@@ -42,15 +42,51 @@ def _trunk_coverage_cohort(run: dict, job: dict) -> str:
 def _ci_coverage_cohort(run: dict, job: dict) -> str:
     """Classify PR coverage, fork fallback, and trunk cache-writer runs."""
     if run.get("event") == "pull_request":
-        return _pull_request_coverage_cohort(job)
+        return _pull_request_coverage_cohort(run, job)
     return _trunk_cache_writer_cohort(run, job)
 
 
-def _pull_request_coverage_cohort(job: dict) -> str:
-    """Keep Ubicloud PR coverage separate from fork fallback runs."""
+def _pull_request_coverage_cohort(run: dict, job: dict) -> str:
+    """Keep paid, fork, and Dependabot PR lanes separate."""
     if _has_standard_ubicloud_runner(job):
         return "pr_coverage"
-    return "fork_hosted" if "ubuntu-latest" in job.get("labels", []) else "other"
+    if "ubuntu-latest" not in job.get("labels", []):
+        return "other"
+    if _is_dependabot_pull_request(run):
+        return "dependabot_hosted"
+    return "fork_hosted" if _has_distinct_head_repository(run) else "other"
+
+
+def _is_dependabot_pull_request(run: dict) -> bool:
+    """Read the PR author, not the actor who most recently pushed."""
+    pull_requests = run.get("pull_requests")
+    if not isinstance(pull_requests, list) or len(pull_requests) != 1:
+        return False
+    pull_request = pull_requests[0]
+    if not isinstance(pull_request, dict):
+        return False
+    user = pull_request.get("user")
+    return isinstance(user, dict) and user.get("login") == "dependabot[bot]"
+
+
+def _has_distinct_head_repository(run: dict) -> bool:
+    """Require saved base/head repository identities before calling a PR a fork."""
+    base = run.get("repository")
+    head = run.get("head_repository")
+    if not isinstance(base, dict) or not isinstance(head, dict):
+        return False
+    base_id, head_id = base.get("id"), head.get("id")
+    if _is_repository_id(base_id) and _is_repository_id(head_id):
+        return base_id != head_id
+    base_name, head_name = base.get("full_name"), head.get("full_name")
+    if isinstance(base_name, str) and isinstance(head_name, str):
+        return base_name.casefold() != head_name.casefold()
+    return False
+
+
+def _is_repository_id(value: object) -> bool:
+    """Accept numeric repository IDs without treating booleans as IDs."""
+    return isinstance(value, int) and not isinstance(value, bool)
 
 
 def _trunk_cache_writer_cohort(run: dict, job: dict) -> str:

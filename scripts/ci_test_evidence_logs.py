@@ -70,6 +70,7 @@ class _NativeLogContext:
     groups: list[str] = dc.field(default_factory=list)
     step_environment: dict[str, str] = dc.field(default_factory=dict)
     in_runner_image: bool = False
+    nextest_summarised: bool = False
 
     def consume(self, index: int) -> None:
         """Record the evidence fields carried by one native log line."""
@@ -126,7 +127,15 @@ def _native_measurements(
     _build_duration_record(timestamp, body, context.evidence)
     _coverage_record(body, context.evidence)
     _resource_record(body, context.evidence, in_runner_image=context.in_runner_image)
-    if phase := _phase_marker(body):
+    phase = _phase_marker(body)
+    match phase:
+        case "nextest_started":
+            context.nextest_summarised = False
+        case "nextest_completed" if context.nextest_summarised:
+            phase = None
+        case "nextest_completed":
+            context.nextest_summarised = True
+    if phase:
         context.evidence["native_phases"].append({
             "phase": phase,
             "timestamp": timestamp,

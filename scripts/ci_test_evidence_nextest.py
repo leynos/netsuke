@@ -87,8 +87,9 @@ class _NextestAccumulator:
             self.attempts.clear()
             self.summarised = False
             _record_start(self.result, start)
-        if not self.summarised:
-            _record_test(self.result, self.attempts, timestamp, body)
+        elif self.summarised:
+            return
+        _record_test(self.result, self.attempts, timestamp, body)
         summary = SUMMARY.fullmatch(body)
         if summary:
             _record_summary(self.result, summary)

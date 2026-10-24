@@ -2,21 +2,19 @@
 
 Status: IN PROGRESS
 
-The investigation is under way. The current PR target is `origin/main` at
-`8a961000859c02862454338fda6c4dd65bda2aa1`. On 23 October the branch was
-rebased from prior target `6572fb956379f47e70af914bfe4307b740a0b15e` and head
-`b2a5117e495be9149b63c2a2fa054be2c49facdb`; the replay had no conflicts and
-`git range-diff` matched all 21 commits in that full branch replay. The
-target-only delta did not change `.github/workflows/ci.yml`,
-`.github/actions/linux-gate-cache/action.yml`, `tests/command_env_ui_tests.rs`
-or `.config/nextest.toml`. At rebased head
-`b1840c2f2542b60caf74432cc13e5edf7eed5c22`, `make check-fmt`, `make test`,
-`make typecheck` and `make lint` passed. Ordinary PR workflows completed
-successfully on head `99522c517c13e0414370df408f2648ee0bb7312a`:
-
-- [CI](https://github.com/leynos/netsuke/actions/runs/39930296912)
-- [Netsukefile](https://github.com/leynos/netsuke/actions/runs/39930296876)
-- [Release](https://github.com/leynos/netsuke/actions/runs/39930297113)
+The investigation is under way. On 24 October, the branch was rebased from
+`8a961000859c02862454338fda6c4dd65bda2aa1` onto `origin/main` at
+`596cf74c2850c1d2088f5822828dfe556aad717e`, then rebased again when `main`
+advanced to `018b81b4311ac5dd99ac4182c51301eeca0dfc55`. All 27 issue commits
+replayed without conflicts and the range-diff matched. The current pre-commit
+worktree candidate passed `make check-fmt`, `make test`, `make typecheck`, and
+`make lint`, as well as the required workflow-contract, documentation-coverage,
+Markdown, and diagram gates. `make test` passed all 4,864 Nextest tests (six
+skipped) and the workspace doctests. Documentation coverage is 98.19% against
+the 80% threshold; workflow contracts passed 1,458 tests (three skipped) and 27
+supplementary script doctests. Markdownlint found zero issues across 200 files,
+and Nixie validated every diagram. Earlier failures and hosted checks belong to
+older heads and remain historical only.
 
 ## Purpose / big picture
 
@@ -82,10 +80,10 @@ source pins, not substitutes for observed runtime versions in each record.
 `7d751eded578e48dacf43ab173d5820e6437c474`; setup-rust is pinned to
 `6cec89bac47a21cf756d68d638a9a510998e57f8`.
 
-### Current-source comparison at the assessed PR head
+### Pre-rebase source comparison at the assessed PR head
 
 Rechecked the source at PR base `8a961000859c02862454338fda6c4dd65bda2aa1` and
-candidate `99522c517c13e0414370df408f2648ee0bb7312a` on 23 October 2026. The
+candidate `3928a0d1fff4f1d62349ef38f6ad435f55135f4a` on 23 October 2026. The
 candidate does not change `.github/workflows/ci.yml` or `.config/nextest.toml`.
 Compared with the historical `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8`
 description above, the current limits are:
@@ -104,19 +102,28 @@ additional reason that the retained historical runs cannot serve as matched
 current controls. They do not change the timing or cost accounting of those
 observations.
 
-Since the reference snapshot, the taiki installer pin changed from
-`83ac0ad63c0167e6f06796fab0fce28db1bf3db0` to
-`183e4297cca2404691e9380e1307288dced5c82a`; its version changed from v2.87.22
-to v2.87.25. The CodeScene uploader changed from
-`a5765019912a8ab6882b12db049c7cde635f3a85` to
-`7d751eded578e48dacf43ab173d5820e6437c474`. The cache action, Nextest config
-and API harness are byte-identical to the reference. The cache `pins_hash`
-still covers all of `ci.yml` and the cache action for tools and Whitaker;
-`target/` remains excluded, and only trusted main pushes write these caches.
-The API harness retains eight direct-rustc fixture tests, Cargo JSON artefact
-discovery, the missing-`--extern netsuke` negative control and a separate real
-Cargo consumer test. `TestSupportRlib` reports elapsed tracing, not fresh vs
-non-fresh artefact counts.
+Since the 10 October reference at `24293a1b3616872100d379e277540bb1df89203c`,
+the taiki installer pin changed from `83ac0ad63c0167e6f06796fab0fce28db1bf3db0`
+(v2.87.22) to `ab6895351a88b908e96a4697860d4ffea5e57dbe` (v2.87.27). The
+`generate-coverage` pin remains `7d751eded578e48dacf43ab173d5820e6437c474`, and
+the Linux gate cache action remains byte-identical to that reference. The
+current `.config/nextest.toml` and `tests/command_env_ui_tests.rs` are not
+byte-identical: Nextest filters, groups and timeouts have changed, and the
+public-API harness now uses Cargo's `check` metadata artefact followed by
+direct rustc fixtures. In particular, `cli_configuration_fixture_compiles` no
+longer creates and checks a real Cargo consumer project; it is now a
+direct-rustc positive/negative fixture. This change is already present at the
+PR base and is outside this EP-1 diff. The issue's fidelity requirement remains
+binding: candidate B must not treat this direct-rustc fixture as a substitute
+for a real Cargo consumer, and that boundary needs a fidelity-preserving
+resolution before B is evaluated.
+
+The cache `pins_hash` still covers all of `ci.yml` and the cache action for
+tools and Whitaker; `target/` remains excluded, and only trusted main pushes
+write these caches. The current harness retains separately identifiable
+public-API fixture cases, Cargo JSON artefact discovery and the missing
+`--extern netsuke` negative control. `TestSupportRlib` reports elapsed tracing,
+not fresh vs non-fresh artefact counts.
 
 The source-only installation audit identifies `scripts/install-build-tools.sh`,
 `scripts/build-tools-common.sh` and `tools/mold/SHA256SUMS` as indirect build
@@ -128,6 +135,29 @@ only the root `dylint.toml`, excluding `test_support/dylint.toml`. Future
 fingerprints must cover both. The installed suite revision and upstream
 installer resolution remain unverified; source pins alone do not establish that
 every installation input is immutable.
+
+### Current target source at the rebased base
+
+The current base `018b81b4311ac5dd99ac4182c51301eeca0dfc55` includes the
+workflow-contract changes from pull request 932 and later
+PowerShell-placeholder hardening from pull request 924. It keeps the eligible
+same-repository Linux PR gate on `ubicloud-standard-4-ubuntu-2404`, with four
+Cargo workers and four Nextest workers, and sends both fork PRs and Dependabot
+PRs to `ubuntu-latest`. The workflow checks the PR author's `user.login` for
+Dependabot because the actor can change when another person pushes to that PR.
+The collector now keeps `fork_hosted` and `dependabot_hosted` separate using
+saved workflow-run `pull_requests[].user.login` and base/head repository
+identities. If the saved run lacks enough provenance to identify either case,
+it emits `other` rather than guessing from the runner label. The required run
+fields are documented in GitHub's
+[Get a workflow run response][workflow-run-response].
+
+The current base retains pull request 932's workflow-contract changes and
+documentation. The intervening pull request 924 change is unrelated to the CI
+source comparison. The cache action and test selection remain unchanged by
+these upstream commits; no candidate optimization has been enabled. The
+original 10 October reference and the earlier 8a961 comparison above remain
+historical snapshots, not the current source baseline.
 
 The original offline evidence set contains 81 job records from 21 distinct
 run-attempt pairs: six main-branch coverage jobs, six main-branch cache-writer
@@ -208,14 +238,15 @@ if distribution shapes differ materially, report that limitation and withhold
 adoption rather than interpreting it as a general median-difference interval.
 
 Keep PR coverage, main-branch coverage, trusted main-branch cache-writer jobs,
-and GitHub-hosted fork jobs in separate cohorts. Separate warm, cold/miss, and
-fallback cache observations. Preserve run attempt, event, source SHA, tested
-merge SHA, variant SHA, runner image/architecture/capacity, tool versions,
-action pins, features/targets, compiler flags, profile, and concurrency limits.
-Failed, cancelled, timed-out, retried, and superseded attempts stay in cost and
-reliability accounting; omit cancelled and superseded attempts only from
-successful-run timing comparisons. Label unmatched source, tests, toolchain,
-runner, or cache as observational and name the confounding factor.
+and GitHub-hosted fork and Dependabot jobs in separate cohorts. Separate warm,
+cold/miss, and fallback cache observations. Preserve run attempt, event, source
+SHA, tested merge SHA, variant SHA, runner image/architecture/capacity, tool
+versions, action pins, features/targets, compiler flags, profile, and
+concurrency limits. Failed, cancelled, timed-out, retried, and superseded
+attempts stay in cost and reliability accounting; omit cancelled and superseded
+attempts only from successful-run timing comparisons. Label unmatched source,
+tests, toolchain, runner, or cache as observational and name the confounding
+factor.
 
 Adoption requires the one-sided 95% upper uncertainty bound for
 candidate-minus-control consumption to be at most zero. No positive cost
@@ -414,10 +445,18 @@ fidelity comparisons block adoption.
 - [x] Replay from historical target
   `6572fb956379f47e70af914bfe4307b740a0b15e` onto current target
   `8a961000859c02862454338fda6c4dd65bda2aa1`; no conflicts occurred and the
-  full branch range-diff matched all 21 commits.
-- [x] On the corrected rebased candidate, pass `make check-fmt`, `make test`,
+  full branch range-diff matched all 21 commits. This is historical; the 24
+  October replay is recorded below.
+- [x] On the previous corrected candidate, pass `make check-fmt`, `make test`,
   `make typecheck`, `make lint`, `make test-workflow-contracts`,
-  `make doc-coverage`, and `make markdownlint`.
+  `make doc-coverage`, and `make markdownlint`; those results remain history,
+  not current-head gate results.
+- [x] Resolve the exact-head parser and provenance assessment findings,
+  including generated properties for retry and post-summary isolation.
+- [x] Rebase the 27-commit issue series from the initial
+  `596cf74c` target onto current `origin/main` at `018b81b`; the range-diff
+  matched and no conflicts occurred. Revalidate the Dependabot hosted-runner
+  cohort against saved PR-author and repository data.
 - [x] Complete the separate doctest pass with the existing selection and
   ignore policy.
 - [x] Confirm `make nixie` exits successfully on the final documentation
@@ -429,6 +468,19 @@ fidelity comparisons block adoption.
   and malformed inventory values, within a fixed 80-example budget per case.
 - [x] Keep default CI execution unchanged and defer in-watchdog telemetry to the
   separately reviewed EP-2 milestone.
+- [x] On the rebased worktree, pass `make check-fmt`,
+  `make test-workflow-contracts` (1,458 passed, 3 skipped, plus 27
+  supplementary script doctests), and `make typecheck`.
+- [x] Resolve the Ruff boolean-expression finding and pass `make lint` on the
+  corrected candidate, including Clippy, both Whitaker checks, Python lint,
+  yamllint, and actionlint.
+- [x] Pass `make doc-coverage` at 98.19%, above
+  the 80% threshold.
+- [x] Pass `make markdownlint` with zero issues across 200 Markdown files and
+  `make nixie` with all diagrams validated after the final plan edit.
+- [x] Pass local `make test`: 4,864 Nextest tests passed, six were skipped,
+  and all workspace doctests passed. The previously slow public-API and
+  locale-stub compile fixtures completed within their configured timeouts.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -470,6 +522,18 @@ or adopted. Update progress and decisions as evidence lands.
   package-cache lock in that fixture's process tree; its cause is unresolved.
   Stop Rust retries while diagnosing the real consumer and complete the
   independent, not-yet-run Python/typecheck gates sequentially.
+
+- 2026-10-23: Rechecking the 10 October reference against current `origin/main`
+  found that `.config/nextest.toml` and `tests/command_env_ui_tests.rs` have
+  changed. The current CLI configuration fixture is direct-rustc, not a real
+  Cargo consumer project. This is already in the target branch, not this PR.
+  Keep the issue's real-consumer fidelity requirement: candidate B cannot use
+  that fixture as a substitute and must resolve the boundary before evaluation.
+
+- 2026-10-23: The completeness assessment found that a second Nextest summary
+  could overwrite counts and duration after the run closed. Freeze the parser
+  at the first summary until another start marker, and keep native phase
+  timestamps aligned with that boundary.
 - 2026-10-15: One delegated local Cargo-preparation probe succeeded in
   266.773 seconds, with 327 fresh and eight non-fresh artefacts plus four
   package-cache lock messages. Lock durations were not measured. This does not
@@ -604,6 +668,15 @@ them. Confirmation of that parser pass was pending at this checkpoint; a later
 review on 23 October is recorded below. No CI dispatch occurred for the offline
 collector milestone.
 
+The exact-head completeness assessment on
+`3928a0d1fff4f1d62349ef38f6ad435f55135f4a` confirmed the Task 1 scope and
+identified a late-summary parser defect plus an outdated current-source
+comparison. The worktree now freezes parsed summary fields and phase timestamps
+until a new Nextest start, with regressions for both paths. The plan now
+records the target-branch change to the public-API harness and keeps the real
+Cargo consumer requirement active for candidate B. These repairs passed the
+post-rebase workflow-contract and full test gates.
+
 ## Revision history
 
 On 23 October, the full branch range from prior target
@@ -652,8 +725,22 @@ above. Ordinary PR workflows passed on head
 the current-source comparison, range accounting, retained-record caveat, and
 Python pattern-match validation were added in response. Earlier hosted
 validation, H4 monitoring, and local supervisor evidence remain dated history.
-The controlled baseline, bounded telemetry, and candidate decisions remain
-outstanding.
+The first 24 October rebase advanced the target to
+`596cf74c2850c1d2088f5822828dfe556aad717e`. The run and job APIs expose the PR
+author's login and base/head repository objects needed to separate the
+Dependabot hosted lane from fork fallback jobs; the collector leaves malformed
+or incomplete provenance in `other`. The first post-rebase `make lint` found an
+overlong boolean condition in the repository-ID predicate; extracting the ID
+check preserved the exclusion of booleans and passed the rerun. The final
+workflow-contract run includes the hosted-cohort, late-summary, and phase
+boundary regressions. On 24 October, `main` advanced to
+`018b81b4311ac5dd99ac4182c51301eeca0dfc55`, so the branch was rebased again.
+All 27 issue commits still match the original range and no conflicts occurred.
+The complete post-rebase gate sequence passed: format, lint, typecheck,
+documentation coverage at 98.19%, workflow contracts (1,458 passed, 3 skipped,
+plus 27 script doctests), the full Rust suite (4,864 passed, six skipped,
+doctests passed), Markdownlint, and Nixie. The controlled baseline, bounded
+telemetry, and candidate decisions remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
@@ -670,3 +757,4 @@ outstanding.
 [llvm-cov-report]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/src/report.rs
 [llvm-cov-manifest]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/Cargo.toml
 [cargo-config-env]: https://github.com/taiki-e/cargo-config2/blob/v0.1.41/src/env.rs
+[workflow-run-response]: https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run
