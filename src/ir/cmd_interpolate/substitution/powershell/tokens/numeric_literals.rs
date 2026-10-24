@@ -113,6 +113,9 @@ fn is_numeric_literal_character(character: PowerShellSourceCharacter<'_>) -> boo
 }
 
 /// Recognize a sign immediately after an exponent marker and its coefficient.
+///
+/// `e` is also a hexadecimal digit, so a sign after a `0x` run is an operator
+/// between two operands rather than the sign of a decimal exponent.
 fn is_exponent_sign(character: PowerShellSourceCharacter<'_>) -> bool {
     if !matches!(character.value(), '+' | '-') {
         return false;
@@ -123,24 +126,53 @@ fn is_exponent_sign(character: PowerShellSourceCharacter<'_>) -> bool {
     if !matches!(exponent.value(), 'e' | 'E') {
         return false;
     }
-    exponent.previous().is_some_and(|coefficient| {
-        coefficient.value().is_ascii_digit() || coefficient.value() == '_'
+    let Some(coefficient) = exponent.previous() else {
+        return false;
+    };
+    (coefficient.value().is_ascii_digit() || coefficient.value() == '_')
+        && !inside_radix_literal(coefficient)
+}
+
+/// Report whether `character` belongs to a `0x` or `0b` digit run.
+fn inside_radix_literal(character: PowerShellSourceCharacter<'_>) -> bool {
+    let mut start = character;
+    while let Some(previous) = start
+        .previous()
+        .filter(|before| is_radix_digit_run_character(*before))
+    {
+        start = previous;
+    }
+    let Some(run) = character
+        .characters
+        .get(start.position..character.position.saturating_add(1))
+    else {
+        return false;
+    };
+    let literal = run.iter().collect::<String>();
+    literal.get(..2).is_some_and(|prefix| {
+        prefix.eq_ignore_ascii_case("0x") || prefix.eq_ignore_ascii_case("0b")
     })
+}
+
+/// Report whether `character` can continue a `0x` or `0b` digit run.
+fn is_radix_digit_run_character(character: PowerShellSourceCharacter<'_>) -> bool {
+    character.value().is_ascii_alphanumeric() || character.value() == '_'
 }
 
 /// Check PowerShell decimal, radix-prefixed and suffixed numeric spellings.
 fn is_power_shell_numeric_literal(literal: &str) -> bool {
     let normalized = literal.replace('_', "");
     let unsigned = normalized.trim_start_matches(['+', '-']);
-    let without_suffix = strip_numeric_suffix(unsigned);
     is_radix_integer(unsigned, PowerShellIntegerRadix::Hexadecimal)
         || is_radix_integer(unsigned, PowerShellIntegerRadix::Binary)
-        || is_radix_integer(without_suffix, PowerShellIntegerRadix::Hexadecimal)
-        || is_radix_integer(without_suffix, PowerShellIntegerRadix::Binary)
-        || is_decimal(without_suffix)
+        || is_decimal(strip_numeric_suffix(unsigned))
 }
 
-/// Remove all type and multiplier suffixes supported by PowerShell literals.
+/// Remove all type and multiplier suffixes supported by decimal literals.
+///
+/// Decimal digits never collide with a suffix, so stripping repeatedly cannot
+/// consume part of the number. A radix literal needs the stricter
+/// [`is_radix_integer`] instead, because `d`, `f`, and `e` are all digits there.
 fn strip_numeric_suffix(mut literal: &str) -> &str {
     while let Some(without_suffix) = strip_one_numeric_suffix(literal) {
         literal = without_suffix;
@@ -163,15 +195,37 @@ fn strip_one_numeric_suffix(literal: &str) -> Option<&str> {
         })
 }
 
-/// Validate a radix-prefixed integer with at least one digit.
+/// Validate a radix-prefixed integer with at least one digit and an optional
+/// trailing suffix chain.
+///
+/// The digit run is measured before any suffix is removed, so a hexadecimal
+/// digit such as the `d` in `0xdL` is never mistaken for a type suffix.
 fn is_radix_integer(literal: &str, radix: PowerShellIntegerRadix) -> bool {
     let prefix = radix.prefix();
-    literal
+    let Some(digits_and_suffix) = literal
         .get(..prefix.len())
-        .is_some_and(|candidate| candidate.eq_ignore_ascii_case(prefix))
-        && literal.get(prefix.len()..).is_some_and(|digits| {
-            !digits.is_empty() && digits.chars().all(|digit| digit.is_digit(radix.base()))
-        })
+        .filter(|candidate| candidate.eq_ignore_ascii_case(prefix))
+        .and_then(|_| literal.get(prefix.len()..))
+    else {
+        return false;
+    };
+    let digit_count = digits_and_suffix
+        .chars()
+        .take_while(|digit| digit.is_digit(radix.base()))
+        .count();
+    let suffixes = digits_and_suffix.get(digit_count..).unwrap_or_default();
+    digit_count > 0 && is_numeric_suffix_chain(suffixes)
+}
+
+/// Report whether `suffixes` is a run of PowerShell type and multiplier suffixes.
+fn is_numeric_suffix_chain(mut suffixes: &str) -> bool {
+    while !suffixes.is_empty() {
+        let Some(without_suffix) = strip_one_numeric_suffix(suffixes) else {
+            return false;
+        };
+        suffixes = without_suffix;
+    }
+    true
 }
 
 /// Validate a decimal integer, fraction or exponent without converting it.
