@@ -8,6 +8,7 @@
 - **Scope:** Shallow-end compatibility and opt-in contract enforcement
 - **Implementation:** [Progressive-enhancement roadmap, phases 20 and
   25][roadmap]
+- **Governing decisions:** [ADR-0062][d62] and [ADR-0067][d67]
 
 ## 1. Summary
 
@@ -258,6 +259,8 @@ with stronger policies controlled by the appropriate authority rather than
 imposed on every Netsuke user.
 
 [roadmap]: ../roadmap-progressive-enhancement.md
+[d62]: ../adrs/adr-0062-progressive-enhancement-contract-boundaries.md
+[d67]: ../adrs/adr-0067-maturity-policy-schema.md
 [states]: rfc-0021-managed-states-and-functional-probes.md
 [inputs]: rfc-0022-optional-typed-task-inputs.md
 [artefacts]: rfc-0023-artefact-ownership-and-scoped-cleanup.md
