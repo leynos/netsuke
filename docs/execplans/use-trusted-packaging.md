@@ -2086,6 +2086,40 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   3.14 baseline: absent path gives `UnreadableDigestRecordError`; non-UTF-8
   bytes, non-JSON text, a JSON array, and an empty `assets` mapping all give
   `DigestRecordError`. Date/Author: 2026-10-23, implementation agent.
+- Repair: the proof assessment (`pr903-proof-fc9aa9ea9`, comment
+  `6360996109`) found that LEM-3's stated method — "a property test over
+  generated digests" — was not delivered. `test_release_reconcile_crates.py`
+  had no Hypothesis import, and its only digest rows were the fixed `"d" * 64`
+  and `"not-a-digest"` parametrizations. That left the plan's own non-vacuity
+  clause unmet: it says the conflicting case is reachable *because the digest
+  is generated rather than fixed*, which two constants cannot establish.
+  `test_identity_turns_on_the_digest_alone` now draws the published checksum
+  and the intended digest independently from a 64-character
+  lowercase-hexadecimal strategy and asserts both directions in one test —
+  equal digests classify `IDENTICAL`, unequal ones `CONFLICT`. Both directions
+  are asserted together deliberately: split into two tests, an
+  always-`IDENTICAL` classifier passes the matching half and an
+  always-`CONFLICT` classifier passes the other, so neither half alone shows
+  the comparison happens. Verified non-vacuous by instrumenting the strategy:
+  across 200 examples, 94 reached `IDENTICAL` and 106 reached `CONFLICT`.
+  Verified the test can fail by mutating
+  `release_reconcile_crates._classify_answer` in a scratch copy: forcing the
+  checksum arm to `True` fails this test (and three neighbours), forcing it to
+  `False` fails it (and four neighbours). The scratch copies were removed.
+  Date/Author: 2026-10-23, implementation agent.
+- Repair: the LEM-3 property test pushed
+  `test_release_reconcile_crates.py` to 420 lines, past the 400-line module cap
+  that `pyproject.toml` sets as `max-module-lines` and that `AGENTS.md` states
+  as a house rule. Pylint reported `C0302` and the lint gate failed. Rather
+  than split the module, the duplication the file already carried was removed:
+  every test repeated the same five-line `classify_registry_state(...)` call
+  with identical `version`, `intended_sha256`, and `http_status` arguments, so
+  the argument that varied was buried among three that did not. A
+  `_classify(body, *, intended=INTENDED, status=OK)` helper now supplies the
+  fixed arguments, and each call site names only what it actually varies. The
+  module is 374 lines; the suite still reports 21 passed, so no coverage was
+  lost, and pylint scores 10.00/10 with no `C0302`. Date/Author: 2026-10-23,
+  implementation agent.
 
 ## Surprises & discoveries
 
