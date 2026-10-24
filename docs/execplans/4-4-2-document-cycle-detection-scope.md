@@ -6,10 +6,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: APPROVED
+Status: IN PROGRESS
 
 Approved by explicit user instruction on 2026-10-24, before rebase or
-implementation.
+implementation. Execution began after rebasing onto the PR target `main` at
+`8a961000859c02862454338fda6c4dd65bda2aa1`.
 
 Revision 2. Drafted on 2026-09-27 against `origin/main` at `ebcedaef`, then
 revised after an expert-panel design review the same day (see `Revision note`).
@@ -36,7 +37,7 @@ At planning time the rule is partly written down and partly wrong:
 - `docs/users-guide.md` (section *Targets, inputs, and dependencies*) says
   "Cycle detection follows `sources` and `deps`. Order-only dependencies
   enforce ordering but do not participate in cycle detection." The code agrees:
-  `src/ir/cycle_detector.rs::CycleDetector::visit_known_edge` walks
+  `src/ir/cycle/detector.rs::CycleDetector::visit_known_edge` walks
   `BuildEdge::inputs` and `BuildEdge::implicit_deps` only.
 - Ninja, the only backend Netsuke drives, does not agree. Ninja 1.11.1 rejects
   a cycle closed by an order-only dependency with
@@ -60,10 +61,10 @@ After this change:
   entry of a multi-output `name` list and every IR implicit output, names the
   same build step; and `dependency_order: serial` adds no dependency of its own.
 - A new Architectural Decision Record (ADR),
-  `docs/adr-041-every-dependency-kind-participates-in-cycle-detection.md`,
-  records the decision and why the earlier "order-only dependencies only affect
-  freshness" rationale was wrong. The design document, the formal-verification
-  document, and the developers' guide point at it.
+  `docs/adrs/adr-0060-every-dependency-kind-participates-in-cycle-detection.md`,
+  records the decision and why the earlier "order-only dependencies only
+  affect freshness" rationale was wrong. The design document, the
+  formal-verification document, and the developers' guide point at it.
 - Unit, property, bounded-model-checking (Kani), behavioural (`rstest-bdd`),
   and end-to-end tests pin the rule, including an independent-oracle property
   test showing the per-output traversal finds a cycle exactly when the
@@ -96,7 +97,7 @@ the only output field, and every entry becomes an explicit output.
 
 ### The IR
 
-`src/ir/graph.rs` defines the public `BuildEdge` struct. Its path-bearing
+`src/ir/graph/mod.rs` defines the public `BuildEdge` struct. Its path-bearing
 fields are `inputs` (from `sources`), `implicit_deps` (from `deps`),
 `order_only_deps` (from `order_only_deps`), `explicit_outputs` (from `name`),
 and `implicit_outputs` (always empty when lowered from a manifest; populated
@@ -109,8 +110,8 @@ output alias (`BuildGraph::index_output_aliases`). `BuildGraph::insert_edge`
 rejects a duplicate alias. `BuildGraph::target_for_output` resolves any alias
 to its stored key and its edge.
 
-`src/ir/from_manifest.rs::process_targets` lowers each manifest target into a
-`BuildEdge` (`implicit_outputs: Vec::new()` at the time of writing), and
+`src/ir/from_manifest/mod.rs::process_targets` lowers each manifest target into
+a `BuildEdge` (`implicit_outputs: Vec::new()` at the time of writing), and
 `BuildGraph::detect_cycles` in the same file calls `cycle::analyse` once the
 whole graph exists. A dependency that no edge produces is treated as an
 external file: it is collected into `missing_dependencies`, logged at `info`,
@@ -118,10 +119,10 @@ and never an error.
 
 ### The cycle detector
 
-`src/ir/cycle.rs` holds the crate-private entry point
+`src/ir/cycle/mod.rs` holds the crate-private entry point
 `analyse(graph) -> CycleDetectionReport` and, under `cfg(kani)`,
 `contains_cycle(graph) -> bool`. The traversal lives in
-`src/ir/cycle_detector.rs`:
+`src/ir/cycle/detector.rs`:
 
 - `CycleDetector::detect_targets` visits every output alias, in sorted order,
   that has not yet been fully visited.
@@ -153,22 +154,22 @@ follow the same shape.
   "Keys are cloned from the `targets` map", a statement made stale by the
   borrow-centric traversal.
 - `docs/developers-guide.md`, the paragraph beginning
-  "`src/ir/cycle.rs::CycleDetector::visit` traverses `inputs` and
+  "`src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
   `implicit_deps`", and the section *IR cycle detection*.
-- Rustdoc on `src/ir/cycle.rs` (module and `analyse`) and on
-  `src/ir/cycle_issue322_property_tests.rs`.
+- Rustdoc on `src/ir/cycle/mod.rs` (module and `analyse`) and on
+  `src/ir/cycle/property_tests/issue322_property_tests.rs`.
 
 The roadmap names "the user guide's dependency and build-graph semantics
 chapter". No such heading exists; this plan creates it (see `Decision log`).
 
 ### Existing tests that encode the old rule
 
-- `src/ir/cycle_issue322_property_tests.rs::order_only_back_edge_has_no_cycle`
+- `src/ir/cycle/property_tests/issue322_property_tests.rs::order_only_back_edge_has_no_cycle`
   asserts that an order-only back edge produces no cycle. It is the executable
   form of the rule this plan reverses and must be inverted, not deleted.
-- `src/ir/cycle_tests.rs`, `src/ir/cycle_analyse_tests.rs`,
-  `src/ir/cycle_property_tests.rs`, and `src/ir/cycle_verification.rs` never
-  populate `order_only_deps` or `implicit_outputs`.
+- `src/ir/cycle/tests.rs`, `src/ir/cycle/property_tests/analyse_tests.rs`,
+  `src/ir/cycle/property_tests/mod.rs`, and `src/ir/cycle/verification.rs`
+  never populate `order_only_deps` or `implicit_outputs`.
 - `tests/features/ir.feature` and `tests/features/ir_generation.feature` each
   check only that `tests/data/circular.yml` (a `sources` cycle) fails.
 - `tests/ir_from_manifest_tests.rs::manifest_error_cases` asserts the cycle
@@ -182,20 +183,22 @@ chapter". No such heading exists; this plan creates it (see `Decision log`).
 `tests/kani_mutation_evidence_tests.rs` requires every `#[kani::proof]` harness
 to own a mutation patch under `docs/verification/mutations/`, named after the
 harness path with `::` replaced by `__`, that still applies with
-`git apply --check`. Its `module_path_for_source` derives the harness path from
-the file name alone: `src/ir/cycle_verification.rs` maps to
-`ir::cycle::verification`, so a second file such as
-`cycle_participation_verification.rs` would map to a different module and break
-the contract. Five existing patches edit `src/ir/cycle_detector.rs`, at hunks
-around `back_edge_result` and `visit_dependency`, away from `visit_known_edge`.
-`docs/developers-guide.md` *Kani harness inventory* lists every harness in a
-table that must be extended.
+`git apply --check`. Its `module_path_for_source` derives the Rust module path
+from the source file's parent directories and stem:
+`src/ir/cycle/verification.rs` maps to `ir::cycle::verification`, so a second
+file such as `cycle_participation_verification.rs` would map to a different
+module and break the contract. Five existing patches edit
+`src/ir/cycle/detector.rs`, at hunks around `back_edge_result` and
+`visit_dependency`, away from `visit_known_edge`. `docs/developers-guide.md`
+*Kani harness inventory* lists every harness in a table that must be extended.
 
 ### Quality gates
 
 `AGENTS.md` names the gates: `make check-fmt`, `make typecheck`, `make lint`,
-`make test`, and, for Markdown, `make markdownlint` (which runs
-`make spelling`) and `make nixie`. `make kani-ir` runs the Kani IR suite. Gates
+`make doc-coverage`, `make test`, and, for Markdown, `make markdownlint` (which
+runs `make spelling`) and `make nixie`. The guide's executable YAML example
+also requires `make test-documentation-contracts` and
+`make test-workflow-contracts`. `make kani-ir` runs the Kani IR suite. Gates
 run sequentially, never in parallel, with output captured by `tee` to
 `/tmp/<action>-netsuke-4-4-2-document-cycle-detection-scope.out`.
 
@@ -216,14 +219,16 @@ Read before starting:
 - `docs/users-guide.md` *Understand the build model*, *Targets, inputs, and
   dependencies*, *Run direct dependencies serially*, and *Use the canonical
   build graph*.
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` (Kani bounds) and
-  `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md` (why serial
-  gates stay out of the IR).
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  (Kani bounds) and
+  `docs/adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md` (why
+  serial gates stay out of the IR).
 - `docs/documentation-style-guide.md` — ADR section order and status values,
   ExecPlan status vocabulary, no first or second person outside `README.md`,
   en-GB-oxendict spelling, and the rule that `docs/contents.md` changes when a
   document is added.
 - `docs/rust-testing-with-rstest-fixtures.md`, `docs/rstest-bdd-users-guide.md`,
+  `docs/rstest-bdd-v0-6-0-migration-guide.md`,
   `docs/rust-doctest-dry-guide.md`, and
   `docs/reliable-testing-in-rust-via-dependency-injection.md`.
 - `docs/ortho-config-users-guide.md` — read to confirm no configuration surface
@@ -234,12 +239,15 @@ Skills to load: `rust-router` first; then `rust-unit-testing` (rstest tables,
 `kani` (the new harnesses), `rust-verification` if the rigour choice is
 revisited, `nll-to-polonius` before touching any borrow in the detector,
 `hexagonal-architecture` for the boundary check, `arch-decision-records` for
-ADR-041, `execplans` to keep this plan current, `en-gb-oxendict-style` for
+ADR-0060, `execplans` to keep this plan current, `en-gb-oxendict-style` for
 prose, and `pr-creation` and `commit-message` when publishing.
 
 ## Conformance basis
 
-Upstream artefacts, all at `origin/main` `ebcedaef`:
+The original conformance review used `origin/main` at `ebcedaef`. The PR target
+was refreshed to `main` at `8a961000859c02862454338fda6c4dd65bda2aa1`; Stage A
+records revalidation against that rebased tree. The relevant current references
+are:
 
 - `docs/roadmap.md` 4.4.2 and its four sub-items (identifiers `RM-4.4.2-a`
   order-only decision, `RM-4.4.2-b` implicit-output decision, `RM-4.4.2-c`
@@ -249,10 +257,10 @@ Upstream artefacts, all at `origin/main` `ebcedaef`:
   contract* (`FV-CYCLE`). This plan changes that section's substance; the
   change is a deliberate, recorded deviation (see `Decision log`, D1).
 - `docs/netsuke-design.md` §5.3 step 4 (`DES-5.3-4`).
-- `docs/adr-004-bound-kani-ir-harnesses-to-small-n.md` (`ADR-004`), binding
-  the Kani bounds.
-- `docs/adr-011-use-ninja-dyndep-for-serial-dependency-ordering.md`
-  (`ADR-011`), binding that serial gates are backend artefacts outside the IR.
+- `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
+  (`ADR-0047`), binding the Kani bounds.
+- `docs/adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md`
+  (`ADR-0011`), binding that serial gates are backend artefacts outside the IR.
 - The Ninja manual's definitions of explicit, implicit, and order-only
   dependencies and implicit outputs, and Ninja's `DependencyScan` behaviour
   (`NINJA-AX`), treated as axioms (see `Verification plan`).
@@ -263,18 +271,18 @@ unmerged); none is invented here.
 Trace links:
 
 ```plaintext
-RM-4.4.2-a -> FV-CYCLE (revised) -> ADR-041 -> EP-M2
+RM-4.4.2-a -> FV-CYCLE (revised) -> ADR-0060 -> EP-M2
   -> participation_tests::order_only_*; kani order_only_two_node_*
   -> e2e order_only_cycle_rejected_before_ninja
   -> bdd "Order-only dependency cycle is rejected"
-RM-4.4.2-b -> ADR-041 -> EP-M1
+RM-4.4.2-b -> ADR-0060 -> EP-M1
   -> participation_tests::implicit_output_*; kani implicit_output_alias_*
   -> property alias_traversal_agrees_with_edge_oracle (EP-M2)
 RM-4.4.2-c -> EP-M3 -> users-guide "Dependency and build-graph semantics"
   -> documented example guide-order-only-cycle-manifest
 RM-4.4.2-d -> EP-M1..EP-M4 -> every gate green; roadmap 4.4.2 ticked
-DES-5.3-4 -> EP-M3 -> netsuke-design.md §5.3 step 4 revised, cites ADR-041
-ADR-011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
+DES-5.3-4 -> EP-M3 -> netsuke-design.md §5.3 step 4 revised, cites ADR-0060
+ADR-0011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
   -> e2e serial_earlier_dependency_on_later_builds
 ```
 
@@ -290,24 +298,24 @@ ADR-011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
   order-only cycle reuses them unchanged.
 - Do not add a manifest field for implicit outputs, and do not change
   `from_manifest` lowering of any field.
-- Do not move serial-dependency gates or dyndep sidecars into the IR (ADR-011).
+- Do not move serial-dependency gates or dyndep sidecars into the IR (ADR-0011).
 - Keep the detector's plain indexed-loop shape; do not introduce chained
   iterators on the Kani path.
 - Respect Polonius rules from `AGENTS.md`: no defensive clones, double lookups,
   or eager error context added to appease the borrow checker; compile the
   natural borrow-returning form first.
-- No new dependencies. `rstest`, `rstest-bdd` 0.5.0, `insta`, `proptest`,
+- No new dependencies. `rstest`, `rstest-bdd` 0.6.0, `insta`, `proptest`,
   `googletest`, and `pretty_assertions` are already dev-dependencies.
 - No in-process environment mutation in tests; subprocess tests configure the
   child with `Command::env` only.
-- No file may exceed 400 lines. `src/ir/cycle_verification.rs` is at 361 and
+- No file may exceed 400 lines. `src/ir/cycle/verification.rs` is at 361 and
   `tests/documentation_examples_tests.rs` is already at 458, so new harnesses
   need room made first (Stage B) and the documented-example case lives in the
   new end-to-end file, with only its identifier added to `EXPECTED_EXAMPLE_IDS`.
-- Every Kani harness lives in a file whose name
+- Every Kani harness lives in a file whose source path
   `tests/kani_mutation_evidence_tests.rs::module_path_for_source` maps to the
   harness's module path: new cycle harnesses therefore go in
-  `src/ir/cycle_verification.rs` (module `ir::cycle::verification`), not in a
+  `src/ir/cycle/verification.rs` (module `ir::cycle::verification`), not in a
   second `*_verification.rs` file.
 - Users' guide prose uses no first or second person, and every new YAML fence
   in the guide carries a `tested-example` marker and a registry entry.
@@ -317,7 +325,7 @@ ADR-011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
 
 - Production code: if more than 3 non-test source files or more than 40 net
   production lines change (Rustdoc included), stop and escalate. The planned
-  production edit is one call in `cycle_detector.rs` plus Rustdoc.
+  production edit is one call in `cycle/detector.rs` plus Rustdoc.
 - Overall scope: if more than 35 files or more than 1,200 net added lines
   change (tests, fixtures, patches, and documentation included), stop and
   escalate. The planned inventory is about 30 files.
@@ -359,10 +367,10 @@ ADR-011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
 - Risk: Netsuke's scope stays wider than Ninja's. Netsuke checks the whole
   manifest; Ninja checks only what it is asked to build. Severity: low.
   Likelihood: certain. Mitigation: already true for `sources` and `deps`
-  cycles; ADR-041 records that the whole-graph scope applies uniformly, and why
-  the reachable-subgraph alternative was rejected (`netsuke generate` has no
-  requested target set).
-- Risk: editing `cycle_detector.rs` stops existing cycle mutation patches from
+  cycles; ADR-0060 records that the whole-graph scope applies uniformly, and
+  why the reachable-subgraph alternative was rejected (`netsuke generate` has
+  no requested target set).
+- Risk: editing `cycle/detector.rs` stops existing cycle mutation patches from
   applying. Severity: low. Likelihood: low. The edit site (`visit_known_edge`)
   is outside every existing hunk and its context, and `git apply --check`
   tolerates line offsets. Mitigation: run the contract test after the edit and
@@ -377,14 +385,14 @@ ADR-011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
   chains) deepen it. Severity: low. Likelihood: low. This risk predates the
   change. Mitigation: none in scope; recorded for the future edge-keyed
   traversal noted under `LEM-1`.
-- Risk: PR 805 (rstest-bdd 0.6.0 migration) merges first and changes step or
-  world syntax. Severity: low. Likelihood: medium. Mitigation: re-check at each
-  rebase; the new step and world slot are small and move with the migration.
-- Risk: ADR number collision. ADR-039 (`jm5/kani-change-scoped-gate`) and
-  ADR-040 (`6-1-1-split-rfc-0006-...`) are taken on other branches, and 030 and
-  031 were vacated by a renumbering. Severity: low. Likelihood: medium.
-  Mitigation: sweep every remote branch for `docs/adr-0*` before writing the
-  ADR and again at each rebase; renumber this plan's ADR, never another.
+- Risk: the current `rstest-bdd` 0.6.0 world or step APIs differ from the
+  original examples. Severity: low. Likelihood: low. Mitigation: read the
+  merged migration guide and existing BDD steps during Stage A, then adapt the
+  planned step and world slot to those APIs.
+- Risk: ADR number collision. ADR-0041 is occupied on main and ADR-0057 through
+  ADR-0059 are reserved on live branches. Severity: low. Likelihood: low.
+  Mitigation: sweep every remote branch for `docs/adrs/adr-0*` immediately
+  before writing ADR-0060; renumber this plan's ADR, never another.
 - Risk: a fixture uses a YAML 1.1 Boolean name (`y`, `n`, `on`, `yes`) and
   fails at parse time, so a "fails" assertion passes for the wrong reason.
   Severity: medium. Likelihood: medium. Mitigation: every cycle assertion
@@ -432,17 +440,17 @@ path contains that arc.
 - Rationale: the finite partitions (self-edge, two-node, three-node, mixed
   kinds, cycle closed last by an order-only arc) are specification examples;
   the property covers generated sizes up to 50 nodes; Kani proves the two-node
-  shape exhaustively within ADR-004's bounds. The one-call production change
+  shape exhaustively within ADR-0047's bounds. The one-call production change
   reuses `visit_dependencies`, which the existing harnesses already verify, so
   one order-only harness is proportionate.
 - Domain: `rstest` cases `order_only_self_edge`, `order_only_two_node`,
   `order_only_three_node`, `order_only_closes_mixed_cycle`; property
   `order_only_back_edge_produces_cycle` over 2–49 nodes; Kani
   `order_only_two_node_cycle_reports_cycle`.
-- Artefact: `src/ir/cycle_participation_tests.rs` (new, `#[cfg(test)]`,
-  included from `src/ir/cycle.rs`), the inverted property in
-  `src/ir/cycle_issue322_property_tests.rs`, and the harness in
-  `src/ir/cycle_verification.rs`.
+- Artefact: `src/ir/cycle/participation_tests.rs` (new, `#[cfg(test)]`,
+  included from `src/ir/cycle/mod.rs`), the inverted property in
+  `src/ir/cycle/property_tests/issue322_property_tests.rs`, and the harness in
+  `src/ir/cycle/verification.rs`.
 - Evidence: before the detector change the `rstest` cases and the property
   fail with `cycle` equal to `None`, and Kani reports a failed assertion;
   afterwards `make test` passes and `make kani-ir` reports the harness
@@ -467,8 +475,8 @@ reported path names the implicit alias that was traversed.
   `non_first_explicit_output_closes_cycle` (the manifest-level equivalent,
   `name: [a, a.extra]`); Kani `implicit_output_alias_cycle_reports_cycle` with
   one-byte aliases.
-- Artefact: `src/ir/cycle_participation_tests.rs` and
-  `src/ir/cycle_verification.rs`.
+- Artefact: `src/ir/cycle/participation_tests.rs` and
+  `src/ir/cycle/verification.rs`.
 - Evidence: these pass before and after the change. They are
   characterization tests pinning existing behaviour, not red tests. Their
   failing form is shown by the mutation patch
@@ -490,9 +498,9 @@ arcs exist: for any `G`, `analyse(G)` is identical whether each edge's
   the generated Ninja is schedulable when an earlier serial dependency depends
   on a later one, which the IR alone cannot show.
 - Domain: property `dependency_order_does_not_change_analysis`, added to
-  `src/ir/cycle_issue322_property_tests.rs` beside the `dag_strategy` and
-  `cyclic_graph_strategy` it reuses, with every edge's order flipped; BDD
-  scenario *Serial ordering adds no cycle*; end-to-end test
+  `src/ir/cycle/property_tests/issue322_property_tests.rs` beside the
+  `dag_strategy` and `cyclic_graph_strategy` it reuses, with every edge's order
+  flipped; BDD scenario *Serial ordering adds no cycle*; end-to-end test
   `serial_earlier_dependency_on_later_builds` using
   `tests/data/serial_earlier_depends_on_later.yml`.
 - Evidence: the property and the BDD scenario pass before and after. The
@@ -516,7 +524,8 @@ unresolved input or implicit dependency.
 - Method: extend the existing property
   `generated_missing_dependencies_are_absent_targets`.
 - Artefact: `missing_graph_strategy` and `injected_missing_deps` in
-  `src/ir/cycle_issue322_property_tests.rs` gain order-only injection.
+  `src/ir/cycle/property_tests/issue322_property_tests.rs` gain order-only
+  injection.
 - Evidence: fails before the detector change (order-only injections are not
   reported), passes after.
 - Non-vacuity: the strategy injects at least one missing order-only dependency
@@ -539,7 +548,7 @@ has a cycle.
   the traversal costs `O(sum over edges of |aliases(e)| * |deps(e)|)` hash
   lookups; 500 aliases against 500 order-only dependencies is about 250,000
   lookups. Edge-keyed visit state would remove the multiplier but touches
-  Polonius- and Kani-sensitive code, so it is deferred and noted in ADR-041.
+  Polonius- and Kani-sensitive code, so it is deferred and noted in ADR-0060.
 - Method: property test against an independent oracle.
 - Rationale: the lemma is the correctness argument for walking aliases instead
   of edges and becomes load-bearing once every dependency kind participates.
@@ -553,8 +562,8 @@ has a cycle.
   dependency, or an arc to an implicit-output alias. Each class is therefore
   present by construction, so no filtering and no seed-sensitive class-coverage
   companion is needed.
-- Artefact: `src/ir/cycle_participation_property_tests.rs` (new, included from
-  `src/ir/cycle.rs` under `#[cfg(test)]`), property
+- Artefact: `src/ir/cycle/property_tests/participation_tests.rs` (new, included
+  from `src/ir/cycle/mod.rs` under `#[cfg(test)]`), property
   `alias_traversal_agrees_with_edge_oracle`. The oracle builds the edge graph
   from `BuildGraph::edges()` and `edge_id_for_output`, keying in-degrees by
   `EdgeId` (which is `Hash + Eq`; its inner index is private), and runs Kahn's
@@ -601,7 +610,7 @@ existing property suites.
 
 - Outcome: characterization tests and a Kani harness pin the existing rule
   that implicit outputs participate as aliases of their producing edge. The
-  canonicalization helpers in `cycle_verification.rs` move to a harness-free
+  canonicalization helpers in `cycle/verification.rs` move to a harness-free
   support file to make room.
 - Requirements and gaps: `RM-4.4.2-b`, `OB-2`.
 - Acceptance evidence: `cycle_participation_tests::implicit_output_*` and
@@ -609,7 +618,7 @@ existing property suites.
   `implicit_output_alias_cycle_reports_cycle` and every existing harness;
   `tests/kani_mutation_evidence_tests.rs` passes; the new patch, applied by
   hand, fails its harness.
-- Conformance check: no production behaviour changes; ADR-004 bounds
+- Conformance check: no production behaviour changes; ADR-0047 bounds
   respected; harness paths match `module_path_for_source`.
 - Recovery: revert the milestone commits; nothing depends on them.
 - Remaining gaps: order-only participation, documentation.
@@ -633,7 +642,7 @@ existing property suites.
 
 ### EP-M3 — document the rule
 
-- Outcome: ADR-041 exists; the users' guide gains *Dependency and build-graph
+- Outcome: ADR-0060 exists; the users' guide gains *Dependency and build-graph
   semantics* with a tested example; the design document, formal-verification
   document, developers' guide, Rustdoc, CHANGELOG, v0.1.0 migration guide, and
   `docs/contents.md` agree with it.
@@ -673,31 +682,32 @@ existing property suites.
 
 ### Stage A — confirm (no code changes)
 
-Re-run the ADR sweep and confirm 041 is free. Confirm the location of
-`visit_known_edge`. Record `make kani-ir` wall time on the unchanged tree as
-the baseline in `Artefacts and notes`. Grep `examples/` and `tests/data/` for
-`order_only_deps` and confirm none closes a cycle.
+Re-sweep all live remote branch tips immediately before writing the ADR and
+confirm ADR-0060 is still free. Confirm the location of `visit_known_edge` and
+the `rstest-bdd` 0.6.0 world and step APIs. Record `make kani-ir` wall time on
+the unchanged tree as the baseline in `Artefacts and notes`. Grep `examples/`
+and `tests/data/` for `order_only_deps` and confirm none closes a cycle.
 
 ### Stage B — EP-M1 characterization
 
-Move the canonicalization-only helpers of `src/ir/cycle_verification.rs`
+Move the canonicalization-only helpers of `src/ir/cycle/verification.rs`
 (`assert_kernel_canonical_properties` through `is_closed_id_cycle`, about 220
-lines) into a new harness-free `src/ir/cycle_verification_support.rs`, declared
-from `cycle_verification.rs` with
-`#[path = "cycle_verification_support.rs"] mod support;`. The harnesses stay in
-`cycle_verification.rs`, so every existing mutation-patch name stays valid. Run
+lines) into a new harness-free `src/ir/cycle/verification_support.rs`, declared
+from `cycle/verification.rs` with
+`#[path = "cycle/verification_support.rs"] mod support;`. The harnesses stay in
+`cycle/verification.rs`, so every existing mutation-patch name stays valid. Run
 `make kani-ir` to confirm the move is behaviour-neutral.
 
-Create `src/ir/cycle_participation_tests.rs` with a `build_edge` fixture taking
+Create `src/ir/cycle/participation_tests.rs` with a `build_edge` fixture taking
 an `EdgeSpec` struct with named path-list fields (keeping the argument count
 within Clippy's limit) and an `rstest` table `implicit_outputs_participate`
 with the three OB-2 cases. Assert with `googletest` matchers
 (`assert_that!(report.cycle, some(eq(&expected)))`) and
 `pretty_assertions::assert_eq` for path vectors. Include it from
-`src/ir/cycle.rs` with
-`#[cfg(test)] #[path = "cycle_participation_tests.rs"] mod participation_tests;`.
+`src/ir/cycle/mod.rs` with
+`#[cfg(test)] #[path = "cycle/participation_tests.rs"] mod participation_tests;`.
 
-Extend the harness-local `edge` helper in `cycle_verification.rs` to accept
+Extend the harness-local `edge` helper in `cycle/verification.rs` to accept
 implicit outputs and order-only dependencies (or add a second small builder),
 and add `implicit_output_alias_cycle_reports_cycle`. Write its mutation patch
 and add its row to *Kani harness inventory* in `docs/developers-guide.md`.
@@ -709,18 +719,18 @@ Red: add the OB-1 `rstest` table `order_only_dependencies_participate`; invert
 asserting the reported cycle contains the injected back edge; extend
 `missing_graph_strategy` and `injected_missing_deps` for OB-4; add
 `dependency_order_does_not_change_analysis`; add
-`src/ir/cycle_participation_property_tests.rs` with the oracle property; add
-the Kani harness `order_only_two_node_cycle_reports_cycle`; add the BDD
+`src/ir/cycle/property_tests/participation_tests.rs` with the oracle property;
+add the Kani harness `order_only_two_node_cycle_reports_cycle`; add the BDD
 scenarios, the world slot and step, and the data files; add
 `tests/cycle_participation_e2e_tests.rs`. Run them and record the failures.
 
-Green: in `src/ir/cycle_detector.rs::visit_known_edge`, after the
+Green: in `src/ir/cycle/detector.rs::visit_known_edge`, after the
 `implicit_deps` call, add a third `visit_dependencies` call over
 `&edge.order_only_deps` with the same early return. Update the Rustdoc on
-`visit_known_edge`, the module doc of `src/ir/cycle.rs`, and the doc on
+`visit_known_edge`, the module doc of `src/ir/cycle/mod.rs`, and the doc on
 `analyse`, replacing "`order_only_deps` are intentionally excluded" with the
-new rule and a pointer to ADR-041. Update the module doc of
-`cycle_issue322_property_tests.rs`. Run
+new rule and a pointer to ADR-0060. Update the module doc of
+`cycle/property_tests/issue322_property_tests.rs`. Run
 `cargo nextest run --test kani_mutation_evidence_tests`; regenerate only a
 patch that no longer applies, and add the new one. Run the focused tests, then
 `make kani-ir`, then the four standard gates.
@@ -731,7 +741,7 @@ regress; otherwise keep the three calls and say why in a comment.
 
 ### Stage D — EP-M3 documentation, EP-M4 close
 
-Write ADR-041 with *Status* (`Accepted`), *Date*, *Context and Problem
+Write ADR-0060 with *Status* (`Accepted`), *Date*, *Context and Problem
 Statement*, *Decision Drivers*, *Considered Options*, *Decision Outcome*, and
 *Consequences*. The options are: keep the exclusion and document it; include
 order-only dependencies (chosen); include them but only warn; a tiered rollout
@@ -762,16 +772,16 @@ build graph*.
 
 Update `docs/formal-verification-methods-in-netsuke.md` *Cycle-participation
 contract*, `docs/netsuke-design.md` §5.3 step 4 (also correcting "Keys are
-cloned"), the two developers' guide passages, `docs/contents.md` (ADR-041 under
-*Decision records*, newest first), `CHANGELOG.md` under *Unreleased* →
+cloned"), the two developers' guide passages, `docs/contents.md` (ADR-0060
+under *Decision records*, newest first), `CHANGELOG.md` under *Unreleased* →
 *Changed* with a **Breaking** entry that also notes the `missing_dependencies`
 content change, and `docs/v0-1-0-migration-guide.md` *At-a-glance changes* plus
 a short section *Remove order-only dependency cycles* (the release is still
 0.1.0, so the v0.1.1 guide's "every v0.1.0 manifest stays compatible" promise
 is untouched). Run `make fmt`, then the Markdown gates.
 
-Tick roadmap 4.4.2 and its sub-items with a completion note naming ADR-041, set
-this plan to `COMPLETE`, and run every gate.
+Tick roadmap 4.4.2 and its sub-items with a completion note naming ADR-0060,
+set this plan to `COMPLETE`, and run every gate.
 
 ## Behavioural specification
 
@@ -891,6 +901,8 @@ make test 2>&1 | tee /tmp/test-netsuke-4-4-2-document-cycle-detection-scope.out
 make doc-coverage 2>&1 | tee /tmp/doc-coverage-netsuke-4-4-2-document-cycle-detection-scope.out
 make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-4-4-2-document-cycle-detection-scope.out
 make nixie 2>&1 | tee /tmp/nixie-netsuke-4-4-2-document-cycle-detection-scope.out
+make test-documentation-contracts 2>&1 | tee /tmp/test-documentation-contracts-netsuke-4-4-2-document-cycle-detection-scope.out
+make test-workflow-contracts 2>&1 | tee /tmp/test-workflow-contracts-netsuke-4-4-2-document-cycle-detection-scope.out
 make kani-ir 2>&1 | tee /tmp/kani-ir-netsuke-4-4-2-document-cycle-detection-scope.out
 ```
 
@@ -937,7 +949,8 @@ Quality criteria:
   mutation patch, applied by hand, makes its harness fail (recorded once).
 - Lint and types: `make check-fmt`, `make typecheck`, `make lint`, and
   `make doc-coverage` pass.
-- Documentation: `make markdownlint` and `make nixie` pass.
+- Documentation: `make markdownlint`, `make nixie`,
+  `make test-documentation-contracts`, and `make test-workflow-contracts` pass.
 
 ## Idempotence and recovery
 
@@ -950,6 +963,15 @@ except `insta` pending snapshots, which are reviewed and either accepted or
 deleted.
 
 ## Artefacts and notes
+
+Rebase, 2026-10-24: the approved old head
+`a3e19222a071b76cbf9c1bcb9a1f538ba5e62006` was replayed from
+`ebcedaef683efeb795d0ab65f94ad11dc5b92eb2` onto
+`8a961000859c02862454338fda6c4dd65bda2aa1`, producing
+`c6f61535a9d7e20eab89764e9ebf4219707dba3e`. `git range-diff` paired the three
+branch commits one-to-one; the rebase had no conflicts and `git diff --check`
+was clean. `make fmt`, `make markdownlint`, and `make nixie` pass for the plan
+synchronization edit.
 
 Ninja 1.11.1 probes, 2026-09-27, scratch `/tmp/ninja-cycle-wfFe`:
 
@@ -982,10 +1004,10 @@ the reason the old rationale fails: an order-only dependency still has to be
 
 No public interface changes. New crate-private test and harness support modules:
 
-- `src/ir/cycle_participation_tests.rs` (`#[cfg(test)]`).
-- `src/ir/cycle_participation_property_tests.rs` (`#[cfg(test)]`).
-- `src/ir/cycle_verification_support.rs` (`#[cfg(kani)]`, harness-free,
-  declared from `cycle_verification.rs`).
+- `src/ir/cycle/participation_tests.rs` (`#[cfg(test)]`).
+- `src/ir/cycle/property_tests/participation_tests.rs` (`#[cfg(test)]`).
+- `src/ir/cycle/verification_support.rs` (`#[cfg(kani)]`, harness-free,
+  declared from `cycle/verification.rs`).
 - `tests/cycle_participation_e2e_tests.rs`. Cargo auto-discovers it;
   `tests/integration_test_wiring_tests.rs` checks that discovery.
 - `TestWorld::generation_cycle: Slot<Vec<String>>` in
@@ -1014,6 +1036,12 @@ already treat order-only dependencies as graph arcs.
   world error storage, Ninja root-only scheduling, and canary `Netsukefile`s (no
   `order_only_deps` in any of the three).
 - [x] (2026-10-24) Plan approved by explicit user instruction; D1 accepted.
+- [x] (2026-10-24) Rebased the approved branch onto the PR target `main`
+  (`8a961000859c02862454338fda6c4dd65bda2aa1`) without conflicts; all three
+  commits retained their purpose in `git range-diff`.
+- [x] (2026-10-24) Reconciled active plan paths and ADR references with the
+  rebased module and document layout; refreshed branch-wide ADR allocation
+  evidence.
 - [ ] EP-M1.
 - [ ] EP-M2.
 - [ ] EP-M3.
@@ -1063,13 +1091,13 @@ already treat order-only dependencies as graph arcs.
   no root. Evidence: the fourth Ninja probe in `Artefacts and notes`
   (`[1/1] touch c`, exit 0). Impact: revision 1's claim that an order-only
   cycle "could never build" was too strong; Risk 1, the migration-guide text,
-  and ADR-041 now say the change rejects such manifests even when the cycle was
-  never requested.
+  and ADR-0060 now say the change rejects such manifests even when the cycle
+  was never requested.
 - Observation (design review): a second Kani file named
   `cycle_participation_verification.rs` would map to module
   `ir::cycle_participation::verification` under
   `tests/kani_mutation_evidence_tests.rs::module_path_for_source`, orphaning
-  the planned patch names. Impact: harnesses stay in `cycle_verification.rs`,
+  the planned patch names. Impact: harnesses stay in `cycle/verification.rs`,
   and helpers move out to make room (D9).
 - Observation (design review): the BDD world keeps only the error's display
   text, and anyhow's non-alternate display omits the `CircularDependency`
@@ -1081,6 +1109,18 @@ already treat order-only dependencies as graph arcs.
 - Observation (design review): revision 1's 20-file tolerance was exceeded by
   its own inventory (about 30 files). Impact: tolerances now separate
   production code (3 files, 40 lines) from the overall change (35 files).
+- Observation (rebase): main moved cycle detection into `src/ir/cycle/` and
+  split property tests into `cycle/property_tests/`. Impact: active plan paths
+  now refer to the rebased locations; Kani harnesses stay in
+  `cycle/verification.rs`, while helper extraction targets
+  `cycle/verification_support.rs` rather than production `cycle/support.rs`.
+- Observation (rebase): main already includes the `rstest-bdd` 0.6.0
+  migration. Impact: the earlier PR-805 migration risk is resolved; Stage A
+  will verify the merged API and use it directly.
+- Observation (rebase): ADR-0041 is occupied on main, ADR-0057 through ADR-0059
+  are reserved on live branches, and the branch sweep found ADR-0060 available.
+  Impact: references use ADR-0060, with a fresh sweep required immediately
+  before authoring it.
 
 ## Decision log
 
@@ -1091,7 +1131,7 @@ already treat order-only dependencies as graph arcs.
   Ninja's untranslated message and lets `netsuke generate` emit a file Ninja
   refuses. This reverses the stated rationale in `FV-CYCLE`, the users' guide,
   the design document, and the developers' guide; that deviation is surfaced
-  for approval with this plan and recorded in ADR-041. The panel's strongest
+  for approval with this plan and recorded in ADR-0060. The panel's strongest
   alternative, a tiered rollout (warn for one release, then reject), was
   weighed and rejected: it keeps `generate` emitting Ninja that Ninja refuses,
   no known manifest (examples or the three release-admission canaries) is
@@ -1105,7 +1145,7 @@ already treat order-only dependencies as graph arcs.
   outputs" semantics and the existing output index. Date/Author: 2026-09-27,
   planning agent.
 - D3. Decision: `dependency_order` adds no arcs; serial gates stay out of the
-  IR. Rationale: ADR-011 keeps gates backend-only, and a later serial
+  IR. Rationale: ADR-0011 keeps gates backend-only, and a later serial
   dependency that another path reaches still starts through that path (H1
   evidence). No user path can name a gate, because `.netsuke/serial` and
   `.netsuke/dyndep` are reserved and rejected by
@@ -1137,13 +1177,13 @@ already treat order-only dependencies as graph arcs.
   most likely to confuse ("but it is only order-only"), so EP-M4 proposes an
   additive hint as a follow-up in the PR description. Date/Author: 2026-09-27,
   planning agent.
-- D8. Decision: allocate ADR-041. Rationale: 038 is the highest on `main`;
-  039 and 040 are taken on open branches; 030 and 031 were vacated by a
-  renumbering and are avoided to prevent confusion. Date/Author: 2026-09-27,
-  planning agent.
-- D9. Decision: add the two new Kani harnesses to `src/ir/cycle_verification.rs`
+- D8. Decision: allocate ADR-0060. Rationale: ADR-0041 is occupied on `main`;
+  ADR-0057 through ADR-0059 are reserved on live branches, and a sweep of 74
+  remote branch tips found 0060 available. Re-sweep before authoring.
+  Date/Author: 2026-10-24, implementation.
+- D9. Decision: add the two new Kani harnesses to `src/ir/cycle/verification.rs`
   and move its canonicalization-only helpers into a harness-free
-  `src/ir/cycle_verification_support.rs`. Rationale: keeps harness paths under
+  `src/ir/cycle/verification_support.rs`. Rationale: keeps harness paths under
   `ir::cycle::verification`, matching the mutation-evidence contract, and keeps
   the file under 400 lines without extending the contract test. Date/Author:
   2026-09-27, planning agent.
