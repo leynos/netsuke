@@ -24,15 +24,13 @@ use std::{
 /// across messages because each direct-rustc harness owns its search-path
 /// ordering policy.
 pub fn dependency_dirs_in_message(line: &str) -> Vec<PathBuf> {
-    compiler_artifact_paths(line)
-        .map(|(_target, paths)| {
-            paths
-                .into_iter()
-                .filter(|path| is_dependency_artefact(path))
-                .filter_map(|path| path.parent().map(Path::to_path_buf))
-                .collect()
-        })
-        .unwrap_or_default()
+    compiler_artifact_paths(line).map_or_else(Default::default, |(_target, paths)| {
+        paths
+            .into_iter()
+            .filter(|path| is_dependency_artefact(path))
+            .filter_map(|path| path.parent().map(Path::to_path_buf))
+            .collect()
+    })
 }
 
 /// Return the preferred metadata path for `target_name` from one Cargo message.

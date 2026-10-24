@@ -40,8 +40,7 @@ fn run_netsuke(
     let ninja_env_owned = ninja_env.map(|p| p.to_string_lossy().into_owned());
     let extra_env: Vec<(&str, &str)> = ninja_env_owned
         .as_ref()
-        .map(|s| vec![("NETSUKE_NINJA", s.as_str())])
-        .unwrap_or_default();
+        .map_or_else(Default::default, |s| vec![("NETSUKE_NINJA", s.as_str())]);
     let run = run_netsuke_in_with_env(current_dir, args, &extra_env)?;
     Ok(CommandOutput {
         stdout: run.stdout,

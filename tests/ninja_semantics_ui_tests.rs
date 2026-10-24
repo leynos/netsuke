@@ -24,12 +24,7 @@ use std::{io, process::Output};
 #[fixture]
 #[once]
 fn test_support_build() -> test_support_rlib::TestSupportRlib {
-    #[expect(
-        clippy::expect_used,
-        reason = "a once fixture cannot return Result; a build failure must abort the suite here"
-    )]
-    let rlib = test_support_rlib::TestSupportRlib::build().expect("test_support should build");
-    rlib
+    test_support_rlib::TestSupportRlib::build().expect("test_support should build")
 }
 
 /// Verify each generated-Ninja text domain rejects the other's wrapper.

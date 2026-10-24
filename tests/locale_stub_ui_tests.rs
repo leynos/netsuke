@@ -36,12 +36,7 @@ use test_support::fs as test_fs;
 #[fixture]
 #[once]
 fn test_support_build() -> test_support_rlib::TestSupportRlib {
-    #[expect(
-        clippy::expect_used,
-        reason = "a once fixture cannot return Result; a build failure must abort the suite here"
-    )]
-    let rlib = test_support_rlib::TestSupportRlib::build().expect("test_support should build");
-    rlib
+    test_support_rlib::TestSupportRlib::build().expect("test_support should build")
 }
 
 #[rstest]

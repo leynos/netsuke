@@ -176,7 +176,7 @@ jobs:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
           # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
-          toolchain: nightly-2026-08-23
+          toolchain: nightly-2026-10-22
           # Preserve warnings-as-errors through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings
@@ -214,6 +214,10 @@ jobs:
           all-targets: 'true'
           doctests: 'true'
           with-ratchet: 'true'
+          # A new path starts a new baseline: the cache entry's version hashes
+          # this path, so the restore misses the figure measured on the previous
+          # toolchain and the committed file sets the baseline.
+          baseline-rust-file: .coverage-baseline-v2.rust
           # `publish-artefact` is deliberately left unset, so the action keeps
           # its default and archives the report this lane uploads to CodeScene.
           # Setting it here, as the pull-request lane does, would leave

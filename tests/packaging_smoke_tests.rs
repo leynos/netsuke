@@ -336,7 +336,7 @@ fn assert_forbidden_roots_absent(packaged_paths: &BTreeSet<String>) {
         assert!(
             offender.is_none(),
             "packaged manifest should not contain `{forbidden_root}`, found `{}`",
-            offender.map(String::as_str).unwrap_or_default()
+            offender.map_or_else(Default::default, String::as_str)
         );
     }
 

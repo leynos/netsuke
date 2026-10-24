@@ -192,10 +192,6 @@ fn contracted_expressions() -> &'static [(&'static str, String)] {
         RUSTFLAGS_VARIABLES
             .iter()
             .map(|variable| {
-                #[expect(
-                    clippy::expect_used,
-                    reason = "a OnceLock initializer cannot return Result; a broken Makefile must abort the suite"
-                )]
                 let expanded = shell_expression(variable.name)
                     .expect("every contracted variable should expand in Make");
                 (variable.name, expanded)

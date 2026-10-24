@@ -96,10 +96,6 @@ fn assert_glob_error_contains(
 fn temp_dir() -> tempfile::TempDir {
     // Keep matched paths shell-inert on Windows, whose system temp parent can
     // contain short-name characters outside the Jinja adapter's allowlist.
-    #[expect(
-        clippy::expect_used,
-        reason = "fixture should fail fast when temp directory creation fails"
-    )]
     {
         Builder::new()
             .prefix("netsuke-glob-")

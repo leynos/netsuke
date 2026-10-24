@@ -20,14 +20,13 @@ fn the_configuration_repeats_every_shared_flag_in_both_rustflags_sources() -> Re
     let read = |value: Option<&toml::Value>| -> Vec<String> {
         value
             .and_then(toml::Value::as_array)
-            .map(|array| {
+            .map_or_else(Default::default, |array| {
                 array
                     .iter()
                     .filter_map(toml::Value::as_str)
                     .map(str::to_owned)
                     .collect()
             })
-            .unwrap_or_default()
     };
     let build = read(config.get("build").and_then(|table| table.get("rustflags")));
     let linux = read(

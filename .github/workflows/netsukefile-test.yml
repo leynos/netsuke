@@ -42,7 +42,7 @@ jobs:
     env:
       # Match rust-toolchain.toml: the tree needs the nightly-default Polonius
       # borrow checker (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
       # `ubicloud-standard-2-ubuntu-2204` supplies two vCPUs; BUILD_JOBS is
       # derived from that one number.
       LINUX_LANE_VCPUS: '2'

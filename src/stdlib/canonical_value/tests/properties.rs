@@ -267,20 +267,20 @@ fn material_class(value: &Value) -> &'static str {
 fn rebuild(value: &Value) -> Value {
     match value.kind() {
         ValueKind::Seq => {
-            let items: Vec<Value> = value
-                .try_iter()
-                .map(|iter| iter.map(|item| rebuild(&item)).collect())
-                .unwrap_or_default();
+            let items: Vec<Value> = value.try_iter().map_or_else(
+                |_| Vec::new(),
+                |iter| iter.map(|item| rebuild(&item)).collect(),
+            );
             Value::from(items)
         }
         ValueKind::Map => {
-            let names: Vec<String> = value
-                .try_iter()
-                .map(|iter| {
+            let names: Vec<String> = value.try_iter().map_or_else(
+                |_| Vec::new(),
+                |iter| {
                     iter.filter_map(|key| key.as_str().map(str::to_owned))
                         .collect()
-                })
-                .unwrap_or_default();
+                },
+            );
             map_of(
                 names
                     .into_iter()

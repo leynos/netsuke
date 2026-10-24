@@ -62,8 +62,8 @@ cargo binstall netsuke-build
 改为从注册表构建时是在仓库检出之外运行的，因此不会自动应用锁定的工具链；需要显式选择该工具链：
 
 ```sh
-rustup toolchain install nightly-2026-08-23
-cargo +nightly-2026-08-23 install netsuke-build
+rustup toolchain install nightly-2026-10-22
+cargo +nightly-2026-10-22 install netsuke-build
 ```
 
 预构建的安装程序可从

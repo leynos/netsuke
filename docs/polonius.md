@@ -140,7 +140,7 @@ has to use the pinned toolchain; nothing needs to propagate a build setting:
 - **Registry installs**: the crates.io package excludes `rust-toolchain.toml`,
   and registry builds run outside the checkout, so
   `cargo install netsuke-build` must select the pinned nightly explicitly
-  (`cargo +nightly-2026-08-23 install netsuke-build`). The README and users'
+  (`cargo +nightly-2026-10-22 install netsuke-build`). The README and users'
   guide document the command and `tests/documentation_installation_tests.rs`
   pins it.
 - **cargo-mutants** (scheduled, informational) runs through the shared

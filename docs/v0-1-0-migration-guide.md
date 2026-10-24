@@ -47,8 +47,8 @@ automatically, so no command-line argument is required. Registry installs run
 outside the checkout and must select the same nightly explicitly:
 
 ```sh
-rustup toolchain install nightly-2026-08-23
-cargo +nightly-2026-08-23 install netsuke-build
+rustup toolchain install nightly-2026-10-22
+cargo +nightly-2026-10-22 install netsuke-build
 ```
 
 ## Install the linker the build standard uses

@@ -32,9 +32,9 @@ fn section_contract_failures_are_specific(
             namespace: Namespace::Test,
         },
     )]);
-    let sections = citation
-        .map(|number| BTreeMap::from([("abs".into(), number.into())]))
-        .unwrap_or_default();
+    let sections = citation.map_or_else(Default::default, |number| {
+        BTreeMap::from([("abs".into(), number.into())])
+    });
     let error =
         check_section_8(&Section::whole(text), &accepted, &sections).expect_err("invalid contract");
     assert!(error.to_string().contains(diagnostic), "{error}");

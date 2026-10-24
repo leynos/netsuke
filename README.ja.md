@@ -66,8 +66,8 @@ cargo binstall netsuke-build
 代わりにレジストリからビルドする場合は、リポジトリのチェックアウト外で実行されるため、固定されたツールチェインは自動的には使用されません。明示的に選択してください:
 
 ```sh
-rustup toolchain install nightly-2026-08-23
-cargo +nightly-2026-08-23 install netsuke-build
+rustup toolchain install nightly-2026-10-22
+cargo +nightly-2026-10-22 install netsuke-build
 ```
 
 ビルド済みのインストーラーは

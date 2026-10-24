@@ -73,8 +73,8 @@ Repository-Checkouts, sodass die festgelegte Toolchain nicht automatisch
 übernommen wird; wählen Sie sie explizit aus:
 
 ```sh
-rustup toolchain install nightly-2026-08-23
-cargo +nightly-2026-08-23 install netsuke-build
+rustup toolchain install nightly-2026-10-22
+cargo +nightly-2026-10-22 install netsuke-build
 ```
 
 Vorgefertigte Installationsprogramme sind über das

@@ -140,6 +140,24 @@ def test_no_caller_opts_out_of_the_guard(workflow_path: Path, job_name: str) -> 
 
 
 @pytest.mark.parametrize(("workflow_path", "job_name"), COVERAGE_JOBS)
+def test_both_lanes_use_the_post_bump_baseline_path(
+    workflow_path: Path, job_name: str
+) -> None:
+    """Both coverage lanes name the baseline file committed for the toolchain bump.
+
+    The baseline lives in the Actions cache, keyed by the baseline file path, so
+    one lane on another path would compare against a baseline the other never
+    wrote.
+    """
+    inputs = _inputs(workflow_path, job_name)
+
+    assert inputs.get("baseline-rust-file") == ".coverage-baseline-v2.rust", (
+        f"{workflow_path.name}:{job_name} must use the baseline path committed "
+        f"for the toolchain bump, got {inputs.get('baseline-rust-file')!r}"
+    )
+
+
+@pytest.mark.parametrize(("workflow_path", "job_name"), COVERAGE_JOBS)
 def test_the_trunk_push_trigger_stays_on_main(
     workflow_path: Path, job_name: str
 ) -> None:
