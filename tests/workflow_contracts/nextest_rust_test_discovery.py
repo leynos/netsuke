@@ -33,12 +33,14 @@ RUST_FUNCTION = re.compile(
     r"fn\s+(?P<name>[a-z0-9_]+)\b[^\{]*)\{"
 )
 CARGO_COMMAND = re.compile(r"Command::new\([^)]*cargo\w*[^)]*\)", re.IGNORECASE)
-# `cargo package --list` prints the package's file list and compiles nothing,
-# so the `package` subcommand counts as build-capable only when `--list` does
-# not follow it. Every other listed subcommand can compile in any form.
+# `cargo package --list` and `cargo package -l` print the package's file list
+# and compile nothing, so package arguments are build-capable only when neither
+# listing option appears before the command's statement ends. Every other
+# listed subcommand can compile in any form.
+PACKAGE_LIST_ARGUMENT = r'"(?:-l|--list)"'
 BUILD_CAPABLE_OPERATION = (
     rf'"(?:{"|".join(BUILD_CAPABLE_SUBCOMMANDS)})"(?<!"package")'
-    r'|"package"(?!\s*,\s*"--list")'
+    rf'|"package"(?![^;]*{PACKAGE_LIST_ARGUMENT})'
 )
 CARGO_OPERATION = re.compile(
     rf"\.(?:arg|args)\(\s*(?:\[\s*)?(?:{BUILD_CAPABLE_OPERATION})"
@@ -49,6 +51,7 @@ CASE_ATTRIBUTE = re.compile(r"#\[case(?:::[a-z0-9_]+)?[\(\[]")
 RETAINED_RUST_LITERALS = {
     *(f'"{operation}"' for operation in BUILD_CAPABLE_SUBCOMMANDS),
     '"cargo"',
+    '"-l"',
     '"--list"',
 }
 # A free function named `build` is reached as a bare `build()`. The `::` and `.`

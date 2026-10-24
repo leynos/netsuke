@@ -159,7 +159,7 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   rest of the workspace.
 - The `cfg(kani)` and Ninja escaping UI tests still invoke `rustc` directly.
   Each compiles one standard-library-only source and resolves no Cargo
-  artefact, so neither waits on Cargo's lock or rebuilds a dependency, and
+  artefact, so neither waits on Cargo's lock nor rebuilds a dependency, and
   neither subject is reachable from a public item that could carry a doctest.
 
 ## Architectural rationale

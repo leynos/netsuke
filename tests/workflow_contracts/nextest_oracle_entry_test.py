@@ -16,7 +16,10 @@ Run via ``make test-workflow-contracts``.
 """
 
 import sys
+import typing as typ
+from contextlib import ExitStack
 from pathlib import Path
+from unittest import mock
 
 import pytest
 
@@ -28,45 +31,65 @@ sys.path.insert(0, str(REPO_ROOT / ".github" / "scripts"))
 
 import verify_nextest_anchored_filters as oracle  # ruff: ignore[module-import-not-at-top-of-file] - needs the sys.path insertion above.
 
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
+
 #: An anchored filter naming a test that is not parameterized.
 UNPARAMETERIZED_SELECTOR = "test(/^coverage_map_status_is_reported($|::)/)"
 
 
 @pytest.fixture
-def replays(monkeypatch: pytest.MonkeyPatch) -> list[object]:
+def replays() -> cabc.Iterator[list[object]]:
     """Replace the Nextest-facing helpers and record each replay request.
 
-    Returns
-    -------
+    Yields
+    ------
     list[object]
         One entry per call to the whole-configuration replay, so a test can
         assert that the replay ran rather than being skipped.
     """
     calls: list[object] = []
-    monkeypatch.setattr(oracle, "instrumented_environment", dict)
-    monkeypatch.setattr(oracle, "_check_every_filter_selects_something", calls.append)
-    monkeypatch.setattr(
-        oracle,
-        "anchored_selectors",
-        lambda: [(UNPARAMETERIZED_SELECTOR, "coverage_map_status_is_reported")],
-    )
-    monkeypatch.setattr(
-        oracle,
-        "configured_names",
-        lambda: ({"coverage_map_status_is_reported"}, set()),
-    )
-    return calls
+    with ExitStack() as patches:
+        patches.enter_context(
+            mock.patch.object(oracle, "instrumented_environment", return_value={})
+        )
+        patches.enter_context(
+            mock.patch.object(
+                oracle,
+                "_check_every_filter_selects_something",
+                side_effect=calls.append,
+            )
+        )
+        patches.enter_context(
+            mock.patch.object(
+                oracle,
+                "anchored_selectors",
+                return_value=[
+                    (UNPARAMETERIZED_SELECTOR, "coverage_map_status_is_reported")
+                ],
+            )
+        )
+        patches.enter_context(
+            mock.patch.object(
+                oracle,
+                "configured_names",
+                return_value=({"coverage_map_status_is_reported"}, set()),
+            )
+        )
+        yield calls
 
 
 def test_no_parameterized_filter_still_replays_every_filter(
-    monkeypatch: pytest.MonkeyPatch, replays: list[object]
+    replays: list[object],
 ) -> None:
     """Pass when no filter names a parameterized test, after the replay runs."""
-    monkeypatch.setattr(oracle, "parameterized_tests", lambda: {"some_case": 2})
-    assert oracle.main([]) == 0, (
-        "an empty intersection of two non-empty corpora is a legitimate "
-        "configuration, not a fault"
-    )
+    with mock.patch.object(
+        oracle, "parameterized_tests", return_value={"some_case": 2}
+    ):
+        assert oracle.main([]) == 0, (
+            "an empty intersection of two non-empty corpora is a legitimate "
+            "configuration, not a fault"
+        )
     assert len(replays) == 1, (
         "the whole-configuration replay must still run when the per-instance "
         "check has no subject"
@@ -74,11 +97,28 @@ def test_no_parameterized_filter_still_replays_every_filter(
 
 
 def test_an_empty_parameterized_corpus_is_refused(
-    monkeypatch: pytest.MonkeyPatch, replays: list[object]
+    replays: list[object],
 ) -> None:
     """Fail when discovery read no parameterized test at all."""
-    monkeypatch.setattr(oracle, "parameterized_tests", dict)
-    with pytest.raises(SystemExit) as raised:
+    with (
+        mock.patch.object(oracle, "parameterized_tests", return_value={}),
+        pytest.raises(SystemExit) as raised,
+    ):
         oracle.main([])
     assert raised.value.code == 1, "an empty read must fail the lane"
+    assert not replays, "a failed read must stop before replaying any filter"
+
+
+def test_an_empty_anchored_corpus_is_refused(
+    replays: list[object],
+) -> None:
+    """Fail when discovery finds parameterized tests but no anchored filters."""
+    with (
+        mock.patch.object(oracle, "anchored_selectors", return_value=[]),
+        mock.patch.object(oracle, "configured_names", return_value=(set(), set())),
+        mock.patch.object(oracle, "parameterized_tests", return_value={"some_case": 2}),
+        pytest.raises(SystemExit) as raised,
+    ):
+        oracle.main([])
+    assert raised.value.code == 1, "an empty filter read must fail the lane"
     assert not replays, "a failed read must stop before replaying any filter"

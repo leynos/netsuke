@@ -78,11 +78,21 @@ fn real_fixture_compiles() {
 
 
 def test_package_list_is_not_a_build_capable_command() -> None:
-    """`cargo package --list` prints a file list and compiles nothing."""
+    """Package listing with either flag does not compile the package."""
     source = """
 #[test]
-fn package_listing() {
-    Command::new(cargo()).args(["package", "--list", "-p", "netsuke-build"]);
+fn package_short_listing() {
+    Command::new(cargo()).args(["package", "-l"]);
+}
+
+#[test]
+fn package_long_listing_after_options() {
+    Command::new(cargo()).args(["package", "-p", "netsuke-build", "--list"]);
+}
+
+#[test]
+fn package_chained_listing() {
+    Command::new(cargo()).arg("package").arg("-l");
 }
 
 #[test]

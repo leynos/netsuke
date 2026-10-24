@@ -192,7 +192,13 @@ fn contracted_expressions() -> &'static [(&'static str, String)] {
             .iter()
             .map(|variable| {
                 let expanded = shell_expression(variable.name)
-                    .expect("every contracted variable should expand in Make");
+                    .map_err(|error| {
+                        format!(
+                            "contracted variable `{}` should expand in Make: {error}",
+                            variable.name
+                        )
+                    })
+                    .expect("every contracted Make variable should expand");
                 (variable.name, expanded)
             })
             .collect()

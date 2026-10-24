@@ -7088,7 +7088,7 @@ reasonable in isolation and failed only on a busy host:
   every compiler-admission wait out of its own allowance. One such test passed
   in 8 s, timed out at 300 s, and needed 709 s inside a widened allowance, all
   on one host with no change to its code.
-- **Do not hand Cargo's artefacts to a `rustc` you invoke yourself.** Reading
+- **Do not hand Cargo's artefacts to a directly invoked `rustc`.** Reading
   metadata paths from `--message-format=json` and passing them through
   `--extern` and `-L dependency=` rebuilds Cargo's job by hand, then needs its
   own parser, response-file writer, and split-build regression tests to stay
