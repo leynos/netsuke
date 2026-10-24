@@ -385,11 +385,32 @@ seeded duplicate.
   fixture passed in 159 seconds in the preceding full run, which passed all
   4,877 tests and doctests; that run differed only by three redundant borrows
   removed in this Clippy correction. The timed-out gate was not retried.
-- [ ] Commit and publish the rebased candidate, then require exact-head hosted
-  CI to clear the local fixture timeout. Refresh CodeRabbit assessments, review
-  state, and all checks for the published head before merging PR #943.
+- [x] Commit and publish the rebased candidate, then require exact-head hosted
+  CI to clear the local fixture timeout. The currently published candidate and
+  hosted checks are recorded below.
+- [ ] Refresh CodeRabbit assessments and review state for the final published
+  head before merging PR #943.
 - [ ] Resolve current-head review concerns, follow checks to equilibrium, and
   merge PR #943 with the verified head commit.
+
+- [x] (2026-10-24) Published and validated head
+  `73f83cbdea021143b1d01dee8b1f37012135caad` over base
+  `f8df5d808f1bee4eb8554df0160119864ade6f39`. GitHub Actions run `40101269764`
+  passed its applicable checks, including `build-test`; local `cs delta`
+  between these commits reported no issues. Focused CodeScene review and check
+  both scored the manifest telemetry source, its tests, and
+  `callsite_interest_reproduction/threads.rs` at 10.0.
+- [x] (2026-10-24) Ran the final sequential Make gates on that exact head:
+  `make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage`,
+  `make markdownlint`, and `make nixie` passed. Doc coverage was 6,180/6,294
+  items (98.19%), and the 65-test coverage harness passed. `make test` reported
+  4,877 tests: 4,876 passed and one timed out; 7 were skipped.
+  `packaged_manifest_retains_build_script_sources` timed out at its configured
+  900-second limit while nested `cargo publish --dry-run` was compiling
+  `netsuke` through the healthy, saturated shared compiler queue. No source
+  diagnostic appeared; nextest stopped before doctests. The exact-head hosted
+  `build-test` passed. Gate logs use the `published-final-1.out` suffix under
+  `/tmp`.
 
 ## Surprises & discoveries
 
