@@ -239,8 +239,7 @@ pub(super) fn rule_name_for(slot: usize, drawn: Option<usize>, rules: &[RulePlan
     rules
         .get(index)
         .or_else(|| rules.first())
-        .map(|rule| rule.name.clone())
-        .unwrap_or_default()
+        .map_or_else(String::new, |rule| rule.name.clone())
 }
 
 /// The lower-indexed targets one slot depends on.

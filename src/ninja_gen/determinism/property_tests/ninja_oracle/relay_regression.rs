@@ -45,7 +45,7 @@
 //! commands.
 
 use super::workspace::BundleWorkspace;
-use super::{emitted, ninja_is_available, paths_of, targets_of};
+use super::{emitted, paths_of, prepare_ninja_capability, targets_of};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use camino::Utf8PathBuf;
@@ -61,13 +61,13 @@ use proptest::test_runner::TestCaseError;
 /// implements `Debug`, so a plain `#[test]` accepts it.
 #[test]
 fn real_ninja_accepts_the_bundle_that_reaches_the_upstream_crash() -> Result<(), TestCaseError> {
-    if !ninja_is_available() {
+    let Some(ninja) = prepare_ninja_capability()? else {
         return Ok(());
-    }
+    };
     let graph = crash_shaped_graph();
     let bundle = emitted(&graph)?;
     let workspace = BundleWorkspace::write(&bundle, &paths_of(&graph), &targets_of(&graph))?;
-    workspace.require_accepts()?;
+    workspace.require_accepts(&ninja)?;
     Ok(())
 }
 

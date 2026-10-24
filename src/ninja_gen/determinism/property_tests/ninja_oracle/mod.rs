@@ -52,6 +52,7 @@
 //! [`GraphSpec`]: crate::ninja_gen::determinism::strategy::graph::GraphSpec
 //! [`GraphBounds`]: crate::ninja_gen::determinism::strategy::graph::GraphBounds
 
+mod capability;
 mod relay_regression;
 mod workspace;
 
@@ -63,11 +64,10 @@ use crate::ninja_gen::determinism::strategy::graph::{
 };
 use crate::ninja_gen::generate_bundle;
 use camino::Utf8PathBuf;
+use capability::{ninja_property_config, prepare_ninja_capability};
 use proptest::prelude::*;
-use proptest::test_runner::TestCaseError;
+use proptest::test_runner::{TestCaseError, TestRunner};
 use std::cell::Cell;
-use std::sync::OnceLock;
-use test_support::ninja::{NinjaWorkspaceError, ninja_integration_workspace};
 use workspace::BundleWorkspace;
 
 /// The obligation's stated domain, with a pool ceiling it can actually reach.
@@ -94,97 +94,72 @@ fn arb_ninja_spec() -> impl Strategy<Value = GraphSpec> {
     arb_graph_spec_within(NINJA_BOUNDS)
 }
 
-/// Whether a usable `ninja` binary is available for this test binary.
+/// Real Ninja accepts both insertion orders of the emitted bundle.
 ///
-/// Probed once and cached: the check spawns a subprocess, and asking it per
-/// case would spend the case budget on process creation. The result is a plain
-/// `bool` passed between threads by `OnceLock`, never an environment mutation.
-fn ninja_is_available() -> bool {
-    static AVAILABLE: OnceLock<bool> = OnceLock::new();
-    *AVAILABLE.get_or_init(|| {
-        match ninja_integration_workspace() {
-            Ok(workspace) => {
-                // The probe's directory is not reused: every case makes its
-                // own, so that no case can see another's sidecars.
-                drop(workspace);
-                true
+/// Both orders are checked rather than only the first because the obligation
+/// is stated over a *permuted emission*: a bundle that happened to parse under
+/// one order while the other emitted something Ninja rejects would fail the
+/// claim, and checking one order would not see it.
+#[test]
+fn real_ninja_accepts_both_insertion_orders() -> Result<(), TestCaseError> {
+    let Some(ninja) = prepare_ninja_capability()? else {
+        return Ok(());
+    };
+    let mut runner = TestRunner::new(ninja_property_config(concat!(
+        module_path!(),
+        "::real_ninja_accepts_both_insertion_orders"
+    )));
+    runner
+        .run(&arb_ninja_spec(), |spec| {
+            for order in [spec.orders().0, spec.orders().1] {
+                let graph = materialize(&spec, order)?;
+                let bundle = emitted(&graph)?;
+                let workspace =
+                    BundleWorkspace::write(&bundle, &paths_of(&graph), &targets_of(&graph))?;
+                workspace.require_accepts(&ninja)?;
             }
-            Err(
-                NinjaWorkspaceError::ProbeSpawn(_)
-                | NinjaWorkspaceError::ProbeFailed(_)
-                | NinjaWorkspaceError::ProbeTimeout(_),
-            ) => {
-                // `ninja_integration_workspace` has already panicked when the
-                // run requires the binary, so reaching here means the skip is
-                // legitimate and `NETSUKE_REQUIRE_NINJA` is not set.
-                tracing::warn!(
-                    "skipping OBL-NINJA: no usable `ninja` binary; set \
-                     NETSUKE_REQUIRE_NINJA=1 to make this a failure"
-                );
-                false
-            }
-            Err(error) => panic!("prepare the Ninja oracle workspace: {error}"),
-        }
-    })
+            Ok(())
+        })
+        .map_err(|error| TestCaseError::fail(format!("real Ninja acceptance property: {error}")))?;
+    Ok(())
 }
 
-proptest! {
-    // A case costs two `ninja` invocations per insertion order, measured at
-    // about 1.6 ms and 1.9 ms each, so sixty-four cases is a few seconds.
-    #![proptest_config(ProptestConfig {
-        cases: 64,
-        max_shrink_time: super::support::HEAVY_SHRINK_TIME_MS,
-        ..ProptestConfig::default()
-    })]
-
-    /// Real Ninja accepts both insertion orders of the emitted bundle.
-    ///
-    /// Both orders are checked rather than only the first because the
-    /// obligation is stated over a *permuted emission*: a bundle that happened
-    /// to parse under one order while the other emitted something Ninja
-    /// rejects would fail the claim, and checking one order would not see it.
-    #[test]
-    fn real_ninja_accepts_both_insertion_orders(spec in arb_ninja_spec()) {
-        if !ninja_is_available() {
-            return Ok(());
-        }
-        for order in [spec.orders().0, spec.orders().1] {
-            let graph = materialize(&spec, order)?;
-            let bundle = emitted(&graph)?;
-            let workspace =
-                BundleWorkspace::write(&bundle, &paths_of(&graph), &targets_of(&graph))?;
-            workspace.require_accepts()?;
-        }
-    }
-
-    /// The two insertion orders yield the same command list under real Ninja.
-    ///
-    /// This is the determinism claim stated through an independent oracle
-    /// rather than through byte comparison. The targets are named explicitly
-    /// and sorted, so the comparison is between two runs over the same target
-    /// set and cannot differ merely because one invocation was asked for a
-    /// different default set.
-    #[test]
-    fn real_ninja_yields_the_same_commands_under_both_orders(spec in arb_ninja_spec()) {
-        if !ninja_is_available() {
-            return Ok(());
-        }
-        let mut lists = Vec::new();
-        for order in [spec.orders().0, spec.orders().1] {
-            let graph = materialize(&spec, order)?;
-            let bundle = emitted(&graph)?;
-            let workspace =
-                BundleWorkspace::write(&bundle, &paths_of(&graph), &targets_of(&graph))?;
-            lists.push(workspace.command_list()?);
-        }
-        let (first, second) = (lists.first(), lists.last());
-        prop_assert_eq!(
-            first,
-            second,
-            "the command list real Ninja derives must not depend on the order \
+/// The two insertion orders yield the same command list under real Ninja.
+///
+/// This is the determinism claim stated through an independent oracle rather
+/// than through byte comparison. The targets are named explicitly and sorted,
+/// so the comparison is between two runs over the same target set and cannot
+/// differ merely because one invocation was asked for a different default set.
+#[test]
+fn real_ninja_yields_the_same_commands_under_both_orders() -> Result<(), TestCaseError> {
+    let Some(ninja) = prepare_ninja_capability()? else {
+        return Ok(());
+    };
+    let mut runner = TestRunner::new(ninja_property_config(concat!(
+        module_path!(),
+        "::real_ninja_yields_the_same_commands_under_both_orders"
+    )));
+    runner
+        .run(&arb_ninja_spec(), |spec| {
+            let mut lists = Vec::new();
+            for order in [spec.orders().0, spec.orders().1] {
+                let graph = materialize(&spec, order)?;
+                let bundle = emitted(&graph)?;
+                let workspace =
+                    BundleWorkspace::write(&bundle, &paths_of(&graph), &targets_of(&graph))?;
+                lists.push(workspace.command_list(&ninja)?);
+            }
+            let (first, second) = (lists.first(), lists.last());
+            prop_assert_eq!(
+                first,
+                second,
+                "the command list real Ninja derives must not depend on the order \
              the graph's edges were inserted in",
-        );
-    }
+            );
+            Ok(())
+        })
+        .map_err(|error| TestCaseError::fail(format!("real Ninja command property: {error}")))?;
+    Ok(())
 }
 
 /// Materialize one specification under `order`.
@@ -293,8 +268,7 @@ fn orders_diverge(spec: &GraphSpec) -> bool {
     let (first, second) = spec.orders();
     let sequences = |order: &[usize]| -> Vec<BuildEdge> {
         spec.materialize(order)
-            .map(|graph| graph.edges().cloned().collect())
-            .unwrap_or_default()
+            .map_or_else(|_| Vec::new(), |graph| graph.edges().cloned().collect())
     };
     edge_lists_differ(&sequences(first), &sequences(second))
 }
@@ -307,10 +281,10 @@ fn orders_diverge(spec: &GraphSpec) -> bool {
 /// the specification rather than from an emitted bundle, so this check is about
 /// the generator and costs no subprocess.
 #[test]
-fn the_domain_reaches_every_class_the_obligation_names() {
-    if !ninja_is_available() {
-        return;
-    }
+fn the_domain_reaches_every_class_the_obligation_names() -> Result<(), TestCaseError> {
+    let Some(_ninja) = prepare_ninja_capability()? else {
+        return Ok(());
+    };
     let tallies: Cell<Reached> = Cell::new(Reached::default());
     super::support::coverage_runner(64)
         .run(&arb_ninja_spec(), |spec| {
@@ -318,12 +292,21 @@ fn the_domain_reaches_every_class_the_obligation_names() {
             tallies.set(tallies.get().extended(spec.classification(), diverse));
             Ok(())
         })
-        .expect("the OBL-NINJA graph strategy should be generatable");
+        .map_err(|error| {
+            TestCaseError::fail(format!(
+                "the OBL-NINJA graph strategy should be generatable: {error}"
+            ))
+        })?;
 
     let observed = tallies.into_inner();
     macro_rules! covered {
         ($field:ident, $why:expr) => {
-            assert!(observed.$field > 0, "{}, reached: {observed:?}", $why,);
+            if observed.$field == 0 {
+                return Err(TestCaseError::fail(format!(
+                    "{}, reached: {observed:?}",
+                    $why
+                )));
+            }
         };
     }
     covered!(
@@ -351,8 +334,10 @@ fn the_domain_reaches_every_class_the_obligation_names() {
         "every case's two insertion orders produced the same edge sequence, so \
          the permutation arm compared one arrangement to itself"
     );
-    assert_eq!(
-        observed.cases, 64,
-        "every sampled case should have been tallied; reached: {observed:?}",
-    );
+    if observed.cases != 64 {
+        return Err(TestCaseError::fail(format!(
+            "every sampled case should have been tallied; reached: {observed:?}"
+        )));
+    }
+    Ok(())
 }

@@ -15,6 +15,7 @@
 //! creating the directory keeps the on-disk shape identical to a real
 //! `netsuke` run's.
 
+use super::capability::NinjaCapability;
 use crate::ninja_gen::GeneratedNinja;
 use camino::{Utf8Component, Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
@@ -97,9 +98,9 @@ impl BundleWorkspace {
     ///
     /// Returns a test failure carrying Ninja's stderr for whichever invocation
     /// rejected the bundle.
-    pub(super) fn require_accepts(&self) -> Result<(), TestCaseError> {
-        self.check("-n", &[])?;
-        self.check("-t", &["commands"])?;
+    pub(super) fn require_accepts(&self, ninja: &NinjaCapability) -> Result<(), TestCaseError> {
+        self.check(ninja, "-n", &[])?;
+        self.check(ninja, "-t", &["commands"])?;
         Ok(())
     }
 
@@ -112,8 +113,11 @@ impl BundleWorkspace {
     ///
     /// Returns a test failure when `ninja` cannot be spawned, exits non-zero, or
     /// prints non-UTF-8 output.
-    pub(super) fn command_list(&self) -> Result<Vec<String>, TestCaseError> {
-        let output = self.check("-t", &["commands"])?;
+    pub(super) fn command_list(
+        &self,
+        ninja: &NinjaCapability,
+    ) -> Result<Vec<String>, TestCaseError> {
+        let output = self.check(ninja, "-t", &["commands"])?;
         let text = String::from_utf8(output)
             .map_err(|error| TestCaseError::fail(format!("ninja -t commands output: {error}")))?;
         Ok(text
@@ -125,8 +129,13 @@ impl BundleWorkspace {
     }
 
     /// Run one invocation and return its standard output.
-    fn check(&self, flag: &str, tool: &[&str]) -> Result<Vec<u8>, TestCaseError> {
-        let output = Command::new("ninja")
+    fn check(
+        &self,
+        ninja: &NinjaCapability,
+        flag: &str,
+        tool: &[&str],
+    ) -> Result<Vec<u8>, TestCaseError> {
+        let output = Command::new(ninja.executable())
             .current_dir(self.directory.path())
             .arg(flag)
             .args(tool)

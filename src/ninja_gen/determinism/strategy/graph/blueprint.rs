@@ -162,8 +162,7 @@ impl Blueprint {
     fn action_id_for(plan: &EdgePlan, actions: &[(String, Action)]) -> String {
         actions
             .get(plan.action_position)
-            .map(|(id, _)| id.clone())
-            .unwrap_or_default()
+            .map_or_else(String::new, |(id, _)| id.clone())
     }
 }
 
