@@ -28,19 +28,35 @@ from ci_test_evidence_cohorts import classify_cohort
 def test_hosted_pr_cohort_uses_author_and_repository_identity(
     author: str | None, base_id: int | None, head_id: int | None, expected: str
 ) -> None:
-    """Separate hosted lanes using the saved PR author and repository IDs."""
-    pull_requests = [] if author is None else [{"user": {"login": author}}]
+    """Separate hosted lanes using matched PR API and repository identities."""
     run = {
         "event": "pull_request",
         "path": ".github/workflows/ci.yml",
         "actor": {"login": "leynos"},
-        "pull_requests": pull_requests,
+        "pull_requests": [
+            {
+                "id": 9001,
+                "number": 17,
+                "base": {"repo": {"id": base_id}},
+                "head": {"repo": {"id": head_id}},
+            }
+        ],
         "repository": {"id": base_id},
         "head_repository": {"id": head_id},
     }
+    pull_request = (
+        None
+        if author is None
+        else {
+            "id": 9001,
+            "number": 17,
+            "base": {"repo": {"id": base_id}},
+            "user": {"login": author},
+        }
+    )
     job = {"name": "build-test", "labels": ["ubuntu-latest"]}
 
-    assert classify_cohort(run, job) == expected, (
+    assert classify_cohort(run, job, pull_request) == expected, (
         "Hosted cohorts must use the PR author and head repository provenance"
     )
 
@@ -50,7 +66,7 @@ def test_repository_names_fallback_when_ids_are_unavailable() -> None:
     run = {
         "event": "pull_request",
         "path": ".github/workflows/ci.yml",
-        "pull_requests": [{"user": {"login": "leynos"}}],
+        "pull_requests": [{"id": 9001, "number": 17}],
         "repository": {"full_name": "leynos/netsuke"},
         "head_repository": {"full_name": "contributor/netsuke"},
     }
@@ -73,6 +89,7 @@ def test_ambiguous_dependabot_identity_is_not_assumed(
     run = {
         "event": "pull_request",
         "path": ".github/workflows/ci.yml",
+        "actor": {"login": "dependabot[bot]"},
         "pull_requests": pull_requests,
         "repository": {"id": 42},
         "head_repository": {"id": 42},
@@ -81,4 +98,59 @@ def test_ambiguous_dependabot_identity_is_not_assumed(
 
     assert classify_cohort(run, job) == "other", (
         "Missing or ambiguous PR metadata must not be labelled as Dependabot"
+    )
+
+
+@pytest.mark.parametrize(
+    ("identity", "expected"),
+    [
+        ("id", 9002),
+        ("number", 18),
+        ("base_repository", 99),
+        ("run_base_repository", 99),
+    ],
+    ids=[
+        "different-pr-id",
+        "different-pr-number",
+        "different-base-repository",
+        "conflicting-run-base",
+    ],
+)
+def test_dependabot_author_requires_matching_saved_pr_identity(
+    identity: str, expected: int
+) -> None:
+    """Ignore PR author metadata unless its run and repository binding matches."""
+    run = {
+        "event": "pull_request",
+        "path": ".github/workflows/ci.yml",
+        "actor": {"login": "dependabot[bot]"},
+        "pull_requests": [
+            {
+                "id": 9001,
+                "number": 17,
+                "base": {"repo": {"id": 42}},
+            }
+        ],
+        "repository": {"id": 42},
+        "head_repository": {"id": 42},
+    }
+    pull_request = {
+        "id": 9001,
+        "number": 17,
+        "base": {"repo": {"id": 42}},
+        "user": {"login": "dependabot[bot]"},
+    }
+    match identity:
+        case "id":
+            pull_request["id"] = expected
+        case "number":
+            pull_request["number"] = expected
+        case "base_repository":
+            pull_request["base"]["repo"]["id"] = expected
+        case "run_base_repository":
+            run["pull_requests"][0]["base"]["repo"]["id"] = expected
+    job = {"name": "build-test", "labels": ["ubuntu-latest"]}
+
+    assert classify_cohort(run, job, pull_request) == "other", (
+        "Unmatched PR metadata must not classify the run by its author's name"
     )

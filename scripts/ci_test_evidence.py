@@ -3,14 +3,7 @@
 # requires-python = ">=3.14"
 # dependencies = ["cyclopts==4.25.3"]
 # ///
-r"""Collect offline CI evidence from GitHub attempt/job JSON and logs.
-
-Offline collector; runner-seconds are a cost proxy.
-
-Usage (log: ``<job_id>.log``; inventory: ``<job_id>.json``):
-    uv run scripts/ci_test_evidence.py --run run.json --jobs jobs.json \
-        --log-dir logs --telemetry-dir telemetry --variant control > out.jsonl
-"""
+r"""Collect offline CI evidence; runner-seconds are a cost proxy."""
 
 import dataclasses as dc
 import datetime as dt
@@ -55,6 +48,7 @@ class EvidenceFiles:
 
     run: Path
     jobs: Path
+    pull_request: Path | None = None
     log_dir: Path | None = None
     telemetry_dir: Path | None = None
 
@@ -235,7 +229,11 @@ def _sum_complete(values: list[float | None]) -> float | None:
 
 
 def collect_attempt(
-    run: dict, response: dict, inputs: CollectorInputs | None = None
+    run: dict,
+    response: dict,
+    inputs: CollectorInputs | None = None,
+    *,
+    pull_request: dict | None = None,
 ) -> list[JobRecord]:
     """Collect each job attempt, refusing mixed attempts or incomplete pages.
 
@@ -246,9 +244,9 @@ def collect_attempt(
     response
         Complete attempt-specific jobs response, including total_count.
     inputs
-        Optional job-ID maps for logs and inventory, plus a fixed experiment
-        variant label. Maps use string job IDs. In-memory inventories are
-        checked against this run, attempt, and job before measurements are used.
+        Optional job-ID maps for evidence and a fixed experiment variant.
+    pull_request
+        Optional saved PR API response, used only after matching run identity.
 
     Incomplete job pages, cross-attempt records, malformed evidence maps, and
     unknown variants are rejected before any record is emitted.
@@ -264,7 +262,7 @@ def collect_attempt(
     validate_attempt_response(run, response)
     validate_evidence_maps(values)
     cost = _attempt_cost(jobs)
-    records = [_job_record(run, job, values) for job in jobs]
+    records = [_job_record(run, job, values, pull_request) for job in jobs]
     for record in records:
         record.update(cost)
     return records
@@ -283,7 +281,9 @@ def _normalized_inputs(inputs: CollectorInputs | None) -> CollectorInputs:
     return values
 
 
-def _job_record(run: dict, job: dict, inputs: CollectorInputs) -> JobRecord:
+def _job_record(
+    run: dict, job: dict, inputs: CollectorInputs, pull_request: dict | None
+) -> JobRecord:
     """Build one record; absent logs give ``log_available=False``."""
     evidence = parse_log(inputs.get("logs", {}).get(str(job["id"]), ""))
     inventory = inputs.get("inventories", {}).get(str(job["id"]))
@@ -306,7 +306,7 @@ def _job_record(run: dict, job: dict, inputs: CollectorInputs) -> JobRecord:
         "variant": inputs.get("variant", "control"),
         "relevant_diff": None,
         "comparison": "observational",
-        "cohort": classify_cohort(run, job),
+        "cohort": classify_cohort(run, job, pull_request),
         "runner_labels": [
             label for label in job.get("labels", []) if is_runner_label(label)
         ],
@@ -332,33 +332,35 @@ def main(
     files: typ.Annotated[EvidenceFiles, Parameter(name="*")],
     variant: ExperimentVariant = ExperimentVariant.CONTROL,
 ) -> None:
-    """Write JSONL from saved API responses and optional evidence files.
+    """Write JSONL from saved API responses.
 
     For example, ``app(["--run", "run.json", "--jobs", "jobs.json"])``
-    writes one JSON object for each saved job.
-
-    Parameters
-    ----------
-    files
-        Saved attempt, jobs, logs and optional inventory artefact paths.
-    variant
-        Fixed experiment label; defaults to control with no CI activation.
+    writes one record for each saved job.
     """
-    run, jobs = _read_saved_attempt(files)
+    run, jobs, pull_request = _read_saved_attempt(files)
     validate_attempt_response(run, jobs)
     inputs: CollectorInputs = {
         "logs": _read_logs(files.log_dir, jobs["jobs"]),
         "inventories": _read_inventories(files.telemetry_dir, run, jobs["jobs"]),
         "variant": variant,
     }
-    _write_records(collect_attempt(run, jobs, inputs))
+    _write_records(collect_attempt(run, jobs, inputs, pull_request=pull_request))
 
 
-def _read_saved_attempt(files: EvidenceFiles) -> tuple[dict, dict]:
-    """Load the run and complete jobs responses from local JSON files."""
+def _read_saved_attempt(
+    files: EvidenceFiles,
+) -> tuple[dict, dict, dict | None]:
+    """Load the run, jobs and optional pull request response from local files."""
     run = json.loads(files.run.read_text(encoding="utf-8"))
     jobs = json.loads(files.jobs.read_text(encoding="utf-8"))
-    return run, jobs
+    pull_request_path = files.pull_request
+    response = (
+        json.loads(pull_request_path.read_text(encoding="utf-8"))
+        if pull_request_path is not None
+        else None
+    )
+    pull_request = response if isinstance(response, dict) else None
+    return run, jobs, pull_request
 
 
 def _read_logs(log_dir: Path | None, jobs: list[dict]) -> dict[str, str]:

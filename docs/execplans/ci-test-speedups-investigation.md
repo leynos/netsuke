@@ -35,6 +35,20 @@ Run 40114633743 passed. CodeScene reported no issues on that checkpoint. This
 hosted success still does not explain the local timeout. The controlled
 baseline, bounded telemetry, and candidate decisions remain outstanding.
 
+The exact-head provenance follow-up found that the workflow-run API does not
+include the associated PR author's login. The collector now accepts a saved PR
+response and joins it only when PR ID, number and base repository ID match the
+single run association; missing or mismatched author data stays `other`. The
+CLI and classifier regression tests cover the native API shape and mismatches.
+On this staged candidate, `make check-fmt`, `make typecheck`, `make lint`, and
+`make test-workflow-contracts` passed; the latter ran 1,465 tests (three
+skipped) plus 27 supplementary script tests. The full Rust suite's latest
+confirmed local result remains the 300-second timeout in
+`cli_configuration_fixture_compiles::case_1_public_api`, after 4,839 tests
+passed and six were skipped; 24 tests and doctests were not reached. A later
+test invocation after rebase produced no terminal result, so it is not counted
+as a pass. Revalidate hosted checks and review on the published exact head.
+
 ## Purpose / big picture
 
 Reduce the elapsed time of Netsuke's existing CI test gate while preserving
@@ -165,12 +179,16 @@ eligible same-repository Linux PR gate remains on
 `ubicloud-standard-4-ubuntu-2404`, with four Cargo workers and four Nextest
 workers, and sends both fork PRs and Dependabot PRs to `ubuntu-latest`. The
 workflow checks the PR author's `user.login` for Dependabot because the actor
-can change when another person pushes to that PR. The collector now keeps
-`fork_hosted` and `dependabot_hosted` separate using saved workflow-run
-`pull_requests[].user.login` and base/head repository identities. If the saved
-run lacks enough provenance to identify either case, it emits `other` rather
-than guessing from the runner label. The required run fields are documented in
-GitHub's [Get a workflow run response][workflow-run-response].
+can change when another person pushes to that PR. A workflow-run response does
+not include the PR author, so the offline collector accepts a separately saved
+pull request response. It uses that author only when the PR ID, number and base
+repository ID match the run's single PR association. If the saved PR response
+is absent or does not match, author-dependent classification remains `other`;
+the collector never substitutes the run actor. Fork classification continues to
+require distinct base and head repository identities. The run association
+fields are documented in GitHub's
+[Get a workflow run response][workflow-run-response], and PR authors in its
+[Get a pull request response][pull-request-response].
 
 The current base retains pull request 932's workflow-contract changes and
 documentation. Pull request 924's change is unrelated to the CI source
@@ -523,7 +541,14 @@ fidelity comparisons block adoption.
   4,864-test Nextest suite passed with six skips, workspace doctests passed, and
   `cli_configuration_fixture_compiles::case_1_public_api` passed in 6.246
   seconds. This does not explain the earlier local timeout.
-- [ ] Revalidate hosted checks after this plan-only update, obtain current-head
+- [x] Use a separately saved pull request response to classify Dependabot only
+  after matching PR ID, number and base repository ID to the workflow run;
+  cover the native API shape, missing metadata and mismatches.
+- [x] Pass `make check-fmt`, `make typecheck`, `make lint`, and
+  `make test-workflow-contracts` on the staged provenance repair. The
+  workflow-contract suite passed 1,465 tests (three skipped) plus 27
+  supplementary script tests.
+- [ ] Revalidate hosted checks after the provenance repair, obtain current-head
   assessments/review, reconcile findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
@@ -806,6 +831,20 @@ CodeScene also passed. This evidence does not establish why the local fixture
 timed out. The controlled baseline, bounded telemetry, and candidate decisions
 remain outstanding.
 
+The follow-up assessment identified a provenance gap: the workflow-run API
+association omits the PR author's login. The current collector reads author
+metadata only from a separately saved PR response whose ID, number and base
+repository match the run association. Classifier tests cover each mismatch, and
+a CLI test exercises the saved-response path. On this candidate,
+`make check-fmt`, `make typecheck`, `make lint`, and
+`make test-workflow-contracts` passed; the workflow-contract suite reported
+1,465 passed, three skipped, and 27 supplementary script tests passed. The
+confirmed local Rust suite result remains 4,839 passed and six skipped before
+the public API compile fixture timed out at 300 seconds; 24 tests and doctests
+were not reached. A later post-rebase invocation has no terminal result and is
+not counted as validation. Hosted CI and review must be refreshed for the
+published candidate before merge.
+
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
 [issue-checkpoint-one]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196022869
@@ -822,3 +861,4 @@ remain outstanding.
 [llvm-cov-manifest]: https://github.com/taiki-e/cargo-llvm-cov/blob/v0.9.0/Cargo.toml
 [cargo-config-env]: https://github.com/taiki-e/cargo-config2/blob/v0.1.41/src/env.rs
 [workflow-run-response]: https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run
+[pull-request-response]: https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request

@@ -13,11 +13,14 @@ repository's `main` branch. The collector retains `trunk_coverage` and
 
 For `ci.yml` pull-request jobs, `pr_coverage` identifies the Ubicloud lane,
 `fork_hosted` requires distinct base and head repository identities, and
-`dependabot_hosted` uses the PR author's `pull_requests[].user.login`. The
-workflow-run API exposes these fields in its [response][workflow-run-response].
-The actor is not a substitute for the PR author because it changes when someone
-else pushes to a PR. Incomplete or ambiguous hosted-run provenance stays in
-`other`; the runner label alone does not prove that a run came from a fork.
+`dependabot_hosted` uses the PR author's `user.login` from a separately saved
+[pull request response][pull-request-response]. A workflow-run response
+includes the associated PR identity but not its author. The collector joins the
+saved PR response only when its PR ID, number and base repository ID match the
+workflow run. The actor is not a substitute for the PR author because it
+changes when someone else pushes to a PR. Missing or mismatched author
+provenance stays in `other`; the runner label alone does not prove that a run
+came from a fork.
 
 The retained observation set is published in `observations.jsonl`: 81 job
 records across 21 distinct run attempts. It contains six main-branch coverage
@@ -37,10 +40,16 @@ GitHub or another service. Run it with:
 
 ```console
 uv run --script scripts/ci_test_evidence.py \
-  --run RUN_JSON --jobs JOBS_JSON --log-dir LOG_DIR \
+  --run RUN_JSON --jobs JOBS_JSON --pull-request PULL_REQUEST_JSON \
+  --log-dir LOG_DIR \
   --telemetry-dir TELEMETRY_DIR --variant control \
   > /tmp/ci-test-evidence-v2.jsonl
 ```
+
+The optional `--pull-request` file is the saved response for the run's single
+associated pull request. It is needed only to identify the author of a hosted
+PR run; without a matching response, the collector leaves author-dependent
+classification in `other`. The collector reads only local files.
 
 Before collection, choose a separately named destination for schema `2`, such as
 `/tmp/ci-test-evidence-v2.jsonl`, and write the output there. Never append
@@ -389,4 +398,4 @@ archive is introduced here. Provider storage and transfer billing for
 repository checkout is unavailable, so this milestone makes no claim that the
 additional data has zero transfer cost.
 
-[workflow-run-response]: https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run
+[pull-request-response]: https://docs.github.com/en/rest/pulls/pulls#get-a-pull-request
