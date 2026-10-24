@@ -155,7 +155,7 @@ fn inside_radix_literal(character: PowerShellSourceCharacter<'_>) -> bool {
 }
 
 /// Report whether `character` can continue a `0x` or `0b` digit run.
-fn is_radix_digit_run_character(character: PowerShellSourceCharacter<'_>) -> bool {
+const fn is_radix_digit_run_character(character: PowerShellSourceCharacter<'_>) -> bool {
     character.value().is_ascii_alphanumeric() || character.value() == '_'
 }
 
