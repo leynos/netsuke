@@ -21,7 +21,14 @@ log has no underlying Cargo diagnostic, so the timeout cause is unresolved. The
 same candidate passed `make typecheck` and `make test-workflow-contracts`
 (1,460 passed, 3 skipped, plus 27 supplementary script tests), and
 `make markdownlint` (zero issues across 200 files) and `make nixie` (all
-diagrams validated). Hosted CI and review on the new head are pending.
+diagrams validated). Hosted CI on published head `282d99e` also passed: the
+4,864-test Nextest suite passed (six skipped, one slow), including the
+previously timed-out fixture in 22.476 seconds, in 208.778 seconds overall; all
+workspace doctests passed. CI reported 91.79% coverage against the 91.7%
+baseline. Netsukefile Build Test and Release Dry Run passed, and local and
+hosted CodeScene reported no issues. The local timeout's cause remains unknown.
+Current-head CI after this plan-only update and CodeRabbit assessments/review
+remain pending.
 
 ## Purpose / big picture
 
@@ -494,17 +501,20 @@ fidelity comparisons block adoption.
   matched and no conflicts occurred.
 - [x] After the nightly toolchain update, pass `make check-fmt`, `make lint`,
   and `make doc-coverage` (98.19%).
-- [ ] Resolve the `make test` timeout in
-  `cli_configuration_fixture_compiles::case_1_public_api`; the 300-second
-  timeout left 24 tests unrun and prevented doctests from starting. The log
-  contains no diagnostic from the fixture's child Cargo command, so its cause
-  is not established.
+- [ ] Resolve the local `make test` timeout in
+  `cli_configuration_fixture_compiles::case_1_public_api`; it left 24 tests
+  unrun and prevented doctests from starting, and the log contains no child
+  Cargo diagnostic. The exact-head hosted suite later passed all 4,864 tests,
+  including this fixture in 22.476 seconds, so the local cause remains
+  unestablished rather than a reproduced source failure.
 - [x] Pass `make typecheck` and `make test-workflow-contracts` on the new base
   (1,460 passed, 3 skipped, plus 27 supplementary script tests).
 - [x] Validate final documentation with `make check-fmt`, `make markdownlint`
   (zero issues across 200 files), and `make nixie` after this plan update.
-- [ ] Validate current-head hosted checks and reviews, reconcile findings, and
-  merge the PR when it reaches equilibrium.
+- [x] Confirm hosted CI run 40112221490, Netsukefile run 40112221417, Release
+  Dry Run 40112221464, and CodeScene passed on published head `282d99e`.
+- [ ] Revalidate hosted checks after this plan-only update, obtain current-head
+  assessments/review, reconcile findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -774,8 +784,15 @@ seconds. Twenty-four tests were not run, doctests did not start, and the log
 contains no diagnostic from the fixture's child Cargo command. Typecheck and
 workflow contracts passed (1,460 passed, 3 skipped, plus 27 supplementary
 script tests), as did Markdownlint (zero issues across 200 files) and Nixie.
-Hosted checks and review for this head remain pending. The controlled baseline,
-bounded telemetry, and candidate decisions remain outstanding.
+Exact-head hosted CI run 40112221490 later passed 4,864 tests (six skipped, one
+slow) in 208.778 seconds, including the timed-out fixture in 22.476 seconds;
+workspace doctests passed. CI reported 91.79% coverage against the 91.7%
+baseline. Netsukefile run 40112221417 and Release Dry Run 40112221464 also
+passed, and local and hosted CodeScene found no issues. This evidence does not
+establish why the local fixture timed out. Current-head checks after this
+plan-only update and CodeRabbit assessments/review remain pending. The
+controlled baseline, bounded telemetry, and candidate decisions remain
+outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
