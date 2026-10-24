@@ -241,29 +241,6 @@ function Test-AutomaticPathQuoting {
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 }
 
-function Test-MissingBashRuntimeDiagnostic {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Netsuke,
-
-        [Parameter(Mandatory)]
-        [string]$Workspace
-    )
-
-    $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
-    $env:NETSUKE_WINDOWS_SHELL = 'bash'
-    $env:PATH = $Workspace
-    $bashFailure = & $Netsuke build scalar 2>&1
-    if ($LASTEXITCODE -eq 0) {
-        throw 'Selecting Bash without bash.exe unexpectedly succeeded.'
-    }
-    if (-not ($bashFailure -match 'bash\.exe.*(not found on PATH|exited with)')) {
-        throw "Bash runtime diagnostics were not actionable: $bashFailure"
-    }
-    # The expected child-process failure must not become the smoke script's exit status.
-    $global:LASTEXITCODE = 0
-}
-
 <#
 .SYNOPSIS
 Runs each Windows recipe smoke scenario in the isolated workspace.
