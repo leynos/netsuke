@@ -14,6 +14,8 @@ Run via ``make test-release-publication``.
 """
 
 import pytest
+from hypothesis import given, settings
+from hypothesis import strategies as st
 from release_reconcile_github import (
     DIGEST_PREFIX,
     AssetAction,
@@ -27,6 +29,20 @@ from release_reconcile_github import (
 #: hexadecimal digest would report a conflict for every asset that is correct.
 DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64
+
+#: One SHA-256 digest, lowercase hexadecimal, generated rather than fixed.
+#:
+#: The alphabet is narrowed to hexadecimal because the value is a digest; the
+#: *values* are not narrowed, so a generated pair covers both the matching and
+#: the non-matching case from one draw.
+_DIGEST = st.text(alphabet="0123456789abcdef", min_size=64, max_size=64)
+
+#: An asset name. Constrained to the characters release assets actually use so
+#: a failure names something a reader recognises; the interesting variation is
+#: in the digests, not the file names.
+_NAME = st.text(
+    alphabet="abcdefghijklmnopqrstuvwxyz0123456789.-", min_size=1, max_size=12
+)
 
 
 def _plan(
@@ -187,4 +203,105 @@ def test_conflicts_reports_every_conflicting_name() -> None:
     )
     assert conflicts(actions) == ("a.tar.gz", "b.tar.gz"), (
         "every conflicting name must be reported, in plan order"
+    )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(published=_DIGEST, intended=_DIGEST)
+def test_skipping_turns_on_digest_equality_alone(published: str, intended: str) -> None:
+    """Require the skip decision to follow digest equality for any pair.
+
+    This is the whole safety property of the module in one two-sided claim: an
+    attached asset whose digest equals the expected one must be skipped, and
+    one whose digest differs must conflict. Both directions are asserted in a
+    single test on purpose. Split apart, a planner that always answered
+    ``SKIP_VERIFIED`` would pass the matching half and one that always answered
+    ``CONFLICT`` the other, so neither half alone is evidence that the
+    comparison happens at all.
+
+    The two digests are drawn independently, so Hypothesis reaches the equal
+    and the unequal case from one property rather than from two handwritten
+    constants. ``derandomize`` keeps a shrink reproducible.
+    """
+    action = _plan(
+        {"netsuke.tar.gz": intended},
+        {"netsuke.tar.gz": f"{DIGEST_PREFIX}{published}"},
+    )["netsuke.tar.gz"]
+    expected = (
+        AssetAction.SKIP_VERIFIED
+        if published.lower() == intended.lower()
+        else AssetAction.CONFLICT
+    )
+    assert action is expected, (
+        f"the decision must turn on digest equality alone: published "
+        f"{published!r} against intended {intended!r} gave {action!r}"
+    )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(
+    expected=st.dictionaries(_NAME, _DIGEST, min_size=1, max_size=8),
+    # The same generator as ``expected`` so overlap is common, plus names drawn
+    # again below, so the plan is exercised with a mix of absent, matching, and
+    # extra assets in each example.
+    attached=st.booleans(),
+)
+def test_every_expected_name_is_decided_once_and_in_order(
+    expected: dict[str, str], *, attached: bool
+) -> None:
+    """Require the plan to be a total, single-entry, name-ordered decision.
+
+    Totality is what a caller iterates: an expected name missing from the plan
+    reads as "nothing to do", which is how an asset never gets uploaded. A
+    duplicate entry would let a caller act twice on one name. Ordering makes
+    the result a value two runs can be compared against.
+
+    ``attached`` switches between an empty ``present`` and one agreeing with
+    every expected name, so the same structural property covers both the
+    upload and the skip branch rather than describing only one of them. The
+    action itself is asserted too: with every asset absent the plan must be
+    all uploads, and with every digest matching it must be all skips.
+    """
+    present = (
+        {name: f"{DIGEST_PREFIX}{digest}" for name, digest in expected.items()}
+        if attached
+        else {}
+    )
+    uniform = AssetAction.SKIP_VERIFIED if attached else AssetAction.UPLOAD
+
+    plan = plan_asset_actions(expected=expected, present=present)
+
+    names = [name for name, _ in plan]
+    assert names == sorted(expected), (
+        "the plan must decide every expected name, once, in name order"
+    )
+    assert len(names) == len(set(names)), "no asset name may be decided twice"
+    assert {action for _, action in plan} == {uniform}, (
+        f"every asset in this example must plan {uniform!r}"
+    )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(
+    expected=st.dictionaries(_NAME, _DIGEST, min_size=1, max_size=5),
+    undeclared=st.dictionaries(_NAME, st.one_of(st.none(), _DIGEST), max_size=5),
+)
+def test_undeclared_assets_never_enter_the_plan(
+    expected: dict[str, str], undeclared: dict[str, str | None]
+) -> None:
+    """Require an attached asset the record does not declare to be ignored.
+
+    An extra attached asset is the inventory check's finding, not something to
+    reconcile here. Reporting it as ``UPLOAD`` would be false — it is present —
+    and as ``CONFLICT`` would block a release over a name the plan never
+    claimed. The two mappings are drawn independently, so they collide freely,
+    which is what makes the ignored case and the decided case reachable from
+    one example.
+    """
+    present = dict.fromkeys(expected) | undeclared
+
+    plan = plan_asset_actions(expected=expected, present=present)
+
+    assert [name for name, _ in plan] == sorted(expected), (
+        "an undeclared attached asset must not appear in the plan"
     )

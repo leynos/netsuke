@@ -23,6 +23,7 @@ release: that omission is an argument error here, not a tagless identity.
 """
 
 import argparse
+import collections.abc as cabc
 import dataclasses
 import json
 import pathlib
@@ -31,6 +32,12 @@ import sys
 
 import release_candidate
 import release_digest
+
+#: The shape of ``subprocess.run`` this module needs. Declared so a test can
+#: supply its own runner instead of patching the global ``subprocess`` module,
+#: which keeps the failure modes of *launching* a command reachable without
+#: actually launching one.
+type SubprocessRunner = cabc.Callable[..., subprocess.CompletedProcess[str]]
 
 EXIT_OK = 0
 EXIT_PACKAGING_FAILED = 1
@@ -97,7 +104,12 @@ class CratePackage:
         }
 
 
-def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
+def package_crate(
+    manifest: pathlib.Path,
+    destination: pathlib.Path,
+    *,
+    runner: SubprocessRunner,
+) -> pathlib.Path:
     """Build the ``.crate`` for the package the manifest declares.
 
     Parameters
@@ -106,6 +118,12 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
         Path to the Cargo manifest naming the package.
     destination
         Target directory ``cargo package`` is given.
+    runner
+        The callable that launches the command. The CLI edge supplies
+        :func:`subprocess.run`; a test supplies its own so the packaging
+        boundary can be exercised without compiling anything. Required rather
+        than defaulted, so the one place this module reaches the process table
+        is :func:`main`.
 
     Returns
     -------
@@ -128,34 +146,37 @@ def package_crate(manifest: pathlib.Path, destination: pathlib.Path) -> pathlib.
     from an earlier run would otherwise be published under this run's
     identity, which is the failure the digest record exists to prevent.
 
-    Both helpers raise ``RuntimeError`` — if ``cargo package`` exits non-zero,
-    exceeds :data:`PACKAGING_TIMEOUT_SECONDS`, or if the directory does not
-    hold exactly one crate afterwards — so :func:`main` translates them into
-    ``EXIT_PACKAGING_FAILED``. A ``TimeoutExpired`` escaping instead would
-    surface as a traceback from a module whose whole contract is "exits with a
-    code and a message".
+    Both helpers raise ``RuntimeError`` — if ``cargo package`` cannot be
+    launched, exits non-zero, exceeds :data:`PACKAGING_TIMEOUT_SECONDS`, or if
+    the directory does not hold exactly one crate afterwards — so :func:`main`
+    translates them into ``EXIT_PACKAGING_FAILED``. A ``TimeoutExpired`` or an
+    ``OSError`` escaping instead would surface as a traceback from a module
+    whose whole contract is "exits with a code and a message".
     """
-    _run_package(manifest, destination)
+    _run_package(manifest, destination, runner=runner)
     return _the_only_crate(destination / PACKAGE_SUBDIR)
 
 
-def _run_package(manifest: pathlib.Path, destination: pathlib.Path) -> None:
+def _run_package(
+    manifest: pathlib.Path,
+    destination: pathlib.Path,
+    *,
+    runner: SubprocessRunner,
+) -> None:
     """Run ``cargo package``, translating every way it can fail.
 
     Raises
     ------
     RuntimeError
-        If the command exits non-zero or exceeds
+        If the command cannot be launched, exits non-zero, or exceeds
         :data:`PACKAGING_TIMEOUT_SECONDS`.
     """
     try:
-        # Both suppressions sit inside the `try` because an ignore comment
-        # binds to the statement that follows it, not to the block a statement
-        # is nested in. Above the `try` they suppress the `try` and leave the
-        # call unsuppressed.
-        # ruff: ignore[subprocess-without-shell-equals-true] - shell is False.
-        # ruff: ignore[start-process-with-partial-path] - cargo is on the workflow PATH.
-        completed = subprocess.run(
+        # `runner` is the injected seam, not the `subprocess` module, so the
+        # bandit process-launch rules do not reach this call: the production
+        # runner installs them at its own `subprocess.run` and the stub never
+        # launches anything. Suppressing them here would be an unused noqa.
+        completed = runner(
             [
                 "cargo",
                 "package",
@@ -174,6 +195,16 @@ def _run_package(manifest: pathlib.Path, destination: pathlib.Path) -> None:
             f"cargo package did not finish within {PACKAGING_TIMEOUT_SECONDS}s "
             f"and was killed; the packaging step cannot be left to the "
             f"runner's own limit, which reports a step timeout and no cause"
+        )
+        raise RuntimeError(msg) from error
+    except OSError as error:
+        # An `OSError` here means the command never started: `cargo` is not on
+        # PATH, or the directory it names is not executable. Nothing ran, so
+        # there is no return code and no standard error to report, and letting
+        # the error escape would turn a wiring fault into a traceback.
+        msg = (
+            f"cargo package could not be launched: {error}; the workflow "
+            f"step's own PATH and working directory are what decide this"
         )
         raise RuntimeError(msg) from error
     if completed.returncode != 0:
@@ -300,7 +331,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"release identity rejected: {error}", file=sys.stderr)
         return EXIT_IDENTITY_REJECTED
     try:
-        crate = package_crate(arguments.manifest, arguments.target_dir)
+        crate = package_crate(
+            arguments.manifest, arguments.target_dir, runner=subprocess.run
+        )
     except RuntimeError as error:
         print(f"packaging failed: {error}", file=sys.stderr)
         return EXIT_PACKAGING_FAILED

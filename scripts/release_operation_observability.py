@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 """Write bounded summaries and telemetry for release operations.
 
-The release workflow calls this helper from its always-run summary step after
-staging or publication. It writes a concise GitHub step summary and JSONL
-records with fixed operation, phase, outcome, and error-category labels. The
-records deliberately omit release tags, artefact names, raw errors, and tokens.
+The release workflow calls this helper from an always-run summary step after
+staging, publication, or crate packaging. It writes a concise GitHub step
+summary and JSONL records with fixed operation, phase, outcome, and
+error-category labels. The records deliberately omit release tags, artefact
+names, raw errors, and tokens.
+
+Which phases an operation has is stated per operation. The packaging job builds
+a crate and hands it on, so it has no draft, download, hoist, or upload-plan
+phase; reporting those as permanently ``skipped`` would read as phases that
+never fail rather than ones the job does not run.
 """
 
 import dataclasses as dc
@@ -18,15 +24,58 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
 VALID_OUTCOMES = frozenset({"success", "failure", "cancelled", "skipped", "unknown"})
-OPERATIONS = frozenset({"release_staging", "release_publication"})
 PHASES = {
     "draft_release": ("Draft release", "draft_creation"),
     "artifact_download": ("Artefact download", "artifact_download"),
     "archive_hoist": ("Archive hoist", "archive_hoist"),
     "upload_plan_validation": ("Upload plan validation", "upload_plan_validation"),
+    "crate_packaging": ("Crate packaging", "crate_packaging"),
+    "artifact_upload": ("Artefact upload", "artifact_upload"),
 }
+#: Which phases each operation has. Stated per operation rather than shared,
+#: because the phases are the operation's own boundaries: staging downloads and
+#: hoists artefacts, publication adds draft creation, and packaging has neither
+#: — it builds the crate and hands it to the next job. Reading a phase a job
+#: does not have would report it "skipped" forever, which looks like a phase
+#: that never fails rather than one that is not part of the operation.
+OPERATION_PHASES = {
+    "release_staging": (
+        "draft_release",
+        "artifact_download",
+        "archive_hoist",
+        "upload_plan_validation",
+    ),
+    "release_publication": (
+        "draft_release",
+        "artifact_download",
+        "archive_hoist",
+        "upload_plan_validation",
+    ),
+    "release_package": ("crate_packaging", "artifact_upload"),
+}
+OPERATIONS = frozenset(OPERATION_PHASES)
 PHASE_ORDER = tuple(PHASES)
 PHASE_OUTCOMES = frozenset({"success", "failure", "cancelled"})
+
+
+def _phases(operation: str) -> tuple[str, ...]:
+    """Return the phases ``operation`` has, refusing an unknown label.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The phase names the operation declares, in the order they run.
+
+    Raises
+    ------
+    ValueError
+        If ``operation`` is not one of the fixed low-cardinality labels.
+    """
+    try:
+        return OPERATION_PHASES[operation]
+    except KeyError:
+        message = f"unsupported release operation: {operation!r}"
+        raise ValueError(message) from None
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -70,7 +119,7 @@ def _error_category(observation: OperationObservation) -> str:
     """Choose the first fixed failure category reported by the workflow."""
     if observation.upload_error_present:
         return "upload_plan_validation"
-    for phase in PHASE_ORDER:
+    for phase in _phases(observation.operation):
         if observation.steps[phase].outcome == "failure":
             return PHASES[phase][1]
     if observation.job_status == "failure":
@@ -113,7 +162,7 @@ def _metric_records(
             "value": operation_duration,
             **common,
         })
-    for phase in PHASE_ORDER:
+    for phase in _phases(observation.operation):
         step = observation.steps[phase]
         if step.outcome not in PHASE_OUTCOMES:
             continue
@@ -194,7 +243,7 @@ def _phase_terminal_event(
 def _trace_records(observation: OperationObservation) -> list[dict[str, object]]:
     """Build bounded start and completion events for executed phases."""
     records: list[dict[str, object]] = []
-    for phase in PHASE_ORDER:
+    for phase in _phases(observation.operation):
         step = observation.steps[phase]
         if step.outcome not in PHASE_OUTCOMES:
             continue
@@ -209,25 +258,40 @@ def _trace_records(observation: OperationObservation) -> list[dict[str, object]]
     return records
 
 
+def _sanitised_step(observation: OperationObservation, phase: str) -> StepState:
+    """Return one phase's outcome and timings, bounded to known labels.
+
+    A phase the operation has but the caller omitted is reported ``skipped``.
+    This renders rather than raising, because an observability record that
+    refuses to be written during an incident is worth less than one that says
+    it does not know.
+
+    Returns
+    -------
+    StepState
+        The phase's bounded outcome and nanosecond timings, or an all-absent
+        record when the caller omitted that phase.
+    """
+    step = observation.steps.get(phase)
+    if step is None:
+        return StepState(outcome="skipped", started_ns=None, ended_ns=None)
+    return StepState(
+        outcome=_outcome(step.outcome),
+        started_ns=step.started_ns,
+        ended_ns=step.ended_ns,
+    )
+
+
 def render_observation(observation: OperationObservation) -> tuple[str, str]:
     """Render the step summary and JSONL telemetry for an operation."""
-    if observation.operation not in OPERATIONS:
-        message = f"unsupported release operation: {observation.operation!r}"
-        raise ValueError(message)
+    phases = _phases(observation.operation)
     safe_observation = OperationObservation(
         operation=observation.operation,
         dry_run=observation.dry_run,
         job_status=_outcome(observation.job_status),
         started_ns=observation.started_ns,
         ended_ns=observation.ended_ns,
-        steps={
-            phase: StepState(
-                outcome=_outcome(observation.steps[phase].outcome),
-                started_ns=observation.steps[phase].started_ns,
-                ended_ns=observation.steps[phase].ended_ns,
-            )
-            for phase in PHASE_ORDER
-        },
+        steps={phase: _sanitised_step(observation, phase) for phase in phases},
         upload_error_present=observation.upload_error_present,
     )
     error_category = _error_category(safe_observation)
@@ -248,7 +312,7 @@ def render_observation(observation: OperationObservation) -> tuple[str, str]:
         f"- Upload error output present: `{upload_error_present}`",
         "- Phase outcomes:",
     ]
-    for phase in PHASE_ORDER:
+    for phase in _phases(safe_observation.operation):
         step = safe_observation.steps[phase]
         duration = _duration_seconds(step.started_ns, step.ended_ns)
         duration_text = "unavailable" if duration is None else f"{duration:.3f}s"
@@ -285,7 +349,7 @@ def observation_from_environment(
                 environment.get(f"{phase.upper()}_ENDED_NS", "")
             ),
         )
-        for phase in PHASE_ORDER
+        for phase in _phases(operation)
     }
     return OperationObservation(
         operation=operation,

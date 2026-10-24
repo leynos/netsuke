@@ -114,6 +114,51 @@ SELECTOR_FRAGMENTS = (
     ("case", "the action must branch on the mode rather than pass both selectors"),
 )
 
+#: Each manifest input that must reach the CLI: the input name, the environment
+#: reference the step assigns it to, and the CLI flag that reads it back.
+#: ``package-name`` and ``bin-name`` are the pair that differ — the crate is
+#: ``netsuke-build`` while the binary it installs is ``netsuke`` — so
+#: forwarding the wrong one produces a valid crate under a name the release
+#: never declared.
+ARGUMENT_FORWARDING = (
+    (
+        "commit",
+        "${{ inputs.commit }}",
+        '--commit "$RELEASE_COMMIT"',
+        "the commit must reach the CLI",
+    ),
+    (
+        "package-name",
+        "${{ inputs['package-name'] }}",
+        '--package-name "$RELEASE_PACKAGE_NAME"',
+        "the Cargo package name must reach the CLI",
+    ),
+    (
+        "version",
+        "${{ inputs.version }}",
+        '--version "$RELEASE_VERSION"',
+        "the version must reach the CLI",
+    ),
+    (
+        "bin-name",
+        "${{ inputs['bin-name'] }}",
+        '--bin-name "$RELEASE_BIN_NAME"',
+        "the binary name must reach the CLI",
+    ),
+)
+
+#: The repository-relative record the CLI writes, as the action spells it.
+IDENTITY_PATH = "artifacts/package/identity.json"
+
+#: The three outputs the action publishes, as the ``printf`` format strings
+#: that write them. The body is a YAML literal block, so ``\n`` stays two
+#: characters for the shell rather than becoming a newline here.
+OUTPUT_FORMATS = (
+    (r"printf 'identity-path=%s\n'", IDENTITY_PATH),
+    (r"printf 'crate-name=%s\n'", "$crate_name"),
+    (r"printf 'crate-path=%s\n'", "target/package/$crate_name"),
+)
+
 
 @pytest.mark.parametrize(
     ("fragment", "reason"),
@@ -132,3 +177,69 @@ def test_the_action_selects_the_selector_before_invoking_the_cli(
     run = _action_run_body()
 
     assert fragment in run, reason
+
+
+@pytest.mark.parametrize(
+    ("name", "reference", "flag", "reason"),
+    ARGUMENT_FORWARDING,
+    ids=[row[0] for row in ARGUMENT_FORWARDING],
+)
+def test_the_action_forwards_every_identity_field_to_the_cli(
+    name: str, reference: str, flag: str, reason: str
+) -> None:
+    """Pass each declared input to the CLI under the flag the CLI parses.
+
+    The inputs are read into named environment variables so the manifest can
+    describe each one. That indirection is exactly where a rename goes
+    unnoticed: the manifest still declares ``package-name``, the CLI still
+    accepts ``--package-name``, and the value between them has become empty.
+    Both ends are asserted here, plus the assignment joining them.
+    """
+    run = _action_run_body()
+    manifest = _action_manifest()
+    inputs = require_mapping(manifest.get("inputs"), "action inputs")
+
+    assert name in inputs, f"the action must declare a {name!r} input"
+    assert flag in run, reason
+    assert reference in str(manifest), (
+        f"the {name!r} input must be assigned to the step environment as {reference!r}"
+    )
+
+
+def test_the_action_maps_the_record_onto_its_declared_outputs() -> None:
+    """Publish the resolved archive name and both paths as step outputs.
+
+    The job consuming this action resolves the archive from ``crate-path``, so
+    an output that stopped being written would hand the next job an empty path
+    and an upload step that stages nothing. Each ``printf`` is asserted with
+    the value it interpolates, not merely the output name: the format string
+    says which output, and the argument says what it is built from.
+    """
+    run = _action_run_body()
+
+    assert f"jq -r '.crate' {IDENTITY_PATH}" in run, (
+        "the archive name must be read from the record the CLI wrote"
+    )
+    for printf, argument in OUTPUT_FORMATS:
+        assert printf in run, f"the action must write {printf!r} to its outputs"
+        assert f"{printf} '{argument}'" in run or f'{printf} "{argument}"' in run, (
+            f"the output written by {printf!r} must carry {argument!r}"
+        )
+    assert '>>"$GITHUB_OUTPUT"' in run, (
+        "the captured values must be appended to the step output file"
+    )
+
+
+def test_the_action_refuses_an_unrecognised_mode() -> None:
+    """Fail the step on any mode other than ``true`` or ``false``.
+
+    The ``case`` has a branch for each real mode. Without a catch-all, an empty
+    or malformed value would fall through with no selector set and the CLI
+    would report a missing argument instead of the input that caused it.
+    """
+    run = _action_run_body()
+
+    assert "dry-run must be true or false" in run, (
+        "an unrecognised mode must be named rather than fall through"
+    )
+    assert "exit 1" in run, "an unrecognised mode must fail the step"
