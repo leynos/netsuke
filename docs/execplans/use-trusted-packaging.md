@@ -2120,6 +2120,72 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   module is 374 lines; the suite still reports 21 passed, so no coverage was
   lost, and pylint scores 10.00/10 with no `C0302`. Date/Author: 2026-10-23,
   implementation agent.
+- Documentation: the two Stage D prose items that the *shipped* code can
+  honestly support are now written. `docs/developers-guide.md` gained a
+  `## Release publication` runbook of roughly 260 lines, placed between
+  `## Release-admission observability` and
+  `## GitHub Actions runner placement`, covering: the job graph with each job's
+  dependency list, `contents` scope and mode; the package-versus-binary
+  identity contract; the twenty-name declaration and the `published_name`
+  normalization; the trusted digest record and the four links of its provenance
+  chain; the re-run procedure with its four exit constants and the
+  conflict-outranks-upload precedence; the offline policy modules and the
+  import-list predicate that keeps them offline; the `package-crate` composite
+  action's six inputs and three outputs; and the two test targets that pin the
+  above. Five tables, each captioned below in the file's own asterisk emphasis
+  (`*Table N: ….*`), because Markdown lint rule MD049 is unconfigured and
+  therefore defaults to asterisk per file. Nothing in it exceeds 80 columns of
+  prose or 120 in a fence.
+  `docs/adrs/adr-0007-publish-the-crates-io-package-as-netsuke-build.md` gained
+  `## Addendum (2026-10-24): the trusted publisher`, recording the OIDC
+  exchange as the accepted target mechanism, the constraint that the exchange
+  must be declared in `release.yml` itself because crates.io matches on the
+  presenting workflow's filename, the `id-token: write` and `crates-io` scopes,
+  and the already-satisfied first-publication precondition, plus two
+  `## References` entries. Both are scoped to what exists. The addendum's
+  `Status of the decision` paragraph states plainly that `release.yml`
+  "publishes nothing to crates.io" and that the exchange job, the inventory
+  verifier, the finalizer and the consumer smoke are still unwritten; the
+  runbook documents the `package-crate` seam and the policy modules, and claims
+  no job it cannot point at. Stage C therefore stays open, and Stage D stays
+  open for the workflow-graph items it describes. Date/Author: 2026-10-24,
+  implementation agent.
+- Verification: the CodeRabbit Security & Privacy finding on the empty `assets`
+  mapping (thread `PRRT_…c2pn`) was already satisfied before this change, which
+  is why no code moved for it. `release_digest_record._declared_assets` reads
+  `record.get(ASSETS_MEMBER)` with no `{}` default, refuses a non-mapping with
+  `must carry an 'assets' mapping, got <type>`, and refuses an empty mapping
+  with `declares no assets, so there is nothing to verify`; the module
+  docstring names the removed `.get("assets", {})` defect explicitly. Proved by
+  a five-case probe under the 3.14 baseline
+  (`PYTHONPATH=scripts uv run --no-project --python 3.14 python -`):
+  missing-assets and empty-assets and non-mapping and absent-file all refuse,
+  and a well-formed record is accepted. A first attempt to probe with the system
+  `python3` (3.12) raised `NameError: name 'cabc' is not defined` at
+  `release_digest_record.py:78`, because the module annotates with a
+  `TYPE_CHECKING`-only import that 3.12 evaluates eagerly — a toolchain
+  artefact of the probe, not a defect in the module, and the reason the
+  repository's Python baseline is stated as 3.14. Date/Author: 2026-10-24,
+  implementation agent.
+- Verification: `make lint` failed at its `lint-python` stage with nine Ruff
+  findings against the Python touched by this branch, and each is now repaired
+  at its source rather than suppressed. `scripts/package_crate_cli.py` carried
+  two suppressions (`subprocess-without-shell-equals-true`,
+  `start-process-with-partial-path`) that Ruff reported as unused, because the
+  call they preceded goes through the injected `runner` seam and not through
+  `subprocess` — the comment now says so and the dead suppressions are gone,
+  while the real `subprocess` boundary keeps its `suspicious-subprocess-import`
+  ignore at the module's import line. Two `docstring-missing-returns` findings
+  in `scripts/release_operation_observability.py` gained `Returns` sections
+  naming the phase tuple and the `StepState` record. The new support module
+  lost an unused `collections.abc` import and had its import block re-sorted.
+  Three test-side findings were repaired in place: a boolean positional
+  parameter became keyword-only, `{name: None for name in expected}` became
+  `dict.fromkeys(expected)`, and an implicitly concatenated assertion message
+  was hoisted into a named `expected` binding. Re-checked with the pinned Ruff
+  0.16.4: `All checks passed!`; the 34 reconciliation and packaging-CLI tests
+  and the five composite-action contract tests still pass. Date/Author:
+  2026-10-24, implementation agent.
 
 ## Surprises & discoveries
 
@@ -3514,3 +3580,20 @@ in favour of the branch's existing `argparse` shape on the strength of three
 probes rather than on style, and it moved three citations that `main`'s growth
 had displaced. Both are recorded above. EP-M1 through EP-M6 remain open; Stage
 C is under way, with the packaging seam repaired and the identity CLI landed.
+
+Draft 4, 2026-10-24: no rebase. This revision records documentation work rather
+than a replay, and corrects one stale sentence: Draft 3's closing claim that
+"EP-M1 through EP-M6 remain open" contradicts this file's own `Status`
+paragraph, which has recorded EP-M1 and EP-M2 as complete since the Stage B
+entries above. Draft 4 leaves EP-M1 and EP-M2 complete, keeps Stage C and Stage
+D open, and adds the `## Release publication` runbook to the developers' guide
+and the trusted-publisher addendum to ADR-0007. Both are deliberately scoped to
+what the tree ships: the runbook documents the `package-crate` seam and the
+offline policy modules and describes no job that does not exist, and the ADR
+addendum's `Status of the decision` section says outright that `release.yml`
+publishes nothing to crates.io yet and names the four pieces still to be
+written. Stage C's remaining work — the five new actions, the job graph, the
+registry exchange, the inventory verifier, the finalizer and the consumer smoke
+— is untouched by this revision, and Stage D stays open for the workflow-side
+mitigations Draft 3 flagged (notably the rehearsal lane's plan-versus-release
+gap recorded in the Decision log).

@@ -422,6 +422,10 @@ jobs:
         # v7.0.1
         with:
           persist-credentials: false
+      - id: release_operation_start
+        name: Start release operation timing
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - name: Install Rust
         uses: >-
           leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
@@ -430,7 +434,13 @@ jobs:
         with:
           python-version: '3.14'
           enable-cache: false
-      - name: Package the crate and record its identity
+      - id: crate_packaging_start
+        name: Start crate packaging timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: package_crate
+        name: Package the crate and record its identity
         uses: ./.github/actions/package-crate
         with:
           tag: ${{ github.ref_name }}
@@ -444,7 +454,18 @@ jobs:
           package-name: ${{ needs.metadata.outputs.package_name }}
           version: ${{ needs.metadata.outputs.version }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
-      - name: Upload the packaged archive to regather
+      - id: crate_packaging_end
+        name: Finish crate packaging timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: artifact_upload_start
+        name: Start artefact upload timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: upload_crate_package
+        name: Upload the packaged archive to regather
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         # v7.0.1
         with:
@@ -453,6 +474,40 @@ jobs:
             artifacts/package/identity.json
             target/package/*.crate
           if-no-files-found: error
+      - id: artifact_upload_end
+        name: Finish artefact upload timing
+        if: always()
+        shell: bash
+        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: release_package
+          RELEASE_DRY_RUN: ${{ needs.metadata.outputs.should_publish != 'true' }}
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
+          CRATE_PACKAGING_OUTCOME: ${{ steps.package_crate.outcome }}
+          CRATE_PACKAGING_STARTED_NS: ${{ steps.crate_packaging_start.outputs.started_ns }}
+          CRATE_PACKAGING_ENDED_NS: ${{ steps.crate_packaging_end.outputs.ended_ns }}
+          ARTIFACT_UPLOAD_OUTCOME: ${{ steps.upload_crate_package.outcome }}
+          ARTIFACT_UPLOAD_STARTED_NS: ${{ steps.artifact_upload_start.outputs.started_ns }}
+          ARTIFACT_UPLOAD_ENDED_NS: ${{ steps.artifact_upload_end.outputs.ended_ns }}
+          # The upload plan's own error output is a staging and publication
+          # concept; this operation has no asset-upload action to report one.
+          UPLOAD_ERROR_PRESENT: 'false'
+          OBSERVABILITY_PATH: >-
+            ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+      - name: Upload release operation observability
+        if: always()
+        uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-operation-observability-${{ github.job }}
+          path: ${{ runner.temp }}/release-operation-observability.jsonl
 
   release:
     if: >-
