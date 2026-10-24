@@ -1452,11 +1452,17 @@ Table: CI lane runner shapes and concurrency settings.
 
 A pull request from a fork cannot obtain a Ubicloud runner, so the three lanes
 that serve pull requests, `build-test`, `kani-smoke`, and `netsukefile`, name
-their runner through an expression rather than a label:
+their runner through an expression rather than a label. A pull request
+Dependabot opened takes the same hosted arm: hosted minutes cost nothing on a
+public repository, and Dependabot opens many pull requests, which therefore
+build cold. The expression tests the pull request's author, not `github.actor`,
+because the actor is whoever triggered the run, so a person pushing to a
+Dependabot branch would flip the runner:
 
 ```yaml
 runs-on: >-
-  ${{ github.event.pull_request.head.repo.fork
+  ${{ (github.event.pull_request.head.repo.fork
+  || github.event.pull_request.user.login == 'dependabot[bot]')
   && 'ubuntu-latest' || 'ubicloud-standard-4-ubuntu-2404' }}
 ```
 
@@ -1465,7 +1471,8 @@ ruleset waits on a required check that will not report. It presents as a pull
 request stuck on a pending check rather than as a placement fault.
 
 Two of those lanes also serve `push`. No second condition is needed: on a push
-the pull-request context is null, so the expression takes the Ubicloud arm.
+the pull-request properties are empty strings (falsy), so the expression takes
+the Ubicloud arm.
 
 The fork arm is pinned per lane rather than shared, and `FORK_FALLBACK_RUNNERS`
 in `tests/workflow_contracts/fork_fallback.py` records which label each takes.
