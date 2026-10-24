@@ -80,27 +80,6 @@ def test_cold_cache_downloads_verifies_and_extracts_the_binary(
     )
 
 
-def test_warm_cache_reuses_a_binary_reporting_the_pinned_version(
-    install_dir: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A restored binary at the pin is kept and no download is attempted."""
-    cached = write_executable(install_dir / "actionlint", f"echo '{VERSION}'")
-    before = cached.read_bytes()
-    monkeypatch.setenv("INPUT_RELEASE_ROOT", file_url(tmp_path / "absent"))
-    monkeypatch.setenv("INPUT_ACTIONLINT_SHA256", "0" * 64)
-
-    exit_code = invoke(script.app)
-
-    assert exit_code == 0, "expected: exit_code == 0"
-    assert cached.read_bytes() == before, "expected: cached.read_bytes() == before"
-    assert "restored from the cache volume" in capsys.readouterr().out, (
-        "expected: 'restored from the cache volume' in capsys.readouterr().out"
-    )
-
-
 def test_stale_cached_binary_is_replaced_by_the_pinned_release(
     install_dir: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -228,67 +207,6 @@ def test_a_missing_install_directory_is_created_on_extraction(
     assert f"installed actionlint {VERSION}" in capsys.readouterr().out, (
         "the install must be reported with its version"
     )
-
-
-def test_a_cached_binary_that_cannot_report_a_version_fails_the_step(
-    install_dir: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A cached binary that runs but cannot answer is a failure, not a miss.
-
-    A reinstall would replace it and the step would pass, so a broken cache
-    would read as a healthy one and the entry would stay broken until the
-    version pin changed. The failure has to surface here, where the diagnostic
-    can name the binary and its exit status. ``INPUT_RELEASE_ROOT`` points at
-    a directory with no releases, so a step that treated this as a cache miss
-    would fail on the download instead and the assertions below would catch
-    the wrong failure.
-    """
-    write_executable(install_dir / "actionlint", "exit 7")
-    monkeypatch.setenv("INPUT_RELEASE_ROOT", file_url(tmp_path / "absent"))
-    monkeypatch.setenv("INPUT_ACTIONLINT_SHA256", "0" * 64)
-
-    exit_code = invoke(script.app)
-
-    assert exit_code == 1, "expected: exit_code == 1"
-    err = capsys.readouterr().err
-    assert "the cached actionlint cannot be used" in err, (
-        "expected: the diagnostic to name the unusable cache entry"
-    )
-    assert "exited 7" in err, "expected: the probe's exit status in the diagnostic"
-    assert "does not match its pinned SHA-256" not in err, (
-        "the step must fail at the cache probe, not at a download it should "
-        "never have attempted"
-    )
-
-
-def test_a_cached_binary_printing_nothing_fails_the_step(
-    install_dir: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A probe that exits 0 while printing nothing is still not an answer.
-
-    This is the other half of the same failure: the exit status is clean, so
-    only the empty output marks the binary as unusable. Without that check the
-    empty string would be compared against the pin, read as a version
-    mismatch, and the binary would be replaced.
-    """
-    write_executable(install_dir / "actionlint", "true")
-    monkeypatch.setenv("INPUT_RELEASE_ROOT", file_url(tmp_path / "absent"))
-    monkeypatch.setenv("INPUT_ACTIONLINT_SHA256", "0" * 64)
-
-    exit_code = invoke(script.app)
-
-    assert exit_code == 1, "expected: exit_code == 1"
-    err = capsys.readouterr().err
-    assert "the cached actionlint cannot be used" in err, (
-        "expected: the diagnostic to name the unusable cache entry"
-    )
-    assert "exited 0" in err, "expected: the probe's exit status in the diagnostic"
 
 
 def test_a_failed_checksum_leaves_no_install_directory_behind(

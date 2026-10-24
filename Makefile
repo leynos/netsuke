@@ -332,6 +332,7 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 		scripts/tests/test_ci_containment.py \
 		scripts/tests/test_ci_discard_instrumented_tree.py \
 		scripts/tests/test_ci_install_actionlint.py \
+		scripts/tests/test_ci_install_actionlint_cache.py \
 		scripts/tests/test_ci_install_kani.py \
 		scripts/tests/test_ci_report_sccache_stats.py \
 		scripts/tests/test_ci_scripts_metadata.py \
