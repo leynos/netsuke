@@ -5,10 +5,12 @@ a Cyclopts helper that reuses the gate-cached binary when it reports the
 pinned version and otherwise downloads the pinned Linux amd64 release archive,
 verifies its SHA-256, and extracts the single ``actionlint`` member. The pins
 live beside the step as ``INPUT_*`` environment variables so a silent change
-to the version or checksum fails a test rather than shipping; the download,
-verification, reuse, and failure behaviours are covered by
-``scripts/tests/test_ci_install_actionlint.py``. ``github_actions_validation_test.py``
-consumes these constants; this module holds no tests of its own.
+to the version or checksum fails a test rather than shipping; download,
+verification, and installation behaviours are covered by
+``scripts/tests/test_ci_install_actionlint.py``, and cache-probe behaviour by
+``scripts/tests/test_ci_install_actionlint_cache.py``.
+``github_actions_validation_test.py`` consumes these constants; this module
+holds no tests of its own.
 
 Run via ``make test-workflow-contracts``.
 """

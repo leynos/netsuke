@@ -11,7 +11,6 @@ struct YamlKey(pub &'static str);
 
 #[derive(Clone, Copy)]
 enum StepField {
-    Uses,
     Runs,
 }
 
@@ -22,7 +21,6 @@ const WHITAKER_INSTALLER_VERSION: &str = "0.2.9";
 impl StepField {
     const fn yaml_key(self) -> &'static str {
         match self {
-            Self::Uses => "uses",
             Self::Runs => "run",
         }
     }
