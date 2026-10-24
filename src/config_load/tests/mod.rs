@@ -6,7 +6,10 @@
 //! configuration-load context carries its injected environment through both
 //! early JSON resolution and the cached merge.
 
-use super::super::{RunWithArgsDependencies, locale_resolution, localization, run_with_args};
+use super::super::{
+    RunWithArgsDependencies, locale_resolution, localization, run_with_args,
+    startup_tracing::StartupWriter,
+};
 use anyhow::{Context, Result, bail, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::Dir;
@@ -324,8 +327,12 @@ fn run_with_config_metrics(
         config_env: &context_env_tests::EmptyConfigEnv,
     };
     let mut exit = None;
+    let startup_writer = StartupWriter::buffering();
     let metrics = captured_metrics(|| {
-        exit = Some(run_with_args(args, &dependencies));
+        exit = Some(tracing::subscriber::with_default(
+            tracing_subscriber::registry(),
+            || run_with_args(args, &dependencies, &startup_writer),
+        ));
     });
     ensure!(
         exit == Some(ExitCode::FAILURE),
