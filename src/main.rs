@@ -45,7 +45,7 @@ mod observability;
 mod startup_tracing;
 
 #[cfg(test)]
-mod test_tracing_capture;
+pub mod test_tracing_capture;
 
 mod config_load;
 use startup_tracing::StartupWriter;
@@ -100,7 +100,9 @@ fn main() -> ExitCode {
         configuration_clock: &configuration_clock,
         config_env: &config_env,
     };
-    run_with_args(args, &dependencies)
+    let startup_writer = StartupWriter::buffering();
+    init_tracing(LevelFilter::WARN, startup_writer.clone());
+    run_with_args(args, &dependencies, &startup_writer)
 }
 
 /// Run one invocation with injectable locale, configuration, and clock providers.
@@ -108,10 +110,12 @@ fn main() -> ExitCode {
 /// Uses the injected [`MonotonicClock`] to orchestrate timed configuration
 /// loading before running the selected command. Returns the command's process
 /// exit code, including failures from argument parsing, configuration loading,
-/// and runner execution.
+/// and runner execution. The production entrypoint owns process-wide tracing
+/// initialization so tests can call this function with a scoped subscriber.
 fn run_with_args<L, S, C, E>(
     args: Vec<OsString>,
     dependencies: &RunWithArgsDependencies<'_, L, S, C, E>,
+    startup_writer: &StartupWriter,
 ) -> ExitCode
 where
     L: locale_resolution::LocaleEnvProvider,
@@ -124,20 +128,18 @@ where
     // only a hint — configuration can still turn JSON on — and the JSON
     // diagnostic goes to stderr, so an event emitted now could corrupt it.
     // Buffering keeps the locale fallback report without taking that risk.
-    let startup_writer = StartupWriter::buffering();
-    init_tracing(LevelFilter::WARN, startup_writer.clone());
     let startup_mode = DiagMode::from_json_enabled(json_hint);
     observability::init_metrics();
     let localizer = startup_localizer(&args, dependencies.locale_env, dependencies.system_locale);
     let (parsed_cli, matches) =
-        match parse_cli_or_exit(args, &localizer, startup_mode, &startup_writer) {
+        match parse_cli_or_exit(args, &localizer, startup_mode, startup_writer) {
             Ok(parsed) => parsed,
             // The buffer was settled inside, before the branch that exits.
             Err(code) => return code,
         };
     let verbose = parsed_cli.verbose;
     if is_informational_help(&parsed_cli) {
-        settle_startup_diagnostics(&startup_writer, startup_mode);
+        settle_startup_diagnostics(startup_writer, startup_mode);
         return finish_run(
             run_cli(&parsed_cli, dependencies.system_locale, startup_mode),
             verbose,
@@ -148,7 +150,7 @@ where
         parsed_cli: &parsed_cli,
         matches: &matches,
         startup_mode,
-        startup_writer: &startup_writer,
+        startup_writer,
         config_env: dependencies.config_env,
     };
     let merged_cli = match config_load::resolve_configuration(
