@@ -16,20 +16,22 @@ compared with `==` or `!=` against a string literal, `&&` and `||`. Anything
 else raises, so a condition it cannot evaluate fails the contract instead of
 being guessed at.
 
+The last test closes the other half of the step: when the condition does let it
+run, the step must hand its work to the checked-in report script with the
+backend `setup-rust` selected. The script's own behaviour is covered by
+`scripts/tests/test_ci_report_sccache_stats.py`, so this module never executes
+a step's `run` as shell.
+
 Run via ``make test-workflow-contracts``.
 """
 
 import re
-import shutil
-import subprocess  # ruff: ignore[suspicious-subprocess-import] - the step's own script is the subject.
 import typing as typ
 
 import pytest
 from cache_contract_data import SETUP_RUST_SCCACHE_JOBS, WORKFLOW_DIR
+from sccache_compile_step_data import SCCACHE_REPORT_SCRIPT
 from workflow_loading import job_steps, load_workflow, named_step
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
 
 SETUP_RUST_ID = "setup-rust"
 _COMPARISON = re.compile(
@@ -228,63 +230,35 @@ def test_an_expression_the_evaluator_cannot_read_is_refused() -> None:
         evaluate("!(always())", {}, job_failed=False)
 
 
-#: The stand-in `sccache`, a shell function loaded through `BASH_ENV`: it records
-#: its arguments, one call per line, and prints a fixed statistics line, writing
-#: valid JSON when asked for the JSON format.
-_FAKE_SCCACHE = r"""
-sccache() {
-  printf '%s\n' "$*" >> "$CALLS_FILE"
-  case "$*" in
-    *json*) printf '%s\n' '{"stats":{}}' ;;
-    *) printf '%s\n' 'Cache location                  ghac (fake)' ;;
-  esac
-}
-"""
-
-
 @pytest.mark.parametrize(("workflow_name", "job_name"), list(SETUP_RUST_SCCACHE_JOBS))
-def test_a_started_job_reports_its_statistics_and_backend(
-    workflow_name: str, job_name: str, tmp_path: Path
+def test_a_started_job_hands_the_backend_to_the_report_script(
+    workflow_name: str, job_name: str
 ) -> None:
-    """The step's own script runs: text and JSON files, and a backend summary.
+    """The step runs the checked-in script and names the backend it selected.
 
     A fallback never reaches this script, because the condition above skips the
-    step; this runs the half that does run, against a stand-in `sccache`, and
-    shows what a started job leaves behind.
+    step. What the script does when it does run — the text and JSON files, the
+    summary section, and the backend line — belongs to the script's own suite,
+    `scripts/tests/test_ci_report_sccache_stats.py`, which drives it with a
+    stand-in `sccache`. Running that behaviour from here would mean executing
+    the step's `run` as shell, which is exactly the inline shell this lane no
+    longer carries.
     """
-    bash = shutil.which("bash")
-    if bash is None:
-        pytest.skip("bash not found on PATH")
     steps = job_steps(load_workflow(WORKFLOW_DIR / workflow_name), job_name)
-    script = str(named_step(steps, "Show sccache statistics")["run"])
-    (tmp_path / "fake.sh").write_text(_FAKE_SCCACHE, encoding="utf-8")
-    (tmp_path / "summary").write_text("", encoding="utf-8")
-    environment = {
-        "PATH": "/usr/bin:/bin",
-        "BASH_ENV": str(tmp_path / "fake.sh"),
-        "CALLS_FILE": str(tmp_path / "calls"),
-        "GITHUB_STEP_SUMMARY": str(tmp_path / "summary"),
-        "SCCACHE_BACKEND": "ubicloud",
-    }
-    completed = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the step's own script under test.
-        [bash, "-e", "-o", "pipefail", "-c", script],
-        capture_output=True,
-        check=False,
-        cwd=tmp_path,
-        env=environment,
-        text=True,
-        timeout=30,
+    show = named_step(steps, "Show sccache statistics")
+    assert str(show.get("run", "")).strip() == SCCACHE_REPORT_SCRIPT, (
+        f"{workflow_name} {job_name} must report through "
+        f"{SCCACHE_REPORT_SCRIPT!r}, got {show.get('run')!r}"
     )
-
-    assert completed.returncode == 0, f"{workflow_name}:{job_name}: {completed.stderr}"
-    calls = (tmp_path / "calls").read_text(encoding="utf-8").splitlines()
-    assert calls == ["--show-stats", "--show-stats --stats-format=json"], calls
-    assert "Cache location" in (tmp_path / "sccache-stats.txt").read_text(
-        encoding="utf-8"
-    ), "the text statistics must be kept"
-    assert (tmp_path / "sccache-stats.json").read_text(encoding="utf-8").strip() == (
-        '{"stats":{}}'
-    ), "the JSON statistics must be kept"
-    summary = (tmp_path / "summary").read_text(encoding="utf-8")
-    assert "- backend: ubicloud" in summary, summary
-    assert "Cache location" in summary, summary
+    env = show.get("env")
+    assert isinstance(env, dict), (
+        f"{workflow_name} {job_name} must pass the selected backend to the "
+        "script; the statistics' own `Cache location` cannot stand in for it"
+    )
+    assert env.get("SCCACHE_BACKEND") == (
+        f"${{{{ steps.{SETUP_RUST_ID}.outputs.cache-backend }}}}"
+    ), (
+        f"{workflow_name} {job_name} must set SCCACHE_BACKEND from "
+        f"steps.{SETUP_RUST_ID}.outputs.cache-backend, got "
+        f"{env.get('SCCACHE_BACKEND')!r}"
+    )

@@ -27,6 +27,7 @@ import pytest
 from cache_contract_data import (
     ACTION_DIR,
     HAND_ROLLED_SCCACHE_VARIABLES,
+    REPO_ROOT,
     SETUP_RUST_ACTION,
     SETUP_RUST_SCCACHE_JOBS,
     WORKFLOW_DIR,
@@ -36,7 +37,7 @@ from cache_contract_data import (
 )
 from fork_fallback import read_placement
 from runner_placement_invariants import GITHUB_HOSTED_LABELS
-from sccache_compile_step_data import is_compile_step
+from sccache_compile_step_data import SCCACHE_REPORT_SCRIPT, is_compile_step
 from workflow_loading import (
     job_steps,
     load_workflow,
@@ -299,13 +300,13 @@ def test_statistics_follow_the_last_compile_and_name_the_backend(
     assert backend in str(show.get("env", {})), (
         f"{workflow_name} {job_name} must report {backend}"
     )
-    script = str(show.get("run", ""))
-    for command in ("sccache --show-stats", "sccache --show-stats --stats-format=json"):
-        assert command in script, (
-            f"{workflow_name} {job_name} must run `{command}` in its report"
-        )
-    assert "${SCCACHE_BACKEND" in script, (
-        f"{workflow_name} {job_name} must print the backend it was handed"
+    script = str(show.get("run", "")).strip()
+    assert script == SCCACHE_REPORT_SCRIPT, (
+        f"{workflow_name} {job_name} must report through the checked-in "
+        f"{SCCACHE_REPORT_SCRIPT!r} rather than inline shell, got {script!r}"
+    )
+    assert (REPO_ROOT / SCCACHE_REPORT_SCRIPT.split()[-1]).is_file(), (
+        f"{SCCACHE_REPORT_SCRIPT!r} must name a script that exists"
     )
 
 
