@@ -7,9 +7,9 @@ be kept up to date as work proceeds.
 
 Status: DRAFT
 
-This plan has not been approved. Do not begin implementation until the user
-explicitly approves it, including the open decisions `D3`, `D4`, `D8`, `D9`, and
-`D11` in the `Decision log`.
+On 2026-10-23 the user accepted the recommended outcomes of decisions `D3`,
+`D4` (Option A), `D8`, `D9`, and `D11`, and asked that implementation not begin
+yet. The plan stays a draft until the user explicitly approves implementation.
 
 ## Purpose / big picture
 
@@ -49,8 +49,9 @@ The four roadmap sub-bullets become observable, repeatable facts:
 1. Colour. `--color never`, and `NO_COLOR` under `--color auto`, produce no
    SGR sequence on any stream Netsuke styles itself (status output, logs,
    diagnostics, help). `--color auto` colours a stream only when it is a
-   terminal, `NO_COLOR` is not in effect, and `TERM` is not `dumb`. What
-   `--color always` does on a pipe is decision `D11`.
+   terminal, `NO_COLOR` is not set to a non-empty value, and `TERM` is not
+   `dumb`. `--color always` styles logs, diagnostics, and help even when the
+   stream is a pipe (decision `D11`).
 2. Emoji. `--emoji never` produces ASCII-only status glyphs, `--emoji always`
    produces Unicode glyphs even in accessible mode, and `--emoji auto` produces
    Unicode in standard mode and ASCII in accessible mode (or when `NO_COLOR` is
@@ -91,7 +92,7 @@ The four roadmap sub-bullets become observable, repeatable facts:
   through the injected `LocaleEnvProvider` already carried by
   `RunWithArgsDependencies` in `src/main.rs`, and stream terminal status is
   measured once in `main()` and passed in as values
-  ([ADR-008](../adr-008-environment-seam-taxonomy.md)).
+  ([ADR-0008](../adrs/adr-0008-environment-seam-taxonomy.md)).
 - Every end-to-end child process starts from `Command::env_clear()` and then
   receives only `PATH`, `HOME` and `TMPDIR` (pointing into the test's temporary
   directory), `LC_ALL=C.UTF-8`, `NETSUKE_LOCALE=en-US`, an explicit `TERM`, and
@@ -105,9 +106,10 @@ The four roadmap sub-bullets become observable, repeatable facts:
 - Presentation decisions must not flow into build semantics. The resolved
   display plan travels beside the command, never inside an application request
   (RFC 0026, "Application requests and an owned execution port").
-- Keep every file under 400 lines, including `src/main.rs` (383 lines today)
-  and `tests/cli_tests/display_policy_domain.rs` (397 lines today). Extract
-  before adding.
+- Keep every file under 400 lines, including `src/main.rs` (379 lines today),
+  `src/runner/mod.rs` (385 lines today) and
+  `tests/cli_tests/display_policy_domain.rs` (397 lines today). Extract before
+  adding.
 - The borrow checker is Polonius and the trait solver is next-generation
   (pinned `nightly-2026-08-23`). Do not add turbofish, clones, or bounds to
   appease an older analysis.
@@ -211,8 +213,12 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 - [x] (2026-09-26 23:10Z) Expert-panel review (accessibility, testing and
   verification, architecture, terminal systems, plan quality); revised the plan
   (see `Revision note`).
-- [ ] User approval of the plan and of decisions `D3`, `D4`, `D8`, `D9`,
-  `D11`.
+- [x] (2026-10-23) User accepted decisions `D3`, `D4` (Option A), `D8`, `D9`,
+  and `D11` as recommended; implementation is not yet authorized.
+- [x] (2026-10-23) Merged `origin/main` (`8a9610008`) into the branch,
+  re-verified the plan's code and documentation references against it, and
+  remapped moved paths and renumbered ADRs (see `Surprises & discoveries`).
+- [ ] User approval to begin implementation.
 - [ ] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour.
 - [ ] EP-M2: display-plan core and single resolution.
@@ -224,7 +230,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 
 - Observation: `--color` governs no ANSI emitter today; its only effect is on
   accessible-mode selection through `NO_COLOR` semantics. Evidence:
-  `src/theme.rs` documents `ColourTokens` as placeholders;
+  `src/theme/mod.rs` documents `ColourTokens` as placeholders;
   `src/main.rs::init_tracing` sets `with_ansi(io::stderr().is_terminal())`;
   `src/` contains no `miette::set_hook` or `clap::ColorChoice`; baseline rows
   `verbose-colnever-tty`, `missing-colnever-tty`, `help-colnever-tty`. Impact:
@@ -245,7 +251,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   static.
 - Observation: display decisions are derived from ambient state in three
   places: `src/main.rs`, `src/runner/mod.rs::run_with_ninja_program_resolver`,
-  and `src/runner/help.rs::resolved_prefs`; `ExecutionContext` recomputes
+  and `src/runner/help/mod.rs::resolved_prefs`; `ExecutionContext` recomputes
   `progress_enabled`, and `IndicatifReporter` relies on `indicatif`'s own
   terminal check. Impact: EP-M2 rewires all of them.
 - Observation: `miette` 7.6.0's graphical handler is already selected on a
@@ -260,6 +266,23 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `miette`'s `×`). Evidence: `src/main.rs::handle_runner_error`; baseline
   `err-auto-tty`. Impact: out of scope; follow-up issue. The suite must not pin
   the duplication as intended.
+- Observation: between the draft (`ebcedaef`) and 2026-10-23, `main` moved
+  the modules this plan touches into directories and renumbered every ADR.
+  Evidence: `src/output/mode.rs` and `src/output/prefs/mod.rs` (re-exported as
+  `output_mode` and `output_prefs`), `src/theme/mod.rs`,
+  `src/status/indicatif.rs`, `src/cli/l10n/mod.rs`, `src/runner/help/mod.rs`,
+  `src/cli/config/mod.rs`, `src/cli/policy/values.rs`,
+  `src/locale/resolution.rs`, `src/startup_tracing/mod.rs`; ADRs now live in
+  `docs/adrs/adr-nnnn-*.md`, where the agent-consistent CLI record is ADR-0046
+  and ADR-0041 is the canonical recipe shell quoting surface. Impact: paths,
+  ADR citations, and the planned ADR serial (now ADR-0060) were remapped. Code
+  inspection of the merged tree on 2026-10-23 shows the defects the plan
+  targets are still present: `src/main.rs` still calls
+  `with_ansi(io::stderr().is_terminal())`; `src/` still has no `set_hook` or
+  `ColorChoice`; and the ambient resolution sites remain at `src/main.rs`,
+  `src/runner/mod.rs`, and `src/runner/help/mod.rs`. The binary was not
+  re-probed; EP-M3's red cells re-run each defect against the implementation
+  base before fixing it.
 
 ## Decision log
 
@@ -271,12 +294,12 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   decision `D11`. Date/Author: 2026-09-26, planning agent, revised after panel
   review.
 - Decision D2: shape the change as a functional core with an imperative
-  shell, not a trait-based port. A new pure module `src/display_plan.rs`
+  shell, not a trait-based port. A new pure module `src/output/plan/mod.rs`
   resolves a `DisplayPlan` from `DisplayPolicies` and `TerminalFacts`. The
   composition root gathers facts once and hands the plan to four outbound
   adapters: the status reporter factory, the `tracing` formatter, the
   diagnostic hook, and `clap` help. Environment strings are reduced to booleans
-  exactly once, by `EnvSignals::read` in `src/output_mode.rs`; precedence lives
+  exactly once, by `EnvSignals::read` in `src/output/mode.rs`; precedence lives
   in `const fn`s over those booleans, which the existing `resolve_with` and
   `resolve_theme` also call, so there is one source of truth for precedence and
   for the empty-`NO_COLOR` rule. Rationale: the domain logic is a total
@@ -286,7 +309,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   capture one facet, so a new type is justified provided it absorbs
   `ReporterOptions` rather than sitting beside it. Date/Author: 2026-09-26,
   planning agent, revised after panel review.
-- Decision D3 (open, requires approval): keep `--progress auto` and
+- Decision D3 (accepted): keep `--progress auto` and
   `--progress always` behaviourally identical, pin the equivalence with a test,
   and document the contract as: "`always` requests progress reporting; it never
   forces animation into a pipe or a dumb terminal, and never overrides
@@ -294,9 +317,10 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   stage lines when stderr is not a terminal. That changes CI logs, contradicts
   the users' guide ("task progress falls back to text, so logs remain
   readable"), and is a product decision outside a verification task.
-  Recommendation: pin the equivalence.
-- Decision D4 (open, requires approval): whether an *empty* `NO_COLOR`
-  counts as set. Today it does (`src/output_mode.rs`: "any value, including
+  Recommendation: pin the equivalence. Outcome: accepted as recommended.
+  Date/Author: 2026-10-23, user.
+- Decision D4 (accepted, Option A): whether an *empty* `NO_COLOR`
+  counts as set. Today it does (`src/output/mode.rs`: "any value, including
   empty"). Option A: align with the `NO_COLOR` convention ("present and not an
   empty string"), which `tracing-subscriber` and `anstream` follow
   (`supports-color` does not: it treats empty as set and `"0"` as unset). This
@@ -304,9 +328,12 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   B: keep current behaviour, pin it, and record the divergence in the ADR.
   Either way every emitter agrees, because after EP-M3 no adapter consults
   `NO_COLOR` itself. Recommendation: Option A. Netsuke is pre-1.0
-  (`0.1.0-beta3`), the convention's current text is explicit, and ADR-003
-  favours predictability over preserving an accident. If Option A is approved,
-  it lands as its own red-green commit in EP-M3.
+  (`0.1.0-beta4`), the convention's current text is explicit, and ADR-0046
+  favours predictability over preserving an accident. Outcome: Option A
+  accepted. An empty `NO_COLOR` counts as unset everywhere Netsuke reads it.
+  The change lands as its own red-green commit in EP-M3 (step 4), after the
+  emitters are bound, and the users' guide and CLI design document are updated
+  to say "set to a non-empty value". Date/Author: 2026-10-23, user.
 - Decision D5: build the PTY harness on `nix::pty::openpty` by enabling the
   `term` feature of the existing `nix` 0.31.3 dev-dependency. Rationale: no
   crate is added to `Cargo.lock`; `portable-pty`, `expectrl`, and `rexpect`
@@ -337,7 +364,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   reached the same conclusion), and duplicating expectations in rstest rows and
   snapshots invites the two to drift. Date/Author: 2026-09-26, planning agent,
   revised after panel review.
-- Decision D8 (open, requires approval): the diagnostic hook maps the plan's
+- Decision D8 (accepted): the diagnostic hook maps the plan's
   `DiagnosticStyle` to `MietteHandlerOpts`: `color(style.colour)`,
   `unicode(style.unicode)`, and `terminal_links(style.links)`, where `links` is
   true only when colour is on and the mode is standard. It never sets
@@ -347,8 +374,9 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   is a visible format change for every accessible-mode user. Recommendation:
   adopt the mapping; defer the narratable handler to a follow-up roadmap item,
   and pin an accessible-mode diagnostic fingerprint now so that switch later
-  shows as a diff.
-- Decision D9 (open, requires approval): `clap` help and version output
+  shows as a diff. Outcome: accepted as recommended; the narratable handler is
+  a follow-up. Date/Author: 2026-10-23, user.
+- Decision D9 (accepted): `clap` help and version output
   follow a startup colour hint: `--color` on the command line (last occurrence
   wins, `--color=never` and localized, case-insensitive values accepted,
   nothing after `--`), then `NETSUKE_COLOR`, then `auto`. Configuration files
@@ -359,15 +387,21 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   own `NO_COLOR`, `CLICOLOR`, and CI heuristics cannot disagree with Netsuke.
   Usage errors stay plain (see `Risks`). Alternative: leave help colouring to
   `clap` and document that `--color` does not apply to help. Recommendation:
-  adopt the startup hint.
+  adopt the startup hint. Outcome: accepted as recommended. Date/Author:
+  2026-10-23, user.
 - Decision D10: record the display-policy contract and verification
-  strategy as ADR-041, status `Proposed` while implementation runs and
-  `Accepted` (with date and summary) at EP-M4. ADR-039 and ADR-040 are claimed
-  on open branches (`jm5/kani-change-scoped-gate`,
-  `6-1-1-split-rfc-0006-set-into-focused-child-rfcs-and-task`). Re-check every
-  remote branch immediately before committing the ADR, and renumber on a clash.
-  Date/Author: 2026-09-26, planning agent.
-- Decision D11 (open, requires approval): `--color always` forces ANSI
+  strategy as ADR-0060, status `Proposed` while implementation runs and
+  `Accepted` (with date and summary) at EP-M4. ADRs now live in
+  `docs/adrs/adr-nnnn-title-slug.md` with four-digit serials. The 2026-09-26
+  draft named ADR-041, which `main` has since given to the canonical recipe
+  shell quoting surface. A sweep of every remote branch on 2026-10-23 found
+  ADR-0059 as the highest serial minted (`module-slice-timeout-audit`) and no
+  branch reserving an `ADR-006x` number in prose, so ADR-0060 is the
+  provisional serial. Re-sweep every remote branch, in both the old
+  `docs/adr-NNN-` and new `docs/adrs/adr-nnnn-` layouts, immediately before
+  committing the ADR, and renumber on a clash. Date/Author: 2026-09-26,
+  planning agent; serial revised 2026-10-23.
+- Decision D11 (accepted): `--color always` forces ANSI
   styling on a non-terminal stream for every emitter Netsuke controls
   (`tracing` logs and `miette` diagnostics on stderr, `clap` help on stdout),
   matching the `CLICOLOR_FORCE` and `FORCE_COLOR` sense of "always". This is
@@ -375,7 +409,8 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   implemented. Alternative: `always` only bypasses `NO_COLOR` and `TERM=dumb`
   detection on a terminal, and pipes stay plain. Recommendation: adopt, because
   "always" that still depends on the stream is surprising, and CI log viewers
-  that render ANSI are the main reason to ask for it.
+  that render ANSI are the main reason to ask for it. Outcome: accepted as
+  recommended. Date/Author: 2026-10-23, user.
 - Decision D12: gather facts through existing seams. `NO_COLOR` and `TERM`
   are read through `RunWithArgsDependencies::locale_env` (the `NETSUKE_JSON`
   precedent), and stream terminal status is two new `bool` values in
@@ -400,44 +435,44 @@ Netsuke is a Rust command-line build tool: it reads a YAML-and-Jinja manifest
 library root is `src/lib.rs`; `test_support/` is a workspace crate of shared
 test helpers.
 
-Policy types and flags. `src/cli/config.rs` defines the `clap`-free enums
+Policy types and flags. `src/cli/config/mod.rs` defines the `clap`-free enums
 `ColourPolicy`, `EmojiPolicy`, `ProgressPolicy`, and `AccessibilityPolicy`, and
 the `CliConfig` struct that `ortho_config` merges from defaults, configuration
 files, `NETSUKE_*` environment variables, and the command line
 (`#[ortho_config(prefix = "NETSUKE")]`). `src/cli/command.rs` declares the
-flags; `src/cli/policy_values.rs` supplies localized, case-insensitive value
+flags; `src/cli/policy/values.rs` supplies localized, case-insensitive value
 parsers; `src/cli/preferences.rs` maps parsed policies to runtime preferences
 (`theme_preference`, `accessibility_override`, `progress_enabled`).
-`src/cli_l10n.rs` holds `locale_hint_from_args` and `json_hint_from_args`, the
-pre-parse argument scans re-exported from `src/cli/parser.rs`;
-`cli::parse_with_localizer_from` in `src/cli/parser.rs` builds and parses the
-localized `clap` command. This task adds no configuration field; see
+`src/cli/l10n/mod.rs` holds `locale_hint_from_args` and `json_hint_from_args`,
+the pre-parse argument scans re-exported from `src/cli/parser/mod.rs`;
+`cli::parse_with_localizer_from` in `src/cli/parser/mod.rs` builds and parses
+the localized `clap` command. This task adds no configuration field; see
 `docs/ortho-config-users-guide.md` for how the layers merge.
 
-Resolution. `src/output_mode.rs::resolve_with` chooses `OutputMode::Accessible`
+Resolution. `src/output/mode.rs::resolve_with` chooses `OutputMode::Accessible`
 or `OutputMode::Standard` from the accessibility override, the colour policy,
-and an injected `read_env` closure. `src/theme.rs::resolve_theme` chooses
+and an injected `read_env` closure. `src/theme/mod.rs::resolve_theme` chooses
 Unicode or ASCII glyph tokens (it has a private `EnvSignals` struct).
-`src/output_prefs.rs` wraps the theme in the `OutputPrefs` value reporters
+`src/output/prefs/mod.rs` wraps the theme in the `OutputPrefs` value reporters
 consume. `output_mode::resolve` and `output_prefs::resolve_from_theme` are thin
 wrappers that read the real process environment.
 
 Rendering. `src/runner/reporter.rs::make_reporter` selects `AccessibleReporter`
 (static labelled lines), `IndicatifReporter` (live `indicatif::MultiProgress`
-bars drawn to stderr, `src/status_indicatif.rs`, which mirrors messages to
+bars drawn to stderr, `src/status/indicatif.rs`, which mirrors messages to
 plain stderr lines when its draw target is hidden), or `SilentReporter`
 (`--progress never`), wrapped in `VerboseTimingReporter` under `--verbose`.
 `should_force_text_task_updates` forces plain task lines when the mode is
 accessible or stdout is not a terminal. `src/main.rs::init_tracing` installs the
-`tracing` subscriber; `src/startup_tracing.rs::StartupWriter` buffers early
-events until the output mode is known. `src/main.rs::handle_runner_error`
+`tracing` subscriber; `src/startup_tracing/mod.rs::StartupWriter` buffers
+early events until the output mode is known. `src/main.rs::handle_runner_error`
 prints failures through `miette::Report`'s debug renderer, which uses the
 process-global `miette` hook (currently the library default). `clap` renders
 `--help` in `src/main.rs::parse_cli_or_exit`.
 
 Existing tests. `tests/cli_tests/display_policy_domain.rs` sweeps the pure
-resolvers against a handwritten truth model. `src/output_mode.rs`,
-`src/theme.rs`, `src/output_prefs.rs`, and `src/runner/reporter.rs` have
+resolvers against a handwritten truth model. `src/output/mode.rs`,
+`src/theme/mod.rs`, `src/output/prefs/mod.rs`, and `src/runner/reporter.rs` have
 `rstest` tables. Behavioural scenarios use `rstest-bdd` 0.5.0 with
 `strict-compile-time-validation`: feature files in `tests/features/` (all
 platforms) and `tests/features_unix/` (Unix only) are collected by `scenarios!`
@@ -458,17 +493,18 @@ provides `fluent::normalize_fluent_isolates` and `fake_ninja`. No test uses a
 PTY.
 
 Terms. A *policy* is the user's request (`auto`, `always`, …). A *fact* is an
-observation (`NO_COLOR` set, stderr is a terminal). A *decision* is what
-Netsuke does (style stderr, draw live bars). The *display plan* is the complete
-set of decisions for one run. An *escape sequence* is any byte sequence
-beginning with `ESC` (0x1B). A *Control Sequence Introducer (CSI)* sequence is
-`ESC [`, then parameter bytes 0x30–0x3F, intermediate bytes 0x20–0x2F, and one
-final byte 0x40–0x7E. An *SGR sequence* is a CSI sequence with final byte `m`.
-A *redraw sequence* is a CSI sequence with final byte in
-`A B C D E F G H J K f`, a save or restore cursor (`ESC 7`, `ESC 8`), or a
-*bare carriage return* (a `\r` not followed by `\n`; a PTY turns every `\n` into
-`\r\n`, so `\r\n` is folded first). An *OSC sequence* is `ESC ]`, used for
-hyperlinks.
+observation (`NO_COLOR` set, stderr is a terminal). `NO_COLOR` is *set* when it
+is present and not empty (decision `D4`); until EP-M3 step 4 lands, the code
+still treats an empty value as set. A *decision* is what Netsuke does (style
+stderr, draw live bars). The *display plan* is the complete set of decisions
+for one run. An *escape sequence* is any byte sequence beginning with `ESC`
+(0x1B). A *Control Sequence Introducer (CSI)* sequence is `ESC [`, then
+parameter bytes 0x30–0x3F, intermediate bytes 0x20–0x2F, and one final byte
+0x40–0x7E. An *SGR sequence* is a CSI sequence with final byte `m`. A *redraw
+sequence* is a CSI sequence with final byte in `A B C D E F G H J K f`, a save
+or restore cursor (`ESC 7`, `ESC 8`), or a *bare carriage return* (a `\r` not
+followed by `\n`; a PTY turns every `\n` into `\r\n`, so `\r\n` is folded
+first). An *OSC sequence* is `ESC ]`, used for hyperlinks.
 
 Skills and guides to load. Load `rust-router` and follow it to
 `rust-unit-testing` (rstest tables, `googletest` matchers, `pretty_assertions`,
@@ -485,7 +521,8 @@ before changing signatures. Read `docs/rust-testing-with-rstest-fixtures.md`,
 
 ## Conformance basis
 
-Upstream artefacts, all at commit `ebcedaef` on `main`:
+Upstream artefacts, all at commit `8a9610008` on `main` (merged into this
+branch on 2026-10-23; the draft was written against `ebcedaef`):
 
 - `docs/roadmap.md`, "3.12. Terminal rendering verification", task 3.12.3
   and its sub-bullets: `RM-3.12.3-COLOUR`, `RM-3.12.3-EMOJI`,
@@ -502,11 +539,13 @@ Upstream artefacts, all at commit `ebcedaef` on `main`:
 - `docs/users-guide.md`, "Policy values and parsing", "Accessible output",
   and "Ninja status progress": `UG-ACCESS`, `UG-EMOJI`, `UG-TEXT-FALLBACK`, and
   `UG-NO-COLOUR-ALONE` ("meaning is not conveyed by colour alone").
-- [ADR-003](../adr-003-agent-consistent-human-first-cli.md) (`ADR-003`) and
-  [ADR-008](../adr-008-environment-seam-taxonomy.md) (`ADR-008`).
-- RFC 0026, "Application requests and an owned execution port"
-  (`RFC-0026-PRESENTATION`); RFC 0027's layer table, which places rendering in
-  "Adapters and presentation" (`RFC-0027-LAYERS`).
+- [ADR-0046](../adrs/adr-0046-agent-consistent-human-first-cli.md) (`ADR-0046`)
+  and [ADR-0008](../adrs/adr-0008-environment-seam-taxonomy.md) (`ADR-0008`).
+- [RFC 0026](../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md),
+  "Application requests and an owned execution port" (`RFC-0026-PRESENTATION`),
+  and the layer table in
+  [RFC 0027](../rfcs/rfc-0027-check-an-executable-architecture-contract.md),
+  which places rendering in "Adapters and presentation" (`RFC-0027-LAYERS`).
 - External conventions: `NO_COLOR` (<https://no-color.org/>; command-line
   arguments and user configuration override it) as `EXT-NO-COLOR`, and
   `FORCE_COLOR` (<https://force-color.org/>) as `EXT-FORCE-COLOR`, which this
@@ -526,7 +565,7 @@ RM-3.12.3-PROGRESS -> DES-PROGRESS, UG-TEXT-FALLBACK, D3 -> INV-PROGRESS -> EP-M
                    -> terminal_rendering progress cells, contract snapshot progress
 RM-3.12.3-ACCESS   -> UG-ACCESS, DES-PROGRESS -> INV-MODE-TRUTH, INV-ACCESS-STATIC -> EP-M1, EP-M2
                    -> terminal_rendering accessibility cells, contract snapshot accessibility
-ADR-008, D12       -> INV-SINGLE-RESOLUTION, L-ENV-SIGNALS -> EP-M2 -> clippy disallowed-methods, witness tables
+ADR-0008, D12       -> INV-SINGLE-RESOLUTION, L-ENV-SIGNALS -> EP-M2 -> clippy disallowed-methods, witness tables
 RFC-0026-PRESENTATION, RFC-0027-LAYERS -> EP-M2 conformance check (plan never enters a build request)
 ```
 
@@ -597,9 +636,15 @@ Lemmas over string inputs:
   `""`, `"dumb"`, `"DUMB"`, `" dumb"`, `"0"`, `"xterm-256color"`, with `#[cfg]`
   rows for the platform rule) plus a `proptest` over arbitrary `Option<String>`
   pairs comparing the refactored resolvers against a copy of the pre-refactor
-  functions kept in the test module. Artefact: `src/output_mode.rs` tests.
+  functions kept in the test module. Artefact: `src/output/mode.rs` tests.
   Non-vacuity: the witness table exhibits each class explicitly; a seeded fault
-  that lower-cases `TERM` must fail the `"DUMB"` row.
+  that lower-cases `TERM` must fail the `"DUMB"` row. Decision `D4` (Option A)
+  changes one class on purpose: until EP-M3 step 4 the `""` row expects
+  `no_color_set` (behaviour preservation during the refactor); step 4 flips
+  that row to unset and changes the reference copy's `NO_COLOR` rule in the
+  same red-green commit, so the property keeps comparing against a stated rule
+  rather than silently drifting. A seeded fault that keeps `is_some()` after
+  step 4 must fail the `""` row.
 - `L-CLASSIFIER`: `test_support::terminal::classify` reports SGR, redraw,
   OSC, any escape, bare carriage return, bidi isolates, and non-ASCII glyphs
   exactly when the input contains them, as defined in
@@ -782,27 +827,33 @@ Requirements: `INV-MODE-TRUTH`, `INV-COLOUR-TRUTH`, `INV-PROGRESS`,
 
 Commit 1 (refactor, behaviour-preserving). Move `init_tracing`,
 `set_tracing_filter`, and the reload handle (with a type alias) from
-`src/main.rs` into a binary-local module `src/main_tracing.rs`, declared with
-`#[path]` like `startup_tracing`; `startup_filter` and `DiagMode` stay where
-they are. In `src/cli_l10n.rs` (344 lines), extract a shared
-`find_option_value` scanner from `locale_hint_from_args`, as the comments on
-`locale_hint_from_args` and `json_hint_from_args` ask for once "a second valued
-pre-clap option" exists (`--color` is that option); move the file's tests to a
-sibling file first if it would exceed 400 lines. Gates must pass with no test
-change.
+`src/main.rs` into a binary-local module `src/main_tracing/mod.rs`, declared
+with a plain `mod main_tracing;` exactly as `main.rs` declares `startup_tracing`
+(`src/startup_tracing/mod.rs`); `startup_filter` and `DiagMode` stay where
+they are. In `src/cli/l10n/mod.rs` (360 lines; its tests already live in
+`src/cli/l10n/tests.rs`), extract a shared `find_option_value` scanner from
+`locale_hint_from_args`, as the comments on `locale_hint_from_args` and
+`json_hint_from_args` ask for once "a second valued pre-clap option" exists
+(`--color` is that option). If the file would exceed 400 lines, move the
+pre-parse scanners into a child module `src/cli/l10n/hints.rs` first. Gates
+must pass with no test change.
 
 Commit 2 (refactor, behaviour-preserving). Introduce the public
 `output_mode::EnvSignals` with `EnvSignals::read(read_env)` and `const fn`s
 over it; make `resolve_with` and `theme::resolve_theme` delegate to them,
-deleting `theme.rs`'s private `EnvSignals`. Add the `L-ENV-SIGNALS` witness
-table and property test first (red: the type does not exist yet; the property
-compares against a verbatim copy of the old functions).
+deleting the private `EnvSignals` in `src/theme/mod.rs`. Add the
+`L-ENV-SIGNALS` witness table and property test first (red: the type does not
+exist yet; the property compares against a verbatim copy of the old functions).
 
-Commit 3 (the core). Before creating `src/display_plan.rs`, record the sweep
-(`OutputPrefs`, `ThemeContext`, `ResolvedTheme`, `ReporterOptions` each capture
-one facet) and the re-use policy (pure; no I/O; callers are the binary
-composition root, `runner`, and tests; adapters read the plan but never
-re-derive it) in its `//!` comment. Extract the truth model from
+Commit 3 (the core). The core lives at `src/output/plan/mod.rs`, beside
+`output::mode` and `output::prefs`, with its unit tests in
+`src/output/plan/tests.rs`, and `src/lib.rs` re-exports it as
+`netsuke::display_plan` in the same way it re-exports `output_mode` and
+`output_prefs`. Before creating it, record the sweep (`OutputPrefs`,
+`ThemeContext`, `ResolvedTheme`, `ReporterOptions` each capture one facet) and
+the re-use policy (pure; no I/O; callers are the binary composition root,
+`runner`, and tests; adapters read the plan but never re-derive it) in its
+`//!` comment. Extract the truth model from
 `tests/cli_tests/display_policy_domain.rs` into
 `tests/cli_tests/display_policy_truth.rs`, write
 `tests/cli_tests/display_plan_domain.rs` (the 5,184-point sweep plus the
@@ -817,7 +868,7 @@ Commit 4 (rewire, all callers at once). `main()` measures
 `RunWithArgsDependencies`; `run_with_args` reads `NO_COLOR` and `TERM` through
 `locale_env`, builds `TerminalFacts` once, resolves the plan after
 configuration merges, and passes it to `runner::run(&cli, plan)`.
-`runner::run_with_ninja_program_resolver`, `runner/help.rs::resolved_prefs`,
+`runner::run_with_ninja_program_resolver`, `runner/help/mod.rs::resolved_prefs`,
 `ExecutionContext.progress_enabled`, and
 `reporter::make_reporter(plan, verbose)` consume the plan; `ReporterOptions`
 loses `mode` and `stdout_is_tty`. `IndicatifReporter` receives
@@ -825,8 +876,9 @@ loses `mode` and `stdout_is_tty`. `IndicatifReporter` receives
 core and the renderer agree. Delete `output_mode::resolve` and
 `output_prefs::resolve_from_theme`; update test callers (about twelve) to
 `resolve_display_plan(cli.display_policies(), TerminalFacts::default())`, and
-update `docs/developers-guide.md` and `docs/test-isolation-with-ninja-env.md`,
-which show `runner::run`. Add `std::io::IsTerminal::is_terminal` to
+update any documentation example that calls `runner::run` or
+`run_with_ninja_program` (sweep with `rg -n 'runner::run' docs`; none exists on
+`main` at `8a9610008`, but re-check). Add `std::io::IsTerminal::is_terminal` to
 `disallowed-methods` in `clippy.toml` and run the negative control. Switch
 EP-M1's handwritten expectations to plan-derived ones.
 
@@ -841,7 +893,8 @@ updated in the same commit.
 ### EP-M3: bind colour and glyph decisions to the emitters
 
 Requirements: `RM-3.12.3-COLOUR`, `INV-NO-SGR-WHEN-OFF`, `INV-COLOUR-ADDITIVE`,
-`INV-GLYPHS` (diagnostics); decisions `D4`, `D8`, `D9`, `D11` as approved.
+`INV-GLYPHS` (diagnostics); decisions `D4` (Option A), `D8`, `D9`, and `D11`,
+all accepted on 2026-10-23.
 
 Each commit starts by adding that commit's end-to-end cells and behavioural
 scenario, running them, and pasting the red output into `Artefacts and notes`;
@@ -860,14 +913,20 @@ then applies the fix; then shows them green.
    `--emoji never`, and `--accessibility on` (the accessible diagnostic
    fingerprint).
 3. `clap`: add `colour_hint_from_args` beside `json_hint_from_args` in
-   `src/cli_l10n.rs` (reusing the `policy_values` parser), a pure
+   `src/cli/l10n/mod.rs` (reusing the `policy_values` parser), a pure
    `display_plan::startup_colour`, and a `ColorChoice` parameter on
    `parse_with_localizer_from`, per `D9`. Cells: `--help` under `never`,
-   `NO_COLOR=1`, `NO_COLOR=` (empty), `always` piped, and `auto` on a PTY; a
-   usage error pinned plain; hint parsing rows for `--color=never`,
-   `--color NEVER`, a repeated flag, and a value after `--`.
-4. If `D4` Option A is approved: change `EnvSignals::read`, flipping the
-   empty-`NO_COLOR` witness rows first (red) and updating the pinned cells.
+   `NO_COLOR=1`, `always` piped, and `auto` on a PTY; a usage error pinned
+   plain; hint parsing rows for `--color=never`, `--color NEVER`, a repeated
+   flag, and a value after `--`.
+4. Empty `NO_COLOR` (`D4`, Option A): first flip the `""` row of the
+   `L-ENV-SIGNALS` witness table and its reference copy, and add end-to-end
+   cells for `NO_COLOR=` (set but empty) on a PTY: `generate` selects standard,
+   live output; `--verbose generate` is coloured; `--help` is coloured. Run
+   them red, then change `EnvSignals::read` to treat an empty value as unset
+   (`is_some_and(|value| !value.is_empty())`), and run them green. No other
+   cell changes, because every other cell sets `NO_COLOR` to a non-empty value
+   or not at all.
 
 The behavioural scenarios added here (red, then green) are:
 
@@ -991,19 +1050,19 @@ this section if one changes.
 Documentation:
 
 - `docs/users-guide.md`, "Control output and accessibility": replace
-  "Colour rendering is not implemented in beta3 …" with the colour contract
+  "Colour rendering is not implemented in beta4 …" with the colour contract
   (which outputs `--color` governs; the `D11` behaviour; help follows the
   command line and `NETSUKE_COLOR` only; usage errors and pre-configuration
   errors are plain; subprocess output is forwarded unchanged). State the `D3`
   wording, the `D4` outcome, and that `TERM=dumb` keeps standard mode static.
 - `docs/netsuke-design.md`: extend "Theme resolution for CLI output" with the
-  display-plan core, its facts, its four adapters, and a link to ADR-041;
+  display-plan core, its facts, its four adapters, and a link to ADR-0060;
   update the "guarded by `insta` snapshots" sentence to name the PTY suite and
   the contract snapshots.
 - `docs/netsuke-cli-design-document.md`: document `DisplayPlan`,
   `TerminalFacts`, and the adapters as the component's internal interface, and
   correct the `NO_COLOR` statement to match `D4`.
-- `docs/adr-041-display-policy-contract-and-terminal-verification.md`:
+- `docs/adrs/adr-0060-display-policy-contract-and-terminal-verification.md`:
   context, the contract table, `D2`, `D3`, `D4`, `D6` to `D9`, `D11`, `D12`,
   and known limitations (no `FORCE_COLOR` input, no ConPTY coverage). Status
   `Accepted` with the date and a one-sentence summary. Add it to the ADR list in
@@ -1147,9 +1206,9 @@ for `openpty`; `googletest` 0.14.3 and `pretty_assertions` 1.4.1; `rstest`
 `FORCE_COLOR`, `CLICOLOR`, and `CLICOLOR_FORCE` are not Netsuke inputs. The
 `CLICOLOR` page now describes itself as deprecated in favour of `NO_COLOR` and
 `FORCE_COLOR`, and adopting `FORCE_COLOR` is a feature, not a verification
-task. ADR-041 lists it under known limitations.
+task. ADR-0060 lists it under known limitations.
 
-In `src/output_mode.rs` (existing public functions keep their signatures):
+In `src/output/mode.rs` (existing public functions keep their signatures):
 
 ```rust
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -1166,7 +1225,7 @@ impl EnvSignals {
 }
 ```
 
-In `src/display_plan.rs` (fields private; queries are `const fn`, so a
+In `src/output/plan/mod.rs` (fields private; queries are `const fn`, so a
 contradictory plan cannot be built):
 
 ```rust
@@ -1222,9 +1281,9 @@ In `src/cli/preferences.rs`, add
 `Cli::display_policies(&self) -> DisplayPolicies`, and move the
 `EmojiPolicy -> Option<ThemePreference>` and
 `AccessibilityPolicy -> Option<bool>` mappings onto the enums in
-`src/cli/config.rs` as `const fn`s that the existing `Cli` accessors delegate
-to. ADR-041 records these enums as approved value dependencies of the core (an
-open item in RFC 0027).
+`src/cli/config/mod.rs` as `const fn`s that the existing `Cli` accessors
+delegate to. ADR-0060 records these enums as approved value dependencies of the
+core (an open item in RFC 0027).
 
 Changed public signatures: `runner::run(cli: &Cli, plan: DisplayPlan)`,
 `runner::run_with_ninja_program(cli: &Cli, plan: DisplayPlan, program:
@@ -1232,9 +1291,9 @@ Changed public signatures: `runner::run(cli: &Cli, plan: DisplayPlan)`,
 and `cli::parse_with_localizer_from(…, colour: ColorChoice)`. Removed:
 `output_mode::resolve` and `output_prefs::resolve_from_theme`. Internal:
 `reporter::make_reporter(plan: DisplayPlan, verbose: bool)`. Binary-local:
-`src/main_tracing.rs` with `init_tracing`, `set_tracing_filter`, and
+`src/main_tracing/mod.rs` with `init_tracing`, `set_tracing_filter`, and
 `set_tracing_ansi(bool)`; the `miette` hook installer beside
-`handle_runner_error`. In `src/cli_l10n.rs`:
+`handle_runner_error`. In `src/cli/l10n/mod.rs`:
 `colour_hint_from_args(&[OsString]) -> Option<ColourPolicy>`.
 
 In `test_support/src/terminal/`:
@@ -1277,7 +1336,7 @@ pub fn run_in_pty(request: PtyRequest) -> anyhow::Result<PtyOutput>;
   red cells from EP-M1 into the EP-M3 commits that fix them and moved the
   colour scenarios into EP-M3. Replaced the facts-to-string round-trip with
   `EnvSignals` shared by all resolvers. Added the missed consumers
-  (`runner/help.rs`, `ExecutionContext`, `indicatif`'s own terminal check),
+  (`runner/help/mod.rs`, `ExecutionContext`, `indicatif`'s own terminal check),
   `redraw_capable` for `TERM=dumb` and unset `TERM`, `INV-COLOUR-ADDITIVE`,
   label and isolate checks, a richer byte classifier, PTY harness flake
   controls, and completeness guards for enumeration. Dropped `force_graphical`
@@ -1285,3 +1344,13 @@ pub fn run_in_pty(request: PtyRequest) -> anyhow::Result<PtyOutput>;
   the Verus rationale, the ADR status handling, and documentation coverage (CLI
   design document, repository layout). The remaining work is unchanged in
   shape: approval, then EP-M0 to EP-M4.
+- 2026-10-23: recorded the user's acceptance of decisions `D3`, `D4`
+  (Option A), `D8`, `D9`, and `D11`; implementation is still not authorized, so
+  the status stays `DRAFT`. Made the `D4` outcome concrete: `NO_COLOR` is set
+  only when non-empty, the change lands as EP-M3 step 4 with its own red cells,
+  and the `L-ENV-SIGNALS` empty-string row flips in that commit. Merged
+  `origin/main` (`8a9610008`) and remapped every path, ADR citation, and line
+  count to the reorganized tree. The core now lives at `src/output/plan/` and
+  the binary-local tracing module uses a plain `mod` declaration. The ADR
+  serial moved from ADR-041 (since taken) to ADR-0060 in `docs/adrs/`.
+  Milestone structure, obligations, and tolerances are unchanged.
