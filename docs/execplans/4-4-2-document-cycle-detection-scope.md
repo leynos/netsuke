@@ -12,9 +12,10 @@ Approved by explicit user instruction on 2026-10-24, before rebase or
 implementation. Execution began after rebasing onto the PR target `main` at
 `8a961000859c02862454338fda6c4dd65bda2aa1`.
 
-Revision 2. Drafted on 2026-09-27 against `origin/main` at `ebcedaef`, then
-revised after an expert-panel design review the same day (see `Revision note`).
-No implementation may begin until the plan is explicitly approved.
+Revision 3, reconciled on 2026-10-24. Drafted on 2026-09-27 against
+`origin/main` at `ebcedaef`, then revised after an expert-panel design review
+the same day (see `Revision note`). Approval was recorded above before
+implementation began.
 
 ## Purpose / big picture
 
@@ -217,8 +218,12 @@ Read before starting:
   and the dependency-classes paragraph near "`ast::DependencyOrder` is the
   closed manifest enum".
 - `docs/users-guide.md` *Understand the build model*, *Targets, inputs, and
-  dependencies*, *Run direct dependencies serially*, and *Use the canonical
-  build graph*.
+  dependencies*, *Run direct dependencies serially*, and *Export dependency
+  edges and raw recipes*.
+- `docs/terms-of-reference.md` §2.2 *Established conventions* and §5.1
+  *Reluctant Make users*: cycles are errors, and order-only dependencies are a
+  required capability, though the document does not define their cycle-check
+  participation.
 - `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`
   (Kani bounds) and
   `docs/adrs/adr-0011-use-ninja-dyndep-for-serial-dependency-ordering.md` (why
@@ -264,9 +269,15 @@ are:
 - The Ninja manual's definitions of explicit, implicit, and order-only
   dependencies and implicit outputs, and Ninja's `DependencyScan` behaviour
   (`NINJA-AX`), treated as axioms (see `Verification plan`).
+- `docs/terms-of-reference.md` §2.2 (`TOR-2.2`) establishes that the
+  dependency graph is acyclic and cycles are errors; §5.1 (`TOR-5.1`) requires
+  order-only dependencies with no loss of generality. Neither section specifies
+  whether order-only dependencies participate in Netsuke's whole-manifest cycle
+  check, so ADR-0060 records the implementation decision.
 
-No Terms of Reference revision governs this item (PR 786 proposes one but is
-unmerged); none is invented here.
+The Terms of Reference revision merged in PR 786 supplies this high-level
+basis; it does not answer the dependency-kind question. No additional ToR
+revision is needed.
 
 Trace links:
 
@@ -309,9 +320,9 @@ ADR-0011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
 - No in-process environment mutation in tests; subprocess tests configure the
   child with `Command::env` only.
 - No file may exceed 400 lines. `src/ir/cycle/verification.rs` is at 361 and
-  `tests/documentation_examples_tests.rs` is already at 458, so new harnesses
-  need room made first (Stage B) and the documented-example case lives in the
-  new end-to-end file, with only its identifier added to `EXPECTED_EXAMPLE_IDS`.
+  `tests/documentation_examples_tests.rs` is at 318, so new harnesses need room
+  made first (Stage B) and the documented-example case lives in the new
+  end-to-end file, with only its identifier added to `EXPECTED_EXAMPLE_IDS`.
 - Every Kani harness lives in a file whose source path
   `tests/kani_mutation_evidence_tests.rs::module_path_for_source` maps to the
   harness's module path: new cycle harnesses therefore go in
@@ -684,9 +695,11 @@ existing property suites.
 
 Re-sweep all live remote branch tips immediately before writing the ADR and
 confirm ADR-0060 is still free. Confirm the location of `visit_known_edge` and
-the `rstest-bdd` 0.6.0 world and step APIs. Record `make kani-ir` wall time on
-the unchanged tree as the baseline in `Artefacts and notes`. Grep `examples/`
-and `tests/data/` for `order_only_deps` and confirm none closes a cycle.
+the `rstest-bdd` 0.6.0 world and step APIs. Record the `make kani-ir` attempt
+and outcome on the unchanged tree in `Artefacts and notes`; if compiler
+admission prevents harness enumeration, record that as an environmental timeout
+and retain the required post-change attempt. Grep `examples/` and `tests/data/`
+for `order_only_deps` and confirm none closes a cycle.
 
 ### Stage B — EP-M1 characterization
 
@@ -694,9 +707,11 @@ Move the canonicalization-only helpers of `src/ir/cycle/verification.rs`
 (`assert_kernel_canonical_properties` through `is_closed_id_cycle`, about 220
 lines) into a new harness-free `src/ir/cycle/verification_support.rs`, declared
 from `cycle/verification.rs` with
-`#[path = "cycle/verification_support.rs"] mod support;`. The harnesses stay in
-`cycle/verification.rs`, so every existing mutation-patch name stays valid. Run
-`make kani-ir` to confirm the move is behaviour-neutral.
+`#[path = "verification_support.rs"] mod support;`. The path is relative to
+`verification.rs`'s directory because the declaration is outside an inline
+module block. The harnesses stay in `cycle/verification.rs`, so every existing
+mutation-patch name stays valid. Run `make kani-ir` to confirm the move is
+behaviour-neutral.
 
 Create `src/ir/cycle/participation_tests.rs` with a `build_edge` fixture taking
 an `EdgeSpec` struct with named path-list fields (keeping the argument count
@@ -704,8 +719,8 @@ within Clippy's limit) and an `rstest` table `implicit_outputs_participate`
 with the three OB-2 cases. Assert with `googletest` matchers
 (`assert_that!(report.cycle, some(eq(&expected)))`) and
 `pretty_assertions::assert_eq` for path vectors. Include it from
-`src/ir/cycle/mod.rs` with
-`#[cfg(test)] #[path = "cycle/participation_tests.rs"] mod participation_tests;`.
+`src/ir/cycle/mod.rs` with `#[cfg(test)] mod participation_tests;` because
+`mod.rs` and the new test file share a directory.
 
 Extend the harness-local `edge` helper in `cycle/verification.rs` to accept
 implicit outputs and order-only dependencies (or add a second small builder),
@@ -719,7 +734,8 @@ Red: add the OB-1 `rstest` table `order_only_dependencies_participate`; invert
 asserting the reported cycle contains the injected back edge; extend
 `missing_graph_strategy` and `injected_missing_deps` for OB-4; add
 `dependency_order_does_not_change_analysis`; add
-`src/ir/cycle/property_tests/participation_tests.rs` with the oracle property;
+`src/ir/cycle/property_tests/participation_tests.rs` with the oracle property,
+declared as `mod participation_tests;` in the sibling `property_tests/mod.rs`;
 add the Kani harness `order_only_two_node_cycle_reports_cycle`; add the BDD
 scenarios, the world slot and step, and the data files; add
 `tests/cycle_participation_e2e_tests.rs`. Run them and record the failures.
@@ -741,17 +757,19 @@ regress; otherwise keep the three calls and say why in a comment.
 
 ### Stage D — EP-M3 documentation, EP-M4 close
 
-Write ADR-0060 with *Status* (`Accepted`), *Date*, *Context and Problem
-Statement*, *Decision Drivers*, *Considered Options*, *Decision Outcome*, and
-*Consequences*. The options are: keep the exclusion and document it; include
-order-only dependencies (chosen); include them but only warn; a tiered rollout
-(warn in one release, reject in the next); and Ninja-parity scope (check only
-the subgraph reachable from requested targets). Record why each lost: warning
-or tiering keeps `netsuke generate` emitting Ninja files that Ninja refuses for
-a pre-1.0 tool with no known affected manifest; the reachable-subgraph scope
-has no meaning for `generate`, which has no requested targets, and would loosen
-the whole-graph check `sources` and `deps` already get. Cite the Ninja probes
-and the GNU Make comparison, and note the deferred edge-keyed traversal.
+Write ADR-0060 with *Status* (`Accepted`), *Date*, *Context and problem
+statement*, *Decision Drivers*, *Options considered*, *Decision outcome*,
+*Known risks and limitations*, and *Consequences*, following the current ADR
+style guide's section names and casing. The options are: keep the exclusion and
+document it; include order-only dependencies (chosen); include them but only
+warn; a tiered rollout (warn in one release, reject in the next); and
+Ninja-parity scope (check only the subgraph reachable from requested targets).
+Record why each lost: warning or tiering keeps `netsuke generate` emitting
+Ninja files that Ninja refuses for a pre-1.0 tool with no known affected
+manifest; the reachable-subgraph scope has no meaning for `generate`, which has
+no requested targets, and would loosen the whole-graph check `sources` and
+`deps` already get. Cite the Ninja probes and the GNU Make comparison, and note
+the deferred edge-keyed traversal.
 
 In `docs/users-guide.md`, replace the two-sentence paragraph under *Targets,
 inputs, and dependencies* with a one-line pointer, and add a new
@@ -767,8 +785,8 @@ for Rust callers, that a `BuildEdge`'s implicit outputs behave like explicit
 ones. It carries one tested example, `guide-order-only-cycle-manifest`, showing
 a rejected order-only cycle and the diagnostic text. Register the identifier in
 `EXPECTED_EXAMPLE_IDS`. Add one-sentence pointers from *Understand the build
-model*, from the IR bullet in *Interpret failures*, and from *Use the canonical
-build graph*.
+model*, from the IR bullet in *Interpret failures*, and from *Export dependency
+edges and raw recipes*.
 
 Update `docs/formal-verification-methods-in-netsuke.md` *Cycle-participation
 contract*, `docs/netsuke-design.md` §5.3 step 4 (also correcting "Keys are
@@ -973,6 +991,16 @@ branch commits one-to-one; the rebase had no conflicts and `git diff --check`
 was clean. `make fmt`, `make markdownlint`, and `make nixie` pass for the plan
 synchronization edit.
 
+Kani baseline, 2026-10-24: the prescribed eight-minute
+`systemd-run --user --scope` wrapper around `make kani-ir` ended with scope
+`Result=timeout`, exit 143, after 481.003 seconds. Kani 0.67.0 printed its
+banner but did not enumerate or run harnesses. `build-limits-status` remained
+healthy; the worktree was waiting in `cargo metadata` for a managed compiler
+probe. Log:
+`/tmp/kani-baseline-netsuke-4-4-2-document-cycle-detection-scope.out`. This
+records an admission timeout, not a proof failure; the post-change run is still
+required.
+
 Ninja 1.11.1 probes, 2026-09-27, scratch `/tmp/ninja-cycle-wfFe`:
 
 ```plaintext
@@ -999,6 +1027,11 @@ order-only dependencies alone do not cause the output to be rebuilt"; implicit
 outputs have "semantics identical to explicit outputs". The first sentence is
 the reason the old rationale fails: an order-only dependency still has to be
 *built first*, which is what makes a cycle through it unschedulable.
+
+Firecrawl recheck, 2026-10-24, against the Ninja v1.13.1 manual at
+<https://ninja-build.org/manual.html#ref_dependencies>: the order-only
+definition still requires dependencies to be built first, and the implicit
+output definition still gives them the semantics of explicit outputs.
 
 ## Interfaces and dependencies
 
@@ -1042,6 +1075,11 @@ already treat order-only dependencies as graph arcs.
 - [x] (2026-10-24) Reconciled active plan paths and ADR references with the
   rebased module and document layout; refreshed branch-wide ADR allocation
   evidence.
+- [x] (2026-10-24) Attempted the unchanged-tree `make kani-ir` baseline in the
+  prescribed capped scope. Compiler admission remained healthy but queued this
+  worktree's Cargo metadata probe until the eight-minute scope timeout; Kani
+  printed its version banner but enumerated no harnesses. This is not proof
+  evidence; the post-change Kani run remains required.
 - [ ] EP-M1.
 - [ ] EP-M2.
 - [ ] EP-M3.
@@ -1224,3 +1262,9 @@ check-then-regenerate step; scoped the stale-rule search away from historical
 ExecPlans; and added users' guide pointers from *Understand the build model*
 and *Interpret failures*. The remaining work is unchanged in shape: EP-M1 to
 EP-M4, awaiting approval.
+
+Revision 3 (2026-10-24): reconciled the active plan with the rebased tree and
+merged Terms of Reference; corrected user-guide signposts and Rust `#[path]`
+resolution; recorded that the baseline Kani attempt timed out in healthy
+compiler admission before harness enumeration. The approved scope and
+acceptance obligations are unchanged.
