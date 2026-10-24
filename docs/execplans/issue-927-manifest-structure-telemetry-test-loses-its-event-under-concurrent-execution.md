@@ -23,8 +23,9 @@ seeded duplicate.
 
 - Keep the production telemetry path and dependency resolution unchanged unless
   a released `tracing-core` fix exists.
-- Do not install a global dispatcher, serialize tests, add retries, or weaken
-  the summary assertion.
+- Do not initialize a process-wide dispatcher from reusable runner logic or
+  test helpers; the existing production initialization belongs to `main`. Do
+  not serialize tests, add retries, or weaken the summary assertion.
 - Keep the thread-local subscriber caveat accurate. The diagnosis must show
   whether it explains this failure instead of assuming that it does.
 - Keep the upstream `which` flake as a separate observation unless post-fix
@@ -354,6 +355,32 @@ seeded duplicate.
   write-lock attempt, so the worker does not prove contention in every run.
   Updated ADR-057 and V2 below to preserve that limit; the bounded Loom model
   supplies separate ordering coverage.
+- [x] (2026-10-24) A serial binary test run reproduced a test-order defect from
+  `run_with_args` installing a process-wide tracing subscriber. Moved the
+  existing production initialization to `main` and ran configuration tests
+  under a scoped registry; the focused serial binary suite passed 62 tests.
+  Clippy then identified that the new `StartupWriter` parameter should be
+  borrowed; the helper and its two callers now pass `&StartupWriter`.
+- [x] (2026-10-24) Rebased the 18-commit range from base
+  `8a961000859c02862454338fda6c4dd65bda2aa1` onto current `main` at
+  `018b81b4311ac5dd99ac4182c51301eeca0dfc55`. The replay completed without
+  conflicts. The two overlapping documentation files retain the newer
+  Dependabot runner and PowerShell placeholder guidance alongside this plan's
+  tracing documentation. The saved tracing patch was reapplied and its SHA-256
+  is `d993eb85c8921d16c1daea18d5b1e752405ac35193a71a428c325bb98b6ca9ef`.
+- [x] (2026-10-24) Re-ran the sequential gates after correcting the Clippy
+  borrows. Formatting, lint, typecheck, doc coverage (98.19%), Markdown lint,
+  Nixie, and local CodeScene checks passed. Nextest passed 4,852 tests with
+  seven skipped before `cli_configuration_fixture_compiles::case_1_public_api`
+  timed out at 300 seconds; 24 tests and doctests did not run. The captured
+  output has no compiler diagnostic, and process inspection found the fixture's
+  nested Cargo check compiling `ureq` through the admission wrapper. The same
+  fixture passed in 159 seconds in the preceding full run, which passed all
+  4,877 tests and doctests; that run differed only by three redundant borrows
+  removed in this Clippy correction. The timed-out gate was not retried.
+- [ ] Commit and publish the rebased candidate, then require exact-head hosted
+  CI to clear the local fixture timeout. Refresh CodeRabbit assessments, review
+  state, and all checks for the published head before merging PR #943.
 - [ ] Resolve current-head review concerns, follow checks to equilibrium, and
   merge PR #943 with the verified head commit.
 
@@ -483,6 +510,15 @@ production emission remains synchronous in `record_manifest_structure`.
   other libtest threads register dispatchers. The transition test now requires
   at least one observation and verifies every observed interest is `never`,
   without assuming a single callback. The review found no other concern.
+- Follow-up review (2026-10-24): CodeRabbit's serial test-order check found
+  that calling `run_with_args` from configuration tests installed a global
+  subscriber before the anchor test ran. Keeping production initialization in
+  `main` and running the test helper under a scoped registry removes that
+  order-dependent process state. The focused serial binary suite passed. The
+  fresh final sequence passed every gate except one nested CLI fixture timed
+  out while compiling `ureq`; the same test passed in the prior complete run.
+  Exact-head hosted CI remains the acceptance check for that environment-bound
+  result.
 - The first stop-hook rerun hit a transient full filesystem while Cargo wrote
   build metadata and Nixie created a temporary directory. After space became
   available, all seven gates passed sequentially: `make check-fmt`, `make test`
