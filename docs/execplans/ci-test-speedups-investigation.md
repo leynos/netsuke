@@ -49,6 +49,19 @@ passed and six were skipped; 24 tests and doctests were not reached. A later
 test invocation after rebase produced no terminal result, so it is not counted
 as a pass. Revalidate hosted checks and review on the published exact head.
 
+The first hosted CodeScene check on the provenance repair flagged the new
+metadata matcher for complexity. The refactor reuses the existing
+`ci_test_evidence_types.validate_identities` validator and separates the
+optional run-base repository check into a module-private predicate. The
+CI-performance protocol records the predicate's ownership and permitted use.
+Local `cs delta origin/main` now reports no issues. On this staged Python-only
+refactor, `make check-fmt`, `make typecheck`, `make lint`, and
+`make test-workflow-contracts` passed; workflow contracts reported 1,472 passed
+and three skipped, plus 27 supplementary script tests. The Rust-only
+`make test` was not repeated because no Rust source changed; its latest
+confirmed result remains the previously recorded public-API fixture timeout.
+Publish this refactor and obtain fresh hosted checks before accepting review.
+
 ## Purpose / big picture
 
 Reduce the elapsed time of Netsuke's existing CI test gate while preserving
@@ -548,7 +561,15 @@ fidelity comparisons block adoption.
   `make test-workflow-contracts` on the staged provenance repair. The
   workflow-contract suite passed 1,465 tests (three skipped) plus 27
   supplementary script tests.
-- [ ] Revalidate hosted checks after the provenance repair, obtain current-head
+- [x] Resolve the hosted CodeScene complexity finding without a suppression by
+  reusing the positive-ID validator and extracting the optional run-base
+  predicate; add missing, malformed and mismatched base regressions and record
+  its scope in the CI-performance protocol.
+- [x] Pass `make check-fmt`, `make typecheck`, `make lint`, and
+  `make test-workflow-contracts` on the refactor (1,472 passed, 3 skipped, plus
+  27 supplementary script tests); local `cs delta origin/main` reports no
+  issues.
+- [ ] Revalidate hosted checks after the CodeScene refactor, obtain current-head
   assessments/review, reconcile findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
@@ -844,6 +865,22 @@ the public API compile fixture timed out at 300 seconds; 24 tests and doctests
 were not reached. A later post-rebase invocation has no terminal result and is
 not counted as validation. Hosted CI and review must be refreshed for the
 published candidate before merge.
+
+The subsequent CodeScene advisory on the PR-author matcher identified
+`Complex Method` and overall code complexity at
+`_pull_request_metadata_matches`. The refactor reuses
+`ci_test_evidence_types.validate_identities` and confines optional base
+repository matching to `_run_association_base_matches_repository`, composed
+only by the author-metadata join. `docs/ci-performance/README.md` records that
+scope and preserves separate fork classification. The added regression cases
+cover omitted, null, malformed, boolean and conflicting run-base data. Local
+`cs delta origin/main` reports no issues. `make check-fmt`, `make typecheck`,
+`make lint`, and `make test-workflow-contracts` passed on the staged code;
+workflow contracts passed 1,472 and skipped three, plus 27 supplementary script
+tests passed. The Rust-only full suite was not rerun because this refactor
+changes only Python and Markdown; the confirmed local fixture timeout above
+remains unresolved. Hosted validation and review still need to cover the
+published refactor commit.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

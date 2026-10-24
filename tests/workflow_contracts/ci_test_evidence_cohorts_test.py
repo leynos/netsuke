@@ -154,3 +154,55 @@ def test_dependabot_author_requires_matching_saved_pr_identity(
     assert classify_cohort(run, job, pull_request) == "other", (
         "Unmatched PR metadata must not classify the run by its author's name"
     )
+
+
+@pytest.mark.parametrize(
+    ("run_base", "expected"),
+    [
+        (None, "dependabot_hosted"),
+        ({}, "dependabot_hosted"),
+        ({"repo": None}, "dependabot_hosted"),
+        ("malformed", "other"),
+        ({"repo": "malformed"}, "other"),
+        ({"repo": {"id": 99}}, "other"),
+        ({"repo": {"id": True}}, "other"),
+    ],
+    ids=[
+        "missing-run-base",
+        "missing-run-base-repository",
+        "null-run-base-repository",
+        "malformed-run-base",
+        "malformed-run-base-repository",
+        "different-run-base-repository",
+        "boolean-run-base-repository-id",
+    ],
+)
+def test_run_association_base_must_match_when_present(
+    run_base: object, expected: str
+) -> None:
+    """Use the run repository only when its optional base data is absent."""
+    run = {
+        "event": "pull_request",
+        "path": ".github/workflows/ci.yml",
+        "pull_requests": [
+            {
+                "id": 9001,
+                "number": 17,
+                "base": run_base,
+                "head": {"repo": {"id": 42}},
+            }
+        ],
+        "repository": {"id": 42},
+        "head_repository": {"id": 42},
+    }
+    pull_request = {
+        "id": 9001,
+        "number": 17,
+        "base": {"repo": {"id": 42}},
+        "user": {"login": "dependabot[bot]"},
+    }
+    job = {"name": "build-test", "labels": ["ubuntu-latest"]}
+
+    assert classify_cohort(run, job, pull_request) == expected, (
+        "Malformed or conflicting run base data must not classify by author"
+    )

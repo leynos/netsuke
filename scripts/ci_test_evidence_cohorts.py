@@ -6,6 +6,8 @@ fallback jobs separate during analysis.
 
 from pathlib import PurePosixPath
 
+from ci_test_evidence_types import validate_identities
+
 
 def classify_cohort(run: dict, job: dict, pull_request: dict | None = None) -> str:
     """Classify a run and job into a fixed comparison cohort.
@@ -98,7 +100,9 @@ def _pull_request_metadata_matches(
         run_repository.get("id"),
         api_base_repository.get("id"),
     )
-    if not all(_is_positive_integer(identity) for identity in identities):
+    try:
+        validate_identities(list(identities))
+    except TypeError, ValueError:
         return False
 
     run_identity = (
@@ -111,26 +115,29 @@ def _pull_request_metadata_matches(
         pull_request["number"],
         api_base_repository["id"],
     )
-    if run_identity != api_identity:
-        return False
+    return run_identity == api_identity and _run_association_base_matches_repository(
+        run_pull_request, run_repository["id"]
+    )
 
+
+def _run_association_base_matches_repository(
+    run_pull_request: dict, repository_id: int
+) -> bool:
+    """Require a supplied run base repository to match its workflow repository."""
     run_base = run_pull_request.get("base")
     if run_base is None:
-        run_base_repository_id = run_repository["id"]
-    elif not isinstance(run_base, dict):
+        return True
+    if not isinstance(run_base, dict):
         return False
-    else:
-        run_base_repository = run_base.get("repo")
-        if run_base_repository is None:
-            run_base_repository_id = run_repository["id"]
-        elif not isinstance(run_base_repository, dict):
-            return False
-        else:
-            run_base_repository_id = run_base_repository.get("id")
-    return (
-        _is_repository_id(run_base_repository_id)
-        and run_base_repository_id == run_repository["id"]
-    )
+
+    run_base_repository = run_base.get("repo")
+    if run_base_repository is None:
+        return True
+    if not isinstance(run_base_repository, dict):
+        return False
+
+    base_repository_id = run_base_repository.get("id")
+    return _is_repository_id(base_repository_id) and base_repository_id == repository_id
 
 
 def _has_distinct_head_repository(run: dict) -> bool:
@@ -151,11 +158,6 @@ def _has_distinct_head_repository(run: dict) -> bool:
 def _is_repository_id(value: object) -> bool:
     """Accept numeric repository IDs without treating booleans as IDs."""
     return isinstance(value, int) and not isinstance(value, bool)
-
-
-def _is_positive_integer(value: object) -> bool:
-    """Accept positive API identities without treating booleans as integers."""
-    return isinstance(value, int) and not isinstance(value, bool) and value > 0
 
 
 def _trunk_cache_writer_cohort(run: dict, job: dict) -> str:

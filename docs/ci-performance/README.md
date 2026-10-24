@@ -22,6 +22,14 @@ changes when someone else pushes to a PR. Missing or mismatched author
 provenance stays in `other`; the runner label alone does not prove that a run
 came from a fork.
 
+The saved-author join is owned by `ci_test_evidence_cohorts.py`.
+`_run_association_base_matches_repository` is composed only by
+`_pull_request_metadata_matches`, which is called only by
+`_is_dependabot_pull_request`. Keep this join limited to Dependabot author
+classification; fork classification uses the workflow run's base and head
+repository identities. Reuse `ci_test_evidence_types.validate_identities` for
+positive API identities; do not generalize the PR-author join to other cohorts.
+
 The retained observation set is published in `observations.jsonl`: 81 job
 records across 21 distinct run attempts. It contains six main-branch coverage
 jobs, six main-branch cache-writer jobs, nine same-repository PR Linux gate
