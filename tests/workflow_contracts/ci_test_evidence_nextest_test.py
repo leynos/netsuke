@@ -137,6 +137,29 @@ def test_partial_nextest_summary_preserves_selected_and_executed_counts() -> Non
     ), "Partial summaries must still close the Nextest phase"
 
 
+def test_late_nextest_summary_cannot_replace_a_closed_run() -> None:
+    """Keep summary counts and elapsed time fixed until the next run starts."""
+    evidence = parse_nextest_records([
+        (None, "Starting 1 test across 1 binary"),
+        (None, "PASS [ 0.100s] fixture::unit works"),
+        (None, "Summary [ 0.100s] 1 test run: 1 passed"),
+        (None, "Summary [ 9.000s] 2 tests run: 2 passed"),
+    ])
+
+    assert evidence["seconds"] == pytest.approx(0.1), (
+        "A summary after closure must not replace the completed run duration"
+    )
+    assert evidence["executed_count"] == 1, (
+        "A summary after closure must not replace the completed run count"
+    )
+    assert evidence["outcomes"] == {"passed": 1}, (
+        "A summary after closure must not replace the completed run outcomes"
+    )
+    assert [test["identity"] for test in evidence["tests"]] == [
+        "fixture::unit works"
+    ], "A completed run must retain only its own test identities"
+
+
 @pytest.mark.parametrize("status", ["ABORT", "SIGABRT", "SIGTERM"])
 def test_crashed_test_statuses_remain_in_the_identity_inventory(status: str) -> None:
     """Retain identities for aborted and signal-terminated test processes."""

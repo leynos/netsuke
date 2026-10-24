@@ -136,7 +136,7 @@ def test_attempt_start_delay_uses_current_attempt_timestamp(
 @pytest.mark.parametrize(
     "case",
     [
-        ("pull_request", "ci.yml", "build-test", "ubuntu-latest", "fork_hosted"),
+        ("pull_request", "ci.yml", "build-test", "ubuntu-latest", "other"),
         ("pull_request", "ci.yml", "build-test", "unknown", "other"),
         (
             "pull_request",
@@ -175,7 +175,7 @@ def test_attempt_start_delay_uses_current_attempt_timestamp(
         ),
     ],
 )
-def test_cohorts_do_not_mix_writer_coverage_or_fork(
+def test_cohort_requires_more_than_a_hosted_runner_label(
     attempt: tuple[dict, dict], case: tuple[str, str, str, str, str]
 ) -> None:
     """Keep execution paths separate even when runner shape matches."""

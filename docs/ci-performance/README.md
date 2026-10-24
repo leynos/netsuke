@@ -11,6 +11,14 @@ Here, the fixed `trunk` cohort label names push-triggered runs on the
 repository's `main` branch. The collector retains `trunk_coverage` and
 `trunk_cache_writer` as fixed cohort labels.
 
+For `ci.yml` pull-request jobs, `pr_coverage` identifies the Ubicloud lane,
+`fork_hosted` requires distinct base and head repository identities, and
+`dependabot_hosted` uses the PR author's `pull_requests[].user.login`. The
+workflow-run API exposes these fields in its [response][workflow-run-response].
+The actor is not a substitute for the PR author because it changes when someone
+else pushes to a PR. Incomplete or ambiguous hosted-run provenance stays in
+`other`; the runner label alone does not prove that a run came from a fork.
+
 The retained observation set is published in `observations.jsonl`: 81 job
 records across 21 distinct run attempts. It contains six main-branch coverage
 jobs, six main-branch cache-writer jobs, nine same-repository PR Linux gate
@@ -380,3 +388,5 @@ is approximately 10.3 MiB before compression; the supplement adds approximately
 archive is introduced here. Provider storage and transfer billing for
 repository checkout is unavailable, so this milestone makes no claim that the
 additional data has zero transfer cost.
+
+[workflow-run-response]: https://docs.github.com/en/rest/actions/workflow-runs#get-a-workflow-run

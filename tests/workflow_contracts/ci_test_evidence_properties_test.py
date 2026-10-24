@@ -60,6 +60,42 @@ def test_nextest_start_scopes_identity_inventory_to_latest_run(
 
 @settings(max_examples=80, derandomize=True, deadline=None)
 @given(
+    late_count=st.integers(min_value=2, max_value=9),
+    late_seconds=st.integers(min_value=1, max_value=9),
+)
+def test_late_nextest_summary_cannot_replace_closed_run(
+    late_count: int, late_seconds: int
+) -> None:
+    """Keep the first summary's timing, outcomes, and identities authoritative."""
+    late_summary = (
+        f"Summary [{late_seconds}.000s] {late_count} tests run: {late_count} passed"
+    )
+    evidence = parse_nextest_records([
+        (None, "Starting 1 test across 1 binary"),
+        ("2026-10-23T00:00:01Z", "PASS [ 0.100s] fixture::unit original"),
+        (None, "Summary [ 0.100s] 1 test run: 1 passed"),
+        (None, late_summary),
+    ])
+
+    assert evidence["seconds"] == pytest.approx(0.1), (
+        "A later summary must not replace the completed run duration"
+    )
+    assert evidence["selected_count"] == 1, (
+        "The original start marker must retain its selected count"
+    )
+    assert evidence["executed_count"] == 1, (
+        "A later summary must not replace the completed run count"
+    )
+    assert evidence["outcomes"] == {"passed": 1}, (
+        "A later summary must not replace the completed run outcomes"
+    )
+    assert [test["identity"] for test in evidence["tests"]] == [
+        "fixture::unit original"
+    ], "A later summary must not alter the completed run identity inventory"
+
+
+@settings(max_examples=80, derandomize=True, deadline=None)
+@given(
     attempts=st.lists(
         st.tuples(
             st.sampled_from(("PASS", "FAIL", "TIMEOUT")),
