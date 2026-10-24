@@ -196,6 +196,38 @@ fn netsuke_owned_path_substitutions_are_quoted() -> Result<()> {
     Ok(())
 }
 
+#[test]
+fn readme_documents_power_shell_script_marker_restrictions() {
+    let normalized_readme = include_str!("../README.md")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    let readme = normalized_readme.as_str();
+
+    assert_that!(
+        readme,
+        contains_substring("Both PowerShell `command:` and `script:` recipes")
+    );
+    assert_that!(
+        readme,
+        contains_substring("PowerShell scripts have no inert")
+    );
+    assert_that!(readme, contains_substring("immediately after a backtick"));
+    assert_that!(
+        readme,
+        contains_substring("PowerShell quote characters also make later markers fail closed")
+    );
+    assert_that!(
+        readme,
+        contains_substring("plain line-comment text leaves later unquoted markers")
+    );
+    assert_that!(readme, contains_substring("includes block-comment openers"));
+    assert_that!(
+        readme,
+        contains_substring("any mid-token `#` can make later markers fail closed")
+    );
+}
+
 #[rstest]
 fn documented_backtick_manifest_is_rejected() -> Result<()> {
     let workspace = manifest_workspace("readme-backtick-rejection-manifest")?;

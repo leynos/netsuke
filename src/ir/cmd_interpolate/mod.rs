@@ -1,10 +1,10 @@
 //! Command interpolation utilities for IR actions.
 //!
-//! Provides [`interpolate_command`], which substitutes the internal tokens
-//! emitted for `{{ ins }}` and `{{ outs }}` markers in recipe command strings.
-//! Shell variables such as `$in` and `$out` remain unchanged in every recipe.
-//! POSIX-compatible routes track shell quoting so path text is encoded for its
-//! insertion context. Called by [`super::from_manifest`] during IR lowering.
+//! Substitute the internal tokens emitted for `{{ ins }}` and `{{ outs }}`
+//! markers in recipe commands and scripts. Shell variables such as `$in` and
+//! `$out` remain unchanged. POSIX-compatible routes track quoting so paths are
+//! encoded for their insertion context; PowerShell accepts markers only at
+//! unquoted sites. Called by [`super::from_manifest`] during IR lowering.
 
 use crate::localization::{self, keys};
 use crate::shell_word;
@@ -39,14 +39,19 @@ pub(crate) struct CommandBindings {
     outs: PathSubstitutions,
 }
 
-/// Retain path text encoded for each POSIX shell quote context.
+/// Retain path text for each shell quote context used during marker lowering.
+///
+/// POSIX and Bash traversals use their contextual encodings. PowerShell's
+/// quoted-context fields reuse its standalone single-quoted path literal. That
+/// representation is not safe inside an existing PowerShell string, so the
+/// PowerShell traversal must reject markers at those sites.
 #[derive(Debug, Clone)]
 struct PathSubstitutions {
-    /// Use when the Netsuke marker is not enclosed by shell quotes.
+    /// Use when the marker is outside shell quotes.
     unquoted: String,
-    /// Use between an existing pair of POSIX single quotes.
+    /// Use between existing POSIX single quotes; unsafe for PowerShell strings.
     single_quoted: String,
-    /// Use between an existing pair of POSIX double quotes.
+    /// Use between existing POSIX double quotes; unsafe for PowerShell strings.
     double_quoted: String,
 }
 
@@ -70,14 +75,14 @@ impl CommandBindings {
         };
         match context {
             QuoteContext::Unquoted => &paths.unquoted,
-            QuoteContext::Single => &paths.single_quoted,
-            QuoteContext::Double => &paths.double_quoted,
+            QuoteContext::Single(_) => &paths.single_quoted,
+            QuoteContext::Double(_) => &paths.double_quoted,
         }
     }
 }
 
 impl PathSubstitutions {
-    /// Encode paths for each POSIX quote context used during Netsuke marker lowering.
+    /// Prepare path encodings used during Netsuke marker lowering.
     fn new(paths: &[Utf8PathBuf], shell: RecipeShell) -> Self {
         let unquoted = quote_paths(paths, shell).join(" ");
         if shell == RecipeShell::PowerShell {
@@ -187,11 +192,14 @@ pub(crate) fn interpolate_command_with_bindings(
 
 /// Interpolate a script without requiring command-shaped shell syntax.
 ///
-/// Script recipes may contain heredocs, comments, and other valid shell text
-/// that `shlex` cannot parse as a command. The traversal preserves each
-/// placeholder's shell-quoting context. Backtick-protected placeholders are
-/// rejected; single-quoted and double-quoted sites use their matching safe
-/// path encodings.
+/// POSIX and Bash scripts may contain heredocs, comments, and other valid
+/// shell text that `shlex` cannot parse as a command; their traversal preserves
+/// the script-specific lexical rules. PowerShell scripts use the same
+/// insertion-site rules as PowerShell commands: markers are valid only when
+/// unquoted, and are rejected in quoted, escaped, or command-substitution
+/// contexts or here-strings. PowerShell comment text isn't treated as an inert
+/// region, so quote characters in a comment can make later markers fail closed.
+/// This function does not apply the command-shaped `shlex` guard.
 pub(crate) fn interpolate_script_with_bindings(
     template: &str,
     bindings: &CommandBindings,
@@ -227,15 +235,15 @@ pub(super) enum Placeholder {
     Outputs,
 }
 
-/// Records the POSIX quote context surrounding a Netsuke recipe marker.
+/// Records the active shell quote context surrounding a recipe marker.
 #[derive(Debug, Clone, Copy)]
 pub(super) enum QuoteContext {
-    /// The Netsuke marker is outside shell quotes.
+    /// The marker is outside shell quotes.
     Unquoted,
-    /// The Netsuke marker is inside POSIX single quotes.
-    Single,
-    /// The Netsuke marker is inside POSIX double quotes.
-    Double,
+    /// The marker is inside single quotes.
+    Single(char),
+    /// The marker is inside double quotes.
+    Double(char),
 }
 
 /// Find an internal recipe token at `pos`.
@@ -296,11 +304,23 @@ fn substitute(template: &str, bindings: &CommandBindings) -> Result<String, IrGe
     Ok(traversal.finish())
 }
 
-/// Replace script placeholders while retaining their POSIX shell quote context.
+/// Replace script placeholders using the traversal for their selected shell.
 ///
-/// A script can validly contain syntax that `shlex` does not accept, so this
-/// performs only the context tracking needed to keep injected paths inert.
+/// PowerShell reuses command traversal because its path bindings are safe only
+/// at unquoted insertion sites. POSIX and Bash retain script-aware handling for
+/// comments, heredocs, escapes, and quoted marker insertion.
 fn substitute_script(template: &str, bindings: &CommandBindings) -> Result<String, IrGenError> {
+    match bindings.shell {
+        RecipeShell::PowerShell => substitute(template, bindings),
+        RecipeShell::Posix | RecipeShell::Bash => substitute_posix_script(template, bindings),
+    }
+}
+
+/// Substitute POSIX script markers while preserving comments and heredocs.
+fn substitute_posix_script(
+    template: &str,
+    bindings: &CommandBindings,
+) -> Result<String, IrGenError> {
     let chars: Vec<char> = template.chars().collect();
     let mut traversal = ScriptSubstitutionTraversal::new(template, &chars, bindings);
     let mut pos = 0;
@@ -334,3 +354,9 @@ mod tests;
 
 #[cfg(test)]
 mod power_shell_tests;
+
+#[cfg(test)]
+mod powershell_script_tests;
+
+#[cfg(test)]
+mod lexical_boundary_tests;

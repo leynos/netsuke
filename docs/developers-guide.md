@@ -907,6 +907,11 @@ that [Recipe-text dialect telemetry](#recipe-text-dialect-telemetry) admits is
 exactly the `ShellDialect` spelling, so the surjection above is what keeps a
 build's quoting reachable from the telemetry vocabulary.
 
+PowerShell quote delimiter classification lives in `src/shell_word.rs`. The
+PowerShell interpolation scanner reuses these single- and double-quote
+predicates, so path escaping and fail-closed marker detection share one
+delimiter table.
+
 Attributed list failures emit the bounded tracing fields `command_list_action`
 (a fixed-width action fingerprint) and `command_list_entry` (the one-based
 entry index), plus the matching `command_list_failure` marker. The process
@@ -987,6 +992,27 @@ Rule names are permanent. A retired rule keeps its name reserved and a rule
 whose meaning changes materially takes a new name, because the name is
 simultaneously a configuration key, a suppression token, a documentation
 anchor, and a field in machine output.
+
+### Choosing the recipe shell in a lint fixture
+
+`test_support::Fixture::new` lowers a fixture for
+`RecipeShell::host_default()`, which is PowerShell on Windows and POSIX
+elsewhere, so a rule test exercises whichever recipe dialect the runner happens
+to have. That default is right for a rule that reads recipe text without
+interpreting it. It is wrong for a fixture whose recipe text is itself the
+subject, because PowerShell and POSIX interpolation accept different marker
+sites: a body such as `"printf %s $${HOME}"` lowers under POSIX and fails
+closed under PowerShell.
+
+Use `Fixture::for_shell` when the fixture asserts shell-specific behaviour, and
+keep `Fixture::new` otherwise. Pinning a shell makes the fixture's own dialect
+a stated part of the test rather than a property of the machine, so a Windows
+runner and a Linux runner reach the same verdict. The same rule applies to a
+fixture that happens to contain shell syntax the rule does not care about: if
+the text would not lower on both platforms, name the shell whose lexis it uses.
+The macros (`assert_lint_silent!` and friends) take fixture text alone and are
+for the indifferent case; a test that needs a pinned shell calls `Fixture`
+directly.
 
 ### Linter pipeline interfaces
 
@@ -1922,6 +1948,9 @@ path quoting, and the large-recipe response-file transport. Neither step sets
 remains an ordinary PowerShell session. The rest of `build-test-windows`
 continues to use Git Bash only for the repository's POSIX Makefile quality
 gates, exactly as `Lint (Whitaker)` already overrides the default to `pwsh`.
+The smoke harness keeps process environment capture and restoration in
+`scripts/windows-recipe-smoke/environment.ps1`, separate from its scenario
+orchestration and path-placeholder fixture helpers.
 
 These steps were in a second job, `windows-native-recipe-smoke`, that `needs`-ed
 `build-test-windows`. That made it a strict serial tail on every pull request:
@@ -5726,7 +5755,7 @@ constants, which `src/ir/mod.rs` re-exports for runner-facing direct IR recipe
 tests. The constants are not manifest markers, Ninja syntax, or a general token
 registry. The module also defines the `CommandBindings` path encodings, the
 `QuoteContext` classification, and the `find_substitution` marker recognizer.
-The sibling `src/ir/cmd_interpolate/substitution.rs` owns
+The sibling `src/ir/cmd_interpolate/substitution/mod.rs` owns
 `SubstitutionTraversal`, which walks one recipe and applies those bindings only
 after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
@@ -5739,8 +5768,20 @@ heredoc delimiters are expanded. It queues declarations FIFO, including quoted
 delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
 surrounding quote context. This is a command-interpolation helper, not a
 general shell parser, and is not intended for reuse outside that boundary. The
-sibling `src/ir/cmd_interpolate/command_substitution.rs` owns the local quote
-and parenthesis state needed to keep protected `$()` bodies isolated.
+`src/ir/cmd_interpolate/substitution/powershell/` module groups focused
+PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
+`lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
+tracks raw native-command arguments, and `tokens/mod.rs` recognizes the token
+boundaries and syntax used by those scanners. The private
+`tokens/member_expressions.rs` helper recognizes variable roots through member
+and index chains; keep it within the PowerShell token scanner rather than
+reusing it as a general expression parser. They share a shell-specific boundary
+but keep distinct state responsibilities. `PowerShellSourceCharacter` binds a
+Unicode-scalar index to the borrowed source buffer and provides checked
+lookaround only within the PowerShell scanner; it is not a shared shell
+abstraction. The sibling `src/ir/cmd_interpolate/command_substitution.rs` owns
+the local quote and parenthesis state needed to keep protected `$()` bodies
+isolated.
 
 `src/manifest/render/mod.rs` may emit the internal tokens while rendering the
 only accepted manifest markers, `{{ ins }}` and `{{ outs }}`. Literal shell
@@ -5767,8 +5808,20 @@ uses backticks as escapes and does not enter that protected region. POSIX and
 Bash scanning also preserves comments and heredoc bodies verbatim; keep markers
 out of those regions, where their internal tokens can remain in generated
 recipe text. Heredoc delimiters are scanned for markers and expand normally.
-`script:` recipes share the POSIX-aware scanner on all shell routes, while
-PowerShell `command:` recipes use separate interpolation rules. For POSIX and
+POSIX and Bash `script:` recipes use the POSIX-aware scanner; PowerShell
+`command:` and `script:` recipes share the PowerShell-aware scanner and reject
+markers in quoted strings, here-strings, `$()`, or immediately after a
+backtick. Typographic PowerShell quote characters also make later markers fail
+closed. PowerShell rejects markers in the raw native-command region after an
+unquoted `--%` stop-parsing token. That region ends at a newline or pipeline
+character; a semicolon does not end it, and scanning resumes after the
+boundary. The path text otherwise reaches the native command literally instead
+of being interpreted as Netsuke's quoted path literal. PowerShell scripts have
+no inert comment regions: plain line-comment text leaves later markers eligible
+for interpolation, while scanner-sensitive syntax after a comment boundary or
+any mid-token `#` can make later markers fail closed. This includes a
+block-comment opener, quotes, backticks, or substitution syntax. In particular,
+an apostrophe in a comment can make a later marker fail closed. For POSIX and
 Bash `command:` recipes, the scanner then validates the substituted text: odd
 backticks reject the command, and the `shlex` guard also evaluates that
 substituted text. `script:` recipes skip both checks, because a script may

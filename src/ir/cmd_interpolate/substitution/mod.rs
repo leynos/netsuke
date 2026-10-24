@@ -8,6 +8,10 @@ use super::{
 };
 use crate::recipe_shell::RecipeShell;
 
+mod powershell;
+
+use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
+
 /// Classify whether the active shell region permits recipe-marker lowering.
 #[derive(Clone, Copy)]
 enum MarkerProtection {
@@ -42,7 +46,11 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     output: String,
     /// Record whether the current position is protected by backticks.
     in_backticks: bool,
-    /// Record the active POSIX quote context outside command substitutions.
+    /// Track PowerShell here-strings, comments, and fail-closed lexical state.
+    power_shell_lexical: PowerShellLexicalState,
+    /// Track native-command arguments following PowerShell's `--%` token.
+    power_shell_stop_parsing: PowerShellStopParsingState,
+    /// Record the active shell quote context outside command substitutions.
     quote_context: QuoteContext,
     /// Retain nested `$()` parsing state where path insertion is refused.
     command_substitutions: Vec<CommandSubstitution>,
@@ -63,6 +71,8 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             bindings,
             output: String::with_capacity(template.len()),
             in_backticks: false,
+            power_shell_lexical: PowerShellLexicalState::new(),
+            power_shell_stop_parsing: PowerShellStopParsingState::new(),
             quote_context: QuoteContext::Unquoted,
             command_substitutions: Vec::new(),
             posix_lexical: PosixLexicalState::new(),
@@ -79,7 +89,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             .get(pos)
             .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
         if self.bindings.shell == RecipeShell::PowerShell {
-            return self.append_power_shell_character(pos, ch);
+            let character = PowerShellSourceCharacter::new(self.chars, pos)
+                .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
+            return self.append_power_shell_character(character);
         }
         self.append_posix_character(pos, ch)
     }
@@ -140,76 +152,25 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
         None
     }
-    /// Preserve PowerShell text while lowering only manifest-owned markers.
-    fn append_power_shell_character(&mut self, pos: usize, ch: char) -> Result<usize, IrGenError> {
-        if let Some(next) = self.append_power_shell_escaped_character(pos, ch)? {
-            return Ok(next);
-        }
-        if self.append_power_shell_single_quote_escape(pos, ch) {
-            return Ok(pos + 2);
-        }
-        self.append_contextual_character(pos, ch, Self::power_shell_marker_protection)
-    }
-
     /// Preserve shared shell syntax before lowering a marker for its active context.
     fn append_contextual_character(
         &mut self,
         pos: usize,
         ch: char,
-        marker_protection: fn(&Self) -> MarkerProtection,
+        marker_protection: fn(&Self, usize) -> MarkerProtection,
     ) -> Result<usize, IrGenError> {
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
             return Ok(next);
         }
         self.update_quote_context(ch);
-        self.append_marker_for_context(pos, ch, marker_protection(self))
+        self.append_marker_for_context(pos, ch, marker_protection(self, pos))
     }
     /// Classify POSIX backticks and command substitutions as protected regions.
-    const fn posix_marker_protection(&self) -> MarkerProtection {
+    const fn posix_marker_protection(&self, _pos: usize) -> MarkerProtection {
         MarkerProtection::from_protected_region(
             self.in_backticks || self.is_in_command_substitution(),
         )
     }
-    /// Classify PowerShell quotes and command substitutions as protected regions.
-    fn power_shell_marker_protection(&self) -> MarkerProtection {
-        MarkerProtection::from_protected_region(
-            !matches!(self.active_quote_context(), QuoteContext::Unquoted)
-                || self.is_in_command_substitution(),
-        )
-    }
-    /// Preserve a PowerShell backtick escape unless it would hide a recipe marker.
-    fn append_power_shell_escaped_character(
-        &mut self,
-        pos: usize,
-        ch: char,
-    ) -> Result<Option<usize>, IrGenError> {
-        if ch != '`' || self.matches_single_quote_context() {
-            return Ok(None);
-        }
-        if find_substitution(self.chars, pos + 1).is_some() {
-            return Err(invalid_command_error(self.template.to_owned()));
-        }
-        let Some(next) = self.chars.get(pos + 1) else {
-            return Ok(None);
-        };
-        self.output.push(ch);
-        self.output.push(*next);
-        Ok(Some(pos + 2))
-    }
-    /// Preserve a doubled PowerShell apostrophe inside its single-quoted literal.
-    fn append_power_shell_single_quote_escape(&mut self, pos: usize, ch: char) -> bool {
-        if !self.matches_single_quote_context() || !self.has_doubled_apostrophe(pos, ch) {
-            return false;
-        }
-        self.output.push_str("''");
-        true
-    }
-
-    /// Report whether `ch` begins a doubled PowerShell apostrophe escape.
-    fn has_doubled_apostrophe(&self, pos: usize, ch: char) -> bool {
-        ch == '\'' && self.chars.get(pos + 1) == Some(&'\'')
-    }
-
     /// Preserve a POSIX escaped character without interpreting its quote meaning.
     fn append_escaped_character(&mut self, pos: usize, ch: char) -> Option<usize> {
         if ch != '\\' || self.matches_single_quote_context() {
@@ -284,9 +245,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         Self::update_quote_context_for_region(quote_context, ch);
     }
 
-    /// Report whether the traversal is currently enclosed by POSIX single quotes.
+    /// Report whether the traversal is currently enclosed by single quotes.
     fn matches_single_quote_context(&self) -> bool {
-        matches!(self.active_quote_context(), QuoteContext::Single)
+        matches!(self.active_quote_context(), QuoteContext::Single(_))
     }
 
     /// Report whether the active shell region is outside both kinds of quotes.
@@ -319,9 +280,11 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Update the quote state of one shell region after copying its source character.
     const fn update_quote_context_for_region(quote_context: &mut QuoteContext, ch: char) {
         match (*quote_context, ch) {
-            (QuoteContext::Unquoted, '\'') => *quote_context = QuoteContext::Single,
-            (QuoteContext::Unquoted, '"') => *quote_context = QuoteContext::Double,
-            (QuoteContext::Single, '\'') | (QuoteContext::Double, '"') => {
+            (QuoteContext::Unquoted, '\'') => *quote_context = QuoteContext::Single('\''),
+            (QuoteContext::Unquoted, '"') => *quote_context = QuoteContext::Double('"'),
+            (QuoteContext::Single(quote) | QuoteContext::Double(quote), character)
+                if quote == character =>
+            {
                 *quote_context = QuoteContext::Unquoted;
             }
             _ => {}

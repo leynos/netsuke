@@ -18,6 +18,8 @@ param(
 
 $smokeScriptDirectory = Join-Path $PSScriptRoot 'windows-recipe-smoke'
 . (Join-Path $smokeScriptDirectory 'bash.ps1')
+. (Join-Path $smokeScriptDirectory 'environment.ps1')
+. (Join-Path $smokeScriptDirectory 'powershell-paths.ps1')
 
 function Assert-Equal {
     param(
@@ -49,34 +51,6 @@ function Invoke-Netsuke {
     if ($LASTEXITCODE -ne 0) {
         throw "Netsuke failed for '$($Arguments -join ' ')' with exit code $LASTEXITCODE."
     }
-}
-
-function Get-EnvironmentVariableState {
-    param(
-        [Parameter(Mandatory)]
-        [string]$Name
-    )
-
-    $value = [System.Environment]::GetEnvironmentVariable($Name, 'Process')
-    [pscustomobject]@{
-        Name = $Name
-        Exists = $null -ne $value
-        Value = $value
-    }
-}
-
-function Restore-EnvironmentVariableState {
-    param(
-        [Parameter(Mandatory)]
-        [pscustomobject]$State
-    )
-
-    if ($State.Exists) {
-        Set-Item -LiteralPath "Env:$($State.Name)" -Value $State.Value
-        return
-    }
-
-    Remove-Item -LiteralPath "Env:$($State.Name)" -ErrorAction SilentlyContinue
 }
 
 function Test-PowerShellCoreHost {
@@ -267,6 +241,45 @@ function Test-AutomaticPathQuoting {
         -Expected 'automatic-path-quoting' -Message 'The discovered target did not build'
 }
 
+<#
+.SYNOPSIS
+Runs each Windows recipe smoke scenario in the isolated workspace.
+
+.DESCRIPTION
+Keeps scenario ordering in one place while leaving setup and restoration to
+the outer smoke-test orchestrator.
+#>
+function Invoke-WindowsRecipeScenarios {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke,
+
+        [Parameter(Mandatory)]
+        [string]$Manifest,
+
+        [Parameter(Mandatory)]
+        [string]$Workspace
+    )
+
+    Test-TargetDiscovery -Netsuke $Netsuke
+    Test-InterpreterSelection -Netsuke $Netsuke
+    Test-DollarSyntax -Netsuke $Netsuke
+    Test-OrderedCommandList -Netsuke $Netsuke
+    Test-IsolatedPowerShellLists -Netsuke $Netsuke
+    Test-DependencyOrdering -Netsuke $Netsuke
+    Test-LargeRecipeTransport -Netsuke $Netsuke
+    Test-AutomaticPathQuoting -Netsuke $Netsuke
+    Test-ExplicitBashIsolation -Netsuke $Netsuke
+    Test-PathPlaceholderScript -Netsuke $Netsuke
+    Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
+        -FixtureName 'windows-recipe-smoke-quoted-script.yml' `
+        -TargetName 'quoted-script-single.txt'
+    Test-QuotedScriptPlaceholderRejection -Netsuke $Netsuke -Manifest $Manifest `
+        -FixtureName 'windows-recipe-smoke-quoted-script-double.yml' `
+        -TargetName 'quoted-script-double.txt'
+    Test-MissingBashRuntimeDiagnostic -Netsuke $Netsuke -Workspace $Workspace
+}
+
 function Invoke-WindowsRecipeSmoke {
     param(
         [Parameter(Mandatory)]
@@ -281,20 +294,9 @@ function Invoke-WindowsRecipeSmoke {
     $Manifest = (Resolve-Path -LiteralPath $Manifest).Path
     Test-PowerShellCoreHost
 
-    $workspace = Join-Path $env:RUNNER_TEMP "netsuke-windows-recipe-smoke-$PID"
-    $environmentState = @(
-        Get-EnvironmentVariableState -Name 'NETSUKE_WINDOWS_SHELL'
-        Get-EnvironmentVariableState -Name 'NETSUKE_SMOKE_OPTION'
-        Get-EnvironmentVariableState -Name 'NETSUKE_SMOKE_VALUE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATION_ROOT'
-        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATED_ENV'
-        Get-EnvironmentVariableState -Name 'NETSUKE_ISOLATED_LARGE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_BASELINE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_ENV'
-        Get-EnvironmentVariableState -Name 'NETSUKE_BASH_VARIABLE'
-        Get-EnvironmentVariableState -Name 'NETSUKE_NINJA'
-        Get-EnvironmentVariableState -Name 'PATH'
-    )
+    $tempRoot = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [System.IO.Path]::GetTempPath() }
+    $workspace = Join-Path $tempRoot "netsuke-windows-recipe-smoke-$PID"
+    $environmentState = Get-WindowsRecipeEnvironmentState
 
     try {
         New-Item -ItemType Directory -Path $workspace | Out-Null
@@ -310,16 +312,14 @@ function Invoke-WindowsRecipeSmoke {
             $env:NETSUKE_SMOKE_VALUE = 'value with spaces'
             $env:NETSUKE_ISOLATION_ROOT = $workspace
 
-            Test-TargetDiscovery -Netsuke $Netsuke
-            Test-InterpreterSelection -Netsuke $Netsuke
-            Test-DollarSyntax -Netsuke $Netsuke
-            Test-OrderedCommandList -Netsuke $Netsuke
-            Test-IsolatedPowerShellLists -Netsuke $Netsuke
-            Test-DependencyOrdering -Netsuke $Netsuke
-            Test-LargeRecipeTransport -Netsuke $Netsuke
-            Test-AutomaticPathQuoting -Netsuke $Netsuke
-            Test-ExplicitBashIsolation -Netsuke $Netsuke
-            Test-MissingBashRuntimeDiagnostic -Netsuke $Netsuke -Workspace $workspace
+            $payloadName = '; New-Item pwned; Write-Output x'
+            $payloadSource = Join-Path $workspace $payloadName
+            # New-Item's -Path parameter treats this semicolon as literal data.
+            New-Item -ItemType File -Path $payloadSource | Out-Null
+            Set-Content -NoNewline -LiteralPath $payloadSource -Value 'path-derived-content'
+
+            Invoke-WindowsRecipeScenarios -Netsuke $Netsuke -Manifest $Manifest `
+                -Workspace $workspace
         }
         finally {
             Pop-Location

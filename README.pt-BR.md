@@ -205,11 +205,24 @@ que a forma é reescrita no texto ativo da receita; consulte a nota abaixo).
 
 [^inert]: Nas rotas POSIX e Bash, o Netsuke copia marcadores em comentários e
     no corpo de heredocs como tokens internos, sem expandi-los; marcadores nos
-    delimitadores de heredoc são expandidos. Receitas `script:` usam o mesmo
-    analisador compatível com POSIX, inclusive no PowerShell, enquanto receitas
-    `command:` do PowerShell seguem regras de interpolação distintas. Não use
-    marcadores em comentários nem no corpo de heredocs: os tokens internos podem
-    permanecer na receita gerada.
+    delimitadores de heredoc são expandidos. Receitas `command:` e `script:` do
+    PowerShell rejeitam marcadores entre aspas simples ou duplas, em here-strings,
+    em `$()` e logo após uma crase. Um marcador também é rejeitado quando está
+    diretamente junto a qualquer caractere de aspa simples reconhecido pelo
+    PowerShell, inclusive as formas tipográficas, ou a outro marcador: literais
+    independentes entre aspas simples podem se unir ao texto
+    de uma string ou argumento vizinho. Scripts PowerShell não tratam comentários
+    como regiões inertes: texto comum de comentário permite interpolar marcadores
+    posteriores sem aspas, mas sintaxe sensível ao analisador após um limite de
+    comentário ou qualquer `#` dentro de um token pode levar à rejeição de
+    marcadores posteriores. Isso inclui o início de um comentário em bloco,
+    aspas, crases e sintaxe de substituição. Um apóstrofo em
+    um comentário também pode levar à rejeição de um marcador posterior. Aspas tipográficas do PowerShell também levam à rejeição
+    conservadora de marcadores posteriores. Na região literal do comando nativo
+    após `--%`, os marcadores são rejeitados até a próxima quebra de linha ou
+    caractere de pipe; a análise é retomada depois desse limite. O ponto e vírgula
+    não encerra essa região. Evite marcadores em comentários e
+    corpos de heredoc POSIX e Bash: tokens internos podem permanecer na receita.
 
 Se `input.txt` existir, este manifesto POSIX copia seu conteúdo para
 `output.txt` e verifica se o `PATH` do shell não está vazio:
@@ -225,8 +238,9 @@ defaults: [output.txt]
 
 **O que o Netsuke coloca entre aspas.** Somente as substituições de caminho
 próprias do Netsuke recebem aspas de shell automaticamente. POSIX e Bash usam
-`shell-quote` e codificação sensível ao contexto; o PowerShell usa codificação
-literal própria e rejeita marcadores em regiões entre aspas. Se
+`shell-quote` e codificação sensível ao contexto; o PowerShell codifica
+caminhos como literais entre aspas simples somente em posições sem aspas. Essa
+codificação não é segura dentro de uma string PowerShell existente. Se
 `input file.txt` existir, este exemplo POSIX passa o caminho como um único
 argumento e produz `output.txt`:
 
@@ -242,8 +256,8 @@ defaults: [output.txt]
 **Crases e substituição de comando.** O Netsuke rejeita marcadores dentro de
 substituições com crases no POSIX e no Bash, e dentro de `$( … )` em todas as
 rotas de shell, nos dois tipos de receita. O PowerShell usa crases como
-escapes, então fica fora da restrição de crases, mas ainda rejeita marcadores em
-`$( … )`. Esse limite dos marcadores é um invariante garantido.
+escapes; por isso rejeita marcadores logo após uma crase e dentro de `$( … )`
+nos dois tipos de receita. Esse limite dos marcadores é um invariante garantido.
 
 Separadamente, receitas `command:` de POSIX e Bash rejeitam atualmente uma
 contagem total ímpar de crases após a substituição. A contagem conservadora

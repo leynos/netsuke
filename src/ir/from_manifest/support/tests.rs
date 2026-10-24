@@ -3,8 +3,10 @@
 use super::*;
 use crate::ir::cmd_interpolate::{binding_preparations, reset_binding_preparations};
 use crate::ir::{INS_TOKEN, OUTS_TOKEN};
+use crate::manifest;
 use crate::recipe_shell::RecipeShell;
 use proptest::prelude::*;
+use rstest::rstest;
 
 #[test]
 fn large_command_list_prepares_path_bindings_once() {
@@ -31,6 +33,31 @@ fn large_command_list_prepares_path_bindings_once() {
         binding_preparations(),
         1,
         "all entries in one recipe must reuse one prepared input/output binding set"
+    );
+}
+
+#[rstest]
+#[case::script("script")]
+#[case::command("command")]
+fn power_shell_manifest_rejects_quoted_input_marker(#[case] recipe_kind: &str) {
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: output\n    sources: \"; New-Item pwned; Write-Output x\"\n    {recipe_kind}: \"Write-Output '{{{{ ins }}}}' > {{{{ outs }}}}\"\n"
+    );
+    let manifest = manifest::render_manifest(
+        manifest::from_str(&source).expect("the manifest should parse"),
+        &minijinja::Environment::new(),
+    )
+    .expect("the manifest template should render");
+    let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)
+        .expect_err("quoted PowerShell recipe markers must fail during IR lowering");
+
+    assert!(
+        matches!(
+            &error,
+            crate::ir::IrGenError::InvalidCommand { command, .. }
+                if command.contains(crate::ir::INS_TOKEN)
+        ),
+        "expected the quoted-marker rejection, got {error:?}"
     );
 }
 

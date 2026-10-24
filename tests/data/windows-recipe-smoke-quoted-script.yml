@@ -1,0 +1,7 @@
+netsuke_version: "1.0.0"
+
+targets:
+  - name: quoted-script-single.txt
+    sources: '; New-Item pwned; Write-Output x'
+    script: |
+      Write-Output '{{ ins }}' > {{ outs }}

@@ -207,11 +207,27 @@ bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
 
 [^inert]: Auf POSIX- und Bash-Routen kopiert Netsuke Marker in Kommentaren und
     in Heredoc-Körpern als interne Token, statt sie zu expandieren; Marker in
-    Heredoc-Begrenzern werden expandiert. `script:`-Rezepte verwenden denselben
-    POSIX-bewussten Scanner, auch in PowerShell, während PowerShell-`command:`-
-    Rezepte eigenen Interpolationsregeln folgen. Verwenden Sie keine Marker in
-    Kommentaren oder Heredoc-Körpern: Interne Token können dort im generierten
-    Rezept verbleiben.
+    Heredoc-Begrenzern werden expandiert. PowerShell-`command:`- und
+    `script:`-Rezepte weisen Marker in einfachen und doppelten
+    Anführungszeichen, Here-Strings, `$()` sowie direkt nach einem Backtick
+    zurück. Ein Marker direkt neben einem von PowerShell erkannten einfachen
+    Anführungszeichen (einschließlich typografischer Varianten) oder einem
+    weiteren Marker wird ebenfalls zurückgewiesen:
+    eigenständige einfach zitierte Literale könnten mit angrenzendem String- oder
+    Argumenttext verschmelzen. PowerShell-Skripte behandeln Kommentare nicht als
+    inerte Bereiche:
+    gewöhnlicher Kommentartext lässt spätere ungequotete Marker zur
+    Interpolation zu, aber scannerempfindliche Syntax nach einer Kommentargrenze
+    oder einem `#` innerhalb eines Tokens kann spätere Marker vorsichtshalber
+    zurückweisen. Dazu zählen Blockkommentar-Anfänge, Anführungszeichen,
+    Backticks und Substitutionssyntax.
+    Typografische PowerShell-Anführungszeichen führen ebenfalls dazu, dass
+    spätere Marker vorsichtshalber scheitern. Im rohen nativen Befehlsbereich
+    nach dem Stop-Parsing-Token `--%` werden Marker bis zum nächsten
+    Zeilenumbruch oder Pipe-Zeichen abgelehnt; danach wird die Prüfung
+    fortgesetzt. Ein Semikolon beendet diesen Bereich nicht. Marker gehören
+    nicht in POSIX- und Bash-Kommentare oder Heredoc-Körper: Interne Token
+    können dort im generierten Rezept verbleiben.
 
 Mit einer vorhandenen Datei `input.txt` kopiert dieses POSIX-Manifest deren
 Inhalt nach `output.txt` und prüft, ob die `PATH`-Variable der Shell nicht leer
@@ -228,8 +244,9 @@ defaults: [output.txt]
 
 **Was Netsuke zitiert.** Automatisches Shell-Quoting erhalten nur Netsukes
 eigene Pfadersetzungen. POSIX und Bash verwenden `shell-quote` und eine
-kontextgerechte Kodierung; PowerShell verwendet eine eigene Literal-Kodierung
-und weist Marker in zitierten Bereichen zurück. Bei einer vorhandenen Datei
+kontextgerechte Kodierung; PowerShell kodiert Pfade nur an unzitierten
+Einfügestellen als einfach zitierte Literale. Diese Kodierung ist innerhalb
+einer bestehenden PowerShell-Zeichenfolge unsicher. Bei einer vorhandenen Datei
 `input file.txt` übergibt dieses POSIX-Beispiel den Pfad als ein Argument und
 erzeugt `output.txt`:
 
@@ -245,9 +262,9 @@ defaults: [output.txt]
 **Backticks und Befehlssubstitution.** Netsuke weist Marker innerhalb von
 Backtick-Befehlssubstitutionen auf POSIX und Bash sowie innerhalb von `$( … )`
 auf allen Shell-Routen zurück, in beiden Rezeptarten. PowerShell verwendet
-Backticks als Escapezeichen und fällt nicht unter die Backtick-Einschränkung,
-weist Marker in `$( … )` aber weiterhin zurück. Diese Markergrenze ist eine
-zugesicherte Invariante.
+Backticks als Escapezeichen; Marker direkt nach einem Backtick und innerhalb von
+`$( … )` werden in beiden Rezeptarten zurückgewiesen. Diese Markergrenze ist
+eine zugesicherte Invariante.
 
 Unabhängig davon weisen POSIX- und Bash-`command:`-Rezepte derzeit eine
 ungerade Gesamtzahl von Backticks nach der Ersetzung zurück. Die konservative

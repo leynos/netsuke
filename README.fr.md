@@ -213,12 +213,27 @@ ci-dessous).
 
 [^inert]: Sur les routes POSIX et Bash, Netsuke copie les marqueurs présents
     dans les commentaires et le corps des heredocs comme des jetons internes, sans
-    les développer ; les marqueurs des délimiteurs de heredoc sont développés. Les
-    recettes `script:` utilisent le même analyseur compatible POSIX, y compris avec
-    PowerShell, tandis que les recettes `command:` de PowerShell suivent des règles
-    d'interpolation distinctes. N'utilisez pas de marqueurs dans les commentaires
-    ni dans les corps des heredocs : les jetons internes peuvent rester dans la
-    recette générée.
+    les développer ; les marqueurs des délimiteurs de heredoc sont développés.
+    Les recettes PowerShell `command:` et `script:` rejettent les marqueurs entre
+    guillemets simples ou doubles, dans les here-strings, dans `$()` et juste après
+    un accent grave. Un marqueur adjacent à un caractère de guillemet simple
+    reconnu par PowerShell, y compris les formes typographiques, ou à un autre
+    marqueur est également rejeté : les littéraux
+    autonomes entre apostrophes pourraient fusionner avec une chaîne ou un
+    argument voisin. Les scripts PowerShell ne traitent pas les commentaires
+    comme des zones inertes : le texte ordinaire d'un commentaire laisse les
+    marqueurs non cités suivants être interpolés, mais une syntaxe sensible à
+    l'analyseur après une limite de commentaire ou tout `#` dans un jeton peut
+    faire rejeter les marqueurs suivants. Cela inclut l'ouverture d'un
+    commentaire de bloc, les guillemets, les accents graves et la syntaxe de
+    substitution. Une apostrophe dans un commentaire
+    peut aussi faire rejeter un marqueur ultérieur. Les guillemets typographiques PowerShell entraînent
+    aussi le rejet prudent des marqueurs suivants. Dans la région brute de
+    commande native après `--%`, les marqueurs sont rejetés jusqu'au prochain
+    saut de ligne ou caractère de canalisation ; l'analyse reprend ensuite.
+    Un point-virgule ne termine pas cette région. Évitez les marqueurs dans
+    les commentaires et heredocs POSIX et Bash : les jetons internes peuvent
+    rester dans la recette.
 
 Si `input.txt` existe, ce manifeste POSIX copie son contenu dans `output.txt`
 et vérifie que le `PATH` du shell n'est pas vide :
@@ -235,9 +250,10 @@ defaults: [output.txt]
 **Ce que Netsuke protège par des guillemets.** Seules ses propres substitutions
 de chemin bénéficient automatiquement de la protection shell par des
 guillemets. POSIX et Bash utilisent `shell-quote` et un encodage adapté au
-contexte ; PowerShell utilise son propre encodage littéral et rejette les
-marqueurs dans les zones entre guillemets. Si `input file.txt` existe, cet
-exemple POSIX transmet le chemin en un seul argument et produit `output.txt`:
+contexte ; PowerShell encode les chemins comme littéraux entre apostrophes
+uniquement aux emplacements sans guillemets. Cet encodage n'est pas sûr dans
+une chaîne PowerShell existante. Si `input file.txt` existe, cet exemple POSIX
+transmet le chemin en un seul argument et produit `output.txt`:
 
 ```yaml
 netsuke_version: '1.0.0'
@@ -252,8 +268,9 @@ defaults: [output.txt]
 dans les substitutions de commande entre accents graves sous POSIX et Bash,
 ainsi que dans `$( … )` sur toutes les voies shell, dans les deux types de
 recette. PowerShell utilise les accents graves comme caractères d'échappement :
-il échappe donc à la restriction sur les accents graves, mais rejette toujours
-les marqueurs dans `$( … )`. Cette limite des marqueurs est un invariant promis.
+un marqueur qui les suit immédiatement est donc rejeté, tout comme un marqueur
+dans `$( … )`, pour les deux types de recette. Cette limite des marqueurs est
+un invariant promis.
 
 À part cela, les recettes `command:` POSIX et Bash rejettent actuellement tout
 nombre total impair d'accents graves après substitution. Ce comptage prudent
