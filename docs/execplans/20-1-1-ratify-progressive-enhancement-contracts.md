@@ -229,6 +229,11 @@ decision D-15.
   the `keys.rs` size cap.
 - [x] (2026-10-24) User approved the plan and selected D-19 Option A,
   honouring ADR-0043's `1.1.0` reservation.
+- [x] (2026-10-24) Rebased PR #808 from its recorded base `8a9610008` onto
+  remote `main` at `f8df5d808`; all five commits replayed patch-identically and
+  no conflicts occurred.
+- [ ] Run the requested gates on the rebased candidate, then publish it with
+  an explicit lease.
 - [ ] EP-M0: re-sweep ADR numbers; record baseline gates.
 - [ ] EP-M1: ADR-0061 (Proposed) and the schema-version registry.
 - [ ] EP-M2: ADR-0062 to ADR-0067 (Proposed), resolution table, RFC and roadmap
