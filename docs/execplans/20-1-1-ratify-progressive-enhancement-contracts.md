@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: DRAFT
+Status: APPROVED
 
 This plan is approval-gated. Do not begin implementation until the user
 explicitly approves it. Approving the plan authorizes drafting the decision
@@ -227,7 +227,8 @@ decision D-15.
   of stale citations and a fresh ADR sweep drove a third draft reconciling the
   plan with ADR-0043, the merged `netsuke check`, the ADR and RFC renames, and
   the `keys.rs` size cap.
-- [ ] Plan approved by the user.
+- [x] (2026-10-24) User approved the plan and selected D-19 Option A,
+  honouring ADR-0043's `1.1.0` reservation.
 - [ ] EP-M0: re-sweep ADR numbers; record baseline gates.
 - [ ] EP-M1: ADR-0061 (Proposed) and the schema-version registry.
 - [ ] EP-M2: ADR-0062 to ADR-0067 (Proposed), resolution table, RFC and roadmap
@@ -659,6 +660,9 @@ makes at approval.
   0003's example to be re-amended. If the approver chooses Option B, EP-M1 adds
   the amendment banner and section to ADR-0043, and rule 8 and the related risk
   are removed. Date/Author: 2026-10-24, planning agent, added on rebase.
+
+- Approval: the user approved this plan on 2026-10-24 and selected the
+  recommended D-19 Option A. The plan honours ADR-0043's `1.1.0` reservation.
 
 ## Outcomes & retrospective
 
