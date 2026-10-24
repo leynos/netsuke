@@ -77,8 +77,8 @@ chaîne d'outils épinglée n'est donc pas détectée automatiquement ;
 sélectionnez-la explicitement :
 
 ```sh
-rustup toolchain install nightly-2026-08-23
-cargo +nightly-2026-08-23 install netsuke-build
+rustup toolchain install nightly-2026-10-22
+cargo +nightly-2026-10-22 install netsuke-build
 ```
 
 Des installateurs prêts à l'emploi sont disponibles depuis la version GitHub

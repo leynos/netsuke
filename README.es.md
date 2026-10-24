@@ -77,8 +77,8 @@ repositorio, por lo que la cadena de herramientas fijada no se detecta
 automáticamente; selecciónela explícitamente:
 
 ```sh
-rustup toolchain install nightly-2026-08-23
-cargo +nightly-2026-08-23 install netsuke-build
+rustup toolchain install nightly-2026-10-22
+cargo +nightly-2026-10-22 install netsuke-build
 ```
 
 Hay instaladores prediseñados disponibles en el

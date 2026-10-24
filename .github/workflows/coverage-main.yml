@@ -176,7 +176,7 @@ jobs:
           # Match rust-toolchain.toml: the tree needs the nightly-default
           # Polonius borrow checker (see
           # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
-          toolchain: nightly-2026-08-23
+          toolchain: nightly-2026-10-22
           # Preserve warnings-as-errors through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings

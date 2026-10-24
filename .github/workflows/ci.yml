@@ -99,7 +99,7 @@ jobs:
       # Polonius is nightly-only (see
       # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md),
       # so CI builds with the dated nightly pinned in rust-toolchain.toml.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
       YAMLLINT_VERSION: '1.38.0'
       UV_CACHE_DIR: ${{ github.workspace }}/.uv-cache
       UV_TOOL_DIR: ${{ github.workspace }}/.uv-tools
@@ -394,7 +394,7 @@ jobs:
     uses: ./.github/workflows/ci-default-features.yml
     with:
       nextest-version: '0.9.133'
-      rust-toolchain: 'nightly-2026-08-23'
+      rust-toolchain: 'nightly-2026-10-22'
 
   kani-smoke:
     # A required check, so it runs and reports on every trigger; it is never
@@ -469,13 +469,13 @@ jobs:
       # `GATE_RUSTFLAGS` unconditionally appends the nightly-only `-Zthreads=8`
       # and stable rejects it before a single patch compiles.
       # `check-build-tools` cannot catch it: it asserts the pin is *installed*,
-      # not *active*, so it can report `toolchain nightly-2026-08-23 available`
+      # not *active*, so it can report `toolchain nightly-2026-10-22 available`
       # one line before the gate aborts on stable.
       #
       # With `cargo kani` the value would not matter, because it resolves its
       # own bundled toolchain. Do not drop it on the grounds that the harnesses
       # pass without it: the mutation compile gate is the consumer.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
       CARGO_HOME: ${{ github.workspace }}/.kani-cargo
       KANI_HOME: ${{ github.workspace }}/.kani-home
       # Redirected so the Kani payloads' toolchain state is cached and torn down

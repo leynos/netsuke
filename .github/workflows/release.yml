@@ -276,7 +276,7 @@ jobs:
       run:
         shell: pwsh
     env:
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-08-23
+      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
       # The GitHub-hosted `windows-latest` standard runner has four vCPUs.
       WINDOWS_LANE_VCPUS: '4'
       CARGO_BUILD_JOBS: '4'

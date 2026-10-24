@@ -4063,7 +4063,7 @@ experiment, and is the route that needs no edit to a committed file.
 
 The probe above explains the mechanism. What decides the question is whether
 netsuke's own suite runs, so it was run: `make test` on `main` at `00f48f77`,
-on the pinned `nightly-2026-08-23`, with the configuration below added to
+on the then-pinned `nightly-2026-08-23`, with the configuration below added to
 `.cargo/config.toml` and nothing else changed. The control is the same commit
 and the same command with that fragment removed. Each arm had its own empty
 `CARGO_TARGET_DIR` and `CARGO_BUILD_BUILD_DIR`, so neither warmed the other,
@@ -5910,7 +5910,7 @@ Current usage in this repository is:
   as a deprecated compatibility alias: `emit_runtime_deprecation_warning` in
   the macros crate turns it into a warning, and that warning reaches the
   compiler because this repository builds on a nightly channel
-  (`nightly-2026-08-23`), which is the condition `rstest_bdd_nightly` selects. A
+  (`nightly-2026-10-22`), which is the condition `rstest_bdd_nightly` selects. A
   `-D warnings` build would therefore escalate it to an error. Nothing here
   selects a harness yet; ordinary synchronous scenarios stay ordinary and need
   no harness at all.
