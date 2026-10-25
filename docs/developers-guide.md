@@ -3606,15 +3606,31 @@ environment or file source. It omits the structural `cmds` container. Keep
 project-discovery rooting and manifest lookup in that discovery boundary, as
 required by [ADR 0049]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
-Release automation delegates installation to
+
+The adapter is also where generated metadata is reconciled with the parser
+Netsuke actually ships. It replaces every `help_id` with the corresponding key
+from `src/localization/keys.rs`, which is why the OrthoConfig v0.10.0
+identifier re-keying described in
+[the imported migration guide](ortho-config-v0-10-0-migration-guide.md) does
+not reach Netsuke's catalogues: no generated identifier survives to be looked
+up. The same reasoning applies to value shapes. `ortho_config` 0.10.0 documents
+every derived boolean as `--flag[=BOOL]`, because its *generated* clap parser
+accepts an optional value; Netsuke declares its flags by hand in
+`src/cli/command.rs` and rejects that spelling, so the adapter reduces boolean
+fields back to presence-only switches. Two tests hold both projections:
+`release_help_identifiers_are_netsuke_declared_not_generated` and
+`release_help_cli_value_shapes_match_the_parser` in
+`src/cli/release_help/metadata_tests.rs`. A new derived field, or a new
+upstream metadata change, is expected to reach one of them. Release automation
+delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
 version supplied as `INPUT_VERSION`. The helper probes the cached binary and,
 on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
 workflow does not fall back to compiling the tool from source. The cache entry
 owns `~/.cargo/bin`, and its key includes the tool version and pinned
 `rust-build-release` revision because that action provisions `cargo-binstall`
-there. Only cargo-orthohelp 0.9.1 and later publish the required assets; see
-[leynos/ortho-config#479][ortho-config-479],
+there. Only cargo-orthohelp 0.9.1 and later publish the required assets, and
+the lane pins 0.10.0; see [leynos/ortho-config#479][ortho-config-479],
 [leynos/ortho-config#480][ortho-config-480].
 
 Three workflow and cache contracts hold this boundary. The Rust

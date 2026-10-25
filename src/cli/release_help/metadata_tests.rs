@@ -287,3 +287,59 @@ fn config_metadata_localization_rejects_unknown_fields() -> Result<()> {
     );
     Ok(())
 }
+
+/// Verify that release help never emits an OrthoConfig-generated identifier.
+///
+/// The v0.10.0 migration guide describes re-keying catalogues from
+/// `{app}.fields.{field}.help` to `{mounted-path}-args-{field}-help`. Netsuke
+/// needs none of that because `localized_config_help` replaces every generated
+/// `help_id` with its own `define_keys!` identifier before release help sees it.
+/// This test pins the consequence: every published identifier is a key
+/// `build_l10n_audit` can attribute to `src/localization`, and none carries the
+/// upstream shapes. Were the projection to stop applying, the audit would not
+/// catch it — the generated keys are absent from the catalogues, so a stray one
+/// becomes a runtime miss rather than a build failure.
+#[test]
+fn release_help_identifiers_are_netsuke_declared_not_generated() -> Result<()> {
+    let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
+    let mut identifiers = metadata
+        .fields
+        .iter()
+        .map(|field| field.help_id.as_str())
+        .chain(std::iter::once(metadata.about_id.as_str()))
+        .collect::<Vec<_>>();
+    identifiers.extend(
+        metadata
+            .subcommands
+            .iter()
+            .map(|command| command.about_id.as_str()),
+    );
+
+    let generated_shapes = [".fields.", "-args-"];
+    for identifier in &identifiers {
+        for shape in generated_shapes {
+            ensure!(
+                !identifier.contains(shape),
+                "release help should not emit the generated identifier {identifier}"
+            );
+        }
+        ensure!(
+            identifier.starts_with("cli."),
+            "release help should name a netsuke-declared key, got {identifier}"
+        );
+    }
+
+    // The localizer resolves against `locales/<tag>/messages.ftl`, so a key that
+    // is missing there would surface as a runtime `[missing: ...]` string.
+    let localizer = crate::cli_localization::build_localizer(Some("en-US"));
+    for identifier in identifiers {
+        let message = localizer
+            .lookup(identifier, None)
+            .with_context(|| format!("release help should resolve {identifier}"))?;
+        ensure!(
+            !message.starts_with("[missing:"),
+            "release help identifier {identifier} should exist in the catalogue: {message}"
+        );
+    }
+    Ok(())
+}

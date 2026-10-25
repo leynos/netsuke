@@ -163,7 +163,22 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   `release_help_cli_value_shapes_match_the_parser` pinning the parity against
   `Cli::command()`. The snapshot's only remaining diff is `ir_version: "1.1"` →
   `"2.0"`.
-- [ ] Milestone 3: Fluent identifier re-keying.
+- [x] (2026-10-25) Milestone 3: Fluent identifier stability. Guide §3's
+  re-keying is not applicable: `localized_config_help` replaces every generated
+  `help_id` with a `define_keys!` identifier before release help sees it. Two
+  tests now hold that.
+  `release_help_identifiers_are_netsuke_declared_not_generated` rejects any
+  identifier carrying the upstream shapes (`.fields.`, `-args-`) and resolves
+  every one through the `en-US` localizer; dropping the `help_id` projection
+  makes it fail with
+  `release help should not emit the generated identifier netsuke-args-file-help`,
+  so it is the real generated shape it rejects.
+  `the_audit_rejects_a_drifting_tree` in `tests/build_l10n_audit_tests.rs`
+  already proves the build audit fails on a missing key, an orphaned key, a
+  variable mismatch, a registry mismatch and a duplicate declaration, and
+  `every_registry_tag_has_a_readable_catalogue` confirms all 35 catalogues are
+  present and readable. The developers' guide records why the re-keying stops
+  at the adapter.
 - [ ] Milestone 4: precedence and boolean regression coverage.
 - [ ] Milestone 5: gates, CodeRabbit, draft PR.
 
