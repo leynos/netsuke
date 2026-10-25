@@ -759,7 +759,7 @@ exists to prevent.
 
 Each new job's body is a single `uses: ./.github/actions/...` step. The
 justification for extracting them is that the composite-action convention is
-the repository's own documented practice (`docs/developers-guide.md:1574-1575`
+the repository's own documented practice (`docs/developers-guide.md:1606-1607`
 records it for the cache steps), **not** that a contract enforces a 400-line
 cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 `main` and is not failing anything.
@@ -831,7 +831,7 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   extracted to a composite action so the job graph stays readable at a glance.
   (Not "under 400 lines": no contract caps workflow YAML, and `release.yml` is
   already 688 lines on `main`. The extraction follows the repository's
-  documented composite-action convention, `docs/developers-guide.md:1574-1575`.)
+  documented composite-action convention, `docs/developers-guide.md:1606-1607`.)
 - Requirements: INV-1, LEM-5, LEM-6 discharged.
 - Acceptance evidence: `make test-workflow-contracts` passes, including the
   new permission and mode-matrix tests.
@@ -2230,6 +2230,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   emitted a non-fatal `unused config key 'unstable.embed-metadata'` warning.
   Date/Author: 2026-10-25, implementation agent.
 
+- [x] (2026-10-25) Rebased onto `origin/main` at `88f20d588` from
+  `0a7a0d58`, replaying 50 commits. `range-diff` paired all 50; 48 were
+  equivalent. The CI/Makefile conflict kept #942's package-verification step
+  and this branch's release-publication test, and unioned both targets. The
+  final review-fix conflict kept #942's nextest policy, package-verification
+  contract, and retired test harnesses while carrying forward the release code,
+  tests, and runbook. `Cargo.lock` was retained from main. `make check-fmt`,
+  `make lint`, `make typecheck`, `make test`, `make test-workflow-contracts`,
+  `make test-release-publication`, `make doc-coverage`, `make markdownlint`, and
+  `make nixie` all passed on `2cc0eaef`. Nextest reported 4,710 passed and 6
+  skipped; doctests passed. Workflow contracts reported 1,497 passed and 3
+  skipped, plus 28 script doctests; release-publication reported 406 passed;
+  Rustdoc coverage was 98.20%. `mbake validate Makefile` passed. Whitaker
+  emitted only the existing non-fatal `unstable.embed-metadata` warning, and
+  compile admission remained healthy. #942 removes `command_env_ui_tests.rs`
+  and its nested-Cargo timeout contract; the build-module-slice test is now a
+  source comparison, and package verification runs through
+  `make test-package-verify`. The two earlier timeout reports are therefore
+  historical for this candidate.
+
 ## Surprises & discoveries
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
@@ -2942,7 +2962,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - Decision: extract every new step body into a composite action rather than
   growing `release.yml` inline. Rationale: the repository's own convention,
-  stated in `docs/developers-guide.md:1574-1575` for the lane cache steps, and
+  stated in `docs/developers-guide.md:1606-1607` for the lane cache steps, and
   the only way to keep the job graph readable while making the sequence
   explicit. **Not** a 400-line cap: no contract enforces one on workflow YAML,
   and `release.yml` is 688 lines on `main`. A local `action.yml` resolves from
@@ -3541,7 +3561,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   only way to hold the stated property rather than restate it. The action is a
   composite action rather than an inline `run:` block because the repository's
   own convention is to extract a step body into `.github/actions/`
-  (`docs/developers-guide.md:1574-1575`), and because the composite-action
+  (`docs/developers-guide.md:1606-1607`), and because the composite-action
   contract then applies the run-interpolation rule to it automatically. It is a
   sixth action rather than a sixth *job*: the five-action rule in Stage C names
   the actions the five new jobs call, and this one is called by an existing
@@ -3674,3 +3694,15 @@ of filesystem space; `make clean` recovered 37.1 GiB, and a fresh run passed
 with 202 GiB free at completion. No release or registry setting was changed.
 Stage C remains partial and Stage D remains open. The non-fatal Whitaker Cargo
 configuration warning is recorded in `Progress`.
+
+Draft 6, 2026-10-25: rebased onto `main` at `88f20d588` after #942, from the
+previous base `0a7a0d58` (50 commits; 48 range-diff-equivalent). The two
+non-identical replay resolutions preserve #942's package-verification lane and
+its compile-contract migration while keeping the release-publication tests and
+adapter changes. The main-branch `Cargo.lock` was retained. Re-derived the four
+developers' guide citations for the composite-action convention against the
+current lines `1606-1607`. #942 removes the CLI nested-Cargo UI harness and
+moves the build-module slice check to source comparison; the earlier timeout
+reports are historical, and the rebased `make test` passes. The full sequential
+gate results are recorded in `Progress`. Stage C remains partial and Stage D
+remains open; no release or registry setting was changed.
