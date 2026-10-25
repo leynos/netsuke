@@ -21,11 +21,21 @@
   the rules it silences and states a reason; there is no blanket disable
   ([#592](https://github.com/leynos/netsuke/issues/592))
 
+### Changed
+
+- Bump `ortho_config` from 0.9.0 to 0.10.0 in the library, build-dependency,
+  and build-slice fixture manifests, and `cargo-orthohelp` from 0.9.1 to 0.10.0
+  in the release workflow. Release help now emits OrthoConfig documentation IR
+  2.0, and the metadata adapter keeps publishing the switch spelling Netsuke's
+  parser actually accepts
+  ([#951](https://github.com/leynos/netsuke/issues/951), [#779](https://github.com/leynos/netsuke/issues/779))
+
 ## [0.1.0-beta4] - 2026-09-26
 
 _If you are upgrading: see the
 [v0.1.0 migration guide](docs/v0-1-0-migration-guide.md)._
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Changed
 
 - **Breaking:** make `which` and `command_available` search only `PATH` by

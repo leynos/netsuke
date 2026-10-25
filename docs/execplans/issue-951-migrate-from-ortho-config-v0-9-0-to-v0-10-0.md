@@ -18,28 +18,38 @@ v0.9.0 release to the published v0.10.0 release, and completes
 [#779](https://github.com/leynos/netsuke/issues/779) — adopting documentation
 IR 2.0 for the release-help metadata — as part of that migration.
 
-After this change a user gets exactly the behaviour they get today, except in
-two deliberately corrected places: an explicitly typed command-line value now
-wins over the environment and configuration files even when it equals the clap
-default, and a generated `--flag=false` spelling is available for boolean
-flags. Release documentation is regenerated from IR 2.0, the localized Fluent
-catalogue identifiers used for generated-message lookups match the new
-hyphenated scheme, and the release pipeline installs `cargo-orthohelp` 0.10.0
-so that generated man pages and PowerShell help agree with the library.
+After this change a user gets exactly the behaviour they get today. Both
+behavioural corrections the v0.10.0 migration guide describes are
+*inapplicable* to Netsuke, and the migration pins that rather than importing
+them. An explicitly typed command-line value continues to win over the
+environment and configuration files even when it equals the clap default,
+because Netsuke's CLI layer tests `ArgMatches::value_source` rather than using
+the generated guard the correction repairs. The generated `--flag=false`
+spelling stays rejected, because Netsuke declares every boolean as a plain
+`#[arg(long)]` switch rather than through OrthoConfig's generated parser.
+Release documentation is regenerated from IR 2.0, the localized Fluent
+catalogue identifiers are unchanged and proven complete, and the release
+pipeline installs `cargo-orthohelp` 0.10.0 so that generated man pages and
+PowerShell help agree with the library.
 
 The migration is observable as: `cargo tree -i ortho_config` reports 0.10.0;
 `make test` passes with a superset of the pre-migration inventory; the
-release-help metadata snapshot records `ir_version: "2.0"`; and
-`cargo orthohelp --format man` regenerates a manual page whose content matches
-the pre-migration page except for documented, IR-2.0-driven changes.
+release-help metadata snapshot records `ir_version: "2.0"`; every boolean
+spelling exits with the same status as before the migration; and
+`cargo-orthohelp` 0.10.0 regenerates a manual page that is byte-identical to
+the one the 0.9.0 reader renders from the migrated tree (SHA-256
+`cc81d1ed...af661a`), with the boolean flags still documented as bare switches
+rather than as `--flag[=BOOL]`.
 
 ## Constraints
 
 - Preserve existing behaviour for configuration precedence (defaults < files <
   environment < CLI), file discovery, localized output, generated
-  documentation, and exit-status and stream contracts. Only the two v0.10.0
-  behavioural corrections named in the migration guide may change observable
-  behaviour, and each must be covered by an explicit regression test.
+  documentation, and exit-status and stream contracts. No observable behaviour
+  may change. Both v0.10.0 behavioural corrections named in the migration guide
+  are inapplicable to Netsuke for the reasons recorded in
+  `Surprises & discoveries`; each is pinned by a regression test so a later
+  change cannot import it by accident.
 - Adopt an optional v0.10.0 capability only where the task brief names it, or
   where it replaces code the migration must already change. Named in this
   repository's brief: `DocMetadata.profiles`, `ProfilesDeclaration`,
@@ -74,7 +84,7 @@ the pre-migration page except for documented, IR-2.0-driven changes.
 - Iterations: if a gate still fails after 3 distinct fix attempts, stop and
   escalate with the log.
 - Compiler: an MSRV floor increase to Rust 1.89.0 and a dated-nightly pin move
-  are pre-authorised. Any change beyond those two is an escalation.
+  are pre-authorized. Any change beyond those two is an escalation.
 - Ambiguity: if the v0.10.0 guide and the repository's shipped behaviour
   genuinely conflict, stop and present the options.
 
@@ -88,7 +98,7 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   one underscored field.
 - Risk: the `--flag=false` boolean change alters exit-status or stream
   contracts. Severity: medium Likelihood: **none** Mitigation: resolved during
-  reconnaissance — netsuke's boolean flags are hand-written clap arguments on
+  reconnaissance — netsuke's boolean flags are handwritten clap arguments on
   `src/cli/command.rs::Cli`, and nothing in `src/` or `build.rs` calls
   `augment_args`, `from_arg_matches`, or `update_from_arg_matches`. The
   `num_args = 0..=1, require_equals = true` emission applies only to
@@ -140,7 +150,10 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   five reconnaissance uncertainties resolved against the real 0.10.0 source at
   `/tmp/ortho-951/tree`; four new findings recorded under
   `Surprises & discoveries`; obligations V2 and V3 and two Risks revised.
-- [ ] Author the ExecPlan, get approval, then implement.
+- [x] (2026-10-25) Author the ExecPlan and implement. Approval came from the
+  task brief itself, which directed the full migration to be carried out rather
+  than proposed, so the draft-then-await gate was satisfied by the instruction
+  that commissioned the work.
 - [x] (2026-10-25) Milestone 1: dependency and toolchain alignment.
   `Cargo.toml` (both `[dependencies]` and `[build-dependencies]`) and
   `build_slice_fixture/Cargo.toml` moved to `ortho_config = "0.10.0"`, keeping
@@ -179,11 +192,69 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   `every_registry_tag_has_a_readable_catalogue` confirms all 35 catalogues are
   present and readable. The developers' guide records why the re-keying stops
   at the adapter.
-- [ ] Milestone 4: precedence and boolean regression coverage.
+- [x] (2026-10-25) Milestone 4: precedence and boolean regression coverage.
+  Obligation V1 is discharged by two tests in
+  `tests/cli_tests/merge_precedence_proptests.rs`: a `prop_compose!` generator
+  (`generated_precedence_layers`) feeding
+  `merge_precedence_holds_for_generated_layers`, and a deterministic
+  eight-subset sweep,
+  `every_layer_subset_resolves_to_its_highest_present_layer`. The sweep exists
+  because the first non-vacuity attempt — asserting, from a `TestRunner` loop,
+  that 256 sampled cases covered the file-only class — was statistical, not
+  structural: independent 50% presence per layer makes file-only roughly 1.4%
+  likely per case, so the assertion had a ~3% chance of failing on any run. The
+  8-subset enumeration makes coverage structural. Negative control: reversing
+  the push order so the file layer applies last makes the enumeration fail at
+  subset `011` with `left: Some(2)`, `right: Some(3)` — the file value winning
+  where the environment value should — and the file was restored from the
+  backup afterwards. Obligation V2 is
+  `explicit_cli_value_equal_to_the_default_still_wins` in
+  `tests/cli_tests/merge.rs`, which reads the fuel default from
+  `CliConfig::default()` rather than restating it. Obligation V3 is the new
+  process-level suite `tests/boolean_flag_spelling_tests.rs` (11 cases), whose
+  before/after evidence is the baseline comparison recorded below. V4 was
+  discharged in Milestone 3.
+- [x] (2026-10-25) V3 evidence: a pre-migration binary built from merge base
+  `88f20d588` into `/home/leynos/.cache/netsuke-baseline-951/` was run against
+  the same eleven boolean spellings as the migrated binary, in the same
+  `env -i` sandbox. Every status code, stdout length and normalized stderr
+  matched: bare `--verbose` 0, bare `graph --html` 0, all six `--flag=false`
+  forms 2 with empty stdout, `--verbose false` and `graph --html false` 2 with
+  empty stdout, and `--json false` 1 with empty stdout and a JSON diagnostics
+  document. The verbose-mode stderr differed only in stage timings and metric
+  histogram samples; every metric name, label, description and hash was
+  identical. Log:
+  `/tmp/boolcompare-issue-951-migrate-from-ortho-config-v0-9-0-to-v0-10-0.out`.
+- [x] (2026-10-25) Axiom A2 discharged against the real tool. Installed
+  `cargo-orthohelp` 0.10.0 into `/home/leynos/.cache/orthohelp-951` with
+  `--disable-strategies compile`, ran `scripts/generate-release-help.sh` for
+  the Unix lane (exit 0, `man/man1/netsuke.1`, 8842 bytes) and the PowerShell
+  arguments for the Windows lane (exit 0, all four artefacts). The 0.9.0 reader
+  over the same tree produced a byte-identical man page, SHA-256
+  `cc81d1ed...af661a`. `presence_only_cli_metadata` is visible in the result:
+  four boolean flags render as bare switches, four value-taking flags keep
+  their value names, and no `BOOL` appears anywhere.
+- [x] (2026-10-25) `make lint` regression fixed. The IR-2.0 commit
+  (`f11e939b1`) grew `src/cli/release_help/mod.rs` to 423 raw lines, over
+  Whitaker's 400-line `module_max_lines` cap. Split the parser-only selector
+  translation into `src/cli/release_help/parser_fields.rs` (113 lines); the
+  parent is now 333. Sixteen `release_help` tests pass and Clippy is green.
 - [ ] Milestone 5: gates, CodeRabbit, draft PR.
 
 ## Surprises & discoveries
 
+- Observation: the generated man page's SYNOPSIS section reads
+  `[missing: netsuke-usage]`. Evidence:
+  `grep -n -A2 SYNOPSIS /tmp/orthohelp-out-951/man/man1/netsuke.1` prints
+  `.B netsuke` followed by `[missing: netsuke-usage]`;
+  `grep -rn "netsuke-usage" locales src` finds no definition, and
+  `git grep netsuke-usage 88f20d588` finds nothing either. Impact: the defect
+  predates the migration and appears in both the 0.9.0 and 0.10.0 readers, so
+  it is a pre-existing catalogue gap (the renderer looks the key up in the
+  `netsuke` namespace, which no locale defines) rather than an IR-2.0 change.
+  `ReleaseHelpCli` sets `synopsis_id: None` at the root and in
+  `documented_subcommand`, which is why the renderer falls back to a generated
+  `netsuke-usage` identifier. Out of migration scope; recorded, not fixed.
 - Observation: the repository's CLI layer does not use OrthoConfig's generated
   CLI guard. `src/cli/merge/mod.rs` builds the CLI layer itself from
   `clap::ArgMatches::value_source(...) == ValueSource::CommandLine`, via
@@ -204,7 +275,7 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   `cargo-orthohelp`, and `ortho_l10n` all at 0.10.0, and `ortho_l10n` 0.10.0 is
   its only version. Evidence: crates.io API queries on 2026-10-25. Impact: no
   Git-tag fallback is needed; the migration can be entirely crates.io.
-- Observation: netsuke's `Cli` is a hand-written `#[derive(Parser)]` struct, so
+- Observation: netsuke's `Cli` is a handwritten `#[derive(Parser)]` struct, so
   the v0.10.0 generated-boolean-flag change cannot reach any netsuke flag.
   Evidence: `src/cli/command.rs:1-60` declares `pub struct Cli` with
   `#[command(...)]` and no OrthoConfig attribute;
@@ -254,13 +325,13 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   `error: unexpected value 'false' for '--verbose' found; no more were expected`
   and exits 2, because `src/cli/command.rs` declares the flags as plain
   `#[arg(long)]` switches. Generated documentation would have described a
-  parser the binary does not have, so `localized_config_help` now normalises
+  parser the binary does not have, so `localized_config_help` now normalizes
   boolean fields back to the presence-only switch shape.
 - Observation: `FieldMetadata.cli.value_name` is `None` for every
   configuration field, and this **predates** the migration. Evidence: 0.9.0
   derived it identically from `attrs.doc.cli_value_name`
   (`.../docs/fields/mod.rs:158`), and `grep -rn cli_value_name src/` finds no
-  declaration in netsuke. Impact: the hand-written parser supplies `FILE`, `N`,
+  declaration in netsuke. Impact: the handwritten parser supplies `FILE`, `N`,
   `BYTES` and friends while the metadata supplies nothing. Out of scope for
   this migration; the new parity test deliberately does not compare value
   names, and its doc comment records why.
@@ -275,6 +346,26 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   pre-existing catalogue gap, reachable only by an invocation shape netsuke
   never produced before; it is unrelated to the version bump and is recorded
   here rather than silently fixed inside the migration.
+- Observation: `--json false graph` exits **1**, not 2, while every other
+  space-separated boolean spelling exits 2. Evidence: the pre-clap scanner
+  `src/cli/l10n/mod.rs::json_hint_from_args` recognizes a bare `--json` and
+  runs before clap parses anything, so it selects JSON diagnostics for the
+  *subcommand* error that follows. Impact: obligation V3's original wording
+  expected a uniform non-zero status and clap's
+  `unexpected argument 'false' found` text. The real contract has two shapes —
+  clap's localized message for the `=`-attached forms and for the non-JSON
+  stray-word forms, and a JSON diagnostics document for the JSON-hint form — so
+  the test asserts each shape separately rather than a single message. The
+  migration does not change the scanner; this is recorded because the first
+  draft of the test would have failed on it.
+- Observation: a non-vacuity assertion driven from a `proptest` runner is
+  itself a flaky test. Evidence: the first V1 non-vacuity check drew 256 cases
+  from the generator and asserted the file-only class appeared; the per-case
+  probability is about 1.4%, so the run failed roughly 3% of the time and did
+  fail during development. Impact: the check was replaced by an exhaustive
+  eight-subset enumeration, which reaches every layer combination on every run
+  by construction. A property that samples is the wrong tool for proving that a
+  generator reaches a class; enumerate the classes instead.
 
 ## Decision log
 
@@ -295,7 +386,7 @@ the pre-migration page except for documented, IR-2.0-driven changes.
 - Decision: do not adopt the v0.10.0 optional-`=<BOOL>` boolean surface, and
   record the non-adoption rather than forcing it. Rationale: the brief permits
   optional capabilities only where the repository context asks for them.
-  Netsuke's flags are hand-written clap arguments and its existing
+  Netsuke's flags are handwritten clap arguments and its existing
   `--json=value` pre-clap scanner (`src/cli/l10n/mod.rs::json_hint_from_args`)
   deliberately ignores an `=`- attached value rather than reading it as a
   boolean assignment. Adopting the generated shape would require routing CLI
@@ -316,7 +407,7 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   the generated usage identifier. Pinning `None` would mean overriding a
   correct generated value to preserve an accident. Date/Author: 2026-10-25,
   agent.
-- Decision: normalise derived boolean CLI metadata back to a presence-only
+- Decision: normalize derived boolean CLI metadata back to a presence-only
   switch inside `localized_config_help`, rather than adopting the generated
   `--flag[=BOOL]` surface or accepting the snapshot change. Rationale:
   `localized_config_help` already exists to project OrthoConfig's generated
@@ -332,10 +423,90 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   CLI shape against `Cli::command()`, and was verified to fail on the exact
   regression (`documented true, parser false` for `verbose`) before the fix was
   restored. Date/Author: 2026-10-25, agent.
+- Decision: discharge obligation V1's non-vacuity requirement by enumerating
+  the eight layer subsets in a plain `#[test]`, and keep the randomized
+  property for breadth only. Rationale: the obligation says "assert those
+  classes are reached rather than relying on the seed", and a sampled assertion
+  still relies on the seed; only enumeration does not. The enumeration also
+  gives the all-three/disagreeing case — the only subset that distinguishes
+  "highest layer wins" from "whichever layer was present won" — a guaranteed
+  slot on every run. It reuses `CliConfig::merge_from_layers` with one layer
+  per tier carrying a distinct `jobs` value, so the merged scalar names the
+  winner unambiguously. Date/Author: 2026-10-25, agent.
 
 ## Outcomes & retrospective
 
-Not yet complete.
+Migrated Netsuke from `ortho_config` v0.9.0 to the published v0.10.0 release
+and closed #779 by adopting documentation IR 2.0. The dependency move needed no
+change to any Netsuke public type, and no Netsuke behaviour changed: every
+contract the migration brief listed — precedence, discovery, localized output,
+generated documentation, exit status, and stream routing — is preserved and
+pinned by a test.
+
+What the source changes actually amounted to. The IR-2.0 literal completion
+(`value_optional`, `behaviour`, `profiles`) was mechanical. The one substantive
+finding was that 0.10.0's derive changed the *documented value shape* of every
+boolean field to `--flag[=BOOL]`, a spelling the handwritten parser rejects.
+Left alone, the generated manual page and PowerShell help would have documented
+a parser Netsuke does not ship. `localized_config_help` already projected
+generated metadata onto the real parser, so normalizing the shape there was a
+one-function extension of an existing responsibility rather than a new
+abstraction, and the new parity test compares every documented shape against
+`Cli::command()`.
+
+Two plan expectations did not survive contact with the code. The migration
+guide's "explicit CLI wins" correction cannot reach Netsuke, because the CLI
+layer is built from `ArgMatches::value_source` rather than the generated guard;
+the obligation became a preservation contract. And the guide's Fluent re-keying
+has no effect, because `localized_config_help` replaces every generated
+identifier with a `define_keys!` key before release help sees it; the
+obligation became a test that rejects any reintroduced generated shape and
+resolves every published identifier through the `en-US` localizer.
+
+What the last validation added. Axiom A2 had been asserted rather than
+discharged. Installing `cargo-orthohelp` 0.10.0 into a private path and running
+`scripts/generate-release-help.sh` for real produced the expected artefact set
+for both the Unix and the PowerShell lanes, and running the older 0.9.0 reader
+over the same migrated tree produced a byte-identical man page. That is two
+facts at once: the 0.10.0 reader accepts IR 2.0, and the migration changed
+nothing a release consumer can read in the page. The exercise also supplied the
+non-vacuity evidence the projection needed — a rendered `OPTIONS` block in
+which four boolean flags have no value name while four value-taking flags keep
+one. A verification that only greps for an absent string is worth exactly as
+much as the section it searched, and this one searched a section that exists.
+
+Residual items, none blocking. `locales/en-US/messages.ftl` has no
+`clap-error-too-many-values` key, so an `--flag=false` invocation logs a
+localizer warning before clap's message; that gap predates the migration and is
+recorded under `Surprises & discoveries` rather than fixed inside it.
+`FieldMetadata.cli.value_name` remains `None` for configuration fields while
+the parser supplies `FILE`, `N` and friends; that also predates the migration,
+and the parity test deliberately does not compare value names so the gap cannot
+be mistaken for a migration regression. Finally, the generated man page's
+SYNOPSIS section reads `[missing: netsuke-usage]`, because `synopsis_id` is
+`None` on the root and on every subcommand and no locale defines a
+`netsuke-usage` key. `git grep netsuke-usage 88f20d588` finds nothing, so the
+defect predates this work; it is a catalogue gap of the same kind as the two
+above and is left for a separate change rather than folded into a dependency
+migration.
+
+Lessons. First, a sampled assertion is the wrong instrument for proving that a
+generator reaches a class: the first V1 non-vacuity check would have failed
+about 3% of runs, and replacing it with an eight-subset enumeration made
+coverage structural and let the negative control (inverting the push order)
+fail on the exact subset that distinguishes "highest layer wins" from
+"whichever layer was present won". Second, a plan is a hypothesis and its prose
+goes stale the moment reconnaissance resolves a risk: three claims in "Purpose
+/ big picture" and two acceptance criteria described behaviour the migration
+does not produce, and reconciling them was part of the work rather than a
+formality. Third, a process-level preservation claim needs the *old* binary as
+its evidence. Running the eleven boolean spellings against a build of the
+pre-migration merge base, and diffing normalized stderr, is what turned "these
+exit codes look right" into a measured before/after. Fourth, an axiom that says
+"verified by running X" is not verified until X has actually run: this plan
+carried that sentence for hours while no invocation of the real tool existed,
+and the cost of closing the gap was one `cargo binstall` and two script runs.
+Run the command the plan names before writing the sentence that cites it.
 
 ## Context and orientation
 
@@ -393,7 +564,7 @@ Trace links:
 guide §2 explicit CLI wins     -> EP-M4 -> proptest tier assertion per layer
 guide §3 Fluent identifier IR  -> EP-M3 -> build_l10n_audit passes; new identifier test
 guide §4 AgentContext/DocMeta  -> EP-M2 -> `profiles: None` compiles; literal is exhaustive
-guide §5 boolean `=BOOL`       -> EP-M4 -> `--flag=false` accepted, `--flag false` rejected
+guide §5 boolean `=BOOL`       -> EP-M4 -> preserved: `--flag=false` still exits 2, `--flag false` still exits 2
 guide §1 cargo-orthohelp 0.10  -> EP-M1 -> CI grep asserts 0.10.0
 ```
 
@@ -450,7 +621,7 @@ nothing on stdout, and `--flag false` exits non-zero the same way.
   `--verbose`, `--fetch-default-deny`, `--trust-project-fetch-policy`,
   `--no-input`, and `GraphArgs::html`.
 - Evidence: this obligation records *preservation*, not red-green. Netsuke's
-  booleans are hand-written clap flags on `src/cli/command.rs::Cli`, not
+  booleans are handwritten clap flags on `src/cli/command.rs::Cli`, not
   OrthoConfig-generated ones, so the v0.10.0
   `num_args = 0..=1, require_equals = true` emission never reaches them and
   `--flag=false` keeps its pre-migration rejection. The evidence is therefore
@@ -482,8 +653,53 @@ requirement. Verified by `cargo metadata`. Not verified: OrthoConfig's internal
 correctness.
 
 Axiom A2: `cargo-orthohelp` 0.10.0 reads IR 2.0 and writes the same artefact
-set as 0.9.1. Verified by running `scripts/generate-release-help.sh` against
-the real tool with a fake-out directory and diffing the produced file set.
+set as 0.9.1. Discharged on 2026-10-25 by running the real tool on the migrated
+tree:
+
+- Unix. Installed 0.10.0 into a private root with
+  `cargo binstall --no-confirm --disable-strategies compile --install-path
+  /home/leynos/.cache/orthohelp-951 cargo-orthohelp@0.10.0`,
+  put that root first on `PATH`, and ran
+  `scripts/generate-release-help.sh x86_64-unknown-linux-gnu netsuke
+  /tmp/orthohelp-out-951 Netsuke`.
+  Exit 0; the script's own `require_file` checks passed and it reported
+  `man/man1/netsuke.1` at 8842 bytes.
+- Windows. Ran the same binary directly with the script's PowerShell arguments
+  (`--format ps --locale en-US --ps-module-name Netsuke --ps-split-subcommands
+  true --ensure-en-us true`).
+  Exit 0; all four artefacts the script requires were produced: `Netsuke.psm1`,
+  `Netsuke.psd1`, `en-US/Netsuke-help.xml`, and `en-US/about_Netsuke.help.txt`.
+- File set unchanged. The Unix run produced exactly `man/man1/netsuke.1`, the
+  set the 0.9.1 lane produced.
+- Content unchanged where it matters. Running the locally installed 0.9.0
+  binary (`cargo orthohelp --format man ...`, which is how that release spells
+  the invocation) over the same migrated tree produced a man page with the
+  identical SHA-256,
+  `cc81d1ed935f417b171721740f6b7a970ef2268e502bc77d0028c89ed1af661a`. The tree
+  emitting IR 2.0 therefore renders identically through both tool versions,
+  which is the strongest available statement short of checking out the
+  pre-migration tree, and it simultaneously demonstrates that the 0.10.0 reader
+  accepts the migrated metadata.
+- Non-vacuity: the option block does render, so "no `BOOL` in the page" is a
+  real observation rather than an empty section. `--verbose`, `--json`,
+  `--fetch-default-deny` and `--trust-project-fetch-policy` appear as bare
+  switches (`\fB\-\-verbose\fR, \fB\-v\fR`), while `--file`, `--jobs`,
+  `--directory` and `--config` still carry value names (`\fIUTF8PATHBUF\fR`,
+  `\fIINT\fR`, `\fIDIR\fR`, `\fIFILE\fR`). That is exactly the split
+  `presence_only_cli_metadata` exists to produce, and it is the contrast that
+  makes the absent `=BOOL` suffix meaningful. The PowerShell MAML contains no
+  `BOOL` either.
+- Residual gap, pre-existing and unchanged: the SYNOPSIS section renders
+  `[missing: netsuke-usage]` because `synopsis_id` is `None` for the root and
+  for every subcommand, and `netsuke-usage` is absent from every locale
+  catalogue. `git grep netsuke-usage 88f20d588` finds nothing, so this predates
+  the migration and is recorded in `Outcomes & retrospective` rather than fixed
+  here.
+
+The axiom is the tool's documented interface, not its internal correctness:
+that 0.10.0 emits a *correct* man page is not claimed, only that it accepts the
+IR 2.0 metadata, produces the same file set, and renders the same bytes for
+this tree as the previous reader did.
 
 ## Plan of work
 
@@ -623,12 +839,27 @@ Acceptance is behavioural:
    baseline count, and every difference is explained in `Outcomes`.
 3. The release-help metadata snapshot contains `ir_version: "2.0"` and every
    other line is either unchanged or justified in the Decision log.
-4. `netsuke --json --verbose` under a config file, an environment variable, and
-   an explicit flag resolves to the flag value.
-5. `netsuke --json=false` exits 0 and `netsuke --json false` exits non-zero with
-   a clap "unexpected argument" diagnostic on stderr.
+4. `cargo nextest run -E 'test(explicit_cli_value_equal_to_the_default_still_wins)'`
+   passes, and `cargo nextest run -E 'binary(cli_tests)'` passes, so an explicit
+   `--manifest-fuel` equal to the compiled default beats a file layer saying 7
+   and an environment layer saying 9, and every layer subset resolves to its
+   highest present layer.
+5. `cargo nextest run -E 'binary(boolean_flag_spelling_tests)'` passes all
+   eleven cases, which pin the measured matrix: a bare switch exits 0 and takes
+   effect; each of six `--flag=false` forms exits 2 with empty stdout and clap's
+   `unexpected value 'false'`; `--verbose false` and `graph --html false` exit
+   2 with empty stdout and `Unknown subcommand` / `Unknown argument`; and
+   `--json false graph` exits 1 with empty stdout and a JSON diagnostics
+   document. Every status code and stream was measured identical against a
+   binary built from the pre-migration merge base.
 6. `bash scripts/generate-release-help.sh <target> netsuke <tmp>/out Netsuke`
-   produces the same file set as before the migration.
+   produces the same file set as before the migration. Measured on 2026-10-25
+   with `cargo-orthohelp` 0.10.0: the Unix run exits 0 and writes exactly
+   `man/man1/netsuke.1`; the PowerShell artefact set is the same four files;
+   and the man page is byte-identical to the one the 0.9.0 reader renders from
+   the same tree. Axiom A2 records the hashes and the non-vacuity check that
+   the boolean flags render as bare switches while value-taking flags keep
+   their value names.
 
 Quality criteria: all of `make check-fmt`, `make lint`, `make doc-coverage`,
 `make test`, and `make test-workflow-contracts` green; Markdown gates green for
@@ -686,7 +917,29 @@ adopted only because the field's type changed, and the value is
 - 2026-10-25: second revision, after reconnaissance resolved every open
   question against the real 0.10.0 source. Obligation V3 rewritten from a
   red-green acceptance to a preservation contract (netsuke's booleans are
-  hand-written clap flags); V2 annotated as preservation for the same reason;
-  the `FluentValue` risk closed; four findings added to
-  `Surprises & discoveries`; EP-M3 redefined as identifier *stability*; four
-  new entries in the Decision log; Stage B/C split clarified.
+  handwritten clap flags); V2 annotated as preservation for the same reason; the
+  `FluentValue` risk closed; four findings added to `Surprises & discoveries`;
+  EP-M3 redefined as identifier *stability*; four new entries in the Decision
+  log; Stage B/C split clarified.
+- 2026-10-25: third revision, after the nine-gate batch returned seven green
+  and two red. Replaced the "deliberately corrected places" framing in
+  `Purpose / big picture` with the measured result: both v0.10.0 behavioural
+  corrections are inapplicable to Netsuke, and the migration is a preservation
+  exercise pinned by tests. Rewrote Constraints bullet 1 and acceptance items 4
+  and 5 the same way, quoting the measured exit-status matrix rather than the
+  guide's prediction. Wrote `Outcomes & retrospective` and recorded the three
+  process lessons, including the sampled non-vacuity test that would have
+  failed about 3% of runs. Recorded the two residual catalogue gaps as out of
+  migration scope. Fixed the `shadow_reuse` Clippy error and the
+  `-ize`/`handwritten` spellings that made the two red gates fail.
+- 2026-10-25: fourth revision. Split
+  `src/cli/release_help/parser_fields.rs` out of the parent module to clear
+  Whitaker's 400-line cap, which the IR-2.0 commit had breached at 423 lines.
+  Discharged Axiom A2 by running `cargo-orthohelp` 0.10.0 for real on both
+  lanes, replacing the plan's previously unearned "Verified by running"
+  sentence with the measured file sets, the shared SHA-256, and the non-vacuity
+  contrast between boolean and value-taking flags. Recorded the pre-existing
+  `[missing: netsuke-usage]` SYNOPSIS defect as a fourth residual catalogue gap
+  and added the matching lesson: an axiom citing a command is not verified
+  until that command has run. Ticked the stale authoring checkbox and added the
+  `### Changed` changelog entry.

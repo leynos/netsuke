@@ -86,7 +86,49 @@ proptest! {
     /// scalar keys resolve to the highest-precedence definer and list keys
     /// append in layer order.
     #[test]
-    fn merge_precedence_holds_for_generated_layers(
+    fn merge_precedence_holds_for_generated_layers(layers in generated_precedence_layers()) {
+        let defaults = sanitize_value(&CliConfig::default()).expect("sanitizable defaults");
+        let mut composer = MergeComposer::new();
+        composer.push_defaults(defaults);
+
+        for (kind, values) in layers.as_slices() {
+            let Some(layer) =
+                build_generated_layer(kind, values.jobs, values.json, &values.schemes)
+            else {
+                continue;
+            };
+            match kind {
+                GeneratedLayer::File => composer.push_file(layer, None),
+                GeneratedLayer::Environment => composer.push_environment(layer),
+                GeneratedLayer::Cli => composer.push_cli(layer),
+            }
+        }
+
+        let expected_jobs = layers
+            .cli
+            .jobs
+            .or(layers.environment.jobs)
+            .or(layers.file.jobs)
+            .map(|jobs| usize::try_from(jobs).expect("generated jobs fit usize"));
+        let merged = CliConfig::merge_from_layers(composer.layers())
+            .expect("generated layers must merge cleanly");
+        prop_assert_eq!(merged.jobs, expected_jobs);
+        prop_assert_eq!(
+            merged.json,
+            layers.cli.json.or(layers.environment.json).or(layers.file.json).unwrap_or(false),
+        );
+        prop_assert_eq!(merged.fetch_allow_scheme, layers.expected_schemes());
+        prop_assert_eq!(merged.env_allow_var, layers.expected_variable_names("allow"));
+        prop_assert_eq!(merged.env_block_var, layers.expected_variable_names("block"));
+    }
+}
+
+prop_compose! {
+    /// Build the strategy the precedence property draws from.
+    ///
+    /// Kept out of the property so the non-vacuity test can drive the *same*
+    /// generator rather than a lookalike that might reach different classes.
+    fn generated_precedence_layers()(
         file_jobs in prop::option::of(1u64..=64),
         env_jobs in prop::option::of(1u64..=64),
         cli_jobs in prop::option::of(1u64..=64),
@@ -96,59 +138,118 @@ proptest! {
         file_schemes in prop::collection::vec(0u8..8, 0..8),
         env_schemes in prop::collection::vec(0u8..8, 0..8),
         cli_schemes in prop::collection::vec(0u8..8, 0..8),
-    ) {
-        let defaults = sanitize_value(&CliConfig::default()).expect("sanitizable defaults");
+    ) -> GeneratedLayers {
+        GeneratedLayers {
+            file: GeneratedLayerValues {
+                jobs: file_jobs,
+                json: file_json,
+                schemes: file_schemes,
+            },
+            environment: GeneratedLayerValues {
+                jobs: env_jobs,
+                json: env_json,
+                schemes: env_schemes,
+            },
+            cli: GeneratedLayerValues {
+                jobs: cli_jobs,
+                json: cli_json,
+                schemes: cli_schemes,
+            },
+        }
+    }
+}
+
+/// One layer's generated scalar and list values.
+#[derive(Debug, Clone)]
+struct GeneratedLayerValues {
+    jobs: Option<u64>,
+    json: Option<bool>,
+    schemes: Vec<u8>,
+}
+
+/// All three layers' generated values for one case.
+#[derive(Debug, Clone)]
+struct GeneratedLayers {
+    file: GeneratedLayerValues,
+    environment: GeneratedLayerValues,
+    cli: GeneratedLayerValues,
+}
+
+impl GeneratedLayers {
+    /// Return the three layers paired with their identities, in precedence
+    /// order.
+    fn as_slices(&self) -> [(GeneratedLayer, &GeneratedLayerValues); 3] {
+        [
+            (GeneratedLayer::File, &self.file),
+            (GeneratedLayer::Environment, &self.environment),
+            (GeneratedLayer::Cli, &self.cli),
+        ]
+    }
+
+    /// Return the schemes the merge should produce, in layer order.
+    fn expected_schemes(&self) -> Vec<String> {
+        self.as_slices()
+            .into_iter()
+            .flat_map(|(kind, values)| generated_schemes(kind, &values.schemes))
+            .collect()
+    }
+
+    /// Return the variable names the merge should produce for `policy`, in
+    /// layer order.
+    fn expected_variable_names(&self, policy: &str) -> Vec<String> {
+        self.as_slices()
+            .into_iter()
+            .flat_map(|(kind, values)| generated_variable_names(kind, &values.schemes, policy))
+            .collect()
+    }
+}
+
+/// Verify that the precedence contract is exercised on every layer subset.
+///
+/// The randomised property samples the layer combinations; this test enumerates
+/// them. There are eight subsets of {file, environment, CLI}, and each one is
+/// built from the *same* values so the expected winner is fixed by the subset
+/// alone. Enumerating makes the non-vacuity argument structural rather than
+/// statistical: every subset is guaranteed to be covered on every run, and the
+/// all-three/disagreeing case — the only one that distinguishes "highest layer
+/// wins" from "whichever layer was present won" — cannot silently drop out.
+#[test]
+fn every_layer_subset_resolves_to_its_highest_present_layer() {
+    for subset in 0u8..8 {
+        let file_present = subset & 0b001 != 0;
+        let environment_present = subset & 0b010 != 0;
+        let cli_present = subset & 0b100 != 0;
+
         let mut composer = MergeComposer::new();
-        composer.push_defaults(defaults);
-
-        let file_layer = build_generated_layer(
-            GeneratedLayer::File,
-            file_jobs,
-            file_json,
-            &file_schemes,
-        );
-        if let Some(layer) = &file_layer {
-            composer.push_file(layer.clone(), None);
+        composer
+            .push_defaults(sanitize_value(&CliConfig::default()).expect("sanitizable defaults"));
+        // One layer per tier and a distinct value in each, so the merged scalar
+        // names the winning tier unambiguously.
+        if file_present {
+            composer.push_file(json!({ "jobs": 2u64 }), None);
         }
-        let env_layer = build_generated_layer(
-            GeneratedLayer::Environment,
-            env_jobs,
-            env_json,
-            &env_schemes,
-        );
-        if let Some(layer) = &env_layer {
-            composer.push_environment(layer.clone());
+        if environment_present {
+            composer.push_environment(json!({ "jobs": 3u64 }));
         }
-        let cli_layer = build_generated_layer(GeneratedLayer::Cli, cli_jobs, cli_json, &cli_schemes);
-        if let Some(layer) = &cli_layer {
-            composer.push_cli(layer.clone());
+        if cli_present {
+            composer.push_cli(json!({ "jobs": 4u64 }));
         }
 
-        let expected_jobs = cli_jobs
-            .or(env_jobs)
-            .or(file_jobs)
-            .map(|jobs| usize::try_from(jobs).expect("generated jobs fit usize"));
+        let expected = if cli_present {
+            Some(4)
+        } else if environment_present {
+            Some(3)
+        } else if file_present {
+            Some(2)
+        } else {
+            None
+        };
         let merged = CliConfig::merge_from_layers(composer.layers())
-            .expect("generated layers must merge cleanly");
-        prop_assert_eq!(merged.jobs, expected_jobs);
-        prop_assert_eq!(merged.json, cli_json.or(env_json).or(file_json).unwrap_or(false));
-        let expected_schemes = generated_schemes(GeneratedLayer::File, &file_schemes)
-            .into_iter()
-            .chain(generated_schemes(GeneratedLayer::Environment, &env_schemes))
-            .chain(generated_schemes(GeneratedLayer::Cli, &cli_schemes))
-            .collect::<Vec<_>>();
-        prop_assert_eq!(merged.fetch_allow_scheme, expected_schemes);
-        let expected_allow_vars = generated_variable_names(GeneratedLayer::File, &file_schemes, "allow")
-            .into_iter()
-            .chain(generated_variable_names(GeneratedLayer::Environment, &env_schemes, "allow"))
-            .chain(generated_variable_names(GeneratedLayer::Cli, &cli_schemes, "allow"))
-            .collect::<Vec<_>>();
-        prop_assert_eq!(merged.env_allow_var, expected_allow_vars);
-        let expected_block_vars = generated_variable_names(GeneratedLayer::File, &file_schemes, "block")
-            .into_iter()
-            .chain(generated_variable_names(GeneratedLayer::Environment, &env_schemes, "block"))
-            .chain(generated_variable_names(GeneratedLayer::Cli, &cli_schemes, "block"))
-            .collect::<Vec<_>>();
-        prop_assert_eq!(merged.env_block_var, expected_block_vars);
+            .expect("an enumerated layer subset must merge cleanly");
+        assert_eq!(
+            merged.jobs, expected,
+            "subset {subset:03b} (file={file_present} env={environment_present} \
+             cli={cli_present}) should resolve to the highest present layer"
+        );
     }
 }

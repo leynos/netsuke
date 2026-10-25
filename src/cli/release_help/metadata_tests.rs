@@ -2,7 +2,10 @@
 
 use super::*;
 use anyhow::{Context, Result, ensure};
+use clap::Command;
 use rstest::rstest;
+
+use super::parser_fields::documented_clap_parser_field;
 
 struct ParserOnlyFieldExpectation {
     long: &'static str,
@@ -129,14 +132,14 @@ fn parser_only_metadata_requires_the_parser_argument(#[case] argument_id: &str) 
 ///
 /// `ortho_config` 0.10.0 documents every derived boolean as `--flag[=BOOL]`,
 /// because its generated parser accepts an optional value. Netsuke declares its
-/// flags by hand and rejects that spelling, so release help normalises boolean
+/// flags by hand and rejects that spelling, so release help normalizes boolean
 /// fields back to presence-only switches. Comparing against `Cli::command()`
 /// makes the parity a standing contract: a future metadata drift fails here
 /// instead of shipping a manual page the binary contradicts.
 ///
 /// Value *names* are deliberately not compared. Netsuke sets no
 /// `cli_value_name`, so the generated metadata has always reported `None` while
-/// the hand-written parser supplies `FILE`, `N`, and friends; that gap predates
+/// the handwritten parser supplies `FILE`, `N`, and friends; that gap predates
 /// the v0.10.0 migration and is not this contract's subject.
 #[test]
 fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
