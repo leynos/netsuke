@@ -2337,6 +2337,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   showed the `assets` and `digests` fields, while the current interface section
   correctly keeps digest records separate. This history-only correction does
   not change the implemented interface or remaining scope.
+- [x] (2026-10-25) Addressed both current CodeRabbit findings in
+  `publish_crates_io_cli`: all three result-record writes diagnose `OSError`
+  and return `EXIT_OUTPUT_ERROR` (4), and parser failures now return the
+  documented usage status 64. The developers' guide documents `classify` and
+  `verify` separately. Regressions cover the normal and response-error classify
+  writes, the successful verify write, and usage failures. Commit `0fec91c2`
+  passed the full sequential gates: `check-fmt`, `lint`, `typecheck`,
+  `doc-coverage` (98.20%), `test` (4,712 passed, 6 skipped; doctests passed),
+  `test-workflow-contracts` (1,494 passed, 3 skipped, plus 28 helper tests),
+  `test-ci-scripts` (99 passed), `test-release-publication` (413 passed),
+  `markdownlint`, and `nixie`.
 
 ## Surprises & discoveries
 
@@ -3829,3 +3840,10 @@ suite. All 32 target-only paths are byte-identical after replay. Main's #708
 extracted CI helper scripts into `scripts/ci/`; its target-side files remain
 intact. Stage C remains partial and Stage D remains open. No publication path,
 release setting, or registry configuration changed.
+
+Draft 11, 2026-10-25: addressed the two current review findings on publisher
+CLI output failures and status documentation. Output-record write errors now
+have a distinct diagnosed status, parser errors use the documented usage code,
+and regression tests cover those outcomes. The full sequential gate set passed
+at commit `0fec91c2`. Stage C remains partial and Stage D remains open. No
+publication path, release setting, or registry configuration changed.
