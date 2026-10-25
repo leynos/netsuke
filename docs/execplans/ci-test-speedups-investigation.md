@@ -2,19 +2,33 @@
 
 Status: IN PROGRESS
 
-On 25 October, the 34-commit branch was rebased from
-`ac826aa9732fad85fce3c9237ce9ac2415052a0a` onto `origin/main` at
-`0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458`. The replay had no conflicts, and
-the range-diff matched all 34 commits. All requested gates passed on candidate
-head `bc3e52e5cc3601484f1e7c84643d3a60eb527082`: `make check-fmt`, `make test`,
-`make typecheck`, and `make lint`. The workflow-contract suite also passed
-1,472 tests, skipped three, and its supplementary script suite passed 27 tests.
-`make doc-coverage` passed at 98.19% (6,178 of 6,292 items) against the 80%
-threshold. Nextest passed all 4,867 selected tests, with six skipped; all
-workspace doctests passed. The previously timing-out
-`cli_configuration_fixture_compiles::case_1_public_api` passed in 287.593
-seconds. `cs delta origin/main HEAD` with CodeScene CLI 1.0.52 found no issues.
-Refresh hosted CI and review on the published exact head before merge.
+On 25 October, the 39-commit branch was rebased from
+`0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458` onto `origin/main` at
+`88f20d588f936b810a2f700a76ceda970451ca7f`. The replay had no conflicts, and
+the range-diff matched all 39 commits. The only overlapping files were
+`docs/contents.md` and `docs/developers-guide.md`; the target's ADR-0059 and
+compile-contract guidance were preserved, and `Cargo.lock` came from the target.
+
+The complete post-rebase local gates passed on code candidate
+`8705f25879e47293b1175147d9decb8dcb4decb5`: `make check-fmt`, `make test`,
+`make typecheck`, `make lint`, `make doc-coverage`, and
+`make test-workflow-contracts`. Nextest passed 4,710 tests with six skipped;
+workspace doctests passed. Workflow contracts passed 1,493 tests with three
+skipped plus 27 script tests. Rustdoc coverage was 98.20% (6,221/6,335).
+Published checkpoint `a4315d26c4a3ce1ad6ae3531a70bece227214426` changed only
+`docs/ci-performance/README.md` and this ExecPlan after that code candidate;
+the documentation-only checkpoint passed `make fmt`, `make check-fmt`,
+`make markdownlint` (zero issues across 201 files), and `make nixie`.
+
+On published checkpoint `a4315d26c4a3ce1ad6ae3531a70bece227214426`, hosted CI
+run 40182895134, Netsukefile run 40182895177, Release Dry Run 40182895178, and
+CodeScene all passed. The hosted coverage result was 91.09% against the 91.7%
+baseline, within the configured ±1.00 percentage-point tolerance; it did not
+exceed the baseline. CodeRabbit's EP-1 assessment in comment 6396445399 found
+no confirmed in-scope defect or omission. The five findings from the previous
+review were confirmed fixed and their threads resolved. This assessment is
+separate from formal review; formal review and merge remain outstanding for the
+next published candidate.
 
 The investigation is under way. On 24 October, the 28-commit branch was rebased
 onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
@@ -607,8 +621,12 @@ fidelity comparisons block adoption.
   candidate, all six local gates passed: Nextest passed 4,710 tests with six
   skipped, doctests passed, workflow contracts passed 1,493 tests with three
   skipped plus 27 script tests, and Rustdoc coverage was 98.20%.
-- [ ] Revalidate hosted checks after the CodeScene refactor, obtain current-head
-  assessments/review, reconcile findings, and merge the PR at equilibrium.
+- [x] Revalidate hosted checks and CodeScene on checkpoint `a4315d2`; all three
+  Actions runs passed. Obtain the EP-1 assessment on that exact base/head and
+  reconcile the five previous findings; the assessment accepted the scoped
+  milestone and all five threads were resolved.
+- [ ] Revalidate the plan-only successor, obtain its current-head assessment and
+  formal review, reconcile any findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -955,8 +973,7 @@ post-rebase local gates passed: `make check-fmt`, `make test`, `make typecheck`,
 `make lint`, `make doc-coverage`, and `make test-workflow-contracts`. Nextest
 passed 4,710 tests with six skipped; doctests passed. Workflow contracts passed
 1,493 tests with three skipped plus 27 script tests, and Rustdoc coverage was
-98.20% (6,221/6,335). Fresh hosted checks and review still must cover the
-published head before merge.
+98.20% (6,221/6,335).
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
