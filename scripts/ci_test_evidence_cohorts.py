@@ -66,18 +66,17 @@ def _pull_request_coverage_cohort(
 
 def _is_dependabot_pull_request(run: dict, pull_request: dict | None) -> bool:
     """Read a matching saved PR author, not the actor who most recently pushed."""
-    if not isinstance(pull_request, dict):
-        return False
-    pull_requests = run.get("pull_requests")
-    if not isinstance(pull_requests, list) or len(pull_requests) != 1:
-        return False
-    run_pull_request = pull_requests[0]
-    if not isinstance(run_pull_request, dict):
-        return False
-    if not _pull_request_metadata_matches(run, run_pull_request, pull_request):
-        return False
-    user = pull_request.get("user")
-    return isinstance(user, dict) and user.get("login") == "dependabot[bot]"
+    match pull_request, run.get("pull_requests"):
+        case dict() as pull_request, list([dict() as run_pull_request]) if (
+            _pull_request_metadata_matches(run, run_pull_request, pull_request)
+        ):
+            match pull_request.get("user"):
+                case dict() as user:
+                    return user.get("login") == "dependabot[bot]"
+                case _:
+                    return False
+        case _:
+            return False
 
 
 def _pull_request_metadata_matches(
@@ -157,7 +156,13 @@ def _has_distinct_head_repository(run: dict) -> bool:
 
 def _is_repository_id(value: object) -> bool:
     """Accept numeric repository IDs without treating booleans as IDs."""
-    return isinstance(value, int) and not isinstance(value, bool)
+    match value:
+        case bool():
+            return False
+        case int():
+            return True
+        case _:
+            return False
 
 
 def _trunk_cache_writer_cohort(run: dict, job: dict) -> str:

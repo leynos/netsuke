@@ -79,8 +79,20 @@ def test_repository_names_fallback_when_ids_are_unavailable() -> None:
 
 @pytest.mark.parametrize(
     "pull_requests",
-    [None, "unknown", [{}], [{"user": {"login": "dependabot[bot]"}}] * 2],
-    ids=["missing", "wrong-type", "missing-author", "ambiguous-authors"],
+    [
+        None,
+        "unknown",
+        ([{"user": {"login": "dependabot[bot]"}}],),
+        [{}],
+        [{"user": {"login": "dependabot[bot]"}}] * 2,
+    ],
+    ids=[
+        "missing",
+        "wrong-type",
+        "tuple-not-list",
+        "missing-author",
+        "ambiguous-authors",
+    ],
 )
 def test_ambiguous_dependabot_identity_is_not_assumed(
     pull_requests: object,
