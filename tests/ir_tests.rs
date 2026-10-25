@@ -2,8 +2,8 @@
 //!
 //! Directly constructs [`netsuke::ir::BuildGraph`], [`BuildEdge`], and
 //! [`Action`] values and asserts their default state, field semantics, and
-//! canonical edge ownership and output-index lookup. Does not exercise manifest
-//! parsing or Ninja generation.
+//! canonical edge ownership and output-index lookup. It also checks direct
+//! manifest-to-IR validation without invoking Ninja generation.
 
 use camino::Utf8PathBuf;
 use netsuke::ast::Recipe;

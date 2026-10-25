@@ -304,7 +304,7 @@ fn manifest_ninja_snapshot(
     Ok(())
 }
 
-/// Assert whether one named edge has an immediately following console binding.
+/// Assert whether one named edge has a console binding.
 ///
 /// # Errors
 ///
@@ -316,7 +316,11 @@ fn assert_console_edge_binding(ninja: &str, output: &str, expected: bool) -> Res
         .iter()
         .position(|line| line.starts_with(&prefix))
         .with_context(|| format!("missing Ninja build edge for {output}"))?;
-    let actual = lines.get(edge_index + 1) == Some(&"  pool = console");
+    let actual = lines
+        .iter()
+        .skip(edge_index + 1)
+        .take_while(|line| line.starts_with("  "))
+        .any(|line| *line == "  pool = console");
     ensure!(
         actual == expected,
         "edge {output} console binding should be {expected}, generated Ninja:\n{ninja}"

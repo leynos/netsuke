@@ -1,4 +1,4 @@
-//! Tests for shell command text accepted by Ninja generation.
+//! Test shell command text accepted by Ninja generation.
 
 use super::NamedAction;
 
