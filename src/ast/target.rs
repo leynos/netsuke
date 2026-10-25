@@ -8,7 +8,13 @@ use super::{DependencyOrder, Recipe, StringOrList, Vars};
 ///
 /// Targets describe the files produced by a rule and their dependencies.
 /// `phony` targets are always considered out of date, while `always` targets are
-/// regenerated even if their inputs are unchanged.
+/// regenerated even if their inputs are unchanged. `console` asks Ninja to run
+/// an executable edge in its serial console pool, which can make long-running
+/// output visible sooner at the cost of serializing other console edges.
+#[expect(
+    clippy::struct_excessive_bools,
+    reason = "manifest controls are independent and may be combined"
+)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct Target {
@@ -45,6 +51,12 @@ pub struct Target {
     /// Force the recipe to run even if the outputs are up to date.
     #[serde(default)]
     pub always: bool,
+
+    /// Run an executable action or target in Ninja's serial console pool.
+    ///
+    /// Defaults to `false`. Dependency-only entries cannot use this setting.
+    #[serde(default)]
+    pub console: bool,
 
     /// Internal discovery metadata marking a target with an unevaluated `when`.
     #[serde(default)]

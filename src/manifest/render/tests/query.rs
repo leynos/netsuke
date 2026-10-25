@@ -38,6 +38,7 @@ fn manifest_with_build_only_recipe_helper() -> Result<NetsukeManifest> {
             vars: action_vars,
             phony: true,
             always: false,
+            console: false,
             conditional: false,
             description: Some("{{ description }}".into()),
         }],
