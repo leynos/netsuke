@@ -6,9 +6,9 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: BLOCKED
 
-Revision 14. See `Revision note` at the foot of this document. This plan was
+Revision 24. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -460,9 +460,53 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   The complete EP-M1 gate sequence passed before the milestone commit.
 - [x] EP-M1: contract test red, then green against a skeleton inventory; all
   seven final gate targets passed before the milestone commit.
-- [ ] EP-M2: register recorded; EV-ORACLE, EV-SWEEP, EV-REVERSE, EV-SEEDED.
-- [ ] EP-M3: landed work, findings, obligations, and trace matrix.
-- [ ] EP-M4: documentation integration, roadmap update, gates green.
+- [x] (2026-10-25) Began EP-M2 by archiving the approved pin into a fresh
+  ignored scratch export under `target/inventory-26-1-1/`.
+- [x] (2026-10-25) Corrected seed P12's stale path against the pin:
+  `src/ir/cycle/verification.rs` is included by the parent `#[cfg(kani)] mod` in
+  `src/ir/cycle/mod.rs`; the file itself has no `cfg` marker.
+- [x] (2026-10-25) The prior combined gate attempt hit `ENOSPC` while Cargo
+  created a build-script output directory; `nixie` also could not create its
+  temporary directory. The current filesystem check reports 278 GB available
+  and 15% inode use, and `/tmp` accepts temporary files. No source or build
+  configuration change is indicated; rerun the gates on the completed candidate.
+- [x] (2026-10-25) `origin/main` advanced to `88f20d588` after the approved pin.
+  Continue the dated snapshot at the previously user-approved
+  `8a961000859c02862454338fda6c4dd65bda2aa1`; the inventory records later
+  consumer re-sweeps and does not move the pin.
+- [x] (2026-10-25) Added the omitted `MISSING_RECIPE_ERROR` marker and reran the
+  primary oracle. It passed with 11,197 warning messages and 7,881 unique
+  primary sites; the 561-marker list now includes all four A1 error constants.
+- [x] (2026-10-25) Corrected the source sweep after finding the two-file
+  `build_slice_fixture` compile contract and three additional
+  `CommandIsolation` trait candidates. The resulting totals are 936 Rust files,
+  2,486 constructor/mutation candidates, 897 exact trait-pattern candidates,
+  and 159 doctest/comment candidates.
+- [x] (2026-10-25) EV-REVERSE checked 1,748 register rows and 3,009 explicit
+  pinned `path:line` anchors with zero missing or out-of-range anchors. The
+  type-table anchors all match their declarations; the fictitious
+  `BuildGraph::remove_edge` row had no source match.
+- [x] (2026-10-25) EV-SEEDED passed with high confidence. The separate pinned
+  export reported all 11 production/Kani controls, classified P9 as test-only,
+  and missed none. Primary spans increased 7,877 to 7,912; the broad sweep
+  increased 2,481 to 2,505 lines. The agent added seven scratch-helper doc
+  comments after the first check failed `missing_docs`; no lint was suppressed.
+- [x] (2026-10-25) EP-M2 complete: the corrected primary oracle and targeted
+  sweeps are reconciled in the 1,748-row register; EV-ORACLE, EV-SWEEP,
+  EV-REVERSE, EV-SEEDED, EV-CONTRACT, and the final gates passed.
+- [x] (2026-10-25) EP-M3 complete: landed work, H1-H4, numbered observations,
+  CO-1 to CO-15, and all 25 dependent-task trace rows are recorded. The real
+  inventory contract passed against this complete document.
+- [x] (2026-10-25) EV-GATES passed sequentially on the completed candidate:
+  `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
+  `make test`, `make markdownlint`, and `make nixie`. Doc coverage is 6,178 of
+  6,292 items (98.19%); Nextest is 4,887 passed, 6 skipped, 0 failed, and all
+  doctests passed. Markdown lint covered 199 files with 0 issues; all Mermaid
+  diagrams validated. An initial gate attempt hit `ENOSPC`; with 278 GB free
+  and 15% inode use, the complete rerun finished without a storage failure.
+- [ ] EP-M4: documentation integration, roadmap update, gates green. ADR-0035
+  remains Proposed on live `origin/main`, so do not tick the roadmap item
+  unless its acceptance condition is met.
 
 ## Surprises & discoveries
 
@@ -474,8 +518,9 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `git diff --name-status 8a961000..origin/main -- src
   build.rs tests test_support benches`.
   Impact: the user approved the plan as written, retaining the `8a961000` pin.
-  The inventory will remain a historical snapshot; later consumers must inspect
-  changes since that pin before relying on it.
+  `origin/main` later advanced to `88f20d588`; this work continues against the
+  approved historical snapshot. Later consumers must inspect changes since that
+  pin before relying on it.
 - Observation (2026-10-25): `make test` timed out at 300 seconds on
   `cli_configuration_fixture_compiles::case_1_public_api` while its nested
   all-features `cargo check` waited for a compiler slot. The suite had passed
@@ -540,6 +585,13 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `src/runner/help_query.rs:110`, while their seeded plants were shaped to
   match the patterns. Evidence: expert review, counts reproduced against
   `ebcedaef`. Impact: D-7 makes the compiler the primary site oracle.
+- Observation (2026-10-25): A1's anticipated register named
+  `EMPTY_COMMAND_LIST_ERROR` and the two command-isolation constants, but its
+  annotation script omitted `MISSING_RECIPE_ERROR`, which is also a CO-1
+  diagnostic constant. The pinned source confirms both empty-list and
+  missing-recipe constants exist. Impact: add the missed marker to the
+  disposable oracle and include both constants in the inventory; no production
+  source changes.
 - Observation: `syn` is not a direct dependency; `deprecated` is not denied by
   the workspace lint table or `.cargo/config.toml` (only `-Zthreads=8` and the
   Linux linker flag), so deprecation warnings do not stop the scratch build.
@@ -674,8 +726,12 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 
 ## Outcomes & retrospective
 
-Not started. Complete at each milestone boundary and before setting the status
-to `COMPLETE`.
+EP-M1 is complete and committed. EP-M2's corrected primary oracle, text sweeps,
+seeded controls, register, and reverse-anchor audit are complete. EP-M3's
+landed work, findings, obligations, and all 25 trace rows are complete. The
+candidate passed the full sequential gate set. EP-M4 remains blocked because
+ADR-0035 is still `Proposed` on live `origin/main`; D-6 Option B requires its
+acceptance before the roadmap entry can be checked or the inventory integrated.
 
 ## Verification plan
 
@@ -726,7 +782,7 @@ Obligations:
   `BuildEdge` construction; P9 a construction inside a `#[cfg(test)]` module;
   P10 an `EdgeId(0)` call in `src/ninja_gen/`; P11 a
   `#[cfg(windows)] impl BuildGraph { fn f(&mut self) { self.actions.clear() } }`
-  block; P12 a `BuildEdge` literal inside `src/ir/cycle_verification.rs` (a
+  block; P12 a `BuildEdge` literal inside `src/ir/cycle/verification.rs` (a
   file that is Kani-only through its parent's `#[cfg(kani)] mod` line, with no
   `cfg` text of its own). The method must report P1 to P8 and P10 to P12 as
   unregistered sites (production, or Kani-only for P8 and P12; P7, P8, P11, and
@@ -806,7 +862,8 @@ Create `docs/hexagonal-hardening-inventory.md` with these sections, in order:
    (anticipated sites for the Register-size tolerance):
    - A1 authored types: `ast::{NetsukeManifest, MacroDefinition, Rule, Target,
      Recipe, RawRecipe, StringOrList, DependencyOrder, CommandIsolation}`, the
-     `pub(crate)` constants `EMPTY_COMMAND_LIST_ERROR`,
+     `pub(crate)` constants `MISSING_RECIPE_ERROR`,
+     `EMPTY_COMMAND_LIST_ERROR`,
      `COMMAND_ISOLATION_RECIPE_ERROR`, and `COMMAND_ISOLATION_SCALAR_ERROR`, and
      `StringOrList::{is_empty_marker, is_blank_content}`; `Recipe`'s
      `Deserialize`; `StringOrList`'s three `From` impls; `deserialize_actions`
@@ -1511,6 +1568,29 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
 - Revision 18 (2026-10-25): recorded EV-GATES for EP-M1: all seven targets
   passed, including 4,887 Nextest tests, all doctests, and 98.19% doc-comment
   coverage. Marked the contract-test milestone complete before its commit.
+
+- Revision 19 (2026-10-25): began EP-M2 by creating a fresh `git archive` at
+  the approved pin under the ignored `target/` scratch hierarchy. Oracle
+  annotations and compiler outputs will stay outside the tracked tree.
+- Revision 20 (2026-10-25): recorded the transient no-space gate failure and
+  current storage evidence. Flagged the newly advanced `origin/main` for the
+  user's pin decision under the plan's drift tolerance.
+- Revision 21 (2026-10-25): corrected A1's expected constant list to include
+  `MISSING_RECIPE_ERROR`, named by CO-1 but omitted from the scratch marker
+  list.
+- Revision 22 (2026-10-25): recorded EV-SEEDED's not-falsified result: 11 of
+  11 production/Kani controls found, P9 test-only, zero misses. Captured the
+  first-attempt `missing_docs` repair and exact sweep-count reconciliation.
+
+- Revision 23 (2026-10-25): completed the corrected primary oracle and
+  sweep reconciliation at the retained pin, added 1,748 unique register rows
+  and the file-only test/Kani appendix, and drafted the findings, obligations,
+  and all 25 trace rows. Recorded the repaired `ENOSPC` environment as pending
+  gate revalidation.
+- Revision 24 (2026-10-25): marked EP-M2 and EP-M3 complete after all seven
+  sequential gates passed. Set the plan status to `BLOCKED` because ADR-0035
+  remains `Proposed`; left EP-M4 and the roadmap checkbox pending its
+  acceptance.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
