@@ -151,6 +151,7 @@ jobs:
         with:
           python-version: ${{ inputs['python-version'] }}
 
+
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
@@ -265,6 +266,96 @@ jobs:
           # directory, so its shape changed as well as its version.
           key: >-
             netsuke-orthohelp-v2-${{ runner.os }}-${{ runner.arch }}-0.10.0-${{ env.RUST_BUILD_RELEASE_PIN }}
+
+      # `cargo-orthohelp` 0.10.0 compiles a bridge binary at generation time,
+      # so `Generate release help` now runs a nested Cargo build that 0.9.1 did
+      # not. On Windows that build resolves `link.exe` through `PATH`, and every
+      # Bash step here starts with Git's `/usr/bin` ahead of Visual Studio,
+      # whose coreutils `link` then answers and fails with "extra operand".
+      # Export the MSVC toolchain variables and pin the linker by full path so
+      # the nested build selects Visual Studio rather than whatever `PATH`
+      # resolves first. This is upstream's own remedy: `leynos/ortho-config`
+      # runs the same step in its own `.github/workflows/ci.yml`.
+      #
+      # It sits here, rather than earlier as upstream places it, because of the
+      # aarch64 Windows lane. The exported `INCLUDE` and `LIB` point at x64
+      # libraries, and `Build release binary` cross-compiles to
+      # `aarch64-pc-windows-msvc`; those variables in scope would let the
+      # release build link against x64 objects. Placing the step after the
+      # release build avoids that, and costs nothing, because
+      # `skip-man-page-discovery: 'true'` means the release build never runs the
+      # nested bridge build — `Generate release help` is its only caller.
+      #
+      # `VsDevCmd.bat` sets its variables in the process it runs in, so the
+      # values are read back from a child `cmd.exe` rather than expected to
+      # appear in this shell.
+      - name: Configure MSVC for nested Cargo builds
+        if: inputs.platform == 'windows'
+        shell: pwsh
+        run: |
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          # `vswhere` takes one long flag list; splatting keeps each argument
+          # on a line the workflow linter will accept.
+          $vcTools = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+          $installationQuery = @(
+            '-latest', '-products', '*', '-requires', $vcTools,
+            '-property', 'installationPath'
+          )
+          $installation = & $vswhere @installationQuery | Select-Object -First 1
+          if (-not $installation) {
+            throw 'vswhere did not find the Visual Studio C++ toolchain'
+          }
+          $vsDevCmd = Join-Path $installation 'Common7\Tools\VsDevCmd.bat'
+          if (-not (Test-Path $vsDevCmd)) {
+            throw 'Visual Studio did not provide VsDevCmd.bat'
+          }
+          $env:MSVC_VSDEVCMD = $vsDevCmd
+          $devEnvironment = & $env:COMSPEC /d /s /c 'call "%MSVC_VSDEVCMD%" -arch=x64 -host_arch=x64 >nul && set'
+          if ($LASTEXITCODE -ne 0) {
+            throw 'VsDevCmd.bat could not configure the x64 MSVC environment'
+          }
+          $toolVariables = @(
+            'INCLUDE', 'LIB', 'LIBPATH', 'VCINSTALLDIR',
+            'VSINSTALLDIR', 'VSCMD_ARG_TGT_ARCH', 'WindowsSdkDir',
+            'WindowsSDKVersion'
+          )
+          $selectedVariables = @{}
+          foreach ($entry in $devEnvironment) {
+            $separator = $entry.IndexOf('=')
+            if ($separator -gt 0) {
+              $name = $entry.Substring(0, $separator)
+              if ($toolVariables -contains $name) {
+                $selectedVariables[$name] = $entry.Substring($separator + 1)
+              }
+            }
+          }
+          if (-not $selectedVariables.ContainsKey('LIB')) {
+            throw 'VsDevCmd.bat did not expose the MSVC library search path'
+          }
+          $sdkLibraries = $selectedVariables['LIB'] -split ';' | Where-Object { $_ }
+          if (-not ($sdkLibraries | Where-Object { Test-Path (Join-Path $_ 'kernel32.lib') })) {
+            throw 'VsDevCmd.bat did not expose the Windows SDK kernel32.lib search path'
+          }
+          foreach ($name in $toolVariables) {
+            if ($selectedVariables.ContainsKey($name)) {
+              Add-Content -Path $env:GITHUB_ENV -Value "$name=$($selectedVariables[$name])" -Encoding utf8
+            }
+          }
+          $linkerQuery = @(
+            '-latest', '-products', '*', '-requires', $vcTools,
+            '-find', 'VC\Tools\MSVC\**\bin\Hostx64\x64\link.exe'
+          )
+          $linker = & $vswhere @linkerQuery | Select-Object -First 1
+          if (-not $linker) {
+            throw 'vswhere did not find the x64 MSVC linker'
+          }
+          $linkerPath = $linker.Trim()
+          Add-Content -Path $env:GITHUB_PATH -Value (Split-Path -Parent $linkerPath) -Encoding utf8
+          # The bridge build passes no `--target`, so it compiles for the host.
+          # Both Windows lanes run on an x64 runner, so the x86_64 triple is the
+          # host scope even for the arm64 release lane.
+          $linkerSetting = "CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER=$linkerPath"
+          Add-Content -Path $env:GITHUB_ENV -Value $linkerSetting -Encoding utf8
 
       - name: Generate release help
         shell: bash

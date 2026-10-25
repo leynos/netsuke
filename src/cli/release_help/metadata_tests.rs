@@ -151,12 +151,17 @@ fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
         let Some(documentation) = field.cli.as_ref() else {
             continue;
         };
-        let Some(argument) = command
+        let argument = command
             .get_arguments()
             .find(|argument| argument.get_id().as_str() == field.name)
-        else {
-            continue;
-        };
+            .with_context(|| {
+                format!(
+                    "release help documents {}, but the parser accepts no such \
+                     argument; the manual page would advertise a flag this \
+                     binary rejects",
+                    field.name,
+                )
+            })?;
 
         let takes_value = argument.get_action().takes_values();
         ensure!(

@@ -291,9 +291,85 @@ rather than as `--flag[=BOOL]`.
   check's "Suppress" link was not used: `AGENTS.md` names duplicated code as a
   refactoring trigger, and suppressing an advisory rule on a test file added by
   this branch would have kept the duplication.
+- [x] (2026-10-25) Windows release lane repaired. The `Release Dry Run` run
+  [40214615772](https://github.com/leynos/netsuke/actions/runs/40214615772)
+  failed on `release / build-windows (aarch64-pc-windows-msvc …)`, at the
+  `Generate release help` step. The failure was a genuine migration defect, not
+  an environment flake: `Build release binary` passed in the same job, so the
+  release binary linked correctly and only the help generation broke. Added a
+  `Configure MSVC for nested Cargo builds` step to
+  `.github/workflows/build-and-package.yml`, modelled on the one upstream runs
+  in `leynos/ortho-config`'s `ci.yml`, and pinned its position with a new
+  `test_build_job_configures_msvc_before_the_nested_cargo_build` contract.
+  `yamllint` at the repository's 120-column limit forced the `vswhere` queries
+  into PowerShell splat arrays; the upstream form fits its own, looser, limit
+  but not this one. The first placement copied upstream and put the step before
+  `Build release binary`. That was wrong here and was corrected before commit:
+  netsuke has an `aarch64-pc-windows-msvc` lane that upstream does not, and the
+  step exports unscoped `INCLUDE`/`LIB` values naming **x64** libraries, so an
+  earlier position would have put x64 search paths in scope for the arm64
+  release build. The step now sits between `Build release binary` and
+  `Generate release help`. Nothing is lost, because the release build passes
+  `skip-man-page-discovery: 'true'` and never invokes the nested bridge build.
+  All three ordering claims were mutation-checked before being trusted:
+  deleting the step fails on the count, moving it after `Generate release help`
+  fails on the nested-build bound, and moving it before
+  `Build release binary` — upstream's placement — fails on the x64-leak bound.
+- [x] (2026-10-25) CodeRabbit round three. One finding, raised twice against
+  `src/cli/release_help/metadata_tests.rs:154-159` and rated `todo`/`trivial`.
+  It was valid: the parity test located the parser argument with
+  `let Some(argument) = … else { continue; }`, so a field release help
+  documented but the parser did not accept would have been skipped rather than
+  reported, leaving the "the manual page would advertise a flag this binary
+  rejects" case undetected. Replaced the `continue` with a `.with_context(…)`
+  that names the mismatch. The targeted run
+  `cargo nextest run -E 'test(release_help_cli_value_shapes_match_the_parser)'`
+  passed afterwards.
 
 ## Surprises & discoveries
 
+- Observation: `cargo-orthohelp` 0.10.0 compiles a bridge binary while it
+  generates help, and that nested build broke the Windows release lane.
+  Evidence: the failing job's log carries
+  `Error: BridgeBuildFailure { status: 101, … }` immediately after
+  `link: extra operand 'D:\\a\\netsuke\\netsuke\\target\\debug\\build\\quote/…-cgu.0.rcgu.o'`
+  and `Try 'link --help' for more information.`
+  (`gh api repos/leynos/netsuke/actions/jobs/121233043778/logs`). The error is
+  coreutils' GNU `link`, not MSVC's `link.exe`: every Bash step on the runner
+  starts with Git's `/usr/bin` ahead of Visual Studio, so the nested build's
+  `PATH` lookup finds the wrong program. Impact: this is new in 0.10.0 —
+  `cargo-orthohelp` 0.9.1 did not build anything, so the lane never resolved a
+  linker — and it is invisible on Linux and macOS. It is also *not*
+  environmental: the same workflow passed six minutes later on
+  `use-trusted-packaging` (`74ec13214`), whose only relevant difference is
+  `cargo-orthohelp` 0.9.1, and whose `Generate release help` step compiled
+  nothing. The first diagnosis from the visible log text was wrong: the failing
+  message looks like a broken MSVC install, but `Build release binary` had
+  already succeeded in the same job, which proves MSVC was working and only the
+  Bash-context nested build was not.
+- Observation: the nested bridge build passes no `--target`, so it compiles for
+  the host rather than for the release target. Evidence:
+  `cargo-orthohelp/src/bridge/mod.rs:293` assembles a build whose only
+  arguments are `--message-format=json`, `--bin <name>`,
+  `--manifest-path <path>`, and `--target-dir <dir>`, and never adds
+  `--target`; the build environment forwards only allow-listed names plus
+  `CARGO_TARGET_<SCOPE>_{LINKER,RUSTFLAGS}` matches
+  (`bridge_build_environment.rs`). Impact: on the `aarch64-pc-windows-msvc`
+  lane the bridge is still built *for x86_64 Windows*, so
+  `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` is the correct variable for both
+  Windows lanes, and an aarch64-scoped linker variable would not be read.
+- Observation: upstream's MSVC placement cannot be copied verbatim, because
+  netsuke's Windows matrix is wider than upstream's. Evidence:
+  `leynos/ortho-config`'s `ci.yml` builds only `x86_64-pc-windows-msvc`, while
+  `.github/workflows/release.yml:201-205` gives netsuke both
+  `x86_64-pc-windows-msvc` and `aarch64-pc-windows-msvc`. Impact: upstream
+  configures MSVC before every Rust build, which is safe there because nothing
+  cross-compiles; here the step exports unscoped `INCLUDE`/`LIB` naming x64
+  libraries, so an earlier placement would let the arm64 release build link
+  against x64 objects. The step therefore goes after `Build release binary` and
+  before `Generate release help`. This is the kind of thing a copied remedy
+  hides: the guide states an ordering rule that is correct for its own matrix
+  and silently wrong for a wider one.
 - Observation: the generated man page's SYNOPSIS section reads
   `[missing: netsuke-usage]`. Evidence:
   `grep -n -A2 SYNOPSIS /tmp/orthohelp-out-951/man/man1/netsuke.1` prints
@@ -431,6 +507,59 @@ rather than as `--flag[=BOOL]`.
 
 ## Decision log
 
+- Decision: repair the Windows release failure with a
+  `Configure MSVC for nested Cargo builds` step in
+  `.github/workflows/build-and-package.yml`, mirroring upstream's own remedy,
+  rather than by passing `--no-build` to `cargo-orthohelp` or by leaving the
+  Windows help artefacts unavailable. Rationale: `--no-build` exists in 0.10.0
+  and would avoid the nested build entirely, but it requires IR cached by an
+  earlier build, which this lane never produces — so it would trade a working
+  release lane for a missing artefact. Suppressing the failure would have
+  shipped Windows packages with no PowerShell help module, which is
+  user-visible. Configuring the toolchain is what upstream does in its own CI,
+  and its developers' guide states the ordering rule explicitly: "Configure
+  MSVC before coverage or any other step that builds Rust, or the nested bridge
+  build links against the wrong tools." Date/Author: 2026-10-25, agent.
+- Decision: place the MSVC step **after** `Build release binary`, not before it
+  as upstream does, which is a deliberate deviation from the remedy being
+  copied. Rationale: netsuke cross-compiles `aarch64-pc-windows-msvc`, which
+  upstream does not, and `VsDevCmd.bat` exports unscoped `INCLUDE` and `LIB`
+  naming x64 libraries. Running it before the release build would put x64
+  search paths in scope for the arm64 link — trading a fixed Windows failure
+  for a possibly-mislinked arm64 binary, which is worse because it would not
+  necessarily fail. The later position is safe and loses nothing:
+  `Build release binary` passes `skip-man-page-discovery: 'true'`, so
+  `Generate release help` is the only step on the job that runs the nested
+  build, which the failing run itself demonstrated — the release build had
+  already succeeded when help generation broke. Upstream's ordering rule still
+  holds in the sense that matters: the toolchain is configured before the step
+  that actually needs it. Date/Author: 2026-10-25, agent.
+- Decision: pin the new step's presence, guard, shell, script fragments, and
+  both position bounds with
+  `test_build_job_configures_msvc_before_the_nested_cargo_build` in
+  `tests/workflow_contracts/package_tooling_contract_test.py`, rather than
+  leaving the fix unguarded. Rationale: the repository already treats workflow
+  shape as a contract — `release_run_interpolation_test.py` pins the exact
+  `run:` bodies of named steps, `sccache_contract_test.py` pins the uncached
+  lane's variables, and `runner_placement_test.py` pins the Windows tool-path
+  sequence. A Windows-only failure is expensive to rediscover: it appears only
+  on tag pushes and dry runs, only after the release binary has linked, and its
+  visible message names the wrong culprit. The upper bound matters as much as
+  the lower one, because "configure MSVC early" is the intuitive rule and the
+  one upstream's guide states; a contract that only enforced the lower bound
+  would license the x64 leak. All three assertions were mutated before being
+  trusted — deleting the step fails on the count, moving it after
+  `Generate release help` fails on the nested-build bound, and moving it before
+  `Build release binary` fails on the x64-leak bound — so none is vacuous.
+  Date/Author: 2026-10-25, agent.
+- Decision: answer the CodeRabbit round-three finding by making the parity test
+  fail rather than skip. Rationale: the reviewer correctly identified that
+  `let Some(argument) = … else { continue; }` let a documented-but-unaccepted
+  argument pass silently, which is precisely the state the test's own doc
+  comment claims to prevent. Replacing the `continue` with `.with_context(…)`
+  keeps the loop's scope — the contract is "every documented CLI field is
+  accepted by the parser", and an unknown field violates it. Date/Author:
+  2026-10-25, agent.
 - Decision: answer the CodeScene Code Duplication advisory on
   `tests/boolean_flag_spelling_tests.rs` by extracting a helper, not by using
   the check's "Suppress" link. Rationale: the duplication was real — two
