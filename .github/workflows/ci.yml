@@ -156,7 +156,7 @@ jobs:
       - name: Install Ninja
         uses: seanmiddleditch/gha-setup-ninja@3b1f8f94a2f8254bd26914c4ab9474d4f0015f67  # v6
       - name: Install cargo-nextest
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283  # v2.87.29
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Install the build standard
@@ -621,7 +621,7 @@ jobs:
         # standard runner, and this job installs none of the test tooling the
         # `build-test` lane does. Pinned to the same action revision and the
         # same workflow-scoped version as that lane, so the two cannot drift.
-        uses: taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe  # v2.87.27
+        uses: taiki-e/install-action@8cca0918f8471c33515202b73f56ab27f2bed283  # v2.87.29
         with:
           tool: nextest@${{ env.NEXTEST_VERSION }}
       - name: Verify the scope wrapper end to end
@@ -717,7 +717,7 @@ jobs:
         run: uv run --script scripts/kani_smoke_metrics.py finalize
       - name: Upload Kani metrics
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: kani-smoke-metrics-${{ github.run_attempt }}
           path: ${{ runner.temp }}/kani-smoke-metrics/metrics.jsonl
