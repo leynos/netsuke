@@ -5041,7 +5041,9 @@ holds them equal.
 
 ### Loom callsite-interest model
 
-The `loom = "0.7.2"` development dependency supports the bounded model in
+The root manifest declares `loom = "0.7.2"` as a compatible development
+dependency requirement; `Cargo.lock` resolves it to 0.7.2. That version
+supports the bounded model in
 [`tests/tracing_interest_model.rs`](../tests/tracing_interest_model.rs). It
 models the stale `Interest::never()` write in `tracing-core` 0.1.36 and checks
 whether two inert registrar anchors prevent that write from replacing a more
@@ -5055,7 +5057,14 @@ location reporting, and logging, overriding the corresponding ambient `LOOM_*`
 settings so those bounds describe the search. `Builder::new` parses numeric
 `LOOM_*` settings before the overrides, so malformed numeric values still fail
 the test. Loom does not provide `Weak` registrars; the model uses a separate
-liveness token to model pruning without retaining the dispatch.
+liveness token to model pruning without retaining the dispatch. This is not a
+full `Weak::upgrade` model: dispatch owners remain alive through the final
+observation, so the model does not cover concurrent drops of the last owner or
+registrar churn.
+
+The final cached-interest check runs after both modelled threads have joined.
+That read uses `SeqCst`, while `tracing-core` reads the cache with `Relaxed`.
+The model checks the stale competing write, not a concurrent cache read.
 
 Run the focused model with:
 

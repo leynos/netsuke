@@ -484,8 +484,24 @@ seeded duplicate.
   correction: `make check-fmt`, `make lint`, `make doc-coverage` (98.19%; 65
   harness tests), `make typecheck`, `make test` (4,725 passed, 7 skipped; all
   doctest groups passed), `make markdownlint` (200 files, zero issues), and
-  `make nixie`. These results are recorded here after that sequence; run the
-  documentation gates on this final plan revision before commit.
+  `make nixie`. These results are recorded here after that sequence. The final
+  plan wording then passed `make fmt`, `make check-fmt`, `make markdownlint`
+  (200 files, zero issues), and `make nixie` before commit.
+- [x] (2026-10-25) CodeRabbit accepted the public-helper mutation diagnostic as
+  satisfying the remaining V2 negative-control requirement: the capture was
+  empty and the exact validator rejected it, although the existing timing
+  assertion determined the child's failure. Its proof assessment accepted the
+  Loom model for its stated bounds and treated the builder regression as a
+  verification-harness check, not a second independent concurrency proof. It
+  identified limits to retain: the liveness token is narrower than
+  `Weak::upgrade`, and the cache load after both threads join is `SeqCst` while
+  upstream reads with `Relaxed`. It also clarified that `loom = "0.7.2"` is a
+  compatible manifest requirement resolved by the lockfile, not a manifest pin.
+  Those boundaries are now explicit in this plan and the developers' guide.
+  Assessment replies: V2 negative-control assessment:
+  <https://github.com/leynos/netsuke/pull/943#issuecomment-6399322356> Proof
+  assessment:
+  <https://github.com/leynos/netsuke/pull/943#issuecomment-6399365706>
 
 ## Surprises & discoveries
 
@@ -708,9 +724,15 @@ referenced from the design and developers' guides, and indexed from
   explore at least one execution with `Interest::never()` cached while T2's
   TRACE dispatch remains live; the anchored model must explore none. Print
   explored execution counts and the bound. Non-vacuity: assert both dispatches
-  are live at the witness and include a second-anchor control. Residual: this
-  model omits allocator timing, real tracing TLS, and full subscriber stacks;
-  validate the same ordering through V2.
+  are live at the witness and include a second-anchor control. Residual: Loom's
+  liveness token does not model general `Weak::upgrade` ownership, and the
+  model omits concurrent drops of the last owner, registrar churn, allocator
+  timing, real tracing TLS, and full subscriber stacks. All dispatch owners
+  remain alive through the final observation. That cache read after both
+  workers join uses `SeqCst`, whereas upstream reads with `Relaxed`; the model
+  checks stale competing writes, not a concurrent cache read. Validate the
+  callsite ordering through V2. The root manifest's compatible `loom = "0.7.2"`
+  requirement resolves to 0.7.2 in `Cargo.lock`.
 - **V2: Real callsite schedule is explicitly gated.** The first T1 registration
   for the summary event pauses while T2 installs a TRACE capture dispatch.
   Unmitigated mode must release on `installed`, capture the structural span,
