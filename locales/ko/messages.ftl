@@ -201,7 +201,7 @@ ninja_gen.reserved_output_path = 경로 '{ $path }'은(는) Netsuke의 직렬 �
 ninja_gen.unsupported_path_character = 경로 '{ $path }'에 지원되지 않는 Ninja 경로 문자 '{ $character }'이(가) 포함되어 있습니다.
 ninja_gen.progress.inline = 빌드 중: { $name }
 ninja_gen.progress.command_list = { $count ->
-   *[other] 빌드 중: { $name } ({ $count } 개 명령)
+   *[other] 빌드 중: { $name } (명령 { $count }개)
 }
 
 # 호스트 패턴 검증.

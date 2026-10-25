@@ -9,7 +9,7 @@ use netsuke::{
     ninja_gen::{self, RecipeShell},
 };
 use rstest::rstest;
-use test_support::sha256_hex;
+use test_support::{localizer_test_lock, set_en_localizer, sha256_hex};
 
 /// Retain the first declared output for every executable inline recipe shape.
 #[rstest]
@@ -94,6 +94,8 @@ fn named_rules_never_retain_inline_progress_labels(
 /// Preserve action identity and command-list failure fingerprints across names.
 #[test]
 fn deduplicated_inline_edges_keep_distinct_labels_and_shared_failure_identity() -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
     let manifest = manifest::from_str(concat!(
         "netsuke_version: '1.0.0'\n",
         "targets:\n",

@@ -93,9 +93,7 @@ impl BuildGraph {
     /// Rules are stored verbatim and expanded later when targets reference
     /// them. This allows each target's input and output paths to be embedded in
     /// the resulting command, meaning identical rule definitions may yield
-    /// distinct actions once interpolated. Target descriptions remain discovery
-    /// metadata; named-rule descriptions control progress. Inline recipes carry
-    /// an edge-local label so Ninja avoids its generated-command fallback.
+    /// distinct actions once interpolated.
     fn process_rules(manifest: &NetsukeManifest, rule_map: &mut IrHashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
             rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
@@ -108,6 +106,9 @@ impl BuildGraph {
     /// targets interpolate their command directly. Each resolved action is
     /// registered once under its content hash, and the resulting edge is
     /// stored once and indexed by every explicit output.
+    /// Target descriptions remain discovery metadata; named-rule descriptions
+    /// control progress. Inline recipes carry an edge-local label so Ninja
+    /// avoids its generated-command fallback.
     ///
     /// # Errors
     ///
