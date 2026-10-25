@@ -199,10 +199,10 @@ ninja_gen.format = Ninja bildiriminin çıktısı biçimlendirilemedi.
 ninja_gen.dyndep_files_required = Bu işlem oluşturulmuş bir Ninja paketi gerektiriyor; dyndep dosyalarını oluşturmak için `netsuke build`, `netsuke clean` veya `netsuke generate` kullanın.
 ninja_gen.reserved_output_path = '{ $path }' yolu Netsuke'nin seri bağımlılık durumu için ayrılmıştır.
 ninja_gen.unsupported_path_character = '{ $path }' yolu, desteklenmeyen Ninja yol karakteri '{ $character }' içeriyor.
-ninja_gen.progress.inline = Derleniyor { $name }
+ninja_gen.progress.inline = { $name } derleniyor
 ninja_gen.progress.command_list = { $count ->
-    [one] Derleniyor { $name } ({ $count } komut)
-   *[other] Derleniyor { $name } ({ $count } komut)
+    [one] { $name } derleniyor ({ $count } komut)
+   *[other] { $name } derleniyor ({ $count } komut)
 }
 
 # Makine deseni doğrulaması.
