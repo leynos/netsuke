@@ -6,16 +6,17 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: BLOCKED
+Status: APPROVED
 
-Revision 8. See `Revision note` at the foot of this document. This plan was
+Revision 9. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
 ("Set v0.1.0-beta4 release version and status (#804)"). It was approved on
 2026-10-23 with D-6 Option B and was re-baselined at
-`8a961000859c02862454338fda6c4dd65bda2aa1`. Implementation is paused at EP-M0
-pending the drift decision recorded under Progress.
+`8a961000859c02862454338fda6c4dd65bda2aa1`. On 2026-10-25, the user approved
+proceeding with this plan as written and retaining that pin. Later consumers
+must account for changes since the inventory baseline.
 
 ## Purpose / big picture
 
@@ -418,14 +419,16 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   the start; OBS-17 to OBS-19 and CO-15 were added.
 - [x] (2026-10-25) User reaffirmed approval to begin EP-M1 to EP-M3, retaining
   D-6 Option B.
-- [ ] (2026-10-25) EP-M0 drift follow-up: `origin/main` advanced from the pin
+- [x] (2026-10-25) EP-M0 drift follow-up: `origin/main` advanced from the pin
   `8a961000` to `f8df5d80`; three commits since the pin touch 50 in-scope
-  paths. Asked the user whether to re-pin before EP-M2, as required by the
-  drift tolerance. Implementation is paused pending that direction.
+  paths. The user approved proceeding with the plan as written, retaining the
+  existing pin. The inventory remains a snapshot at `8a961000`; later consumers
+  must check changes since that pin.
 - [x] (2026-10-25) Gate follow-up: `make test` timed out after 4,839 passes
   when the CLI configuration fixture's nested build waited on compiler
   admission. Added a targeted 900-second allowance and updated its contracts
-  and developers' guide; the full gate sequence is being rerun.
+  and developers' guide; the complete gate sequence passed on the updated
+  candidate.
 - [ ] EP-M1: contract test red, then green against a skeleton inventory.
 - [ ] EP-M2: register recorded; EV-ORACLE, EV-SWEEP, EV-REVERSE, EV-SEEDED.
 - [ ] EP-M3: landed work, findings, obligations, and trace matrix.
@@ -440,8 +443,9 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `018b81b43`. Evidence:
   `git diff --name-status 8a961000..origin/main -- src
   build.rs tests test_support benches`.
-  Impact: the re-pin tolerance applies; the user was asked whether to re-pin
-  before EP-M2, and implementation is paused pending that choice.
+  Impact: the user approved the plan as written, retaining the `8a961000` pin.
+  The inventory will remain a historical snapshot; later consumers must inspect
+  changes since that pin before relying on it.
 - Observation (2026-10-25): `make test` timed out at 300 seconds on
   `cli_configuration_fixture_compiles::case_1_public_api` while its nested
   all-features `cargo check` waited for a compiler slot. The suite had passed
@@ -527,13 +531,11 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 
 ## Decision log
 
-- Open decision D-12 (requested 2026-10-25): `origin/main` moved from the
-  approved pin before EP-M2 completed. Re-pinning to `f8df5d80` makes the
-  inventory describe the current implementation head and requires re-running
-  the plan's complete sweeps; retaining `8a961000` preserves the existing
-  baseline but leaves the inventory older, with later consumers responsible for
-  checking commits since the pin. The plan's drift tolerance requires the
-  user's choice before implementation continues.
+- Decision D-12 (resolved 2026-10-25): retain the existing pin
+  `8a961000859c02862454338fda6c4dd65bda2aa1`. The user approved proceeding with
+  the plan as written before implementation began. This keeps the inventory
+  tied to its declared historical baseline; later consumers must check changes
+  since that pin before relying on the inventory.
 - Decision D-1: deliver the inventory as a standalone reference document,
   `docs/hexagonal-hardening-inventory.md`. Rationale: it is revision-pinned and
   consumed by many later tasks. An RFC appendix would mix a dated observation
@@ -1437,8 +1439,12 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
 - Revision 8 (2026-10-25): the full test gate timed out at 300 seconds while
   `cli_configuration_fixture_compiles` waited for shared compiler admission.
   Added a targeted 900-second nextest allowance and updated its workflow
-  contracts and developers' guide. Re-running gates; the plan remains blocked
-  on the re-pin decision.
+  contracts and developers' guide. The updated candidate passed the full gate
+  sequence.
+
+- Revision 9 (2026-10-25): the user approved beginning with the plan as written
+  and retaining pin `8a961000`; resolved D-12 and set status to `APPROVED`
+  before implementation.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
