@@ -1739,7 +1739,6 @@ dependencies = [
  "clap_mangen",
  "digest",
  "dunce",
- "fluent-bundle",
  "fs4",
  "glob",
  "googletest",

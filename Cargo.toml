@@ -195,11 +195,10 @@ regex = "1.12.2"
 # comment or a literal quoting the same name is not one. Full syntax, because
 # the items being read are ordinary source files.
 syn = { version = "2", features = ["full", "visit"] }
-# Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
-# exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
-# the value type, so the tests need `fluent-bundle` directly. Constrained to
-# the version `ortho_config` resolves, or the `FluentValue` types would differ.
-fluent-bundle = "0.16.0"
+# Plural-selection tests pass numeric arguments to Fluent through
+# `ortho_config::LocalizationArgs`. `ortho_config` re-exports `FluentValue`, so
+# the tests reach the value type through it rather than depending on
+# `fluent-bundle` directly; one crate owns that version choice.
 
 [workspace]
 members = ["test_support", "build_slice_fixture", "public_api_fixture"]

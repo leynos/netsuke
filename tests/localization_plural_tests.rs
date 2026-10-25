@@ -8,9 +8,9 @@
 use std::collections::BTreeSet;
 
 use anyhow::{Context, Result, ensure};
-use fluent_bundle::FluentValue;
 use netsuke::locale_catalogues::SUPPORTED_LOCALES;
 use netsuke::localization::{self, keys};
+use ortho_config::FluentValue;
 use ortho_config::LocalizationArgs;
 use rstest::rstest;
 use test_support::fluent::normalize_fluent_isolates;

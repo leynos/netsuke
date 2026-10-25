@@ -143,7 +143,7 @@ fn a_fallback_resolved_request_renders_as_its_catalogue(
 
     for count in [0_i64, 1, 2, 5] {
         let mut args = ortho_config::LocalizationArgs::new();
-        args.insert("count", fluent_bundle::FluentValue::from(count));
+        args.insert("count", ortho_config::FluentValue::from(count));
         let fallback_text = via_fallback.lookup(
             crate::localization::keys::EXAMPLE_FILES_PROCESSED,
             Some(&args),
