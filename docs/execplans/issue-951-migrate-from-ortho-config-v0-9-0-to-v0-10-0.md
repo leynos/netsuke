@@ -470,6 +470,33 @@ rather than as `--flag[=BOOL]`.
   slot on every run. It reuses `CliConfig::merge_from_layers` with one layer
   per tier carrying a distinct `jobs` value, so the merged scalar names the
   winner unambiguously. Date/Author: 2026-10-25, agent.
+- Decision: keep the two imported guides byte-for-byte and decline CodeRabbit's
+  two link findings against them, recording the trade-off instead. Rationale:
+  the task brief requires the import to stay byte-for-byte and to keep local
+  notes outside the upstream copies, and both files still hash to exactly the
+  values recorded under *Artefacts and notes* (re-verified after the review),
+  so editing them would break the provenance claim the plan makes. The finding
+  is nonetheless real: the guides are written for the upstream `docs/`
+  directory, so their `users-guide.md` links resolve to Netsuke's own users'
+  guide, and their `v0-10-0-migration-guide.md` and `v0-9-0-migration-guide.md`
+  links name files that do not exist here. The reader-facing remedy that stays
+  inside the constraint is taken instead: `docs/contents.md` now states that
+  the two files are vendored and gives the mapping from the upstream link names
+  to the local files, so a reader who follows a stale link finds the
+  explanation in the index rather than a 404. Note that the pre-existing v0.9.0
+  import set this precedent by rewriting one such link; that file is not
+  byte-for-byte and the new imports deliberately are. Date/Author: 2026-10-25,
+  agent.
+- Decision: replace EP-M1's `grep -c '0\.9\.'` acceptance check with the four
+  named pin sites. Rationale: CodeRabbit was right that the check cannot pass.
+  Measured, not assumed:
+  `grep -c '0\.9\.' .github/workflows/build-and-package.yml` returns **3**
+  against the already-migrated workflow, because the file explains its own
+  history in comments and keeps three `0.9.1` mentions there. An acceptance
+  criterion that fails on correct work is worse than no criterion, because it
+  invites someone to "fix" the explanatory comments. The four sites are the two
+  `netsuke-orthohelp-v2-…-0.10.0-…` cache keys, `INPUT_VERSION`, and the
+  version-validation step. Date/Author: 2026-10-25, agent.
 
 ## Outcomes & retrospective
 
@@ -768,9 +795,14 @@ EP-M1 — dependency and toolchain alignment.
   floor the graph demands is declared.
 - Requirements: #951 dependency alignment; guide §1.
 - Acceptance evidence: `cargo tree -i ortho_config` shows exactly one
-  `ortho_config v0.10.0`;
-  `grep -c '0\.9\.' .github/workflows/build-and-package.yml` returns 0 for the
-  tool pin.
+  `ortho_config v0.10.0`; the four tool pin sites in
+  `.github/workflows/build-and-package.yml` all read `0.10.0` — the two
+  `netsuke-orthohelp-v2-…-0.10.0-…` cache keys, `INPUT_VERSION: '0.10.0'`, and
+  the version-validation step. Do not test this with
+  `grep -c '0\.9\.' .github/workflows/build-and-package.yml`: the file keeps
+  three deliberate `0.9.1` mentions in its own explanatory comments, so that
+  grep returns 3 whether or not every pin has moved, and it would have reported
+  a failure on a correctly migrated workflow. Name the four sites instead.
 - Conformance check: dependency versions updated together (yes); design still
   followed (no source change yet); upstream assumptions valid (crates.io
   publication confirmed); no unapproved dependency change; no persisted-format
