@@ -6,6 +6,7 @@ use netsuke::{
     ir::{BuildGraph, IrGenError},
     manifest, ninja_gen,
 };
+use test_support::{localizer_test_lock, set_en_localizer};
 
 /// Verify that every output alias resolves to one canonical edge.
 fn assert_canonical_output_aliases(
@@ -98,6 +99,8 @@ fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
 /// Keep progress provenance on one canonical edge using its first output.
 #[test]
 fn inline_multi_output_progress_uses_first_declared_name() -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
     let manifest = manifest::from_str(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: [first.out, second.out]\n    command: echo built\n",
     )?;

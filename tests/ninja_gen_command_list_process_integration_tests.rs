@@ -15,7 +15,7 @@ use netsuke::ninja_gen::generate;
 use rstest::{fixture, rstest};
 use std::process::Command;
 use tempfile::TempDir;
-use test_support::ninja_gen;
+use test_support::{localizer_test_lock, ninja_gen, set_en_localizer};
 
 #[fixture]
 fn ninja_integration_setup() -> Option<TempDir> {
@@ -105,6 +105,8 @@ fn run_command_list_with_progress(
 fn command_list_fails_fast_at_first_nonzero_exit(
     ninja_integration_setup: Option<TempDir>,
 ) -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
     let Some(run) = run_command_list_with_progress(
         ninja_integration_setup,
         &["echo one > first.txt", "false", "echo never > last.txt"],

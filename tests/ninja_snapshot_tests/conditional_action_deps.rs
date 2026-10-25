@@ -15,11 +15,13 @@ use std::{
     time::Duration,
 };
 use tempfile::{TempDir, tempdir};
-use test_support::ensure_binaries_available;
+use test_support::{ensure_binaries_available, localizer_test_lock, set_en_localizer};
 
 /// Snapshot and execute the selected conditional-action dependency graph.
 #[test]
 fn conditional_action_deps_ninja_snapshot() -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
     let manifest = manifest::from_path("tests/data/conditional_action_deps.yml")?;
     let ir = BuildGraph::from_manifest(&manifest)?;
     let ninja_content = ninja_gen::generate(&ir)?;
