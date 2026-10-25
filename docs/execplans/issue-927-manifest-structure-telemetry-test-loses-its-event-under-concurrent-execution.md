@@ -356,11 +356,17 @@ seeded duplicate.
   Updated ADR-057 and V2 below to preserve that limit; the bounded Loom model
   supplies separate ordering coverage.
 - [x] (2026-10-24) A serial binary test run reproduced a test-order defect from
-  `run_with_args` installing a process-wide tracing subscriber. Moved the
-  existing production initialization to `main` and ran configuration tests
-  under a scoped registry; the focused serial binary suite passed 62 tests.
-  Clippy then identified that the new `StartupWriter` parameter should be
-  borrowed; the helper and its two callers now pass `&StartupWriter`.
+  `run_with_args` installing a process-wide tracing subscriber. This was
+  directly relevant to #927's callsite-interest regression: the in-process
+  configuration tests also invoke the startup path and must be able to use a
+  scoped subscriber without leaking a global default into later callsite tests.
+  Moved production initialization to the binary `main` boundary, then ran the
+  configuration tests under a scoped registry. Passing `StartupWriter` into
+  `run_with_args` preserves buffered startup diagnostics while keeping that
+  function usable under the test subscriber. The focused serial binary suite
+  passed 62 tests. Clippy then identified that the new `StartupWriter`
+  parameter should be borrowed; the helper and its two callers now pass
+  `&StartupWriter`.
 - [x] (2026-10-24) Rebased the 18-commit range from base
   `8a961000859c02862454338fda6c4dd65bda2aa1` onto current `main` at
   `018b81b4311ac5dd99ac4182c51301eeca0dfc55`. The replay completed without
@@ -388,8 +394,19 @@ seeded duplicate.
 - [x] Commit and publish the rebased candidate, then require exact-head hosted
   CI to clear the local fixture timeout. The currently published candidate and
   hosted checks are recorded below.
-- [ ] Refresh CodeRabbit assessments and review state for the final published
-  head before merging PR #943.
+- [x] (2026-10-25) Refresh CodeRabbit assessments and review state for the
+  final published head before merging PR #943. On base
+  `de81d5c34ab3c0103a5de71a0518b89980187c11` and head
+  `4f137730f727aba80ddb111f5131808985dba8fb`, the status reports a completed
+  review, and the refreshed summary covers the range from `ce729638` through
+  the accepted head with no actionable inline comments. The summary still has a
+  Developer Documentation warning about this plan's remaining-work record and
+  an Out of Scope Changes inconclusive row asking for the startup-diagnostics
+  rationale; both are recorded for disposition below. The PR review decision is
+  `APPROVED`.
+- [x] (2026-10-25) After recording the current review status and startup
+  tracing rationale, `make fmt`, `make check-fmt`, `make markdownlint`, and
+  `make nixie` passed on this ExecPlan-only change.
 - [ ] Resolve current-head review concerns, follow checks to equilibrium, and
   merge PR #943 with the verified head commit.
 
@@ -847,8 +864,9 @@ PR whose title contains `(#927)`, summary says `Closes #927`, and terminal
   consolidation are complete. The latest source change passed the focused
   regression and all repository gates; local CodeScene delta found no issues.
   Post-fix manifest runs are clean in the recorded default/high-thread matrix.
-  Remaining work: complete exact-head hosted assessments and replies, then
-  follow ready-for-review PR #943 to merge.
+  Exact-head hosted checks and the latest CodeRabbit review are complete.
+  Remaining work: reconcile the refreshed pre-merge rows, obtain the final
+  approval outcome, and merge PR #943.
 
 ## Concrete steps
 
