@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Issue: <https://github.com/leynos/netsuke/issues/951>
 
@@ -265,7 +265,19 @@ rather than as `--flag[=BOOL]`.
   the other five gates had passed. Logs:
   `/tmp/gates-final-netsuke-issue-951.out`, `/tmp/markdownlint-951-fix.log`,
   `/tmp/checkfmt-951-md024.log`.
-- [ ] Milestone 5: CodeRabbit review, push, draft PR.
+- [x] (2026-10-25) Milestone 5: CodeRabbit review, push, draft PR. Two review
+  rounds completed before the third hit the hourly review cap, and every
+  finding was either fixed or declined with the reason recorded in the Decision
+  log. Round one raised three: the EP-M1 acceptance check, which was genuinely
+  impossible and fixed, and two vendored-guide link findings, declined. Round
+  two raised two more, both inside the vendored guides and both declined with
+  evidence. Pushed over SSH as `leynos`; the remote head `c76890ecd` matched
+  local `HEAD` and the branch now tracks
+  `origin/issue-951-migrate-from-ortho-config-v0-9-0-to-v0-10-0` with zero
+  unpushed commits. Opened draft PR
+  [#953](https://github.com/leynos/netsuke/pull/953) with `(#951)` in the title,
+  `Closes #951` and `Closes #779` in the body, and the Lody session under
+  References.
 
 ## Surprises & discoveries
 
