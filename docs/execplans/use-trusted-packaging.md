@@ -3820,3 +3820,12 @@ to past tense after the current-head completeness follow-up confirmed the
 interface correction. This preserves the reason for the original record while
 making clear that the current interface sketch no longer contains those fields.
 No implementation scope or behaviour changed.
+
+Draft 10, 2026-10-25: rebased onto `main` at `de81d5c3` from the prior boundary
+`88f20d58` (57 commits; 54 range-diff-equivalent, three non-identical Makefile
+replays, with no additions or omissions). The three conflicts preserve
+`test-ci-scripts`, `test-release-publication`, and the expanded docstring
+suite. All 32 target-only paths are byte-identical after replay. Main's #708
+extracted CI helper scripts into `scripts/ci/`; its target-side files remain
+intact. Stage C remains partial and Stage D remains open. No publication path,
+release setting, or registry configuration changed.
