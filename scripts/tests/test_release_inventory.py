@@ -5,6 +5,8 @@ files it declared: nothing missing, nothing extra, no empty file, no duplicate
 name, and no name that could reach outside the directory it is staged in. Each
 class is a named row below, and the accept rows make the predicate two-sided,
 so a validator that refuses everything and one that refuses nothing each fail.
+Generated path cases also exercise both path flavours and the order-preserving
+partition that separates escaping names from other malformed names.
 
 Stating the rule as exact set equality matters because the failure it catches
 is otherwise invisible. On 2026-10-12 every published release was found to
@@ -18,6 +20,7 @@ is that release's verdict written down.
 import dataclasses
 
 import pytest
+import release_asset_names
 import release_inventory
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
@@ -146,6 +149,96 @@ def test_a_published_asset_is_immutable() -> None:
 
 
 _SAFE_NAME = st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,20}", fullmatch=True)
+_PATH_COMPONENT = st.one_of(
+    st.sampled_from((".", "..")),
+    st.from_regex(r"[A-Za-z0-9_-]{1,8}", fullmatch=True),
+)
+
+
+@st.composite
+def _asset_name_cases(draw: st.DrawFn) -> tuple[str, bool, bool]:
+    """Generate a name with expected escape and bare-file outcomes.
+
+    Cases vary separators, absolute prefixes, current and parent components,
+    drive-like names, and trailing separators. Keep this strategy local to the
+    inventory suite because it models this policy's two-platform contract.
+
+    Returns
+    -------
+    tuple[str, bool, bool]
+        The generated name and its expected escape and bare-name results.
+    """
+    flavour = draw(st.sampled_from(("posix", "windows")))
+    separator = draw(st.sampled_from(("/", "\\")))
+    components = draw(st.lists(_PATH_COMPONENT, min_size=1, max_size=5))
+    is_absolute = draw(st.booleans())
+    has_trailing_separator = draw(st.booleans())
+    name = separator.join(components)
+    if is_absolute:
+        prefix = "/" if flavour == "posix" else f"C:{separator}"
+        name = prefix + name
+    if has_trailing_separator:
+        name += separator
+
+    depth = 0
+    escapes = is_absolute
+    for component in components:
+        if component == "..":
+            depth -= 1
+            escapes = escapes or depth < 0
+        elif component not in {"", "."}:
+            depth += 1
+    is_bare = (
+        not is_absolute
+        and not has_trailing_separator
+        and len(components) == 1
+        and components[0] not in {"", ".", ".."}
+        and ":" not in components[0]
+    )
+    return name, escapes, is_bare
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@example(case=("../netsuke", True, False))
+@example(case=("C:\\Windows\\netsuke.exe", True, False))
+@example(case=("C:/Windows/netsuke.exe", True, False))
+@example(case=("C:", False, False))
+@example(case=("", False, False))
+@example(case=("./netsuke", False, False))
+@example(case=("netsuke/", False, False))
+@example(case=("netsuke\\", False, False))
+@example(case=(r"nested\file", False, False))
+@given(case=_asset_name_cases())
+def test_asset_name_predicates_cover_generated_posix_and_windows_paths(
+    case: tuple[str, bool, bool],
+) -> None:
+    """Match generated path facts, including normalization edge cases."""
+    name, expected_escape, expected_bare = case
+
+    assert release_asset_names.escapes_its_directory(name) is expected_escape, (
+        f"the escape predicate must match generated path {name!r}"
+    )
+    assert release_asset_names.is_bare_file_name(name) is expected_bare, (
+        f"the bare-name predicate must match generated path {name!r}"
+    )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(cases=st.lists(_asset_name_cases(), max_size=8))
+def test_rejected_path_partition_preserves_generated_input_order(
+    cases: list[tuple[str, bool, bool]],
+) -> None:
+    """Partition generated names without sorting or losing duplicates."""
+    names = [name for name, _, _ in cases]
+    expected_escaping = [name for name, escapes, _ in cases if escapes]
+    expected_malformed = [
+        name for name, escapes, bare in cases if not escapes and not bare
+    ]
+
+    assert release_asset_names.rejected_names(names) == (
+        expected_escaping,
+        expected_malformed,
+    ), "both rejection classes must preserve source order"
 
 
 @settings(max_examples=200, deadline=None, derandomize=True)

@@ -2562,6 +2562,16 @@ writes for these result records. Keep it within this CLI; command-specific
 schemas, diagnostics, and exit statuses stay with their subcommands. Other
 release records retain their own validation and I/O boundaries.
 
+`package_crate_cli` returns 0 after recording the archive identity and digest,
+1 when `cargo package` fails, 2 when candidate identity validation rejects the
+inputs, and 3 when archive discovery, hashing, or package-record persistence
+fails. Invalid arguments retain `argparse`'s usage status. Its private
+`_write_package_record` writes only the `CratePackage` record, using a sibling
+temporary file and atomic replacement so a failed write cannot expose partial
+JSON. Keep it within this CLI: other release records have their own schemas,
+validation, and I/O boundaries, so this helper is not a general release-record
+writer.
+
 ### Policy and adapter boundaries
 
 The policy modules make decisions from values that their callers have already
@@ -2583,6 +2593,8 @@ those operations at the file or transport boundary:
   basenames. `release_declaration_cli` reads TOML, asks the hoist adapter for
   archive names, scans the staged tree, and passes those observations in.
 - `release_inventory` checks `PublishedAsset` names and sizes.
+  Flat asset names are checked under both POSIX and Windows path rules;
+  separators, drive-qualified names, traversal, and nested paths are refused.
   `verify_release_inventory_cli` scans the directory and constructs those
   values before calling the policy.
 - `release_registry_response` maps crates.io status and JSON schema into typed
@@ -2656,7 +2668,7 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the twenty-two `scripts/tests/test_*.py`
+`make test-release-publication` runs the twenty-four `scripts/tests/test_*.py`
 modules for the release-policy CLIs and their library modules, then runs the
 same source modules under `--doctest-modules`, so the examples in their
 docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,

@@ -366,11 +366,13 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_candidate.py \
 		scripts/tests/test_release_candidate_cli.py \
 		scripts/tests/test_package_crate_cli.py \
+		scripts/tests/test_package_crate_cli_errors.py \
 		scripts/tests/test_publish_crates_io_cli.py \
 		scripts/tests/test_verify_release_inventory_cli.py \
 		scripts/tests/test_verify_release_inventory_command.py \
 		scripts/tests/test_finalize_github_release_cli.py \
 		scripts/tests/test_release_inventory.py \
+		scripts/tests/test_release_identity_record.py \
 		scripts/tests/test_release_semver.py \
 		scripts/tests/test_release_digest.py \
 		scripts/tests/test_release_digest_files.py \

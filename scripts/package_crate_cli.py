@@ -1,34 +1,26 @@
 """Package the release crate and record the identity of the bytes produced.
 
-Every later stage compares against this record: the registry exchange refuses
-to publish bytes whose digest disagrees, the inventory verifier checks the
-published ``.crate`` against it, and the consumer smoke re-downloads the same
-archive and expects the same value. Recording the digest here — once, at the
-moment the archive is created — is what makes those three the *same* claim
-rather than three independent recomputations that could drift.
+Publication, inventory, and consumer smoke compare against this record's
+archive digest; recording it once keeps their claims aligned.
 
-The module stays a thin seam. Packaging is a subprocess, and subprocesses are
-what a workflow step may do; the policy that decides whether an identity is
-publishable lives in :mod:`release_candidate`, and the digest arithmetic lives
-in :mod:`release_digest_files`. Nothing here reaches the network, so the packaging
-job runs to completion during a dry run.
+Identity policy stays in :mod:`release_candidate`, digest I/O in
+:mod:`release_digest_files`; this subprocess seam needs no network.
 
-A dry run has no release tag to record. A pull request run is triggered by an
-event whose ``github.ref_name`` is a merge ref such as ``903/merge``, not a
-tag, so the caller passes :option:`--dry-run` instead of :option:`--tag` and
-the record stores ``tag: null``. Making the two mutually exclusive, rather
-than treating an absent tag as a rehearsal, is what stops a publishing call
-site that forgot its tag from silently producing a record that names no
-release: that omission is an argument error here, not a tagless identity.
+A pull request's ``github.ref_name`` is a merge ref such as ``903/merge``.
+The caller therefore passes :option:`--dry-run`, which records ``tag: null``.
+Requiring exactly one of :option:`--tag` and :option:`--dry-run` stops a
+publishing call that forgot its tag from silently producing a tagless identity.
 """
 
 import argparse
 import collections.abc as cabc
+import contextlib
 import dataclasses
 import json
 import pathlib
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - packaging boundary.
 import sys
+import tempfile
 
 import release_candidate
 import release_digest_files
@@ -42,6 +34,7 @@ type SubprocessRunner = cabc.Callable[..., subprocess.CompletedProcess[str]]
 EXIT_OK = 0
 EXIT_PACKAGING_FAILED = 1
 EXIT_IDENTITY_REJECTED = 2
+EXIT_ARTIFACT_ERROR = 3
 
 #: Wall-clock seconds ``cargo package`` may run before it is killed.
 #:
@@ -102,6 +95,50 @@ class CratePackage:
             "identity": self.identity.as_record(),
             "sha256": self.sha256,
         }
+
+
+def _write_package_record(output: pathlib.Path, package: CratePackage) -> None:
+    """Atomically write the package identity and digest record.
+
+    The temporary file is a sibling of ``output``, so replacement stays on
+    one filesystem and readers never observe a partial JSON record.
+
+    Raises
+    ------
+    OSError
+        If the temporary record cannot be written, removed, or replaced.
+
+    Examples
+    --------
+    >>> identity = release_candidate.ReleaseIdentity("v1.2.3", "0" * 40,
+    ...     "netsuke-build", "1.2.3", "netsuke", False)
+    >>> package = CratePackage(identity, pathlib.Path("x.crate"), "ab")
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     output = pathlib.Path(directory) / "package.json"
+    ...     _write_package_record(output, package)
+    ...     json.loads(output.read_text(encoding="utf-8"))["crate"]
+    'x.crate'
+    """
+    temporary_path: pathlib.Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=output.parent,
+            prefix=f".{output.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temporary:
+            temporary_path = pathlib.Path(temporary.name)
+            _ = temporary.write(
+                json.dumps(package.as_record(), indent=2, sort_keys=True) + "\n"
+            )
+        temporary_path.replace(output)
+    except OSError:
+        if temporary_path is not None:
+            with contextlib.suppress(OSError):
+                temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def package_crate(
@@ -295,7 +332,9 @@ def main(argv: list[str] | None = None) -> int:
     int
         ``EXIT_OK`` when the archive and its record exist,
         ``EXIT_IDENTITY_REJECTED`` when the identity facts disagree, or
-        ``EXIT_PACKAGING_FAILED`` when ``cargo package`` refuses.
+        ``EXIT_PACKAGING_FAILED`` when ``cargo package`` refuses, or
+        ``EXIT_ARTIFACT_ERROR`` when archive discovery, hashing, or record
+        persistence fails.
 
     Notes
     -----
@@ -337,11 +376,23 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as error:
         print(f"packaging failed: {error}", file=sys.stderr)
         return EXIT_PACKAGING_FAILED
-    package = CratePackage(identity, crate, release_digest_files.digest_of_file(crate))
-    arguments.output.write_text(
-        json.dumps(package.as_record(), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
+    except OSError as error:
+        print(f"could not inspect the packaged archive: {error}", file=sys.stderr)
+        return EXIT_ARTIFACT_ERROR
+    try:
+        digest = release_digest_files.digest_of_file(crate)
+    except OSError as error:
+        print(f"could not read the packaged archive {crate}: {error}", file=sys.stderr)
+        return EXIT_ARTIFACT_ERROR
+    package = CratePackage(identity, crate, digest)
+    try:
+        _write_package_record(arguments.output, package)
+    except OSError as error:
+        print(
+            f"could not write package record to {arguments.output}: {error}",
+            file=sys.stderr,
+        )
+        return EXIT_ARTIFACT_ERROR
     return EXIT_OK
 
 

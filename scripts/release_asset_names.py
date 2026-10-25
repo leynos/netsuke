@@ -12,6 +12,10 @@ nested or reserved (``sub/netsuke``) means a directory-shaped path reached a
 listing that should hold flat files. Reporting both as "bad name" would hide
 the first.
 
+Raw separators are rejected before path parsing: ``PurePath`` normalizes away
+trailing separators and ``.`` components, which would otherwise make strings
+such as ``netsuke/`` or ``./netsuke`` look like bare file names.
+
 Nothing here raises or performs I/O: :mod:`release_inventory` owns the
 refusals, so the predicates can be exercised directly.
 
@@ -111,10 +115,16 @@ def is_bare_file_name(name: str) -> bool:
     Both flavours must agree, for the reason given in
     :func:`escapes_its_directory`: a name nested under Windows separators
     alone is not the flat name the uploader publishes, though a POSIX parser
-    treats the backslashes as ordinary characters.
+    treats the backslashes as ordinary characters. The original spelling is
+    checked too because path parsing removes trailing separators and ``.``
+    components.
     """
+    if name in {"", ".", ".."} or any(separator in name for separator in ("/", "\\")):
+        return False
     return all(
-        len(flavour(name).parts) == 1 and flavour(name).parts[0] not in {"", ".", ".."}
+        not flavour(name).drive
+        and len(flavour(name).parts) == 1
+        and flavour(name).parts[0] not in {"", ".", ".."}
         for flavour in PATH_FLAVOURS
     )
 
