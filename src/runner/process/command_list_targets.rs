@@ -7,8 +7,10 @@ use crate::{
 };
 use std::{collections::BTreeMap, fmt::Write as _};
 
-/// Maximum UTF-8 bytes retained from one output name, including its marker.
+/// Maximum UTF-8 bytes in one quoted display name, including its marker.
 const MAX_TARGET_NAME_BYTES: usize = 64;
+/// Bytes reserved for the display name's opening and closing quotes.
+const TARGET_NAME_QUOTES_BYTES: usize = 2;
 /// Maximum number of candidate names shown in a failure clause.
 const MAX_SHOWN_CANDIDATES: usize = 3;
 /// Visible suffix marking a shortened output name.
@@ -17,7 +19,7 @@ const TRUNCATION_MARKER: &str = "…";
 /// Invocation-local index from generated action fingerprints to output names.
 #[derive(Debug, Default)]
 pub(in crate::runner) struct CommandListTargetIndex {
-    /// Sorted, bounded output names for each lowercase action fingerprint.
+    /// Sorted, quoted display names for each lowercase action fingerprint.
     targets_by_fingerprint: BTreeMap<String, Vec<String>>,
 }
 
@@ -93,11 +95,11 @@ impl TargetResolution<'_> {
     /// Format a definite target or a bounded, explicitly incomplete candidate list.
     fn format_clause(self) -> Option<String> {
         match self {
-            Self::Unique(target) => Some(format!("target {target:?}")),
+            Self::Unique(target) => Some(format!("target {target}")),
             Self::Ambiguous { shown, remaining } => {
                 let shown_names = shown
                     .iter()
-                    .map(|target| format!("{target:?}"))
+                    .map(String::as_str)
                     .collect::<Vec<_>>()
                     .join(", ");
                 let mut clause = format!("targets {shown_names}");
@@ -129,19 +131,47 @@ fn first_output(edge: &BuildEdge) -> Option<&camino::Utf8PathBuf> {
         .or_else(|| edge.implicit_outputs.first())
 }
 
-/// Bound one output name on a UTF-8 boundary and preserve a visible suffix.
+/// Escape and bound one quoted output name while preserving complete escapes.
 fn bound_target_name(target: &str) -> String {
-    if target.len() <= MAX_TARGET_NAME_BYTES {
-        return target.to_owned();
+    let content_limit = MAX_TARGET_NAME_BYTES - TARGET_NAME_QUOTES_BYTES;
+    let escaped_length = target.chars().fold(0usize, |length, character| {
+        length.saturating_add(debug_escaped_character_len(character))
+    });
+    if escaped_length <= content_limit {
+        let mut escaped = String::with_capacity(escaped_length);
+        for character in target.chars() {
+            push_debug_escaped_character(&mut escaped, character);
+        }
+        return format!("\"{escaped}\"");
     }
 
-    let prefix_limit = MAX_TARGET_NAME_BYTES - TRUNCATION_MARKER.len();
-    let mut boundary = prefix_limit;
-    while !target.is_char_boundary(boundary) {
-        boundary -= 1;
+    let prefix_limit = content_limit - TRUNCATION_MARKER.len();
+    let mut prefix = String::with_capacity(prefix_limit);
+    for character in target.chars() {
+        let character_length = debug_escaped_character_len(character);
+        if prefix.len() + character_length > prefix_limit {
+            break;
+        }
+        push_debug_escaped_character(&mut prefix, character);
     }
-    format!(
-        "{}{TRUNCATION_MARKER}",
-        target.get(..boundary).unwrap_or_default()
-    )
+    prefix.push_str(TRUNCATION_MARKER);
+    format!("\"{prefix}\"")
+}
+
+/// Count the UTF-8 bytes used by one Rust debug-escaped string character.
+fn debug_escaped_character_len(character: char) -> usize {
+    match character {
+        '"' => 2,
+        '\'' => 1,
+        _ => character.escape_debug().map(char::len_utf8).sum(),
+    }
+}
+
+/// Append one character using Rust string debug escaping without surrounding quotes.
+fn push_debug_escaped_character(escaped: &mut String, character: char) {
+    match character {
+        '"' => escaped.push_str("\\\""),
+        '\'' => escaped.push('\''),
+        _ => escaped.extend(character.escape_debug()),
+    }
 }

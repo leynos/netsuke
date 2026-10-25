@@ -188,6 +188,29 @@ fn long_output_names_are_truncated_on_a_utf8_boundary(mut graph_with_identity_ac
 }
 
 #[rstest]
+fn escaped_output_names_stay_within_the_display_byte_limit(
+    mut graph_with_identity_action: BuildGraph,
+) {
+    let target = format!("{}{}", "x".repeat(57), "\n".repeat(10));
+    insert_edge(
+        &mut graph_with_identity_action,
+        "identity",
+        &[&target],
+        false,
+    );
+    let index = CommandListTargetIndex::from_graph(&graph_with_identity_action);
+    let clause = index
+        .clause(&action_identity("identity"))
+        .expect("a command-list target should resolve");
+    let display_name = clause
+        .strip_prefix("target ")
+        .expect("unique target clause should have its prefix");
+
+    assert_eq!(display_name.len(), 64);
+    assert_eq!(display_name, format!("\"{}\\n…\"", "x".repeat(57)));
+}
+
+#[rstest]
 fn output_names_escape_control_characters_and_quote_them(
     mut graph_with_identity_action: BuildGraph,
 ) {

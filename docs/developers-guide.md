@@ -900,10 +900,12 @@ the marker digest again.
 After the stderr worker has joined, the exit boundary resolves the marker once
 against that index. A unique edge adds a quoted target name to the failure
 message. Multiple edges add sorted, quoted candidates. Names use Rust
-debug-style escaping for control characters and are bounded to 64 UTF-8 bytes,
-including a visible truncation marker. At most three candidates are shown,
-followed by `and N more` when others remain. An absent index or unknown
-fingerprint leaves the existing marker and error text unchanged.
+debug-style escaping for control characters. Each quoted display name is
+bounded to 64 UTF-8 bytes, including its quotes and any visible truncation
+marker; truncation preserves complete escape sequences. At most three
+candidates are shown, followed by `and N more` when others remain. An absent
+index or unknown fingerprint leaves the existing marker and error text
+unchanged.
 
 Failure attribution is private to Ninja process execution:
 `FailureAttributionWriter` parses only Ninja's stderr. Because Ninja relays a
