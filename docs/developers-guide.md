@@ -2469,7 +2469,7 @@ publish. That statement is the digest record: `{"assets": {name: digest}}`,
 written by `release_declaration_cli --digest-record` from the staged tree in
 the same run that declares the names, and read by both later consumers.
 
-The provenance chain has three links and each one refuses rather than
+The provenance chain has four links and each one refuses rather than
 interpolates.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
@@ -2651,7 +2651,7 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the twenty `scripts/tests/test_*.py`
+`make test-release-publication` runs the twenty-two `scripts/tests/test_*.py`
 modules for the release-policy CLIs and their library modules, then runs the
 same source modules under `--doctest-modules`, so the examples in their
 docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,

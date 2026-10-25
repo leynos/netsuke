@@ -2222,13 +2222,13 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   s), `test` (4,866 Nextest passed, 6 skipped; doctests passed),
   `test-workflow-contracts` (1,484 passed, 3 skipped, plus 28 script doctests),
   `test-release-publication` (406 passed), `doc-coverage` (6,178/6,292; 98.19%),
-  `markdownlint`, and `nixie`. The canonical gate summary is The runner
-  recorded its summary TSV and per-gate logs under `/tmp`. A first post-rebase
-  run exhausted the root filesystem in Whitaker; `make clean` removed 37.1 GiB
-  of regenerable output, and this complete run ended with 202 GiB free. Both
-  Whitaker scopes passed, but their older `nightly-2026-05-28` child Cargo
-  emitted a non-fatal `unused config key 'unstable.embed-metadata'` warning.
-  Date/Author: 2026-10-25, implementation agent.
+  `markdownlint`, and `nixie`. The runner recorded its summary TSV and
+  per-gate logs under `/tmp`. A first post-rebase run exhausted the root
+  filesystem in Whitaker; `make clean` removed 37.1 GiB of regenerable output,
+  and this complete run ended with 202 GiB free. Both Whitaker scopes passed,
+  but their older `nightly-2026-05-28` child Cargo emitted a non-fatal
+  `unused config key 'unstable.embed-metadata'` warning. Date/Author:
+  2026-10-25, implementation agent.
 
 - [x] (2026-10-25) Rebased onto `origin/main` at `88f20d588` from
   `0a7a0d58`, replaying 50 commits. `range-diff` paired all 50; 48 were
