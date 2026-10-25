@@ -2250,6 +2250,20 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `make test-package-verify`. The two earlier timeout reports are therefore
   historical for this candidate.
 
+- [x] (2026-10-25) Addressed the four CodeRabbit findings published against
+  the pre-rebase PR head. The developers' guide now matches the four-link
+  provenance chain and the 22-module publication test target; this plan's
+  gate-summary sentence is complete. `publish_crates_io_cli._verify` now maps
+  indeterminate responses and archive I/O failures to the declared
+  verification-error exit, with regressions for HTTP 503 and a missing
+  status-200 archive. The documentation-only commit `e1f22718` passed
+  `check-fmt`, `markdownlint`, and `nixie`; the code candidate committed as
+  `9b86e023` passed `check-fmt`, `lint`, `typecheck`,
+  `test-release-publication` (408 passed), and `test` (4,710 passed, 6 skipped;
+  doctests passed). Fresh `lint` and `nixie` runs also passed after the
+  stop-hook failures did not reproduce. Date/Author: 2026-10-25, implementation
+  agent.
+
 ## Surprises & discoveries
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
@@ -3706,3 +3720,13 @@ moves the build-module slice check to source comparison; the earlier timeout
 reports are historical, and the rebased `make test` passes. The full sequential
 gate results are recorded in `Progress`. Stage C remains partial and Stage D
 remains open; no release or registry setting was changed.
+
+Draft 7, 2026-10-25: resolved four review findings on the rebased tree. The
+provenance and test-module counts now match their enumerated sources, and the
+historical gate summary is grammatical. The CLI maps indeterminate download
+observations and archive-read failures to the existing verification-error
+status; regression cases cover HTTP 503 and a missing successful response body.
+The targeted publication suite and the requested repository gates pass. This is
+a verifier and documentation correction only; it adds no workflow job and does
+not publish a release or change registry settings. Stage C remains partial and
+Stage D remains open.
