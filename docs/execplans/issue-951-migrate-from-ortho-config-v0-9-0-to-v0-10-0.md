@@ -332,6 +332,18 @@ rather than as `--flag[=BOOL]`.
   that names the mismatch. The targeted run
   `cargo nextest run -E 'test(release_help_cli_value_shapes_match_the_parser)'`
   passed afterwards.
+- [x] (2026-10-25) Remove a stray blank line between the `Install uv` and
+  `Build release binary` steps of the reusable build job, introduced by the
+  previous edit. Gates re-run for the YAML delta: `make check-fmt`,
+  `make github-actions-lint`, and `make test-workflow-contracts` (1355 passed,
+  3 skipped — identical to the pre-change count). Committed as `00aa92478`.
+- [x] (2026-10-25) CodeRabbit round four: `review --agent` completed with
+  **zero findings** across all 25 changed files. Three earlier attempts were
+  rate-limited, and the mandated randomized `vsleep` of 45–90 minutes was used
+  between each, per the brief. The review ran over the working tree that became
+  `00aa92478`; the only delta between that tree and the reviewed content is the
+  blank line removed above, which the three gates listed immediately before
+  this entry cover.
 
 ## Surprises & discoveries
 
