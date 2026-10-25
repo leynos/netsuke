@@ -36,6 +36,7 @@ fn run_command_list(
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("chain".into(), action);

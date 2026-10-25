@@ -197,6 +197,8 @@ ir.invalid_command = Invalid command interpolation: { $snippet }.
 
 # Ninja generation errors.
 ninja_gen.missing_action = Missing action '{ $id }' referenced by a build edge.
+ninja_gen.console_dependency_only = Build edge '{ $output }' cannot select the console pool because its action is dependency-only.
+ninja_gen.console_pool_conflict = Build edge '{ $output }' selects the console pool but its action requests custom pool '{ $pool }'.
 ninja_gen.format = Failed to format the Ninja manifest output.
 ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialised.
 ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.

@@ -164,6 +164,21 @@ pub(super) fn assert_target_always(world: &TestWorld, index: usize, expected: bo
     })
 }
 
+/// Validate the console-scheduling flag on a target.
+///
+/// # Errors
+///
+/// Returns an error when the target is missing or its flag differs.
+pub(super) fn assert_target_console(world: &TestWorld, index: usize, expected: bool) -> Result<()> {
+    with_target(world, index, |target| {
+        ensure!(
+            target.console == expected,
+            "target {index} console scheduling should be {expected}"
+        );
+        Ok(())
+    })
+}
+
 /// Generic manifest collection count assertion.
 fn assert_manifest_count<F>(
     world: &TestWorld,

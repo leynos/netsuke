@@ -39,6 +39,9 @@ impl Display for DisplayEdge<'_> {
         writeln!(output)?;
         write_flag!(output, "restat", self.edge.always && !self.action_restat);
         write_kv!(output, "description", self.description);
+        if self.edge.console {
+            writeln!(output, "  pool = console")?;
+        }
         writeln!(output)
     }
 }

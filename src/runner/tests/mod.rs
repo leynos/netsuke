@@ -246,6 +246,7 @@ fn ninja_text_propagates_typed_generation_errors() {
             progress_label: None,
             phony: false,
             always: false,
+            console: false,
         })
         .expect("test graph output aliases must be unique");
 

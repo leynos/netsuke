@@ -197,6 +197,8 @@ ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
 
 # خطاهای تولید پرونده‌های Ninja.
 ninja_gen.missing_action = کنش «{ $id }» که یک یال ساخت به آن ارجاع می‌دهد وجود ندارد.
+ninja_gen.console_dependency_only = ‏یال ساخت «{ $output }» نمی‌تواند مخزن کنسول را انتخاب کند، زیرا کنش آن فقط شامل وابستگی‌هاست.
+ninja_gen.console_pool_conflict = ‏یال ساخت «{ $output }» مخزن کنسول را انتخاب می‌کند، اما کنش آن مخزن سفارشی «{ $pool }» را درخواست می‌کند.
 ninja_gen.format = قالب‌بندی خروجی مانیفست Ninja ممکن نشد.
 ninja_gen.dyndep_files_required = ‏ این ساخت به بستهٔ تولیدشدهٔ Ninja نیاز دارد؛ از `netsuke build`، `netsuke clean` یا `netsuke generate` استفاده کنید تا فایل‌های dyndep ایجاد شوند.
 ninja_gen.reserved_output_path = ‏ مسیر '{ $path }' برای وضعیت وابستگی‌های ترتیبی Netsuke رزرو شده است.

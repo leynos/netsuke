@@ -69,6 +69,7 @@ pub(super) fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
         progress_label: None,
         phony: fixture.phony,
         always: fixture.always,
+        console: false,
     };
     assert!(
         graph.insert_edge(edge).is_ok(),

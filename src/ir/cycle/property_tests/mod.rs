@@ -55,6 +55,7 @@ impl EdgeBuilder {
             progress_label: None,
             phony: false,
             always: false,
+            console: false,
         }
     }
 }

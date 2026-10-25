@@ -196,6 +196,8 @@ ir.invalid_command = 命令中的插值無效：{ $snippet }。
 
 # Ninja 產生錯誤。
 ninja_gen.missing_action = 缺少建置邊所參照的動作「{ $id }」。
+ninja_gen.console_dependency_only = 建置邊「{ $output }」無法選取主控台集區，因為它的動作只包含相依項目。
+ninja_gen.console_pool_conflict = 建置邊「{ $output }」選取了主控台集區，但它的動作要求自訂集區「{ $pool }」。
 ninja_gen.format = 無法格式化 Ninja 資訊清單的輸出。
 ninja_gen.dyndep_files_required = 此操作需要產生的 Ninja dyndep 檔案；請使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以產生這些檔案。
 ninja_gen.reserved_output_path = 路徑「{ $path }」已保留給 Netsuke 的序列相依性狀態。

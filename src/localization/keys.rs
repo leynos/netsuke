@@ -173,6 +173,8 @@ define_keys! {
     IR_ACTION_SERIALISATION => "ir.action_serialisation",
     IR_INVALID_COMMAND => "ir.invalid_command",
     NINJA_GEN_MISSING_ACTION => "ninja_gen.missing_action",
+    NINJA_GEN_CONSOLE_DEPENDENCY_ONLY => "ninja_gen.console_dependency_only",
+    NINJA_GEN_CONSOLE_POOL_CONFLICT => "ninja_gen.console_pool_conflict",
     NINJA_GEN_FORMAT => "ninja_gen.format",
     NINJA_GEN_DYNDEP_FILES_REQUIRED => "ninja_gen.dyndep_files_required",
     NINJA_GEN_RESERVED_OUTPUT_PATH => "ninja_gen.reserved_output_path",

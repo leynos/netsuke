@@ -197,6 +197,8 @@ ir.invalid_command = Virheellinen komennon sijoitus: { $snippet }.
 
 # Ninja-generoinnin virheet.
 ninja_gen.missing_action = Toiminto ”{ $id }”, johon koontikaari viittaa, puuttuu.
+ninja_gen.console_dependency_only = Koontireuna ”{ $output }” ei voi valita konsolipoolia, koska sen toiminto sisältää vain riippuvuuksia.
+ninja_gen.console_pool_conflict = Koontireuna ”{ $output }” valitsee konsolipoolin, mutta sen toiminto pyytää mukautettua poolia ”{ $pool }”.
 ninja_gen.format = Ninja-manifestin tulostetta ei voitu muotoilla.
 ninja_gen.dyndep_files_required = Tämä toiminto vaatii luodun Ninja-paketin; käytä komentoa `netsuke build`, `netsuke clean` tai `netsuke generate`, jotta dyndep-tiedostot luodaan.
 ninja_gen.reserved_output_path = Polku '{ $path }' on varattu Netsuken sarjariippuvuuksien tilan tallentamiseen.

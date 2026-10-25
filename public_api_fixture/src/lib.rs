@@ -6,6 +6,8 @@
 //! compiled, and Cargo compiles them in the build phase with every other
 //! workspace library. See ADR-0059 for why the checks left the test suite.
 
+#[path = "../../tests/ui/build_edge_console_compile_pass.rs"]
+pub mod build_edge_console;
 pub mod cli_configuration;
 pub mod command_env;
 pub mod command_list;

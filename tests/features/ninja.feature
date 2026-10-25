@@ -12,6 +12,18 @@ Feature: Ninja file generation
     Then the ninja file contains "build clean:"
     And the ninja file contains "rm -rf build"
 
+  Scenario: Console actions emit an edge-level console pool binding
+    When the manifest file "tests/data/console.yml" is compiled to IR
+    And the ninja file is generated
+    Then the ninja file contains "build streamed-action:"
+    And the ninja file contains "build inline-console:"
+    And the ninja file contains "  pool = console"
+
+  Scenario: Dependency-only console edges are rejected
+    Given a dependency-only action graph with console scheduling
+    When the ninja file is generated
+    Then ninja generation fails with "dependency-only"
+
   Scenario: The child shell receives the sentinel environment
     When the manifest file "tests/data/dollar_escaping.yml" is compiled to IR
     And the ninja file is generated
