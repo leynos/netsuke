@@ -6907,6 +6907,17 @@ variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
+The manifest `console` Boolean lowers to `BuildEdge.console`. It is scheduling
+metadata owned by the edge because two targets can share one action and rule
+while only one target needs streamed output. `Action.pool` remains unchanged,
+so console selection does not alter action identity or action deduplication.
+`src/ninja_gen/display_edge.rs` emits `pool = console` on that edge, and shared
+console-scheduling validation runs before both direct Ninja generation and
+dyndep-bundle generation. That validation rejects dependency-only edges and
+custom action pools that conflict with `console`; it accepts an existing
+`Action.pool` value of `console`. Synthetic serial gates and dyndep sidecars
+never inherit the binding.
+
 `src/ir/cycle/detector.rs::CycleDetector::visit_known_edge` traverses `inputs`,
 `implicit_deps`, and `order_only_deps` when detecting cycles. Order-only
 dependencies do not trigger a rebuild when they change, but they still have to

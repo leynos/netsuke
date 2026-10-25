@@ -15,6 +15,14 @@ Feature: Manifest Parsing
     Then the target 1 is phony
     And the target 1 is always rebuilt
 
+  Scenario: Parsing console scheduling for actions and targets
+    Given the manifest file "tests/data/console.yml" is parsed
+    When the flags are checked
+    Then the action 1 requests console scheduling
+    And the action 2 does not request console scheduling
+    And the target 1 does not request console scheduling
+    And the target 2 requests console scheduling
+
   Scenario: A target in the 'actions' block is implicitly phony
     Given the manifest file "tests/data/actions.yml" is parsed
     When the flags are checked

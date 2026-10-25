@@ -3,6 +3,46 @@
 use super::command_list::{CommandListEntry, CommandListEntryError, command_list_entry_error};
 use super::{NinjaGenError, RecipeShell, escape::validate_ninja_value};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
+use crate::ir::BuildGraph;
+use crate::localization::{self, keys};
+
+/// Reject console scheduling that conflicts with an edge's action.
+///
+/// # Errors
+///
+/// Returns an error when a console edge uses a dependency-only recipe or
+/// conflicts with an action's custom pool.
+pub(super) fn validate_console_scheduling(graph: &BuildGraph) -> Result<(), NinjaGenError> {
+    for edge in graph.edges().filter(|edge| edge.console) {
+        let Some(action) = graph.actions.get(&edge.action_id) else {
+            continue;
+        };
+        let output = edge
+            .explicit_outputs
+            .first()
+            .map_or_else(|| "<no explicit output>".to_owned(), ToString::to_string);
+        if action.recipe.is_dependency_only() {
+            return Err(NinjaGenError::ConsoleDependencyOnly {
+                message: localization::message(keys::NINJA_GEN_CONSOLE_DEPENDENCY_ONLY)
+                    .with_arg("output", &output),
+                output,
+            });
+        }
+        if let Some(pool) = action.pool.as_deref() {
+            validate_ninja_value(pool)?;
+            if pool != "console" {
+                return Err(NinjaGenError::ConsolePoolConflict {
+                    message: localization::message(keys::NINJA_GEN_CONSOLE_POOL_CONFLICT)
+                        .with_arg("output", &output)
+                        .with_arg("pool", pool),
+                    output,
+                    pool: pool.to_owned(),
+                });
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Reject recipes the generated shell cannot execute with stable semantics.
 pub(super) fn validate_action_recipe(
@@ -104,9 +144,11 @@ pub(super) fn validate_action_metadata(action: &crate::ir::Action) -> Result<(),
 mod tests {
     //! Verifies shell-specific recipe validation boundaries.
 
-    use super::{NinjaGenError, RecipeShell, validate_action_recipe};
+    use super::{NinjaGenError, RecipeShell, validate_action_recipe, validate_console_scheduling};
     use crate::ast::{CommandIsolation, Recipe, StringOrList};
-    use crate::ir::Action;
+    use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
+    use crate::ninja_gen::{generate, generate_bundle};
+    use camino::Utf8PathBuf;
 
     /// Construct one action with a supplied command recipe for validation tests.
     fn command_action(command: StringOrList) -> Action {
@@ -121,6 +163,37 @@ mod tests {
             pool: None,
             restat: false,
         }
+    }
+
+    /// Build one console edge whose recipe and pool can vary across cases.
+    fn console_graph(recipe: Recipe, pool: Option<&str>) -> BuildGraph {
+        let mut graph = BuildGraph::default();
+        graph.actions.insert(
+            "console-action".into(),
+            Action {
+                recipe,
+                description: None,
+                depfile: None,
+                deps_format: None,
+                pool: pool.map(str::to_owned),
+                restat: false,
+            },
+        );
+        graph
+            .insert_edge(BuildEdge {
+                action_id: "console-action".into(),
+                inputs: Vec::new(),
+                implicit_deps: Vec::new(),
+                dependency_order: DependencyOrder::Parallel,
+                explicit_outputs: vec![Utf8PathBuf::from("console.out")],
+                implicit_outputs: Vec::new(),
+                order_only_deps: Vec::new(),
+                phony: false,
+                always: false,
+                console: true,
+            })
+            .expect("test graph output aliases must be unique");
+        graph
     }
 
     /// Accept multi-line scalar text because PowerShell receives it through its transport.
@@ -172,6 +245,112 @@ mod tests {
         assert!(matches!(
             validate_action_recipe(&action, 1, RecipeShell::PowerShell),
             Err(NinjaGenError::InvalidCommandIsolation { action_index: 1 })
+        ));
+    }
+
+    /// Reject console scheduling when the action is only a dependency marker.
+    #[test]
+    fn console_edges_reject_dependency_only_recipes() {
+        let graph = console_graph(
+            Recipe::Command {
+                command: StringOrList::Empty,
+                isolation: CommandIsolation::Shared,
+            },
+            None,
+        );
+        let error = validate_console_scheduling(&graph)
+            .expect_err("dependency-only console edge must fail validation");
+        assert!(error.to_string().contains("console.out"));
+        assert!(matches!(
+            error,
+            NinjaGenError::ConsoleDependencyOnly { output, .. } if output == "console.out"
+        ));
+    }
+
+    /// Reject custom action pools when the edge independently requests console scheduling.
+    #[test]
+    fn console_edges_reject_conflicting_action_pools() {
+        let graph = console_graph(
+            Recipe::Command {
+                command: "echo ready".into(),
+                isolation: CommandIsolation::Shared,
+            },
+            Some("link_pool"),
+        );
+        let error = validate_console_scheduling(&graph)
+            .expect_err("custom pool conflict must fail validation");
+        let rendered = error.to_string();
+        assert!(rendered.contains("console.out"));
+        assert!(rendered.contains("link_pool"));
+        assert!(matches!(
+            error,
+            NinjaGenError::ConsolePoolConflict { output, pool, .. }
+                if output == "console.out" && pool == "link_pool"
+        ));
+    }
+
+    /// Accept an explicit `console` action pool when it matches the edge selection.
+    #[test]
+    fn console_edges_accept_matching_action_pools() {
+        let graph = console_graph(
+            Recipe::Command {
+                command: "echo ready".into(),
+                isolation: CommandIsolation::Shared,
+            },
+            Some("console"),
+        );
+        assert!(validate_console_scheduling(&graph).is_ok());
+    }
+
+    /// Return the same localized scheduling errors from direct and bundled generation.
+    #[test]
+    fn direct_and_bundle_generators_reject_invalid_console_scheduling() {
+        let dependency_only = console_graph(
+            Recipe::Command {
+                command: StringOrList::Empty,
+                isolation: CommandIsolation::Shared,
+            },
+            None,
+        );
+        let direct_error = generate(&dependency_only)
+            .expect_err("direct generation must reject dependency-only console edges");
+        assert!(direct_error.to_string().contains("console.out"));
+        assert!(matches!(
+            direct_error,
+            NinjaGenError::ConsoleDependencyOnly { output, .. } if output == "console.out"
+        ));
+        let bundle_error = generate_bundle(&dependency_only)
+            .expect_err("bundle generation must reject dependency-only console edges");
+        assert!(bundle_error.to_string().contains("console.out"));
+        assert!(matches!(
+            bundle_error,
+            NinjaGenError::ConsoleDependencyOnly { output, .. } if output == "console.out"
+        ));
+
+        let pool_conflict = console_graph(
+            Recipe::Command {
+                command: "echo ready".into(),
+                isolation: CommandIsolation::Shared,
+            },
+            Some("link_pool"),
+        );
+        let direct_pool_error = generate(&pool_conflict)
+            .expect_err("direct generation must reject console pool conflicts");
+        assert!(direct_pool_error.to_string().contains("console.out"));
+        assert!(direct_pool_error.to_string().contains("link_pool"));
+        assert!(matches!(
+            direct_pool_error,
+            NinjaGenError::ConsolePoolConflict { output, pool, .. }
+                if output == "console.out" && pool == "link_pool"
+        ));
+        let bundle_pool_error = generate_bundle(&pool_conflict)
+            .expect_err("bundle generation must reject console pool conflicts");
+        assert!(bundle_pool_error.to_string().contains("console.out"));
+        assert!(bundle_pool_error.to_string().contains("link_pool"));
+        assert!(matches!(
+            bundle_pool_error,
+            NinjaGenError::ConsolePoolConflict { output, pool, .. }
+                if output == "console.out" && pool == "link_pool"
         ));
     }
 }

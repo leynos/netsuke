@@ -54,6 +54,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     },
     target_name: Utf8PathBuf::from("out"),
     ninja_args: vec!["-n"],
@@ -79,6 +80,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     },
     target_name: Utf8PathBuf::from("out"),
     ninja_args: vec!["out"],
@@ -104,6 +106,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     },
     target_name: Utf8PathBuf::from("out"),
     ninja_args: vec!["out"],
@@ -129,6 +132,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         progress_label: None,
         phony: true,
         always: false,
+        console: false,
     },
     target_name: Utf8PathBuf::from("action-called.txt"),
     ninja_args: vec!["say-hello"],
@@ -224,6 +228,7 @@ fn errors_when_action_missing() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     graph
         .insert_edge(edge)
@@ -271,6 +276,7 @@ fn generate_format_error() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
@@ -312,6 +318,7 @@ fn serial_graph(command: &str, dependencies: &[&str]) -> Result<BuildGraph> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);

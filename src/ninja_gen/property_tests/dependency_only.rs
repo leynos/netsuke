@@ -42,6 +42,7 @@ fn dependency_only_graph(dependencies: &[String], order: DependencyOrder) -> Bui
                 progress_label: None,
                 phony: false,
                 always: false,
+                console: false,
             })
             .is_ok(),
         "test graph output aliases must be unique",

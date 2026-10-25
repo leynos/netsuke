@@ -77,6 +77,7 @@ fn run_command_list_with_progress(
         progress_label: progress_label.map(str::to_owned),
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("chain".into(), action);

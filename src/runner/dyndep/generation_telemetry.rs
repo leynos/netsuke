@@ -67,6 +67,8 @@ fn record_outcome<T>(span: &tracing::Span, result: &Result<T, NinjaGenError>) ->
 const fn error_category(error: &NinjaGenError) -> &'static str {
     match error {
         NinjaGenError::MissingAction { .. } => "missing_action",
+        NinjaGenError::ConsoleDependencyOnly { .. } => "console_dependency_only",
+        NinjaGenError::ConsolePoolConflict { .. } => "console_pool_conflict",
         NinjaGenError::EmptyCommandRecipe { .. }
         | NinjaGenError::InvalidCommandIsolation { .. }
         | NinjaGenError::MultipleBackgroundJobs { .. }
