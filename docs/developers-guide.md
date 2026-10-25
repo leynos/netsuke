@@ -1025,6 +1025,14 @@ rendering both emit the localized value through `DisplayEdge` as an escaped
 edge-level `description`. Named-rule metadata remains on the rule, where its
 description continues to control progress.
 
+`src/ninja_gen/edge_metadata.rs` owns the shared action lookup, rule-name
+selection, `restat` value and escaped progress description for generated edges.
+Its only callers are `generate_into_with_shell` and
+`EdgeRenderer::render_edge`; each passes the graph edge and the localizer
+resolved once for generation, then forwards the returned metadata to
+`DisplayEdge`. Keep action identity, command text, named-rule metadata and
+Ninja text emission outside this helper.
+
 ## Adding a lint rule
 
 `netsuke check` is driven by a static registry in `src/lint/registry/mod.rs`.

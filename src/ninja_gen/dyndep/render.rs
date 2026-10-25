@@ -7,9 +7,8 @@
 use super::{DYNDEP_NAMESPACE, GeneratedDyndep, SERIAL_NAMESPACE};
 use crate::hex;
 use crate::ir::{BuildEdge, BuildGraph};
-use crate::localization::{self, keys};
-use crate::ninja_gen::escape::{NinjaValue, escape_metadata_value};
-use crate::ninja_gen::progress_label;
+use crate::ninja_gen::edge_metadata;
+use crate::ninja_gen::escape::NinjaValue;
 use crate::ninja_gen::{
     DisplayEdge, NinjaGenError, edge_requires_gates, path_key, validated_ninja_path,
 };
@@ -73,27 +72,14 @@ struct EdgeRenderer<'a> {
 impl EdgeRenderer<'_> {
     /// Render one graph edge, applying staged dyndep lowering when required.
     fn render_edge(&mut self, edge: &BuildEdge) -> Result<(), NinjaGenError> {
-        let action = self.graph.actions.get(&edge.action_id).ok_or_else(|| {
-            NinjaGenError::MissingAction {
-                id: edge.action_id.clone(),
-                message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
-                    .with_arg("id", &edge.action_id),
-            }
-        })?;
-
+        let metadata = edge_metadata::for_edge(self.graph, edge, self.localizer)?;
         let rendered_action = RenderedAction {
-            name: if action.recipe.is_dependency_only() {
-                "phony"
-            } else {
-                &edge.action_id
-            },
-            restat: action.restat,
+            name: metadata.action_name,
+            restat: metadata.restat,
         };
-        let localized_description = progress_label::for_edge(edge, action, self.localizer);
-        let ninja_description = escape_metadata_value(localized_description.as_deref())?;
         let rendered_edge = RenderedEdge {
             action: rendered_action,
-            description: ninja_description.as_ref(),
+            description: metadata.description.as_ref(),
         };
         if edge_requires_gates(edge) {
             return self.render_serial_edge(edge, rendered_edge);

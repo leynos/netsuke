@@ -61,6 +61,7 @@ macro_rules! write_flag {
 
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
+mod edge_metadata;
 mod progress_label;
 /// Generate a Ninja build file as a string.
 ///
@@ -180,30 +181,16 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     let mut edges: Vec<_> = graph.edges().collect();
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
     for edge in edges {
-        let action =
-            graph
-                .actions
-                .get(&edge.action_id)
-                .ok_or_else(|| NinjaGenError::MissingAction {
-                    id: edge.action_id.clone(),
-                    message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
-                        .with_arg("id", &edge.action_id),
-                })?;
-        let localized_description = progress_label::for_edge(edge, action, localizer.as_ref());
-        let ninja_description = escape_metadata_value(localized_description.as_deref())?;
+        let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
         write!(
             out,
             "{}",
             DisplayEdge {
                 edge,
-                action_name: if action.recipe.is_dependency_only() {
-                    "phony"
-                } else {
-                    &edge.action_id
-                },
-                action_restat: action.restat,
+                action_name: metadata.action_name,
+                action_restat: metadata.restat,
                 implicit_deps: &edge.implicit_deps,
-                description: ninja_description.as_ref(),
+                description: metadata.description.as_ref(),
             }
         )?;
     }
