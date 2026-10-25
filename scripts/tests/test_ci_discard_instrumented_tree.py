@@ -106,11 +106,28 @@ def test_subtrees_input_overrides_the_default_names(
     )
 
 
+@pytest.fixture(
+    params=[
+        pytest.param("..", id="parent"),
+        pytest.param(r"C:\outside", id="windows-drive-rooted"),
+        pytest.param(r"\outside", id="windows-rooted"),
+        pytest.param(r"nested\child", id="windows-backslash-separated"),
+    ]
+)
+def bad_subtree_name(
+    monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest
+) -> str:
+    """Set an unsafe subtree name after a valid name for removal."""
+    bad_name = typ.cast("str", request.param)
+    monkeypatch.setenv("INPUT_SUBTREES", f"llvm-cov {bad_name}")
+    return bad_name
+
+
 def test_a_bad_name_removes_nothing_at_all(
     cmd_mox: CmdMox,
     target: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    bad_subtree_name: str,
 ) -> None:
     """A bad name fails the step before the first tree is removed.
 
@@ -119,14 +136,13 @@ def test_a_bad_name_removes_nothing_at_all(
     a tree the caller never agreed to lose would already be gone. Every name
     is resolved before the first removal so the failure is total.
     """
-    monkeypatch.setenv("INPUT_SUBTREES", "llvm-cov ..")
     # The run stops before the post-removal df, so only the pre-flight is made.
     _df(cmd_mox, expected_calls=1)
 
     exit_code = invoke(script.app)
 
     assert exit_code == 1, "expected: exit_code == 1"
-    assert "refusing to remove '..'" in capsys.readouterr().err, (
+    assert f"refusing to remove {bad_subtree_name!r}" in capsys.readouterr().err, (
         "expected: the diagnostic to name the refused component"
     )
     assert (target / "llvm-cov").is_dir(), (

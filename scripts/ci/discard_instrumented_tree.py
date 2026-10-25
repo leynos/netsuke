@@ -45,18 +45,23 @@ def _names_a_plain_component(name: str) -> bool:
     Absolute names, names carrying a separator, and the three names that do not
     denote a distinct child -- the empty string, ``.`` and ``..`` -- are all
     rejected, so an accepted name always denotes one entry directly beneath the
-    directory it is joined to.
+    directory it is joined to. Check Windows syntax as well as the native path
+    flavour, so a name accepted on POSIX cannot become rooted when run on
+    Windows.
 
     Returns
     -------
     bool
         ``True`` only for a name that resolves to one ordinary component.
     """
-    component = pathlib.PurePosixPath(name)
+    component = pathlib.PurePath(name)
+    windows_component = pathlib.PureWindowsPath(name)
     return (
-        not component.is_absolute()
+        not component.anchor
         and len(component.parts) == 1
         and component.parts[0] not in {"", ".", ".."}
+        and not windows_component.anchor
+        and len(windows_component.parts) == 1
     )
 
 

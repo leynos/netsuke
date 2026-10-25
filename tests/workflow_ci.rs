@@ -192,8 +192,14 @@ const KANI_INSTALL_SCRIPT: &str = "scripts/ci/install_kani.py";
 /// describes, so a mismatch must name the payload it belongs to rather than
 /// reporting a generic failure.
 const KANI_INSTALL_PINS: [(&str, &str); 2] = [
-    ("INPUT_FRONTEND_SHA256", "ed2bafc239b834e14c6b66fc4838e342"),
-    ("INPUT_BUNDLE_SHA256", "3b5f7afd3b51603ee720db7bc1bc4fe4"),
+    (
+        "INPUT_FRONTEND_SHA256",
+        "ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974",
+    ),
+    (
+        "INPUT_BUNDLE_SHA256",
+        "3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0",
+    ),
 ];
 
 /// Require the Kani install step to delegate to the installer, with its pins.
@@ -223,10 +229,10 @@ fn ensure_kani_install_delegates_to_script(install_step: &Mapping) -> Result<()>
     let missing_pins: Vec<String> = KANI_INSTALL_PINS
         .iter()
         .copied()
-        .filter(|(key, prefix)| {
+        .filter(|(key, expected)| {
             mapping_get(env, YamlKey(key))
                 .and_then(Value::as_str)
-                .is_none_or(|value| !value.starts_with(prefix))
+                .is_none_or(|value| value != *expected)
         })
         .map(|(key, _)| key.to_owned())
         .collect();
@@ -239,6 +245,41 @@ fn ensure_kani_install_delegates_to_script(install_step: &Mapping) -> Result<()>
         missing.is_empty(),
         "Kani's binary-only cached installation is missing: {missing:?}"
     );
+    Ok(())
+}
+
+#[test]
+fn unit_rejects_truncated_kani_checksum_pins() -> Result<()> {
+    for (invalid_index, (invalid_key, expected_pin)) in KANI_INSTALL_PINS.iter().enumerate() {
+        let truncated_pin = expected_pin
+            .get(..32)
+            .context("Kani checksum pin should have a UTF-8 boundary at 32 bytes")?;
+        let frontend_pin = if invalid_index == 0 {
+            truncated_pin
+        } else {
+            KANI_INSTALL_PINS[0].1
+        };
+        let bundle_pin = if invalid_index == 1 {
+            truncated_pin
+        } else {
+            KANI_INSTALL_PINS[1].1
+        };
+        let install_step: Value = serde_yaml::from_str(&format!(
+            "run: uv run --script {KANI_INSTALL_SCRIPT}\nenv:\n  INPUT_KANI_VERSION: '0.67.0'\n  INPUT_FRONTEND_SHA256: {frontend_pin}\n  INPUT_BUNDLE_SHA256: {bundle_pin}\n"
+        ))
+        .context("parse Kani install step with a truncated checksum pin")?;
+        let mapping = install_step
+            .as_mapping()
+            .context("Kani install step should be a mapping")?;
+        let error = ensure_kani_install_delegates_to_script(mapping)
+            .err()
+            .context("truncated Kani checksum pin should be rejected")?;
+
+        ensure!(
+            error.to_string().contains(invalid_key),
+            "truncated checksum diagnostic should name {invalid_key}"
+        );
+    }
     Ok(())
 }
 

@@ -54,6 +54,21 @@ class Release:
     variable outright: a nested dataclass field is not a command path
     component, so the app-level ``INPUT_`` prefix does not supply the rest of
     the name, and leaving it implicit would leave these unbound.
+
+    Attributes
+    ----------
+    version : str
+        actionlint version to install, without the leading ``v``.
+    sha256 : str
+        Expected SHA-256 digest of the release archive.
+    install_dir : pathlib.Path
+        Directory that receives the ``actionlint`` binary.
+    release_root : str
+        Base URL that hosts the release archives.
+    platform : str
+        Platform suffix used in the archive name.
+    runner_temp : pathlib.Path | None
+        Optional runner temporary directory for the install scratch area.
     """
 
     version: typ.Annotated[
@@ -113,6 +128,15 @@ class Probe:
     a different fact, and a caller that cannot tell them apart has to guess --
     and the guess that replaces a broken binary hides the breakage behind a
     green step.
+
+    Attributes
+    ----------
+    version : str | None
+        Version reported by the binary. ``None`` means the cache is empty or
+        the binary cannot report a version.
+    failure : str | None
+        Diagnostic when a cached binary cannot report a version, or ``None``
+        otherwise.
     """
 
     version: str | None = None
