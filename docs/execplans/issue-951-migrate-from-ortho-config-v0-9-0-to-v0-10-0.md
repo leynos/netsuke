@@ -315,6 +315,13 @@ rather than as `--flag[=BOOL]`.
   deleting the step fails on the count, moving it after `Generate release help`
   fails on the nested-build bound, and moving it before
   `Build release binary` — upstream's placement — fails on the x64-leak bound.
+  Confirmed on the pushed commit `8a47ec69f`: `Release Dry Run`
+  [40238479467](https://github.com/leynos/netsuke/actions/runs/40238479467)
+  went green on **every** lane, including both Windows lanes that previously
+  failed. The aarch64 Windows job log shows the nested bridge build completing
+  (`Finished dev profile … in 2m 07s`) where it previously died on
+  `link: extra operand`, and all four help artefacts produced — the man page
+  still 8842 bytes, matching the pre-migration measurement.
 - [x] (2026-10-25) CodeRabbit round three. One finding, raised twice against
   `src/cli/release_help/metadata_tests.rs:154-159` and rated `todo`/`trivial`.
   It was valid: the parity test located the parser argument with
