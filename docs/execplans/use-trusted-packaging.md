@@ -2332,6 +2332,11 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   wiring remain. `composite_action_contract_test.py` already covers expression
   placement, manifest step shape, and negative controls. Stage C and Stage D
   remain open. No release or registry setting was changed.
+- [x] (2026-10-25) Reworded one historical decision-log sentence identified
+  by the current-head completeness assessment: the earlier interface sketch
+  showed the `assets` and `digests` fields, while the current interface section
+  correctly keeps digest records separate. This history-only correction does
+  not change the implemented interface or remaining scope.
 
 ## Surprises & discoveries
 
@@ -3345,8 +3350,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - Decision: `ReleaseIdentity` keeps its six fields and the digest record
   travels **beside** it, rather than gaining the `assets` and `digests` fields
-  the `Interfaces and dependencies` sketch shows. Rationale: the sketch is not
-  describing one record but two. The identity is what the packaging job is
+  the earlier `Interfaces and dependencies` sketch showed. Rationale: that
+  sketch conflated two records. The identity is what the packaging job is
   authorized to publish — tag, commit, package name, version, binary name,
   prerelease flag — and it is settled before any artefact exists, which is why
   it can refuse a disagreeing tag *before* spending build time. The digests
@@ -3807,3 +3812,9 @@ delivered packaging and contracts from the open publisher, workflow, archive
 file-list, mutation-target, and composite-action lint work. Stage C and Stage D
 remain open; no acceptance criteria or implementation scope changed, and no
 release or registry setting was changed.
+
+Draft 9, 2026-10-25: changed one historical decision-log reference from present
+to past tense after the current-head completeness follow-up confirmed the
+interface correction. This preserves the reason for the original record while
+making clear that the current interface sketch no longer contains those fields.
+No implementation scope or behaviour changed.
