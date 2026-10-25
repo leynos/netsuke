@@ -56,6 +56,7 @@ fn edge_strategy_with_ranges(
                     progress_label: None,
                     phony: false,
                     always: false,
+                    console: false,
                 }
             },
         )
@@ -124,6 +125,7 @@ fn serial_graph(dependencies: Vec<Utf8PathBuf>) -> BuildGraph {
                 progress_label: None,
                 phony: false,
                 always: false,
+                console: false,
             })
             .is_ok(),
         "test graph output aliases must be unique",

@@ -35,6 +35,7 @@ fn dependency_only_serial_bundle_uses_phony_without_a_recipe() -> Result<()> {
             progress_label: None,
             phony: true,
             always: false,
+            console: false,
         })
         .expect("test graph output aliases must be unique");
 

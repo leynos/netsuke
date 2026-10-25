@@ -13,6 +13,7 @@ use tracing::field;
 
 /// Metric name counting runner-owned bundle generation outcomes.
 const BUNDLE_GENERATIONS_TOTAL: &str = "netsuke_ninja_dyndep_bundle_generations_total";
+
 /// Metric name measuring runner-owned bundle generation duration in seconds.
 const BUNDLE_GENERATION_DURATION: &str = "netsuke_ninja_dyndep_bundle_generation_duration_seconds";
 
@@ -67,6 +68,8 @@ fn record_outcome<T>(span: &tracing::Span, result: &Result<T, NinjaGenError>) ->
 const fn error_category(error: &NinjaGenError) -> &'static str {
     match error {
         NinjaGenError::MissingAction { .. } => "missing_action",
+        NinjaGenError::ConsoleDependencyOnly { .. } => "console_dependency_only",
+        NinjaGenError::ConsolePoolConflict { .. } => "console_pool_conflict",
         NinjaGenError::EmptyCommandRecipe { .. }
         | NinjaGenError::InvalidCommandIsolation { .. }
         | NinjaGenError::MultipleBackgroundJobs { .. }

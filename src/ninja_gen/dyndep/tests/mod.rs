@@ -33,6 +33,7 @@ fn serial_edge(output: &str, deps: &[&str]) -> BuildEdge {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     }
 }
 
@@ -348,8 +349,8 @@ fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
     Ok(())
 }
 
+mod console;
 mod dependency_only;
-
 mod multi_output;
 
 mod paths;

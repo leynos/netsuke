@@ -189,7 +189,9 @@ pool machinery, with no hidden overlapping-resource scheduler.
 - [ ] 22.1.2. Lower resolved classes into Ninja pool definitions. Requires
   22.1.1.
   - [ ] Reuse `Action.pool`, emit stable bounded names, and preserve dependency
-    and dyndep semantics. Reject console/custom-pool conflicts.
+    and dyndep semantics. Keep `console: true` as independent edge-level
+    selection; reject only console plus contention and reject conflicting
+    custom action pools during generation.
   - [ ] Include complete action sequences and persisted scheduling metadata;
     integrate with 12.3.1 rather than reimplementing the codec.
   - [ ] Property-test declaration-order independence and unannotated-output
@@ -203,8 +205,9 @@ the guarantee and exposes its invocation-only boundary.
 - [ ] 22.2.1. Add controlled-process concurrency tests. Requires 22.1.2.
   - [ ] Assert capacities one and two under larger global `-j`, and show an
     unrelated action can run while a class is occupied.
-  - [ ] Exercise multi-command edges, failure, cancellation, and console
-    rejection without relying solely on sleeps.
+  - [ ] Exercise multi-command edges, failure, cancellation, and rejection of
+    console plus contention without relying solely on sleeps. Prove console
+    output forwarding and console-pool exclusivity with controlled handshakes.
   - [ ] Demonstrate that separate Ninja invocations do not share the limit. See
     RFC 0024 sections 6 and 8.
 - [ ] 22.2.2. Publish class inspection and the native-build canary. Requires

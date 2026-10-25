@@ -240,7 +240,7 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
     Ok(())
 }
 
-/// Snapshot command-list lowering for isolated and implicit-dependency recipes.
+/// Snapshot selected manifest recipes and edge-level Ninja metadata.
 #[rstest]
 #[case::isolated_command_list(
     "tests/data/isolated_command_list.yml",
@@ -249,16 +249,30 @@ fn multi_command_manifest_ninja_snapshot() -> Result<()> {
         "command = ( { _netsuke_background_before=",
         "} )",
     ],
+    &[],
 )]
 #[case::implicit_deps(
     "tests/data/implicit_deps.yml",
     "implicit_deps_manifest_ninja",
     &[" | "],
+    &[],
 )]
-fn command_list_manifest_ninja_snapshot(
+#[case::console(
+    "tests/data/console.yml",
+    "console_manifest_ninja",
+    &["build streamed-action:", "build inline-console:", "pool = console"],
+    &[
+        ("streamed-action", true),
+        ("ordinary-action", false),
+        ("ordinary-target", false),
+        ("inline-console", true),
+    ],
+)]
+fn manifest_ninja_snapshot(
     #[case] fixture_path: &str,
     #[case] snapshot_name: &str,
     #[case] expected_fragments: &[&str],
+    #[case] expected_console_bindings: &[(&str, bool)],
 ) -> Result<()> {
     let fixture_dir = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
         .context("open repository root to read command-list test data")?;
@@ -275,7 +289,9 @@ fn command_list_manifest_ninja_snapshot(
             "expected `{fragment}` in generated Ninja output:\n{ninja_content}"
         );
     }
-
+    for (output, expected) in expected_console_bindings {
+        assert_console_edge_binding(&ninja_content, output, *expected)?;
+    }
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
         env!("CARGO_MANIFEST_DIR"),
@@ -285,6 +301,26 @@ fn command_list_manifest_ninja_snapshot(
         assert_snapshot!(snapshot_name, ninja_content);
     });
 
+    Ok(())
+}
+
+/// Assert whether one named edge has an immediately following console binding.
+///
+/// # Errors
+///
+/// Returns an error when the edge is missing or its binding does not match.
+fn assert_console_edge_binding(ninja: &str, output: &str, expected: bool) -> Result<()> {
+    let lines: Vec<_> = ninja.lines().collect();
+    let prefix = format!("build {output}:");
+    let edge_index = lines
+        .iter()
+        .position(|line| line.starts_with(&prefix))
+        .with_context(|| format!("missing Ninja build edge for {output}"))?;
+    let actual = lines.get(edge_index + 1) == Some(&"  pool = console");
+    ensure!(
+        actual == expected,
+        "edge {output} console binding should be {expected}, generated Ninja:\n{ninja}"
+    );
     Ok(())
 }
 

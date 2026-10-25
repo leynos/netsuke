@@ -199,6 +199,8 @@ ir.ambiguous_substitution_boundary = Límite ambiguo de sustitución de comando 
 
 # Errores de generación de Ninja.
 ninja_gen.missing_action = Falta la acción '{ $id }' referenciada por un borde de compilación.
+ninja_gen.console_dependency_only = El borde de compilación «{ $output }» no puede seleccionar el grupo de consola porque su acción solo declara dependencias.
+ninja_gen.console_pool_conflict = El borde de compilación «{ $output }» selecciona el grupo de consola, pero su acción solicita el grupo personalizado «{ $pool }».
 ninja_gen.format = No se pudo formatear la salida del manifiesto Ninja.
 ninja_gen.dyndep_files_required = Esta compilación requiere un paquete Ninja generado; use `netsuke build`, `netsuke clean` o `netsuke generate` para materializar los archivos dyndep.
 ninja_gen.reserved_output_path = La ruta '{ $path }' está reservada para el estado de dependencias seriales de Netsuke.

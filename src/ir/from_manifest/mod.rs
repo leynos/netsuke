@@ -172,6 +172,7 @@ impl BuildGraph {
                 order_only_deps: to_paths(&target.order_only_deps),
                 phony: target.phony,
                 always: target.always,
+                console: target.console,
             };
 
             #[cfg(not(kani))]
