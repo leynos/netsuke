@@ -628,6 +628,14 @@ is unavailable on the default Windows PowerShell route. See
 [ADR-0045](adrs/adr-0045-isolate-command-list-entries.md) for the decision and
 compatibility constraints.
 
+Command-list failure markers retain the action fingerprint and one-based entry
+index. After Ninja exits, the CLI runner resolves the fingerprint through an
+invocation-local index of canonical command-list edges and adds bounded output
+names to diagnostics. This extension stays runner-private: marker parsing,
+public process request types, and the public command-list AST remain unchanged.
+The external `public_api_fixture` continues to validate the AST boundary
+without exposing runtime attribution.
+
 Netsuke should add four complementary capabilities.
 
 #### Backend dollar escaping (implemented)
