@@ -209,10 +209,10 @@ rather than as `--flag[=BOOL]`.
   where the environment value should — and the file was restored from the
   backup afterwards. Obligation V2 is
   `explicit_cli_value_equal_to_the_default_still_wins` in
-  `tests/cli_tests/merge.rs`, which reads the fuel default from
-  `CliConfig::default()` rather than restating it. Obligation V3 is the new
-  process-level suite `tests/boolean_flag_spelling_tests.rs` (11 cases), whose
-  before/after evidence is the baseline comparison recorded below. V4 was
+  `tests/cli_tests/merge/explicit_cli_wins.rs`, which reads the fuel default
+  from `CliConfig::default()` rather than restating it. Obligation V3 is the
+  new process-level suite `tests/boolean_flag_spelling_tests.rs` (11 cases),
+  whose before/after evidence is the baseline comparison recorded below. V4 was
   discharged in Milestone 3.
 - [x] (2026-10-25) V3 evidence: a pre-migration binary built from merge base
   `88f20d588` into `/home/leynos/.cache/netsuke-baseline-951/` was run against
@@ -239,7 +239,33 @@ rather than as `--flag[=BOOL]`.
   Whitaker's 400-line `module_max_lines` cap. Split the parser-only selector
   translation into `src/cli/release_help/parser_fields.rs` (113 lines); the
   parent is now 333. Sixteen `release_help` tests pass and Clippy is green.
-- [ ] Milestone 5: gates, CodeRabbit, draft PR.
+- [x] (2026-10-25) Second `module_max_lines` regression, and the gate batch
+  that found it. `tests/cli_tests/merge.rs` reached 426 raw lines with the
+  explicit-CLI test added, so it became `tests/cli_tests/merge/mod.rs` with the
+  new test in `merge/explicit_cli_wins.rs`. Nesting it beneath `merge` was a
+  deliberate correction: a first attempt at a sibling
+  `merge_explicit_cli_wins.rs` failed Whitaker's `no_std_fs_operations`, which
+  the existing exclusion for `cli_tests::cli_tests::merge` covers for
+  descendants but not for siblings, so nesting reuses the sanctioned boundary
+  instead of widening `dylint.toml`. The new file also entered
+  `tools/kani/proof-scope.toml`, which `kani_proof_scope_test.py` recomputes
+  from the harness closure and which failed with the missing path named. The
+  sequential batch of six gates then ran: `markdownlint` **failed** with
+  `MD024/no-duplicate-heading` on `CHANGELOG.md`, because the new `### Changed`
+  under `Unreleased` made beta4's `### Changed` the document's second and that
+  heading had no guard; the file's own idiom, already used seven times there,
+  is a `markdownlint-disable-next-line MD024` comment, and the alternative —
+  relaxing MD024 globally for one occurrence — would change lint policy for
+  every document. The other five gates passed on that same tree: `nixie`,
+  `typecheck`, `doc-coverage` (98.20% against an 80% threshold), `lint`
+  (Clippy, Whitaker, Ruff, Pylint, df12 lints, ambrleaks, interrogate 100%,
+  yamllint, actionlint) and `test` (4726 run, 4726 passed, 6 skipped; doctests
+  green). After the one-line CHANGELOG fix `markdownlint` and `check-fmt` were
+  re-run green, and the fix was confirmed to be the only delta from the tree
+  the other five gates had passed. Logs:
+  `/tmp/gates-final-netsuke-issue-951.out`, `/tmp/markdownlint-951-fix.log`,
+  `/tmp/checkfmt-951-md024.log`.
+- [ ] Milestone 5: CodeRabbit review, push, draft PR.
 
 ## Surprises & discoveries
 
@@ -366,6 +392,17 @@ rather than as `--flag[=BOOL]`.
   eight-subset enumeration, which reaches every layer combination on every run
   by construction. A property that samples is the wrong tool for proving that a
   generator reaches a class; enumerate the classes instead.
+- Observation: adding a fourth-level heading to `CHANGELOG.md` can fail
+  `markdownlint` on a *different* entry. Evidence: the new `### Changed` under
+  `Unreleased` made the pre-existing `### Changed` under `[0.1.0-beta4]` the
+  document's second occurrence, and MD024 fires on the later duplicate, so the
+  error pointed at line 38 rather than at the heading just added. Impact: the
+  repo's idiom for this is `<!-- markdownlint-disable-next-line MD024 -->`,
+  already used seven times in the file; the fix is one comment line on the
+  *later* heading. Relaxing MD024 globally would change lint policy for every
+  document to accommodate one file, so it was rejected. A changelog edit is a
+  Markdown-lint event even when the change is prose-only, and the diagnostic
+  line number is not the edited line.
 
 ## Decision log
 
@@ -600,7 +637,7 @@ generated loader cannot silently regress it.
   injected-environment seam (never process-environment mutation).
 - Rationale: one scenario with a crisp expected value; a property would dilute
   the specification.
-- Artefact: `tests/cli_tests/merge.rs` (or a sibling), plus the
+- Artefact: `tests/cli_tests/merge/explicit_cli_wins.rs`, plus the
   `merge_precedence_proptests.rs` extension.
 - Evidence: with the CLI layer suppressed, the test must fail with 8 (env) not
   4 (cli).
