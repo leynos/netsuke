@@ -278,6 +278,19 @@ rather than as `--flag[=BOOL]`.
   [#953](https://github.com/leynos/netsuke/pull/953) with `(#951)` in the title,
   `Closes #951` and `Closes #779` in the body, and the Lody session under
   References.
+- [x] (2026-10-25) CodeScene de-duplication on PR #953. The
+  `CodeScene Code Health Review (main)` check failed with "Enforce advisory
+  code health rules (1 file with Code Duplication)" against
+  `tests/boolean_flag_spelling_tests.rs`, score 9.39. `cs check` reproduced the
+  verdict locally (9.38) and named both sites: lines 133 and 156, the two
+  parameterized rejection tests, whose bodies repeated the same sandbox → run →
+  label → assert sequence. Fixed by extracting
+  `rejected_stderr(arguments, expected_status)`, which owns the one copy of the
+  sequence and lets each `#[case]` keep only the message assertion its contract
+  names. Re-measured: 10.00, no warnings. All eleven cases still pass. The
+  check's "Suppress" link was not used: `AGENTS.md` names duplicated code as a
+  refactoring trigger, and suppressing an advisory rule on a test file added by
+  this branch would have kept the duplication.
 
 ## Surprises & discoveries
 
@@ -418,6 +431,16 @@ rather than as `--flag[=BOOL]`.
 
 ## Decision log
 
+- Decision: answer the CodeScene Code Duplication advisory on
+  `tests/boolean_flag_spelling_tests.rs` by extracting a helper, not by using
+  the check's "Suppress" link. Rationale: the duplication was real — two
+  parameterized tests repeated a four-step arrange/act/assert sequence that the
+  third test also needed — so suppression would have preserved the defect and
+  moved it out of measurement. `AGENTS.md` lists duplicated code as a
+  refactoring trigger and directs replacing duplicated tests with
+  `#[rstest(...)]` parameterized cases; the extraction follows that, and the
+  score moved 9.38 → 10.00 with all eleven cases still green. Date/Author:
+  2026-10-25, agent.
 - Decision: import the v0.10.0 users' guide **over** the existing
   `docs/ortho-config-users-guide.md`, and add the v0.10.0 migration guide
   alongside the retained v0.9.0 one. Rationale: matches the brief's "replace an

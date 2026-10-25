@@ -49,8 +49,17 @@ fn run_netsuke(workspace: &Path, home: &Path, arguments: &[&str]) -> Result<Outp
         .context("run netsuke with boolean arguments")
 }
 
-/// Assert a case's status code and that standard output stayed empty.
-fn assert_rejected(output: &Output, expected_status: i32, case: &str) -> Result<String> {
+/// Run a rejection case in a fresh sandbox and return its normalized standard
+/// error.
+///
+/// Every rejection case needs the same three facts: an isolated workspace, the
+/// exact exit status, and a message with Fluent isolates normalized. Each
+/// `#[case]` therefore supplies only the argument vector and the status it
+/// should produce, and stays free to assert the message its own contract names.
+fn rejected_stderr(arguments: &[&str], expected_status: i32) -> Result<String> {
+    let (workspace, home) = sandbox()?;
+    let output = run_netsuke(workspace.path(), home.path(), arguments)?;
+    let case = arguments.join(" ");
     ensure!(
         output.status.code() == Some(expected_status),
         "{case} should exit {expected_status}, got {:?}",
@@ -133,13 +142,11 @@ fn a_bare_subcommand_switch_is_accepted_and_applied() -> Result<()> {
 fn an_equals_attached_value_is_rejected_as_an_unexpected_value(
     #[case] arguments: &[&str],
 ) -> Result<()> {
-    let (workspace, home) = sandbox()?;
-    let output = run_netsuke(workspace.path(), home.path(), arguments)?;
-    let case = arguments.join(" ");
-    let stderr = assert_rejected(&output, 2, &case)?;
+    let stderr = rejected_stderr(arguments, 2)?;
     ensure!(
         stderr.contains("unexpected value 'false'"),
-        "{case} should report an unexpected value, got: {stderr}"
+        "{} should report an unexpected value, got: {stderr}",
+        arguments.join(" "),
     );
     Ok(())
 }
@@ -157,13 +164,11 @@ fn a_space_separated_value_is_rejected_as_a_stray_word(
     #[case] arguments: &[&str],
     #[case] expected_message: &str,
 ) -> Result<()> {
-    let (workspace, home) = sandbox()?;
-    let output = run_netsuke(workspace.path(), home.path(), arguments)?;
-    let case = arguments.join(" ");
-    let stderr = assert_rejected(&output, 2, &case)?;
+    let stderr = rejected_stderr(arguments, 2)?;
     ensure!(
         stderr.contains(expected_message) && stderr.contains("false"),
-        "{case} should report {expected_message:?} naming `false`, got: {stderr}"
+        "{} should report {expected_message:?} naming `false`, got: {stderr}",
+        arguments.join(" "),
     );
     Ok(())
 }
@@ -178,9 +183,7 @@ fn a_space_separated_value_is_rejected_as_a_stray_word(
 /// acceptance: the `false` word is still rejected.
 #[rstest]
 fn json_with_a_space_separated_value_keeps_its_json_diagnostics() -> Result<()> {
-    let (workspace, home) = sandbox()?;
-    let output = run_netsuke(workspace.path(), home.path(), &["--json", "false", "graph"])?;
-    let stderr = assert_rejected(&output, 1, "--json false graph")?;
+    let stderr = rejected_stderr(&["--json", "false", "graph"], 1)?;
 
     let document: serde_json::Value =
         serde_json::from_str(&stderr).context("--json false should route a JSON document")?;
