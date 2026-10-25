@@ -1,10 +1,9 @@
-"""Read what crates.io answered, without deciding what it means.
+"""Adapt crates.io transport responses into typed release observations.
 
-The registry replies in two shapes, and both carry the fields a publication
-decision needs. Reading them is mechanical: parse the JSON, find the version
-records, pick out the number, the checksum, and the yank flag. Deciding
-whether those facts permit a publish is the caller's job, and lives in
-:mod:`release_reconcile_crates`.
+The registry replies in two JSON shapes and uses HTTP status codes to report
+absence and transient failures. This adapter owns that transport vocabulary:
+it maps status and schema into domain observations, leaving
+:mod:`release_reconcile_crates` to decide what those facts permit.
 
 Keeping the two apart is what lets each be reviewed on its own terms. This
 module is where a schema surprise belongs — a record without a checksum, a
@@ -27,7 +26,15 @@ it in. Coverage lives in ``scripts/tests/test_release_reconcile_crates.py``.
 """
 
 import json
-import typing as typ
+
+from release_reconcile_crates import (
+    RegistryAbsent,
+    RegistryIndeterminate,
+    RegistryObservation,
+    RegistrySingleVersion,
+    RegistryVersion,
+    RegistryVersionHistory,
+)
 
 #: Top-level key in a *crate* response: an array of every version.
 VERSIONS_KEY = "versions"
@@ -37,6 +44,12 @@ VERSION_KEY = "version"
 
 #: Top-level key naming the crate metadata object in a crate response.
 CRATE_KEY = "crate"
+
+#: HTTP status for a successful registry response.
+HTTP_OK = 200
+
+#: HTTP status the registry uses when a version key is absent.
+HTTP_NOT_FOUND = 404
 
 #: Count of versions the crate endpoint states the history holds.
 NUM_VERSIONS_KEY = "num_versions"
@@ -55,34 +68,7 @@ class RegistryResponseError(ValueError):
     """Report a response body that is not the JSON shape the registry sends."""
 
 
-class VersionRecord(typ.NamedTuple):
-    """Carry the fields of one registry version record this code reads."""
-
-    #: The version the record describes, as the registry spells it, or ``None``
-    #: when the record carried no usable number.
-    num: str | None
-
-    #: The authoritative SHA-256 of that version's ``.crate``.
-    checksum: str
-
-    #: Whether the version's maintainers withdrew it.
-    is_yanked: bool
-
-
-class RegistryAnswer(typ.NamedTuple):
-    """Carry a readable answer's records, and what kind of answer it was."""
-
-    #: Whether the body listed a crate's whole history rather than one version.
-    is_history: bool
-
-    #: How many versions the body says the history holds, if it says at all.
-    stated_total: int | None
-
-    #: The version records the body carried.
-    records: list[VersionRecord]
-
-
-def _raw_records(parsed: object) -> list[object]:
+def _raw_records(parsed: object) -> tuple[bool, list[object]]:
     """Return the version records from a parsed crates.io response.
 
     Parameters
@@ -92,9 +78,8 @@ def _raw_records(parsed: object) -> list[object]:
 
     Returns
     -------
-    list[object]
-        Either the one record from a version response, or every record from a
-        crate response.
+    tuple[bool, list[object]]
+        Whether this is a history response and its raw version records.
 
     Raises
     ------
@@ -113,10 +98,10 @@ def _raw_records(parsed: object) -> list[object]:
         raise RegistryResponseError(msg)
     single = parsed.get(VERSION_KEY)
     if isinstance(single, dict):
-        return [single]
+        return False, [single]
     many = parsed.get(VERSIONS_KEY)
     if isinstance(many, list):
-        return many
+        return True, many
     msg = (
         f"registry response carries neither a {VERSION_KEY!r} object nor a "
         f"{VERSIONS_KEY!r} list: {parsed!r}"
@@ -124,7 +109,7 @@ def _raw_records(parsed: object) -> list[object]:
     raise RegistryResponseError(msg)
 
 
-def _record_fields(versions: list[object]) -> list[VersionRecord]:
+def _record_fields(versions: list[object]) -> tuple[RegistryVersion, ...]:
     """Return the fields this code reads from each version record.
 
     Parameters
@@ -134,41 +119,61 @@ def _record_fields(versions: list[object]) -> list[VersionRecord]:
 
     Returns
     -------
-    list[VersionRecord]
+    tuple[RegistryVersion, ...]
         One record per entry, in the order the registry listed them.
 
     Raises
     ------
     RegistryResponseError
-        If a version record is not an object or carries no usable checksum.
+        If a version record is not an object or carries no usable number or
+        checksum.
 
     Notes
     -----
-    A missing ``num`` is not an error here. The registry does send it — every
-    record on both shapes carried it at the 2026-10-23 probe — but a body that
-    omits it is still a body whose checksum and yank flag can be read, and
-    refusing it would widen this module's authority over the caller's
-    vocabulary. The record is kept with ``num=None``, and what that means for
-    a version filter is stated where the filter is applied.
+    A missing or non-string ``num`` is rejected rather than represented as
+    absence. In a history answer, an unnumbered record could be the intended
+    version; treating it as absent would plan a duplicate publication.
     """
-    records: list[VersionRecord] = []
+    records: list[RegistryVersion] = []
     for version in versions:
         if not isinstance(version, dict):
             msg = f"registry version record is not an object: {version!r}"
             raise RegistryResponseError(msg)
-        checksum = version.get(CHECKSUM_KEY)
-        if not isinstance(checksum, str) or not checksum:
-            msg = f"registry version record carries no checksum: {version!r}"
-            raise RegistryResponseError(msg)
-        num = version.get(NUM_KEY)
-        records.append(
-            VersionRecord(
-                num=num if isinstance(num, str) else None,
-                checksum=checksum,
-                is_yanked=bool(version.get(YANKED_KEY, False)),
-            )
-        )
-    return records
+        records.append(_version_record(version))
+    return tuple(records)
+
+
+def _version_record(version: dict[object, object]) -> RegistryVersion:
+    """Validate and return the fields this adapter reads from one record.
+
+    Returns
+    -------
+    RegistryVersion
+        The version number, checksum, and yank state used by reconciliation.
+
+    Raises
+    ------
+    RegistryResponseError
+        If the record has no usable version number or checksum.
+
+    Examples
+    --------
+    >>> _version_record({"num": "1.0.0", "checksum": "ab"})
+    RegistryVersion(num='1.0.0', checksum='ab', is_yanked=False)
+    """
+    num = version.get(NUM_KEY)
+    if not isinstance(num, str) or not num:
+        msg = f"registry version record carries no usable number: {version!r}"
+        raise RegistryResponseError(msg)
+    checksum = version.get(CHECKSUM_KEY)
+    if not isinstance(checksum, str) or not checksum:
+        msg = f"registry version record carries no checksum: {version!r}"
+        raise RegistryResponseError(msg)
+    return RegistryVersion(
+        num=num,
+        checksum=checksum,
+        is_yanked=bool(version.get(YANKED_KEY)),
+    )
 
 
 def _stated_total(parsed: object) -> int | None:
@@ -182,65 +187,131 @@ def _stated_total(parsed: object) -> int | None:
     return stated if isinstance(stated, int) else None
 
 
-def read_registry_response(body: str | None) -> RegistryAnswer | None:
-    """Return the version records a readable response body carries.
+def _history_is_complete(
+    *,
+    is_history: bool,
+    stated_total: int | None,
+    records: tuple[RegistryVersion, ...],
+) -> bool:
+    """Report whether an advertised version history has every stated record.
+
+    Returns
+    -------
+    bool
+        ``True`` for a single-version response or a complete history.
+
+    Examples
+    --------
+    >>> _history_is_complete(
+    ...     is_history=True,
+    ...     stated_total=1,
+    ...     records=(RegistryVersion("1.0.0", "ab", is_yanked=False),),
+    ... )
+    True
+    """
+    if not is_history or stated_total is None:
+        return True
+    return stated_total == len(records)
+
+
+def observe_registry_response(status: int, body: str | None) -> RegistryObservation:
+    """Map an HTTP response into a domain observation.
 
     Parameters
     ----------
+    status
+        HTTP status returned by crates.io.
     body
         Response body as recorded, or ``None`` when the response had none.
 
     Returns
     -------
-    RegistryAnswer | None
-        The records the body carried and what kind of answer it was, or
-        ``None`` when the body is not a readable answer at all.
+    RegistryObservation
+        An absent, indeterminate, or readable version observation.
 
     Notes
     -----
-    ``None`` and "no records" are deliberately different answers, so the
-    return is optional rather than an empty answer. An absent or unparseable
-    body is a transient or proxied reply the caller may retry; a body that
-    parses and does not fit is a schema surprise, which is why the error is
-    raised rather than folded into ``None``. Collapsing the two would let a
-    wrong assumption about the registry's schema look like a bad connection.
+    HTTP 404 is the registry's absence observation; every other non-200 status
+    and an absent or non-JSON body are indeterminate. A body that parses but
+    does not fit either documented shape is a schema surprise, which raises
+    :class:`RegistryResponseError` rather than being folded into uncertainty.
 
     A body that is JSON but neither crates.io shape, or one carrying a version
     record this module cannot read, raises :class:`RegistryResponseError`.
-    Neither condition is detected here: :func:`_raw_records` and
-    :func:`_record_fields` raise it while the parse is being unpacked, which
-    is where the shape is actually read.
+    The parsing helpers raise it while unpacking the parsed body, where the
+    response shape and records are actually read.
 
     Examples
     --------
-    >>> read_registry_response(None) is None
-    True
-    >>> read_registry_response("not json") is None
-    True
-    >>> answer = read_registry_response(
-    ...     '{"version": {"num": "1.0.0", "checksum": "ab"}}'
+    >>> observe_registry_response(404, None)
+    RegistryAbsent()
+    >>> observe_registry_response(503, "ignored")
+    RegistryIndeterminate()
+    >>> answer = observe_registry_response(
+    ...     200, '{"version": {"num": "1.0.0", "checksum": "ab"}}'
     ... )
-    >>> answer.is_history, answer.stated_total
-    (False, None)
-    >>> answer.records
-    [VersionRecord(num='1.0.0', checksum='ab', is_yanked=False)]
-    >>> history = read_registry_response(
-    ...     '{"crate": {"num_versions": 1}, '
-    ...     '"versions": [{"num": "1.0.0", "checksum": "ab"}]}'
-    ... )
-    >>> history.is_history, history.stated_total
-    (True, 1)
+    >>> answer.record
+    RegistryVersion(num='1.0.0', checksum='ab', is_yanked=False)
     """
-    if body is None:
-        # A 200 with no body is not a readable answer, whatever it claims.
-        return None
+    if status == HTTP_NOT_FOUND:
+        return RegistryAbsent()
+    if status != HTTP_OK or body is None:
+        return RegistryIndeterminate()
     try:
         parsed = json.loads(body)
     except json.JSONDecodeError:
-        return None
-    return RegistryAnswer(
-        is_history=isinstance(parsed, dict)
-        and isinstance(parsed.get(VERSIONS_KEY), list),
-        stated_total=_stated_total(parsed),
-        records=_record_fields(_raw_records(parsed)),
-    )
+        return RegistryIndeterminate()
+    return _observe_parsed_response(parsed)
+
+
+def _observe_parsed_response(parsed: object) -> RegistryObservation:
+    """Reconcile a decoded response body into its typed registry observation.
+
+    Returns
+    -------
+    RegistryObservation
+        A history, one version, or an indeterminate response when the
+        advertised history is incomplete.
+
+    Examples
+    --------
+    >>> isinstance(
+    ...     _observe_parsed_response(
+    ...         {"version": {"num": "1.0.0", "checksum": "ab"}}
+    ...     ),
+    ...     RegistrySingleVersion,
+    ... )
+    True
+    """
+    is_history, raw_records = _raw_records(parsed)
+    records = _record_fields(raw_records)
+    stated_total = _stated_total(parsed)
+    if not _history_is_complete(
+        is_history=is_history, stated_total=stated_total, records=records
+    ):
+        return RegistryIndeterminate()
+    return _observation_for_records(records, is_history=is_history)
+
+
+def _observation_for_records(
+    records: tuple[RegistryVersion, ...], *, is_history: bool
+) -> RegistryObservation:
+    """Build the typed observation for successfully read version records.
+
+    Returns
+    -------
+    RegistryObservation
+        A version history or one version record, according to the response.
+
+    Examples
+    --------
+    >>> record = RegistryVersion("1.0.0", "ab", is_yanked=False)
+    >>> isinstance(
+    ...     _observation_for_records((record,), is_history=False),
+    ...     RegistrySingleVersion,
+    ... )
+    True
+    """
+    if is_history:
+        return RegistryVersionHistory(records=records)
+    return RegistrySingleVersion(record=records[0])

@@ -16,37 +16,16 @@ is that release's verdict written down.
 """
 
 import dataclasses
-import typing as typ
 
 import pytest
 import release_inventory
 from hypothesis import example, given, settings
 from hypothesis import strategies as st
 
-if typ.TYPE_CHECKING:
-    from pathlib import Path
-
 ARCHIVE = "netsuke-build-0.1.0-beta4-x86_64-unknown-linux-gnu.tar.gz"
 SIDECAR = f"{ARCHIVE}.sha256"
 BIN = "netsuke"
 DECLARED = (ARCHIVE, SIDECAR, BIN)
-
-STAGING_CONFIG = """\
-[common]
-bin_name = "netsuke"
-
-[common.binstall]
-enabled = true
-
-[targets.linux-x86_64]
-target = "x86_64-unknown-linux-gnu"
-"""
-
-MANIFEST = """\
-[package]
-name = "netsuke-build"
-version = "9.9.9"
-"""
 
 
 def _published(name: str, size: int = 1) -> release_inventory.PublishedAsset:
@@ -164,39 +143,6 @@ def test_a_published_asset_is_immutable() -> None:
     rewritten = "name"
     with pytest.raises(dataclasses.FrozenInstanceError):
         setattr(asset, rewritten, "other")
-
-
-def test_binstall_names_declare_every_archive_and_its_sidecar(tmp_path: Path) -> None:
-    """Derive both the archive and its sidecar for every staged target.
-
-    The derivation is not restated here: it delegates to the hoist's own
-    ``expected_archive_names``, so this test would fail if the inventory and
-    the hoist ever disagreed about what an archive is called.
-    """
-    staging = tmp_path / "release-staging.toml"
-    staging.write_text(STAGING_CONFIG, encoding="utf-8")
-    manifest = tmp_path / "Cargo.toml"
-    manifest.write_text(MANIFEST, encoding="utf-8")
-
-    names = release_inventory.binstall_asset_names(staging, manifest, "9.9.9")
-
-    archive = "netsuke-build-9.9.9-x86_64-unknown-linux-gnu.tar.gz"
-    assert names == (archive, f"{archive}.sha256"), (
-        "a declared target must contribute both its archive and its sidecar"
-    )
-
-
-def test_the_observed_inventory_names_each_file_and_its_size(tmp_path: Path) -> None:
-    """Read each regular file's bare name and byte size from the staging directory."""
-    (tmp_path / "netsuke").write_bytes(b"binary")
-    (tmp_path / "netsuke.sha256").write_text("checksum", encoding="utf-8")
-
-    observed = release_inventory.read_inventory(tmp_path)
-
-    assert [(asset.name, asset.size) for asset in observed] == [
-        ("netsuke", 6),
-        ("netsuke.sha256", 8),
-    ], "the reader must report each file's name and its byte size"
 
 
 _SAFE_NAME = st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,20}", fullmatch=True)

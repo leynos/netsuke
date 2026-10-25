@@ -2371,12 +2371,12 @@ durable decision.
 Publishing a release is split in two, and the split is the design rather than
 an accident of layering. The workflow is the only place that touches a network:
 it checks out, builds, packages, uploads artefacts, and calls the GitHub
-release API. Everything that decides *what* a published byte is lives in a
-Python module under `scripts/` that reads files and returns a value, so
-identity resolution, asset declaration, inventory checking, and re-run
-reconciliation can be exercised without a release existing. The boundary is
-held by a contract test rather than by convention; see
-[Offline policy modules](#offline-policy-modules).
+release API. Python policy modules decide what a published byte is from
+in-memory names, mappings, digests, and typed observations. CLI and adapter
+modules own filesystem access, serialization, registry response shapes, and
+GitHub's digest spelling. This keeps decisions independently testable without a
+release and makes the external formats visible at named boundaries; the
+contract tests hold that split as well as the no-network rule.
 
 ### The release job graph
 
@@ -2436,27 +2436,31 @@ one from the other.
 *Table 2: The package-versus-binary identity contract.* (ADR-0007 records why
 the crate cannot be called `netsuke`.)
 
-The release publishes a flat set of twenty names: the six cargo-binstall
-archives, one `.sha256` sidecar for each, and eight operating-system packages.
-No name is hard-coded in the workflow. Archives and sidecars are derived from
-`.github/release-staging.toml` through
-`release_inventory.binstall_asset_names`, while the packages are counted from
-the staged tree against the per-platform format list in
+The trusted-publication plan targets a flat set of twenty names: the six
+cargo-binstall archives, one `.sha256` sidecar for each, and eight
+operating-system packages. This is the planned declaration, not the current
+release workflow's output, which contains twenty-nine names. No name is
+hard-coded in the planned declaration. Archive names and sidecars come from the
+hoist adapter's `expected_archive_names` function, while packages are counted
+from the staged tree against the per-platform format list in
 `release_package_formats.PLATFORM_FORMATS` — two `.deb` and two `.rpm` for
 Linux, two `.pkg` for macOS, two `.msi` for Windows.
 
 | Source                                          | Names it contributes                |
 | ----------------------------------------------- | ----------------------------------- |
-| `release_inventory.binstall_asset_names`        | six archives and their six sidecars |
+| Hoist adapter's `expected_archive_names`        | six archives and their six sidecars |
 | `PLATFORM_FORMATS` held against the staged tree | eight operating-system packages     |
 
-*Table 3: The two sources of the twenty-name declaration.*
+*Table 3: The two sources of the planned twenty-name declaration.*
 
 Holding the staged tree to a count is what makes a failed package build a
-refusal rather than a smaller declaration. `release_declaration.published_name`
-normalizes the single character that differs between staging and publication: a
-`~` in a `.deb` or `.rpm` prerelease name becomes `.`. Every other name is
-published as staged.
+refusal rather than a smaller declaration. The
+`release_github_assets_adapter.published_asset_name` adapter normalizes the one
+character GitHub changes in a prerelease package name: `~` becomes `.`. The
+declaration CLI applies that mapping before it calls the policy module, and the
+staged-digest collector uses the same function to find the corresponding file.
+Those two boundary modules are the only production callers; policy modules
+accept GitHub-visible names and do not apply provider-specific transformations.
 
 ### Trusted digest records
 
@@ -2483,15 +2487,16 @@ sidecar beside it, and the download still agrees perfectly. Comparing each
 downloaded asset against a record written before upload is what makes either
 substitution visible.
 
-`release_digest_record` owns the record's shape and every refusal, so the
-producer and both consumers cannot disagree about what a usable record is. A
-record that is unreadable, is not a JSON object, carries no `assets` member,
-carries an empty or non-mapping one, or maps a name to something that is not a
-hexadecimal SHA-256 digest is refused. An unreadable path raises the narrower
-`UnreadableDigestRecordError` so a consumer can tell a wiring fault from a
-content fault. A vacuous default — reading a missing `assets` member as an
-empty mapping — would plan no work and refuse nothing, and every consumer reads
-this record as permission to act on a release.
+`release_digest_record` owns the record's in-memory shape and every refusal,
+while `release_digest_record_files` reads or writes its JSON representation.
+The producer and both consumers therefore cannot disagree about what a usable
+record is. A record that is unreadable, is not a JSON object, carries no
+`assets` member, carries an empty or non-mapping one, or maps a name to
+something that is not a hexadecimal SHA-256 digest is refused. An unreadable
+path raises the narrower `UnreadableDigestRecordError` so a consumer can tell a
+wiring fault from a content fault. A vacuous default — reading a missing
+`assets` member as an empty mapping — would plan no work and refuse nothing,
+and every consumer reads this record as permission to act on a release.
 
 The inventory verifier records each asset's **own** digest, sidecars included.
 A sidecar is first checked against the archive beside it, which proves the
@@ -2526,20 +2531,25 @@ published digest is a promise to whoever already downloaded it, so
 reconciliation never clobbers: a conflicting asset stops the release.
 
 On the registry side the equivalent question is per version, not per crate.
-`release_reconcile_crates.classify_registry_state` takes the intended version
-and returns one of five states: absent, identical, conflict, yanked, or
-indeterminate. It has to select by version because the crate endpoint answers
-with a crate's entire publication history — the 2026-10-23 probe of `serde`
-returned all 316 versions — so asking "is this version yanked?" of the whole
-list would make one old yank decide every future release. Guessing absence from
-an unrecognized response would publish over a version that already exists, so
-an unreadable body is indeterminate rather than absent.
+`release_registry_response.observe_registry_response` maps the recorded HTTP
+status and JSON body into typed observations;
+`release_reconcile_crates.classify_registry_state` compares those observations
+with the intended version and digest and returns one of five states: absent,
+identical, conflict, yanked, or indeterminate. It has to select by version
+because the crate endpoint answers with a crate's entire publication history —
+the 2026-10-23 probe of `serde` returned all 316 versions — so asking "is this
+version yanked?" of the whole list would make one old yank decide every future
+release. Guessing absence from an unrecognized response would publish over a
+version that already exists, so an unreadable body is indeterminate rather than
+absent.
 
 Reading the status is not uniform across the two hosts. Both crates.io API
 endpoints answer a 404 with different prose, while an absent object on
-`static.crates.io` answers **403** rather than 404. `verify_crates_io_bytes`
-therefore accepts both as absence; a verifier that treated 403 as an error
-would report a healthy unpublished crate as broken.
+`static.crates.io` answers **403** rather than 404.
+`release_crates_io_adapter.observe_download_file` maps both to an absent
+observation; a verifier that treated 403 as an error would report a healthy
+unpublished crate as broken. The adapter hashes a successful download and
+passes only that digest to `verify_crates_io_bytes`.
 
 `publish_crates_io_cli` exposes the same decision as two subcommands.
 `classify` reads a registry response and says what to do next, and `verify`
@@ -2547,23 +2557,56 @@ checks downloaded crate bytes against a recorded digest. Each exits 0 on
 success, 1 when an action is required, 2 when verification failed, and 64 on a
 usage error.
 
-### Offline policy modules
+### Policy and adapter boundaries
 
-The twenty modules that make up the release-policy surface must not reach the
-network. `tests/workflow_contracts/release_publication_imports.py` decides that
-property from the import list, and the behaviour is deliberate:
-`import urllib.request`, `from urllib import request`, and
+The policy modules make decisions from values that their callers have already
+parsed. They do not read paths, parse JSON or TOML, inspect HTTP status codes,
+or interpret provider-specific digest strings. The surrounding modules own
+those operations at the file or transport boundary:
+
+- `release_candidate` exposes a stable mapping; `release_candidate_cli`
+  serializes it, while `release_identity_record` validates a decoded mapping.
+- `release_digest` parses and compares sidecar text and digest strings.
+  `release_digest_files` hashes files and reads sidecars; the package CLI,
+  staged-digest collector, inventory verifier, and crates.io adapter are its
+  only production callers. `release_staged_digests` scans the staged tree and
+  hashes exactly the declared names for `release_declaration_cli`.
+- `release_digest_record` validates in-memory digest mappings.
+  `release_digest_record_files` owns JSON and path errors; declaration writes
+  through it, and inventory verification and finalization read through it.
+- `release_declaration` derives names from parsed target facts and staged
+  basenames. `release_declaration_cli` reads TOML, asks the hoist adapter for
+  archive names, scans the staged tree, and passes those observations in.
+- `release_inventory` checks `PublishedAsset` names and sizes.
+  `verify_release_inventory_cli` scans the directory and constructs those
+  values before calling the policy.
+- `release_registry_response` maps crates.io status and JSON schema into typed
+  observations for `release_reconcile_crates`. `release_crates_io_adapter` maps
+  download status and file bytes into a `DownloadObservation` for
+  `verify_crates_io_bytes`.
+- `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
+  `release_reconcile_github` receives bare digests and only plans actions.
+
+Each adapter has a narrow scope and named callers. File adapters do not own
+release policy, response adapters do not choose whether a run publishes, and
+policy modules do not grow convenience access to these boundaries. Composition
+stays in the existing CLIs rather than in a general-purpose port layer.
+
+Every release-publication source module must remain network-free.
+`tests/workflow_contracts/release_publication_boundary_test.py` checks that
+property with helpers from `release_publication_imports.py`, and the behaviour
+is deliberate: `import urllib.request`, `from urllib import request`, and
 `import urllib.request as fetch` all reach the same client, while
 `import release_digest` reaches nothing. `NETWORK_MODULES` bans the clients
 and, by naming a package, bans its submodules with it.
 
-`test_policy_modules_import_no_network_client` applies that predicate to every
-module the `test-release-publication` target names, and the check is
-mutation-tested: `test_the_no_network_check_would_notice_an_offender` supplies
-four offenders and three clean imports, so a predicate that never fired cannot
-pass by having nothing to check. The boundary is what keeps a decision testable
-without a release, and adding a network client to one of those modules is a
-design change rather than a small convenience.
+`test_release_sources_import_no_network_client` applies that predicate to every
+source module named by `test-release-publication`. The same contract applies
+`policy_boundary_offenders` to the pure `POLICY_MODULES` list, rejecting file,
+serialization, HTTP-status, and provider-format work there. Both detectors have
+positive controls, so either check fails if its predicate stops matching.
+Adding a network client or moving an external format into policy is a design
+change, not a small convenience.
 
 ### The `package-crate` composite action
 
@@ -2608,7 +2651,7 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the sixteen `scripts/tests/test_*.py`
+`make test-release-publication` runs the twenty `scripts/tests/test_*.py`
 modules for the release-policy CLIs and their library modules, then runs the
 same source modules under `--doctest-modules`, so the examples in their
 docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,

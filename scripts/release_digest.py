@@ -1,4 +1,4 @@
-"""Compare published bytes with the digest a release recorded for them.
+"""Parse and compare release digests using only in-memory values.
 
 A release publishes a file and, beside it, a ``.sha256`` sidecar. The sidecar
 is the release's own claim about the bytes; the file is the bytes. Neither
@@ -17,15 +17,14 @@ Where a digest arrives from an untrusted source, :func:`constant_time_equal`
 compares it without revealing, through timing, how much of the expected value
 a guess matched.
 
-Nothing here performs network I/O; callers supply already-downloaded paths.
+File reads and hashing live in :mod:`release_digest_files`; this module owns
+the digest and sidecar rules applied to their in-memory values.
 
 Run via the release workflow's inventory verification; behavioural coverage
 lives in ``scripts/tests/test_release_digest.py``.
 """
 
-import hashlib
 import hmac
-import pathlib
 import re
 
 #: Hexadecimal digits in a SHA-256 digest.
@@ -53,42 +52,6 @@ class MalformedSidecarError(DigestError):
 
 class DigestMismatchError(DigestError):
     """Report bytes whose digest is not the one recorded for them."""
-
-
-def digest_of_file(path: pathlib.Path) -> str:
-    """Return the lowercase hexadecimal SHA-256 of the file at ``path``.
-
-    Parameters
-    ----------
-    path
-        File to hash.
-
-    Returns
-    -------
-    str
-        Sixty-four lowercase hexadecimal characters.
-
-    Notes
-    -----
-    The file is read in blocks rather than whole. The inputs include release
-    archives and a ``.crate``, so hashing one by loading it entirely would
-    make the verifier's memory use a function of the artefact's size.
-
-    Examples
-    --------
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     sample = Path(tmp) / "hello.txt"
-    ...     _ = sample.write_bytes(b"netsuke")
-    ...     digest_of_file(sample)
-    '79e4b991b14ef4d874ee27ff97dc10f5873a452496ac92c3d234e9ca46207b85'
-    """
-    hasher = hashlib.sha256()
-    with path.open("rb") as handle:
-        for block in iter(lambda: handle.read(1024 * 1024), b""):
-            hasher.update(block)
-    return hasher.hexdigest()
 
 
 def parse_sidecar(text: str) -> tuple[str, str]:
@@ -130,17 +93,11 @@ def parse_sidecar(text: str) -> tuple[str, str]:
 
     Examples
     --------
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     asset = Path(tmp) / "netsuke-linux-x86_64"
-    ...     _ = asset.write_bytes(b"netsuke")
-    ...     recorded = (
-    ...         digest_of_file(asset)
-    ...         + "  artifacts/linux-x86_64/netsuke-linux-x86_64"
-    ...     )
-    ...     digest, name = parse_sidecar(recorded)
-    ...     (name, digest == digest_of_file(asset))
+    >>> import hashlib
+    >>> digest = hashlib.sha256(b"netsuke").hexdigest()
+    >>> recorded = digest + "  artifacts/linux-x86_64/netsuke-linux-x86_64"
+    >>> parsed_digest, name = parse_sidecar(recorded)
+    >>> (name, parsed_digest == digest)
     ('netsuke-linux-x86_64', True)
     >>> parse_sidecar("not a checksum")  # doctest: +ELLIPSIS
     Traceback (most recent call last):
@@ -156,7 +113,7 @@ def parse_sidecar(text: str) -> tuple[str, str]:
     if recorded.startswith("\\"):
         msg = f"sidecar records an escaped path, which no asset name can be: {line!r}"
         raise MalformedSidecarError(msg)
-    name = pathlib.PurePosixPath(recorded).name
+    name = recorded.rsplit("/", maxsplit=1)[-1]
     if not name:
         msg = f"sidecar names no file: {line!r}"
         raise MalformedSidecarError(msg)
@@ -197,61 +154,52 @@ def constant_time_equal(left: str, right: str) -> bool:
     return hmac.compare_digest(left.lower().encode(), right.lower().encode())
 
 
-def verify_file_against_sidecar(path: pathlib.Path) -> str:
-    """Require ``path``'s bytes to match the sidecar written beside it.
+def verify_sidecar(asset_name: str, actual_digest: str, sidecar_text: str) -> str:
+    """Require an in-memory digest and sidecar to describe the same asset.
 
     Parameters
     ----------
-    path
-        The published file, whose ``.sha256`` sibling is read.
+    asset_name
+        Bare name of the asset whose bytes were hashed by the adapter.
+    actual_digest
+        Digest computed from those bytes.
+    sidecar_text
+        Text read from the asset's ``.sha256`` sibling.
 
     Returns
     -------
     str
-        The verified digest, for a caller to compare against the trusted
-        identity record's value.
+        The verified digest.
 
     Raises
     ------
     MalformedSidecarError
-        If the sidecar is malformed, or if it records a digest for a
-        differently named file.
+        If the sidecar is malformed or names a different asset.
     DigestMismatchError
-        If the file's digest is not the one its sidecar records.
-
-    Notes
-    -----
-    The sidecar must describe *this* file. A sidecar copied or renamed beside
-    the wrong file would otherwise confirm a digest that is perfectly valid
-    for something else, so the recorded name is required to match before the
-    bytes are trusted.
+        If the recorded digest differs from ``actual_digest``.
 
     Examples
     --------
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     asset = Path(tmp) / "asset.bin"
-    ...     _ = asset.write_bytes(b"netsuke")
-    ...     recorded = digest_of_file(asset) + "  dist/asset.bin" + chr(10)
-    ...     _ = (Path(tmp) / "asset.bin.sha256").write_text(
-    ...         recorded, encoding="utf-8"
-    ...     )
-    ...     verify_file_against_sidecar(asset) == digest_of_file(asset)
+    >>> digest = "ab" * 32
+    >>> verify_sidecar("asset.bin", digest, digest + "  dist/asset.bin") == digest
     True
+    >>> verify_sidecar(
+    ...     "other.bin", digest, digest + "  dist/asset.bin"
+    ... )  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+        ...
+    release_digest.MalformedSidecarError: other.bin.sha256 ...
     """
-    sidecar = path.with_name(f"{path.name}.sha256")
-    recorded_digest, recorded_name = parse_sidecar(sidecar.read_text(encoding="utf-8"))
-    if recorded_name != path.name:
+    recorded_digest, recorded_name = parse_sidecar(sidecar_text)
+    if recorded_name != asset_name:
         msg = (
-            f"{sidecar.name} records a digest for {recorded_name!r}, not for "
-            f"{path.name!r}"
+            f"{asset_name}.sha256 records a digest for {recorded_name!r}, not for "
+            f"{asset_name!r}"
         )
         raise MalformedSidecarError(msg)
-    actual_digest = digest_of_file(path)
     if not constant_time_equal(actual_digest, recorded_digest):
         msg = (
-            f"{path.name} hashes to {actual_digest}, but its sidecar records "
+            f"{asset_name} hashes to {actual_digest}, but its sidecar records "
             f"{recorded_digest}"
         )
         raise DigestMismatchError(msg)

@@ -1,10 +1,11 @@
-"""Validate a release's staged files against the set it declared.
+"""Validate in-memory release inventory observations against declared names.
 
 A release is only as trustworthy as the agreement between what it said it
 would publish and what it actually presents. This module states that agreement
 as exact set equality: the staged names are precisely the declared names, each
-appearing once, each a non-empty regular file, and each a bare file name that
-cannot resolve outside the directory holding it.
+appearing once, each observation non-empty, and each name a bare file name
+that cannot resolve outside the directory holding it. The CLI constructs
+observations only for regular files and does not follow symbolic links.
 
 Exact equality is the point. Checking only that every present file looks
 acceptable accepts a release that is *missing* an asset, as long as what did
@@ -13,24 +14,21 @@ its six archives' ``.sha256`` sidecars and none of the archives they describe:
 every file present passed inspection, and the release was unusable through
 ``cargo binstall``. Comparing against the declared set catches it.
 
-Nothing here performs I/O beyond reading a directory listing, and every
-rejection carries a diagnosis rather than an exit code, because
-:func:`validate_inventory` raises one error per class.
+Directory scanning and archive-name discovery belong to the release adapters.
+This module accepts observed names and sizes, and every rejection carries a
+diagnosis rather than an exit code.
 
 Run via the release workflow's inventory verification; behavioural coverage
 lives in ``scripts/tests/test_release_inventory.py``.
 """
 
 import dataclasses
-import os
 import typing as typ
 
-import hoist_binstall_discovery
 import release_asset_names
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
-    from pathlib import Path
 
 #: Appended to an archive's name to describe its checksum sidecar.
 SIDECAR_SUFFIX = ".sha256"
@@ -222,18 +220,50 @@ def _require_declared_agreement(
     """
     declared = set(expected)
     staged = set(counts)
-    absent = sorted(declared - staged)
+    absent = _missing_assets(declared, staged)
     if absent:
         msg = "declared assets were not staged: " + ", ".join(
             repr(name) for name in absent
         )
         raise MissingAssetError(msg)
-    undeclared = sorted(staged - declared)
+    undeclared = _unexpected_assets(staged, declared)
     if undeclared:
         msg = "assets were staged but never declared: " + ", ".join(
             repr(name) for name in undeclared
         )
         raise UnexpectedAssetError(msg)
+
+
+def _missing_assets(declared: set[str], staged: set[str]) -> list[str]:
+    """Return declared names that the staged tree does not contain.
+
+    Returns
+    -------
+    list[str]
+        Missing asset names in sorted order.
+
+    Examples
+    --------
+    >>> _missing_assets({"a", "b"}, {"a"})
+    ['b']
+    """
+    return sorted(declared - staged)
+
+
+def _unexpected_assets(staged: set[str], declared: set[str]) -> list[str]:
+    """Return staged names absent from the release declaration.
+
+    Returns
+    -------
+    list[str]
+        Unexpected asset names in sorted order.
+
+    Examples
+    --------
+    >>> _unexpected_assets({"a", "extra"}, {"a"})
+    ['extra']
+    """
+    return sorted(staged - declared)
 
 
 def validate_inventory(
@@ -273,67 +303,3 @@ def validate_inventory(
     _require_safe_names(assets)
     counts = _require_usable_entries(assets)
     _require_declared_agreement(counts, expected=expected)
-
-
-def binstall_asset_names(
-    staging_config: Path, manifest: Path, version: str
-) -> tuple[str, ...]:
-    """Declare the archive and sidecar each staged target contributes.
-
-    Parameters
-    ----------
-    staging_config
-        Path to ``.github/release-staging.toml``.
-    manifest
-        Path to the Cargo manifest naming the package.
-    version
-        Release version interpolated into each archive name.
-
-    Returns
-    -------
-    tuple[str, ...]
-        Each target's archive immediately followed by its
-        ``.sha256`` sidecar.
-
-    Notes
-    -----
-    The archive names are not derived here. They come from
-    :func:`hoist_binstall_discovery.expected_archive_names`, so the inventory
-    and the hoist cannot drift apart about what an archive is called. This
-    function adds only the sidecar suffix the hoist stages beside each archive.
-    """
-    archives = hoist_binstall_discovery.expected_archive_names(
-        staging_config, manifest, version
-    )
-    return tuple(
-        name for archive in archives for name in (archive, f"{archive}{SIDECAR_SUFFIX}")
-    )
-
-
-def read_inventory(directory: Path) -> list[PublishedAsset]:
-    """Read the bare name and byte size of every regular file in ``directory``.
-
-    Parameters
-    ----------
-    directory
-        Staging directory to list.
-
-    Returns
-    -------
-    list[PublishedAsset]
-        One entry per regular file, sorted by name.
-
-    Notes
-    -----
-    Only regular files are reported, and symlinks are not followed, so a link
-    is never mistaken for the asset it points at: the release must publish the
-    archive itself, not a reference left elsewhere. Sorted output keeps the
-    result stable, so a caller comparing two listings compares content.
-    """
-    with os.scandir(directory) as entries:
-        assets = [
-            PublishedAsset(name=entry.name, size=entry.stat().st_size)
-            for entry in entries
-            if entry.is_file(follow_symlinks=False)
-        ]
-    return sorted(assets, key=lambda asset: asset.name)

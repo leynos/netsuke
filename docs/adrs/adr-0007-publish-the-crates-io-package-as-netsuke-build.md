@@ -134,9 +134,9 @@ itself, with no long-lived registry credential stored anywhere.
   `job_workflow_ref` of the file that declares the job. A reusable workflow
   would present its own filename, so moving the exchange into one silently
   breaks publication.
-- The job carries `id-token: write` and the `crates-io` environment, and is the
-  only job in the workflow to hold either alongside GitHub release-write
-  authority.
+- The exchange job has `contents: read`, `id-token: write`, and the
+  `crates-io` environment. It has no GitHub release-write authority; that
+  permission remains in separate release jobs.
 - The first publication is not reachable this way. Trusted Publishing can only
   publish a crate that already exists, so a brand-new package name still needs
   one manual token-authenticated upload. `netsuke-build` is already published,
@@ -152,7 +152,11 @@ run publishes GitHub assets only, and this addendum records the shape the
 registry path is to take rather than a mechanism in use.
 
 The offline policy modules that support the decision are already in place and
-are what the unwritten job will call: `publish_crates_io_cli` classifies a
-registry response and verifies downloaded crate bytes, and
-`release_digest_record` holds the pre-upload digest record both consumers read.
-They reach no network; the workflow step is the only place that does.
+are what the unwritten job will call. Policy modules compare in-memory facts;
+the CLI and named adapters own file access, JSON/TOML serialization, registry
+response schemas, HTTP status codes, and GitHub's digest spelling. In
+particular, `release_reconcile_crates` receives typed registry observations,
+`verify_crates_io_bytes` receives a typed download observation, and
+`release_reconcile_github` receives bare digest strings. Those modules reach
+neither the network nor filesystem or provider formats; workflow steps make the
+network requests, and the adapters translate their results.

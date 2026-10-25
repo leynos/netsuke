@@ -10,7 +10,7 @@ rather than three independent recomputations that could drift.
 The module stays a thin seam. Packaging is a subprocess, and subprocesses are
 what a workflow step may do; the policy that decides whether an identity is
 publishable lives in :mod:`release_candidate`, and the digest arithmetic lives
-in :mod:`release_digest`. Nothing here reaches the network, so the packaging
+in :mod:`release_digest_files`. Nothing here reaches the network, so the packaging
 job runs to completion during a dry run.
 
 A dry run has no release tag to record. A pull request run is triggered by an
@@ -31,7 +31,7 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import] - packaging boun
 import sys
 
 import release_candidate
-import release_digest
+import release_digest_files
 
 #: The shape of ``subprocess.run`` this module needs. Declared so a test can
 #: supply its own runner instead of patching the global ``subprocess`` module,
@@ -337,7 +337,7 @@ def main(argv: list[str] | None = None) -> int:
     except RuntimeError as error:
         print(f"packaging failed: {error}", file=sys.stderr)
         return EXIT_PACKAGING_FAILED
-    package = CratePackage(identity, crate, release_digest.digest_of_file(crate))
+    package = CratePackage(identity, crate, release_digest_files.digest_of_file(crate))
     arguments.output.write_text(
         json.dumps(package.as_record(), indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

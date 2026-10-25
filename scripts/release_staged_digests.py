@@ -10,10 +10,11 @@ Splitting the two keeps each file under the repository's 400-line cap and
 separates two different reasons to change: how a staged tree is read, and what
 a record is allowed to mean.
 
-Names here are the names GitHub publishes, not the spelling the tree holds. The
-mapping is :func:`release_declaration.published_name`, the same authority the
-declaration uses, so a prerelease package is recorded under the name a consumer
-downloads and not the `~` spelling it is staged under.
+Names here are the names GitHub publishes, not the spelling the tree holds.
+The mapping is :func:`release_github_assets_adapter.published_asset_name`, the
+same authority the declaration CLI uses, so a prerelease package is recorded
+under the name a consumer downloads and not the ``~`` spelling it is staged
+under.
 
 Nothing here reaches the network.
 
@@ -24,8 +25,8 @@ behavioural coverage lives in ``scripts/tests/test_release_staged_digests.py``.
 import typing as typ
 
 import hoist_binstall_discovery
-import release_declaration
-import release_digest
+import release_digest_files
+import release_github_assets_adapter
 from release_package_formats import StagedTreeError
 
 if typ.TYPE_CHECKING:
@@ -108,14 +109,16 @@ def staged_digests(
     ...     staged = root / "netsuke.tar.gz"
     ...     _ = staged.write_bytes(b"netsuke")
     ...     recorded = staged_digests(root, expected=["netsuke.tar.gz"])
-    ...     recorded["netsuke.tar.gz"] == release_digest.digest_of_file(staged)
+    ...     recorded["netsuke.tar.gz"] == release_digest_files.digest_of_file(staged)
     True
     """
     names = sorted(set(expected))
     indexed = _staged_index(dist_dir)
     _require_every_name_staged(indexed, names)
     _require_one_file_per_name(indexed, names)
-    return {name: release_digest.digest_of_file(indexed[name][0]) for name in names}
+    return {
+        name: release_digest_files.digest_of_file(indexed[name][0]) for name in names
+    }
 
 
 def _staged_index(dist_dir: pathlib.Path) -> dict[str, list[pathlib.Path]]:
@@ -133,7 +136,7 @@ def _staged_index(dist_dir: pathlib.Path) -> dict[str, list[pathlib.Path]]:
     """
     indexed: dict[str, list[pathlib.Path]] = {}
     for path in hoist_binstall_discovery.walk_files(dist_dir):
-        published = release_declaration.published_name(path.name)
+        published = release_github_assets_adapter.published_asset_name(path.name)
         indexed.setdefault(published, []).append(path)
     return indexed
 

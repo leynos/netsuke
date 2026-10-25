@@ -3,7 +3,7 @@
 Every byte a release uploads is derived from one peeled commit and validated
 against one Cargo package identity. This module owns that identity: it holds
 the tag/version agreement, refuses a near-match rather than normalizing one,
-and serializes the result as a record later stages compare against. It performs
+and exposes the result as a record later stages compare against. It performs
 no filesystem, network, or process access, so its behaviour is fully decided by
 its arguments.
 
@@ -21,7 +21,6 @@ this module's callers never need to do.
 """
 
 import dataclasses
-import json
 import re
 
 from release_semver import is_prerelease, is_valid_semver
@@ -241,17 +240,6 @@ class ReleaseIdentity:
             "tag": self.tag,
             "version": self.version,
         }
-
-    def to_json(self) -> str:
-        """Render the identity record as deterministic JSON.
-
-        Returns
-        -------
-        str
-            The record as indented JSON with sorted keys and a trailing
-            newline, so a committed record is diff-stable.
-        """
-        return json.dumps(self.as_record(), sort_keys=True, indent=2) + "\n"
 
 
 def resolve_identity(facts: CandidateFacts) -> ReleaseIdentity:

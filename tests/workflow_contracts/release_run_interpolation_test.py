@@ -234,7 +234,7 @@ def test_wix_and_draft_release_inputs_use_environment_variables() -> None:
         "Ensure release exists (draft)",
     )
     draft_env = require_mapping(draft.get("env"), "draft-release environment")
-    assert draft_env.get("INPUT_TAG") == "${{ github.ref_name }}", (
+    assert draft_env.get("INPUT_TAG") == "${{ needs.metadata.outputs.release_tag }}", (
         "the release tag must be an environment value"
     )
     assert draft_env.get("GITHUB_TOKEN") == "${{ secrets.GITHUB_TOKEN }}", (

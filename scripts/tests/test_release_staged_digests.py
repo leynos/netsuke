@@ -9,7 +9,7 @@ was never staged, and one published name claimed by two files.
 import typing as typ
 
 import pytest
-import release_digest
+import release_digest_files
 from release_staged_digests import (
     AmbiguousStagedAssetError,
     UnstagedAssetError,
@@ -32,9 +32,9 @@ def test_a_declared_asset_is_hashed_from_its_staged_file(
 
     digests = staged_digests(tmp_path, expected=[ARCHIVE])
 
-    assert digests == {ARCHIVE: release_digest.digest_of_file(tmp_path / ARCHIVE)}, (
-        "the recorded digest must describe the staged file's bytes"
-    )
+    assert digests == {
+        ARCHIVE: release_digest_files.digest_of_file(tmp_path / ARCHIVE)
+    }, "the recorded digest must describe the staged file's bytes"
 
 
 def test_only_declared_assets_are_recorded(tmp_path: pathlib.Path) -> None:

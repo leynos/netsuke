@@ -8,10 +8,13 @@ run should publish, stand down, or stop. :mod:`release_reconcile_crates` owns
 that classification and is proved separately; this CLI is the seam that lets a
 workflow step call it.
 
-The verification half is the same seam in reverse. After a publication, the
-step downloads the archive it just published and hands the bytes here, where
-:func:`verify_crates_io_bytes.verify_downloaded_archive` decides whether they
-are the archive the identity record describes.
+The verification half is the same seam in reverse. The adapter maps the saved
+download and response status into a typed observation; the pure verifier
+decides whether its digest matches the identity record.
+
+An unreadable response file or an unexpected registry schema is recorded as a
+separate response error. That keeps an input failure distinguishable from a
+readable response whose state requires operator action.
 
 Neither half opens a socket. A step that does is a step, and says so in the
 workflow where its credential lives.
@@ -22,13 +25,16 @@ import json
 import pathlib
 import sys
 
+import release_crates_io_adapter
 import release_digest
 import release_reconcile_crates
+import release_registry_response
 import verify_crates_io_bytes
 
 EXIT_OK = 0
 EXIT_ACTION_REQUIRED = 1
 EXIT_VERIFICATION_FAILED = 2
+EXIT_RESPONSE_ERROR = 3
 EXIT_USAGE = 64
 
 #: The verdicts :func:`verify_crates_io_bytes.plan_verification` can return,
@@ -98,6 +104,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--sha256", required=True, help="the digest the identity record holds"
     )
     verify.add_argument(
+        "--status",
+        type=int,
+        default=200,
+        help="HTTP status for the saved download response (default: 200)",
+    )
+    verify.add_argument(
         "--output", required=True, type=pathlib.Path, help="where to write the verdict"
     )
     return parser
@@ -105,17 +117,44 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _classify(arguments: argparse.Namespace) -> int:
     """Classify a registry response and record the action it dictates."""
-    body = (
-        arguments.body.read_text(encoding="utf-8")
-        if arguments.body is not None
-        else None
-    )
-    state = release_reconcile_crates.classify_registry_state(
-        body,
-        version=arguments.version,
-        intended_sha256=arguments.sha256,
-        http_status=arguments.status,
-    )
+    try:
+        body = (
+            arguments.body.read_text(encoding="utf-8")
+            if arguments.body is not None
+            else None
+        )
+        observation = release_registry_response.observe_registry_response(
+            arguments.status, body
+        )
+        state = release_reconcile_crates.classify_registry_state(
+            observation, version=arguments.version, intended_sha256=arguments.sha256
+        )
+    except (
+        OSError,
+        UnicodeError,
+        release_registry_response.RegistryResponseError,
+    ) as error:
+        fault = (
+            "registry-response"
+            if isinstance(error, release_registry_response.RegistryResponseError)
+            else "response-file"
+        )
+        arguments.output.write_text(
+            json.dumps(
+                {
+                    "action": "fail",
+                    "error": str(error),
+                    "fault": fault,
+                    "state": "indeterminate",
+                },
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"registry response error ({fault}): {error}", file=sys.stderr)
+        return EXIT_RESPONSE_ERROR
     action = release_reconcile_crates.plan_crates_action(state)
     arguments.output.write_text(
         json.dumps({"action": action, "state": state.value}, indent=2, sort_keys=True)
@@ -146,8 +185,11 @@ def _verify(arguments: argparse.Namespace) -> int:
         ``EXIT_VERIFICATION_FAILED`` when the archive was absent or disagreed.
     """
     try:
-        digest = verify_crates_io_bytes.verify_downloaded_archive(
-            arguments.archive,
+        observation = release_crates_io_adapter.observe_download_file(
+            arguments.status, arguments.archive
+        )
+        digest = verify_crates_io_bytes.verify_observation(
+            observation=observation,
             crate=arguments.crate,
             version=arguments.version,
             expected_sha256=arguments.sha256,

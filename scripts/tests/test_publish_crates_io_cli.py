@@ -15,6 +15,7 @@ import verify_crates_io_bytes
 from publish_crates_io_cli import (
     EXIT_ACTION_REQUIRED,
     EXIT_OK,
+    EXIT_RESPONSE_ERROR,
     EXIT_VERIFICATION_FAILED,
     VERDICT_EXITS,
     build_parser,
@@ -181,12 +182,52 @@ def test_the_cli_treats_a_missing_body_as_absent_only_for_404(
     )
 
 
+@pytest.mark.parametrize(
+    ("body_content", "fault"),
+    [
+        pytest.param(None, "response-file", id="unreadable-file"),
+        pytest.param("{}", "registry-response", id="unexpected-schema"),
+    ],
+)
+def test_the_cli_records_response_errors_separately_from_action_refusals(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    body_content: str | None,
+    fault: str,
+) -> None:
+    """Record response faults without conflating them with classified states."""
+    destination = tmp_path / "decision.json"
+    body = tmp_path / "body.json"
+    if body_content is not None:
+        _ = body.write_text(body_content, encoding="utf-8")
+    argv = _classify_argv(destination, status=200, body=body)
+
+    code = main(argv)
+
+    assert code == EXIT_RESPONSE_ERROR, (
+        f"an unreadable response must use its own exit code, got {code}"
+    )
+    assert EXIT_RESPONSE_ERROR != EXIT_ACTION_REQUIRED, (
+        "a response fault and a classified refusal need distinct exit codes"
+    )
+    record = _decision(destination)
+    assert record["action"] == "fail", "a response fault must stop publication"
+    assert record["state"] == "indeterminate", (
+        "the record must not infer registry state"
+    )
+    assert record["fault"] == fault, f"the record must identify {fault!r}"
+    assert record["error"], "the record must retain the failure detail"
+    assert "registry response error" in capsys.readouterr().err, (
+        "the response fault must be diagnosed on standard error"
+    )
+
+
 def test_the_cli_verifies_a_matching_archive(tmp_path: pathlib.Path) -> None:
     """Accept the bytes the identity record describes, and record the digest."""
     archive = _archive(tmp_path, b"netsuke crate")
-    import release_digest
+    import release_digest_files
 
-    digest = release_digest.digest_of_file(archive)
+    digest = release_digest_files.digest_of_file(archive)
     destination = tmp_path / "verdict.json"
     argv = _verify_argv(archive, destination)
     argv[argv.index("--sha256") + 1] = digest

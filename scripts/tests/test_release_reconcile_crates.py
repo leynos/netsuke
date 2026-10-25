@@ -20,13 +20,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from release_reconcile_crates import (
-    NOT_FOUND,
-    OK,
-    RegistryResponseError,
     RegistryState,
     classify_registry_state,
     plan_crates_action,
 )
+from release_registry_response import RegistryResponseError, observe_registry_response
 
 #: A well-formed digest, matching what the registry reports for a published
 #: version. Which 64 characters they are does not matter; that both sides use
@@ -37,6 +35,8 @@ OTHER = "e" * 64
 #: The version under test, and one the registry has already published.
 VERSION = "1.0.0"
 EARLIER = "0.9.0"
+NOT_FOUND = 404
+OK = 200
 
 #: One SHA-256 digest, lowercase hexadecimal, generated rather than fixed.
 #:
@@ -93,8 +93,9 @@ def _classify(
     RegistryState
         The state the response was classified as.
     """
+    observation = observe_registry_response(status, body)
     return classify_registry_state(
-        body, version=VERSION, intended_sha256=intended, http_status=status
+        observation, version=VERSION, intended_sha256=intended
     )
 
 
@@ -285,6 +286,23 @@ def test_a_version_with_no_checksum_is_refused() -> None:
     """
     with pytest.raises(RegistryResponseError):
         _classify(json.dumps({"version": {"num": VERSION, "yanked": False}}))
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        json.dumps({"version": {"checksum": INTENDED, "yanked": False}}),
+        json.dumps({
+            "crate": {"num_versions": 1},
+            "versions": [{"checksum": INTENDED, "yanked": False}],
+        }),
+    ],
+    ids=["single-version", "history"],
+)
+def test_a_record_without_a_version_number_is_refused(body: str) -> None:
+    """Refuse an unnumbered record rather than treating it as absent."""
+    with pytest.raises(RegistryResponseError, match="no usable number"):
+        _classify(body)
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, 429])

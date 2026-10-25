@@ -11,8 +11,8 @@ release. Nothing here opens a socket.
 import typing as typ
 
 import pytest
-import release_digest
-import release_digest_record
+import release_digest_files
+import release_digest_record_files
 import release_inventory
 from release_declaration_cli import (
     EXIT_INPUT_UNUSABLE,
@@ -232,7 +232,7 @@ def test_the_written_declaration_is_what_the_verifier_checks(
     _stage_archive(workspace["dist"])
     _ = main(_argv(workspace))
     declared = workspace["output"].read_text(encoding="utf-8").splitlines()
-    trusted = release_digest_record.read_digest_record(workspace["record"])
+    trusted = release_digest_record_files.read_digest_record(workspace["record"])
 
     verified = verify(workspace["dist"], expected=declared, trusted=trusted)
 
@@ -256,14 +256,14 @@ def test_the_producer_records_a_digest_for_every_declared_asset(
     _ = main(_argv(workspace))
     declared = workspace["output"].read_text(encoding="utf-8").splitlines()
 
-    recorded = release_digest_record.read_digest_record(workspace["record"])
+    recorded = release_digest_record_files.read_digest_record(workspace["record"])
 
     assert sorted(recorded) == sorted(declared), (
         "the record must cover exactly the declared assets, or the verifier's "
         f"exact-set check will refuse a correct release: {sorted(recorded)}"
     )
     for name in declared:
-        assert recorded[name] == release_digest.digest_of_file(
+        assert recorded[name] == release_digest_files.digest_of_file(
             workspace["dist"] / name
         ), f"the recorded digest for {name} must describe its staged bytes"
 
@@ -281,7 +281,7 @@ def test_the_verifier_rejects_a_tree_the_declaration_names(
     _stage_archive(workspace["dist"])
     _ = main(_argv(workspace))
     declared = workspace["output"].read_text(encoding="utf-8").splitlines()
-    trusted = release_digest_record.read_digest_record(workspace["record"])
+    trusted = release_digest_record_files.read_digest_record(workspace["record"])
     _ = (workspace["dist"] / SIDECAR).unlink()
 
     with pytest.raises(release_inventory.MissingAssetError):

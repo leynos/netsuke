@@ -19,11 +19,11 @@ Run via ``scripts/release_declaration.py``; behavioural coverage lives in
 ``scripts/tests/test_release_declaration.py``.
 """
 
+import enum
 import typing as typ
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
-    from pathlib import Path
 
 #: The package formats the build stages, keyed by the ``platform`` value the
 #: staging configuration names. The list per platform is exhaustive: a platform
@@ -52,13 +52,65 @@ class ConfigurationError(DeclarationError):
 class MissingTargetsError(ConfigurationError):
     """Report a staging configuration that declares no release target."""
 
+    def __init__(self) -> None:
+        """Build the stable diagnosis for an empty release-target mapping.
+
+        Examples
+        --------
+        >>> str(MissingTargetsError())
+        'staging configuration defines no release targets'
+        """
+        super().__init__("staging configuration defines no release targets")
+
+
+class MalformedTargetKind(enum.Enum):
+    """Name one malformed target condition understood by declaration policy."""
+
+    #: The staging configuration is not a string-keyed mapping.
+    INVALID_MAPPING = "invalid-mapping"
+
+    #: A target table has no string-valued platform field.
+    MISSING_PLATFORM = "missing-platform"
+
 
 class MalformedTargetError(ConfigurationError):
-    """Report a target table that does not name its platform."""
+    """Report a target table that is not usable by release declaration."""
+
+    def __init__(self, kind: MalformedTargetKind) -> None:
+        """Build a target diagnosis from its typed validation condition.
+
+        Examples
+        --------
+        >>> str(MalformedTargetError(MalformedTargetKind.MISSING_PLATFORM))
+        'staging configuration has a target without a platform'
+        >>> str(MalformedTargetError(MalformedTargetKind.INVALID_MAPPING))
+        'staging configuration is not a string-keyed mapping'
+        """
+        messages = {
+            MalformedTargetKind.INVALID_MAPPING: (
+                "staging configuration is not a string-keyed mapping"
+            ),
+            MalformedTargetKind.MISSING_PLATFORM: (
+                "staging configuration has a target without a platform"
+            ),
+        }
+        super().__init__(messages[kind])
 
 
 class UnknownPlatformError(ConfigurationError):
     """Report a configured platform this build stages no package format for."""
+
+    def __init__(self, platform: str) -> None:
+        """Build the diagnosis for a configured but unsupported platform.
+
+        Examples
+        --------
+        >>> str(UnknownPlatformError("solaris"))
+        "staging configuration declares unpackageable platform 'solaris'"
+        """
+        super().__init__(
+            f"staging configuration declares unpackageable platform {platform!r}"
+        )
 
 
 class StagedTreeError(DeclarationError):
@@ -78,28 +130,27 @@ class DuplicatePackageError(StagedTreeError):
     """Report that two staged packages claim one published name."""
 
 
-def match_format(staged: cabc.Iterable[Path], package_format: str) -> list[Path]:
-    """Return the staged packages carrying ``package_format`` as their suffix.
+def match_format(staged: cabc.Iterable[str], package_format: str) -> list[str]:
+    """Return staged package names carrying ``package_format`` as a suffix.
 
     Returns
     -------
-    list[Path]
-        The staged paths whose suffix is ``package_format``, in input order.
+    list[str]
+        The staged names whose suffix is ``package_format``, in input order.
 
     Examples
     --------
-    >>> from pathlib import Path
-    >>> staged = [Path("netsuke-1.x86_64.rpm"), Path("netsuke-1_amd64.deb")]
-    >>> [path.name for path in match_format(staged, ".rpm")]
+    >>> staged = ["netsuke-1.x86_64.rpm", "netsuke-1_amd64.deb"]
+    >>> match_format(staged, ".rpm")
     ['netsuke-1.x86_64.rpm']
     >>> match_format(staged, ".msi")
     []
     """
-    return [path for path in staged if path.suffix == package_format]
+    return [name for name in staged if name.endswith(package_format)]
 
 
 def require_format_count(
-    matches: list[Path], *, platform: str, package_format: str, target_count: int
+    matches: list[str], *, platform: str, package_format: str, target_count: int
 ) -> None:
     """Refuse a format this platform staged the wrong number of files for.
 

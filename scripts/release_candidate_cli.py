@@ -12,6 +12,7 @@ mistake a half-written identity for an authorised one.
 """
 
 import argparse
+import json
 import pathlib
 import sys
 
@@ -89,7 +90,8 @@ def main(argv: list[str] | None = None) -> int:
     except release_candidate.IdentityError as error:
         print(f"release identity rejected: {error}", file=sys.stderr)
         return EXIT_IDENTITY_REJECTED
-    arguments.output.write_text(identity.to_json(), encoding="utf-8")
+    record = json.dumps(identity.as_record(), sort_keys=True, indent=2) + "\n"
+    arguments.output.write_text(record, encoding="utf-8")
     return EXIT_OK
 
 

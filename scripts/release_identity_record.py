@@ -1,11 +1,12 @@
 """Rebuild a recorded release identity, re-validating it on the way in.
 
 :mod:`release_candidate` decides which candidate a run may publish, and
-:meth:`release_candidate.ReleaseIdentity.to_json` writes that decision down.
-This module reads it back. The two are separate because their inputs differ: a
-resolver sees facts the workflow has just gathered, while a reader sees
-whatever is on disk, which may have been hand-edited, truncated by a failed
-write, or left over from an earlier run.
+:meth:`release_candidate.ReleaseIdentity.as_record` exposes that decision as a
+mapping. The CLI adapter serializes it, and this module validates the decoded
+mapping on read. The two are separate because their inputs differ: a resolver
+sees facts the workflow has just gathered, while a reader sees a value that may
+have been hand-edited, truncated by a failed write, or left over from an
+earlier run.
 
 That difference is why later stages call this rather than handing a mapping to
 :func:`release_candidate.resolve_identity`. A stored ``is_prerelease`` flag is

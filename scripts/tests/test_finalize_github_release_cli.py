@@ -157,6 +157,37 @@ def test_the_cli_refuses_an_asset_that_disagrees(
     err = capsys.readouterr().err
     assert ARCHIVE in err, "the diagnosis must name the archive conflict"
     assert SIDECAR in err, "the diagnosis must name the sidecar conflict too"
+    assert "trusted digest record" in err, (
+        "the diagnosis must distinguish the build's trusted input from an inventory"
+    )
+
+
+@pytest.mark.parametrize(
+    ("listing", "reason"),
+    [
+        pytest.param(None, "the listing file is absent", id="unreadable-file"),
+        pytest.param("not json", "the listing is malformed", id="malformed-json"),
+        pytest.param("[]", "the listing is not an object", id="not-an-object"),
+    ],
+)
+def test_the_cli_refuses_an_unreadable_asset_listing(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    listing: str | None,
+    reason: str,
+) -> None:
+    """Refuse absent or malformed observations rather than allowing release."""
+    identity = _identity(tmp_path / "identity.json", {ARCHIVE: ARCHIVE_DIGEST})
+    assets = tmp_path / "assets.json"
+    if listing is not None:
+        _ = assets.write_text(listing, encoding="utf-8")
+    output = tmp_path / "plan.json"
+
+    code = main(_argv(identity, assets, output))
+
+    assert code == EXIT_INPUT_UNREADABLE, f"{reason} must be refused, got {code}"
+    assert not output.exists(), "an unreadable listing must leave no plan behind"
+    assert capsys.readouterr().err, "the refusal must be diagnosed"
 
 
 def test_the_cli_refuses_an_unreadable_asset_digest(

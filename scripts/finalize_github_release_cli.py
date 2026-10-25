@@ -37,6 +37,7 @@ import pathlib
 import sys
 
 import release_digest_record
+import release_digest_record_files
 import release_reconcile_github
 
 EXIT_OK = 0
@@ -97,6 +98,24 @@ class InputUnreadableError(ValueError):
     """Report a digest record that cannot support a publish decision."""
 
 
+def _normalise_github_digest(reported: object) -> str | None:
+    """Convert GitHub's vendor digest into the policy's bare digest value.
+
+    GitHub reports ``sha256:<hex>`` while the trusted record stores bare
+    hexadecimal. Keeping that representation at this adapter boundary leaves
+    the reconciliation policy independent of the provider's response format.
+
+    Returns
+    -------
+    str | None
+        The bare lowercase digest, or ``None`` when GitHub's value is unusable.
+    """
+    if not isinstance(reported, str) or not reported.startswith("sha256:"):
+        return None
+    digest = reported.removeprefix("sha256:").strip().lower()
+    return digest or None
+
+
 def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     """Return the digest each declared asset must have, keyed by name.
 
@@ -123,7 +142,7 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     Notes
     -----
     The record's parsing and its every refusal live in
-    :func:`release_digest_record.read_digest_record`, so the verifier and this
+    :func:`release_digest_record_files.read_digest_record`, so the verifier and this
     module cannot disagree about what a usable record is. What stays here is
     the translation into :class:`InputUnreadableError`, because this CLI's exit
     codes are its own: ``EXIT_INPUT_UNREADABLE`` tells the workflow step to
@@ -157,7 +176,7 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     refused
     """
     try:
-        return release_digest_record.read_digest_record(identity_path)
+        return release_digest_record_files.read_digest_record(identity_path)
     except release_digest_record.DigestRecordError as error:
         raise InputUnreadableError(str(error)) from error
 
@@ -178,22 +197,6 @@ def main(argv: list[str] | None = None) -> int:
         ``EXIT_UPLOAD_REQUIRED`` when assets are merely missing, or
         ``EXIT_INPUT_UNREADABLE`` when the digest record cannot support a
         decision at all.
-
-    Notes
-    -----
-    The plan is written in every case the record permits, including the
-    refusing ones. An operator reading the job's artefacts sees which action
-    each asset was assigned, rather than only the first name that stopped the
-    run.
-
-    ``EXIT_CONFLICT`` outranks ``EXIT_UPLOAD_REQUIRED`` when a release holds
-    both kinds of finding. Taking the numeric maximum would pick the upload
-    code, because ``2 > 1`` — and the step branches on the code, so the run
-    would report a missing asset and skip the conflict diagnostic for a release
-    whose real problem is an asset that must not be overwritten. The precedence
-    is therefore stated rather than derived from the numbers, and the conflict
-    message is printed whenever any conflict is present, whatever the final
-    code.
 
     Examples
     --------
@@ -221,15 +224,47 @@ def main(argv: list[str] | None = None) -> int:
     except InputUnreadableError as error:
         print(f"digest record unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
-    present = json.loads(arguments.assets.read_text(encoding="utf-8"))
+    return _reconcile_listing(expected, arguments.assets, arguments.output)
+
+
+def _reconcile_listing(
+    expected: dict[str, str], assets_path: pathlib.Path, output_path: pathlib.Path
+) -> int:
+    """Reconcile and record the GitHub asset listing for one trusted record.
+
+    Returns
+    -------
+    int
+        The exit code for the recorded reconciliation plan.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     missing = pathlib.Path(tmp) / "missing.json"
+    ...     output = pathlib.Path(tmp) / "plan.json"
+    ...     _reconcile_listing({}, missing, output)
+    3
+    """
+    try:
+        present = json.loads(assets_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        print(f"asset listing unreadable: {error}", file=sys.stderr)
+        return EXIT_INPUT_UNREADABLE
+    if not isinstance(present, dict):
+        print("asset listing unreadable: expected a JSON object", file=sys.stderr)
+        return EXIT_INPUT_UNREADABLE
+    normalized = {
+        name: _normalise_github_digest(digest) for name, digest in present.items()
+    }
     actions = release_reconcile_github.plan_asset_actions(
-        expected=expected, present={str(k): v for k, v in present.items()}
+        expected=expected, present=normalized
     )
     conflicting = release_reconcile_github.conflicts(actions)
-    _write_plan(arguments.output, actions, conflicting)
+    _write_plan(output_path, actions, conflicting)
     if conflicting:
         print(
-            "the release holds assets that disagree with the inventory record: "
+            "the release holds assets that disagree with the trusted digest record: "
             + ", ".join(conflicting),
             file=sys.stderr,
         )

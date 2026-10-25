@@ -585,33 +585,36 @@ Stages, each ending in validation.
 
 ### Stage B — the failing suites
 
-New pure modules under `scripts/`, each stdlib-only and under 400 lines:
+Policy modules and boundary adapters under `scripts/`, each stdlib-only and
+under 400 lines:
 
-1. `scripts/release_candidate.py` — `ReleaseIdentity` dataclass and
-   `resolve_identity(...)`; validates the tag/version agreement (LEM-1),
-   records the peeled commit, package name, version, prerelease flag, binary
-   name, expected asset names, and expected digests, and serializes to JSON
-   with a stable key order.
-2. `scripts/release_inventory.py` — `expected_assets(...)` from
-   `.github/release-staging.toml` plus `Cargo.toml`, and
-   `validate_inventory(...)` implementing LEM-2: non-empty, unique, relative, no
-   `..` component, exact set equality against the manifest.
+1. `scripts/release_candidate.py` — `ReleaseIdentity` and
+   `resolve_identity(...)` validate the tag/version agreement (LEM-1) and
+   expose the candidate as a stable mapping. The CLI serializes it, while
+   `release_identity_record.py` validates a decoded mapping.
+2. `scripts/release_inventory.py` — `validate_inventory(...)` implements
+   LEM-2 over `PublishedAsset` names and sizes. The inventory CLI scans the
+   staged directory before it calls the policy.
 3. `scripts/release_reconcile_crates.py` — `classify_registry_state(...)`
-   returning one of `ABSENT`, `IDENTICAL`, `CONFLICT`, `YANKED`,
-   `INDETERMINATE` from a recorded response body and the intended digest
-   (LEM-3), and `plan_crates_action(...)`.
+   compares typed registry observations with the intended version and digest
+   (LEM-3), and `plan_crates_action(...)` returns the next action. The
+   `release_registry_response.py` adapter parses status and JSON into those
+   observations.
 4. `scripts/release_reconcile_github.py` — `plan_asset_actions(...)`
-   implementing LEM-4.
-5. `scripts/release_digest.py` — SHA-256 of a file, sidecar parsing and
-   comparison, constant-time compare.
-6. `scripts/verify_crates_io_bytes.py` — digest comparison of a downloaded
-   `.crate`, given a local path. **This module performs no download.** The
-   workflow step performs the request and writes the bytes to a file; the
-   module reads that file. Its names predate the split — `download_url` builds
-   the URL the workflow step fetches, and `required_headers` returns what that
-   step must send — but neither opens a connection, and
-   `test_policy_modules_import_no_network_client` in
-   `release_publication_test.py` enforces that with a positive control.
+   implements LEM-4 over bare digest strings. The finalizer CLI normalizes
+   GitHub's `sha256:` representation before invoking it.
+5. `scripts/release_digest.py` — sidecar parsing, digest comparison, and
+   constant-time comparison over in-memory strings. `release_digest_files.py`
+   owns hashing files and reading sidecars.
+6. `scripts/verify_crates_io_bytes.py` — digest comparison over a typed
+   `DownloadObservation`. `release_crates_io_adapter.py` maps HTTP statuses and
+   a downloaded file into that value; this policy module opens no path and
+   interprets no response code.
+
+`release_digest_record.py`, `release_declaration.py`,
+`release_package_formats.py`, `release_asset_names.py`, `release_semver.py`, and
+`release_identity_record.py` likewise decide over mappings, names, and
+strings. Their file and serialization adapters stay at the CLI boundary.
 
 Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 
@@ -801,24 +804,25 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Remaining gaps: everything below.
 - Compatibility decision: none.
 
-**EP-M2 — pure policy modules and their tests.**
+**EP-M2 — pure policy modules, boundary adapters, and their tests.**
 
-- Outcome: seven pure modules under `scripts/`, each with a focused suite, all
-  runnable locally without network access. The plan first named six;
+- Outcome: twelve policy modules under `scripts/`, with file and provider
+  formats handled by small adapters and CLIs. The plan first named six;
   `release_semver` was added during Stage B to hold the version grammar the
-  identity resolver and the inventory both consult. Stage C added two more
-  under the same discipline — `release_digest_record` for the trusted record's
-  shape and `release_staged_digests` for hashing the staged tree — so the
-  milestone's count is seven and the tree's is nine.
+  identity resolver and inventory both consult. Stage C added digest-record
+  policy and adapters for file hashing and sidecar reads, JSON record IO,
+  crates.io response parsing, and downloaded crate bytes.
 - Requirements: LEM-1, LEM-2, LEM-3, LEM-4 discharged.
 - Acceptance evidence: `make test-release-publication` passes; each module's
   reject rows fail before the module exists.
-- Conformance check: no module exceeds 400 lines; no module imports a network
-  client, asserted by `test_policy_modules_import_no_network_client` over every
-  `SOURCE_MODULES` entry (with a positive control, so the check cannot pass by
-  matching nothing); Ruff, Pylint, Interrogate, and ty pass.
+- Conformance check: no module exceeds 400 lines; no source imports a network
+  client, asserted by `test_release_sources_import_no_network_client` in
+  `release_publication_boundary_test.py` over `SOURCE_MODULES`. The
+  `POLICY_MODULES` contract also rejects file IO, JSON/TOML parsing, HTTP
+  status codes, and GitHub digest syntax in policy code. Both boundaries have
+  positive controls; Ruff, Pylint, Interrogate, and ty pass.
 - Recovery: the modules are additive; revert the commit.
-- Remaining gaps: no workflow wiring yet.
+- Remaining gaps: the remaining publication workflow jobs and stages are open.
 - Compatibility decision: none; these are new private modules.
 
 **EP-M3 — the GitHub-side publication sequence.**
@@ -2187,6 +2191,29 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   and the five composite-action contract tests still pass. Date/Author:
   2026-10-24, implementation agent.
 
+- Verification of the post-rebase gate batch on `14a08223b`, run sequentially
+  into `/tmp/gates-14a08223-1792847745/`: `check-fmt`, `markdownlint`, `nixie`,
+  `test-release-publication`, `github-actions-lint`, `typecheck`, `lint`, and
+  `test-workflow-contracts` all exited 0. `typecheck` took 40m49s and `lint`
+  17m55s, both dominated by compile-slot queueing with `build-limits-status`
+  reporting `capacity 4, held 4, healthy` throughout; `lint` also recorded
+  `the managed sccache server is not serving compilations; compiling without
+  the cache`,
+  which the admission policy states is not a build failure. Doc coverage
+  reported `RESULT: PASSED (minimum: 100.0%, actual: 100.0%)`. `test` exited 2
+  on a single `TIMEOUT [300.025s]` of
+  `netsuke-build::command_env_ui_tests::cli_configuration_fixture_compiles`,
+  with 4839 passed, 6 skipped, and 24 unscheduled by fail-fast. The diff
+  contains no `.rs` file at all (Makefile 1, Markdown 3, Python 53, YAML 5),
+  and the developers' guide's *per-test budget is a product, not a period*
+  section states this fixture "retains the 300 s default" and that the historic
+  300 s package-cache wait "no longer justifies a CLI-specific allowance". The
+  timeout is therefore the documented contended-host case rather than a defect,
+  and widening the allowance is explicitly rejected by policy. The stable
+  oracle agrees: hosted run 40097520109 completed `success` on the same head,
+  with `build-test`, `kani-smoke`, both Windows jobs, and all four release
+  build legs green. Date/Author: 2026-10-24, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
@@ -3228,11 +3255,14 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `release_staged_digests.staged_digests` hashes each declared asset in the
   staged tree, keyed by `release_declaration.published_name` so a prerelease
   package is recorded under the spelling GitHub publishes rather than the `~`
-  it is staged under. `verify_release_inventory_cli --trusted` reads that
-  record and `release_digest_record.require_downloads_match_record` compares
-  every download against it, which refuses a replaced operating-system package
-  and, because the record's archive digest does not move when both files are
-  rewritten, a replaced archive/sidecar pair.
+  it is staged under. The current boundary owner is
+  `release_github_assets_adapter.published_asset_name`; the declaration CLI and
+  staged-digest collector share it, while policy modules accept the
+  provider-visible spelling. `verify_release_inventory_cli --trusted` reads
+  that record and `release_digest_record.require_downloads_match_record`
+  compares every download against it, which refuses a replaced operating-system
+  package and, because the record's archive digest does not move when both
+  files are rewritten, a replaced archive/sidecar pair.
   `finalize_github_release_cli --identity` reads the same trusted record, not
   the verifier's output. The record's shape and its refusals live in
   `release_digest_record` so the two consumers cannot disagree about what a
@@ -3545,6 +3575,28 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the reader for the same reason in reverse: `str(None)` would read a
   rehearsal's `null` back as the four-character tag `"None"`, so absence is
   passed through as absence. Date/Author: 2026-10-23, implementation agent.
+
+- Decision: keep filesystem, serialization, HTTP response, and provider-format
+  work outside release policy modules. Rationale: policy decisions should be
+  testable from values without knowing whether they came from TOML, a file, or
+  a remote API. `release_digest_files` and `release_digest_record_files` own
+  file access; `release_registry_response` and `release_crates_io_adapter`
+  translate registry responses and downloaded bytes; the CLIs scan staged
+  trees, serialize identities, and normalize GitHub digest strings. These
+  adapters are scoped to the listed release call sites and compose in the CLIs
+  rather than introducing a general port layer. The `POLICY_MODULES` contract
+  rejects file/JSON/TOML/HTTP/provider-format effects in policy sources, with
+  positive controls. Date/Author: 2026-10-24, implementation agent.
+
+- Decision: keep GitHub's asset-name rewrite in its own boundary adapter.
+  Rationale: `release_declaration` is policy and must not normalize a name
+  based on one hosting provider. `release_github_assets_adapter` is the single
+  implementation shared by the declaration CLI, which passes consumer-visible
+  names to policy, and the staged-digest collector, which maps those names back
+  to files. Those two are its only production callers; the policy-boundary
+  contract prevents a second copy from appearing in a policy module. This is a
+  provider-specific release seam, not a general filename-normalization API.
+  Date/Author: 2026-10-24, implementation agent.
 
 ## Outcomes & retrospective
 

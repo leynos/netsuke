@@ -29,12 +29,15 @@ offline and keeps the network boundary at the place holding the credential.
 
 import argparse
 import json
+import os
 import pathlib
 import sys
 import typing as typ
 
 import release_digest
+import release_digest_files
 import release_digest_record
+import release_digest_record_files
 import release_inventory
 
 if typ.TYPE_CHECKING:
@@ -103,12 +106,32 @@ def verify(
     recording the archive's digest under the sidecar's name would make the
     finalizer compare the wrong value.
     """
-    present = release_inventory.read_inventory(directory)
+    present = _read_inventory(directory)
     release_inventory.validate_inventory(present, expected=expected)
     release_digest_record.require_record_matches_declaration(trusted, expected=expected)
     computed = _digests_of_downloads(directory, present)
     release_digest_record.require_downloads_match_record(computed, trusted=trusted)
     return computed
+
+
+def _read_inventory(directory: pathlib.Path) -> list[release_inventory.PublishedAsset]:
+    """Observe regular files and sizes at the CLI's filesystem boundary.
+
+    Returns
+    -------
+    list[release_inventory.PublishedAsset]
+        Regular files and their observed byte lengths, ordered by name.
+
+    Symbolic links are excluded so a staged link is never mistaken for the
+    asset bytes it points at.
+    """
+    with os.scandir(directory) as entries:
+        assets = [
+            release_inventory.PublishedAsset(name=entry.name, size=entry.stat().st_size)
+            for entry in entries
+            if entry.is_file(follow_symlinks=False)
+        ]
+    return sorted(assets, key=lambda asset: asset.name)
 
 
 def _digests_of_downloads(
@@ -137,8 +160,8 @@ def _digests_of_downloads(
                 asset.name[: -len(release_inventory.SIDECAR_SUFFIX)]
             )
             # Verification only: the digest returned describes the archive.
-            _ = release_digest.verify_file_against_sidecar(archive)
-        computed[asset.name] = release_digest.digest_of_file(path)
+            _ = release_digest_files.verify_file_against_sidecar(archive)
+        computed[asset.name] = release_digest_files.digest_of_file(path)
     return computed
 
 
@@ -238,8 +261,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"declaration unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
     try:
-        trusted = release_digest_record.read_digest_record(arguments.trusted)
-    except release_digest_record.UnreadableDigestRecordError as error:
+        trusted = release_digest_record_files.read_digest_record(arguments.trusted)
+    except release_digest_record_files.UnreadableDigestRecordError as error:
         print(f"trusted digest record unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
     except release_digest_record.DigestRecordError as error:

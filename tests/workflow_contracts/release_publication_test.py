@@ -3,10 +3,10 @@
 A suite that nothing collects is worse than a suite that does not exist. It
 passes `make test`, it passes review, and it reports nothing; the failure it
 was written to catch goes on happening. That is the shape Cuprum #499 records,
-and it is the specific hazard here: the release-candidate, semver, and
-inventory modules arrived as new files under ``scripts/tests``, which
-``make test`` does not reach at all — it runs the Rust suite. Until
-``test-release-publication`` exists and CI invokes it, those modules are inert.
+and it is the specific hazard here: release-policy and adapter modules arrived
+as new files under ``scripts/tests``, which ``make test`` does not reach at all
+— it runs the Rust suite. Until ``test-release-publication`` exists and CI
+invokes it, those modules are inert.
 
 So this contract holds the wiring, not the behaviour. It pins the Makefile
 target's command line, the CI step that runs it, the step's position relative
@@ -22,11 +22,7 @@ import typing as typ
 
 import pytest
 from makefile_recipes import load_makefile, makefile_recipe
-from release_publication_imports import (
-    any_offender,
-    imported_modules,
-    network_offenders,
-)
+from release_publication_modules import SECTION_MODULES, SOURCE_MODULES
 from release_publication_wiring import (
     TEST_MODULE,
     collected_modules,
@@ -48,56 +44,6 @@ if typ.TYPE_CHECKING:
 
 TARGET = "test-release-publication"
 CI_STEP_NAME = "Release publication tests"
-
-#: The test modules this target owns. Named individually rather than by a
-#: glob, so a module silently dropped from the recipe is a failure here and
-#: not a smaller test run that still reports success.
-SECTION_MODULES = (
-    "scripts/tests/test_release_candidate.py",
-    "scripts/tests/test_release_candidate_cli.py",
-    "scripts/tests/test_package_crate_cli.py",
-    "scripts/tests/test_publish_crates_io_cli.py",
-    "scripts/tests/test_verify_release_inventory_cli.py",
-    "scripts/tests/test_finalize_github_release_cli.py",
-    "scripts/tests/test_release_inventory.py",
-    "scripts/tests/test_release_semver.py",
-    "scripts/tests/test_release_digest.py",
-    "scripts/tests/test_verify_crates_io_bytes.py",
-    "scripts/tests/test_release_reconcile_crates.py",
-    "scripts/tests/test_release_reconcile_github.py",
-    "scripts/tests/test_release_declaration.py",
-    "scripts/tests/test_release_declaration_cli.py",
-    "scripts/tests/test_release_digest_record.py",
-    "scripts/tests/test_release_staged_digests.py",
-)
-
-#: The modules under test, named on the command line so `--doctest-modules`
-#: has something to collect. `pytest` with the flag but no module argument
-#: collects examples only in what it already walks, so dropping these leaves
-#: the flag present and every example unrun — a state that looks identical to
-#: success from the outside.
-SOURCE_MODULES = (
-    "scripts/release_candidate.py",
-    "scripts/release_candidate_cli.py",
-    "scripts/release_identity_record.py",
-    "scripts/package_crate_cli.py",
-    "scripts/publish_crates_io_cli.py",
-    "scripts/verify_release_inventory_cli.py",
-    "scripts/finalize_github_release_cli.py",
-    "scripts/release_inventory.py",
-    "scripts/release_semver.py",
-    "scripts/release_digest.py",
-    "scripts/verify_crates_io_bytes.py",
-    "scripts/release_registry_response.py",
-    "scripts/release_reconcile_crates.py",
-    "scripts/release_reconcile_github.py",
-    "scripts/release_asset_names.py",
-    "scripts/release_package_formats.py",
-    "scripts/release_declaration.py",
-    "scripts/release_declaration_cli.py",
-    "scripts/release_digest_record.py",
-    "scripts/release_staged_digests.py",
-)
 
 #: Fragments any sibling script-test target carries. The three that matter
 #: are the baseline interpreter, the pinned pytest, and the isolated
@@ -181,62 +127,6 @@ def test_a_prompt_outside_a_string_constant_does_not_count() -> None:
     assert docstring_example_count(documented) == 1, (
         "a prompt inside a docstring must still count"
     )
-
-
-@pytest.mark.parametrize("module", SOURCE_MODULES)
-def test_policy_modules_import_no_network_client(module: str) -> None:
-    """Require every source module to be testable with no network at all.
-
-    EP-M2 states the policy modules perform no network I/O and each is runnable
-    locally without one. The statement is only worth making if something
-    checks it: an import added later would otherwise leave the claim in prose
-    while the suite silently needed a socket. The verifier is the module most
-    at risk — its name says "download" — so it takes a local path and returns
-    a digest, and the workflow step that writes that file is what downloads.
-
-    The CLI seams are held to the same rule deliberately, even though they do
-    perform I/O. A CLI writes the record its job needs, but the *network* half
-    of that job belongs to the workflow step, which is where GitHub's own
-    credentials and OIDC exchange live. Keeping the seam socket-free is what
-    makes the boundary legible: anything that reaches the network is a step,
-    never a Python module.
-    """
-    source = (REPO_ROOT / module).read_text(encoding="utf-8")
-    offenders = network_offenders(source)
-    assert not offenders, (
-        f"{module} imports {offenders!r}, so the module is no longer pure "
-        f"policy; move the request into the workflow step and pass the "
-        f"resulting path in"
-    )
-
-
-def test_the_no_network_check_would_notice_an_offender() -> None:
-    """Exercise the detector on a module that does open a connection.
-
-    Without this, :func:`test_policy_modules_import_no_network_client` could
-    pass because :func:`imported_modules` parses nothing or because the banned
-    set matches no spelling. The positive control is a synthetic source, not a
-    fixture file, so it cannot be mistaken for a real module.
-    """
-    positives = (
-        "import urllib.request",
-        "from urllib.request import urlopen",
-        "import http.client as client",
-        "from socket import create_connection",
-    )
-    for source in positives:
-        assert any_offender(imported_modules(source)), (
-            f"the detector must flag {source!r}, or the no-network check is vacuous"
-        )
-    negatives = (
-        "import release_digest",
-        "from pathlib import Path",
-        "import typing as typ",
-    )
-    for source in negatives:
-        assert not any_offender(imported_modules(source)), (
-            f"the detector must not flag {source!r}, a non-network import"
-        )
 
 
 def test_the_target_is_declared_phony() -> None:

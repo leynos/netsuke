@@ -22,10 +22,9 @@ from release_digest import (
     DigestMismatchError,
     MalformedSidecarError,
     constant_time_equal,
-    digest_of_file,
     parse_sidecar,
-    verify_file_against_sidecar,
 )
+from release_digest_files import digest_of_file, verify_file_against_sidecar
 
 if typ.TYPE_CHECKING:
     import pathlib

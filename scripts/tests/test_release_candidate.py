@@ -8,7 +8,6 @@ validator that always raises and one that never raises each fail.
 """
 
 import dataclasses
-import json
 
 import pytest
 import release_candidate
@@ -165,19 +164,13 @@ def test_prerelease_flag_tracks_the_cargo_version(
 
 
 def test_identity_record_has_a_stable_key_order() -> None:
-    """Serialize to JSON with sorted keys, so two records diff by content only."""
+    """Expose identity facts in sorted key order for the CLI adapter."""
     identity = release_candidate.resolve_identity(_facts())
     record = identity.as_record()
 
     assert list(record) == sorted(record), (
         "the identity record's keys must already be in sorted order"
     )
-    rendered = identity.to_json()
-    assert rendered == json.dumps(record, sort_keys=True, indent=2) + "\n", (
-        "the rendered record must be sorted, indented, and newline-terminated"
-    )
-    assert identity.to_json() == rendered, "serialization must be deterministic"
-    assert json.loads(rendered) == record, "the record must survive a round trip"
 
 
 def test_identity_record_names_the_candidate_and_its_distribution() -> None:
@@ -309,8 +302,8 @@ def test_any_well_formed_version_round_trips_through_its_own_tag(
     assert identity.is_prerelease is (prerelease is not None), (
         "the prerelease flag must match whether a prerelease field was generated"
     )
-    assert json.loads(identity.to_json())["version"] == version, (
-        "the serialized record must carry the same version"
+    assert identity.as_record()["version"] == version, (
+        "the policy record must carry the same version"
     )
 
 
@@ -363,9 +356,7 @@ def test_a_tagless_identity_round_trips_through_its_record() -> None:
     """
     identity = release_candidate.resolve_identity(_facts(tag=None))
 
-    rebuilt = release_identity_record.identity_from_mapping(
-        json.loads(identity.to_json())
-    )
+    rebuilt = release_identity_record.identity_from_mapping(identity.as_record())
 
     assert rebuilt.tag is None, "absence must survive the round trip as absence"
 

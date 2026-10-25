@@ -31,9 +31,12 @@ behavioural coverage lives in ``scripts/tests/test_release_declaration_cli.py``.
 import argparse
 import pathlib
 import sys
+import tomllib
 
+import hoist_binstall_discovery
 import release_declaration
-import release_digest_record
+import release_digest_record_files
+import release_github_assets_adapter
 import release_staged_digests
 
 EXIT_OK = 0
@@ -113,19 +116,6 @@ def main(argv: list[str] | None = None) -> int:
         configuration or manifest could not be read or does not describe a
         releasable build.
 
-    Notes
-    -----
-    The two failures are separated because they send an operator to different
-    places. ``EXIT_MISSING_ASSETS`` means the build promised a package it did
-    not stage, and the next thing to read is that platform's job.
-    ``EXIT_INPUT_UNUSABLE`` means the configuration or manifest was wrong
-    before any asset was considered, so no build job is at fault.
-
-    Neither file is written until both are computed. A partial declaration
-    would let a later stage compare against a shorter list and call the release
-    verified; a partial record would leave assets uncompared, which is the same
-    defect wearing the other hat.
-
     Examples
     --------
     An unreadable manifest is refused before any asset is considered, and no
@@ -145,15 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     """
     arguments = build_parser().parse_args(argv)
     try:
-        names = release_declaration.declared_asset_names(
-            arguments.dist_dir,
-            arguments.staging_config,
-            arguments.manifest,
-            arguments.version,
-        )
-        digests = release_staged_digests.staged_digests(
-            arguments.dist_dir, expected=names
-        )
+        names, digests = _compute_declaration(arguments)
     except release_declaration.ConfigurationError as error:
         print(f"release declaration inputs unusable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNUSABLE
@@ -163,9 +145,57 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, KeyError, ValueError) as error:
         print(f"release declaration inputs unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNUSABLE
-    release_declaration.write_declaration(names, arguments.output)
-    release_digest_record.write_digest_record(digests, arguments.digest_record)
+    arguments.output.write_text(
+        "".join(f"{name}\n" for name in names), encoding="utf-8"
+    )
+    release_digest_record_files.write_digest_record(digests, arguments.digest_record)
     return EXIT_OK
+
+
+def _compute_declaration(
+    arguments: argparse.Namespace,
+) -> tuple[tuple[str, ...], dict[str, str]]:
+    """Compute the declared names and trusted digests from parsed CLI inputs.
+
+    Returns
+    -------
+    tuple[tuple[str, ...], dict[str, str]]
+        The sorted names and their lowercase SHA-256 digests.
+
+    Examples
+    --------
+    The configuration is parsed before any declaration can be written:
+
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     config = Path(tmp) / "staging.toml"
+    ...     _ = config.write_text("invalid = [", encoding="utf-8")
+    ...     args = argparse.Namespace(
+    ...         staging_config=config, manifest=Path(tmp) / "Cargo.toml",
+    ...         version="1.0.0", dist_dir=Path(tmp)
+    ...     )
+    ...     try:
+    ...         _compute_declaration(args)
+    ...     except tomllib.TOMLDecodeError:
+    ...         print("refused")
+    refused
+    """
+    config = tomllib.loads(arguments.staging_config.read_text(encoding="utf-8"))
+    archive_names = hoist_binstall_discovery.expected_archive_names(
+        arguments.staging_config, arguments.manifest, arguments.version
+    )
+    staged_package_names = [
+        release_github_assets_adapter.published_asset_name(path.name)
+        for path in hoist_binstall_discovery.walk_files(arguments.dist_dir)
+    ]
+    names = release_declaration.declared_asset_names(
+        archive_names=archive_names,
+        target_config=config,
+        staged_package_names=staged_package_names,
+    )
+    digests = release_staged_digests.staged_digests(arguments.dist_dir, expected=names)
+    return names, digests
 
 
 if __name__ == "__main__":

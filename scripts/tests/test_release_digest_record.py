@@ -15,10 +15,12 @@ import release_digest
 from release_digest_record import (
     DigestRecordError,
     RecordedDigestMismatchError,
-    UnreadableDigestRecordError,
-    read_digest_record,
     require_downloads_match_record,
     require_record_matches_declaration,
+)
+from release_digest_record_files import (
+    UnreadableDigestRecordError,
+    read_digest_record,
     write_digest_record,
 )
 

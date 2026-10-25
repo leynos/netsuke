@@ -88,6 +88,7 @@ jobs:
       package_description: ${{ steps.package_metadata.outputs.description }}
       package_manifest: ${{ steps.manifest_path.outputs.value }}
       should_publish: ${{ steps.release_modes.outputs['should-publish'] }}
+      release_tag: ${{ steps.validate_publish_ref.outputs.release_tag }}
       dry_run: ${{ steps.release_modes.outputs['dry-run'] }}
       should_upload_workflow_artifacts: ${{ steps.release_modes.outputs['should-upload-workflow-artifacts'] }}
       should_upload_package_artifacts: >-
@@ -111,6 +112,22 @@ jobs:
         name: Determine release modes
         uses: >-
           leynos/shared-actions/.github/actions/determine-release-modes@2f58fab140cc8dfe69756aaa6a3bbb987c426023
+      - id: validate_publish_ref
+        name: Validate publishing ref
+        if: steps.release_modes.outputs['should-publish'] == 'true'
+        shell: bash
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          set -euo pipefail
+          case "$RELEASE_REF" in
+            refs/tags/v*.*.*) release_tag="${RELEASE_REF#refs/tags/}" ;;
+            *)
+              printf 'publishing requires a v*.*.* tag ref, got %s\n' "$RELEASE_REF" >&2
+              exit 1
+              ;;
+          esac
+          printf 'release_tag=%s\n' "$release_tag" >>"$GITHUB_OUTPUT"
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
@@ -443,7 +460,7 @@ jobs:
         name: Package the crate and record its identity
         uses: ./.github/actions/package-crate
         with:
-          tag: ${{ github.ref_name }}
+          tag: ${{ needs.metadata.outputs.release_tag }}
           commit: ${{ github.sha }}
           # A rehearsal runs on a pull request, where `github.ref_name` is the
           # merge ref (`903/merge`), not a release tag. The same mode output
@@ -601,7 +618,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/upload-release-assets@a5765019912a8ab6882b12db049c7cde635f3a85
         with:
-          release-tag: ${{ github.ref_name }}
+          release-tag: ${{ needs.metadata.outputs.release_tag || github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           dist-dir: dist
           dry-run: true
@@ -689,7 +706,7 @@ jobs:
         if: needs.metadata.outputs.should_publish == 'true'
         shell: bash
         env:
-          INPUT_TAG: ${{ github.ref_name }}
+          INPUT_TAG: ${{ needs.metadata.outputs.release_tag }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: uv run --no-project --python 3.14 scripts/ensure_draft_release.py
@@ -742,7 +759,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/upload-release-assets@0606ca899ce2995a0c4bc78e660e80832e6e8855
         with:
-          release-tag: ${{ github.ref_name }}
+          release-tag: ${{ needs.metadata.outputs.release_tag }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
           dist-dir: dist
           dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}

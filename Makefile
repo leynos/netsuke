@@ -350,9 +350,9 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 		scripts/tests/test_ci_support.py \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
-# The release-candidate and inventory modules are pure: they read strings,
-# paths, and directory listings, and make no network request, so their suites
-# run beside the other script tests rather than in a job of their own.
+# Release-policy modules receive names, digests, mappings, or typed transport
+# observations. CLI and adapter modules own file, JSON, TOML, and provider
+# formats; the suites run beside the other script tests without a network job.
 #
 # The source modules are named here as well as their suites, and the run
 # carries --doctest-modules, so the examples in their docstrings execute.
@@ -368,31 +368,41 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_package_crate_cli.py \
 		scripts/tests/test_publish_crates_io_cli.py \
 		scripts/tests/test_verify_release_inventory_cli.py \
+		scripts/tests/test_verify_release_inventory_command.py \
 		scripts/tests/test_finalize_github_release_cli.py \
 		scripts/tests/test_release_inventory.py \
 		scripts/tests/test_release_semver.py \
 		scripts/tests/test_release_digest.py \
+		scripts/tests/test_release_digest_files.py \
 		scripts/tests/test_verify_crates_io_bytes.py \
+		scripts/tests/test_release_crates_io_adapter.py \
+		scripts/tests/test_release_github_assets_adapter.py \
 		scripts/tests/test_release_reconcile_crates.py \
+		scripts/tests/test_release_reconcile_crates_properties.py \
 		scripts/tests/test_release_reconcile_github.py \
 		scripts/tests/test_release_declaration.py \
 		scripts/tests/test_release_declaration_cli.py \
 		scripts/tests/test_release_digest_record.py \
+		scripts/tests/test_release_digest_record_files.py \
 		scripts/tests/test_release_staged_digests.py \
 		scripts/release_candidate.py scripts/release_candidate_cli.py \
 		scripts/release_identity_record.py \
 		scripts/package_crate_cli.py scripts/publish_crates_io_cli.py \
+		scripts/release_crates_io_adapter.py \
+		scripts/release_github_assets_adapter.py \
 		scripts/verify_release_inventory_cli.py \
 		scripts/finalize_github_release_cli.py \
 		scripts/release_inventory.py \
 		scripts/release_semver.py scripts/release_digest.py \
+		scripts/release_digest_files.py \
 		scripts/verify_crates_io_bytes.py \
 		scripts/release_registry_response.py \
 		scripts/release_reconcile_crates.py \
 		scripts/release_reconcile_github.py \
 		scripts/release_asset_names.py scripts/release_package_formats.py \
 		scripts/release_declaration.py scripts/release_declaration_cli.py \
-		scripts/release_digest_record.py scripts/release_staged_digests.py \
+		scripts/release_digest_record.py scripts/release_digest_record_files.py \
+		scripts/release_staged_digests.py \
 		-c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules
 

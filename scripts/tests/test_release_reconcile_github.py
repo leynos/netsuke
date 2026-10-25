@@ -13,20 +13,16 @@ uploads, not six skips.
 Run via ``make test-release-publication``.
 """
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 from release_reconcile_github import (
-    DIGEST_PREFIX,
     AssetAction,
     conflicts,
-    normalise_digest,
     plan_asset_actions,
 )
 
-#: Digests stand in for real ones. The prefix is the part that matters: GitHub
-#: reports ``sha256:<hex>``, and an unnormalised comparison against a bare
-#: hexadecimal digest would report a conflict for every asset that is correct.
+#: Digests stand in for bare values after the GitHub adapter normalises the
+#: provider's ``sha256:<hex>`` representation.
 DIGEST_A = "a" * 64
 DIGEST_B = "b" * 64
 
@@ -60,7 +56,7 @@ def test_a_missing_asset_is_planned_for_upload() -> None:
     """
     plan = _plan(
         {"netsuke.tar.gz": DIGEST_A, "netsuke.tar.gz.sha256": DIGEST_B},
-        {"netsuke.tar.gz.sha256": f"{DIGEST_PREFIX}{DIGEST_B}"},
+        {"netsuke.tar.gz.sha256": DIGEST_B},
     )
     assert plan["netsuke.tar.gz"] is AssetAction.UPLOAD, (
         "an absent archive must be planned for upload"
@@ -72,7 +68,7 @@ def test_a_missing_asset_is_planned_for_upload() -> None:
 
 def test_a_present_asset_with_the_right_digest_is_skipped() -> None:
     """Require a verified asset to be left alone rather than re-uploaded."""
-    plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": f"sha256:{DIGEST_A}"})
+    plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": DIGEST_A})
     assert plan["netsuke.tar.gz"] is AssetAction.SKIP_VERIFIED, (
         "an asset whose published digest matches must not be re-uploaded"
     )
@@ -85,14 +81,14 @@ def test_a_present_asset_with_the_wrong_digest_conflicts() -> None:
     GitHub assets are immutable once uploaded — so the only safe answer is to
     stop.
     """
-    plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": f"sha256:{DIGEST_B}"})
+    plan = _plan({"netsuke.tar.gz": DIGEST_A}, {"netsuke.tar.gz": DIGEST_B})
     assert plan["netsuke.tar.gz"] is AssetAction.CONFLICT, (
         "different bytes under the same name must stop the release"
     )
     assert conflicts(
         plan_asset_actions(
             expected={"netsuke.tar.gz": DIGEST_A},
-            present={"netsuke.tar.gz": f"sha256:{DIGEST_B}"},
+            present={"netsuke.tar.gz": DIGEST_B},
         )
     ) == ("netsuke.tar.gz",), "the conflicting name must be reported"
 
@@ -118,7 +114,7 @@ def test_undeclared_assets_are_not_decided_here() -> None:
     """
     plan = _plan(
         {"netsuke.tar.gz": DIGEST_A},
-        {"netsuke.tar.gz": f"sha256:{DIGEST_A}", "stowaway.txt": f"sha256:{DIGEST_B}"},
+        {"netsuke.tar.gz": DIGEST_A, "stowaway.txt": DIGEST_B},
     )
     assert set(plan) == {"netsuke.tar.gz"}, (
         "an undeclared asset must not appear in the plan"
@@ -134,32 +130,14 @@ def test_the_plan_is_sorted_by_asset_name() -> None:
     )
 
 
-@pytest.mark.parametrize(
-    ("reported", "expected"),
-    [
-        (f"sha256:{DIGEST_A}", DIGEST_A),
-        (f"sha256:{DIGEST_A.upper()}", DIGEST_A),
-        (None, None),
-        ("", None),
-        ("sha256:", None),
-        # A bare hexadecimal digest is NOT accepted. GitHub reports the
-        # prefixed form, and `None` here means "no evidence", which
-        # plan_asset_actions turns into a conflict. Passing the raw string
-        # through instead would compare bare against prefixed and report a
-        # conflict for a value we never read correctly.
-        (DIGEST_A, None),
-    ],
-)
-def test_normalise_digest_accepts_only_the_prefixed_form(
-    reported: str | None, expected: str | None
-) -> None:
-    """Require the prefixed form to normalise and everything else to be ``None``.
-
-    The prefixed and upper-case readings must compare equal to a bare digest,
-    or a correct asset is reported as a conflict.
-    """
-    assert normalise_digest(reported) == expected, (
-        "only GitHub's prefixed digest form may normalise to a bare digest"
+def test_the_policy_does_not_interpret_github_digest_syntax() -> None:
+    """Leave provider prefixes to the adapter that reads GitHub's response."""
+    plan = _plan(
+        {"netsuke.tar.gz": DIGEST_A},
+        {"netsuke.tar.gz": f"sha256:{DIGEST_A}"},
+    )
+    assert plan["netsuke.tar.gz"] is AssetAction.CONFLICT, (
+        "the pure policy must compare provider digest strings without rewriting them"
     )
 
 
@@ -170,7 +148,7 @@ def test_every_expected_asset_receives_exactly_one_action() -> None:
     iterating the result, which is how an asset never gets uploaded.
     """
     expected = {f"{n}.tar.gz": DIGEST_A for n in range(5)}
-    present = {f"{n}.tar.gz": f"sha256:{DIGEST_A}" for n in (1, 3)}
+    present = {f"{n}.tar.gz": DIGEST_A for n in (1, 3)}
     plan = plan_asset_actions(expected=expected, present=present)
     assert [name for name, _ in plan] == sorted(expected), (
         "every expected asset must have its own entry"
@@ -199,7 +177,7 @@ def test_conflicts_reports_every_conflicting_name() -> None:
     """Require all conflicts to be reported, not only the first."""
     actions = plan_asset_actions(
         expected={"a.tar.gz": DIGEST_A, "b.tar.gz": DIGEST_A, "c.tar.gz": DIGEST_A},
-        present={"a.tar.gz": f"sha256:{DIGEST_B}", "b.tar.gz": f"sha256:{DIGEST_B}"},
+        present={"a.tar.gz": DIGEST_B, "b.tar.gz": DIGEST_B},
     )
     assert conflicts(actions) == ("a.tar.gz", "b.tar.gz"), (
         "every conflicting name must be reported, in plan order"
@@ -225,7 +203,7 @@ def test_skipping_turns_on_digest_equality_alone(published: str, intended: str) 
     """
     action = _plan(
         {"netsuke.tar.gz": intended},
-        {"netsuke.tar.gz": f"{DIGEST_PREFIX}{published}"},
+        {"netsuke.tar.gz": published},
     )["netsuke.tar.gz"]
     expected = (
         AssetAction.SKIP_VERIFIED
@@ -262,11 +240,7 @@ def test_every_expected_name_is_decided_once_and_in_order(
     action itself is asserted too: with every asset absent the plan must be
     all uploads, and with every digest matching it must be all skips.
     """
-    present = (
-        {name: f"{DIGEST_PREFIX}{digest}" for name, digest in expected.items()}
-        if attached
-        else {}
-    )
+    present = dict(expected) if attached else {}
     uniform = AssetAction.SKIP_VERIFIED if attached else AssetAction.UPLOAD
 
     plan = plan_asset_actions(expected=expected, present=present)

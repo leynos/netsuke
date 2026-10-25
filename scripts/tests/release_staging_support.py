@@ -8,7 +8,7 @@ agreeing about *fixtures*; two copies would let a format change quietly make
 one suite assert against a release shape the other no longer produces.
 
 The record helper is the load-bearing one. It hashes the staged files directly
-with :func:`release_digest.digest_of_file` instead of reading back what the
+with :func:`release_digest_files.digest_of_file` instead of reading back what the
 producer wrote, so a test that substitutes a download is comparing it against
 an independent account of the build's bytes. A record obtained from the module
 under test would let a fault in that module vouch for itself.
@@ -18,9 +18,8 @@ Nothing here reaches the network.
 
 import typing as typ
 
-import release_digest
-import release_digest_record
-import release_inventory
+import release_digest_files
+import release_digest_record_files
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -61,7 +60,7 @@ def stage_archive(
     directory.mkdir(parents=True, exist_ok=True)
     archive = directory / ARCHIVE
     _ = archive.write_bytes(BODY)
-    digest = release_digest.digest_of_file(archive).encode()
+    digest = release_digest_files.digest_of_file(archive).encode()
     recorded = sidecar_body if sidecar_body is not None else digest
     _ = (directory / SIDECAR).write_text(
         f"{recorded.decode()}  dist/{ARCHIVE}\n", encoding="utf-8"
@@ -123,8 +122,9 @@ def trusted_digests(staging: pathlib.Path) -> dict[str, str]:
     module under test's idea of one.
     """
     return {
-        asset.name: release_digest.digest_of_file(staging / asset.name)
-        for asset in release_inventory.read_inventory(staging)
+        path.name: release_digest_files.digest_of_file(path)
+        for path in staging.iterdir()
+        if path.is_file()
     }
 
 
@@ -146,5 +146,5 @@ def write_trusted_record(
         ``destination``, so a caller can pass the result straight to an
         invocation's argument list.
     """
-    release_digest_record.write_digest_record(digests, destination)
+    release_digest_record_files.write_digest_record(digests, destination)
     return destination

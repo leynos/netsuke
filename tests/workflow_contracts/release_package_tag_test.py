@@ -33,6 +33,7 @@ from workflow_loading import (
     named_step,
     require_list,
     require_mapping,
+    workflow_job,
 )
 
 if typ.TYPE_CHECKING:
@@ -40,6 +41,7 @@ if typ.TYPE_CHECKING:
 
 PACKAGE_JOB = "package-crate"
 PACKAGE_STEP = "Package the crate and record its identity"
+PUBLISH_JOB = "publish-release"
 ACTION_MANIFEST: Path = (
     REPO_ROOT / ".github" / "actions" / "package-crate" / "action.yml"
 )
@@ -64,6 +66,22 @@ def _action_manifest() -> dict[str, object]:
     )
 
 
+def _action_inputs_and_environment() -> tuple[dict[str, object], dict[str, object]]:
+    """Return the manifest inputs and package-step environment together."""
+    manifest = _action_manifest()
+    inputs = require_mapping(manifest.get("inputs"), "action inputs")
+    steps = require_list(
+        require_mapping(manifest.get("runs"), "action runs").get("steps"),
+        "action steps",
+    )
+    named_steps = [require_mapping(step, "action step") for step in steps]
+    package = require_mapping(
+        named_step(named_steps, "Package crate"), "package action step"
+    )
+    environment = require_mapping(package.get("env"), "package action environment")
+    return inputs, environment
+
+
 def _action_run_body() -> str:
     """Return every ``run`` block the action declares, joined for inspection."""
     runs = require_mapping(_action_manifest().get("runs"), "action runs")
@@ -85,6 +103,69 @@ def test_the_packaging_step_receives_the_rehearsal_mode() -> None:
         "the packaging step must receive the same publish-mode flag as the "
         f"upload stage, got {inputs.get('dry-run')!r}"
     )
+
+
+def test_publishing_requires_a_validated_release_tag() -> None:
+    """Reject non-tag reusable-workflow calls before exposing a publish tag."""
+    workflow = load_workflow(RELEASE_WORKFLOW_PATH)
+    metadata = workflow_job(workflow, "metadata")
+    outputs = require_mapping(metadata.get("outputs"), "metadata outputs")
+    steps = job_steps(workflow, "metadata")
+    validation = named_step(steps, "Validate publishing ref")
+    environment = require_mapping(validation.get("env"), "ref validation environment")
+
+    assert outputs.get("release_tag") == (
+        "${{ steps.validate_publish_ref.outputs.release_tag }}"
+    ), "the metadata output must come from the ref-validation step"
+    assert validation.get("id") == "validate_publish_ref", (
+        "the output reference and validation step identity must stay aligned"
+    )
+    assert validation.get("if") == (
+        "steps.release_modes.outputs['should-publish'] == 'true'"
+    ), "only publishing runs need a release ref"
+    assert environment.get("RELEASE_REF") == "${{ github.ref }}", (
+        "the check must inspect the full ref, not a reusable-workflow input"
+    )
+    run = str(validation.get("run", ""))
+    assert "refs/tags/v*.*.*" in run, "publishing must require a release tag ref"
+    assert "printf 'release_tag=%s\\n' \"$release_tag\"" in run, (
+        "only the validated tag may be exposed to downstream jobs"
+    )
+
+    package_step = named_step(job_steps(workflow, PACKAGE_JOB), PACKAGE_STEP)
+    package_inputs = require_mapping(package_step.get("with"), "package inputs")
+    assert package_inputs.get("tag") == "${{ needs.metadata.outputs.release_tag }}", (
+        "crate identity must use the validated release tag"
+    )
+
+
+def test_only_the_validated_tag_reaches_publishing_steps() -> None:
+    """Keep raw refs out of the real GitHub release publication path."""
+    workflow = load_workflow(RELEASE_WORKFLOW_PATH)
+    staging_steps = job_steps(workflow, "release")
+    staging_upload = named_step(staging_steps, "Upload artefacts to release")
+    staging_inputs = require_mapping(
+        staging_upload.get("with"), "staging upload inputs"
+    )
+    assert staging_inputs.get("release-tag") == (
+        "${{ needs.metadata.outputs.release_tag || github.ref_name }}"
+    ), "a rehearsal needs a non-empty tag for the upload action's dry-run plan"
+    assert staging_inputs.get("dry-run") is True, (
+        "the raw-ref fallback is safe only while the staging upload is a dry run"
+    )
+
+    publish_steps = job_steps(workflow, PUBLISH_JOB)
+    draft = named_step(publish_steps, "Ensure release exists (draft)")
+    draft_env = require_mapping(draft.get("env"), "draft release environment")
+    assert draft_env.get("INPUT_TAG") == "${{ needs.metadata.outputs.release_tag }}", (
+        "draft creation must use the validated tag"
+    )
+
+    upload = named_step(publish_steps, "Upload artefacts to release")
+    upload_inputs = require_mapping(upload.get("with"), "publish upload inputs")
+    assert upload_inputs.get("release-tag") == (
+        "${{ needs.metadata.outputs.release_tag }}"
+    ), "a real asset upload must use the validated tag without a raw-ref fallback"
 
 
 def test_the_action_accepts_a_tag_and_a_rehearsal() -> None:
@@ -123,24 +204,28 @@ SELECTOR_FRAGMENTS = (
 ARGUMENT_FORWARDING = (
     (
         "commit",
+        "RELEASE_COMMIT",
         "${{ inputs.commit }}",
         '--commit "$RELEASE_COMMIT"',
         "the commit must reach the CLI",
     ),
     (
         "package-name",
+        "RELEASE_PACKAGE_NAME",
         "${{ inputs['package-name'] }}",
         '--package-name "$RELEASE_PACKAGE_NAME"',
         "the Cargo package name must reach the CLI",
     ),
     (
         "version",
+        "RELEASE_VERSION",
         "${{ inputs.version }}",
         '--version "$RELEASE_VERSION"',
         "the version must reach the CLI",
     ),
     (
         "bin-name",
+        "RELEASE_BIN_NAME",
         "${{ inputs['bin-name'] }}",
         '--bin-name "$RELEASE_BIN_NAME"',
         "the binary name must reach the CLI",
@@ -180,12 +265,12 @@ def test_the_action_selects_the_selector_before_invoking_the_cli(
 
 
 @pytest.mark.parametrize(
-    ("name", "reference", "flag", "reason"),
+    "case",
     ARGUMENT_FORWARDING,
     ids=[row[0] for row in ARGUMENT_FORWARDING],
 )
 def test_the_action_forwards_every_identity_field_to_the_cli(
-    name: str, reference: str, flag: str, reason: str
+    case: tuple[str, str, str, str, str],
 ) -> None:
     """Pass each declared input to the CLI under the flag the CLI parses.
 
@@ -195,14 +280,12 @@ def test_the_action_forwards_every_identity_field_to_the_cli(
     accepts ``--package-name``, and the value between them has become empty.
     Both ends are asserted here, plus the assignment joining them.
     """
-    run = _action_run_body()
-    manifest = _action_manifest()
-    inputs = require_mapping(manifest.get("inputs"), "action inputs")
+    inputs, environment = _action_inputs_and_environment()
 
-    assert name in inputs, f"the action must declare a {name!r} input"
-    assert flag in run, reason
-    assert reference in str(manifest), (
-        f"the {name!r} input must be assigned to the step environment as {reference!r}"
+    assert case[0] in inputs, f"the action must declare a {case[0]!r} input"
+    assert case[3] in _action_run_body(), case[4]
+    assert environment.get(case[1]) == case[2], (
+        f"the {case[0]!r} input must map exactly to {case[1]} as {case[2]!r}"
     )
 
 
