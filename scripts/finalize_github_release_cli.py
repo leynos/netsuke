@@ -44,6 +44,7 @@ EXIT_OK = 0
 EXIT_CONFLICT = 1
 EXIT_UPLOAD_REQUIRED = 2
 EXIT_INPUT_UNREADABLE = 3
+EXIT_OUTPUT_UNWRITABLE = 4
 
 #: Every action :func:`release_reconcile_github.plan_asset_actions` can return,
 #: paired with the exit code this CLI reports. Enumerated so an action added to
@@ -196,7 +197,8 @@ def main(argv: list[str] | None = None) -> int:
         un-drafted, ``EXIT_CONFLICT`` when an asset disagrees,
         ``EXIT_UPLOAD_REQUIRED`` when assets are merely missing, or
         ``EXIT_INPUT_UNREADABLE`` when the digest record cannot support a
-        decision at all.
+        decision at all, or ``EXIT_OUTPUT_UNWRITABLE`` when the reconciliation
+        plan cannot be recorded.
 
     Examples
     --------
@@ -235,7 +237,8 @@ def _reconcile_listing(
     Returns
     -------
     int
-        The exit code for the recorded reconciliation plan.
+        The exit code for the reconciliation plan, or
+        ``EXIT_OUTPUT_UNWRITABLE`` when it cannot be recorded.
 
     Examples
     --------
@@ -261,13 +264,23 @@ def _reconcile_listing(
         expected=expected, present=normalized
     )
     conflicting = release_reconcile_github.conflicts(actions)
-    _write_plan(output_path, actions, conflicting)
+    try:
+        _write_plan(output_path, actions, conflicting)
+    except OSError as error:
+        print(
+            f"reconciliation plan write failed: {output_path}: {error}", file=sys.stderr
+        )
+        output_error = error
+    else:
+        output_error = None
     if conflicting:
         print(
             "the release holds assets that disagree with the trusted digest record: "
             + ", ".join(conflicting),
             file=sys.stderr,
         )
+    if output_error is not None:
+        return EXIT_OUTPUT_UNWRITABLE
     return _verdict(actions)
 
 
@@ -280,7 +293,8 @@ def _write_plan(
 
     The plan is written for refusing runs too, so an operator sees which
     action every asset was assigned rather than only the first name that
-    stopped the run.
+    stopped the run. The caller maps ``Path.write_text`` failures to a distinct
+    output-unwritable exit status.
     """
     output.write_text(
         json.dumps(

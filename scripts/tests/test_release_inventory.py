@@ -103,6 +103,9 @@ def test_a_duplicated_name_is_rejected() -> None:
         pytest.param("a/../../b", id="a-parent-below-a-component"),
         pytest.param("/etc/passwd", id="an-absolute-posix-path"),
         pytest.param(r"C:\Windows\netsuke.exe", id="a-windows-drive-path"),
+        pytest.param(r"\Windows\netsuke.exe", id="a-windows-rooted-path"),
+        pytest.param("C:netsuke.exe", id="a-windows-drive-relative-path"),
+        pytest.param("C:", id="a-windows-drive-only-path"),
     ],
 )
 def test_a_name_that_could_escape_the_staging_directory_is_rejected(name: str) -> None:
@@ -177,6 +180,12 @@ _POSIX_ABSOLUTE_ASSET_CASES = _SAFE_PATH_COMPONENT.map(
 _WINDOWS_ABSOLUTE_ASSET_CASES = st.tuples(_SAFE_PATH_COMPONENT, _PATH_SEPARATOR).map(
     lambda parts: (f"C:{parts[1]}{parts[0]}", True, False)
 )
+_WINDOWS_ROOTED_ASSET_CASES = _SAFE_PATH_COMPONENT.map(
+    lambda name: (f"\\{name}", True, False)
+)
+_WINDOWS_DRIVE_RELATIVE_ASSET_CASES = _SAFE_PATH_COMPONENT.map(
+    lambda name: (f"C:{name}", True, False)
+)
 _ASSET_NAME_CASES = st.one_of(
     _BARE_ASSET_CASES,
     _NESTED_ASSET_CASES,
@@ -186,6 +195,8 @@ _ASSET_NAME_CASES = st.one_of(
     _TRAILING_SEPARATOR_ASSET_CASES,
     _POSIX_ABSOLUTE_ASSET_CASES,
     _WINDOWS_ABSOLUTE_ASSET_CASES,
+    _WINDOWS_ROOTED_ASSET_CASES,
+    _WINDOWS_DRIVE_RELATIVE_ASSET_CASES,
 )
 
 
@@ -193,7 +204,9 @@ _ASSET_NAME_CASES = st.one_of(
 @example(case=("../netsuke", True, False))
 @example(case=("C:\\Windows\\netsuke.exe", True, False))
 @example(case=("C:/Windows/netsuke.exe", True, False))
-@example(case=("C:", False, False))
+@example(case=(r"\Windows\netsuke.exe", True, False))
+@example(case=("C:netsuke.exe", True, False))
+@example(case=("C:", True, False))
 @example(case=("", False, False))
 @example(case=("./netsuke", False, False))
 @example(case=("netsuke/", False, False))

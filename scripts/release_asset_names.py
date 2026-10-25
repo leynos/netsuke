@@ -3,7 +3,8 @@ r"""Judge whether a staged asset name is safe to publish as a bare file name.
 An asset name is data, not a path on the host that produced it, so it is
 judged under both path flavours. ``C:\Windows\netsuke.exe`` is one ordinary
 component to a POSIX parser and something else entirely to an uploader running
-on Windows; a name absolute under *either* reading is refused.
+on Windows; a name absolute, rooted, or drive-relative under *either* reading
+is refused.
 
 Two defects are distinguished here, and the distinction matters. A name that
 walks above its origin (``../netsuke``) means the release tried to publish
@@ -80,8 +81,8 @@ def escapes_its_directory(name: str) -> bool:
     Returns
     -------
     bool
-        ``True`` for an absolute path, a Windows drive or UNC path, or any
-        component sequence that walks above its origin.
+        ``True`` for an absolute path, a Windows-rooted or drive-relative path,
+        or any component sequence that walks above its origin.
 
     Notes
     -----
@@ -90,7 +91,12 @@ def escapes_its_directory(name: str) -> bool:
     """
     for flavour in PATH_FLAVOURS:
         parsed = flavour(name)
-        if parsed.is_absolute() or walks_out_of_its_directory(parsed.parts):
+        if any((
+            parsed.is_absolute(),
+            bool(parsed.root),
+            bool(parsed.drive),
+            walks_out_of_its_directory(parsed.parts),
+        )):
             return True
     return False
 

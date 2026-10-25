@@ -24,6 +24,7 @@ from finalize_github_release_cli import (
     EXIT_CONFLICT,
     EXIT_INPUT_UNREADABLE,
     EXIT_OK,
+    EXIT_OUTPUT_UNWRITABLE,
     EXIT_UPLOAD_REQUIRED,
     build_parser,
     main,
@@ -260,6 +261,39 @@ def test_the_cli_reports_a_conflict_ahead_of_a_missing_asset(
         "this test is only meaningful while the numeric order inverts the "
         "intended precedence"
     )
+
+
+@pytest.mark.parametrize(
+    ("reported_digest", "has_conflict"),
+    [
+        pytest.param(f"sha256:{ARCHIVE_DIGEST}", False, id="verified-asset"),
+        pytest.param(f"sha256:{'ef' * 32}", True, id="conflicting-asset"),
+    ],
+)
+def test_the_cli_reports_an_unwritable_plan_and_keeps_conflict_diagnostics(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    *,
+    reported_digest: str,
+    has_conflict: bool,
+) -> None:
+    """Give plan-write failures a distinct status without hiding conflicts."""
+    identity = _identity(tmp_path / "identity.json", {ARCHIVE: ARCHIVE_DIGEST})
+    assets = _reported(tmp_path / "assets.json", {ARCHIVE: reported_digest})
+    output = tmp_path / "plan-directory"
+    output.mkdir()
+
+    code = main(_argv(identity, assets, output))
+
+    assert code == EXIT_OUTPUT_UNWRITABLE, (
+        f"a plan-write failure must be distinct, got {code}"
+    )
+    err = capsys.readouterr().err
+    assert "reconciliation plan write failed" in err, (
+        "the output failure must have an actionable diagnostic"
+    )
+    if has_conflict:
+        assert ARCHIVE in err, "the failed write must not hide the conflict name"
 
 
 @pytest.mark.parametrize(

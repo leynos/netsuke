@@ -2514,12 +2514,13 @@ anything is un-drafted.
 three actions — upload, skip-verified, or conflict — and
 `finalize_github_release_cli` turns the plan into an exit status.
 
-| Exit constant           | Code | Meaning                                                  |
-| ----------------------- | ---- | -------------------------------------------------------- |
-| `EXIT_OK`               | 0    | every asset is attached with the recorded digest         |
-| `EXIT_CONFLICT`         | 1    | an attached asset disagrees, or reports no usable digest |
-| `EXIT_UPLOAD_REQUIRED`  | 2    | assets are missing and nothing conflicts                 |
-| `EXIT_INPUT_UNREADABLE` | 3    | the record cannot support a decision at all              |
+| Exit constant            | Code | Meaning                                                  |
+| ------------------------ | ---- | -------------------------------------------------------- |
+| `EXIT_OK`                | 0    | every asset is attached with the recorded digest         |
+| `EXIT_CONFLICT`          | 1    | an attached asset disagrees, or reports no usable digest |
+| `EXIT_UPLOAD_REQUIRED`   | 2    | assets are missing and nothing conflicts                 |
+| `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
+| `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
 *Table 4: `finalize_github_release_cli` exit statuses.*
 
@@ -2563,14 +2564,14 @@ schemas, diagnostics, and exit statuses stay with their subcommands. Other
 release records retain their own validation and I/O boundaries.
 
 `package_crate_cli` returns 0 after recording the archive identity and digest,
-1 when `cargo package` fails, 2 when candidate identity validation rejects the
-inputs, and 3 when archive discovery, hashing, or package-record persistence
-fails. Invalid arguments retain `argparse`'s usage status. Its private
-`_write_package_record` writes only the `CratePackage` record, using a sibling
-temporary file and atomic replacement so a failed write cannot expose partial
-JSON. Keep it within this CLI: other release records have their own schemas,
-validation, and I/O boundaries, so this helper is not a general release-record
-writer.
+1 when `cargo package` fails or does not produce exactly one `.crate` archive,
+2 when candidate identity validation rejects the inputs, and 3 when archive
+discovery I/O, hashing, or package-record persistence fails. Invalid arguments
+retain `argparse`'s usage status. Its private `_write_package_record` writes
+only the `CratePackage` record, using a sibling temporary file and atomic
+replacement so a failed write cannot expose partial JSON. Keep it within this
+CLI: other release records have their own schemas, validation, and I/O
+boundaries, so this helper is not a general release-record writer.
 
 ### Policy and adapter boundaries
 
