@@ -1226,3 +1226,14 @@ adopted only because the field's type changed, and the value is
   and added the matching lesson: an axiom citing a command is not verified
   until that command has run. Ticked the stale authoring checkbox and added the
   `### Changed` changelog entry.
+- 2026-10-25: fifth revision, after `Release Dry Run` failed on the Windows
+  lane. Recorded the root cause (`cargo-orthohelp` 0.10.0's nested bridge build
+  resolving coreutils' `link` through `PATH`), the repair, and a correction to
+  my own first attempt at it: the MSVC step belongs *after*
+  `Build release binary`, not before it as upstream places it, because netsuke's
+  `aarch64-pc-windows-msvc` lane would otherwise link against the x64 library
+  paths `VsDevCmd.bat` exports. Added the two-sided contract test, the
+  round-three parity-test fix, the round-four clean-review record, and the
+  reasoning for not re-running the Rust gates over a YAML-and-prose delta.
+  Confirmed both Windows lanes green on
+  [40238479467](https://github.com/leynos/netsuke/actions/runs/40238479467).
