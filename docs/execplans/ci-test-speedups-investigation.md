@@ -198,7 +198,7 @@ every installation input is immutable.
 
 ### Current target source at the rebased base
 
-The current base `0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458` includes the
+The current base `88f20d588f936b810a2f700a76ceda970451ca7f` includes the
 workflow-contract changes from pull request 932, PowerShell-placeholder
 hardening from pull request 924, the nightly toolchain update from pull request
 947, the build-footprint settings from pull request 948, and the
@@ -209,17 +209,20 @@ settings. It also starts coverage baseline v2. The eligible same-repository
 Linux PR gate remains on `ubicloud-standard-4-ubuntu-2404`, with four Cargo
 workers and four Nextest workers. In both the main and default-features lanes,
 fork and Dependabot pull requests use `ubuntu-latest`; runner-contract tests
-cover the exact job assignments. The workflow checks the PR author's
-`user.login` for Dependabot because the actor can change when another person
-pushes to that PR. A workflow-run response does not include the PR author, so
-the offline collector accepts a separately saved pull request response. It uses
-that author only when the PR ID, number and base repository ID match the run's
-single PR association. If the saved PR response is absent or does not match,
-author-dependent classification remains `other`; the collector never
-substitutes the run actor. Fork classification continues to require distinct
-base and head repository identities. The run association fields are documented
-in GitHub's [Get a workflow run response][workflow-run-response], and PR
-authors in its [Get a pull request response][pull-request-response].
+cover the exact job assignments. Pull request 942 moves public-API compile
+contracts into a workspace fixture and compile-fail doctests, and moves package
+verification to `make test-package-verify`. These changes alter the timed test
+set and compile boundaries relative to the retained observations. The workflow
+checks the PR author's `user.login` for Dependabot because the actor can change
+when another person pushes to that PR. A workflow-run response does not include
+the PR author, so the offline collector accepts a separately saved pull request
+response. It uses that author only when the PR ID, number and base repository
+ID match the run's single PR association. If the saved PR response is absent or
+does not match, author-dependent classification remains `other`; the collector
+never substitutes the run actor. Fork classification continues to require
+distinct base and head repository identities. The run association fields are
+documented in GitHub's [Get a workflow run response][workflow-run-response],
+and PR authors in its [Get a pull request response][pull-request-response].
 
 The current base retains pull request 932's workflow-contract changes and
 documentation. Pull request 924's change is unrelated to the CI source
@@ -228,9 +231,10 @@ baseline, but reports no test-selection changes. Pull request 948 changes the
 development build profile and adds build-footprint contract tests; it does not
 change CI test selection. Pull request 949 changes the default-features runner
 placement for Dependabot and adds runner-contract coverage; it does not change
-test selection. No candidate optimization has been enabled. The original 10
-October reference and the earlier 8a961 comparison above remain historical
-snapshots, not the current source baseline.
+test selection. Pull request 942 changes compile-contract placement and moves
+package verification out of the timed suite. No candidate optimization has been
+enabled. The original 10 October reference and the earlier 8a961 comparison
+above remain historical snapshots, not the current source baseline.
 
 The original offline evidence set contains 81 job records from 21 distinct
 run-attempt pairs: six main-branch coverage jobs, six main-branch cache-writer
@@ -598,6 +602,11 @@ fidelity comparisons block adoption.
   correct pull-request API provenance, validate jobs pages before extraction,
   and preserve list-only PR identity matching with structural patterns. The
   functional fix and structural refactor each passed all six local gates.
+- [x] Rebase the 39-commit candidate onto `origin/main` at `88f20d5`; no
+  conflicts occurred and the range-diff matched all 39 commits. On the rebased
+  candidate, all six local gates passed: Nextest passed 4,710 tests with six
+  skipped, doctests passed, workflow contracts passed 1,493 tests with three
+  skipped plus 27 script tests, and Rustdoc coverage was 98.20%.
 - [ ] Revalidate hosted checks after the CodeScene refactor, obtain current-head
   assessments/review, reconcile findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
@@ -934,6 +943,20 @@ tests with six skipped, workspace doctests passed, workflow contracts passed
 1,478 tests with three skipped plus 27 script tests, and Rustdoc coverage was
 98.19% (6,178/6,292). Fresh hosted checks and review must cover the published
 head before merge.
+
+After PR #942 advanced `main` to `88f20d588f936b810a2f700a76ceda970451ca7f`,
+the 39-commit candidate previously based at
+`0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458` was rebased onto the new target. No
+conflicts occurred, and `git range-diff` matched all 39 commits. The only
+overlapping files were `docs/contents.md` and `docs/developers-guide.md`; the
+target's ADR-0059 and compile-contract guidance were preserved alongside this
+branch's CI evidence documentation. `Cargo.lock` came from the target. The
+post-rebase local gates passed: `make check-fmt`, `make test`, `make typecheck`,
+`make lint`, `make doc-coverage`, and `make test-workflow-contracts`. Nextest
+passed 4,710 tests with six skipped; doctests passed. Workflow contracts passed
+1,493 tests with three skipped plus 27 script tests, and Rustdoc coverage was
+98.20% (6,221/6,335). Fresh hosted checks and review still must cover the
+published head before merge.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

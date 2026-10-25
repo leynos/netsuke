@@ -343,7 +343,7 @@ are also missing until bounded telemetry is enabled.
 The source comparison in the ExecPlan section “Pre-rebase source comparison at
 the assessed PR head” used PR base `8a961000859c02862454338fda6c4dd65bda2aa1`
 and assessed candidate head `3928a0d1fff4f1d62349ef38f6ad435f55135f4a`. The PR
-base has since moved to `0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458`; see
+base has since moved to `88f20d588f936b810a2f700a76ceda970451ca7f`; see
 “Current target source at the rebased base” in the ExecPlan for the current
 source comparison. Timeout differences from the historical
 `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8` snapshot are recorded there. The
