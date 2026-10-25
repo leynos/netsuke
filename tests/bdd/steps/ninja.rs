@@ -203,6 +203,27 @@ fn ninja_contains(world: &TestWorld, fragment: &str) -> Result<()> {
     )
 }
 
+/// Verify that one named edge has its own console-pool binding.
+#[then("the Ninja edge {output:string} has a console pool binding")]
+fn ninja_edge_has_console_pool_binding(world: &TestWorld, output: &str) -> Result<()> {
+    let ninja = get_ninja_content(world)?;
+    let lines: Vec<_> = ninja.lines().collect();
+    let prefix = format!("build {output}:");
+    let edge_index = lines
+        .iter()
+        .position(|line| line.starts_with(&prefix))
+        .with_context(|| format!("missing Ninja build edge for {output}"))?;
+    ensure!(
+        lines
+            .iter()
+            .skip(edge_index + 1)
+            .take_while(|line| line.starts_with("  "))
+            .any(|line| *line == "  pool = console"),
+        "Ninja edge {output} has no console pool binding:\n{ninja}"
+    );
+    Ok(())
+}
+
 #[then("shlex splitting command {index:usize} yields {tokens:string}")]
 fn ninja_command_tokens(world: &TestWorld, index: usize, tokens: &str) -> Result<()> {
     let ninja = get_ninja_content(world)?;

@@ -197,8 +197,8 @@ ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
 
 # Ninja üretimi hataları.
 ninja_gen.missing_action = Bir derleme kenarının başvurduğu "{ $id }" eylemi eksik.
-ninja_gen.console_dependency_only = ‘{ $output }’ derleme kenarı, eylemi yalnızca bağımlılıklardan oluştuğu için konsol havuzunu seçemez.
-ninja_gen.console_pool_conflict = ‘{ $output }’ derleme kenarı konsol havuzunu seçiyor, ancak eylemi özel ‘{ $pool }’ havuzunu istiyor.
+ninja_gen.console_dependency_only = "{ $output }" derleme kenarı, eylemi yalnızca bağımlılıklardan oluştuğu için konsol havuzunu seçemez.
+ninja_gen.console_pool_conflict = "{ $output }" derleme kenarı konsol havuzunu seçiyor, ancak eylemi özel "{ $pool }" havuzunu istiyor.
 ninja_gen.format = Ninja bildiriminin çıktısı biçimlendirilemedi.
 ninja_gen.dyndep_files_required = Bu işlem oluşturulmuş bir Ninja paketi gerektiriyor; dyndep dosyalarını oluşturmak için `netsuke build`, `netsuke clean` veya `netsuke generate` kullanın.
 ninja_gen.reserved_output_path = '{ $path }' yolu Netsuke'nin seri bağımlılık durumu için ayrılmıştır.

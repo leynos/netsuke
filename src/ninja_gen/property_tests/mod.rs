@@ -67,6 +67,7 @@ fn format_edge(edge: &BuildEdge) -> String {
         edge,
         action_name: &edge.action_id,
         action_restat: false,
+        action_pool: None,
         implicit_deps: &edge.implicit_deps,
         description: None,
     }

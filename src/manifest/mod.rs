@@ -99,6 +99,14 @@ enum StdlibRegistration {
     ManifestQuery,
 }
 
+/// Localize recipe validation errors that have a matching user-facing message.
+fn recipe_validation_message(detail: &'static str) -> Option<localization::LocalizedMessage> {
+    (detail == crate::ast::CONSOLE_DEPENDENCY_ONLY_ERROR).then(|| {
+        localization::message(keys::NINJA_GEN_CONSOLE_DEPENDENCY_ONLY)
+            .with_arg("output", "dependency-only entry")
+    })
+}
+
 /// Parse, render, and validate a manifest with injected loading boundaries.
 ///
 /// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
@@ -160,12 +168,14 @@ fn evaluate_manifest(
     } else {
         render::render_manifest_with_budget(manifest, &jinja, &budget)?
     };
-    rendered_manifest
-        .validate_recipes()
-        .map_err(|detail| ManifestError::Parse {
-            source: map_data_error(serde_json::Error::custom(detail), name),
+    rendered_manifest.validate_recipes().map_err(|detail| {
+        let diagnostic_details = recipe_validation_message(detail)
+            .map_or_else(|| detail.to_owned(), |message| message.to_string());
+        ManifestError::Parse {
+            source: map_data_error(serde_json::Error::custom(diagnostic_details), name),
             message: localization::message(keys::MANIFEST_PARSE),
-        })?;
+        }
+    })?;
     Ok(rendered_manifest)
 }
 /// Parse a manifest string using Jinja for value templating.

@@ -55,6 +55,7 @@ impl EdgeRenderer<'_> {
         let rendered_action = RenderedAction {
             name: metadata.action_name,
             restat: metadata.restat,
+            pool: metadata.pool,
         };
         let rendered_edge = RenderedEdge {
             action: rendered_action,
@@ -91,6 +92,7 @@ impl EdgeRenderer<'_> {
                 edge,
                 action_name: rendered_edge.action.name,
                 action_restat: rendered_edge.action.restat,
+                action_pool: rendered_edge.action.pool,
                 implicit_deps,
                 description: rendered_edge.description,
             }
@@ -115,4 +117,6 @@ struct RenderedAction<'a> {
     name: &'a str,
     /// Preserve whether Ninja should restat this edge after execution.
     restat: bool,
+    /// Pool selected by the shared action, if any.
+    pool: Option<&'a str>,
 }

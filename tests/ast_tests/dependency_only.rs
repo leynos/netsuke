@@ -4,10 +4,10 @@ use anyhow::{Context, Result, ensure};
 use netsuke::localization::{self, keys};
 use netsuke::{
     ast::{CommandIsolation, NetsukeManifest, Recipe, StringOrList},
-    ir::BuildGraph,
+    ir::{BuildGraph, IrGenError},
 };
 use rstest::rstest;
-use test_support::display_error_chain;
+use test_support::{display_error_chain, localizer::locale_localizer};
 
 use super::support::parse_manifest;
 
@@ -236,7 +236,7 @@ fn dependency_only_console_entries_are_rejected(#[case] sections: &str) -> Resul
         parse_manifest(&yaml).expect_err("dependency-only entries cannot use the console pool");
     let chain = display_error_chain(error.as_ref());
     ensure!(
-        chain.contains("console cannot be enabled for dependency-only entries"),
+        chain.contains("console pool") && chain.contains("dependency-only"),
         "unexpected console dependency-only diagnostic: {chain}"
     );
     Ok(())
@@ -245,6 +245,7 @@ fn dependency_only_console_entries_are_rejected(#[case] sections: &str) -> Resul
 /// Preserve the console-specific validation diagnostic during direct IR lowering.
 #[test]
 fn direct_ir_lowering_preserves_console_dependency_only_diagnostic() -> Result<()> {
+    let _locale = locale_localizer("fr");
     let yaml = concat!(
         "netsuke_version: '1.0.0'\n",
         "targets:\n",
@@ -257,8 +258,16 @@ fn direct_ir_lowering_preserves_console_dependency_only_diagnostic() -> Result<(
     let error = BuildGraph::from_manifest(&manifest)
         .expect_err("console scheduling on an aggregate should fail IR lowering");
     ensure!(
-        error.to_string() == "console cannot be enabled for dependency-only entries",
-        "direct AST lowering should preserve the console diagnostic: {error}"
+        matches!(
+            &error,
+            IrGenError::InvalidManifest { message }
+                if *message == "console cannot be enabled for dependency-only entries"
+        ),
+        "direct AST lowering should preserve the console diagnostic code: {error}"
+    );
+    ensure!(
+        error.to_string().contains("arête de compilation"),
+        "direct AST lowering should localize the console diagnostic: {error}"
     );
     Ok(())
 }

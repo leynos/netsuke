@@ -193,6 +193,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
                 edge,
                 action_name: metadata.action_name,
                 action_restat: metadata.restat,
+                action_pool: metadata.pool,
                 implicit_deps: &edge.implicit_deps,
                 description: metadata.description.as_ref(),
             }

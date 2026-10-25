@@ -342,10 +342,10 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 }
 
 mod bash_binding;
+mod command_syntax;
 mod console;
 mod isolated_command_list;
 #[path = "legacy_shell.rs"]
 mod power_shell;
 #[path = "shell_isolated.rs"]
 mod power_shell_isolated;
-mod shell_command;

@@ -197,8 +197,8 @@ ir.invalid_command = การแทรกค่าในคำสั่งไ�
 
 # ข้อผิดพลาดในการสร้างไฟล์ Ninja
 ninja_gen.missing_action = ไม่มีการกระทำ “{ $id }” ที่เส้นเชื่อมของการสร้างอ้างถึง
-ninja_gen.console_dependency_only = ขอบเขตการสร้าง ‘{ $output }’ เลือกพูลคอนโซลไม่ได้ เพราะการกระทำมีเฉพาะการพึ่งพาเท่านั้น
-ninja_gen.console_pool_conflict = ขอบเขตการสร้าง ‘{ $output }’ เลือกพูลคอนโซล แต่การกระทำร้องขอพูลที่กำหนดเอง ‘{ $pool }’
+ninja_gen.console_dependency_only = เส้นเชื่อมของการสร้าง “{ $output }” เลือกพูลคอนโซลไม่ได้ เพราะการกระทำมีเฉพาะการพึ่งพาเท่านั้น
+ninja_gen.console_pool_conflict = เส้นเชื่อมของการสร้าง “{ $output }” เลือกพูลคอนโซล แต่การกระทำร้องขอพูลที่กำหนดเอง “{ $pool }”
 ninja_gen.format = จัดรูปแบบผลลัพธ์ของไฟล์รายการ Ninja ไม่สำเร็จ
 ninja_gen.dyndep_files_required = การดำเนินการนี้ต้องใช้บันเดิล Ninja ที่สร้างขึ้น ให้ใช้ `netsuke build`, `netsuke clean` หรือ `netsuke generate` เพื่อทำให้ไฟล์ dyndep พร้อมใช้งาน
 ninja_gen.reserved_output_path = เส้นทาง '{ $path }' สงวนไว้สำหรับสถานะการขึ้นต่อกันแบบลำดับของ Netsuke

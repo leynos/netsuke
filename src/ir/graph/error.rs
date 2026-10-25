@@ -3,9 +3,20 @@
 //! Keeps recoverable validation failures separate from the graph containers so
 //! callers can inspect stable IR diagnostics without coupling to storage.
 
-use crate::localization::LocalizedMessage;
+use crate::localization::{self, LocalizedMessage, keys};
 use camino::Utf8PathBuf;
 use thiserror::Error;
+
+/// Render a manifest validation diagnostic in the active locale when possible.
+fn invalid_manifest_message(message: &'static str) -> String {
+    if message == crate::ast::CONSOLE_DEPENDENCY_ONLY_ERROR {
+        localization::message(keys::NINJA_GEN_CONSOLE_DEPENDENCY_ONLY)
+            .with_arg("output", "dependency-only entry")
+            .to_string()
+    } else {
+        message.to_owned()
+    }
+}
 
 /// Errors produced during IR generation.
 ///
@@ -39,7 +50,7 @@ use thiserror::Error;
 #[derive(Debug, Error)]
 pub enum IrGenError {
     /// Raised when a directly deserialized manifest violates recipe rules.
-    #[error("{message}")]
+    #[error("{}", invalid_manifest_message(.message))]
     InvalidManifest {
         /// Stable schema diagnostic identifying the violated recipe rule.
         message: &'static str,
