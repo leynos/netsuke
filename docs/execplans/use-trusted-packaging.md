@@ -2214,6 +2214,22 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   with `build-test`, `kani-smoke`, both Windows jobs, and all four release
   build legs green. Date/Author: 2026-10-24, implementation agent.
 
+- Verification of the rebased review-fix batch in `e587615b`, based on
+  `origin/main` at `0a7a0d58`: Git replayed 48 commits without conflicts, and
+  the staged 59-path candidate was restored cleanly. Its diff fingerprint
+  (`d9d6d6eb620828a87380fc11a349cb9828686633773da125d9dd17d0376b9c4b`) passed
+  the full sequential set: `check-fmt` (3 s), `lint` (2,783 s), `typecheck` (85
+  s), `test` (4,866 Nextest passed, 6 skipped; doctests passed),
+  `test-workflow-contracts` (1,484 passed, 3 skipped, plus 28 script doctests),
+  `test-release-publication` (406 passed), `doc-coverage` (6,178/6,292; 98.19%),
+  `markdownlint`, and `nixie`. The canonical gate summary is The runner
+  recorded its summary TSV and per-gate logs under `/tmp`. A first post-rebase
+  run exhausted the root filesystem in Whitaker; `make clean` removed 37.1 GiB
+  of regenerable output, and this complete run ended with 202 GiB free. Both
+  Whitaker scopes passed, but their older `nightly-2026-05-28` child Cargo
+  emitted a non-fatal `unused config key 'unstable.embed-metadata'` warning.
+  Date/Author: 2026-10-25, implementation agent.
+
 ## Surprises & discoveries
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
@@ -3649,3 +3665,12 @@ registry exchange, the inventory verifier, the finalizer and the consumer smoke
 — is untouched by this revision, and Stage D stays open for the workflow-side
 mitigations Draft 3 flagged (notably the rehearsal lane's plan-versus-release
 gap recorded in the Decision log).
+
+Draft 5, 2026-10-25: rebased onto `main` at `0a7a0d58` (48 commits, zero
+conflicts) and committed the review-fix batch as `e587615b`. The full
+sequential gate set passed on the exact 59-path diff; see the latest `Progress`
+entry for the fingerprint and logs. The first post-rebase gate attempt ran out
+of filesystem space; `make clean` recovered 37.1 GiB, and a fresh run passed
+with 202 GiB free at completion. No release or registry setting was changed.
+Stage C remains partial and Stage D remains open. The non-fatal Whitaker Cargo
+configuration warning is recorded in `Progress`.
