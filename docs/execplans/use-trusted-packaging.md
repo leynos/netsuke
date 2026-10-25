@@ -2369,6 +2369,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   passed), `mbake validate Makefile`, `markdownlint`, and `nixie`.
   `cs delta origin/main HEAD` reports no issues. No release or registry setting
   changed; Stage C remains partial and Stage D remains open.
+- [x] (2026-10-25) Fixed the workflow-contract failure in CI run
+  `40215105692`: `SECTION_MODULES` now includes the package CLI error and
+  identity-reader suites in the order used by `test-release-publication`. Commit
+  `85ad454e` passed the sequential local gates: `check-fmt` (5 s), `lint` (250
+  s), `typecheck` (4 s), `doc-coverage` (98.20%), `test` (4,712 passed, 6
+  skipped; doctests passed), `test-workflow-contracts` (1,496 passed, 3
+  skipped, plus 28 CI-script/doc tests), `test-release-publication` (424
+  passed), `markdownlint` (zero issues), `nixie`, and
+  `mbake validate Makefile`. The hosted run failed only at the stale
+  module-list assertion; its other five CI jobs, Release Dry Run, Netsukefile
+  Build Test, and CodeScene passed. Fresh hosted checks on the repaired head
+  remain pending.
 
 ## Surprises & discoveries
 
