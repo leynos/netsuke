@@ -49,7 +49,7 @@ name have already been made visible before interpolation.
 
 Emit the localized label as an edge-level Ninja `description` binding beside
 `restat`, in both ordinary and dyndep output. Escape it with the existing
-metadata-value path, so `$` is doubled and unsafe Ninja control characters
+metadata-value path, so `$` is doubled, and unsafe Ninja control characters
 return the established generation error. Do not emit this binding for
 dependency-only phony edges. Executable inline actions keep their label even
 when their output is phony.
