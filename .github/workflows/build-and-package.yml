@@ -151,7 +151,6 @@ jobs:
         with:
           python-version: ${{ inputs['python-version'] }}
 
-
       - name: Build release binary
         uses: leynos/shared-actions/.github/actions/rust-build-release@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
