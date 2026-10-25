@@ -257,9 +257,9 @@ def collect_attempt(
         Empty complete jobs give ``[]``; other jobs retain their outcomes.
 
     """
+    validate_attempt_response(run, response)
     values = _normalized_inputs(inputs)
     jobs = response["jobs"]
-    validate_attempt_response(run, response)
     validate_evidence_maps(values)
     cost = _attempt_cost(jobs)
     records = [_job_record(run, job, values, pull_request) for job in jobs]

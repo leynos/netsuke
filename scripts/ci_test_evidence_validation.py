@@ -19,14 +19,29 @@ def validate_attempt_response(run: dict, response: dict) -> None:
     response
         Saved jobs API response with ``jobs`` and ``total_count`` fields.
 
-    Malformed pages fail validation before the collector records measurements.
-    The delegated checks choose the exception that matches the invalid
-    response or conflicting identity.
+    Raises
+    ------
+    TypeError
+        If the response does not contain a list of job objects.
     """
-    jobs = response["jobs"]
+    match response:
+        case {"jobs": list() as jobs} if all(_is_mapping(job) for job in jobs):
+            pass
+        case _:
+            message = "jobs response must contain a jobs list"
+            raise TypeError(message)
     _validate_complete_jobs_response(jobs, response.get("total_count"))
     _validate_job_identities(run, jobs)
     _validate_job_attempts(run, jobs)
+
+
+def _is_mapping(value: object) -> typ.TypeGuard[dict]:
+    """Identify JSON objects without coercion."""
+    match value:
+        case dict():
+            return True
+        case _:
+            return False
 
 
 def _validate_complete_jobs_response(jobs: list[dict], total_count: object) -> None:
