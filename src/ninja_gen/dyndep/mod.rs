@@ -54,6 +54,7 @@
 //!         progress_label: None,
 //!         phony: false,
 //!         always: false,
+//!         console: false,
 //! }).expect("test graph output aliases must be unique");
 //! let bundle = generate_bundle(&graph).expect("generate bundle");
 //! assert!(bundle.build_file().contains("ninja_required_version = 1.10"));
@@ -92,7 +93,10 @@ const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 /// Returns [`NinjaGenError::ReservedOutputPath`] when a user output or
 /// dependency collides with the reserved `.netsuke/serial` or
 /// `.netsuke/dyndep` namespace, and [`NinjaGenError::MissingAction`] when an
-/// edge references an unknown action.
+/// edge references an unknown action. Returns
+/// [`NinjaGenError::ConsoleDependencyOnly`] when a console edge uses a
+/// dependency-only action, and [`NinjaGenError::ConsolePoolConflict`] when its
+/// action requests a conflicting custom pool.
 pub fn generate_bundle(graph: &BuildGraph) -> Result<GeneratedNinja, NinjaGenError> {
     generate_bundle_for_shell(graph, RecipeShell::host_default())
 }
@@ -137,9 +141,12 @@ pub(crate) fn generate_bundle_for_shell_with_bash(
 /// [`NinjaGenError::UnsupportedCommandListExec`],
 /// [`NinjaGenError::UnanalyzableCommandListEval`], or
 /// [`NinjaGenError::NinjaControlCharacter`] when an action recipe cannot be
-/// rendered safely. Returns [`NinjaGenError::MissingAction`] when an edge
-/// references an action absent from the graph, or [`NinjaGenError::Format`]
-/// when rendering the bundle fails.
+/// rendered safely. Returns [`NinjaGenError::ConsoleDependencyOnly`] when a
+/// console edge uses a dependency-only action or
+/// [`NinjaGenError::ConsolePoolConflict`] when its action requests a
+/// conflicting custom pool. Returns [`NinjaGenError::MissingAction`] when an
+/// edge references an action absent from the graph, or
+/// [`NinjaGenError::Format`] when rendering the bundle fails.
 fn generate_bundle_inner(
     graph: &BuildGraph,
     shell: RecipeShell,
@@ -147,6 +154,7 @@ fn generate_bundle_inner(
 ) -> Result<GeneratedNinja, NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
+    super::validation::validate_console_scheduling(graph)?;
     let serial_present = graph_requires_dyndep(graph);
 
     let mut out = String::new();

@@ -195,6 +195,8 @@ ir.invalid_command = Interpolare nevalidă în comandă: { $snippet }.
 
 # Erori la generarea fișierelor Ninja.
 ninja_gen.missing_action = Lipsește acțiunea „{ $id }” la care face referire o muchie de construire.
+ninja_gen.console_dependency_only = Muchia de construire „{ $output }” nu poate selecta grupul console, deoarece acțiunea sa conține doar dependențe.
+ninja_gen.console_pool_conflict = Muchia de construire „{ $output }” selectează grupul console, dar acțiunea sa solicită grupul personalizat „{ $pool }”.
 ninja_gen.format = Ieșirea manifestului Ninja nu a putut fi formatată.
 ninja_gen.dyndep_files_required = Această operație necesită un pachet Ninja generat; utilizați `netsuke build`, `netsuke clean` sau `netsuke generate` pentru a materializa fișierele dyndep.
 ninja_gen.reserved_output_path = Calea '{ $path }' este rezervată pentru starea dependențelor seriale Netsuke.

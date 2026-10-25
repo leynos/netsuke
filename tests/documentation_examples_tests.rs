@@ -44,6 +44,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-command-list-failure-ambiguous-diagnostic",
     "guide-command-list-failure-unique-diagnostic",
     "guide-complete-manifest",
+    "guide-console-target",
     "guide-configuration-observability",
     "guide-crates-io-install",
     "guide-direct-command-list",
@@ -239,6 +240,7 @@ fn every_documented_fence_has_a_known_unique_identifier() -> Result<()> {
 #[case("guide-direct-command-list")]
 #[case("guide-command-available-manifest")]
 #[case("guide-serial-dependency-order-manifest")]
+#[case("guide-console-target")]
 #[case("stdlib-yaml-syntax-manifest")]
 #[case("stdlib-jinja-syntax-manifest")]
 #[case("stdlib-optional-rustflags-manifest")]
@@ -247,6 +249,26 @@ fn documented_manifest_generates_ninja(#[case] example_id: &str) -> Result<()> {
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
 
     assert_generates_valid_ninja(&run, example_id)
+}
+
+/// Keep the console-pool guide example tied to its generated Ninja binding.
+#[test]
+fn documented_console_example_selects_the_console_pool() -> Result<()> {
+    let workspace = manifest_workspace("guide-console-target")?;
+    let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
+
+    assert_success(&run, "guide console-pool target")?;
+    let lint_edge = run
+        .stdout
+        .split_once("build lint:")
+        .map(|(_, following)| following.split("\nbuild ").next().unwrap_or(following))
+        .context("generated Ninja should contain the lint build edge")?;
+    ensure!(
+        lint_edge.contains("  pool = console"),
+        "the documented lint target should select the console pool: {}",
+        run.stdout
+    );
+    Ok(())
 }
 
 #[test]

@@ -195,6 +195,8 @@ ir.invalid_command = Некоректна підстановка в команд
 
 # Помилки створення файлів Ninja.
 ninja_gen.missing_action = Відсутня дія «{ $id }», на яку посилається ребро збирання.
+ninja_gen.console_dependency_only = Ребро збирання «{ $output }» не може вибрати пул консолі, оскільки його дія містить лише залежності.
+ninja_gen.console_pool_conflict = Ребро збирання «{ $output }» вибирає пул консолі, але його дія запитує власний пул «{ $pool }».
 ninja_gen.format = Не вдалося відформатувати вивід маніфесту Ninja.
 ninja_gen.dyndep_files_required = Для цієї операції потрібні згенеровані Ninja dyndep файли; використовуйте `netsuke build`, `netsuke clean` або `netsuke generate`, щоб матеріалізувати їх.
 ninja_gen.reserved_output_path = Шлях '{ $path }' зарезервовано для стану послідовних залежностей Netsuke.

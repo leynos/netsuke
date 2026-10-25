@@ -196,6 +196,8 @@ ir.invalid_command = Interpolación de comando no válida: { $snippet }.
 
 # Errores de generación de Ninja.
 ninja_gen.missing_action = Falta la acción '{ $id }' referenciada por una arista de compilación.
+ninja_gen.console_dependency_only = La arista de compilación «{ $output }» no puede seleccionar el grupo de consola porque su acción solo declara dependencias.
+ninja_gen.console_pool_conflict = La arista de compilación «{ $output }» selecciona el grupo de consola, pero su acción solicita el grupo personalizado «{ $pool }».
 ninja_gen.format = No se pudo dar formato a la salida del manifiesto de Ninja.
 ninja_gen.dyndep_files_required = Esta compilación requiere un paquete Ninja generado; use `netsuke build`, `netsuke clean` o `netsuke generate` para materializar los archivos dyndep.
 ninja_gen.reserved_output_path = La ruta '{ $path }' está reservada para el estado de dependencias seriales de Netsuke.

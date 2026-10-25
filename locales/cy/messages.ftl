@@ -195,6 +195,8 @@ ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $snippet }.
 
 # Gwallau cynhyrchu Ninja.
 ninja_gen.missing_action = Mae'r weithred ‘{ $id }’ y cyfeirir ati gan ymyl adeiladu ar goll.
+ninja_gen.console_dependency_only = Ni all ymyl adeiladu ‘{ $output }’ ddewis y gronfa consol am mai dibyniaethau yn unig yw ei weithred.
+ninja_gen.console_pool_conflict = Mae ymyl adeiladu ‘{ $output }’ yn dewis y gronfa consol, ond mae ei weithred yn gofyn am gronfa addasedig ‘{ $pool }’.
 ninja_gen.format = Methwyd â fformatio allbwn y maniffest Ninja.
 ninja_gen.dyndep_files_required = Mae'r adeilad hwn yn gofyn am fwndel Ninja a gynhyrchwyd; defnyddiwch `netsuke build`, `netsuke clean` neu `netsuke generate` er mwyn deunyddoli ffeiliau dyndep.
 ninja_gen.reserved_output_path = Mae'r llwybr '{ $path }' wedi'i gadw ar gyfer cyflwr dibyniaethau cyfresol Netsuke.

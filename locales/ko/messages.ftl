@@ -195,6 +195,8 @@ ir.invalid_command = 명령의 보간이 잘못되었습니다: { $snippet }.
 
 # Ninja 생성 오류.
 ninja_gen.missing_action = 빌드 간선이 참조하는 동작 '{ $id }'이(가) 없습니다.
+ninja_gen.console_dependency_only = 빌드 에지 ‘{ $output }’는 콘솔 풀을 선택할 수 없습니다. 작업이 종속성만으로 이루어져 있기 때문입니다.
+ninja_gen.console_pool_conflict = 빌드 에지 ‘{ $output }’는 콘솔 풀을 선택하지만 작업은 사용자 지정 풀 ‘{ $pool }’을 요청합니다.
 ninja_gen.format = Ninja 매니페스트 출력의 서식을 지정하지 못했습니다.
 ninja_gen.dyndep_files_required = 이 작업에는 생성된 Ninja 번들이 필요합니다. dyndep 파일을 생성하려면 `netsuke build`, `netsuke clean` 또는 `netsuke generate`를 사용하세요.
 ninja_gen.reserved_output_path = 경로 '{ $path }'은(는) Netsuke의 직렬 종속성 상태용으로 예약되어 있습니다.

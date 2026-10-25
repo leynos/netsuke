@@ -195,6 +195,8 @@ ir.invalid_command = Cur a-steach mì-dhligheach san àithne: { $snippet }.
 
 # Mearachdan dèanamh Ninja.
 ninja_gen.missing_action = Tha an gnìomh “{ $id }” air a bheil oir togail a' toirt iomradh a dhìth.
+ninja_gen.console_dependency_only = Chan urrainn do dh’iomall togail ‘{ $output }’ amar a’ chonsail a thaghadh oir chan eil san ghnìomh aige ach eisimeileachdan.
+ninja_gen.console_pool_conflict = Tha iomall togail ‘{ $output }’ a’ taghadh amar a’ chonsail, ach tha an gnìomh aige ag iarraidh an amar ghnàthaichte ‘{ $pool }’.
 ninja_gen.format = Cha b' urrainnear às-chur an fhoirm-liosta Ninja fhòrmatadh.
 ninja_gen.dyndep_files_required = Feumaidh an togail seo pasgan Ninja a chaidh a chruthachadh; cleachd `netsuke build`, `netsuke clean` no `netsuke generate` gus na faidhlichean dyndep a chruthachadh.
 ninja_gen.reserved_output_path = Tha an t-slighe '{ $path }' glèidhte airson staid eisimeileachdan shreathach Netsuke.

@@ -1,0 +1,16 @@
+netsuke_version: "1.0.0"
+actions:
+  - name: streamed-action
+    rule: shared
+    console: true
+  - name: ordinary-action
+    rule: shared
+rules:
+  - name: shared
+    command: "echo {{ outs }}"
+targets:
+  - name: ordinary-target
+    rule: shared
+  - name: inline-console
+    command: "echo {{ outs }}"
+    console: true

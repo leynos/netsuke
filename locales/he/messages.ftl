@@ -195,6 +195,8 @@ ir.invalid_command = שיבוץ לא תקין בפקודה: { $snippet }.
 
 # שגיאות ביצירת קובצי Ninja.
 ninja_gen.missing_action = הפעולה „{ $id }” שאליה מפנה קשת בנייה חסרה.
+ninja_gen.console_dependency_only = ‏קשת הבנייה „{ $output }” אינה יכולה לבחור במאגר המסוף, כי הפעולה שלה כוללת תלויות בלבד.
+ninja_gen.console_pool_conflict = ‏קשת הבנייה „{ $output }” בוחרת במאגר המסוף, אך הפעולה שלה מבקשת את המאגר המותאם אישית „{ $pool }”.
 ninja_gen.format = לא ניתן היה לעצב את פלט מניפסט Ninja.
 ninja_gen.dyndep_files_required = ‏בנייה זו דורשת חבילת Ninja שנוצרה; השתמשו ב־`netsuke build`, ב־`netsuke clean` או ב־`netsuke generate` כדי ליצור את קובצי dyndep.
 ninja_gen.reserved_output_path = ‏הנתיב '{ $path }' שמור למצב התלויות הסדרתיות של Netsuke.

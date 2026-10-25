@@ -195,6 +195,8 @@ ir.invalid_command = Ugyldig indsættelse i kommandoen: { $snippet }.
 
 # Fejl under generering af Ninja.
 ninja_gen.missing_action = Handlingen "{ $id }", som en byggekant henviser til, mangler.
+ninja_gen.console_dependency_only = Byggekanten ‘{ $output }’ kan ikke vælge konsolpuljen, fordi handlingen kun indeholder afhængigheder.
+ninja_gen.console_pool_conflict = Byggekanten ‘{ $output }’ vælger konsolpuljen, men handlingen anmoder om den brugerdefinerede pulje ‘{ $pool }’.
 ninja_gen.format = Ninja-manifestets output kunne ikke formateres.
 ninja_gen.dyndep_files_required = Dette build kræver en genereret Ninja-pakke; brug `netsuke build`, `netsuke clean` eller `netsuke generate`, så dyndep-filerne materialiseres.
 ninja_gen.reserved_output_path = Stien '{ $path }' er reserveret til Netsukes serielle afhængighedstilstand.

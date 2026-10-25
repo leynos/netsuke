@@ -195,6 +195,8 @@ ir.invalid_command = コマンドの補間が無効です: { $snippet }。
 
 # Ninja 生成のエラー。
 ninja_gen.missing_action = ビルド辺が参照するアクション「{ $id }」がありません。
+ninja_gen.console_dependency_only = ビルドエッジ「{ $output }」はコンソールプールを選択できません。アクションが依存関係のみだからです。
+ninja_gen.console_pool_conflict = ビルドエッジ「{ $output }」はコンソールプールを選択していますが、アクションはカスタムプール「{ $pool }」を要求しています。
 ninja_gen.format = Ninja マニフェストの出力を整形できませんでした。
 ninja_gen.dyndep_files_required = この操作には生成済み Ninja バンドルが必要です。dyndep ファイルを具体化するには `netsuke build`、`netsuke clean`、または `netsuke generate` を使用してください。
 ninja_gen.reserved_output_path = パス '{ $path }' は Netsuke の直列依存関係の状態用に予約されています。

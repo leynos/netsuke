@@ -350,6 +350,7 @@ fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>)
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     }
 }
 

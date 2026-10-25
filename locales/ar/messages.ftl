@@ -195,6 +195,8 @@ ir.invalid_command = إقحام غير صالح داخل الأمر: { $snippet 
 
 # أخطاء توليد ملفات Ninja.
 ninja_gen.missing_action = الإجراء «{ $id }» الذي تشير إليه حافة بناء مفقود.
+ninja_gen.console_dependency_only = ‏لا يمكن لحافة البناء «{ $output }» اختيار مجموعة وحدة التحكم لأن إجراءها يقتصر على التبعيات.
+ninja_gen.console_pool_conflict = ‏تختار حافة البناء «{ $output }» مجموعة وحدة التحكم، لكن إجراءها يطلب مجموعة مخصصة «{ $pool }».
 ninja_gen.format = تعذّر تنسيق مخرجات ملف بيانات Ninja.
 ninja_gen.dyndep_files_required = ‏ يتطلّب هذا البناء حزمة Ninja مُنشأة؛ استخدم `netsuke build` أو `netsuke clean` أو `netsuke generate` لتجهيز ملفات dyndep.
 ninja_gen.reserved_output_path = ‏ المسار '{ $path }' محجوز لحالة تبعيات Netsuke التسلسلية.

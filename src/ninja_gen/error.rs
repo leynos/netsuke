@@ -15,6 +15,24 @@ pub enum NinjaGenError {
         /// Localized error message.
         message: LocalizedMessage,
     },
+    /// A dependency-only edge cannot request Ninja's console pool.
+    #[error("{message}")]
+    ConsoleDependencyOnly {
+        /// First explicit output identifying the offending build edge.
+        output: String,
+        /// Localized error message.
+        message: LocalizedMessage,
+    },
+    /// A console edge conflicts with the pool selected by its action.
+    #[error("{message}")]
+    ConsolePoolConflict {
+        /// First explicit output identifying the offending build edge.
+        output: String,
+        /// Action pool that conflicts with console scheduling.
+        pool: String,
+        /// Localized error message.
+        message: LocalizedMessage,
+    },
     /// An action built outside manifest deserialization has no command entries.
     #[error("command-list action {action_index} has no command entries")]
     EmptyCommandRecipe {

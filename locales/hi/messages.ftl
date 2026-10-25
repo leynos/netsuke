@@ -195,6 +195,8 @@ ir.invalid_command = आदेश में अमान्य प्रक्�
 
 # Ninja निर्माण की त्रुटियाँ।
 ninja_gen.missing_action = किसी बिल्ड कोर द्वारा संदर्भित क्रिया “{ $id }” अनुपस्थित है।
+ninja_gen.console_dependency_only = बिल्ड एज ‘{ $output }’ कंसोल पूल नहीं चुन सकता, क्योंकि इसकी क्रिया केवल निर्भरताएँ बताती है।
+ninja_gen.console_pool_conflict = बिल्ड एज ‘{ $output }’ कंसोल पूल चुनता है, लेकिन इसकी क्रिया कस्टम पूल ‘{ $pool }’ का अनुरोध करती है।
 ninja_gen.format = Ninja मैनिफ़ेस्ट का निर्गम स्वरूपित नहीं किया जा सका।
 ninja_gen.dyndep_files_required = इस बिल्ड के लिए जनरेट किया गया Ninja बंडल आवश्यक है; dyndep फ़ाइलों को मूर्त रूप देने के लिए `netsuke build`, `netsuke clean` या `netsuke generate` का उपयोग करें।
 ninja_gen.reserved_output_path = पथ '{ $path }' Netsuke की क्रमिक निर्भरता स्थिति के लिए आरक्षित है।
