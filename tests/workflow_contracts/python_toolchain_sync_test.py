@@ -266,6 +266,9 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",
+            # The PEP 723 dependencies ty cannot read out of the scripts. The
+            # bounded ranges name the band each exact pin sits in, which
+            # `kani_proof_scope_decision_test.py` holds this target to.
             "--with 'cyclopts>=4.25.3,<5'",
             "--with 'cuprum>=0.1.0,<0.2.0'",
             "--extra-search-path scripts",

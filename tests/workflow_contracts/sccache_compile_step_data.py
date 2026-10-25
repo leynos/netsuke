@@ -16,6 +16,39 @@ from pathlib import PurePosixPath
 #: `cargo llvm-cov` build rather than a plain `run:` compiler invocation.
 GENERATE_COVERAGE_ACTION = "leynos/shared-actions/.github/actions/generate-coverage@"
 
+#: The Cyclopts helper every compiling lane reports through; it writes the
+#: text and JSON files and the summary section, covered by
+#: `scripts/tests/test_ci_report_sccache_stats.py`.
+SCCACHE_REPORT_SCRIPT = "uv run --script scripts/ci/report_sccache_stats.py"
+#: The one lane that only prints the JSON form and keeps no files: the
+#: release smoke job has no uv and nothing downstream reads its statistics.
+JSON_ONLY_REPORTS = frozenset({("release.yml", "windows-native-recipe-smoke")})
+
+
+def assert_report_command(workflow_name: str, job_name: str, command: str) -> None:
+    """Assert a job's statistics step reports the way its lane is allowed to.
+
+    Parameters
+    ----------
+    workflow_name
+        Workflow file the job lives in.
+    job_name
+        The compiling job under test.
+    command
+        The ``run`` script of its ``Show sccache statistics`` step.
+    """
+    command = command.strip()
+    if (workflow_name, job_name) in JSON_ONLY_REPORTS:
+        assert "sccache --show-stats --stats-format=json" in command, (
+            f"{workflow_name} {job_name} must export machine-readable sccache "
+            "statistics"
+        )
+        return
+    assert command == SCCACHE_REPORT_SCRIPT, (
+        f"{workflow_name} {job_name} must report through the checked-in "
+        f"{SCCACHE_REPORT_SCRIPT!r} rather than inline shell, got {command!r}"
+    )
+
 
 def invokes_build_command(line: str) -> bool:
     """Return whether a shell line's first word is `make` or `cargo`.

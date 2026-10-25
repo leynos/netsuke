@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-package-verify build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -164,6 +164,16 @@ INTERROGATE = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 # typecheck gate without any code change. Bump deliberately and fix new
 # diagnostics in the same commit.
 TY_VERSION ?= 0.0.74
+# The CI helper scripts under scripts/ci declare these in their PEP 723
+# blocks; scripts/tests/test_ci_scripts_metadata.py holds the two in step, so
+# `uv run --script` in CI and the test and typecheck gates resolve one release.
+# cuprum is a PyPI release, not a git ref: the scripts and the older
+# `scripts/` helpers share one `run_sync` signature, and a git pin would give
+# `make typecheck-python` a different cuprum from the one those helpers
+# declare, so no single resolution could satisfy both.
+CYCLOPTS_VERSION ?= 4.25.3
+CUPRUM_VERSION ?= 0.1.0
+CI_SCRIPT_DEPS = --with cyclopts==$(CYCLOPTS_VERSION) --with cuprum==$(CUPRUM_VERSION)
 # Every Python source the repository owns. Ruff and Pylint resolve their own
 # configuration and exclusions from pyproject.toml, so these paths only bound
 # the walk.
@@ -322,6 +332,23 @@ test-linux-package-metadata: ## Test Linux package metadata reading and validati
 		scripts/tests/test_validate_linux_package_metadata.py -c /dev/null --rootdir=. \
 		-p no:cacheprovider
 
+test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and cmd-mox
+	@PYTHONPATH=scripts/ci:scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 --with cmd-mox==0.2.0 --with hypothesis==6.151.9 \
+		$(CI_SCRIPT_DEPS) \
+		python -m pytest -p cmd_mox.pytest_plugin \
+		scripts/tests/test_ci_archive.py \
+		scripts/tests/test_ci_containment.py \
+		scripts/tests/test_ci_discard_instrumented_tree.py \
+		scripts/tests/test_ci_install_actionlint.py \
+		scripts/tests/test_ci_install_actionlint_cache.py \
+		scripts/tests/test_ci_install_kani.py \
+		scripts/tests/test_ci_report_sccache_stats.py \
+		scripts/tests/test_ci_scripts_metadata.py \
+		scripts/tests/test_ci_stage_test_shell.py \
+		scripts/tests/test_ci_support.py \
+		-c /dev/null --rootdir=. -p no:cacheprovider
+
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no
 # longer share a command line. The debug build takes the standard; the release
 # build is one of the two exclusions.
@@ -436,15 +463,21 @@ typecheck-python: ## Typecheck the Python sources with ty
 	# would layer the extras through `.pth` chaining, which ty cannot follow.
 	# Standalone scripts declare these runtime dependencies in PEP 723 blocks,
 	# which ty does not read, so include them in its environment explicitly.
-	# Both `scripts` and `.github/scripts` are named as search roots because
-	# the contract tests import from them through a `sys.path` insert, which
-	# ty does not follow; without the roots those imports read as unresolved.
+	# The bounded ranges name the band each pin sits in, so this one
+	# resolution typechecks every script and helper together: the CI helper
+	# scripts pin cyclopts and cuprum exactly, and `scripts/kani_proof_scope.py`
+	# declares its own pins, which the Kani workflow-contract test holds this
+	# target to. Both `scripts` and `.github/scripts` are named as search
+	# roots because the contract tests import from them through a `sys.path`
+	# insert, which ty does not follow; without the roots those imports read
+	# as unresolved.
 	$(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 		--from ty==$(TY_VERSION) --with pytest==9.0.2 --with pytest-cov==7.0.0 \
 		--with 'pyyaml>=6' --with 'hypothesis>=6' --with 'cmd-mox==0.2.0' \
 		--with 'cyclopts>=4.25.3,<5' --with 'cuprum>=0.1.0,<0.2.0' \
 		ty check --python-version $(PYTHON_BASELINE) \
-		--extra-search-path scripts --extra-search-path .github/scripts \
+		--extra-search-path scripts/ci --extra-search-path scripts \
+		--extra-search-path .github/scripts \
 		$(PYTHON_SOURCES)
 
 markdownlint: spelling ## Lint Markdown and enforce en-GB-oxendict spelling
