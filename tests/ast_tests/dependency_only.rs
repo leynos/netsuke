@@ -225,3 +225,40 @@ fn direct_ast_deserialisation_is_validated_before_ir_lowering() -> Result<()> {
     );
     Ok(())
 }
+
+/// Reject console scheduling on dependency-only entries during parsing.
+#[rstest]
+#[case::action("actions:\n  - name: all\n    deps: [lint]\n    console: true\ntargets: []\n")]
+#[case::target("actions: []\ntargets:\n  - name: release\n    deps: [build]\n    console: true\n")]
+fn dependency_only_console_entries_are_rejected(#[case] sections: &str) -> Result<()> {
+    let yaml = format!("netsuke_version: '1.0.0'\n{sections}");
+    let error =
+        parse_manifest(&yaml).expect_err("dependency-only entries cannot use the console pool");
+    let chain = display_error_chain(error.as_ref());
+    ensure!(
+        chain.contains("console cannot be enabled for dependency-only entries"),
+        "unexpected console dependency-only diagnostic: {chain}"
+    );
+    Ok(())
+}
+
+/// Preserve the console-specific validation diagnostic during direct IR lowering.
+#[test]
+fn direct_ir_lowering_preserves_console_dependency_only_diagnostic() -> Result<()> {
+    let yaml = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: release\n",
+        "    deps: [build]\n",
+        "    console: true\n",
+    );
+    let manifest: NetsukeManifest =
+        serde_saphyr::from_str(yaml).context("directly deserialize the manifest")?;
+    let error = BuildGraph::from_manifest(&manifest)
+        .expect_err("console scheduling on an aggregate should fail IR lowering");
+    ensure!(
+        error.to_string() == "console cannot be enabled for dependency-only entries",
+        "direct AST lowering should preserve the console diagnostic: {error}"
+    );
+    Ok(())
+}
