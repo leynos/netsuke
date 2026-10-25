@@ -6,9 +6,9 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: APPROVED
+Status: IN PROGRESS
 
-Revision 9. See `Revision note` at the foot of this document. This plan was
+Revision 14. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -429,7 +429,37 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   admission. Added a targeted 900-second allowance and updated its contracts
   and developers' guide; the complete gate sequence passed on the updated
   candidate.
-- [ ] EP-M1: contract test red, then green against a skeleton inventory.
+- [x] (2026-10-25) Began EP-M1 after committing the approval checkpoint
+  (`4b8bc1a4a`). The document-contract test is being added test-first; its red
+  run must identify the not-yet-created inventory before the skeleton is added.
+- [x] (2026-10-25) The first focused run stopped during compilation before any
+  test ran: `concat!` rejected the fixture's named pin, and both borrowed
+  section helpers needed explicit output lifetimes. Fixed those errors and
+  corrected the transitive-negative fixture; the red experiment remains to be
+  repeated.
+- [x] (2026-10-25) The second run compiled and confirmed the expected missing
+  inventory failure, but also exposed that Rust string continuations stripped
+  roadmap-fixture indentation; eight fixture assertions also dropped their
+  `Result`s. Replaced those strings with literal concatenation and propagated
+  the results; the red experiment remains to be repeated.
+- [x] (2026-10-25) EV-RED passed on the third focused run: all 17 fixture tests
+  passed and `real_inventory_is_consistent` was the sole failure, naming the
+  absent inventory path. Added the empty pinned skeleton and all 25 dependent
+  tasks as pending EP-M3 exclusions; the focused green check is next.
+- [x] (2026-10-25) EV-CONTRACT passed after aligning its skeleton with both
+  register tables and adding malformed-ID, duplicate-pin, and wildcard cases:
+  all 23 focused tests passed with no compiler warnings. EV-GATES then passed:
+  format, typecheck, lint, doc coverage at 98.19%, 4,887 Nextest tests with 6
+  skipped and all doctests, Markdown lint with 199 files and zero issues, and
+  Mermaid validation. The EP-M1 milestone is ready to commit.
+- [x] (2026-10-25) Clippy follow-up: the first full `make lint` run found 20
+  issues in the new contract helpers. Extracted the roadmap parser and split
+  the validator; the next lint run reduced these to four iterator lifetime and
+  shadowing findings. Clippy then passed, while Whitaker found two complex
+  predicates. Named those predicates; the complete `make lint` target passed.
+  The complete EP-M1 gate sequence passed before the milestone commit.
+- [x] EP-M1: contract test red, then green against a skeleton inventory; all
+  seven final gate targets passed before the milestone commit.
 - [ ] EP-M2: register recorded; EV-ORACLE, EV-SWEEP, EV-REVERSE, EV-SEEDED.
 - [ ] EP-M3: landed work, findings, obligations, and trace matrix.
 - [ ] EP-M4: documentation integration, roadmap update, gates green.
@@ -1445,6 +1475,42 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
 - Revision 9 (2026-10-25): the user approved beginning with the plan as written
   and retaining pin `8a961000`; resolved D-12 and set status to `APPROVED`
   before implementation.
+
+- Revision 10 (2026-10-25): committed the approval checkpoint, retaining the
+  declared pin, then began EP-M1 with the document-integrity test's red stage.
+
+- Revision 11 (2026-10-25): recorded the initial compile-only failure of the
+  red test, fixed the literal and lifetime errors, and removed the transitive
+  dependent from the negative fixture's Excluded list.
+
+- Revision 12 (2026-10-25): recorded the second red run's expected missing-file
+  failure plus its unexpected empty dependency set and unused-Result warnings;
+  preserved fixture indentation and propagated every fixture assertion result.
+
+- Revision 13 (2026-10-25): recorded EV-RED and added the pinned inventory
+  skeleton with empty register and trace tables and all 25 dependent tasks
+  excluded pending EP-M3.
+
+- Revision 14 (2026-10-25): recorded EV-CONTRACT after 23 focused tests passed,
+  including the additional register grammar and wildcard cases; full gates
+  remain before the EP-M1 commit.
+
+- Revision 15 (2026-10-25): recorded the first full lint failure and its
+  follow-up. Extracted the roadmap dependency parser, split validation into
+  focused checks, removed unchecked string slicing, and corrected the four
+  remaining lifetime and shadowing findings before another lint run.
+
+- Revision 16 (2026-10-25): Clippy passed after revision 15, but Whitaker
+  rejected two three-part conditions in the Markdown parser. Replaced them with
+  named predicates, then recorded the complete lint pass.
+
+- Revision 17 (2026-10-25): recorded that the full `make lint` target passed
+  after the named-predicate repair; the remaining EP-M1 gates are required
+  before its commit.
+
+- Revision 18 (2026-10-25): recorded EV-GATES for EP-M1: all seven targets
+  passed, including 4,887 Nextest tests, all doctests, and 98.19% doc-comment
+  coverage. Marked the contract-test milestone complete before its commit.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
