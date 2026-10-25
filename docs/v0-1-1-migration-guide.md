@@ -24,6 +24,16 @@ Netsuke lowers this entry to a native Ninja `phony` node. The dependencies
 retain their previous ordering, deduplication, and failure-propagation
 behaviour, but the aggregate no longer launches a shell command.
 
+Generated bundles for serial lists with two or more dependencies also contain
+one relay phony for each staged dependency. Each relay carries the
+corresponding real dependency; its dyndep sidecar reveals that relay as an
+input to the staged gate. These relays are distinct from the dependency-only
+aggregate phony such as `all`, which still represents the authored workflow.
+Manifests remain compatible and need no edit for this generated-state change.
+See
+[ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md)
+for the reason for this indirection.
+
 An entry with neither a recipe nor a non-empty `deps` list remains invalid.
 Continue using `command`, `script`, or `rule` whenever the action or target has
 work of its own to perform. See the

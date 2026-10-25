@@ -354,3 +354,5 @@ mod dependency_only;
 mod multi_output;
 
 mod paths;
+
+mod serial_snapshot;
