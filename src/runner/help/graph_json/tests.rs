@@ -177,6 +177,7 @@ fn target_strategy() -> impl Strategy<Value = Target> {
                 vars: HashMap::default(),
                 phony,
                 always,
+                console: false,
                 conditional,
                 description,
             },
