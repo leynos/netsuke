@@ -178,8 +178,63 @@ def test_a_failing_post_removal_df_fails_the_step_after_removing(
     assert not (target / "llvm-cov").exists(), (
         "expected: not (target / 'llvm-cov').exists()"
     )
-    assert "removed " not in captured.out, (
-        "the per-tree report is skipped when the step fails"
+    assert f"removed {target / 'llvm-cov-target'}" in captured.out, (
+        "each completed removal must be reported before the post-removal df"
+    )
+    assert f"removed {target / 'llvm-cov'}" in captured.out, (
+        "each completed removal must be reported before the post-removal df"
+    )
+
+
+def test_a_later_removal_failure_reports_completed_removals(
+    cmd_mox: CmdMox,
+    target: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Keep the log accurate when a later tree fails to be removed."""
+
+    class InjectedRemovalError(OSError):
+        """Represent the deliberately injected removal failure."""
+
+        def __init__(self) -> None:
+            """Set the diagnostic expected from the failed removal."""
+            super().__init__("injected removal failure")
+
+    _df(cmd_mox, expected_calls=1)
+    original_rmtree = script.shutil.rmtree
+    calls = 0
+
+    def remove_first_then_fail(path: pathlib.Path) -> None:
+        """Remove the first tree and fail on the next removal."""
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            original_rmtree(path)
+            return
+        raise InjectedRemovalError
+
+    monkeypatch.setattr(script.shutil, "rmtree", remove_first_then_fail)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    captured = capsys.readouterr()
+    removed_lines = set(captured.out.splitlines())
+    assert f"removed {target / 'llvm-cov-target'}" in removed_lines, (
+        "the successfully removed first tree must be reported"
+    )
+    assert f"removed {target / 'llvm-cov'}" not in removed_lines, (
+        "a tree that failed removal must not be reported as removed"
+    )
+    assert "injected removal failure" in captured.err, (
+        "expected the removal failure to be reported"
+    )
+    assert not (target / "llvm-cov-target").exists(), (
+        "the first tree should have been removed"
+    )
+    assert (target / "llvm-cov").is_dir(), (
+        "the second tree should remain after its removal failed"
     )
 
 

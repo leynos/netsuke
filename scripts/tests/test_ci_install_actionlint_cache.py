@@ -52,6 +52,32 @@ def test_warm_cache_reuses_a_binary_reporting_the_pinned_version(
     )
 
 
+def test_cached_symlink_is_rejected_without_probing_its_target(
+    install_dir: pathlib.Path,
+    no_releases_available: None,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Never reuse a cache entry that redirects the install path elsewhere."""
+    outside = write_executable(tmp_path / "outside" / "actionlint", f"echo '{VERSION}'")
+    outside_before = outside.read_bytes()
+    cached = install_dir / "actionlint"
+    cached.symlink_to(outside)
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    err = capsys.readouterr().err
+    assert "symbolic link" in err, "expected the diagnostic to reject the link"
+    assert cached.is_symlink(), "expected the cache symlink to remain untouched"
+    assert outside.read_bytes() == outside_before, (
+        "expected the external executable to remain untouched"
+    )
+    assert "does not match its pinned SHA-256" not in err, (
+        "expected rejection before attempting a release download"
+    )
+
+
 def test_a_cached_binary_that_cannot_report_a_version_fails_the_step(
     install_dir: pathlib.Path,
     no_releases_available: None,

@@ -217,8 +217,12 @@ fn ensure_kani_install_delegates_to_script(install_step: &Mapping) -> Result<()>
     let env = mapping_get(install_step, YamlKey("env"))
         .context("the Kani install step should declare the pins it passes")
         .and_then(|value| value_mapping(value, "Kani install step env"))?;
-    let missing: Vec<String> = std::iter::once(("INPUT_KANI_VERSION", ""))
-        .chain(KANI_INSTALL_PINS.iter().copied())
+    let version_is_missing = mapping_get(env, YamlKey("INPUT_KANI_VERSION"))
+        .and_then(Value::as_str)
+        .is_none_or(str::is_empty);
+    let missing_pins: Vec<String> = KANI_INSTALL_PINS
+        .iter()
+        .copied()
         .filter(|(key, prefix)| {
             mapping_get(env, YamlKey(key))
                 .and_then(Value::as_str)
@@ -226,9 +230,35 @@ fn ensure_kani_install_delegates_to_script(install_step: &Mapping) -> Result<()>
         })
         .map(|(key, _)| key.to_owned())
         .collect();
+    let mut missing = Vec::with_capacity(missing_pins.len() + usize::from(version_is_missing));
+    if version_is_missing {
+        missing.push("INPUT_KANI_VERSION".to_owned());
+    }
+    missing.extend(missing_pins);
     ensure!(
         missing.is_empty(),
         "Kani's binary-only cached installation is missing: {missing:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn unit_rejects_empty_kani_version_pin() -> Result<()> {
+    let install_step: Value = serde_yaml::from_str(&format!(
+        "run: uv run --script {KANI_INSTALL_SCRIPT}\nenv:\n  INPUT_KANI_VERSION: \"\"\n  INPUT_FRONTEND_SHA256: {}\n  INPUT_BUNDLE_SHA256: {}\n",
+        KANI_INSTALL_PINS[0].1, KANI_INSTALL_PINS[1].1
+    ))
+    .context("parse Kani install step with an empty version")?;
+    let mapping = install_step
+        .as_mapping()
+        .context("Kani install step should be a mapping")?;
+
+    let error = ensure_kani_install_delegates_to_script(mapping)
+        .err()
+        .context("empty Kani version pin should be rejected")?;
+    ensure!(
+        error.to_string().contains("INPUT_KANI_VERSION"),
+        "missing pin diagnostic should name INPUT_KANI_VERSION"
     );
     Ok(())
 }

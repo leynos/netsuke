@@ -83,8 +83,18 @@ class Release:
 
     @property
     def binary(self) -> pathlib.Path:
-        """The cached binary's path, resolved so it is never looked up on PATH."""
-        return (self.install_dir / BINARY_NAME).resolve()
+        """The install path without following its final component."""
+        return self.install_dir / BINARY_NAME
+
+
+class ActionlintSymlinkInstallError(CiScriptError):
+    """Refuse actionlint installation through a symbolic link."""
+
+    def __init__(self, binary: pathlib.Path) -> None:
+        """Build the refusal message for ``binary``."""
+        super().__init__(
+            f"refusing to install actionlint through symbolic link {binary}"
+        )
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -129,6 +139,12 @@ def probe_version(binary: pathlib.Path) -> Probe:
     prevent. Split first to preserve the existing first-line parsing; stripping
     the whole stream first could promote a later line over a blank first line.
 
+    Parameters
+    ----------
+    binary
+        Candidate executable path. It is made absolute for command lookup, but
+        its final component is never resolved through a symbolic link.
+
     Returns
     -------
     Probe
@@ -136,6 +152,9 @@ def probe_version(binary: pathlib.Path) -> Probe:
         one. Neither field is set when there was nothing to ask, which is the
         empty-cache case the cold path exists for.
     """
+    binary = binary.absolute()
+    if binary.is_symlink():
+        return Probe(failure=f"{binary} is a symbolic link")
     if not is_executable_file(binary):
         return Probe()
     spec = RunSpec(catalogue(str(binary)), echo=False)
@@ -157,16 +176,40 @@ def install(release: Release, scratch: pathlib.Path) -> None:
     extraction writes into the destination rather than creating it, so the
     directory is made here. It is made after verification rather than before
     so a checksum failure leaves no install directory behind.
+
+    Parameters
+    ----------
+    release
+        Pins and destinations for the actionlint archive.
+    scratch
+        Directory for the temporary downloaded archive.
+
+    Raises
+    ------
+    ActionlintSymlinkInstallError
+        If the install path is a symbolic link.
     """
+    binary = release.binary
+    if binary.is_symlink():
+        raise ActionlintSymlinkInstallError(binary)
     archive = scratch / pathlib.PurePosixPath(release.url).name
     download(release.url, archive)
     verify_sha256(archive, release.sha256)
-    release.binary.parent.mkdir(parents=True, exist_ok=True)
-    extract_members(archive, release.binary.parent, (BINARY_NAME,))
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    if binary.is_symlink():
+        raise ActionlintSymlinkInstallError(binary)
+    extract_members(archive, binary.parent, (BINARY_NAME,))
 
 
 def ensure_installed_version(binary: pathlib.Path, expected: str) -> str:
     """Return the version ``binary`` reports, failing unless it is ``expected``.
+
+    Parameters
+    ----------
+    binary
+        Installed executable whose version must be checked.
+    expected
+        Pinned version the executable must report.
 
     Returns
     -------
@@ -200,6 +243,11 @@ def reuse_or_install(release: Release) -> str:
     raising from inside the entry point's own ``try`` makes the decision and
     its handling one tangle, and leaves the branch untestable without going
     through the exit status.
+
+    Parameters
+    ----------
+    release
+        Pins, cache destination, and release source for actionlint.
 
     Returns
     -------
@@ -238,6 +286,11 @@ def main(*, release: Release) -> int:
     pin changed, so the failure would return with nothing recorded to explain
     it. An absent or non-executable binary is the ordinary empty-cache case and
     is still replaced.
+
+    Parameters
+    ----------
+    release
+        Workflow inputs describing the pinned actionlint release.
 
     Returns
     -------

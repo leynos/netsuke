@@ -126,9 +126,11 @@ def discard(target_dir: pathlib.Path, subtrees: tuple[str, ...]) -> list[pathlib
         if tree.is_symlink() or tree.is_file():
             tree.unlink()
             removed.append(tree)
+            print(f"removed {tree}")
         elif tree.is_dir():
             shutil.rmtree(tree)
             removed.append(tree)
+            print(f"removed {tree}")
     return removed
 
 
@@ -156,13 +158,11 @@ def main(
     names = tuple(subtrees) if subtrees else DEFAULT_SUBTREES
     try:
         show_disk_usage()
-        removed = discard(target_dir, names)
+        discard(target_dir, names)
         show_disk_usage()
     except (CiScriptError, OSError) as error:
         print(f"discard_instrumented_tree: {error}", file=sys.stderr)
         return 1
-    for tree in removed:
-        print(f"removed {tree}")
     return 0
 
 
