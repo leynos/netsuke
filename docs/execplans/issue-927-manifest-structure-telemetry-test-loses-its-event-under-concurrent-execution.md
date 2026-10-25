@@ -462,15 +462,17 @@ seeded duplicate.
   `test_support/src/tracing_capture.rs`. The parent regression test failed in
   the public-helper child because its summary callback ran before T1 released
   the gate (`before release=true, after release=false`). The unmitigated and
-  anchored child schedules passed first. This test checks registration timing
-  before reaching the public-helper exact-cardinality oracle, so this run does
-  not establish the requested empty-event oracle diagnostic; record that limit
-  for the follow-up assessment. Restored the source byte-for-byte (SHA-256
-  `08ccbe5e1077e856aedfd69088bb19a26e58f63a9577796af1b78287b8b6cf56`) and reran
-  `cargo nextest run -p netsuke-build --lib
-  stale_summary_interest_is_reproduced_in_a_fresh_process`,
-  which passed. Mutation and restored-run logs are in the private PR #943
-  evidence bundle.
+  anchored child schedules passed first. A follow-up used temporary
+  instrumentation before the timing assertion to snapshot the public-helper
+  child's events and evaluate the exact-cardinality validator. It printed
+  `events: []` and
+  `Err(a structural summary must emit exactly one trace event: [])`; the child
+  then failed at the existing callback-timing assertion. The source was
+  restored byte-for-byte (SHA-256
+  `08ccbe5e1077e856aedfd69088bb19a26e58f63a9577796af1b78287b8b6cf56`), and the
+  focused parent test passed after forcing a rebuild of the restored sources.
+  The diagnostic was removed. Logs are in
+  `/tmp/pr943-a1-public-helper-mutation/`.
 - [x] (2026-10-25) Corrected the focused Loom command in the developers' guide
   to select the Cargo package `netsuke-build`; `netsuke` is the library and
   binary target name. The previous command named a non-existent package. The
@@ -592,6 +594,15 @@ production emission remains synchronous in `record_manifest_structure`.
   `RELEASE_CAUSE=installed`, six span fields, `events: []`, and
   `a structural summary must emit exactly one trace event: []`. The anchor
   implementation was restored before the passing run.
+- Public-helper anchor-registration negative control: removing only the
+  registration call made its child capture no events. Temporary diagnostics
+  evaluated the exact-cardinality validator before the existing timing check
+  and reported `events: []` with the expected validator error. The child still
+  failed on callback timing, so the diagnostic records the oracle result
+  without changing which assertion determines the child exit. After restoring
+  the helper byte-for-byte, the focused parent test passed with all three child
+  modes. Logs: `/tmp/pr943-a1-public-helper-mutation/focused-mutated-lib.out`
+  and `focused-restored-rebuilt-lib.out`.
 - Post-fix sequential libtest matrix (no retries):
 
   | Filter                                 | Default threads      | 16 threads           |
