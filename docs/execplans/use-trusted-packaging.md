@@ -2348,6 +2348,16 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `test-workflow-contracts` (1,494 passed, 3 skipped, plus 28 helper tests),
   `test-ci-scripts` (99 passed), `test-release-publication` (413 passed),
   `markdownlint`, and `nixie`.
+- [x] (2026-10-25) Cleared CodeScene's Large Method finding on
+  `publish_crates_io_cli._classify` (71 lines against a 70-line threshold) by
+  extracting the CLI-private `_write_json_record` helper. It owns deterministic
+  JSON formatting and path writes for this CLI's result records; command
+  schemas, diagnostics, and exit decisions remain at their subcommands.
+  `cs delta` confirms the method is below threshold. Commit `013baf3e` passed
+  the sequential gates: `check-fmt`, `lint`, `typecheck`, `doc-coverage`
+  (98.20%; 6,221/6,335 items), `test` (4,712 passed, 6 skipped; doctests
+  passed), `test-release-publication` (414 passed), `test-ci-scripts` (99
+  passed), `markdownlint`, and `nixie`.
 
 ## Surprises & discoveries
 
@@ -3847,3 +3857,10 @@ have a distinct diagnosed status, parser errors use the documented usage code,
 and regression tests cover those outcomes. The full sequential gate set passed
 at commit `0fec91c2`. Stage C remains partial and Stage D remains open. No
 publication path, release setting, or registry configuration changed.
+
+Draft 12, 2026-10-25: cleared CodeScene's Large Method advisory by extracting
+the private `_write_json_record` helper from `_classify`. The helper remains
+inside `publish_crates_io_cli`; result schemas, diagnostics, and exit choices
+stay with their subcommands. The nine sequential gates passed at commit
+`013baf3e`. Stage C remains partial and Stage D remains open. No publication
+path, release setting, or registry configuration changed.
