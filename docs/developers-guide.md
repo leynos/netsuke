@@ -6344,12 +6344,14 @@ The manifest `console` Boolean lowers to `BuildEdge.console`. It is scheduling
 metadata owned by the edge because two targets can share one action and rule
 while only one target needs streamed output. `Action.pool` remains unchanged,
 so console selection does not alter action identity or action deduplication.
-`src/ninja_gen/display_edge.rs` emits `pool = console` on that edge, and shared
+`src/ninja_gen/display_edge.rs` emits `pool = console` on that edge. If a
+shared action rule already declares `pool = console`, ordinary edges get an
+empty edge-level `pool =` binding to clear that inherited selection. Shared
 console-scheduling validation runs before both direct Ninja generation and
 dyndep-bundle generation. That validation rejects dependency-only edges and
 custom action pools that conflict with `console`; it accepts an existing
 `Action.pool` value of `console`. Synthetic serial gates and dyndep sidecars
-never inherit the binding.
+never inherit either binding.
 
 `src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
 `implicit_deps` when detecting cycles. It intentionally does not traverse

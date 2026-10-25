@@ -4,6 +4,7 @@ use anyhow::{Context, Result, ensure};
 use rstest::rstest;
 
 use super::support::parse_manifest;
+use netsuke::manifest::ManifestError;
 
 /// Default target console scheduling to false and accept either explicit value.
 #[rstest]
@@ -24,6 +25,33 @@ fn target_console_defaults_and_overrides(
         "unexpected console flag: got {}, expected {}",
         target.console,
         expected_console
+    );
+    Ok(())
+}
+
+/// Preserve the parse diagnostic path while localizing dependency-only console errors.
+#[test]
+fn dependency_only_console_manifest_error_is_localized() -> Result<()> {
+    let _locale = test_support::localizer::locale_localizer("fr");
+    let yaml = r#"
+        netsuke_version: "1.0.0"
+        targets:
+          - name: all
+            deps: [lint]
+            console: true
+    "#;
+    let error = parse_manifest(yaml).expect_err("dependency-only console must be rejected");
+    ensure!(
+        matches!(
+            error.downcast_ref::<ManifestError>(),
+            Some(ManifestError::Parse { .. })
+        ),
+        "manifest validation should retain the parse diagnostic path: {error:#}"
+    );
+    let rendered = format!("{error:#}");
+    ensure!(
+        rendered.contains("arête de compilation"),
+        "dependency-only console diagnostic should use the French catalogue: {rendered}"
     );
     Ok(())
 }

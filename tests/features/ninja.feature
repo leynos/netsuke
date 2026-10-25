@@ -17,7 +17,8 @@ Feature: Ninja file generation
     And the ninja file is generated
     Then the ninja file contains "build streamed-action:"
     And the ninja file contains "build inline-console:"
-    And the ninja file contains "  pool = console"
+    And the Ninja edge "streamed-action" has a console pool binding
+    And the Ninja edge "inline-console" has a console pool binding
 
   Scenario: Dependency-only console edges are rejected
     Given a dependency-only action graph with console scheduling
