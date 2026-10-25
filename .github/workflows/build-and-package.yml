@@ -206,7 +206,7 @@ jobs:
           # Generation `v2`: the entry no longer carries a source-build target
           # directory, so its shape changed as well as its version.
           key: >-
-            netsuke-orthohelp-v2-${{ runner.os }}-${{ runner.arch }}-0.9.1-${{ env.RUST_BUILD_RELEASE_PIN }}
+            netsuke-orthohelp-v2-${{ runner.os }}-${{ runner.arch }}-0.10.0-${{ env.RUST_BUILD_RELEASE_PIN }}
 
       - name: Install cargo-orthohelp
         # Runs after `rust-build-release`, which nests the setup-rust action
@@ -221,7 +221,7 @@ jobs:
         # checksum-verified archives with working binstall metadata
         # (leynos/ortho-config#480), so the exception is retired: only 0.9.1
         # and later carry assets, and pinning below that would reintroduce a
-        # compile.
+        # compile. 0.10.0 publishes the same five archives.
         #
         # `--disable-strategies compile` is what makes that structural rather
         # than hopeful. The previous form listed the binary-only strategies it
@@ -237,7 +237,7 @@ jobs:
           # per-repository budget. `contents: read` is all it carries, which
           # is what reading a public release needs and nothing more.
           GITHUB_TOKEN: ${{ github.token }}
-          INPUT_VERSION: '0.9.1'
+          INPUT_VERSION: '0.10.0'
         shell: bash
         run: uv run --no-project --python "$UV_PYTHON" scripts/install_orthohelp.py
 
@@ -245,7 +245,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.9\.1([[:space:]]|$)'
+          cargo-orthohelp --version | grep -Eq '(^|[[:space:]])0\.10\.0([[:space:]]|$)'
 
       - name: Save cargo-orthohelp
         if: steps.orthohelp_cache.outputs.cache-hit != 'true'
@@ -264,7 +264,7 @@ jobs:
           # Generation `v2`: the entry no longer carries a source-build target
           # directory, so its shape changed as well as its version.
           key: >-
-            netsuke-orthohelp-v2-${{ runner.os }}-${{ runner.arch }}-0.9.1-${{ env.RUST_BUILD_RELEASE_PIN }}
+            netsuke-orthohelp-v2-${{ runner.os }}-${{ runner.arch }}-0.10.0-${{ env.RUST_BUILD_RELEASE_PIN }}
 
       - name: Generate release help
         shell: bash

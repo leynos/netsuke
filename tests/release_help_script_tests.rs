@@ -56,7 +56,8 @@ fn generates_manual_page_for_non_windows_target(
     ensure!(
         log.lines()
             .all(|invocation| invocation.starts_with("orthohelp ")),
-        "v0.9.0 invocations should select the cargo-orthohelp subcommand, got {log}"
+        "cargo-orthohelp invocations should select the cargo-orthohelp \
+         subcommand, got {log}"
     );
     ensure!(
         log.contains("--man-date 1970-01-01"),

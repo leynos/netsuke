@@ -39,7 +39,7 @@ fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> 
         "workflow should keep the installer invocation thin"
     );
     ensure!(
-        install_body.contains("INPUT_VERSION: '0.9.1'"),
+        install_body.contains("INPUT_VERSION: '0.10.0'"),
         "workflow should pin the installed version through INPUT_VERSION"
     );
     ensure!(
@@ -51,8 +51,8 @@ fn assert_orthohelp_comes_from_a_prebuilt_release(contents: &str) -> Result<()> 
             .context("compile the cargo-orthohelp source-install pattern")?;
     ensure!(
         source_install.find_iter(contents).count() == 0,
-        "cargo-orthohelp must never be installed from source; 0.9.1 publishes \
-         prebuilt archives for every platform this lane targets"
+        "cargo-orthohelp must never be installed from source; 0.9.1 and later \
+         publish prebuilt archives for every platform this lane targets"
     );
     ensure!(
         !contents.contains("orthohelp-build"),

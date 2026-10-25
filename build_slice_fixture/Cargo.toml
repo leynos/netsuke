@@ -26,7 +26,7 @@ lint = []
 [dependencies]
 camino = { version = "1.2.0", features = ["serde1"] }
 clap = { version = "4.5.0", features = ["derive"] }
-ortho_config = { version = "0.9.0", features = ["serde_json"] }
+ortho_config = { version = "0.10.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "1"
 tracing = "0.1"
