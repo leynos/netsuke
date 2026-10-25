@@ -43,16 +43,7 @@ impl CommandListTargetIndex {
     pub(in crate::runner) fn from_graph(graph: &BuildGraph) -> Self {
         let mut targets_by_fingerprint = BTreeMap::<String, Vec<String>>::new();
         for edge in graph.edges() {
-            if edge.phony {
-                continue;
-            }
-            let Some(action) = graph.actions.get(&edge.action_id) else {
-                continue;
-            };
-            if !is_command_list(&action.recipe) {
-                continue;
-            }
-            let Some(output) = first_output(edge) else {
+            let Some(output) = indexable_output(graph, edge) else {
                 continue;
             };
 
@@ -111,6 +102,21 @@ impl TargetResolution<'_> {
             Self::NotFound => None,
         }
     }
+}
+
+/// Return the preferred output for an indexable command-list edge.
+fn indexable_output<'graph>(
+    graph: &'graph BuildGraph,
+    edge: &'graph BuildEdge,
+) -> Option<&'graph camino::Utf8PathBuf> {
+    if edge.phony {
+        return None;
+    }
+    let action = graph.actions.get(&edge.action_id)?;
+    if !is_command_list(&action.recipe) {
+        return None;
+    }
+    first_output(edge)
 }
 
 /// Return whether `recipe` carries an ordered command-list recipe.

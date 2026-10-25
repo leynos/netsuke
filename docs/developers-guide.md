@@ -897,6 +897,9 @@ double SHA-256 identity. The generator and runner both call `action_identity`,
 which hashes the textual `ActionId` bytes; the runner does not decode and hash
 the marker digest again.
 
+The edge-eligibility selector remains private to the CLI index and is not a
+Ninja-generation interface.
+
 After the stderr worker has joined, the exit boundary resolves the marker once
 against that index. A unique edge adds a quoted target name to the failure
 message. Multiple edges add sorted, quoted candidates. Names use Rust
@@ -969,7 +972,7 @@ Attributed list failures emit the bounded tracing fields `command_list_action`
 entry index), plus the matching `command_list_failure` marker. The process
 boundary adds `command_list_target` when output names resolve. This field holds
 the same bounded clause used by the error; it contains output names but no
-command text and is never a metric label. It records
+command text and is never a metric label. The process boundary records
 `netsuke_ninja_command_list_failures_total` and
 `netsuke_ninja_command_list_failure_duration_seconds` with only the `outcome`
 label set to `failure`. Elapsed failure duration is measured through the

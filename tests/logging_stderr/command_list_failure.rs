@@ -148,7 +148,7 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
         "JSON diagnostics should retain the full action fingerprint: {stderr}"
     );
     ensure!(
-        diagnostics.to_string().contains("result.txt"),
+        contains_target_clause(&diagnostics.to_string(), "target \"result.txt\""),
         "JSON diagnostics should name the resolved target: {diagnostics}"
     );
     ensure!(
