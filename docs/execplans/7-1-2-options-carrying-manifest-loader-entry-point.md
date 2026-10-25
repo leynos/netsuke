@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: APPROVED
 
 Approved 2026-10-14 by the user, by explicit instruction to proceed with this
 plan under the `sdlc-implementation` workflow. That approval accepts the
@@ -461,6 +461,8 @@ and YAML fixtures, and were set from the inventory in Table 1.
   the plan's pull request.
 - [x] (2026-10-14) User approval of the plan and the listed deviations, given
   by explicit instruction to proceed under the `sdlc-implementation` workflow.
+- [x] (2026-10-25) The user explicitly reconfirmed approval before this
+  rebase; the header was set to `APPROVED` before history rewriting.
 - [x] (2026-10-14) Rebase onto `origin/main` `486b876c` (64 commits ahead of the
   plan's base `ebcedaef`); rehearsed in a scratch clone first, applied with
   zero conflicts, pushed, and local/remote/tracking refs verified equal.
@@ -2508,9 +2510,10 @@ recomputed from Table 1; the telemetry predicate was narrowed and moved to an
 ADR-018 addendum. Why: all three panel reviews returned "revise" with
 evidence-backed findings (factual corrections, non-vacuity gaps, a
 translation-unsafe marker, a scope ceiling breached by construction, and
-forward-compatibility of the overlay API). Effect on remaining work: the plan
-awaits approval of the recorded deviations and an answer to the open question
-on file-reading filters.
+forward-compatibility of the overlay API). At that point, the plan still
+awaited approval of the recorded deviations and an answer to the open question
+on file-reading filters. The user settled that question on 2026-09-27 and
+approved the plan and deviations on 2026-10-14.
 
 2026-09-27, after the user's decision on the open question. What changed: the
 open question became a `Decision log` entry. Roadmap 7.4.1 now also roots the
@@ -2519,5 +2522,12 @@ the sandbox, and technical design §5.5 names them as a third group of ambient
 bypasses. Why: the user chose to extend 7.4.1 rather than add an item or accept
 permanent refusal. Effect on remaining work: none on the 7.1.2 implementation,
 which refuses these filters until 7.4.1 lands; EP-M5 no longer needs to add the
-filters to §5.5, and has no remaining roadmap gap. The plan awaits approval of
-the recorded deviations.
+filters to §5.5, and has no remaining roadmap gap. At that point, approval of
+the recorded deviations remained pending; the user approved them on 2026-10-14.
+
+2026-10-25, before the requested rebase and resumed implementation. What
+changed: the header now says `APPROVED`, recording the user’s explicit
+instruction; the existing approval of the listed deviations remains in force.
+Why: establish approval before the history rewrite. Effect on remaining work:
+after rebase and before further code changes, return the header to
+`IN PROGRESS`; milestone scope and acceptance criteria remain unchanged.
