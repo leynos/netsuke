@@ -19,6 +19,7 @@ fn build_edge(inputs: &[&str], implicit_deps: &[&str], output: &str) -> BuildEdg
         explicit_outputs: vec![path(output)],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     }

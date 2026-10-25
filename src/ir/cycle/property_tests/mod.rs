@@ -52,6 +52,7 @@ impl EdgeBuilder {
             explicit_outputs: vec![self.output],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
+            progress_label: None,
             phony: false,
             always: false,
         }

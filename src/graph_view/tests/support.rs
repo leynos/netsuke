@@ -66,6 +66,7 @@ pub(super) fn add_edge(graph: &mut BuildGraph, fixture: EdgeFixture<'_>) {
         explicit_outputs: fixture.explicit_outputs.iter().map(|s| p(s)).collect(),
         implicit_outputs: fixture.implicit_outputs.iter().map(|s| p(s)).collect(),
         order_only_deps: fixture.order_only_deps.iter().map(|s| p(s)).collect(),
+        progress_label: None,
         phony: fixture.phony,
         always: fixture.always,
     };

@@ -49,6 +49,7 @@ pub(super) fn scalar_graph(command: String) -> BuildGraph {
                 explicit_outputs: vec![Utf8PathBuf::from("out")],
                 implicit_outputs: Vec::new(),
                 order_only_deps: Vec::new(),
+                progress_label: None,
                 phony: false,
                 always: false,
             })

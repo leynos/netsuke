@@ -64,6 +64,7 @@ fn graph(recipe: Recipe, input: &str, output: &str) -> Result<BuildGraph> {
         explicit_outputs: vec![Utf8PathBuf::from(output)],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };

@@ -32,6 +32,7 @@ fn dependency_only_serial_bundle_uses_phony_without_a_recipe() -> Result<()> {
             explicit_outputs: vec![Utf8PathBuf::from("all")],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
+            progress_label: None,
             phony: true,
             always: false,
         })

@@ -419,7 +419,10 @@ rule:
 - `description`: Optional discovery metadata for a target or action. It is
   rendered through the normal manifest context and displayed by
   `netsuke help targets`. It does not affect Ninja progress output: that stays
-  driven by the referenced rule's `description`.
+  driven by the referenced rule's `description` for named-rule recipes. Inline
+  command and script recipes use the first declared output as a localized
+  progress label; see
+  [ADR 0057](adrs/adr-0057-readable-inline-recipe-progress.md).
 
 - `env`: A planned mapping of environment variables to apply when this target or
   action runs. Target-level values override rule-level values after the rule is
@@ -771,13 +774,15 @@ splitting and reduces the need for `shell_quote` in ordinary recipes.
 
 #### Execution feedback
 
-Rule descriptions are the source of normal Ninja progress text. Target and
-action descriptions are discovery metadata displayed by `netsuke help targets`;
-they do not affect Ninja progress output. Ninja progress comes exclusively from
-the referenced `Rule::description`. Planned target/action environment mappings
-remain separate future work under roadmap item 3.14.9. Conditional
-branch-selection messages belong in Netsuke's verbose diagnostics, not in
-mandatory recipe output:
+Named-rule descriptions are the source of normal Ninja progress text. Target
+and action descriptions are discovery metadata displayed by
+`netsuke help targets`; they do not affect Ninja progress output. Inline
+command and script edges instead carry a localized, bounded progress label
+derived from their first declared output, as decided in
+[ADR 0057](adrs/adr-0057-readable-inline-recipe-progress.md). Planned
+target/action environment mappings remain separate future work under roadmap
+item 3.14.9. Conditional branch-selection messages belong in Netsuke's verbose
+diagnostics, not in mandatory recipe output:
 
 - In `netsuke help targets`, target and action `description` values explain the
   operations available in the manifest.

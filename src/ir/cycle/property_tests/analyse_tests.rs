@@ -124,6 +124,7 @@ fn analyse_resolves_non_first_output_alias_as_dependency() {
         explicit_outputs: vec![path("first"), path("second")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };
