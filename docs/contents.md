@@ -336,6 +336,8 @@ operator, user, and contributor references are easier to find.
   system guide and precedence reference.
 - [ortho-config-v0-9-0-migration-guide.md](ortho-config-v0-9-0-migration-guide.md):
   Migration guidance for the OrthoConfig v0.9.0 release.
+- [ortho-config-v0-10-0-migration-guide.md](ortho-config-v0-10-0-migration-guide.md):
+  Migration guidance for the OrthoConfig v0.10.0 release.
 - [translators-guide.md](translators-guide.md): Localization workflow,
   translation guidance, the locale registry that owns the supported-tag list,
   and the fallback policy that keeps regional and script variants distinct.
