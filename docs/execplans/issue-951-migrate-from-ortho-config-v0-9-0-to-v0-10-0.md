@@ -497,6 +497,27 @@ rather than as `--flag[=BOOL]`.
   invites someone to "fix" the explanatory comments. The four sites are the two
   `netsuke-orthohelp-v2-…-0.10.0-…` cache keys, `INPUT_VERSION`, and the
   version-validation step. Date/Author: 2026-10-25, agent.
+- Decision: decline the three CodeRabbit findings that ask for edits inside the
+  two vendored guides, and keep the reader-facing notes in `docs/contents.md`.
+  Rationale: all three are accurate about the upstream text, and none can be
+  fixed where it points without breaking the byte-for-byte requirement. The
+  second round's findings are the sharpest illustration of why a vendored-copy
+  review needs a stated boundary: CodeRabbit asked for
+  `guide-compose-layers-with-sources` to propagate a `Result` instead of
+  printing `composition=ready`, which is a correct criticism of upstream's
+  example, and also asked for the migration guide's `users-guide.md` links to
+  be retargeted. Both would rewrite vendored text. Measured facts that settle
+  the boundary: both files still hash to the values recorded under *Artefacts
+  and notes*; `tests/documentation_examples/mod.rs`'s `DOCUMENTS` list covers
+  only `README.md`, `docs/users-guide.md`,
+  `docs/stdlib-yaml-and-jinja-guide.md` and `docs/developers-guide.md`, so no
+  example inside a vendored guide is executed by
+  `make test-documentation-contracts`; and `guide-compose-layers-with-sources`
+  appears nowhere in `EXPECTED_EXAMPLE_IDS`. The example is therefore inert
+  prose here, and correcting it would buy nothing while costing the provenance
+  claim. The index now says both things a reader needs — the link mapping and
+  the fact that vendored examples are not executed locally — so the finding is
+  answered where it can be. Date/Author: 2026-10-25, agent.
 
 ## Outcomes & retrospective
 
