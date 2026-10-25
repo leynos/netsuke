@@ -88,6 +88,8 @@ ignore = ["mis-grouping",
   "\\bartifact-suffix\\b",
   "\\bNETSUKE_COLOR\\b",
   "\\bNO_COLOR\\b",
+  # Inventory IDs preserve this exact source symbol from `host::pattern`.
+  "@host::pattern::normalise_host_pattern#consumer",
 ]
 
 [files]
