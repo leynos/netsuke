@@ -35,6 +35,7 @@ EXIT_OK = 0
 EXIT_ACTION_REQUIRED = 1
 EXIT_VERIFICATION_FAILED = 2
 EXIT_RESPONSE_ERROR = 3
+EXIT_OUTPUT_ERROR = 4
 EXIT_USAGE = 64
 
 #: The verdicts :func:`verify_crates_io_bytes.plan_verification` can return,
@@ -139,28 +140,46 @@ def _classify(arguments: argparse.Namespace) -> int:
             if isinstance(error, release_registry_response.RegistryResponseError)
             else "response-file"
         )
+        try:
+            arguments.output.write_text(
+                json.dumps(
+                    {
+                        "action": "fail",
+                        "error": str(error),
+                        "fault": fault,
+                        "state": "indeterminate",
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+        except OSError as output_error:
+            print(
+                f"registry response error ({fault}): {error}; "
+                f"could not write response-error record to "
+                f"{arguments.output}: {output_error}",
+                file=sys.stderr,
+            )
+            return EXIT_OUTPUT_ERROR
+        print(f"registry response error ({fault}): {error}", file=sys.stderr)
+        return EXIT_RESPONSE_ERROR
+    action = release_reconcile_crates.plan_crates_action(state)
+    try:
         arguments.output.write_text(
             json.dumps(
-                {
-                    "action": "fail",
-                    "error": str(error),
-                    "fault": fault,
-                    "state": "indeterminate",
-                },
-                indent=2,
-                sort_keys=True,
+                {"action": action, "state": state.value}, indent=2, sort_keys=True
             )
             + "\n",
             encoding="utf-8",
         )
-        print(f"registry response error ({fault}): {error}", file=sys.stderr)
-        return EXIT_RESPONSE_ERROR
-    action = release_reconcile_crates.plan_crates_action(state)
-    arguments.output.write_text(
-        json.dumps({"action": action, "state": state.value}, indent=2, sort_keys=True)
-        + "\n",
-        encoding="utf-8",
-    )
+    except OSError as error:
+        print(
+            f"could not write registry decision record to {arguments.output}: {error}",
+            file=sys.stderr,
+        )
+        return EXIT_OUTPUT_ERROR
     if action == "fail":
         print(
             f"registry state {state.value!r} does not permit publication",
@@ -183,7 +202,8 @@ def _verify(arguments: argparse.Namespace) -> int:
     int
         ``EXIT_OK`` when the downloaded bytes matched the expected digest, or
         ``EXIT_VERIFICATION_FAILED`` when the archive was absent, disagreed,
-        or could not be read or interpreted.
+        or could not be read or interpreted. ``EXIT_OUTPUT_ERROR`` means the
+        verified digest could not be recorded.
     """
     try:
         observation = release_crates_io_adapter.observe_download_file(
@@ -204,11 +224,20 @@ def _verify(arguments: argparse.Namespace) -> int:
     except (verify_crates_io_bytes.VerificationError, OSError) as error:
         print(f"published archive unverifiable: {error}", file=sys.stderr)
         return VERDICT_EXITS["error"]
-    arguments.output.write_text(
-        json.dumps({"sha256": digest, "verdict": "verified"}, indent=2, sort_keys=True)
-        + "\n",
-        encoding="utf-8",
-    )
+    try:
+        arguments.output.write_text(
+            json.dumps(
+                {"sha256": digest, "verdict": "verified"}, indent=2, sort_keys=True
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    except OSError as error:
+        print(
+            f"could not write verification record to {arguments.output}: {error}",
+            file=sys.stderr,
+        )
+        return EXIT_OUTPUT_ERROR
     return VERDICT_EXITS["verified"]
 
 
@@ -224,7 +253,8 @@ def main(argv: list[str] | None = None) -> int:
     -------
     int
         ``EXIT_OK`` when the decision permits proceeding and the bytes verify,
-        or a non-zero code naming the refusal.
+        ``EXIT_OUTPUT_ERROR`` when the result cannot be recorded, or
+        ``EXIT_USAGE`` when the invocation is invalid.
 
     Notes
     -----
@@ -243,7 +273,10 @@ def main(argv: list[str] | None = None) -> int:
     ...       "--sha256", "ab", "--output", "/dev/null"])
     0
     """
-    arguments = build_parser().parse_args(argv)
+    try:
+        arguments = build_parser().parse_args(argv)
+    except SystemExit as error:
+        return EXIT_OK if error.code == EXIT_OK else EXIT_USAGE
     match arguments.command:
         case "classify":
             return _classify(arguments)

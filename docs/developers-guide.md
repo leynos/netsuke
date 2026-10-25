@@ -2551,11 +2551,12 @@ observation; a verifier that treated 403 as an error would report a healthy
 unpublished crate as broken. The adapter hashes a successful download and
 passes only that digest to `verify_crates_io_bytes`.
 
-`publish_crates_io_cli` exposes the same decision as two subcommands.
-`classify` reads a registry response and says what to do next, and `verify`
-checks downloaded crate bytes against a recorded digest. Each exits 0 on
-success, 1 when an action is required, 2 when verification failed, and 64 on a
-usage error.
+`publish_crates_io_cli` exposes the decision as two subcommands. `classify`
+returns 0 when it records a publish or skip decision, 1 when the registry state
+requires operator action, 3 when the saved response is unreadable or has an
+unexpected schema, and 4 when it cannot write the decision record. `verify`
+returns 0 when the downloaded bytes match, 2 when verification fails, and 4
+when it cannot write the verdict record. Invalid invocations return 64.
 
 ### Policy and adapter boundaries
 

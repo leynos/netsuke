@@ -11,11 +11,14 @@ import json
 import typing as typ
 
 import pytest
+import release_digest_files
 import verify_crates_io_bytes
 from publish_crates_io_cli import (
     EXIT_ACTION_REQUIRED,
     EXIT_OK,
+    EXIT_OUTPUT_ERROR,
     EXIT_RESPONSE_ERROR,
+    EXIT_USAGE,
     EXIT_VERIFICATION_FAILED,
     VERDICT_EXITS,
     build_parser,
@@ -330,3 +333,61 @@ def test_the_cli_requires_a_mode() -> None:
     """Refuse an invocation that names neither half of the exchange."""
     with pytest.raises(SystemExit):
         _ = build_parser().parse_args([])
+
+
+@pytest.mark.parametrize(
+    ("status", "body_name"),
+    [
+        pytest.param(404, None, id="decision-record"),
+        pytest.param(200, "missing-body.json", id="response-error-record"),
+    ],
+)
+def test_the_classify_cli_reports_output_record_failures(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    status: int,
+    body_name: str | None,
+) -> None:
+    """Return a distinct diagnosed status when classify cannot write its record."""
+    output = tmp_path / "output"
+    output.mkdir()
+    body = tmp_path / body_name if body_name is not None else None
+
+    code = main(_classify_argv(output, status=status, body=body))
+    diagnostic = capsys.readouterr().err
+
+    assert code == EXIT_OUTPUT_ERROR, diagnostic
+    assert "could not write" in diagnostic, diagnostic
+    if body_name is not None:
+        assert "registry response error" in diagnostic, diagnostic
+
+
+def test_the_verify_cli_reports_output_record_failures(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Return a distinct diagnosed status when verify cannot write its verdict."""
+    archive = _archive(tmp_path, b"netsuke crate")
+    output = tmp_path / "output"
+    output.mkdir()
+    argv = _verify_argv(archive, output)
+    argv[argv.index("--sha256") + 1] = release_digest_files.digest_of_file(archive)
+
+    code = main(argv)
+    diagnostic = capsys.readouterr().err
+
+    assert code == EXIT_OUTPUT_ERROR, diagnostic
+    assert "could not write verification record" in diagnostic, diagnostic
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [pytest.param([], id="missing-mode"), pytest.param(["unknown"], id="unknown-mode")],
+)
+def test_main_maps_parser_failures_to_the_usage_exit_code(
+    arguments: list[str], capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Map argparse's parser failure to the documented usage status."""
+    assert main(arguments) == EXIT_USAGE, "parser failures must use the usage exit code"
+    assert "usage:" in capsys.readouterr().err, (
+        "parser failures must explain valid usage"
+    )
