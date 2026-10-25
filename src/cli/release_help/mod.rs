@@ -72,9 +72,33 @@ fn localized_config_help(fields: Vec<FieldMetadata>) -> Result<Vec<FieldMetadata
             })?;
             help_key.clone_into(&mut field.help_id);
             field.long_help_id = None;
+            presence_only_cli_metadata(&mut field);
             Ok(field)
         })
         .collect()
+}
+
+/// Describe a boolean configuration flag as the presence-only switch Netsuke
+/// exposes.
+///
+/// `ortho_config` 0.10.0 documents every boolean field as `--flag[=BOOL]`,
+/// because its *generated* clap parser accepts an optional value. Netsuke does
+/// not use that parser: `src/cli/command.rs` declares the flags by hand, and
+/// they reject `--verbose=false` with clap's `unexpected value` error. Release
+/// help must describe the parser users actually run, so the generated
+/// optional-value surface is reduced to the plain switch that exists. Without
+/// this, the man page would document a spelling the binary refuses.
+fn presence_only_cli_metadata(field: &mut FieldMetadata) {
+    if !matches!(field.value.as_ref(), Some(ValueType::Bool)) {
+        return;
+    }
+    let Some(cli) = field.cli.as_mut() else {
+        return;
+    };
+    cli.takes_value = false;
+    cli.value_name = None;
+    cli.value_optional = false;
+    cli.possible_values.clear();
 }
 
 /// Build release-help metadata for every parser-only top-level selector.
@@ -137,6 +161,9 @@ fn documented_clap_parser_field(command: &Command, argument_id: &str) -> Result<
                 .map(ToString::to_string),
             multiple: matches!(argument.get_action(), &ArgAction::Append),
             takes_value: argument.get_action().takes_values(),
+            // Parser-only selectors take exactly one required value, so the
+            // `--flag[=BOOL]` optional-value spelling does not apply.
+            value_optional: false,
             possible_values: argument
                 .get_possible_values()
                 .iter()
@@ -190,6 +217,9 @@ fn documented_subcommand(root: &DocMetadata, name: &str, about_id: &str) -> DocM
         fields: Vec::new(),
         subcommands: Vec::new(),
         windows: None,
+        // Netsuke declares no behavioural metadata and no profile selector.
+        behaviour: None,
+        profiles: None,
     }
 }
 

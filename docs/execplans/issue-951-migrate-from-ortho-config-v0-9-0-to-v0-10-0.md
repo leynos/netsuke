@@ -127,13 +127,13 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   `docs/ortho-config-v0-10-0-migration-guide.md`, byte-for-byte, and record
   SHA-256 sums.
 - [x] (2026-10-25) Baseline: `make test` on the unmodified tree at `88f20d588`
-  exited **0**. Nextest: **4710 run, 4710 passed, 6 skipped, 0 failed** in
-  52.4 s across 115 binaries. Doctests: `netsuke` 114 passed / 27 ignored of
-  141, `netsuke_build_slice_fixture` 1 passed, `netsuke_public_api_fixture` 0,
+  exited **0**. Nextest: **4710 run, 4710 passed, 6 skipped, 0 failed** in 52.4
+  s across 115 binaries. Doctests: `netsuke` 114 passed / 27 ignored of 141,
+  `netsuke_build_slice_fixture` 1 passed, `netsuke_public_api_fixture` 0,
   `test_support` 40 passed / 6 ignored of 46, plus 3 auxiliary passed. Feature
   combination: `--all-features`; runner profile: nextest `default`. There are
-  no failures, so the migrated tree must reproduce these exact counts — the
-  6 nextest skips and the 33 doctest ignores are pre-existing and must not
+  no failures, so the migrated tree must reproduce these exact counts — the 6
+  nextest skips and the 33 doctest ignores are pre-existing and must not
   change. Log:
   `/tmp/test-baseline-issue-951-migrate-from-ortho-config-v0-9-0-to-v0-10-0.out`.
 - [x] (2026-10-25) Inventory (wyvern recon) reconciled against this plan: all
@@ -141,8 +141,28 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   `/tmp/ortho-951/tree`; four new findings recorded under
   `Surprises & discoveries`; obligations V2 and V3 and two Risks revised.
 - [ ] Author the ExecPlan, get approval, then implement.
-- [ ] Milestone 1: dependency and toolchain alignment.
-- [ ] Milestone 2: IR 2.0 metadata (closes #779).
+- [x] (2026-10-25) Milestone 1: dependency and toolchain alignment.
+  `Cargo.toml` (both `[dependencies]` and `[build-dependencies]`) and
+  `build_slice_fixture/Cargo.toml` moved to `ortho_config = "0.10.0"`, keeping
+  `features = ["serde_json"]`. `cargo update -p ortho_config --precise 0.10.0`
+  moved `ortho_config` and `ortho_config_macros` to 0.10.0 and added
+  `ortho_l10n` 0.10.0; the only transitive fallout was forced by upstream —
+  `dirs` 5.0.1 → 7.0.0 (0.10.0 declares `dirs = "7"`) and the removal of
+  `dirs-sys`, `redox_users`, three `windows-sys`/`windows-targets` 0.48 crates
+  and eight `windows_*` crates that only `dirs` 5 pulled in. The CI tool pin
+  moved 0.9.1 → 0.10.0 in all four places it appears (two cache keys,
+  `INPUT_VERSION`, the version-validation grep), and the two contract tests
+  plus one stale message were updated to match.
+  `cargo check --workspace --all-targets --all-features` finishes with 0 errors.
+- [x] (2026-10-25) Milestone 2: IR 2.0 metadata (closes #779). The
+  `CliMetadata` and `DocMetadata` literals in `src/cli/release_help/mod.rs`
+  gained `value_optional`, `behaviour` and `profiles`; the release-help test
+  now reads `ortho_config::docs::ORTHO_DOCS_IR_VERSION` instead of hard-coding
+  a version; and `presence_only_cli_metadata` restores the switch shape that
+  0.10.0's derive changed under netsuke's feet, with
+  `release_help_cli_value_shapes_match_the_parser` pinning the parity against
+  `Cli::command()`. The snapshot's only remaining diff is `ir_version: "1.1"` →
+  `"2.0"`.
 - [ ] Milestone 3: Fluent identifier re-keying.
 - [ ] Milestone 4: precedence and boolean regression coverage.
 - [ ] Milestone 5: gates, CodeRabbit, draft PR.
@@ -204,6 +224,42 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   `keys::CLI_ABOUT`. Impact: Milestone 3 shrinks to documenting the
   non-applicability and pinning the observable metadata, not re-keying 35
   catalogues.
+- Observation: 0.10.0's derive changed the **generated boolean CLI shape**, not
+  just the IR version. Evidence:
+  `ortho_config_macros/src/derive/generate/docs/fields/mod.rs:229-241` emits,
+  for every `is_bool` field, `value_name: Some("BOOL")`, `value_optional: true`,
+  `takes_value: true`, and `possible_values: ["true", "false"]`; 0.9.0 emitted
+  `takes_value: !meta.is_bool` with empty `possible_values` and no value name.
+  Impact: the first regenerated snapshot showed `possible_values: []` →
+  `["true", "false"]` on `verbose`, `fetch_default_deny`,
+  `trust_project_fetch_policy` and `json`, and `cargo-orthohelp` renders that as
+  `--flag[=BOOL]` (see `cargo-orthohelp/src/roff/escape/mod.rs:37`). That
+  spelling is false for netsuke: `./target/debug/netsuke --verbose=false build`
+  prints
+  `error: unexpected value 'false' for '--verbose' found; no more were expected`
+  and exits 2, because `src/cli/command.rs` declares the flags as plain
+  `#[arg(long)]` switches. Generated documentation would have described a
+  parser the binary does not have, so `localized_config_help` now normalises
+  boolean fields back to the presence-only switch shape.
+- Observation: `FieldMetadata.cli.value_name` is `None` for every
+  configuration field, and this **predates** the migration. Evidence: 0.9.0
+  derived it identically from `attrs.doc.cli_value_name`
+  (`.../docs/fields/mod.rs:158`), and `grep -rn cli_value_name src/` finds no
+  declaration in netsuke. Impact: the hand-written parser supplies `FILE`, `N`,
+  `BYTES` and friends while the metadata supplies nothing. Out of scope for
+  this migration; the new parity test deliberately does not compare value
+  names, and its doc comment records why.
+- Observation: `locales/en-US/messages.ftl` has no `clap-error-too-many-values`
+  key, and a live run logs
+  `WARN ortho_config::localizer::clap_error: missing translation for clap error
+  identifier=clap-error-too-many-values error_kind=TooManyValues locale=en-US`.
+  Evidence: the `clap-error-*` family at `locales/en-US/messages.ftl:83-91`
+  covers `missing-argument`, `missing-subcommand`, `unknown-argument`,
+  `invalid-value`, `invalid-subcommand` and `value-validation` only, and the
+  0.9.0 → 0.10.0 `message_id` mapping for `ErrorKind` is equivalent. Impact:
+  pre-existing catalogue gap, reachable only by an invocation shape netsuke
+  never produced before; it is unrelated to the version bump and is recorded
+  here rather than silently fixed inside the migration.
 
 ## Decision log
 
@@ -245,6 +301,22 @@ the pre-migration page except for documented, IR-2.0-driven changes.
   the generated usage identifier. Pinning `None` would mean overriding a
   correct generated value to preserve an accident. Date/Author: 2026-10-25,
   agent.
+- Decision: normalise derived boolean CLI metadata back to a presence-only
+  switch inside `localized_config_help`, rather than adopting the generated
+  `--flag[=BOOL]` surface or accepting the snapshot change. Rationale:
+  `localized_config_help` already exists to project OrthoConfig's generated
+  metadata onto the parser netsuke actually ships — it overwrites every
+  `help_id` from `top_level_flag_help_key` and clears `long_help_id` for the
+  same reason — so the value shape belongs there too. Accepting the generated
+  shape would ship a manual page and PowerShell help documenting
+  `--verbose=false`, which the binary rejects with exit 2. The fix is
+  `presence_only_cli_metadata`, applied to `ValueType::Bool` fields: it clears
+  `value_name` and `possible_values` and sets `takes_value` and
+  `value_optional` to `false`. A new test,
+  `release_help_cli_value_shapes_match_the_parser`, compares every documented
+  CLI shape against `Cli::command()`, and was verified to fail on the exact
+  regression (`documented true, parser false` for `verbose`) before the fix was
+  restored. Date/Author: 2026-10-25, agent.
 
 ## Outcomes & retrospective
 

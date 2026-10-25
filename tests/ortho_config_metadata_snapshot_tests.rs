@@ -7,6 +7,7 @@
 use insta::assert_yaml_snapshot;
 use netsuke::cli::ReleaseHelpCli;
 use ortho_config::OrthoConfigDocs;
+use ortho_config::docs::ORTHO_DOCS_IR_VERSION;
 use serde::Serialize;
 
 const APPEND_MERGE_FIELDS: [&str; 6] = [
@@ -141,4 +142,21 @@ fn metadata_snapshot() -> MetadataSnapshot {
 #[test]
 fn release_help_documentation_metadata_is_stable() {
     assert_yaml_snapshot!(metadata_snapshot());
+}
+
+/// Report the documentation IR Netsuke emits, above the release-help contract.
+///
+/// The emitted version must track the linked `ortho_config` release rather than
+/// a value copied into this repository: the snapshot below records the exact
+/// string for review, while this assertion fails first, with a named reason,
+/// when a dependency bump changes the contract. Issue #779 requires reading
+/// `ORTHO_DOCS_IR_VERSION` instead of hard-coding either version, so that the
+/// bump is a deliberate, reviewed edit rather than a silent drift.
+#[test]
+fn release_help_metadata_reports_the_linked_documentation_ir_version() {
+    let metadata = ReleaseHelpCli::get_doc_metadata();
+    assert_eq!(
+        metadata.ir_version, ORTHO_DOCS_IR_VERSION,
+        "release-help metadata should report the linked ortho_config IR version"
+    );
 }

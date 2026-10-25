@@ -125,6 +125,90 @@ fn parser_only_metadata_requires_the_parser_argument(#[case] argument_id: &str) 
     Ok(())
 }
 
+/// Verify that documented CLI value shapes match the parser users actually run.
+///
+/// `ortho_config` 0.10.0 documents every derived boolean as `--flag[=BOOL]`,
+/// because its generated parser accepts an optional value. Netsuke declares its
+/// flags by hand and rejects that spelling, so release help normalises boolean
+/// fields back to presence-only switches. Comparing against `Cli::command()`
+/// makes the parity a standing contract: a future metadata drift fails here
+/// instead of shipping a manual page the binary contradicts.
+///
+/// Value *names* are deliberately not compared. Netsuke sets no
+/// `cli_value_name`, so the generated metadata has always reported `None` while
+/// the hand-written parser supplies `FILE`, `N`, and friends; that gap predates
+/// the v0.10.0 migration and is not this contract's subject.
+#[test]
+fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
+    let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
+    let command = Cli::command();
+    let mut compared = Vec::new();
+
+    for field in &metadata.fields {
+        let Some(documentation) = field.cli.as_ref() else {
+            continue;
+        };
+        let Some(argument) = command
+            .get_arguments()
+            .find(|argument| argument.get_id().as_str() == field.name)
+        else {
+            continue;
+        };
+
+        let takes_value = argument.get_action().takes_values();
+        ensure!(
+            documentation.takes_value == takes_value,
+            "release help should document the value shape {name} parses: \
+             documented {documented}, parser {parsed}",
+            name = field.name,
+            documented = documentation.takes_value,
+            parsed = takes_value,
+        );
+        ensure!(
+            !documentation.value_optional,
+            "release help must not offer the optional-value spelling for {}",
+            field.name
+        );
+        if takes_value {
+            ensure!(
+                documentation.possible_values
+                    == argument
+                        .get_possible_values()
+                        .iter()
+                        .map(|value| value.get_name().to_owned())
+                        .collect::<Vec<_>>(),
+                "release help should document the accepted values for {}",
+                field.name
+            );
+        } else {
+            // A presence-only switch parses no value at all. Clap still records
+            // `possible_values` for `SetTrue` actions, so copying them would
+            // describe a value surface no invocation can reach.
+            ensure!(
+                documentation.value_name.is_none() && documentation.possible_values.is_empty(),
+                "release help should describe {} as a switch with no value",
+                field.name
+            );
+        }
+        compared.push(field.name.as_str());
+    }
+
+    // The four boolean flags that 0.10.0 first documented as `--flag[=BOOL]`
+    // are the reason this contract exists, so their absence proves nothing.
+    for expected in [
+        "verbose",
+        "fetch_default_deny",
+        "trust_project_fetch_policy",
+        "json",
+    ] {
+        ensure!(
+            compared.contains(&expected),
+            "release help should compare {expected} against the parser: {compared:?}"
+        );
+    }
+    Ok(())
+}
+
 /// Verify that release help includes every parser-only selector.
 #[test]
 fn release_help_metadata_composes_every_parser_only_selector() -> Result<()> {
