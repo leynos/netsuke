@@ -11,7 +11,7 @@ use netsuke::ninja_gen::generate;
 use rstest::{fixture, rstest};
 use std::process::Command;
 use tempfile::TempDir;
-use test_support::ninja_gen;
+use test_support::{localizer_test_lock, ninja_gen, set_en_localizer};
 
 /// Supply a temporary workspace when real Ninja is available.
 ///
@@ -117,6 +117,8 @@ fn progress_line(output: &str) -> Result<&str> {
 fn scalar_inline_recipe_prints_its_readable_name(
     ninja_integration_setup: Option<TempDir>,
 ) -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
     let Some(run) = run_action(
         ninja_integration_setup,
         command_action(StringOrList::String("printf done".into()), None),
@@ -143,6 +145,8 @@ fn scalar_inline_recipe_prints_its_readable_name(
 fn command_list_progress_keeps_tool_stdout_in_declaration_order(
     ninja_integration_setup: Option<TempDir>,
 ) -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
     let Some(run) = run_action(
         ninja_integration_setup,
         command_action(
