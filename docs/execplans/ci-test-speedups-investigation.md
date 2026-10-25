@@ -27,8 +27,19 @@ baseline, within the configured ±1.00 percentage-point tolerance; it did not
 exceed the baseline. CodeRabbit's EP-1 assessment in comment 6396445399 found
 no confirmed in-scope defect or omission. The five findings from the previous
 review were confirmed fixed and their threads resolved. This assessment is
-separate from formal review; formal review and merge remain outstanding for the
-next published candidate.
+separate from formal review; formal review and merge remained outstanding after
+this checkpoint.
+
+Published checkpoint `5c49f5d726ea6c940f5ecf9b2c2508aeac5f88ef` changed only
+this ExecPlan after `a4315d26c4a3ce1ad6ae3531a70bece227214426`. It passed
+`make fmt`, `make check-fmt`, `make markdownlint` (zero issues across 201
+files), and `make nixie`. Exact-head CI run 40185149633, Netsukefile run
+40185149568, and Release Dry Run 40185149614 passed on attempt 1; the release
+run skipped its expected Windows smoke and publishing jobs. CodeScene passed
+(result 8117285). Hosted coverage was 91.08% against the 91.7% baseline: within
+the configured ±1.00 percentage-point tolerance, but below baseline. The
+exact-head EP-1 assessment in comment 6396804980 found no confirmed in-scope
+omission. Formal review and merge remain outstanding.
 
 The investigation is under way. On 24 October, the 28-commit branch was rebased
 onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
@@ -625,8 +636,13 @@ fidelity comparisons block adoption.
   Actions runs passed. Obtain the EP-1 assessment on that exact base/head and
   reconcile the five previous findings; the assessment accepted the scoped
   milestone and all five threads were resolved.
-- [ ] Revalidate the plan-only successor, obtain its current-head assessment and
-  formal review, reconcile any findings, and merge the PR at equilibrium.
+- [x] Validate plan-only head `5c49f5d` with `make fmt`, `make check-fmt`,
+  `make markdownlint` (zero issues across 201 files), and `make nixie`. Exact-
+  head CI, Netsukefile, Release Dry Run, and CodeScene passed; the EP-1
+  assessment found no confirmed in-scope omission. Coverage was 91.08% against
+  the 91.7% baseline, within tolerance and not above baseline.
+- [ ] Complete the current-head formal review, reconcile any findings, and
+  merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -756,8 +772,8 @@ or adopted. Update progress and decisions as evidence lands.
 ## Outcomes & retrospective
 
 The offline collector, observation set and dated supplement form the current
-code milestone in draft PR #918. The collector does not change default CI
-execution or add telemetry inside the Cargo watchdog. It emits schema 2 with
+code milestone in PR #918. The collector does not change default CI execution
+or add telemetry inside the Cargo watchdog. It emits schema 2 with
 attempt-scoped start latency, while the published observations remain their
 original schema 1 records. Nextest parsing accepts singular and plural start
 and summary forms, including a start line without a skipped-count suffix.
@@ -974,6 +990,12 @@ post-rebase local gates passed: `make check-fmt`, `make test`, `make typecheck`,
 passed 4,710 tests with six skipped; doctests passed. Workflow contracts passed
 1,493 tests with three skipped plus 27 script tests, and Rustdoc coverage was
 98.20% (6,221/6,335).
+
+The plan-only successor at `5c49f5d` passed the Markdown and diagram gates and
+all exact-head hosted checks. Its current-head EP-1 assessment found no
+confirmed in-scope omission. The observed 91.08% hosted coverage is within the
+91.7% baseline tolerance but does not exceed the baseline. Formal review,
+finding reconciliation, and merge remain open work.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
