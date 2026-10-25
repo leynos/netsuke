@@ -14,6 +14,22 @@ fn identifies_entry(message: &str, entry: usize) -> bool {
     message.contains(FAILURE_PREFIX) && message.contains(&format!(", entry {entry}"))
 }
 
+/// Verify that `message` retains the full fixed-width action fingerprint.
+fn contains_full_fingerprint(message: &str) -> bool {
+    let Some(marker) = message.split_once(FAILURE_PREFIX).map(|(_, marker)| marker) else {
+        return false;
+    };
+    let Some((fingerprint, _)) = marker.split_once(", entry ") else {
+        return false;
+    };
+    fingerprint.len() == 64 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+/// Verify that `message` contains a quoted target clause in plain or escaped form.
+fn contains_target_clause(message: &str, clause: &str) -> bool {
+    message.contains(clause) || message.contains(&clause.replace('"', "\\\""))
+}
+
 fn failing_command_list_workspace(first_entry: &str) -> Result<Option<TempDir>> {
     let temp = match ninja_integration_workspace() {
         Ok(temp) => temp,
@@ -37,6 +53,34 @@ targets:
 "#,
         )
         .as_bytes(),
+    )?;
+    Ok(Some(temp))
+}
+
+/// Build a manifest with two targets sharing one failing command-list action.
+fn shared_command_list_workspace() -> Result<Option<TempDir>> {
+    let temp = match ninja_integration_workspace() {
+        Ok(temp) => temp,
+        Err(error) => {
+            tracing::warn!(%error, "skipping shared command-list attribution test: Ninja unavailable");
+            return Ok(None);
+        }
+    };
+    let workspace: Dir = open_workspace(&temp)?;
+    workspace.write(
+        "Netsukefile",
+        concat!(
+            "netsuke_version: '1.0.0'\n",
+            "targets:\n",
+            "  - name: left\n",
+            "    command: ['echo first', 'false', 'touch unexpected']\n",
+            "  - name: right\n",
+            "    command: ['echo first', 'false', 'touch unexpected']\n",
+            "  - name: all\n",
+            "    deps: [left, right]\n",
+            "    command: 'true'\n",
+            "defaults: [all]\n",
+        ),
     )?;
     Ok(Some(temp))
 }
@@ -65,6 +109,14 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
         identifies_entry(&stderr, 2),
         "human diagnostics should name the bounded failing entry: {stderr}"
     );
+    ensure!(
+        contains_full_fingerprint(&stderr),
+        "human diagnostics should retain the full action fingerprint: {stderr}"
+    );
+    ensure!(
+        contains_target_clause(&stderr, "target \"result.txt\""),
+        "human diagnostics should name the resolved target: {stderr}"
+    );
     let output_file = open_workspace(&temp)?
         .read_to_string("result.txt")
         .context("read the partial command-list output")?;
@@ -92,6 +144,14 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
         "JSON diagnostics should retain bounded entry attribution: {diagnostics}"
     );
     ensure!(
+        contains_full_fingerprint(&stderr),
+        "JSON diagnostics should retain the full action fingerprint: {stderr}"
+    );
+    ensure!(
+        diagnostics.to_string().contains("result.txt"),
+        "JSON diagnostics should name the resolved target: {diagnostics}"
+    );
+    ensure!(
         !stderr.contains("false"),
         "JSON attribution must not expose the command text: {stderr}"
     );
@@ -112,6 +172,45 @@ fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
     ensure!(
         stderr.contains("command_list_failure") && identifies_entry(&stderr, 2),
         "tracing should record the bounded command-list failure context: {stderr}"
+    );
+    ensure!(
+        contains_full_fingerprint(&stderr),
+        "tracing should retain the full action fingerprint: {stderr}"
+    );
+    ensure!(
+        stderr.contains("command_list_target")
+            && contains_target_clause(&stderr, "target \"result.txt\""),
+        "tracing should name the resolved target: {stderr}"
+    );
+    Ok(())
+}
+
+#[test]
+fn shared_command_list_failure_reports_ambiguous_target_candidates() -> Result<()> {
+    let Some(temp) = shared_command_list_workspace()? else {
+        return Ok(());
+    };
+    let output = run_failing_build(&temp, &["--progress", "never", "build"])?;
+    ensure!(
+        !output.status.success(),
+        "a failing shared command list must fail the build"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
+    ensure!(
+        identifies_entry(&stderr, 2),
+        "ambiguous attribution should retain the failing entry: {stderr}"
+    );
+    ensure!(
+        contains_full_fingerprint(&stderr),
+        "ambiguous attribution should retain the full fingerprint: {stderr}"
+    );
+    ensure!(
+        contains_target_clause(&stderr, "targets \"left\", \"right\""),
+        "shared actions should report sorted candidate targets: {stderr}"
+    );
+    ensure!(
+        !contains_target_clause(&stderr, "target \"all\""),
+        "the serial aggregate must not replace the failing direct targets: {stderr}"
     );
     Ok(())
 }

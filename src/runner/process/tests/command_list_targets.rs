@@ -5,8 +5,9 @@ use crate::{
     ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
     ninja_gen::{
         command_list::{COMMAND_LIST_FAILURE_PREFIX, action_identity},
-        generate_bundle,
+        dyndep::generate_bundle_for_shell,
     },
+    recipe_shell::RecipeShell,
     runner::process::command_list_targets::CommandListTargetIndex,
 };
 use camino::Utf8PathBuf;
@@ -63,7 +64,8 @@ fn marker_fingerprint_matches_the_generator_key(mut graph_with_identity_action: 
     );
     let graph = graph_with_identity_action;
     let index = CommandListTargetIndex::from_graph(&graph);
-    let generated = generate_bundle(&graph).expect("command list should generate");
+    let generated = generate_bundle_for_shell(&graph, RecipeShell::Posix)
+        .expect("POSIX command list should generate");
     let fingerprint = action_identity("identity");
     let marker = format!("{COMMAND_LIST_FAILURE_PREFIX}{fingerprint}, entry 1");
 

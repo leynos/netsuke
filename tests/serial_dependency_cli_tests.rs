@@ -59,6 +59,9 @@ fn run_netsuke(directory: &TempDir, arguments: &[&str]) -> Result<std::process::
         .context("run netsuke CLI command")
 }
 
+#[path = "serial_dependency_cli_tests/command_list_failure.rs"]
+mod command_list_failure;
+
 fn run_netsuke_with_ninja(
     directory: &TempDir,
     arguments: &[&str],

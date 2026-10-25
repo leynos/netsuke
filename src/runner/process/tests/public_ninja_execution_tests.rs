@@ -190,3 +190,40 @@ fn public_ninja_execution_splits_info_and_debug_events() -> anyhow::Result<()> {
     let debug_events = capture_public_ninja_execution(LevelFilter::DEBUG)?;
     assert_public_ninja_debug_event(&debug_events)
 }
+
+/// Preserve the legacy failure text when the public API has no graph index.
+#[cfg(unix)]
+#[test]
+fn public_ninja_api_keeps_unresolved_command_list_failure_text() -> anyhow::Result<()> {
+    use test_support::exec::write_exec_with_content;
+
+    let workspace = tempfile::tempdir()?;
+    let build_file = workspace.path().join("build.ninja");
+    test_support::fs::write(&build_file, "# empty manifest\n")?;
+    let fingerprint = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let marker = format!("netsuke command-list failure: action {fingerprint}, entry 2");
+    let script = format!("#!/bin/sh\nprintf '%s\\n' '{marker}' >&2\nexit 1\n");
+    let fake_ninja = write_exec_with_content(workspace.path(), "fake-ninja", &script)?;
+    let utf8_build_file = Utf8PathBuf::from_path_buf(build_file)
+        .map_err(|path| anyhow::anyhow!("build file path is not UTF-8: {}", path.display()))?;
+    let utf8_fake_ninja = Utf8PathBuf::from_path_buf(fake_ninja)
+        .map_err(|path| anyhow::anyhow!("fake Ninja path is not UTF-8: {}", path.display()))?;
+    let options = NinjaProcessOptions::default();
+    let targets = BuildTargets::default();
+    let env = CommandEnv::inherit();
+    let result = run_ninja_with(&NinjaBuildRequest {
+        program: &utf8_fake_ninja,
+        options: &options,
+        build_file: &utf8_build_file,
+        targets: &targets,
+        env: &env,
+        stderr_mode: StderrMode::Forward,
+    });
+    let error = result.expect_err("a non-zero public Ninja request should fail");
+    let message = error.to_string();
+    anyhow::ensure!(
+        message == format!("ninja exited with exit status: 1: {marker}"),
+        "the public API should retain the exact legacy failure text, got {message}"
+    );
+    Ok(())
+}

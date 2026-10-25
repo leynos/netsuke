@@ -215,6 +215,11 @@ fn exit_failure_uses_one_target_resolution_for_error_and_tracing(
             !error_text.contains("command_list_target") && !error_text.contains("target \""),
             "an unknown fingerprint should leave the error unchanged: {error_text}"
         );
+        assert_eq!(
+            error_text,
+            format!("ninja exited with {}: {marker}", exit_status(1)),
+            "an unknown fingerprint should preserve the exact legacy error text"
+        );
         assert!(
             !telemetry.contains("command_list_target="),
             "an unknown fingerprint should omit the tracing field: {telemetry}"
