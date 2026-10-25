@@ -198,6 +198,10 @@ ninja_gen.format = 无法格式化 Ninja 清单的输出。
 ninja_gen.dyndep_files_required = 此操作需要生成的 Ninja dyndep 文件；请使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以生成这些文件。
 ninja_gen.reserved_output_path = 路径“{ $path }”已保留给 Netsuke 的串行依赖状态。
 ninja_gen.unsupported_path_character = 路径“{ $path }”包含不支持的 Ninja 路径字符“{ $character }”。
+ninja_gen.progress.inline = 正在构建 { $name }
+ninja_gen.progress.command_list = { $count ->
+   *[other] 正在构建 { $name } ({ $count } 条命令)
+}
 
 # 主机模式校验。
 host_pattern.empty = 主机模式不能为空。

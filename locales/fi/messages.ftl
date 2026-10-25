@@ -199,6 +199,11 @@ ninja_gen.format = Ninja-manifestin tulostetta ei voitu muotoilla.
 ninja_gen.dyndep_files_required = Tämä toiminto vaatii luodun Ninja-paketin; käytä komentoa `netsuke build`, `netsuke clean` tai `netsuke generate`, jotta dyndep-tiedostot luodaan.
 ninja_gen.reserved_output_path = Polku '{ $path }' on varattu Netsuken sarjariippuvuuksien tilan tallentamiseen.
 ninja_gen.unsupported_path_character = Polku '{ $path }' sisältää tukemattoman Ninja-polun merkin '{ $character }'.
+ninja_gen.progress.inline = Kootaan { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Kootaan { $name } ({ $count } komento)
+   *[other] Kootaan { $name } ({ $count } komentoa)
+}
 
 # Isäntähahmojen tarkistus.
 host_pattern.empty = Isäntähahmo ei saa olla tyhjä.

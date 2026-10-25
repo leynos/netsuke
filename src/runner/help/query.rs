@@ -13,7 +13,7 @@ use super::super::RunnerError;
 use super::super::generation;
 use super::super::path_helpers::{ensure_manifest_exists, resolve_manifest_path};
 use super::graph_json::GraphJson;
-use super::terminal_safe;
+use crate::terminal_text::{is_terminal_control, terminal_safe};
 
 /// One catalogue row: a single resolved target name with its metadata.
 pub(super) struct HelpEntry {
@@ -135,7 +135,7 @@ fn reject_terminal_controls_in_target_names(manifest: &NetsukeManifest) -> Resul
     let targets = manifest.actions.iter().chain(&manifest.targets);
     if targets
         .flat_map(|target| target.name.to_string_vec())
-        .any(|name| name.chars().any(super::is_terminal_control))
+        .any(|name| name.chars().any(is_terminal_control))
     {
         bail!("help targets cannot validate a target name with terminal control characters");
     }

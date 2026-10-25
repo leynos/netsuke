@@ -200,6 +200,11 @@ ninja_gen.format = Failed to format the Ninja manifest output.
 ninja_gen.dyndep_files_required = This build requires a generated Ninja bundle; use `netsuke build`, `netsuke clean`, or `netsuke generate` so the dyndep files are materialized.
 ninja_gen.reserved_output_path = The path '{ $path }' is reserved for Netsuke's serial dependency state.
 ninja_gen.unsupported_path_character = The path '{ $path }' contains the unsupported Ninja path character '{ $character }'.
+ninja_gen.progress.inline = Building { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Building { $name } ({ $count } command)
+   *[other] Building { $name } ({ $count } commands)
+}
 
 # Host pattern validation.
 host_pattern.empty = Host pattern must not be empty.

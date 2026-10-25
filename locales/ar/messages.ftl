@@ -199,6 +199,15 @@ ninja_gen.format = تعذّر تنسيق مخرجات ملف بيانات Ninja.
 ninja_gen.dyndep_files_required = ‏ يتطلّب هذا البناء حزمة Ninja مُنشأة؛ استخدم `netsuke build` أو `netsuke clean` أو `netsuke generate` لتجهيز ملفات dyndep.
 ninja_gen.reserved_output_path = ‏ المسار '{ $path }' محجوز لحالة تبعيات Netsuke التسلسلية.
 ninja_gen.unsupported_path_character = ‏ يحتوي المسار '{ $path }' على محرف مسار Ninja غير مدعوم هو '{ $character }'.
+ninja_gen.progress.inline = ‏بناء { $name }
+ninja_gen.progress.command_list = { $count ->
+    [zero] ‏بناء { $name } ({ $count } أمر)
+    [one] ‏بناء { $name } ({ $count } أمر)
+    [two] ‏بناء { $name } ({ $count } أمران)
+    [few] ‏بناء { $name } ({ $count } أوامر)
+    [many] ‏بناء { $name } ({ $count } أمرًا)
+   *[other] ‏بناء { $name } ({ $count } أمر)
+}
 
 # التحقق من أنماط المضيفين.
 host_pattern.empty = يجب ألّا يكون نمط المضيف فارغًا.

@@ -199,6 +199,13 @@ ninja_gen.format = Výstup manifestu Ninja se nepodařilo naformátovat.
 ninja_gen.dyndep_files_required = Toto sestavení vyžaduje vygenerovaný balíček Ninja; použijte `netsuke build`, `netsuke clean` nebo `netsuke generate`, aby se soubory dyndep materializovaly.
 ninja_gen.reserved_output_path = Cesta '{ $path }' je vyhrazena pro stav sériových závislostí Netsuke.
 ninja_gen.unsupported_path_character = Cesta '{ $path }' obsahuje nepodporovaný znak cesty Ninja '{ $character }'.
+ninja_gen.progress.inline = Sestavuje se: { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Sestavuje se: { $name } ({ $count } příkaz)
+    [few] Sestavuje se: { $name } ({ $count } příkazy)
+    [many] Sestavuje se: { $name } ({ $count } příkazu)
+   *[other] Sestavuje se: { $name } ({ $count } příkazů)
+}
 
 # Ověření vzorů hostitelů.
 host_pattern.empty = Vzor hostitele nesmí být prázdný.

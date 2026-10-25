@@ -165,14 +165,24 @@ impl LocalizedMessage {
         }
         Some(args)
     }
+
+    /// Render this message with a localizer already resolved by its caller.
+    ///
+    /// # Examples
+    ///
+    /// A generation operation can resolve its locale once, then render each
+    /// label through that handle: `message.render_with(localizer)`.
+    #[must_use]
+    pub(crate) fn render_with(&self, localizer: &dyn Localizer) -> String {
+        let args = self.args_map();
+        localizer.message(self.key, args.as_ref(), self.key)
+    }
 }
 
 impl fmt::Display for LocalizedMessage {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let localizer = localizer();
-        let args = self.args_map();
-        let message = localizer.message(self.key, args.as_ref(), self.key);
-        f.write_str(&message)
+        f.write_str(&self.render_with(localizer.as_ref()))
     }
 }
 

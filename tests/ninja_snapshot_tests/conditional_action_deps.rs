@@ -145,7 +145,7 @@ fn assert_conditional_ninja_selection(dir: &TempDir, build_file: &Path) -> Resul
     run_conditional_ninja(dir, build_file, &["-t", "query", "out/fallback"])?;
     let first = run_conditional_ninja(dir, build_file, &["-n", "out/fallback"])?;
     ensure!(
-        first.contains("echo fallback"),
+        first.contains("Building out/fallback"),
         "expected dry run to reach selected target, got:\n{first}"
     );
 

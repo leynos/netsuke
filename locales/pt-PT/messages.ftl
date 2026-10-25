@@ -200,6 +200,11 @@ ninja_gen.format = Não foi possível formatar a saída do manifesto Ninja.
 ninja_gen.dyndep_files_required = Esta operação requer um pacote Ninja gerado; utilize `netsuke build`, `netsuke clean` ou `netsuke generate` para materializar os ficheiros dyndep.
 ninja_gen.reserved_output_path = O caminho '{ $path }' está reservado para o estado de dependências seriais do Netsuke.
 ninja_gen.unsupported_path_character = O caminho '{ $path }' contém o carácter de caminho do Ninja não suportado '{ $character }'.
+ninja_gen.progress.inline = A compilar { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] A compilar { $name } ({ $count } comando)
+   *[other] A compilar { $name } ({ $count } comandos)
+}
 
 # Validação de padrões de anfitrião.
 host_pattern.empty = O padrão de anfitrião não pode estar vazio.

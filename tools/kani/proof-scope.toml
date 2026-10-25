@@ -122,6 +122,7 @@ sources = [
   "src/output/prefs/mod.rs",
   "src/recipe_shell.rs",
   "src/shell_word.rs",
+  "src/terminal_text.rs",
   "src/stdlib/canonical_value/admission.rs",
   "src/stdlib/canonical_value/error.rs",
   "src/stdlib/canonical_value/mod.rs",

@@ -362,8 +362,11 @@ Targets and actions may also provide `description`, but with a different
 purpose: a target or action description is discovery metadata surfaced by
 `netsuke help targets` (see
 [Generate and inspect artefacts](#generate-and-inspect-artefacts)). It does not
-affect Ninja progress output, which stays driven by the referenced rule's
-`description`.
+affect Ninja progress output. Inline `command` and `script` recipes receive a
+localized progress label based on their first declared output; command lists
+also show their entry count. A named rule's `description` remains authoritative
+for its progress output. To supply custom progress wording, put a `description`
+on a named rule and reference that rule from the target or action.
 
 A `command` list runs its entries in declaration order and stops at the first
 non-zero exit, so entries share the fail-fast behaviour of a handwritten `&&`

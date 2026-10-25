@@ -178,6 +178,8 @@ define_keys! {
     NINJA_GEN_DYNDEP_FILES_REQUIRED => "ninja_gen.dyndep_files_required",
     NINJA_GEN_RESERVED_OUTPUT_PATH => "ninja_gen.reserved_output_path",
     NINJA_GEN_UNSUPPORTED_PATH_CHARACTER => "ninja_gen.unsupported_path_character",
+    NINJA_GEN_PROGRESS_INLINE => "ninja_gen.progress.inline",
+    NINJA_GEN_PROGRESS_COMMAND_LIST => "ninja_gen.progress.command_list",
     HOST_PATTERN_EMPTY => "host_pattern.empty",
     HOST_PATTERN_CONTAINS_SCHEME => "host_pattern.contains_scheme",
     HOST_PATTERN_CONTAINS_SLASH => "host_pattern.contains_slash",

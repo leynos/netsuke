@@ -199,6 +199,10 @@ ninja_gen.format = Ninja 매니페스트 출력의 서식을 지정하지 못했
 ninja_gen.dyndep_files_required = 이 작업에는 생성된 Ninja 번들이 필요합니다. dyndep 파일을 생성하려면 `netsuke build`, `netsuke clean` 또는 `netsuke generate`를 사용하세요.
 ninja_gen.reserved_output_path = 경로 '{ $path }'은(는) Netsuke의 직렬 종속성 상태용으로 예약되어 있습니다.
 ninja_gen.unsupported_path_character = 경로 '{ $path }'에 지원되지 않는 Ninja 경로 문자 '{ $character }'이(가) 포함되어 있습니다.
+ninja_gen.progress.inline = 빌드 중: { $name }
+ninja_gen.progress.command_list = { $count ->
+   *[other] 빌드 중: { $name } ({ $count } 개 명령)
+}
 
 # 호스트 패턴 검증.
 host_pattern.empty = 호스트 패턴은 비어 있을 수 없습니다.

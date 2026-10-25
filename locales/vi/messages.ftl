@@ -199,6 +199,10 @@ ninja_gen.format = Không định dạng được đầu ra của tệp kê khai
 ninja_gen.dyndep_files_required = Thao tác này yêu cầu các tệp Ninja dyndep đã tạo; hãy dùng `netsuke build`, `netsuke clean` hoặc `netsuke generate` để hiện thực hóa chúng.
 ninja_gen.reserved_output_path = Đường dẫn '{ $path }' được dành riêng cho trạng thái phụ thuộc tuần tự của Netsuke.
 ninja_gen.unsupported_path_character = Đường dẫn '{ $path }' chứa ký tự đường dẫn Ninja không được hỗ trợ '{ $character }'.
+ninja_gen.progress.inline = Đang dựng { $name }
+ninja_gen.progress.command_list = { $count ->
+   *[other] Đang dựng { $name } ({ $count } lệnh)
+}
 
 # Kiểm tra mẫu máy chủ.
 host_pattern.empty = Mẫu máy chủ không được để trống.

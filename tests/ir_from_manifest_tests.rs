@@ -21,6 +21,8 @@ use rstest::rstest;
 mod canonical_edge_storage;
 #[path = "ir_from_manifest_tests/dependency_classes.rs"]
 mod dependency_classes;
+#[path = "ir_from_manifest_tests/progress_labels.rs"]
+mod progress_labels;
 
 /// Generate the expected action and target counts for each manifest fixture.
 #[rstest]
@@ -184,6 +186,13 @@ fn dependency_only_entries_lower_to_deduplicated_phony_actions() -> Result<()> {
             }),
         "dependency-only entries should deduplicate into one non-executable action: {:?}",
         graph.actions
+    );
+    let (_, aggregate) = graph
+        .target_for_output(Utf8PathBuf::from("all").as_path())
+        .context("expected the dependency-only aggregate edge")?;
+    ensure!(
+        aggregate.progress_label.is_none(),
+        "dependency-only recipes must not retain progress labels"
     );
     let ninja = ninja_gen::generate(&graph).context("generate dependency-only Ninja")?;
     ensure!(

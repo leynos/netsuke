@@ -61,6 +61,7 @@ macro_rules! write_flag {
 
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
+mod progress_label;
 /// Generate a Ninja build file as a string.
 ///
 /// # Examples
@@ -167,6 +168,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     out: &mut W,
     shell: RecipeShell,
 ) -> Result<(), NinjaGenError> {
+    let localizer = localization::localizer();
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
     if graph_requires_dyndep(graph) {
@@ -187,6 +189,8 @@ pub(crate) fn generate_into_with_shell<W: Write>(
                     message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
                         .with_arg("id", &edge.action_id),
                 })?;
+        let localized_description = progress_label::for_edge(edge, action, localizer.as_ref());
+        let ninja_description = escape_metadata_value(localized_description.as_deref())?;
         write!(
             out,
             "{}",
@@ -199,6 +203,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
                 },
                 action_restat: action.restat,
                 implicit_deps: &edge.implicit_deps,
+                description: ninja_description.as_ref(),
             }
         )?;
     }

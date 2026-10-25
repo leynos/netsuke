@@ -53,25 +53,21 @@
 //! ```
 
 mod bundle;
+mod render;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
+use render::render_edges;
 
-use crate::hex;
-use crate::ir::{BuildEdge, BuildGraph};
+#[cfg(test)]
+use crate::ir::BuildEdge;
+use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NinjaGenError, RecipeShell, edge_requires_gates, graph_requires_dyndep, join, path_key,
-    reject_unsupported_path_characters, write_action_rules,
+    NinjaGenError, RecipeShell, graph_requires_dyndep, join, reject_unsupported_path_characters,
+    write_action_rules,
 };
 use crate::recipe_shell::BashExecutable;
-use camino::Utf8PathBuf;
-use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use std::fmt::Write as _;
 
-/// Schema tag incorporated into every parent (gate-set) identity.
-const PARENT_SCHEMA: &str = "netsuke-serial-v1";
-/// Format tag incorporated into every dyndep filename digest.
-const DYNDEP_SCHEMA: &str = "netsuke-dyndep-v1";
 /// Reserved state namespace for serial gate paths.
 const SERIAL_NAMESPACE: &str = ".netsuke/serial";
 /// Reserved state namespace for dyndep sidecar files.
@@ -152,8 +148,8 @@ fn generate_bundle_inner(
 
     write_action_rules(graph, &mut out, shell, bash_executable)?;
 
-    let mut stages = SerialStages::default();
-    render_edges(graph, &mut out, &mut stages)?;
+    let localizer = localization::localizer();
+    let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;
 
     if !graph.default_targets.is_empty() {
         let mut defs = graph.default_targets.clone();
@@ -163,193 +159,8 @@ fn generate_bundle_inner(
 
     Ok(GeneratedNinja {
         build_file: out,
-        dyndep_files: stages.dyndep_files,
+        dyndep_files,
     })
-}
-
-/// Render each distinct graph edge in stable output order.
-fn render_edges(
-    graph: &BuildGraph,
-    out: &mut String,
-    stages: &mut SerialStages,
-) -> Result<(), NinjaGenError> {
-    let mut edges: Vec<_> = graph.edges().collect();
-    edges.sort_by_key(|a| path_key(&a.explicit_outputs));
-
-    for edge in edges {
-        render_edge(graph, edge, out, stages)?;
-    }
-    Ok(())
-}
-
-/// Render one graph edge, applying staged dyndep lowering when required.
-fn render_edge(
-    graph: &BuildGraph,
-    edge: &BuildEdge,
-    out: &mut String,
-    stages: &mut SerialStages,
-) -> Result<(), NinjaGenError> {
-    let action =
-        graph
-            .actions
-            .get(&edge.action_id)
-            .ok_or_else(|| NinjaGenError::MissingAction {
-                id: edge.action_id.clone(),
-                message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
-                    .with_arg("id", &edge.action_id),
-            })?;
-
-    let rendered_action = RenderedAction {
-        name: if action.recipe.is_dependency_only() {
-            "phony"
-        } else {
-            &edge.action_id
-        },
-        restat: action.restat,
-    };
-    if edge_requires_gates(edge) {
-        return render_serial_edge(edge, rendered_action, out, stages);
-    }
-    render_display_edge(edge, rendered_action, &edge.implicit_deps, out)
-}
-
-/// Hold the selected Ninja rule metadata while lowering a graph edge.
-///
-/// Keep these fields together because direct and serial lowering must render
-/// the same rule selection without widening the graph representation.
-#[derive(Clone, Copy)]
-struct RenderedAction<'a> {
-    /// Name the Ninja rule selected for the edge.
-    name: &'a str,
-    /// Preserve whether Ninja should restat this edge after execution.
-    restat: bool,
-}
-/// Render one staged serial edge and replace its real dependencies with gates.
-fn render_serial_edge(
-    edge: &BuildEdge,
-    action: RenderedAction<'_>,
-    out: &mut String,
-    stages: &mut SerialStages,
-) -> Result<(), NinjaGenError> {
-    let mut gate_paths = Vec::new();
-    render_serial_block(edge, out, stages, &mut gate_paths)?;
-    render_display_edge(edge, action, &gate_paths, out)
-}
-
-/// Render an edge using its already selected Ninja action metadata.
-fn render_display_edge(
-    edge: &BuildEdge,
-    action: RenderedAction<'_>,
-    implicit_deps: &[Utf8PathBuf],
-    out: &mut String,
-) -> Result<(), NinjaGenError> {
-    write!(
-        out,
-        "{}",
-        crate::ninja_gen::DisplayEdge {
-            edge,
-            action_name: action.name,
-            action_restat: action.restat,
-            implicit_deps,
-        }
-    )?;
-    Ok(())
-}
-
-/// Mutable staging state shared while lowering one serial edge.
-#[derive(Default)]
-struct SerialStages {
-    /// Dyndep sidecars collected while lowering serial edges.
-    dyndep_files: Vec<GeneratedDyndep>,
-    /// Sidecar paths already staged, deduplicating shared dependencies.
-    staged_sidecars: HashSet<Utf8PathBuf>,
-}
-
-/// Emit the staged gates and sidecar-producing phony edges for one serial edge,
-/// collecting each sidecar into the bundle and returning the gate paths in
-/// dependency order.
-fn render_serial_block(
-    edge: &BuildEdge,
-    out: &mut String,
-    stages: &mut SerialStages,
-    gate_paths: &mut Vec<Utf8PathBuf>,
-) -> Result<(), NinjaGenError> {
-    use crate::ninja_gen::validated_ninja_path;
-
-    let parent = parent_identity(edge);
-    for (index, dep) in edge.implicit_deps.iter().enumerate() {
-        let gate = parent.join(format!("{index:03}"));
-        let content = sidecar_content(&gate, dep)?;
-        let digest = sidecar_digest(&content);
-        let sidecar = Utf8PathBuf::from(format!("{DYNDEP_NAMESPACE}/{digest}.dd"));
-
-        let sidecar_escaped = validated_ninja_path(sidecar.as_str())?;
-        let gate_escaped = validated_ninja_path(gate.as_str())?;
-
-        // The phony edge that produces (but never rebuilds) the sidecar file.
-        // Starting at the second stage it depends on the previous gate, which
-        // prevents Ninja from revealing the next sidecar early.
-        match gate_paths.last() {
-            None => writeln!(out, "build {sidecar_escaped}: phony")?,
-            Some(prev) => {
-                let prev_escaped = validated_ninja_path(prev.as_str())?;
-                writeln!(out, "build {sidecar_escaped}: phony {prev_escaped}")?;
-            }
-        }
-        // The gate edge: order-only depends on the sidecar and declares it as
-        // its dyndep file so Ninja loads the real dependency from the sidecar.
-        writeln!(out, "build {gate_escaped}: phony || {sidecar_escaped}")?;
-        writeln!(out, "  dyndep = {sidecar_escaped}")?;
-        writeln!(out)?;
-
-        if stages.staged_sidecars.insert(sidecar.clone()) {
-            stages.dyndep_files.push(GeneratedDyndep {
-                relative_path: sidecar,
-                content,
-            });
-        }
-        gate_paths.push(gate);
-    }
-    Ok(())
-}
-
-/// Derive the stable parent (gate-set) identity for a serial edge.
-///
-/// The identity is a SHA-256 over the edge canonical output identity and an
-/// explicit schema tag, so renaming the output or changing the staging format
-/// yields a fresh namespace without colliding with other serial edges.
-fn parent_identity(edge: &BuildEdge) -> Utf8PathBuf {
-    let canonical = edge
-        .explicit_outputs
-        .iter()
-        .map(|p| p.as_str())
-        .collect::<Vec<_>>()
-        .join("\u{0}");
-    let mut hasher = Sha256::new();
-    hasher.update(PARENT_SCHEMA.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(canonical.as_bytes());
-    let digest = hex::to_lower_hex(&hasher.finalize());
-    Utf8PathBuf::from(format!("{SERIAL_NAMESPACE}/{digest}"))
-}
-
-/// Render the dyndep document for one gate and its real dependency.
-fn sidecar_content(gate: &Utf8PathBuf, dep: &Utf8PathBuf) -> Result<String, NinjaGenError> {
-    use crate::ninja_gen::validated_ninja_path;
-    let gate_escaped = validated_ninja_path(gate.as_str())?;
-    let dep_escaped = validated_ninja_path(dep.as_str())?;
-    Ok(format!(
-        "ninja_dyndep_version = 1\nbuild {gate_escaped}: dyndep | {dep_escaped}\n"
-    ))
-}
-
-/// Content-address a sidecar by its complete bytes and a format tag.
-fn sidecar_digest(content: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(DYNDEP_SCHEMA.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(content.as_bytes());
-    hex::to_lower_hex(&hasher.finalize())
 }
 
 /// Reject user outputs or dependencies that collide with the reserved

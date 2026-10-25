@@ -199,6 +199,11 @@ ninja_gen.format = De uitvoer van het Ninja-manifest kon niet worden opgemaakt.
 ninja_gen.dyndep_files_required = Deze bewerking vereist een gegenereerde Ninja-bundel; gebruik `netsuke build`, `netsuke clean` of `netsuke generate` om de dyndep-bestanden te materialiseren.
 ninja_gen.reserved_output_path = Het pad '{ $path }' is gereserveerd voor de seriële afhankelijkheidsstatus van Netsuke.
 ninja_gen.unsupported_path_character = Het pad '{ $path }' bevat het niet-ondersteunde Ninja-padteken '{ $character }'.
+ninja_gen.progress.inline = Bouwt { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Bouwt { $name } ({ $count } opdracht)
+   *[other] Bouwt { $name } ({ $count } opdrachten)
+}
 
 # Validatie van hostpatronen.
 host_pattern.empty = Het hostpatroon mag niet leeg zijn.

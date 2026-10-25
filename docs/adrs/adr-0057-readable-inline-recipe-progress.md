@@ -43,7 +43,9 @@ text helper, then bound the sanitized name to 80 Unicode scalar values,
 including a trailing `…` when truncation is needed. Localize a short scalar or
 script label, or a command-list label that includes the recipe's entry count.
 Use the resolved action recipe to choose the message and count; never use
-command text or target/action discovery descriptions.
+command text or target/action discovery descriptions. Remove Fluent's
+formatter-added directional isolates after rendering; raw bidi controls in the
+name have already been made visible before interpolation.
 
 Emit the localized label as an edge-level Ninja `description` binding beside
 `restat`, in both ordinary and dyndep output. Escape it with the existing
@@ -75,4 +77,4 @@ recipe execution.
 ## References
 
 - [Netsuke design, §2.4 and §2.6](../netsuke-design.md)
-- [Roadmap item 3.14.11](../roadmap.md#31411-surface-selected-conditional-actions-without-recipe-echo)
+- [Roadmap item 3.14.11](../roadmap.md#314-conditional-action-planning)

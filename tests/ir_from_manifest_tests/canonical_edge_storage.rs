@@ -95,6 +95,29 @@ fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
     Ok(())
 }
 
+/// Keep progress provenance on one canonical edge using its first output.
+#[test]
+fn inline_multi_output_progress_uses_first_declared_name() -> Result<()> {
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: [first.out, second.out]\n    command: echo built\n",
+    )?;
+    let graph = BuildGraph::from_manifest(&manifest)?;
+    let canonical = assert_canonical_output_aliases(&graph, 2)?;
+    let ninja = ninja_gen::generate(&graph)?;
+
+    ensure!(
+        canonical.progress_label.as_deref() == Some("first.out"),
+        "the edge label should use the first declared output: {:?}",
+        canonical.progress_label
+    );
+    ensure!(
+        ninja.contains("description = Building first.out")
+            && !ninja.contains("Building second.out"),
+        "the canonical edge should emit one first-output label: {ninja}"
+    );
+    Ok(())
+}
+
 /// Resolve a dependency that names a non-first output alias of one edge.
 ///
 /// Cycle detection and missing-dependency reporting both resolve a dependency

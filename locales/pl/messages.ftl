@@ -199,6 +199,13 @@ ninja_gen.format = Nie udało się sformatować wyjścia manifestu Ninja.
 ninja_gen.dyndep_files_required = Ta operacja wymaga wygenerowanego pakietu Ninja; użyj `netsuke build`, `netsuke clean` lub `netsuke generate`, aby utworzyć pliki dyndep.
 ninja_gen.reserved_output_path = Ścieżka '{ $path }' jest zarezerwowana dla stanu szeregowych zależności Netsuke.
 ninja_gen.unsupported_path_character = Ścieżka '{ $path }' zawiera nieobsługiwany znak ścieżki Ninja: '{ $character }'.
+ninja_gen.progress.inline = Trwa budowanie: { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Trwa budowanie: { $name } ({ $count } polecenie)
+    [few] Trwa budowanie: { $name } ({ $count } polecenia)
+    [many] Trwa budowanie: { $name } ({ $count } poleceń)
+   *[other] Trwa budowanie: { $name } ({ $count } polecenia)
+}
 
 # Walidacja wzorców hostów.
 host_pattern.empty = Wzorzec hosta nie może być pusty.

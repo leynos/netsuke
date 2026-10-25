@@ -34,6 +34,7 @@ mod shell_word;
 mod snapshot_test_support;
 pub mod status;
 pub mod stdlib;
+mod terminal_text;
 #[cfg(test)]
 pub(crate) mod test_tracing_capture;
 pub mod theme;
