@@ -2,6 +2,19 @@
 
 Status: IN PROGRESS
 
+On 26 October, formal CodeRabbit review `5645777679` of published head
+`1ef4de4d11c4157a11bd2f573c5bf29a927dbdd7` requested changes for two missing
+regressions: rejection of an unknown experiment variant and a stable schema-2
+JSONL projection across variants and cohorts. The worktree adds both contracts
+in `ci_test_evidence_output_test.py` and pins the projection in
+`ci_test_evidence_schema2.json`, including nulls and raw-log exclusion. The
+candidate passed `make check-fmt`, `make test` (4,712 passed, six skipped, and
+doctests passed), `make typecheck`, `make lint`, and
+`make test-workflow-contracts` (1,494 passed, three skipped, plus 27 script
+tests), sequentially. These results cover the test changes before this plan
+update; the final documentation candidate still needs its gates, then a
+current-head hosted review and CI before merge.
+
 On 25 October, the 39-commit branch was rebased from
 `0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458` onto `origin/main` at
 `88f20d588f936b810a2f700a76ceda970451ca7f`. The replay had no conflicts, and
