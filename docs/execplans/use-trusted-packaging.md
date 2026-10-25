@@ -472,7 +472,7 @@ escaping path.
 
 **LEM-3 (reconciliation is state-based).** For crates.io, version absence,
 identical package, conflicting package, yanked version, and indeterminate error
-are five distinct outcomes with four distinct actions; only an identical
+are five distinct states with three distinct actions; only an identical
 checksum permits a skip.
 
 - Obligation: `LEM-3` holds for every classification input.
@@ -627,7 +627,9 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
   committing it first leaves `make test-workflow-contracts` red. The other four
   assert the separation itself and pass vacuously until the job exists, which
   is why the existence checks are not optional.
-- `tests/workflow_contracts/composite_action_contract_test.py` (new).
+- `tests/workflow_contracts/composite_action_contract_test.py` is delivered.
+  It applies the run-interpolation rule to every composite action and checks
+  manifest step shape, with a negative mutation proving the rule can fail.
 - `tests/workflow_contracts/release_modules_wired_test.py` (Cuprum #499) is
   **superseded**: `release_publication_test.py`, landed at `ef02f499`, already
   performs the Makefile and continuous-integration wiring checks plus the
@@ -635,18 +637,19 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 
 ### Stage C — implementation
 
-`.github/actions/` gains one composite action per extracted body:
+`.github/actions/` contains the delivered `package-crate` action. Four more
+job-matched actions remain to be added, one per extracted body:
 
-- `package-crate/` — resolve and record the identity.
+- `package-crate/` — resolve and record the identity (delivered).
 - `publish-crates-io/` — probe, decide, upload, verify registry bytes.
 - `verify-release-inventory/` — compare the whole release against the
   identity record.
 - `finalize-github-release/` — reconcile the draft, then un-draft.
 - `consumer-smoke/` — download, verify, extract and run the published bytes.
 
-A sixth action, `upload-declared-assets/`, is called by the existing
-`publish-release` job rather than by a new one; the Decision log records why
-the upload step becomes a composite action instead of an inline `run` block.
+The separate `upload-declared-assets/` helper also remains to be added for the
+existing `publish-release` job; the Decision log records why the upload step
+becomes a composite action instead of an inline `run` block.
 
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
@@ -686,8 +689,10 @@ deliberate negative mutation in
 `tests/workflow_contracts/composite_action_contract_test.py` discharges its
 non-vacuity, so the stricter rule cannot pass by having nothing to check.
 
-`.github/workflows/release.yml` gains, after the existing `metadata`, `build-*`,
-`windows-native-recipe-smoke`, and `release-admission-canaries` jobs:
+The intended end-state in `.github/workflows/release.yml` adds the sequence
+below after the existing `metadata`, `build-*`, `windows-native-recipe-smoke`,
+and `release-admission-canaries` jobs. The `package-crate` job has landed; the
+other four jobs remain:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
@@ -766,23 +771,23 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 
 ### Stage D — wiring and documentation
 
-- `Makefile`: a `test-release-publication` target running the new
-  `scripts/tests` modules with pinned `pytest` and `hypothesis`, and a
-  `test-release-negative-mutation` target.
-- `Makefile`: a **new, separate** target validates
+- `Makefile`: `test-release-publication` already runs the `scripts/tests`
+  modules with pinned `pytest` and `hypothesis`; the separate
+  `test-release-negative-mutation` target remains to be added.
+- Planned Makefile target: a **new, separate** target will validate
   `.github/actions/*/action.yml` — yamllint with the same policy, plus a
-  `bash -n`-based syntax check over each composite action's `run` blocks — and
-  is wired into `lint` alongside `github-actions-lint`. It cannot be appended to
-  `github-actions-lint` itself; see `Surprises & discoveries` for the
-  positional pin that forbids it. The two pre-existing defects in the existing
-  five manifests — `windows-msi-upgrade-validation/action.yml` missing its
-  `---` document start, and `windows-gate-cache/action.yml` carrying a trailing
-  blank line — were repaired ahead of this target, in commit `b07de6038`, so
-  its first run is green on the threshold and any red it reports is
-  attributable to the manifests this branch adds. Both findings and both
-  repairs are recorded in `Surprises & discoveries`; neither file is otherwise
-  touched by this branch, and neither repair adds an exemption.
-- `.github/workflows/ci.yml`: run the new targets in `build-test`.
+  `bash -n`-based syntax check over each composite action's `run` blocks, and
+  will be wired into `lint` alongside `github-actions-lint`. It cannot be
+  appended to `github-actions-lint` itself; see `Surprises & discoveries` for
+  the positional pin that forbids it. The two pre-existing defects in the
+  existing five manifests — `windows-msi-upgrade-validation/action.yml` missing
+  its `---` document start, and `windows-gate-cache/action.yml` carrying a
+  trailing blank line — were repaired ahead of this target, in commit
+  `b07de6038`, so its first run is green on the threshold and any red it
+  reports is attributable to the manifests this branch adds. Both findings and
+  both repairs are recorded in `Surprises & discoveries`; neither file is
+  otherwise touched by this branch, and neither repair adds an exemption.
+- `.github/workflows/ci.yml`: wire the remaining new targets into `build-test`.
 - `docs/developers-guide.md`: the release runbook — job graph, package and
   asset identity contract, provenance verification, re-run procedure, and
   partial-publication recovery.
@@ -827,64 +832,83 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 
 **EP-M3 — the GitHub-side publication sequence.**
 
-- Outcome: `release.yml` carries the full sequence, every new job body
+- Outcome (target): `release.yml` carries the full sequence, every new job body
   extracted to a composite action so the job graph stays readable at a glance.
   (Not "under 400 lines": no contract caps workflow YAML, and `release.yml` is
   already 688 lines on `main`. The extraction follows the repository's
   documented composite-action convention, `docs/developers-guide.md:1606-1607`.)
-- Requirements: INV-1, LEM-5, LEM-6 discharged.
-- Acceptance evidence: `make test-workflow-contracts` passes, including the
-  new permission and mode-matrix tests.
+- Requirements: INV-1, LEM-5, and LEM-6 are assigned here; the workflow and
+  permission-separation portions remain open.
+- Acceptance evidence: the target is `make test-workflow-contracts` passing
+  with the permission and mode-matrix tests. The LEM-5 permission suite and the
+  remaining publication jobs have not landed.
 - Conformance check: the six existing outputs are unchanged; the three
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
-- Remaining gaps: no crate is published by any run, because the trusted
-  publisher's registration is a maintainer action. The package already exists
-  on crates.io (`0.1.0-beta1` through `beta4`), so no initial publication is
-  outstanding; only the registration and the account settings are.
+- Remaining gaps: only `package-crate` is in the new workflow graph. Four
+  job-matched actions and jobs, `upload-declared-assets`, and the LEM-5 suite
+  remain. No crate is published by any run; after the workflow lands, trusted
+  publisher registration and account settings remain maintainer actions. The
+  package already exists on crates.io (`0.1.0-beta1` through `beta4`), so no
+  initial publication is outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
 **EP-M4 — the crate package and the registry publisher.**
 
-- Outcome: `package-crate` and `publish-crates-io` exist, with the ephemeral
-  token confined to one step.
-- Requirements: AXIOM-1, AXIOM-2, INV-1.
-- Acceptance evidence: the dry run produces a `.crate`, its digest, and its
-  file list, and reaches no network write.
+- Outcome (target): `package-crate` and `publish-crates-io` exist, with the
+  ephemeral token confined to one step. The `package-crate` action and job are
+  delivered; the registry publisher is not.
+- Requirements: AXIOM-1, AXIOM-2, and INV-1 are assigned here; registry
+  publication remains open.
+- Acceptance evidence: the target dry run produces a `.crate`, its digest, and
+  its file list, and reaches no network write. The delivered packaging record
+  contains the archive name, candidate identity, and digest, but not the
+  required archive file list.
 - Conformance check: no long-lived token anywhere; `persist-credentials: false`
   on the publisher's checkout; no cache restore in the publisher.
-- Recovery: both jobs are gated on `should_publish`, so a revert or a skip
-  leaves the current release path intact.
-- Remaining gaps: the live exchange is unvalidated by construction.
+- Recovery: the new publisher will be gated on `should_publish`;
+  `package-crate` also runs in rehearsal mode but only builds the archive and
+  identity record. Reverting the publication additions restores the current
+  release path.
+- Remaining gaps: the `publish-crates-io` action/job and archive file-list
+  evidence are missing. The live exchange will remain unvalidated by
+  construction.
 - Compatibility decision: none.
 
 **EP-M5 — recoverability and reconciliation.**
 
-- Outcome: re-running a tag run reconciles rather than duplicating; the
+- Outcome (target): re-running a tag run reconciles rather than duplicating; the
   finalizer completes a matching release and fails closed otherwise.
-- Requirements: LEM-3, LEM-4.
+- Requirements: LEM-3 and LEM-4 policy and CLI decisions are implemented;
+  workflow orchestration and recovery remain open.
 - Acceptance evidence: a simulated second run against a partially populated
   release reports exactly the missing assets and uploads only those.
 - Conformance check: `cancel-in-progress` is `false` for a tag; no
   `--clobber` is used for reconciliation.
 - Recovery: a failed run leaves the draft and the published version intact
   and is safe to re-run.
-- Remaining gaps: no cross-service atomicity is claimed.
+- Remaining gaps: the remote orchestration and partial-publication recovery
+  sequence have not landed. No cross-service atomicity is claimed.
 - Compatibility decision: none.
 
 **EP-M6 — gates, guards, and documentation.**
 
-- Outcome: a deliberate negative mutation is caught by the same route CI
-  runs; composite actions are linted; no new test is orphaned.
-- Requirements: Cuprum #487 and #499 closed locally.
-- Acceptance evidence: `make test-release-negative-mutation` fails with the
-  injected mutation and passes without it; the new composite-action target
-  covers `.github/actions` and `make lint` runs it.
+- Outcome (target): a deliberate negative mutation is caught by a CI-run route;
+  composite actions are linted; no new test is orphaned. The publication test
+  target, generic composite-action contract, package-action contract, and
+  documentation are delivered.
+- Requirements: Cuprum #487 and #499 are assigned here; the dedicated
+  mutation route and composite-action lint wiring remain open.
+- Acceptance evidence: `make test-release-negative-mutation` must fail with
+  the injected mutation and pass without it. A separate composite-action target
+  must lint `.github/actions` and be included in `make lint`; neither target
+  exists yet.
 - Conformance check: the full gate set passes sequentially.
 - Recovery: revert.
-- Remaining gaps: none known.
+- Remaining gaps: the dedicated negative-mutation target, composite-action
+  YAML and shell lint target, and their CI wiring.
 
 ## Concrete steps
 
@@ -995,25 +1019,53 @@ New Python surface, all private to the repository:
 
 ```python
 # scripts/release_candidate.py
-@dataclasses.dataclass(frozen=True)
-class ReleaseIdentity:
+@dataclasses.dataclass(frozen=True, slots=True)
+class CandidateFacts:
+    tag: str | None
     commit: str
-    package: str
+    package_name: str
     version: str
-    is_prerelease: bool
     bin_name: str
-    assets: tuple[str, ...]
-    digests: cabc.Mapping[str, str]
 
-def resolve_identity(*, tag: str, commit: str, package: str,
-                     version: str, bin_name: str) -> ReleaseIdentity: ...
+@dataclasses.dataclass(frozen=True, slots=True)
+class ReleaseIdentity:
+    tag: str | None
+    commit: str
+    package_name: str
+    version: str
+    bin_name: str
+    is_prerelease: bool
 
-def validate_tag_against_version(tag: str, version: str) -> None:
-    """Raise TagVersionMismatch when the tag does not spell the version."""
+def resolve_identity(facts: CandidateFacts) -> ReleaseIdentity: ...
 ```
 
 ```python
 # scripts/release_reconcile_crates.py
+@dataclasses.dataclass(frozen=True, slots=True)
+class RegistryVersion:
+    num: str
+    checksum: str
+    is_yanked: bool
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RegistryAbsent: ...
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RegistryIndeterminate: ...
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RegistrySingleVersion:
+    record: RegistryVersion
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class RegistryVersionHistory:
+    records: tuple[RegistryVersion, ...]
+
+RegistryObservation = (
+    RegistryAbsent | RegistryIndeterminate | RegistrySingleVersion
+    | RegistryVersionHistory
+)
+
 class RegistryState(enum.Enum):
     ABSENT = "absent"
     IDENTICAL = "identical"
@@ -1021,8 +1073,11 @@ class RegistryState(enum.Enum):
     YANKED = "yanked"
     INDETERMINATE = "indeterminate"
 
-def classify_registry_state(body: str | None, *, intended_sha256: str,
-                            http_status: int) -> RegistryState: ...
+def classify_registry_state(
+    observation: RegistryObservation, *, version: str, intended_sha256: str
+) -> RegistryState: ...
+
+def plan_crates_action(state: RegistryState) -> str: ...
 ```
 
 ```python
@@ -1032,8 +1087,11 @@ class AssetAction(enum.Enum):
     SKIP_VERIFIED = "skip-verified"
     CONFLICT = "conflict"
 
-def plan_asset_actions(*, expected: cabc.Mapping[str, str],
-                       present: cabc.Mapping[str, str]) -> tuple[tuple[str, AssetAction], ...]: ...
+def plan_asset_actions(
+    *,
+    expected: cabc.Mapping[str, str],
+    present: cabc.Mapping[str, str | None],
+) -> tuple[tuple[str, AssetAction], ...]: ...
 ```
 
 Dependencies: none new. `rust-lang/crates-io-auth-action` at
@@ -1499,12 +1557,14 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   a dry run; `publish-release` creates it at `release.yml:589`. Prose and one
   test; no workflow body, Rust source, or gate configuration changed.
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
-  Scope correction from recon at `c1f3f2ed`: this is not an extraction of
-  existing bodies. `release.yml` has no `package-crate`, `publish-crates-io`,
-  `verify-release-inventory` or `consumer-smoke` job, and no crates.io step of
-  any kind; only `release` and `publish-release` carry the upload sequence that
-  the new jobs decompose. Stage C therefore writes five new composite actions
-  plus the job graph, and is the largest stage in this plan.
+  The scope correction from recon at `c1f3f2ed` established that this is not an
+  extraction of existing bodies: only `release` and `publish-release` carry the
+  existing upload sequence. Since that reconnaissance, the `package-crate`
+  action and job have landed. Four job-matched actions and jobs remain
+  (`publish-crates-io`, `verify-release-inventory`, `finalize-github-release`
+  and `consumer-smoke`), together with the planned `upload-declared-assets`
+  helper for `publish-release`. No crates.io workflow step exists yet, so Stage
+  C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
   change and committed it as `d604b0cd`. Nine targets pass outright:
@@ -2263,6 +2323,15 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   doctests passed). Fresh `lint` and `nixie` runs also passed after the
   stop-hook failures did not reproduce. Date/Author: 2026-10-25, implementation
   agent.
+- [x] (2026-10-25) Corrected the current Stage C scope summary after review
+  found it still described the `package-crate` job as absent. The package
+  action/job is present; four job-matched publication actions/jobs and the
+  `upload-declared-assets` helper remain. The packaging record still lacks the
+  archive file list required by EP-M4. The LEM-5 permission suite, dedicated
+  negative-mutation target, and composite-action YAML/shell lint target and CI
+  wiring remain. `composite_action_contract_test.py` already covers expression
+  placement, manifest step shape, and negative controls. Stage C and Stage D
+  remain open. No release or registry setting was changed.
 
 ## Surprises & discoveries
 
@@ -3730,3 +3799,11 @@ The targeted publication suite and the requested repository gates pass. This is
 a verifier and documentation correction only; it adds no workflow job and does
 not publish a release or change registry settings. Stage C remains partial and
 Stage D remains open.
+
+Draft 8, 2026-10-25: corrected stale interface sketches to match the delivered
+candidate, registry-observation, and asset-planning types, and changed LEM-3's
+action count from four to three. The current milestone summaries now separate
+delivered packaging and contracts from the open publisher, workflow, archive
+file-list, mutation-target, and composite-action lint work. Stage C and Stage D
+remain open; no acceptance criteria or implementation scope changed, and no
+release or registry setting was changed.
