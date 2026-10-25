@@ -43,6 +43,20 @@ fn stale_summary_interest_is_reproduced_in_a_fresh_process() -> Result<()> {
             "ISSUE927_ORACLE=one-accepted",
         ],
     )?;
+
+    let public_helper_output = run_worker_child("public-helper")?;
+    require_worker_markers(
+        &public_helper_output,
+        &[
+            "ISSUE927_GATE_PAUSED=true",
+            "ISSUE927_DISPATCH_REGISTRATION_STARTED_BEFORE_RELEASE=true",
+            "ISSUE927_SUMMARY_CALLBACK_BEFORE_RELEASE=false",
+            "ISSUE927_SUMMARY_CALLBACK_AFTER_RELEASE=true",
+            "ISSUE927_RELEASE_CAUSE=deadline",
+            "ISSUE927_EVENT_SNAPSHOT=[",
+            "ISSUE927_ORACLE=one-accepted",
+        ],
+    )?;
     Ok(())
 }
 

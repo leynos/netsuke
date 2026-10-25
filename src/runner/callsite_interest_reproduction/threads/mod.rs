@@ -1,15 +1,17 @@
-//! Coordinate the two gated capture schedules used by the fresh-process test.
+//! Coordinate three gated capture schedules used by the fresh-process test.
 //!
-//! These helpers stay private to the issue 927 reproduction. The two modes
+//! These helpers stay private to the issue 927 reproduction. The three modes
 //! share channel orchestration and event snapshots while retaining distinct
 //! subscriber installation boundaries.
+
+mod capture;
 
 use super::super::manifest_structure_telemetry::record_manifest_structure;
 use super::gate::{GATE_DEADLINE, GatedSubscriber, RegistrationGate, RegistrationGateChannels};
 use super::{EMPTY_MANIFEST_COUNTS, validate_manifest_structure_events};
 use crate::ast::NetsukeManifest;
-use crate::test_tracing_capture::CapturedEvents;
 use anyhow::{Context, Result, anyhow, ensure};
+use capture::spawn_capture_thread;
 use metrics_util::debugging::DebuggingRecorder;
 use std::{
     sync::{
@@ -30,6 +32,8 @@ pub(super) enum CaptureMode {
     Unmitigated,
     /// Capture with the shared helper and release after the fixed deadline.
     Mitigated,
+    /// Capture through `test_support::with_test_subscriber` and release by deadline.
+    PublicHelper,
 }
 
 /// Own the event and structural-span snapshot returned by T2.
@@ -139,7 +143,11 @@ fn validate_registration_timing(
         timing.summary_callback_after_release
     );
     ensure!(
-        timing.summary_callback_after_release == matches!(capture_mode, CaptureMode::Mitigated),
+        timing.summary_callback_after_release
+            == matches!(
+                capture_mode,
+                CaptureMode::Mitigated | CaptureMode::PublicHelper
+            ),
         "T2 summary callback had the wrong timing relative to T1's gate: before release={}, after release={}",
         timing.summary_callback_before_release,
         timing.summary_callback_after_release
@@ -175,7 +183,7 @@ impl CaptureMode {
     fn expected_release(self) -> &'static str {
         match self {
             Self::Unmitigated => "installed",
-            Self::Mitigated => "deadline",
+            Self::Mitigated | Self::PublicHelper => "deadline",
         }
     }
 
@@ -183,93 +191,11 @@ impl CaptureMode {
     fn release_requirement(self) -> &'static str {
         match self {
             Self::Unmitigated => "unmitigated T1 must release when T2 installs TRACE",
-            Self::Mitigated => "anchored T2 registration must wait for T1's read-side rebuild",
+            Self::Mitigated | Self::PublicHelper => {
+                "anchored T2 registration must wait for T1's read-side rebuild"
+            }
         }
     }
-}
-
-/// Start T2 with the selected subscriber installation boundary.
-fn spawn_capture_thread(
-    capture_mode: CaptureMode,
-    channels: CaptureThreadChannels,
-    manifest: NetsukeManifest,
-) -> JoinHandle<Result<CaptureSnapshot>> {
-    let CaptureThreadChannels {
-        paused_receiver,
-        registration_started_sender,
-        summary_callback_sender,
-        installed_sender,
-        finished_receiver,
-    } = channels;
-    thread::spawn(move || {
-        paused_receiver
-            .recv_timeout(THREAD_DEADLINE)
-            .context("wait for T1 to pause the summary registration")?;
-        crate::test_tracing_capture::with_manifest_summary_registration_signal(
-            summary_callback_sender,
-            || match capture_mode {
-                CaptureMode::Unmitigated => {
-                    let (trace_subscriber, captured) =
-                        crate::test_tracing_capture::uninstalled_test_subscriber(
-                            LevelFilter::TRACE,
-                        );
-                    registration_started_sender
-                        .send(())
-                        .context("signal T2 reached Dispatch::new")?;
-                    let dispatch = tracing::Dispatch::new(trace_subscriber);
-                    tracing::dispatcher::with_default(&dispatch, || {
-                        capture_manifest_after_install(
-                            &installed_sender,
-                            &finished_receiver,
-                            &manifest,
-                            &captured,
-                        )
-                    })
-                }
-                CaptureMode::Mitigated => {
-                    crate::test_tracing_capture::with_test_subscriber_at_registration(
-                        LevelFilter::TRACE,
-                        || {
-                            registration_started_sender
-                                .send(())
-                                .context("signal T2 reached Dispatch::new")
-                        },
-                        |captured| {
-                            capture_manifest_after_install(
-                                &installed_sender,
-                                &finished_receiver,
-                                &manifest,
-                                &captured,
-                            )
-                        },
-                    )
-                }
-            },
-        )
-    })
-}
-
-/// Signal dispatch installation and snapshot the production emission after T1 ends.
-fn capture_manifest_after_install(
-    installed_sender: &Sender<()>,
-    finished_receiver: &Receiver<()>,
-    manifest: &NetsukeManifest,
-    captured: &CapturedEvents,
-) -> Result<CaptureSnapshot> {
-    installed_sender
-        .send(())
-        .context("signal that the TRACE dispatch is installed")?;
-    finished_receiver
-        .recv_timeout(THREAD_DEADLINE)
-        .context("wait for T1 to finish its production emission")?;
-    let recorder = DebuggingRecorder::new();
-    metrics::with_local_recorder(&recorder, || {
-        record_manifest_structure(manifest);
-    });
-    Ok(CaptureSnapshot {
-        events: captured.snapshot(),
-        span_fields: captured.span_fields("runner.manifest.structure"),
-    })
 }
 
 /// Start T1 with the DEBUG composition wrapped by the single-callsite gate.
@@ -318,12 +244,22 @@ struct CaptureThreadChannels {
     finished_receiver: Receiver<()>,
 }
 
+/// Own the channels used by T2's selected capture mode.
+struct CaptureModeChannels {
+    /// Signal that T2 entered the dispatch-registration boundary.
+    registration_started_sender: Sender<()>,
+    /// Signal that T2 installed its tracing dispatch.
+    installed_sender: Sender<()>,
+    /// Wait for T1's production emission to complete.
+    finished_receiver: Receiver<()>,
+}
+
 impl WorkerChannels {
     /// Build channels and select the schedule's fixed registration deadline.
     fn new(capture_mode: CaptureMode) -> Self {
         let gate_deadline = match capture_mode {
             CaptureMode::Unmitigated => THREAD_DEADLINE,
-            CaptureMode::Mitigated => GATE_DEADLINE,
+            CaptureMode::Mitigated | CaptureMode::PublicHelper => GATE_DEADLINE,
         };
         let (paused_sender, paused_receiver) = mpsc::channel();
         let (registration_started_sender, registration_started_receiver) = mpsc::channel();

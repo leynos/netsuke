@@ -5039,6 +5039,35 @@ repeated in the `test-workflow-contracts` and `typecheck-python` recipes, and
 `tests/workflow_contracts/kani_smoke_metrics_test.py::test_dependency_pins_match_the_makefile`
 holds them equal.
 
+### Loom callsite-interest model
+
+The `loom = "0.7.2"` development dependency supports the bounded model in
+[`tests/tracing_interest_model.rs`](../tests/tracing_interest_model.rs). It
+models the stale `Interest::never()` write in `tracing-core` 0.1.36 and checks
+whether two inert registrar anchors prevent that write from replacing a more
+permissive callsite interest. The model complements the fresh-process schedule
+in the reproduction module; it does not model the real thread-local dispatcher,
+allocator timing, or full `tracing-subscriber` layers.
+
+The model explores at most three threads, 10,000 branches, and three
+preemptions. Its builder disables permutation and duration caps, checkpoints,
+location reporting, and logging, overriding the corresponding ambient `LOOM_*`
+settings so those bounds describe the search. `Builder::new` parses numeric
+`LOOM_*` settings before the overrides, so malformed numeric values still fail
+the test. Loom does not provide `Weak` registrars; the model uses a separate
+liveness token to model pruning without retaining the dispatch.
+
+Run the focused model with:
+
+```bash
+cargo nextest run -p netsuke --test tracing_interest_model
+```
+
+The model's source mapping and limits are recorded in
+[ADR-0057](adrs/adr-0057-anchor-tracing-test-callsite-interest-rebuilds.md) and
+the
+[Issue 927 ExecPlan](execplans/issue-927-manifest-structure-telemetry-test-loses-its-event-under-concurrent-execution.md).
+
 ## Test execution
 
 ### Which job executes which tests
@@ -7425,6 +7454,14 @@ Subscriber callbacks on that path must not re-enter tracing or register a
 dispatch: a writer-preferring `RwLock` can deadlock when a callback tries to
 acquire a read lock while a writer is waiting. The capture layers only render
 fields and update mutex-protected buffers; they emit no tracing.
+
+Use `with_test_subscriber_registration_hooks` only for deterministic tests that
+coordinate a capture dispatch with another registrar. Its thread-local scope
+provides one callback immediately before dispatch creation and an observer for
+the capture layer's callsite registrations. Wrap it around the public
+`with_test_subscriber` helper so that helper remains the sole owner of anchor
+registration. Ordinary tests should call `with_test_subscriber` directly; hook
+callbacks must not emit tracing or register a dispatch.
 
 Anchors prevent new `JustOne` selections after initialization. They cannot
 cancel a `JustOne` registration that already took its snapshot, so a narrow

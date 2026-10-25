@@ -411,6 +411,39 @@ seeded duplicate.
   diagnostic appeared; nextest stopped before doctests. The exact-head hosted
   `build-test` passed. Gate logs use the `published-final-1.out` suffix under
   `/tmp`.
+- [x] (2026-10-24) The exact-head CodeRabbit review identified that existing
+  tests could pass if the public capture helper stopped registering its
+  anchors, and requested fuller Loom tooling documentation. Added a third
+  deterministic fresh-process mode that reaches anchors only through the public
+  `with_test_subscriber` helper, retaining the unmitigated control and exact
+  one-event oracle. Added thread-local registration hooks solely to coordinate
+  this schedule, and documented their scope and the Loom model in the
+  developers' guide. Sequential candidate gates and a fresh review are pending.
+- [x] (2026-10-24) The first sequential `make test` attempt found the new
+  observer function unused in the binary test target, where
+  `test_tracing_capture` is also compiled. Removed that extra function and
+  moved its metadata check into the library-only reproduction worker, reusing
+  the scoped signal already used by the capture layer. The gate sequence is
+  paused at this finding; rerun it after formatting this correction.
+- [x] (2026-10-24) The next test run showed that the public helper's first lazy
+  anchor initialization happened after T1 entered the gate, allowing the
+  summary callback before release. The public-helper child now initializes its
+  anchors through `with_test_subscriber` before starting the gated schedule;
+  the scheduled T2 capture still uses the public helper, and neither path calls
+  the anchor function directly. The gate run stopped before later gates, which
+  remain pending on this corrected candidate.
+- [x] (2026-10-24) The follow-up compile then found the public-helper
+      preflight's
+  missing `LevelFilter` import. Added the explicit `tracing_subscriber` import;
+  that run stopped before tests, so the schedule still requires candidate-bound
+  execution evidence and the full gate sequence.
+- [x] (2026-10-25) Completed the corrected candidate's sequential gates:
+  `make check-fmt`, `make test` (4,877 passed, 7 skipped; all doctests passed),
+  `make typecheck`, `make lint`, `make doc-coverage` (6,188/6,303 items;
+  98.18%; 65 harness tests passed), `make markdownlint` (199 files, zero
+  issues), and `make nixie`. The local CodeScene staged-diff analysis found no
+  issues. No test timed out. A fresh review and hosted checks on the published
+  candidate remain pending.
 
 ## Surprises & discoveries
 
@@ -547,6 +580,15 @@ production emission remains synchronous in `record_manifest_structure`.
   out while compiling `ureq`; the same test passed in the prior complete run.
   Exact-head hosted CI remains the acceptance check for that environment-bound
   result.
+- Follow-up review (2026-10-24): CodeRabbit found that the existing fresh-
+  process schedule called the anchor function directly, so it did not protect
+  `with_test_subscriber`'s public anchor-registration contract. The new
+  `public-helper` child mode uses only that public helper and checks the same
+  one-event oracle; the unmitigated zero-event control remains. The developers'
+  guide now records Loom 0.7.2, the model path and bounds, its abstractions,
+  the focused command, and links to ADR-057 and this plan. The corrected
+  candidate still required a complete sequential gate run at that point; see
+  the later progress entry for its results.
 - The first stop-hook rerun hit a transient full filesystem while Cargo wrote
   build metadata and Nixie created a temporary directory. After space became
   available, all seven gates passed sequentially: `make check-fmt`, `make test`
@@ -633,7 +675,11 @@ referenced from the design and developers' guides, and indexed from
   signal and callback ordering are the observable checks; the bounded Loom
   model supplies separate ordering coverage. In the anchored run the real
   capture-layer callback is observed only after T1 releases the registry lock.
-  An acknowledgement within the callback deadline releases on `installed` and
+  A third public-helper mode must obtain anchors solely through
+  `test_support::tracing_capture::with_test_subscriber`, observe the callback
+  after release, and pass the exact one-event oracle. It must not call the
+  anchor function or another anchor-registering helper directly. An
+  acknowledgement within the callback deadline releases on `installed` and
   fails the worker. Unmitigated mode uses the 10-second thread deadline for the
   boundary and callback phases. Retain the separate installation-completion
   signal inside `with_default`. Method: ignored child worker driven by a parent
@@ -641,7 +687,8 @@ referenced from the design and developers' guides, and indexed from
   child that exceeds its 20-second deadline. Artefact:
   `src/runner/callsite_interest_reproduction/`. Non-vacuity: require all phase
   markers and the exact-cardinality oracle; removing the pre-registration
-  anchor must reproduce zero summaries and a validator error.
+  anchor from the public helper must reproduce zero summaries and a validator
+  error in the public-helper child, which has no direct anchor setup.
 - **V3: Summary oracle is exact and non-vacuous.** One exact summary with the
   six expected count tokens succeeds; zero or two summaries fail; wrong or
   duplicate count tokens, an additional count token, and `SENTINEL` fail.
@@ -752,11 +799,12 @@ make nixie
 
 Expected verification output includes a model witness in Variant A, no witness
 in Variant B, `ISSUE927_DISPATCH_REGISTRATION_STARTED_BEFORE_RELEASE=true` in
-both children, `RELEASE_CAUSE=installed` and summary callback markers
+all three children, `RELEASE_CAUSE=installed` and summary callback markers
 `BEFORE_RELEASE=true, AFTER_RELEASE=false` in the unmitigated child,
 `RELEASE_CAUSE=deadline` and callback markers
-`BEFORE_RELEASE=false, AFTER_RELEASE=true` in the mitigated child, a span
-snapshot in both modes, and one exact summary only in mitigated mode. The
+`BEFORE_RELEASE=false, AFTER_RELEASE=true` in both anchored children, a span
+snapshot in the original two modes, and one exact summary only in the anchored
+modes. The public-helper child must use no direct anchor-registration call. The
 delayed-boundary negative control must reject a registration signal sent only
 after T1 releases its gate.
 

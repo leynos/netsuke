@@ -200,7 +200,7 @@ where
 }
 
 /// Notify the reproduction worker once the capture layer registers the summary.
-fn signal_summary_registration() {
+pub(crate) fn signal_summary_registration() {
     let registration_sender = SUMMARY_REGISTRATION_SIGNAL.with(|signal| signal.borrow_mut().take());
     if let Some(sender) = registration_sender {
         sender.send(()).unwrap_or(());

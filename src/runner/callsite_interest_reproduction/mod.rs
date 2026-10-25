@@ -16,6 +16,7 @@ use std::{ffi::OsString, time::Duration};
 use threads::{
     CaptureMode, CaptureSnapshot, RegistrationAttemptTiming, WorkerSnapshot, run_worker_threads,
 };
+use tracing_subscriber::filter::LevelFilter;
 
 const MODE_ENV: &str = "NETSUKE_ISSUE_927_WORKER_MODE";
 const CHILD_DEADLINE: Duration = Duration::from_secs(20);
@@ -38,6 +39,7 @@ fn interest_worker() -> Result<()> {
     match mode.as_str() {
         "unmitigated" => run_unmitigated_worker(),
         "mitigated" => run_mitigated_worker(),
+        "public-helper" => run_public_helper_worker(),
         _ => Err(anyhow!("unexpected issue 927 worker mode {mode:?}")),
     }
 }
@@ -75,6 +77,26 @@ fn run_mitigated_worker() -> Result<()> {
     test_support::tracing_capture::ensure_test_interest_anchors_registered();
     let snapshot = run_worker_threads(CaptureMode::Mitigated)?;
     validate_mitigated_capture(&snapshot.capture)?;
+    print_capture_markers(&snapshot, "deadline", "one-accepted")
+}
+
+/// Prove the public capture helper supplies anchors for the stale-interest schedule.
+///
+/// # Errors
+///
+/// Returns an error when the worker schedule or exact event oracle fails.
+fn run_public_helper_worker() -> Result<()> {
+    // Initialize anchors through the public boundary before T1 enters the gate.
+    test_support::tracing_capture::with_test_subscriber(LevelFilter::TRACE, |_| ());
+    let snapshot = run_worker_threads(CaptureMode::PublicHelper)?;
+    validate_manifest_structure_events(&snapshot.capture.events, &EMPTY_MANIFEST_COUNTS).map_err(
+        |error| {
+            anyhow!(
+                "public test subscriber failed its exact-cardinality oracle: {error}; events: {:?}",
+                snapshot.capture.events
+            )
+        },
+    )?;
     print_capture_markers(&snapshot, "deadline", "one-accepted")
 }
 
