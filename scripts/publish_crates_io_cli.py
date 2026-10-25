@@ -182,7 +182,8 @@ def _verify(arguments: argparse.Namespace) -> int:
     -------
     int
         ``EXIT_OK`` when the downloaded bytes matched the expected digest, or
-        ``EXIT_VERIFICATION_FAILED`` when the archive was absent or disagreed.
+        ``EXIT_VERIFICATION_FAILED`` when the archive was absent, disagreed,
+        or could not be read or interpreted.
     """
     try:
         observation = release_crates_io_adapter.observe_download_file(
@@ -200,6 +201,9 @@ def _verify(arguments: argparse.Namespace) -> int:
     except release_digest.DigestMismatchError as error:
         print(f"published archive mismatch: {error}", file=sys.stderr)
         return VERDICT_EXITS["mismatch"]
+    except (verify_crates_io_bytes.VerificationError, OSError) as error:
+        print(f"published archive unverifiable: {error}", file=sys.stderr)
+        return VERDICT_EXITS["error"]
     arguments.output.write_text(
         json.dumps({"sha256": digest, "verdict": "verified"}, indent=2, sort_keys=True)
         + "\n",

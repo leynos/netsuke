@@ -267,6 +267,36 @@ def test_the_cli_refuses_an_absent_archive(tmp_path: pathlib.Path) -> None:
     assert not destination.exists(), "an absent archive has no verdict to record"
 
 
+@pytest.mark.parametrize(
+    ("status", "diagnostic"),
+    [
+        pytest.param(503, "cannot verify", id="indeterminate-response"),
+        pytest.param(200, "unverifiable", id="missing-success-body"),
+    ],
+)
+def test_the_cli_reports_unverifiable_archive_failures(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    status: int,
+    diagnostic: str,
+) -> None:
+    """Map uncertain responses and unreadable archive files to verification failure."""
+    archive = tmp_path / f"{CRATE}-{VERSION}.crate"
+    destination = tmp_path / "verdict.json"
+    argv = _verify_argv(archive, destination)
+    argv.extend(["--status", str(status)])
+
+    code = main(argv)
+
+    assert code == VERDICT_EXITS["error"], (
+        f"status {status} must use the declared verification-error exit, got {code}"
+    )
+    assert not destination.exists(), "an unverifiable archive has no success verdict"
+    assert diagnostic in capsys.readouterr().err, (
+        "the diagnostic must explain why the archive is unverifiable"
+    )
+
+
 def test_the_exit_table_covers_every_verdict_the_policy_module_declares() -> None:
     """Require the table to name every verdict, so no case falls to a default.
 
