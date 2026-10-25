@@ -30,6 +30,7 @@ fn script_recipe_context_reserves_ins_and_outs_placeholders() -> Result<()> {
             vars: target_vars,
             phony: false,
             always: false,
+            console: false,
             conditional: false,
             description: None,
         }],
