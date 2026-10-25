@@ -70,15 +70,19 @@ and Gecko all passed on attempt 1. The CI run passed all six jobs; the release
 run passed its metadata, admission, and platform artefact jobs, with its
 expected native-recipe smoke and publishing jobs skipped.
 
-The CodeRabbit summary still carries a Developer Documentation warning from the
-review of `189b2256`. The published plan update records the rebase and its
-local gate outcomes, but the warning has not been reconciled against the newer
-candidate. The CodeRabbit status on `2d31ee8` is `Review paused`; one managed
-resume request is queued. A fresh EP-1 assessment is also pending because the
-previous assessment predates this rebase. No proof was added or materially
-changed, so a separate proof assessment does not apply. This plan-only
-successor records those pending lifecycle steps; its own hosted checks and
-current-head assessment remain to be observed after publication.
+The CodeRabbit summary's Developer Documentation warning was anchored to the
+review of `189b2256`. Focused reconciliation comment `6399113511` supplied the
+current plan and gate evidence for base `de81d5c` and head `4e84a4d`;
+CodeRabbit confirmed in `6399125097` that the warning is addressed and needs no
+further documentation change. On exact head `4e84a4d`, CI run `40204065517`,
+Netsukefile run `40204065477`, Release Dry Run `40204065491`, CodeScene result
+`8118935`, and Gecko passed. CI passed all six jobs. Release passed nine jobs
+and skipped the expected Windows recipe smoke and publish jobs. The CodeRabbit
+status remains `Review paused`, with one managed resume request queued. A fresh
+EP-1 assessment remains pending because the prior assessment predates this
+rebase. No proof was added or materially changed, so a separate proof
+assessment does not apply. The current-head formal review and merge also remain
+outstanding at this checkpoint.
 
 The investigation is under way. On 24 October, the 28-commit branch was rebased
 onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
