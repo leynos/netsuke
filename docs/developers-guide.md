@@ -4768,7 +4768,7 @@ and the failure then names nextest's cap rather than the patch that was slow.
 The widened allowance is bounded from above by the whole-run budget: the
 ordering requires `global-timeout` strictly above the largest per-test
 allowance. The mutation gate's 600 s is now the largest allowance in the file;
-every other test uses the 300 s default, because ADR-0059 moved the compiler
+every other test uses the 300 s default because ADR-0059 moved the compiler
 work that once needed 900 s out of the suite. At 60 s periods, 960 s would
 permit at most fifteen periods (900 s) while remaining strictly below the
 whole-run budget. An allowance of 960 s would equal that budget, and the run
@@ -5066,7 +5066,7 @@ rather than ahead of it.
 
 One check is deliberately not run twice. Cargo's publish verification build
 runs only on the Linux gate, as the `Package verification` step's
-`make test-package-verify`, because what Cargo puts in a package does not vary
+`make test-package-verify` because what Cargo puts in a package does not vary
 by platform and the verification costs a median of 240.8s on `windows-latest`
 against about 25s on the cached Linux runner. Both platforms still assert the
 packaged file list through `packaged_manifest_retains_build_script_sources`,
@@ -5120,12 +5120,14 @@ governs the non-doctest pass only, and deliberately stays small:
   `packaged_manifest_retains_build_script_sources`, which keeps only the
   `cargo package --list` assertions. Under shared compiler admission that build
   reached a 600s cap, then a 720s one, so no per-test allowance could bound it.
-  The production module-slice boundary, the embedder-facing public API, and the
-  `test_support` compile-time contracts all compile in the workspace build
-  before test execution (see "Compile-time contracts live in the build graph"),
-  so none of them has a nested Cargo invocation or a widened timeout. The
-  remaining targeted allowances stay below the 960s CI whole-run cap; none adds
-  retries or widens timeouts for unrelated tests.
+  The production module-slice boundary and the embedder-facing public API
+  fixture compile in the workspace build phase (see "Compile-time contracts
+  live in the build graph"). The positive `StubEnv::without_locale()` example
+  and its `compile_fail,E0599` example for `StubEnv::default()` run in
+  `test_support`'s doctest phase. The fixture libraries have no nested Cargo
+  invocation or widened timeout; doctests run outside Nextest's per-test
+  allowance. The remaining targeted allowances stay below the 960s CI whole-run
+  cap; none adds retries or widens timeouts for unrelated tests.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
@@ -5318,7 +5320,7 @@ warming the compiler cache, and sharing a target directory), and the ten-run
 revisit gate. [ADR-0033][adr-0033-split-build] records the replacement
 decision: the live build was removed in favour of recorded Cargo JSON, while
 the parser boundary remains covered. [ADR-0059][adr-0059-compile-contracts]
-then retired the parser, the harness, and both tests together, because no
+then retired the parser, the harness, and both tests together because no
 compile-time contract drives a compiler from a test any longer.
 
 ### How this relates to the isolation utilities
@@ -5406,21 +5408,21 @@ configured Dependabot directory patterns.
 `make test-package-verify` runs `cargo publish --dry-run` to verify the
 packaged crate builds successfully for release; the Linux gate runs it as its
 `Package verification` step, outside the test suite, because the verification
-compile has no bound a per-test allowance could express (ADR-0059). Run it
-locally after changing the package's `include` list, `build.rs`, or
-`build_l10n_audit/`. `tests/packaging_smoke_tests.rs` uses
-`cargo package --list`, which compiles nothing, to confirm that the packaged
-manifest retains build-script sources, including the `build_l10n_audit/`
-modules, and rejects stale `ninja_env/` paths. It also asserts that every
-catalogue named by the locale registry ships in the package, so adding a locale
-cannot silently omit its `messages.ftl` from a release. Every `README*.md` in
-the crate root must likewise ship, because the localization menu at the top of
-each edition links its siblings by relative path; the expected set is read from
-the crate root, so a new translation is required to be packaged without
-updating the test. Package `include` patterns are anchored to the crate root so
-similarly named files below local caches cannot leak into the archive. The
-smoke test also confirms that `.uv-cache/` and the workspace-only
-`test_support/` crate are absent from the netsuke package.
+compile cannot be bounded by a per-test allowance (ADR-0059). Run it locally
+after changing the package's `include` list, `build.rs`, or `build_l10n_audit/`.
+`tests/packaging_smoke_tests.rs` uses `cargo package --list`, which compiles
+nothing, to confirm that the packaged manifest retains build-script sources,
+including the `build_l10n_audit/` modules, and rejects stale `ninja_env/`
+paths. It also asserts that every catalogue named by the locale registry ships
+in the package, so adding a locale cannot silently omit its `messages.ftl` from
+a release. Every `README*.md` in the crate root must likewise ship because the
+localization menu at the top of each edition links its siblings by relative
+path; the expected set is read from the crate root, so a new translation is
+required to be packaged without updating the test. Package `include` patterns
+are anchored to the crate root so similarly named files below local caches
+cannot leak into the archive. The smoke test also confirms that `.uv-cache/`
+and the workspace-only `test_support/` crate are absent from the netsuke
+package.
 
 `tests/man_page_contract_tests.rs` and `tests/binstall_metadata_tests.rs` guard
 the package-versus-target naming split described in
@@ -7097,7 +7099,7 @@ reasonable in isolation and failed only on a busy host:
   directly.
 - **Do not answer a timeout by widening the allowance.** The module-slice check
   timed out at 300 s, then 720 s, then 900 s. A wider allowance moves which run
-  fails; it does not change whether one will, because the wait belongs to the
+  fails; it does not change whether one will because the wait belongs to the
   host. Move the work out of the test instead.
 - **Do not narrow a nested check to make it cheaper.** Scoping `cargo check` to
   one package or one target changes the feature unification and build mode, so
@@ -7118,7 +7120,7 @@ for a compiler; do not work around either by renaming the call.
 each module states what it type-checks. Its reuse policy is narrow on purpose.
 Add a module when a public API needs an external-crate compile check; do not
 add a second dependency, which would let a module name items an embedder would
-not have, and do not add tests or doctests to it, because nothing in it runs.
+not have, and do not add tests or doctests to it because nothing in it runs.
 Forward a host feature only when it changes the public surface, as `lint` does.
 
 The `cfg(kani)` and Ninja escaping UI tests are outside this policy's reach.
