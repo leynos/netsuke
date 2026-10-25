@@ -2,6 +2,23 @@
 
 Status: IN PROGRESS
 
+On 25 October, the 33-commit issue series was rebased from
+`f8df5d808f1bee4eb8554df0160119864ade6f39` onto `origin/main` at
+`ac826aa9732fad85fce3c9237ce9ac2415052a0a`. The replay had no conflicts, and
+the range-diff matched all 33 commits. On tested code head
+`869ef7931097df00d5145a18d998db253f7db52e`, `make check-fmt`, `make typecheck`,
+`make lint`, `make test-workflow-contracts`, and `make doc-coverage` passed;
+Rust doc coverage was 98.19% (6,178 of 6,292 items) against the 80% threshold.
+The workflow-contract suite passed 1,472 tests, skipped three, and its
+supplementary script suite passed 27 tests. `make test` ran 4,843 of 4,867
+tests: 4,842 passed, six were skipped, and
+`cli_configuration_fixture_compiles::case_1_public_api` timed out at 300.025
+seconds. Twenty-four tests were not run, and doctests were not reached. No
+diagnostic from the fixture's child Cargo command appears in the log; this
+local suite is not a pass. The worktree's `cs delta origin/main` reports no
+issues. The rebased candidate has not yet received hosted validation; refresh
+CI and review on the published exact head before merge.
+
 The investigation is under way. On 24 October, the 28-commit branch was rebased
 onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
 base advanced from `018b81b4311ac5dd99ac4182c51301eeca0dfc55`. The replay had
@@ -184,31 +201,35 @@ every installation input is immutable.
 
 ### Current target source at the rebased base
 
-The current base `f8df5d808f1bee4eb8554df0160119864ade6f39` includes the
+The current base `ac826aa9732fad85fce3c9237ce9ac2415052a0a` includes the
 workflow-contract changes from pull request 932, PowerShell-placeholder
-hardening from pull request 924, and the nightly toolchain update from pull
-request 947. It pins `nightly-2026-10-22` and starts coverage baseline v2. The
-eligible same-repository Linux PR gate remains on
-`ubicloud-standard-4-ubuntu-2404`, with four Cargo workers and four Nextest
-workers, and sends both fork PRs and Dependabot PRs to `ubuntu-latest`. The
-workflow checks the PR author's `user.login` for Dependabot because the actor
-can change when another person pushes to that PR. A workflow-run response does
-not include the PR author, so the offline collector accepts a separately saved
-pull request response. It uses that author only when the PR ID, number and base
-repository ID match the run's single PR association. If the saved PR response
-is absent or does not match, author-dependent classification remains `other`;
-the collector never substitutes the run actor. Fork classification continues to
-require distinct base and head repository identities. The run association
-fields are documented in GitHub's
-[Get a workflow run response][workflow-run-response], and PR authors in its
-[Get a pull request response][pull-request-response].
+hardening from pull request 924, the nightly toolchain update from pull request
+947, and the build-footprint settings from pull request 948. It pins
+`nightly-2026-10-22`, disables development incremental compilation and debug
+data, and sets Cargo's `embed-metadata = false`; its contract tests cover those
+settings. It also starts coverage baseline v2. The eligible same-repository
+Linux PR gate remains on `ubicloud-standard-4-ubuntu-2404`, with four Cargo
+workers and four Nextest workers, and sends both fork PRs and Dependabot PRs to
+`ubuntu-latest`. The workflow checks the PR author's `user.login` for
+Dependabot because the actor can change when another person pushes to that PR.
+A workflow-run response does not include the PR author, so the offline
+collector accepts a separately saved pull request response. It uses that author
+only when the PR ID, number and base repository ID match the run's single PR
+association. If the saved PR response is absent or does not match,
+author-dependent classification remains `other`; the collector never
+substitutes the run actor. Fork classification continues to require distinct
+base and head repository identities. The run association fields are documented
+in GitHub's [Get a workflow run response][workflow-run-response], and PR
+authors in its [Get a pull request response][pull-request-response].
 
 The current base retains pull request 932's workflow-contract changes and
 documentation. Pull request 924's change is unrelated to the CI source
 comparison. Pull request 947 changes the compiler toolchain and coverage
-baseline, but reports no test-selection changes. No candidate optimization has
-been enabled. The original 10 October reference and the earlier 8a961
-comparison above remain historical snapshots, not the current source baseline.
+baseline, but reports no test-selection changes. Pull request 948 changes the
+development build profile and adds build-footprint contract tests; it does not
+change CI test selection. No candidate optimization has been enabled. The
+original 10 October reference and the earlier 8a961 comparison above remain
+historical snapshots, not the current source baseline.
 
 The original offline evidence set contains 81 job records from 21 distinct
 run-attempt pairs: six main-branch coverage jobs, six main-branch cache-writer
@@ -881,6 +902,20 @@ tests passed. The Rust-only full suite was not rerun because this refactor
 changes only Python and Markdown; the confirmed local fixture timeout above
 remains unresolved. Hosted validation and review still need to cover the
 published refactor commit.
+
+The 25 October rebase moved the 33-commit series onto `origin/main` at
+`ac826aa9732fad85fce3c9237ce9ac2415052a0a`, which adds pull request 948's
+development build-footprint settings and contract tests. No conflicts occurred,
+and the range-diff matched all 33 commits. The tested code head
+`869ef7931097df00d5145a18d998db253f7db52e` passed format checking, typecheck,
+lint, workflow contracts (1,472 passed, 3 skipped, plus 27 supplementary script
+tests), and documentation coverage (98.19%, 6,178/6,292 items). The full Rust
+suite ran 4,843 tests: 4,842 passed, six were skipped, and
+`cli_configuration_fixture_compiles::case_1_public_api` timed out at 300.025
+seconds. Twenty-four tests were not run and doctests were not reached. The
+fixture produced no child Cargo diagnostic. Do not report the local suite as
+passing. `cs delta origin/main` found no issues. Hosted CI and review have not
+yet been refreshed for the rebased candidate.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
