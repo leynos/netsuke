@@ -57,7 +57,8 @@ is inconclusive.
    `check-build-tools`. Its sole build recipe is:
 
    ```makefile
-   $(GATE_RUSTFLAGS) $(CARGO) build --lib --manifest-path $(CURDIR)/Cargo.toml --message-format=json --all-features
+   diagnostic: check-build-tools
+	$(GATE_RUSTFLAGS) $(CARGO) build --lib --manifest-path $(CURDIR)/Cargo.toml --message-format=json --all-features
    ```
 
 2. Run that target once from the existing worktree using the clean client

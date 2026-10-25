@@ -591,6 +591,8 @@ fidelity comparisons block adoption.
   `make test-workflow-contracts` on the refactor (1,472 passed, 3 skipped, plus
   27 supplementary script tests); local `cs delta origin/main` reports no
   issues.
+- [x] Obtain a full CodeRabbit review on published head `f7368b9`; it found
+  five actionable documentation and Python findings that require correction.
 - [ ] Revalidate hosted checks after the CodeScene refactor, obtain current-head
   assessments/review, reconcile findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
@@ -838,41 +840,41 @@ the current-source comparison, range accounting, retained-record caveat, and
 Python pattern-match validation were added in response. Earlier hosted
 validation, H4 monitoring, and local supervisor evidence remain dated history.
 The first 24 October rebase advanced the target to
-`596cf74c2850c1d2088f5822828dfe556aad717e`. The run and job APIs expose the PR
-author's login and base/head repository objects needed to separate the
-Dependabot hosted lane from fork fallback jobs; the collector leaves malformed
-or incomplete provenance in `other`. The first post-rebase `make lint` found an
-overlong boolean condition in the repository-ID predicate; extracting the ID
-check preserved the exclusion of booleans and passed the rerun. The final
-workflow-contract run includes the hosted-cohort, late-summary, and phase
-boundary regressions. On 24 October, `main` advanced to
-`018b81b4311ac5dd99ac4182c51301eeca0dfc55`, and the branch was rebased again.
-All 28 commits matched the prior range and no conflicts occurred. That
-candidate passed the complete local gate sequence: format, lint, typecheck,
-documentation coverage at 98.19%, workflow contracts (1,458 passed, 3 skipped,
-plus 27 script doctests), the full Rust suite (4,864 passed, six skipped,
-doctests passed), Markdownlint, and Nixie. Hosted CI also passed on that head.
-The base then advanced to `f8df5d808f1bee4eb8554df0160119864ade6f39` with pull
-request 947's nightly toolchain update. The 28-commit replay onto this target
-had no conflicts and matched the range-diff. On the new candidate,
-`make check-fmt`, `make lint`, and `make doc-coverage` passed; coverage is
-98.19%. `make test` passed 4,839 tests and skipped six before
-`cli_configuration_fixture_compiles::case_1_public_api` timed out at 300
-seconds. Twenty-four tests were not run, doctests did not start, and the log
-contains no diagnostic from the fixture's child Cargo command. Typecheck and
-workflow contracts passed (1,460 passed, 3 skipped, plus 27 supplementary
-script tests), as did Markdownlint (zero issues across 200 files) and Nixie.
-Exact-head hosted CI run 40112221490 later passed 4,864 tests (six skipped, one
-slow) in 208.778 seconds, including the timed-out fixture in 22.476 seconds;
-workspace doctests passed. CI reported 91.79% coverage against the 91.7%
-baseline. Netsukefile run 40112221417 and Release Dry Run 40112221464 also
-passed, and local and hosted CodeScene found no issues. On the later published
-checkpoint `52bbd36`, CI 40114633754 passed all 4,864 Nextest tests with six
-skips and the workspace doctests; the previously timed-out fixture passed in
-6.246 seconds. Netsukefile 40114633693, Release Dry Run 40114633743, and
-CodeScene also passed. This evidence does not establish why the local fixture
-timed out. The controlled baseline, bounded telemetry, and candidate decisions
-remain outstanding.
+`596cf74c2850c1d2088f5822828dfe556aad717e`. The run response supplies the PR
+association and base/head repository objects, but not the PR author's login. A
+separately saved PR response supplies `user.login` for identifying the
+Dependabot hosted lane; the collector leaves malformed or incomplete provenance
+in `other`. The first post-rebase `make lint` found an overlong boolean
+condition in the repository-ID predicate; extracting the ID check preserved the
+exclusion of booleans and passed the rerun. The final workflow-contract run
+includes the hosted-cohort, late-summary, and phase boundary regressions. On 24
+October, `main` advanced to `018b81b4311ac5dd99ac4182c51301eeca0dfc55`, and the
+branch was rebased again. All 28 commits matched the prior range and no
+conflicts occurred. That candidate passed the complete local gate sequence:
+format, lint, typecheck, documentation coverage at 98.19%, workflow contracts
+(1,458 passed, 3 skipped, plus 27 script doctests), the full Rust suite (4,864
+passed, six skipped, doctests passed), Markdownlint, and Nixie. Hosted CI also
+passed on that head. The base then advanced to
+`f8df5d808f1bee4eb8554df0160119864ade6f39` with pull request 947's nightly
+toolchain update. The 28-commit replay onto this target had no conflicts and
+matched the range-diff. On the new candidate, `make check-fmt`, `make lint`, and
+`make doc-coverage` passed; coverage is 98.19%. `make test` passed 4,839 tests
+and skipped six before `cli_configuration_fixture_compiles::case_1_public_api`
+timed out at 300 seconds. Twenty-four tests were not run, doctests did not
+start, and the log contains no diagnostic from the fixture's child Cargo
+command. Typecheck and workflow contracts passed (1,460 passed, 3 skipped, plus
+27 supplementary script tests), as did Markdownlint (zero issues across 200
+files) and Nixie. Exact-head hosted CI run 40112221490 later passed 4,864 tests
+(six skipped, one slow) in 208.778 seconds, including the timed-out fixture in
+22.476 seconds; workspace doctests passed. CI reported 91.79% coverage against
+the 91.7% baseline. Netsukefile run 40112221417 and Release Dry Run 40112221464
+also passed, and local and hosted CodeScene found no issues. On the later
+published checkpoint `52bbd36`, CI 40114633754 passed all 4,864 Nextest tests
+with six skips and the workspace doctests; the previously timed-out fixture
+passed in 6.246 seconds. Netsukefile 40114633693, Release Dry Run 40114633743,
+and CodeScene also passed. This evidence does not establish why the local
+fixture timed out. The controlled baseline, bounded telemetry, and candidate
+decisions remain outstanding.
 
 The follow-up assessment identified a provenance gap: the workflow-run API
 association omits the PR author's login. The current collector reads author
@@ -916,8 +918,10 @@ workspace doctests passed. Workflow contracts passed 1,472 tests, skipped
 three, and ran 27 supplementary script tests. Documentation coverage was 98.19%
 (6,178/6,292 items). The slow CLI configuration fixture passed in 287.593
 seconds, and all three split-build fixtures passed. `cs delta origin/main HEAD`
-with CodeScene CLI 1.0.52 found no issues. Hosted CI and review still need to
-cover the published candidate.
+with CodeScene CLI 1.0.52 found no issues. A full CodeRabbit review of
+published head `f7368b9` found five actionable documentation and Python
+findings. Those fixes are being applied; fresh hosted checks and review are
+required on the corrected head before merge.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

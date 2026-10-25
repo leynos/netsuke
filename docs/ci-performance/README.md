@@ -340,16 +340,19 @@ are also missing until bounded telemetry is enabled.
 
 ## Current state
 
-The current-source comparison is scoped to PR base
-`8a961000859c02862454338fda6c4dd65bda2aa1` and the assessed candidate head
-`99522c517c13e0414370df408f2648ee0bb7312a`; timeout differences from the
-historical `c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8` snapshot are recorded in
-the ExecPlan. The issue's source snapshot,
-`24293a1b3616872100d379e277540bb1df89203c`, is historical. Run `38276341866` is
-one of the four successful PR Linux gate observations: its gate job took 1,062
-seconds, with 3,912 passes, six skips, 3,103 sccache hits, 390 misses and 3,120
-MiB peak system-used. Its source differs from the other PR observations.
-September timings are historical context, not baseline measurements.
+The source comparison in the ExecPlan section “Pre-rebase source comparison at
+the assessed PR head” used PR base `8a961000859c02862454338fda6c4dd65bda2aa1`
+and assessed candidate head `3928a0d1fff4f1d62349ef38f6ad435f55135f4a`. The PR
+base has since moved to `0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458`; see
+“Current target source at the rebased base” in the ExecPlan for the current
+source comparison. Timeout differences from the historical
+`c65ad9709d1d7cc46c094d88b2eecd1deea8f4c8` snapshot are recorded there. The
+issue's source snapshot, `24293a1b3616872100d379e277540bb1df89203c`, is
+historical. Run `38276341866` is one of the four successful PR Linux gate
+observations: its gate job took 1,062 seconds, with 3,912 passes, six skips,
+3,103 sccache hits, 390 misses and 3,120 MiB peak system-used. Its source
+differs from the other PR observations. September timings are historical
+context, not baseline measurements.
 
 An exact-SHA run query on 15 October found only scheduled CI and mutation runs
 for this implementation base. In the [scheduled CI attempt][base-schedule],
