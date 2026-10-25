@@ -247,7 +247,6 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     let binding = interpreter
         .as_ref()
         .map_or(InterpreterBinding::Unbound, InterpreterBinding::Bound);
-    validate_console_scheduling(graph)?;
     generate_into_with_binding(graph, out, shell, binding)
 }
 
@@ -280,6 +279,10 @@ pub(crate) fn generate_into_with_binding<W: Write>(
     binding: InterpreterBinding<'_>,
 ) -> Result<(), NinjaGenError> {
     let localizer = localization::localizer();
+    // Both entry points reach the writer through this function, so validating
+    // here keeps console scheduling checked on the trusted-interpreter path as
+    // well as the legacy shell path.
+    validate_console_scheduling(graph)?;
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
     if graph_requires_dyndep(graph) {
@@ -297,6 +300,7 @@ pub(crate) fn generate_into_with_binding<W: Write>(
                 edge,
                 action_name: metadata.action_name,
                 action_restat: metadata.restat,
+                action_pool: metadata.pool,
                 implicit_deps: &edge.implicit_deps,
                 description: metadata.description.as_ref(),
             }
@@ -321,4 +325,5 @@ mod property_tests;
 mod test_support;
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/ninja_gen/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
 // weave: run 'weave explain src/ninja_gen/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -198,7 +198,7 @@ ir.invalid_command = आदेश में अमान्य प्रक्�
 ir.ambiguous_substitution_boundary = वर्ण { $position } पर अस्पष्ट कमांड प्रतिस्थापन सीमा; प्रतिस्थापन के समापन कोष्ठक को अगले '#' से अलग करें।
 
 # Ninja निर्माण की त्रुटियाँ।
-ninja_gen.missing_action = किसी बिल्ड कोर द्वारा संदर्भित क्रिया “{ $id }” अनुपस्थित है।
+ninja_gen.missing_action = किसी बिल्ड एज द्वारा संदर्भित क्रिया “{ $id }” अनुपस्थित है।
 ninja_gen.console_dependency_only = बिल्ड एज ‘{ $output }’ कंसोल पूल नहीं चुन सकता, क्योंकि इसकी क्रिया केवल निर्भरताएँ बताती है।
 ninja_gen.console_pool_conflict = बिल्ड एज ‘{ $output }’ कंसोल पूल चुनता है, लेकिन इसकी क्रिया कस्टम पूल ‘{ $pool }’ का अनुरोध करती है।
 ninja_gen.format = Ninja मैनिफ़ेस्ट का निर्गम स्वरूपित नहीं किया जा सका।

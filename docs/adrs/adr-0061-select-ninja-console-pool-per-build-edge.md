@@ -37,7 +37,10 @@ owner.
 - Add a default-false `console` Boolean to manifest actions and targets, and
   carry it as `BuildEdge.console`.
 - Emit an edge-level `pool = console` binding only for selected user edges.
-  Synthetic serial gates and dyndep sidecars do not inherit the binding.
+  When an action rule declares `pool = console`, emit an empty edge-level
+  `pool =` binding on its ordinary edges so they do not inherit console
+  scheduling. Synthetic serial gates and dyndep sidecars do not inherit either
+  binding.
 - Keep `Action.pool` and action hashing unchanged. A pre-existing
   `Action.pool: console` is accepted as redundant; a different custom pool
   conflicts with console selection and is rejected by the generator.
@@ -46,6 +49,12 @@ owner.
   itself.
 - Validate these rules before both direct Ninja generation and dyndep-bundle
   generation, preserving the existing missing-action diagnostic path.
+
+Adding the field to the public `Target` struct breaks downstream Rust callers
+that construct it with a struct literal. The package currently declares version
+`0.1.0-beta4`, and this source break is accepted for the next pre-release API:
+callers must provide `console`. The default only preserves manifest
+compatibility through Serde.
 
 Ninja runs console-pool edges one at a time in one invocation. Output from
 other edges is held while a console edge runs. Netsuke forwards Ninja output as
