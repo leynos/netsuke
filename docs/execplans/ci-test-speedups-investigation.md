@@ -592,7 +592,12 @@ fidelity comparisons block adoption.
   27 supplementary script tests); local `cs delta origin/main` reports no
   issues.
 - [x] Obtain a full CodeRabbit review on published head `f7368b9`; it found
-  five actionable documentation and Python findings that require correction.
+  five actionable documentation and Python findings, resolved below.
+- [x] Resolve the five findings in commits `68c1ed184`, `47dca9a05`, and
+  `fac6db1d6`: clarify historical source comparisons and Make instructions,
+  correct pull-request API provenance, validate jobs pages before extraction,
+  and preserve list-only PR identity matching with structural patterns. The
+  functional fix and structural refactor each passed all six local gates.
 - [ ] Revalidate hosted checks after the CodeScene refactor, obtain current-head
   assessments/review, reconcile findings, and merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
@@ -920,8 +925,15 @@ three, and ran 27 supplementary script tests. Documentation coverage was 98.19%
 seconds, and all three split-build fixtures passed. `cs delta origin/main HEAD`
 with CodeScene CLI 1.0.52 found no issues. A full CodeRabbit review of
 published head `f7368b9` found five actionable documentation and Python
-findings. Those fixes are being applied; fresh hosted checks and review are
-required on the corrected head before merge.
+findings. The documentation corrections are in `68c1ed184`; the malformed jobs
+response fix is in `47dca9a05`; and the separate structural-pattern refactor is
+in `fac6db1d6`. Both code commits passed `make check-fmt`, `make test`,
+`make typecheck`, `make lint`, `make doc-coverage`, and
+`make test-workflow-contracts`. On the refactor candidate, Nextest passed 4,867
+tests with six skipped, workspace doctests passed, workflow contracts passed
+1,478 tests with three skipped plus 27 script tests, and Rustdoc coverage was
+98.19% (6,178/6,292). Fresh hosted checks and review must cover the published
+head before merge.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
