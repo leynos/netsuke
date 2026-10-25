@@ -701,6 +701,16 @@ rather than as `--flag[=BOOL]`.
   claim. The index now says both things a reader needs — the link mapping and
   the fact that vendored examples are not executed locally — so the finding is
   answered where it can be. Date/Author: 2026-10-25, agent.
+- Decision: record round four as satisfied by a clean review rather than by
+  re-running the gates a fourth time. Rationale: `coderabbit review --agent`
+  read the working tree and returned `findings: 0` over all 25 changed files,
+  so there is nothing to act on. The commits pushed after the reviewed tree —
+  `00aa92478` (one deleted blank line in a YAML file) and `d07bf02e9` (this
+  plan's own Progress text) — are covered by the gates their delta type
+  requires: `check-fmt`, `github-actions-lint` and `test-workflow-contracts`
+  for the YAML, then `check-fmt` and `markdownlint` for the prose. Nothing in
+  the pushed delta touches Rust source, so the heavier gates were not re-run
+  and are not claimed. Date/Author: 2026-10-25, agent.
 
 ## Outcomes & retrospective
 
