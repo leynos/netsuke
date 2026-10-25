@@ -49,8 +49,10 @@ passed pre-merge rows and one ExecPlan warning. Its inline findings were
 Repair commit `9c4e929f9f0a34ed06d984bcfb606f68c9fe2049` keeps duration
 whitespace inside the optional duration group, adds an unclosed-bracket
 regression case, and gives the ambiguous-association cases matching, fully
-populated saved metadata. Replies, thread resolution, and review of the repair
-candidate remain pending; the old review does not cover that candidate.
+populated saved metadata. On published head
+`2d31ee8788bee43828a31df6a11b90692c626335`, CodeRabbit confirmed both findings
+as addressed and the threads are resolved. The old formal review still covers
+only `189b2256`; a current-head formal review remains outstanding.
 
 After remote `main` advanced to `de81d5c34ab3c0103a5de71a0518b89980187c11`, the
 42-commit branch replay completed without conflicts and `git range-diff`
@@ -61,9 +63,22 @@ passed 4,712 tests with six skipped, and workspace doctests passed. Workflow
 contracts passed 1,492 tests with three skipped plus 27 supplementary script
 checks. Rustdoc coverage was 98.20% (6,221/6,335). The ExecPlan update passed
 `make fmt`, `make check-fmt`, `make markdownlint` (zero issues across 201
-files), and `make nixie`. Hosted checks, CodeScene, a fresh formal review,
-review-thread reconciliation, and merge remain outstanding for the repair
-candidate.
+files), and `make nixie`. On published candidate
+`2d31ee8788bee43828a31df6a11b90692c626335`, CI run `40201221279`, Netsukefile
+run `40201221305`, Release Dry Run `40201221407`, CodeScene result `8118709`,
+and Gecko all passed on attempt 1. The CI run passed all six jobs; the release
+run passed its metadata, admission, and platform artefact jobs, with its
+expected native-recipe smoke and publishing jobs skipped.
+
+The CodeRabbit summary still carries a Developer Documentation warning from the
+review of `189b2256`. The published plan update records the rebase and its
+local gate outcomes, but the warning has not been reconciled against the newer
+candidate. The CodeRabbit status on `2d31ee8` is `Review paused`; one managed
+resume request is queued. A fresh EP-1 assessment is also pending because the
+previous assessment predates this rebase. No proof was added or materially
+changed, so a separate proof assessment does not apply. This plan-only
+successor records those pending lifecycle steps; its own hosted checks and
+current-head assessment remain to be observed after publication.
 
 The investigation is under way. On 24 October, the 28-commit branch was rebased
 onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
@@ -673,9 +688,12 @@ fidelity comparisons block adoption.
   passed 4,712 tests with six skipped, workflow contracts passed 1,492 with
   three skipped plus 27 script checks, and documentation coverage was 98.20%
   (6,221/6,335).
-- [ ] Publish the repair candidate, refresh hosted checks and CodeRabbit
-  review, reply to and resolve its findings, reconcile pre-merge rows, and
-  merge the PR at equilibrium.
+- [x] Publish repair candidate `2d31ee8`; its exact-head CI, Netsukefile,
+  Release Dry Run, CodeScene, and Gecko checks passed. Reply to the two inline
+  findings; CodeRabbit confirmed both repairs and the threads are resolved.
+- [ ] Validate this plan-only successor on its published head; reconcile the
+  stale Developer Documentation row, obtain a current-head EP-1 assessment and
+  formal review, then merge at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
