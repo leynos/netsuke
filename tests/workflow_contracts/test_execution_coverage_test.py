@@ -275,8 +275,8 @@ def test_ambient_ui_harnesses_do_not_rebuild_in_isolated_targets(source: Path) -
     )
 
 
-def test_cold_packaging_verification_has_a_scoped_budget() -> None:
-    """Allow measured cold package compilation without relaxing ordinary tests."""
+def test_cold_child_builds_have_scoped_budgets() -> None:
+    """Allow cold or contended child builds without relaxing ordinary tests."""
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
     )
@@ -287,8 +287,8 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     timed_overrides = [
         override for override in profile["overrides"] if "slow-timeout" in override
     ]
-    assert len(timed_overrides) == 4, (
-        "only remaining nested builds may need extended test budgets"
+    assert len(timed_overrides) == 5, (
+        "only measured cold or contended builds may need extended test budgets"
     )
     configured = {
         override["filter"]: override["slow-timeout"] for override in timed_overrides
@@ -309,6 +309,7 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     expected.update({
         f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
         for name, periods in (
+            ("cli_configuration_fixture_compiles", 15),
             ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
             ("stub_env_default_does_not_compile", 15),
         )

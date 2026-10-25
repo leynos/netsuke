@@ -72,6 +72,14 @@ test-group = "nested-cargo-builds"
 success-output = "immediate"
 
 [[profile.default.overrides]]
+# This all-features Cargo check can be cold or wait on shared compiler
+# admission. A full-suite run reached the default 300 s cap while waiting for
+# a compiler slot, so give this one nested build fifteen warning periods.
+filter = 'test(/^cli_configuration_fixture_compiles($|::)/)'
+success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 15 }
+
+[[profile.default.overrides]]
 filter = 'test(/^stub_env_default_does_not_compile($|::)/) | test(/^stub_env_builders_compile_under_the_same_harness($|::)/) | test(/^split_build_fixture_compiles_through_the_direct_rustc_harness($|::)/) | test(/^text_domains_cannot_be_swapped($|::)/) | test(/^document_and_needle_compile_together($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
