@@ -41,6 +41,30 @@ the configured ±1.00 percentage-point tolerance, but below baseline. The
 exact-head EP-1 assessment in comment 6396804980 found no confirmed in-scope
 omission. Formal review and merge remain outstanding.
 
+On the previously published head `189b22560816b40b352c7812938f0db44f1c12e2`,
+formal CodeRabbit review `5643469912` returned `CHANGES_REQUESTED`, with 14
+passed pre-merge rows and one ExecPlan warning. Its inline findings were
+`4371043447` (quadratic backtracking in the Nextest result pattern) and
+`4371043455` (the ambiguous-cohort test omitted matching saved PR metadata).
+Repair commit `9c4e929f9f0a34ed06d984bcfb606f68c9fe2049` keeps duration
+whitespace inside the optional duration group, adds an unclosed-bracket
+regression case, and gives the ambiguous-association cases matching, fully
+populated saved metadata. Replies, thread resolution, and review of the repair
+candidate remain pending; the old review does not cover that candidate.
+
+After remote `main` advanced to `de81d5c34ab3c0103a5de71a0518b89980187c11`, the
+42-commit branch replay completed without conflicts and `git range-diff`
+matched all 42 commits. On the tree recorded by repair commit `9c4e929`, the
+post-rebase `make check-fmt`, `make test`, `make typecheck`, `make lint`,
+`make doc-coverage`, and `make test-workflow-contracts` gates passed. Nextest
+passed 4,712 tests with six skipped, and workspace doctests passed. Workflow
+contracts passed 1,492 tests with three skipped plus 27 supplementary script
+checks. Rustdoc coverage was 98.20% (6,221/6,335). The ExecPlan update passed
+`make fmt`, `make check-fmt`, `make markdownlint` (zero issues across 201
+files), and `make nixie`. Hosted checks, CodeScene, a fresh formal review,
+review-thread reconciliation, and merge remain outstanding for the repair
+candidate.
+
 The investigation is under way. On 24 October, the 28-commit branch was rebased
 onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
 base advanced from `018b81b4311ac5dd99ac4182c51301eeca0dfc55`. The replay had
@@ -641,7 +665,16 @@ fidelity comparisons block adoption.
   head CI, Netsukefile, Release Dry Run, and CodeScene passed; the EP-1
   assessment found no confirmed in-scope omission. Coverage was 91.08% against
   the 91.7% baseline, within tolerance and not above baseline.
-- [ ] Complete the current-head formal review, reconcile any findings, and
+- [x] Rebase the 42-commit candidate onto remote `main` at `de81d5c`; no
+  conflicts occurred and the range-diff matched all 42 commits.
+- [x] Fix the two inline findings from review `5643469912` in
+  `9c4e929f9`; pass `make check-fmt`, `make test`, `make typecheck`,
+  `make lint`, `make doc-coverage`, and `make test-workflow-contracts`. Nextest
+  passed 4,712 tests with six skipped, workflow contracts passed 1,492 with
+  three skipped plus 27 script checks, and documentation coverage was 98.20%
+  (6,221/6,335).
+- [ ] Publish the repair candidate, refresh hosted checks and CodeRabbit
+  review, reply to and resolve its findings, reconcile pre-merge rows, and
   merge the PR at equilibrium.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
@@ -838,6 +871,15 @@ until a new Nextest start, with regressions for both paths. The plan now
 records the target-branch change to the public-API harness and keeps the real
 Cargo consumer requirement active for candidate B. These repairs passed the
 post-rebase workflow-contract and full test gates.
+
+At this checkpoint, repair commit `9c4e929f9f0a34ed06d984bcfb606f68c9fe2049` is
+the local code candidate rebased onto `de81d5c`. Its full serial validation
+passed: check-fmt, test, typecheck, lint, doc-coverage, and workflow-contract
+gates. These are local correctness results, not hosted validation or CI timing
+evidence. The PR's published head is still `189b2256`, whose formal review
+requested changes. The repairs are on its successor; hosted checks, a fresh
+review, thread replies and resolution, pre-merge reconciliation, and merge
+remain outstanding.
 
 ## Revision history
 
