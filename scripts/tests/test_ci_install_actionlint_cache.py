@@ -104,6 +104,28 @@ def test_a_cached_binary_printing_nothing_fails_the_step(
     _assert_unusable_cache_diagnostic(capsys.readouterr().err)
 
 
+def test_a_cached_binary_with_a_blank_first_line_does_not_skip_to_the_next(
+    install_dir: pathlib.Path,
+    no_releases_available: None,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    r"""Keep the cache probe tied to actionlint's first output line."""
+    binary = write_executable(install_dir / "actionlint", rf"printf '\n{VERSION}\n'")
+    before = binary.read_bytes()
+
+    exit_code = invoke(script.app)
+
+    assert exit_code == 1, "expected: exit_code == 1"
+    err = capsys.readouterr().err
+    _assert_unusable_cache_diagnostic(err)
+    assert "does not match its pinned SHA-256" not in err, (
+        "the cache probe must reject the blank first line before downloading"
+    )
+    assert binary.read_bytes() == before, (
+        "the cached executable must be left exactly as it was found"
+    )
+
+
 @pytest.mark.parametrize(
     "body",
     [r"printf '   \n'", r"printf '\t\n'", r"printf '\n'"],

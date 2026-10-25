@@ -120,13 +120,14 @@ def probe_version(binary: pathlib.Path) -> Probe:
     second behind a green step and leave the cache volume holding an entry
     nobody knows is wrong.
 
-    "Without printing a version" is judged on the *normalized* line, not on the
-    raw stream. Whitespace alone is truthy, so a stream of spaces or newlines
-    passes a check on ``result.stdout`` and then strips to the empty string,
-    which would be handed back as a version. No pin equals the empty string,
-    so that empty version would read as a mismatch and the broken entry would
-    be replaced -- the very silent repair the failure state exists to prevent.
-    Normalizing first is what keeps the third case in the failure branch.
+    "Without printing a version" is judged on the normalized first line, not on
+    the raw stream. Whitespace alone is truthy, so a stream of spaces or
+    newlines passes a check on ``result.stdout`` and then strips to the empty
+    string, which would be handed back as a version. No pin equals the empty
+    string, so that empty version would read as a mismatch and the broken entry
+    would be replaced -- the very silent repair the failure state exists to
+    prevent. Split first to preserve the existing first-line parsing; stripping
+    the whole stream first could promote a later line over a blank first line.
 
     Returns
     -------
@@ -141,11 +142,12 @@ def probe_version(binary: pathlib.Path) -> Probe:
     result = run(str(binary), "--version", spec=spec)
     if not result.ok:
         return Probe(failure=describe_failure(result))
-    lines = (result.stdout or "").strip().splitlines()
-    if not lines:
+    lines = (result.stdout or "").splitlines()
+    version = lines[0].strip() if lines else ""
+    if not version:
         reason = f"{describe_failure(result)}: printed no version"
         return Probe(failure=reason)
-    return Probe(version=lines[0].strip())
+    return Probe(version=version)
 
 
 def install(release: Release, scratch: pathlib.Path) -> None:

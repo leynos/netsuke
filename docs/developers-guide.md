@@ -2990,11 +2990,13 @@ installs that exact version. Run the workflow checks with
 
 CI installs actionlint v1.7.12 through
 [`scripts/ci/install_actionlint.py`](../scripts/ci/install_actionlint.py),
-which reuses the gate-cached binary when it reports the pinned version and
-otherwise downloads the Linux `x86_64` release archive, verifies its SHA-256
-against the pin, and extracts the single `actionlint` member. The same command
-reproduces that setup locally; the pins are the two `INPUT_*` values beside the
-step in `.github/workflows/ci.yml`.
+which reuses the gate-cached binary when it reports the pinned version. If no
+executable is cached, or the cached binary reports a different version, the
+script downloads the Linux `x86_64` release archive, verifies its SHA-256
+against the pin, and extracts the single `actionlint` member. A cached binary
+that cannot report its version fails the step instead of being silently
+replaced. The same command reproduces that setup locally; the pins are the two
+`INPUT_*` values beside the step in `.github/workflows/ci.yml`.
 
 The Makefile resolves `actionlint` in the recipe shell, using the `PATH` it
 curates for its recipes, which includes the Go tool directory: `$GOBIN` when
