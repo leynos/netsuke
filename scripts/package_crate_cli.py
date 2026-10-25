@@ -388,10 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         _write_package_record(arguments.output, package)
     except OSError as error:
-        print(
-            f"could not write package record to {arguments.output}: {error}",
-            file=sys.stderr,
-        )
+        print("package record write failed:", arguments.output, error, file=sys.stderr)
         return EXIT_ARTIFACT_ERROR
     return EXIT_OK
 

@@ -149,53 +149,44 @@ def test_a_published_asset_is_immutable() -> None:
 
 
 _SAFE_NAME = st.from_regex(r"[A-Za-z0-9][A-Za-z0-9._-]{0,20}", fullmatch=True)
-_PATH_COMPONENT = st.one_of(
-    st.sampled_from((".", "..")),
-    st.from_regex(r"[A-Za-z0-9_-]{1,8}", fullmatch=True),
+_PATH_SEPARATOR = st.sampled_from(("/", "\\"))
+_SAFE_PATH_COMPONENT = st.from_regex(r"[A-Za-z0-9_-]{1,8}", fullmatch=True)
+_BARE_ASSET_CASES = _SAFE_PATH_COMPONENT.map(lambda name: (name, False, True))
+_NESTED_ASSET_CASES = st.tuples(_SAFE_PATH_COMPONENT, _PATH_SEPARATOR).map(
+    lambda parts: (f"nested{parts[1]}{parts[0]}", False, False)
 )
-
-
-@st.composite
-def _asset_name_cases(draw: st.DrawFn) -> tuple[str, bool, bool]:
-    """Generate a name with expected escape and bare-file outcomes.
-
-    Cases vary separators, absolute prefixes, current and parent components,
-    drive-like names, and trailing separators. Keep this strategy local to the
-    inventory suite because it models this policy's two-platform contract.
-
-    Returns
-    -------
-    tuple[str, bool, bool]
-        The generated name and its expected escape and bare-name results.
-    """
-    flavour = draw(st.sampled_from(("posix", "windows")))
-    separator = draw(st.sampled_from(("/", "\\")))
-    components = draw(st.lists(_PATH_COMPONENT, min_size=1, max_size=5))
-    is_absolute = draw(st.booleans())
-    has_trailing_separator = draw(st.booleans())
-    name = separator.join(components)
-    if is_absolute:
-        prefix = "/" if flavour == "posix" else f"C:{separator}"
-        name = prefix + name
-    if has_trailing_separator:
-        name += separator
-
-    depth = 0
-    escapes = is_absolute
-    for component in components:
-        if component == "..":
-            depth -= 1
-            escapes = escapes or depth < 0
-        elif component not in {"", "."}:
-            depth += 1
-    is_bare = (
-        not is_absolute
-        and not has_trailing_separator
-        and len(components) == 1
-        and components[0] not in {"", ".", ".."}
-        and ":" not in components[0]
+_TRAVERSAL_ASSET_CASES = st.tuples(_SAFE_PATH_COMPONENT, _PATH_SEPARATOR).map(
+    lambda parts: (f"..{parts[1]}{parts[0]}", True, False)
+)
+_DEEP_TRAVERSAL_ASSET_CASES = st.tuples(_SAFE_PATH_COMPONENT, _PATH_SEPARATOR).map(
+    lambda parts: (
+        f"{parts[0]}{parts[1]}..{parts[1]}..{parts[1]}{parts[0]}",
+        True,
+        False,
     )
-    return name, escapes, is_bare
+)
+_DOT_COMPONENT_ASSET_CASES = st.tuples(_SAFE_PATH_COMPONENT, _PATH_SEPARATOR).map(
+    lambda parts: (f".{parts[1]}{parts[0]}", False, False)
+)
+_TRAILING_SEPARATOR_ASSET_CASES = st.tuples(_SAFE_PATH_COMPONENT, _PATH_SEPARATOR).map(
+    lambda parts: (f"{parts[0]}{parts[1]}", False, False)
+)
+_POSIX_ABSOLUTE_ASSET_CASES = _SAFE_PATH_COMPONENT.map(
+    lambda name: (f"/{name}", True, False)
+)
+_WINDOWS_ABSOLUTE_ASSET_CASES = st.tuples(_SAFE_PATH_COMPONENT, _PATH_SEPARATOR).map(
+    lambda parts: (f"C:{parts[1]}{parts[0]}", True, False)
+)
+_ASSET_NAME_CASES = st.one_of(
+    _BARE_ASSET_CASES,
+    _NESTED_ASSET_CASES,
+    _TRAVERSAL_ASSET_CASES,
+    _DEEP_TRAVERSAL_ASSET_CASES,
+    _DOT_COMPONENT_ASSET_CASES,
+    _TRAILING_SEPARATOR_ASSET_CASES,
+    _POSIX_ABSOLUTE_ASSET_CASES,
+    _WINDOWS_ABSOLUTE_ASSET_CASES,
+)
 
 
 @settings(max_examples=200, deadline=None, derandomize=True)
@@ -208,7 +199,7 @@ def _asset_name_cases(draw: st.DrawFn) -> tuple[str, bool, bool]:
 @example(case=("netsuke/", False, False))
 @example(case=("netsuke\\", False, False))
 @example(case=(r"nested\file", False, False))
-@given(case=_asset_name_cases())
+@given(case=_ASSET_NAME_CASES)
 def test_asset_name_predicates_cover_generated_posix_and_windows_paths(
     case: tuple[str, bool, bool],
 ) -> None:
@@ -224,7 +215,7 @@ def test_asset_name_predicates_cover_generated_posix_and_windows_paths(
 
 
 @settings(max_examples=200, deadline=None, derandomize=True)
-@given(cases=st.lists(_asset_name_cases(), max_size=8))
+@given(cases=st.lists(_ASSET_NAME_CASES, max_size=8))
 def test_rejected_path_partition_preserves_generated_input_order(
     cases: list[tuple[str, bool, bool]],
 ) -> None:

@@ -82,7 +82,7 @@ def test_the_cli_cleans_up_when_package_record_persistence_fails(
     status = main(packaging_argv(destination, target_dir=tmp_path / "target"))
 
     assert status == EXIT_ARTIFACT_ERROR, f"record failure must return 3, got {status}"
-    assert "could not write package record" in capsys.readouterr().err, (
+    assert "package record write failed" in capsys.readouterr().err, (
         "the failure must identify package record persistence"
     )
     assert not destination.exists(), "failed persistence must not expose a record"
