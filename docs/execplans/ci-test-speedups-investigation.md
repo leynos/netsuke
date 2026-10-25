@@ -2,22 +2,19 @@
 
 Status: IN PROGRESS
 
-On 25 October, the 33-commit issue series was rebased from
-`f8df5d808f1bee4eb8554df0160119864ade6f39` onto `origin/main` at
-`ac826aa9732fad85fce3c9237ce9ac2415052a0a`. The replay had no conflicts, and
-the range-diff matched all 33 commits. On tested code head
-`869ef7931097df00d5145a18d998db253f7db52e`, `make check-fmt`, `make typecheck`,
-`make lint`, `make test-workflow-contracts`, and `make doc-coverage` passed;
-Rust doc coverage was 98.19% (6,178 of 6,292 items) against the 80% threshold.
-The workflow-contract suite passed 1,472 tests, skipped three, and its
-supplementary script suite passed 27 tests. `make test` ran 4,843 of 4,867
-tests: 4,842 passed, six were skipped, and
-`cli_configuration_fixture_compiles::case_1_public_api` timed out at 300.025
-seconds. Twenty-four tests were not run, and doctests were not reached. No
-diagnostic from the fixture's child Cargo command appears in the log; this
-local suite is not a pass. The worktree's `cs delta origin/main` reports no
-issues. The rebased candidate has not yet received hosted validation; refresh
-CI and review on the published exact head before merge.
+On 25 October, the 34-commit branch was rebased from
+`ac826aa9732fad85fce3c9237ce9ac2415052a0a` onto `origin/main` at
+`0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458`. The replay had no conflicts, and
+the range-diff matched all 34 commits. All requested gates passed on candidate
+head `bc3e52e5cc3601484f1e7c84643d3a60eb527082`: `make check-fmt`, `make test`,
+`make typecheck`, and `make lint`. The workflow-contract suite also passed
+1,472 tests, skipped three, and its supplementary script suite passed 27 tests.
+`make doc-coverage` passed at 98.19% (6,178 of 6,292 items) against the 80%
+threshold. Nextest passed all 4,867 selected tests, with six skipped; all
+workspace doctests passed. The previously timing-out
+`cli_configuration_fixture_compiles::case_1_public_api` passed in 287.593
+seconds. `cs delta origin/main HEAD` with CodeScene CLI 1.0.52 found no issues.
+Refresh hosted CI and review on the published exact head before merge.
 
 The investigation is under way. On 24 October, the 28-commit branch was rebased
 onto `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, after the
@@ -201,21 +198,23 @@ every installation input is immutable.
 
 ### Current target source at the rebased base
 
-The current base `ac826aa9732fad85fce3c9237ce9ac2415052a0a` includes the
+The current base `0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458` includes the
 workflow-contract changes from pull request 932, PowerShell-placeholder
 hardening from pull request 924, the nightly toolchain update from pull request
-947, and the build-footprint settings from pull request 948. It pins
+947, the build-footprint settings from pull request 948, and the
+default-features Dependabot runner placement from pull request 949. It pins
 `nightly-2026-10-22`, disables development incremental compilation and debug
 data, and sets Cargo's `embed-metadata = false`; its contract tests cover those
 settings. It also starts coverage baseline v2. The eligible same-repository
 Linux PR gate remains on `ubicloud-standard-4-ubuntu-2404`, with four Cargo
-workers and four Nextest workers, and sends both fork PRs and Dependabot PRs to
-`ubuntu-latest`. The workflow checks the PR author's `user.login` for
-Dependabot because the actor can change when another person pushes to that PR.
-A workflow-run response does not include the PR author, so the offline
-collector accepts a separately saved pull request response. It uses that author
-only when the PR ID, number and base repository ID match the run's single PR
-association. If the saved PR response is absent or does not match,
+workers and four Nextest workers. In both the main and default-features lanes,
+fork and Dependabot pull requests use `ubuntu-latest`; runner-contract tests
+cover the exact job assignments. The workflow checks the PR author's
+`user.login` for Dependabot because the actor can change when another person
+pushes to that PR. A workflow-run response does not include the PR author, so
+the offline collector accepts a separately saved pull request response. It uses
+that author only when the PR ID, number and base repository ID match the run's
+single PR association. If the saved PR response is absent or does not match,
 author-dependent classification remains `other`; the collector never
 substitutes the run actor. Fork classification continues to require distinct
 base and head repository identities. The run association fields are documented
@@ -227,9 +226,11 @@ documentation. Pull request 924's change is unrelated to the CI source
 comparison. Pull request 947 changes the compiler toolchain and coverage
 baseline, but reports no test-selection changes. Pull request 948 changes the
 development build profile and adds build-footprint contract tests; it does not
-change CI test selection. No candidate optimization has been enabled. The
-original 10 October reference and the earlier 8a961 comparison above remain
-historical snapshots, not the current source baseline.
+change CI test selection. Pull request 949 changes the default-features runner
+placement for Dependabot and adds runner-contract coverage; it does not change
+test selection. No candidate optimization has been enabled. The original 10
+October reference and the earlier 8a961 comparison above remain historical
+snapshots, not the current source baseline.
 
 The original offline evidence set contains 81 job records from 21 distinct
 run-attempt pairs: six main-branch coverage jobs, six main-branch cache-writer
@@ -898,24 +899,25 @@ cover omitted, null, malformed, boolean and conflicting run-base data. Local
 `cs delta origin/main` reports no issues. `make check-fmt`, `make typecheck`,
 `make lint`, and `make test-workflow-contracts` passed on the staged code;
 workflow contracts passed 1,472 and skipped three, plus 27 supplementary script
-tests passed. The Rust-only full suite was not rerun because this refactor
-changes only Python and Markdown; the confirmed local fixture timeout above
-remains unresolved. Hosted validation and review still need to cover the
-published refactor commit.
+tests passed. The Rust-only full suite was not rerun for that staged refactor
+because it changed only Python and Markdown. The subsequent rebase validation
+below ran the full suite and passed; the public-API compile fixture completed
+in 287.593 seconds, after earlier candidates had timed out at 300 seconds.
+Hosted validation and review still need to cover the published refactor commit.
 
-The 25 October rebase moved the 33-commit series onto `origin/main` at
-`ac826aa9732fad85fce3c9237ce9ac2415052a0a`, which adds pull request 948's
-development build-footprint settings and contract tests. No conflicts occurred,
-and the range-diff matched all 33 commits. The tested code head
-`869ef7931097df00d5145a18d998db253f7db52e` passed format checking, typecheck,
-lint, workflow contracts (1,472 passed, 3 skipped, plus 27 supplementary script
-tests), and documentation coverage (98.19%, 6,178/6,292 items). The full Rust
-suite ran 4,843 tests: 4,842 passed, six were skipped, and
-`cli_configuration_fixture_compiles::case_1_public_api` timed out at 300.025
-seconds. Twenty-four tests were not run and doctests were not reached. The
-fixture produced no child Cargo diagnostic. Do not report the local suite as
-passing. `cs delta origin/main` found no issues. Hosted CI and review have not
-yet been refreshed for the rebased candidate.
+The 25 October rebase moved the 34-commit branch onto `origin/main` at
+`0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458`, which adds pull request 949's
+default-features Dependabot runner placement and runner-contract tests. No
+conflicts occurred, and the range-diff matched all 34 commits. On candidate head
+`bc3e52e5cc3601484f1e7c84643d3a60eb527082`, `make check-fmt`, `make test`,
+`make typecheck`, `make lint`, `make test-workflow-contracts`, and
+`make doc-coverage` all passed. Nextest passed 4,867 tests, with six skipped;
+workspace doctests passed. Workflow contracts passed 1,472 tests, skipped
+three, and ran 27 supplementary script tests. Documentation coverage was 98.19%
+(6,178/6,292 items). The slow CLI configuration fixture passed in 287.593
+seconds, and all three split-build fixtures passed. `cs delta origin/main HEAD`
+with CodeScene CLI 1.0.52 found no issues. Hosted CI and review still need to
+cover the published candidate.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
