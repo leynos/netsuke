@@ -2381,6 +2381,22 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   module-list assertion; its other five CI jobs, Release Dry Run, Netsukefile
   Build Test, and CodeScene passed. Fresh hosted checks on the repaired head
   remain pending.
+- [x] (2026-10-26) Addressed the three findings in CodeRabbit review
+  `5645850465`. `release_asset_names.escapes_its_directory` now classifies
+  rooted and drive-relative Windows paths as escaping; the developers' guide
+  states that zero or multiple `.crate` archives return the packaging-failure
+  status; and `finalize_github_release_cli` returns a distinct status when it
+  cannot write its plan while still reporting every conflict name. Regression
+  cases cover the Windows forms, the `C:` edge, and plan-write failures with
+  and without a conflict. Code commit `e99a6039` passed `check-fmt`, `lint`,
+  `typecheck`, `doc-coverage` (98.20%), `test` (4,712 passed, 6 skipped;
+  doctests passed), `test-release-publication` (429 passed), `markdownlint`
+  (199 files, zero issues), and `nixie`. `cs delta origin/main` found no
+  issues. The stop-hook Nixie temporary-directory error did not recur; `/tmp`
+  had 190 GiB free with mode 1777 during diagnosis. The hook's earlier lint
+  failure was followed by a successful full lint after the three Ruff findings
+  were corrected. No release or registry setting changed; Stage C remains
+  partial and Stage D remains open.
 
 ## Surprises & discoveries
 
@@ -3896,3 +3912,12 @@ platform flavours and normalization cases. Commits `6b3e69e1` and `8d4affc3`
 passed the nine sequential gates, and `cs delta origin/main HEAD` reports no
 issues. Stage C remains partial and Stage D remains open. No release or
 registry setting changed.
+
+Draft 14, 2026-10-26: resolved the three findings from CodeRabbit's completed
+review of `de284514`. Windows-rooted and drive-relative asset names are now
+classified as escaping, package archive-count failures are documented with
+their actual status, and reconciliation-plan write errors have a distinct
+status that preserves conflict diagnostics. Commit `e99a6039` passed the full
+sequential code gate set; the stop-hook's Nixie temporary-directory failure did
+not recur. The plan's delivery scope is unchanged: Stage C remains partial and
+Stage D remains open, and no release or registry setting changed.
