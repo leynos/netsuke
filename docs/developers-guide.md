@@ -5060,7 +5060,7 @@ liveness token to model pruning without retaining the dispatch.
 Run the focused model with:
 
 ```bash
-cargo nextest run -p netsuke --test tracing_interest_model
+cargo nextest run -p netsuke-build --test tracing_interest_model
 ```
 
 The model's source mapping and limits are recorded in

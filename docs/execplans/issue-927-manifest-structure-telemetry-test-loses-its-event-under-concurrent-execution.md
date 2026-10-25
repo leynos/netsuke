@@ -444,6 +444,46 @@ seeded duplicate.
   issues), and `make nixie`. The local CodeScene staged-diff analysis found no
   issues. No test timed out. A fresh review and hosted checks on the published
   candidate remain pending.
+- [x] (2026-10-25) Rebased and published candidate
+  `e0d8f5a1a9a363d541c0fab55f0dc2686dea44e7` on `main` at
+  `de81d5c34ab3c0103a5de71a0518b89980187c11`, then passed the sequential gates
+  `make check-fmt`, `make lint`, `make doc-coverage` (6,231/6,346 items;
+  98.19%; 65 harness tests passed), `make typecheck`, `make test` (4,725
+  passed, 7 skipped; all doctest groups passed), `make markdownlint` (200
+  files, zero issues), and `make nixie`. `cs delta origin/main HEAD` found no
+  issues in the changed code. The exact-head hosted Netsukefile, Release Dry
+  Run, CodeScene, Kani, and build-test checks passed; Windows lint remained
+  pending at the latest observation, and CodeRabbit's status was
+  `Review paused` for this head. The hosted status and formal review still
+  require reconciliation.
+- [x] (2026-10-25) Ran the focused public-helper negative control on the
+  published candidate by removing only the call to
+  `ensure_test_interest_anchors_registered()` from
+  `test_support/src/tracing_capture.rs`. The parent regression test failed in
+  the public-helper child because its summary callback ran before T1 released
+  the gate (`before release=true, after release=false`). The unmitigated and
+  anchored child schedules passed first. This test checks registration timing
+  before reaching the public-helper exact-cardinality oracle, so this run does
+  not establish the requested empty-event oracle diagnostic; record that limit
+  for the follow-up assessment. Restored the source byte-for-byte (SHA-256
+  `08ccbe5e1077e856aedfd69088bb19a26e58f63a9577796af1b78287b8b6cf56`) and reran
+  `cargo nextest run -p netsuke-build --lib
+  stale_summary_interest_is_reproduced_in_a_fresh_process`,
+  which passed. Mutation and restored-run logs are in the private PR #943
+  evidence bundle.
+- [x] (2026-10-25) Corrected the focused Loom command in the developers' guide
+  to select the Cargo package `netsuke-build`; `netsuke` is the library and
+  binary target name. The previous command named a non-existent package. The
+  corrected command
+  `cargo nextest run -p netsuke-build --test tracing_interest_model` passed
+  both tests (log:
+  `/tmp/focused-tracing-interest-b52a33dc-f184-4eef-82fc-038987db14c6-issue-927-e0d8f5a.out`).
+  The complete sequential candidate gates also passed with this guide
+  correction: `make check-fmt`, `make lint`, `make doc-coverage` (98.19%; 65
+  harness tests), `make typecheck`, `make test` (4,725 passed, 7 skipped; all
+  doctest groups passed), `make markdownlint` (200 files, zero issues), and
+  `make nixie`. These results are recorded here after that sequence; run the
+  documentation gates on this final plan revision before commit.
 
 ## Surprises & discoveries
 
