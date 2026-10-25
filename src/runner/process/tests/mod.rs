@@ -25,6 +25,7 @@ use std::thread;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 
+mod command_list_targets;
 #[cfg(unix)]
 mod public_ninja_execution_tests;
 

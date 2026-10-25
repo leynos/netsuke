@@ -17,22 +17,13 @@ pub(super) fn record_failure(
     target_clause: Option<&str>,
 ) {
     describe_metrics();
-    if let Some(target) = target_clause {
-        tracing::warn!(
-            command_list_action = failure.action_identity(),
-            command_list_entry = failure.entry_index(),
-            command_list_failure = %failure,
-            command_list_target = target,
-            "Ninja command-list entry failed"
-        );
-    } else {
-        tracing::warn!(
-            command_list_action = failure.action_identity(),
-            command_list_entry = failure.entry_index(),
-            command_list_failure = %failure,
-            "Ninja command-list entry failed"
-        );
-    }
+    tracing::warn!(
+        command_list_action = failure.action_identity(),
+        command_list_entry = failure.entry_index(),
+        command_list_failure = %failure,
+        command_list_target = target_clause,
+        "Ninja command-list entry failed"
+    );
     counter!(COMMAND_LIST_FAILURES_TOTAL, "outcome" => "failure").increment(1);
     histogram!(COMMAND_LIST_FAILURE_DURATION, "outcome" => "failure").record(elapsed);
 }

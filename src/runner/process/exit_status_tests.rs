@@ -3,12 +3,71 @@
 use super::child_exit::check_exit_status_with_context;
 use super::*;
 use crate::test_tracing_capture::with_test_subscriber;
+use crate::{
+    ast::{CommandIsolation, Recipe, StringOrList},
+    ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
+    ninja_gen::command_list::{COMMAND_LIST_FAILURE_PREFIX, action_identity},
+};
 use monotony::test_util::FixedMonotonicClock;
+use rstest::{fixture, rstest};
 use std::{
+    io::Write,
     process::ExitStatus,
     time::{Duration, Instant},
 };
 use tracing_subscriber::filter::LevelFilter;
+
+/// Stable action id used by command-list exit-status cases.
+const TEST_ACTION_ID: &str = "identity";
+
+/// Build a graph that contains the command-list action under test.
+#[fixture]
+fn graph_with_identity_action() -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        TEST_ACTION_ID.to_owned(),
+        Action {
+            recipe: Recipe::Command {
+                command: StringOrList::List(vec!["true".to_owned()]),
+                isolation: CommandIsolation::Shared,
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        },
+    );
+    graph
+}
+
+/// Add one canonical edge with one explicit output to `graph`.
+fn add_target_edge(graph: &mut BuildGraph, target: &str) {
+    let result = graph.insert_edge(BuildEdge {
+        action_id: TEST_ACTION_ID.to_owned(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
+        explicit_outputs: vec![target.into()],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+    });
+    assert!(result.is_ok(), "test target outputs should be unique");
+}
+
+/// Parse one command-list marker into the failure value used by exit handling.
+fn command_list_failure(fingerprint: &str) -> super::failure_attribution::CommandListFailure {
+    let mut writer = super::failure_attribution::FailureAttributionWriter::new(Vec::new());
+    let marker = format!("{COMMAND_LIST_FAILURE_PREFIX}{fingerprint}, entry 2\n");
+    writer
+        .write_all(marker.as_bytes())
+        .expect("test marker should be writable");
+    writer
+        .into_failure()
+        .expect("test marker should parse into an attribution")
+}
 
 #[cfg(unix)]
 fn exit_status(code: i32) -> ExitStatus {
@@ -79,6 +138,88 @@ fn failed_ninja_exit_records_exit_status_diagnostics() {
         event.contains("status="),
         "exit failure should include the child status: {event}"
     );
+}
+
+#[rstest]
+#[case::unique(
+    &["check-fmt"],
+    TEST_ACTION_ID,
+    Some("target \"check-fmt\"")
+)]
+#[case::ambiguous(
+    &["lint", "check-fmt"],
+    TEST_ACTION_ID,
+    Some("targets \"check-fmt\", \"lint\"")
+)]
+#[case::unknown(
+    &["check-fmt"],
+    "unindexed-action",
+    None
+)]
+fn exit_failure_uses_one_target_resolution_for_error_and_tracing(
+    mut graph_with_identity_action: BuildGraph,
+    #[case] targets: &[&str],
+    #[case] marker_action_id: &str,
+    #[case] expected_clause: Option<&str>,
+) {
+    for target in targets {
+        add_target_edge(&mut graph_with_identity_action, target);
+    }
+    let index = super::command_list_targets::CommandListTargetIndex::from_graph(
+        &graph_with_identity_action,
+    );
+    let fingerprint = action_identity(marker_action_id);
+    let failure = command_list_failure(&fingerprint);
+    let clock = FixedMonotonicClock::with_elapsed(Duration::ZERO);
+    let context = command_log_context();
+    let failure_context = ExitFailureContext {
+        operation: "build",
+        stderr_mode: StderrMode::Suppress,
+        command_list_failure: Some(&failure),
+        command_list_targets: Some(&index),
+        clock: &clock,
+        started_at: Instant::now(),
+    };
+    let (result, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let result = check_exit_status_with_context(exit_status(1), &context, &failure_context);
+        (result, captured.snapshot())
+    });
+
+    let error = result.expect_err("a failing Ninja exit should return an error");
+    let marker = format!("{COMMAND_LIST_FAILURE_PREFIX}{fingerprint}, entry 2");
+    let error_text = error.to_string();
+    assert!(
+        error_text.contains(&marker),
+        "the error should retain the full failure marker: {error_text}"
+    );
+    let telemetry = events
+        .iter()
+        .find(|event| event.contains("command_list_action="))
+        .expect("the attributed failure should emit its tracing event");
+    assert!(
+        telemetry.contains(&format!("command_list_action={fingerprint:?}")),
+        "tracing should retain the full action fingerprint: {telemetry}"
+    );
+
+    if let Some(clause) = expected_clause {
+        assert!(
+            error_text.contains(&format!("({clause})")),
+            "the error should append the resolved target clause: {error_text}"
+        );
+        assert!(
+            telemetry.contains(&format!("command_list_target={clause:?}")),
+            "tracing should record the same resolved target clause: {telemetry}"
+        );
+    } else {
+        assert!(
+            !error_text.contains("command_list_target") && !error_text.contains("target \""),
+            "an unknown fingerprint should leave the error unchanged: {error_text}"
+        );
+        assert!(
+            !telemetry.contains("command_list_target="),
+            "an unknown fingerprint should omit the tracing field: {telemetry}"
+        );
+    }
 }
 
 #[cfg(unix)]

@@ -506,11 +506,12 @@ rather than a subshell, so a changed working directory, environment assignment,
 or shell variable can be used by later entries. In `isolated` mode, each
 brace/eval wrapper runs inside a subshell and its state changes do not reach
 later entries. A failed entry stops the chain, and the diagnostic identifies
-the generated action and one-based list-entry positions, for example
-`netsuke command-list failure: action HASH, entry 2`. These brace-group,
-`eval`, background-job, and `exec` restrictions apply only to the Unix renderer
-and the explicit Windows Bash compatibility route; the Windows PowerShell route
-uses its native-command and error checks instead.
+the generated action and one-based list-entry positions. When the runner
+resolves one output target, its name follows the entry index, as in
+`netsuke command-list failure: action HASH, entry 2 (target "check-fmt")`.
+These brace-group, `eval`, background-job, and `exec` restrictions apply only
+to the Unix renderer and the explicit Windows Bash compatibility route; the
+Windows PowerShell route uses its native-command and error checks instead.
 
 <!-- tested-example: guide-command-list -->
 
