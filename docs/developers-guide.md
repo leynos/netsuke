@@ -2556,7 +2556,11 @@ returns 0 when it records a publish or skip decision, 1 when the registry state
 requires operator action, 3 when the saved response is unreadable or has an
 unexpected schema, and 4 when it cannot write the decision record. `verify`
 returns 0 when the downloaded bytes match, 2 when verification fails, and 4
-when it cannot write the verdict record. Invalid invocations return 64.
+when it cannot write the verdict record. Invalid invocations return 64. The
+CLI's private `_write_json_record` owns deterministic JSON formatting and path
+writes for these result records. Keep it within this CLI; command-specific
+schemas, diagnostics, and exit statuses stay with their subcommands. Other
+release records retain their own validation and I/O boundaries.
 
 ### Policy and adapter boundaries
 

@@ -116,6 +116,22 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _write_json_record(output: pathlib.Path, record: dict[str, object]) -> None:
+    """Write a sorted, indented, newline-terminated JSON result record.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     destination = pathlib.Path(directory) / "result.json"
+    ...     _write_json_record(destination, {"action": "publish"})
+    ...     json.loads(destination.read_text(encoding="utf-8"))
+    {'action': 'publish'}
+    """
+    serialized = json.dumps(record, indent=2, sort_keys=True) + "\n"
+    output.write_text(serialized, encoding="utf-8")
+
+
 def _classify(arguments: argparse.Namespace) -> int:
     """Classify a registry response and record the action it dictates."""
     try:
@@ -141,19 +157,14 @@ def _classify(arguments: argparse.Namespace) -> int:
             else "response-file"
         )
         try:
-            arguments.output.write_text(
-                json.dumps(
-                    {
-                        "action": "fail",
-                        "error": str(error),
-                        "fault": fault,
-                        "state": "indeterminate",
-                    },
-                    indent=2,
-                    sort_keys=True,
-                )
-                + "\n",
-                encoding="utf-8",
+            _write_json_record(
+                arguments.output,
+                {
+                    "action": "fail",
+                    "error": str(error),
+                    "fault": fault,
+                    "state": "indeterminate",
+                },
             )
         except OSError as output_error:
             print(
@@ -167,13 +178,7 @@ def _classify(arguments: argparse.Namespace) -> int:
         return EXIT_RESPONSE_ERROR
     action = release_reconcile_crates.plan_crates_action(state)
     try:
-        arguments.output.write_text(
-            json.dumps(
-                {"action": action, "state": state.value}, indent=2, sort_keys=True
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        _write_json_record(arguments.output, {"action": action, "state": state.value})
     except OSError as error:
         print(
             f"could not write registry decision record to {arguments.output}: {error}",
@@ -225,13 +230,7 @@ def _verify(arguments: argparse.Namespace) -> int:
         print(f"published archive unverifiable: {error}", file=sys.stderr)
         return VERDICT_EXITS["error"]
     try:
-        arguments.output.write_text(
-            json.dumps(
-                {"sha256": digest, "verdict": "verified"}, indent=2, sort_keys=True
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        _write_json_record(arguments.output, {"sha256": digest, "verdict": "verified"})
     except OSError as error:
         print(
             f"could not write verification record to {arguments.output}: {error}",
