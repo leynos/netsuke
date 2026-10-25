@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: APPROVED
+Status: IN PROGRESS
 
 Approved 2026-10-14 by the user, by explicit instruction to proceed with this
 plan under the `sdlc-implementation` workflow. That approval accepts the
@@ -252,7 +252,7 @@ verbatim into every catalogue, for example
 
 `docs/netsuke-test-framework-technical-design.md` §4.2 and §4.3 specify this
 task. The design predates several loader changes (the `ManifestEnvironment`
-bundle, `ManifestBudgetLimits`, the manifest root, and ADR-018's query-mode
+bundle, `ManifestBudgetLimits`, the manifest root, and ADR-0050's query-mode
 telemetry suppression), and its public-field sketch leaves overlays outside the
 mode that grants them. `Decision log` records each reconciliation; EP-M5 writes
 them back into the design.
@@ -277,7 +277,7 @@ them back into the design.
 | `tests/manifest_load_options_tests.rs`, `tests/manifest_load_options/*` | public differential and property tests                                   |
 | `tests/features/manifest_load_options.feature`, `tests/bdd/…`           | behavioural scenarios, steps, and `TestWorld` slots                      |
 | `tests/ui/manifest_load_options_embedder_pass.rs`                       | compile-pass fixture pinning the public surface                          |
-| `docs/…`                                                                | design, ADR-055, ADR-018 addendum, guides, contents, roadmap             |
+| `docs/…`                                                                | design, ADR-0060, ADR-0050 addendum, guides, contents, roadmap           |
 
 *Table 1: Files in scope.*
 
@@ -299,10 +299,10 @@ feature file and its steps must land in the same commit.
 Read before starting: `AGENTS.md`;
 `docs/netsuke-test-framework-technical-design.md` §§4, 5, 7, 12–14;
 `docs/netsuke-test-framework-ux-design.md` §§1, 7–8;
-`docs/rfcs/0007-netsukefile-testing-framework.md`; `docs/netsuke-design.md`;
-`docs/adr-008-environment-seam-taxonomy.md`;
-`docs/adr-010-scope-glob-capability-to-literal-prefix.md`;
-`docs/adr-018-bound-manifest-template-evaluation.md`; `docs/polonius.md`;
+`docs/rfcs/rfc-0007-netsukefile-testing-framework.md`; `docs/netsuke-design.md`;
+`docs/adrs/adr-0008-environment-seam-taxonomy.md`;
+`docs/adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md`;
+`docs/adrs/adr-0050-bound-manifest-template-evaluation.md`; `docs/polonius.md`;
 `docs/rust-testing-with-rstest-fixtures.md`; `docs/rstest-bdd-users-guide.md`;
 `docs/rust-doctest-dry-guide.md`;
 `docs/reliable-testing-in-rust-via-dependency-injection.md`;
@@ -428,7 +428,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
 
 - Risk: technical-design divergence confuses later roadmap items.
   Severity: low. Likelihood: certain. Mitigation: EP-M5 updates the design in
-  the same change set, and ADR-055 records the substantive decisions.
+  the same change set, and ADR-0060 records the substantive decisions.
 
 - Risk: a peer session pushes to this branch or `main` moves.
   Severity: low. Likelihood: low. Mitigation: fetch before every push; after
@@ -467,7 +467,8 @@ and YAML fixtures, and were set from the inventory in Table 1.
   plan's base `ebcedaef`); rehearsed in a scratch clone first, applied with
   zero conflicts, pushed, and local/remote/tracking refs verified equal.
 - [x] (2026-10-14) Plan corrections for the rebase: base commit, module paths
-  after `main`'s layout migration, and ADR-041 renumbered to ADR-055.
+  after `main`'s layout migration, and ADR-041 renumbered to ADR-055 (since
+  renumbered again to ADR-0060; see `Surprises & discoveries`).
 - [x] (2026-10-14) Stage A baseline: the full gate set run sequentially by
   `scrutineer` against the untouched branch at `0b2a366b`. Six gates pass;
   `make test` is red from compiler-admission contention, not from this
@@ -476,7 +477,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `tests/data/manifest_load_options/` (the four planned plus three recorded as
   a deviation), plus the reused `tests/data/glob.yml`; the public suite
   (`tests/manifest_load_options_tests.rs`, `tests/manifest_load_options/`) with
-  12 rows over the nine public entry points; the crate-internal rows in
+  12 rows over the eleven public entry points; the crate-internal rows in
   `src/manifest/tests/wrapper_equivalence.rs` and
   `src/stdlib/register/refusal_snapshots.rs`. Every snapshot reviewed by
   reading before acceptance. No production file changed: the one source edit
@@ -850,7 +851,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
     `6a6fed3a`, `git merge-base` is `486b876c` — the branch is *not* based on
     `origin/main` — and the surface is **44 paths, 40 of them non-Markdown**
     (`src/manifest/tests/*`, `src/stdlib/register.rs`, `test_support/*`,
-    `tests/manifest_load_options/*`, 13 insta snapshots). The nine-gate set was
+    `tests/manifest_load_options/*`, 15 insta snapshots). The nine-gate set was
     therefore right on scope grounds alone, independent of the ExecPlan
     argument. A base-versus-branch-tip confusion produced a false description of
     the change surface, exactly as it did for the `nixie` verdict above.
@@ -904,6 +905,23 @@ and YAML fixtures, and were set from the inventory in Table 1.
     **0** `build-limits:` admission failures. The zero is what makes this queue
     latency rather than an admission refusal. All five cases of the shared
     filter passed in both attempts.
+- [x] (2026-10-24) Rebased onto `origin/main` `8a961000` after `main` moved 15
+  commits on, replaying all 29 branch commits (`486b876c..67894369`) with two
+  conflict stops, both in files where `main`'s documentation-layout migration
+  (`c8e58a0a8`) met this branch's substance. `range-diff` shows 29 commits with
+  exactly 2 changed, and each delta is solely the `ADR-010` → `ADR-0010`
+  renumber. The semantic audit found 550 of 550 target-only paths
+  byte-identical and no unexplained deletion. `Cargo.lock` needed no rebuild:
+  `cargo metadata --locked --offline --no-deps` is clean against `main`'s lock
+  plus this branch's single added `"regex",` edge in `test_support`.
+  Post-rebase repair of old-style citations and stale figures: see the entry
+  below.
+- [x] (2026-10-25) Rebased the 30-commit branch range from `8a961000` onto
+  fetched `origin/main` `de81d5c3` with Git’s built-in `zdiff3` backend; no
+  rebase conflicts. The rebase range-diff matched all 30 replayed commits. All
+  180 target-only paths are byte-identical and no branch deletion remains
+  against the target. Reapplied and reconciled the pre-existing plan
+  corrections.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -1173,16 +1191,23 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `src/value/mod.rs` is a path inside the `minijinja` crate, not this one, and
   now says so.
 
-- Observation: **ADR-041 is already spent.** Evidence: `origin/main` publishes
-  `docs/adr-041-canonical-recipe-shell-quoting-surface.md`, and a sweep of
-  every remote branch for `docs/adr-[0-9]{3}-` puts the ceiling at **054**
-  (held by `docs/crate-decomposition-programme`). The plan reserved 041 and
-  named it in seven places, and its own `Plan of work` said to re-check at
-  every rebase. Impact: renumbered to **ADR-055**, above the highest
-  allocation, per `docs/documentation-style-guide.md`'s
-  no-renumbering-after-publication rule. A free number inside the existing
-  bracket would not have been safe: 044–053 are unclaimed on `main` but
-  bracketed by open allocations.
+- Observation: **ADR-041 is already spent**, and the reservation has since
+  moved twice. Evidence: `origin/main` publishes
+  `docs/adrs/adr-0041-canonical-recipe-shell-quoting-surface.md`. At the
+  2026-10-14 rebase a sweep of every remote branch put the ceiling at **054**
+  (held by `docs/crate-decomposition-programme`), and a free number inside the
+  bracket was rejected because 044–053 were unclaimed on `main` yet bracketed
+  by open allocations; the plan reserved **ADR-055** on that basis. The
+  2026-10-24 rebase re-swept and found the number **bracketed after all**:
+  `main` had merged `adr-0056-manifest-linting-under-netsuke-check.md`, leaving
+  0055 between a merged 0056 and the still-open 0052–0054 allocations, and the
+  same rule that rejected 044–053 now rejects 0055. Impact: renumbered to
+  **ADR-0060**, above the highest allocation anywhere (`adr-0059-…` on
+  `module-slice-timeout-audit`), per `docs/documentation-style-guide.md`'s
+  no-renumbering-after-publication rule. Both sweeps must span the *four-digit*
+  `docs/adrs/adr-nnnn-` layout as well as the legacy `docs/adr-nnn-` one: a
+  `docs/adr-[0-9]{3}-` pattern silently misses every migrated record, and did
+  so on the first pass here.
 
 - Observation: the Stage A baseline's `make test` is red, and the cause is
   compiler-admission contention on this host rather than the candidate.
@@ -1226,8 +1251,9 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `tests/snapshots/` — and they are now one shared builder, per the decision
   recorded below. Likewise the `ManifestQuery` claim was swept: it is named in
   10 places across five documents outside this plan — `developers-guide.md`,
-  `roadmap.md`, ADR-018, RFC 0007, and the technical design — and the corrected
-  paragraph was the only site asserting the process environment.
+  `roadmap.md`, ADR-0050 (then numbered 018), RFC 0007, and the technical
+  design — and the corrected paragraph was the only site asserting the process
+  environment.
 
 - Observation: the review's two minor findings were one defect reported twice,
   and a raw finding count therefore overstated the work by a third. Evidence:
@@ -1317,7 +1343,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   fields and constructors, carries a `ManifestEnvironment` (reader plus access
   policy) instead of `Option<EnvReader>`, and carries `ManifestBudgetLimits`.
   Rationale: the codebase bundles reader and policy so no caller injects one
-  without the other; every production load is budgeted (ADR-018); private
+  without the other; every production load is budgeted (ADR-0050); private
   fields let 7.1.3 add macro substitutions without breaking callers. For a test
   load, the reader lives in the `TestSurface` (owned `EnvReader`, default
   `disabled_env_reader`, policy `EnvAccessPolicy::default()`), so query options
@@ -1347,7 +1373,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `command_available`, `now`) remain replaceable by overlays; filters and tests
   are not mockable in the first version (UX §8.6). Roadmap 7.4.1 later replaces
   the `glob`, file-test, and file-reading filter stubs with sandbox-rooted
-  adapters. Recorded in ADR-055. Date/Author: 2026-09-27, planning agent.
+  adapters. Recorded in ADR-0060. Date/Author: 2026-09-27, planning agent.
 
 - Decision (Deviation from design §5.5): `which` and `expanduser` refuse under
   test, although §5.5's table implies they run against an empty `PATH` and a
@@ -1423,7 +1449,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - Decision: the predicate gating expansion-report metrics and the
   budget-exhaustion metric is `records_expansion_and_budget_telemetry`,
   `pub(crate)`, false for `ManifestQuery` and `Test`. Other loader telemetry
-  continues to fire in every mode. Recorded as ADR-018 Addendum E. Rationale:
+  continues to fire in every mode. Recorded as ADR-0050 Addendum E. Rationale:
   those counters are described as "normal manifest loading" metrics; counting
   test runs would distort usage evidence. The narrower name says exactly what
   is gated. Date/Author: 2026-09-27, planning agent after panel review.
@@ -1465,14 +1491,14 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `ortho_config` layering and localized help apply. The developers' guide gains
   the loader-entry convention instead. Date/Author: 2026-09-27, planning agent.
 
-- Decision: a new ADR, ADR-055, records the deny-by-default test surface and
-  the refusal-code contract; telemetry goes to ADR-018 Addendum E; the options
+- Decision: a new ADR, ADR-0060, records the deny-by-default test surface and
+  the refusal-code contract; telemetry goes to ADR-0050 Addendum E; the options
   shape goes to design §4.3 only. Rationale: the surface decision is hard to
-  reverse and spans network, process, filesystem, and clock, which ADR-008
-  (environment seams) does not cover. ADR-039 and ADR-040 are claimed on
-  unmerged branches (`jm5/kani-change-scoped-gate`, `6-1-1-split-rfc-0006-…`);
-  re-check at every rebase. Date/Author: 2026-09-27, planning agent after panel
-  review.
+  reverse and spans network, process, filesystem, and clock, which ADR-0008
+  (environment seams) does not cover. At the time of writing ADR-0039 and
+  ADR-0040 were claimed on unmerged branches; both have since merged, and the
+  allocation has been re-swept at each rebase. Re-check at every rebase.
+  Date/Author: 2026-09-27, planning agent after panel review.
 
 - Decision: the six file-reading filters (`contents`, `size`, `linecount`,
   `hash`, `digest`, `realpath`) refuse under test in 7.1.2, and roadmap 7.4.1
@@ -1536,8 +1562,8 @@ Upstream artefacts, at `main` commit `486b876c`:
   RM-b (`Test` mode), RM-c (reuse the diagnostic shape and
   `disabled_env_reader`), RM-d (registration order), RM-e (differential tests
   for I4 and I7).
-- ADR-008 (environment seams), ADR-010 (glob capability scoping), ADR-018
-  (bounded template evaluation and query telemetry suppression).
+- ADR-0008 (environment seams), ADR-0010 (glob capability scoping),
+  ADR-0050 (bounded template evaluation and query telemetry suppression).
 - Governing standards: `AGENTS.md`, `docs/documentation-style-guide.md`.
 
 There is no terms-of-reference document for phase 7; RFC 0007 plays that role.
@@ -1690,7 +1716,7 @@ through pipeline actions.
 - OBL-7 — `now()` under test.
   Statement: with `with_clock(fixed_clock(t))`, `now()` returns `t`; with
   `with_clock(system_clock())`, `now()` is real (explicit injection, recorded
-  in ADR-055); with the default clock, `now()` refuses with the test code.
+  in ADR-0060); with the default clock, `now()` refuses with the test code.
   Method: three named unit tests. Artefact: `src/manifest/tests/test_mode.rs`.
   Evidence: red before EP-M3; green after. Non-vacuity: seeded fault — register
   `now()` unconditionally; the default clock row must fail.
@@ -1993,8 +2019,8 @@ After each milestone, perform the conformance check listed and update
 
 ### EP-M5 — documentation, ADR, and roadmap closure
 
-- Outcome: design §4.2, §4.3, §5.5, and §7 reconciled; ADR-055 written and
-  indexed in `docs/contents.md`; ADR-018 Addendum E; developers' guide,
+- Outcome: design §4.2, §4.3, §5.5, and §7 reconciled; ADR-0060 written and
+  indexed in `docs/contents.md`; ADR-0050 Addendum E; developers' guide,
   `docs/netsuke-design.md`, and `docs/polonius.md` updated; roadmap 7.1.2 and
   its five bullets ticked; this plan set to `COMPLETE`.
 - Requirements: design §15; AGENTS.md documentation rules.
@@ -2011,7 +2037,7 @@ After each milestone, perform the conformance check listed and update
 
 Read the files in `Context and orientation`. Run the full gate set on the
 untouched branch through `scrutineer` and record the baseline. Re-confirm
-ADR-055 is free immediately before minting it, by sweeping `docs/adr-*` across
+ADR-0060 is free immediately before minting it, by sweeping `docs/adrs/` across
 every remote branch: the number is only valid at the sweep, and `main` can take
 it while this branch sits open.
 
@@ -2108,11 +2134,11 @@ anchors), §4.3 (options shape, `TestSurface`, overlays in the test surface,
 `macro_substitutions`, overlay name rules), §5.5 (the full refusing inventory
 and the `which`/`expanduser` deviation; the six file-reading filters are
 already recorded there), and §7 (shadowed-function capture is possible). Write
-`docs/adr-055-deny-by-default-test-mode-stdlib.md` (surface, refusal code and
-typed source, `is_system` as injection) and index it in `docs/contents.md`. Add
-Addendum E to `docs/adr-018-bound-manifest-template-evaluation.md`. Add a
-"Manifest loader entry points" subsection to `docs/developers-guide.md` (new
-callers use `from_str_with_options`; do not add another `from_path_with_*`
+`docs/adrs/adr-0060-deny-by-default-test-mode-stdlib.md` (surface, refusal code
+and typed source, `is_system` as injection) and index it in `docs/contents.md`.
+Add Addendum E to `docs/adrs/adr-0050-bound-manifest-template-evaluation.md`.
+Add a "Manifest loader entry points" subsection to `docs/developers-guide.md`
+(new callers use `from_str_with_options`; do not add another `from_path_with_*`
 rung; how overlays and the surface inventory work, and that a new stdlib helper
 needs a `SURFACE` row). Record `ManifestLoadOptions<'a>` in `docs/polonius.md`
 (borrowed `ManifestEnvironment` and stage observer; no clones). Add one
@@ -2507,9 +2533,9 @@ corpus at run time, and a compile-pass fixture pins the public surface; the
 behavioural feature shrank to three scenarios landing with their steps; the
 corpus reuses `tests/data`; milestones fell from seven to six; tolerances were
 recomputed from Table 1; the telemetry predicate was narrowed and moved to an
-ADR-018 addendum. Why: all three panel reviews returned "revise" with
-evidence-backed findings (factual corrections, non-vacuity gaps, a
-translation-unsafe marker, a scope ceiling breached by construction, and
+ADR-0050 addendum (then numbered 018). Why: all three panel reviews returned
+"revise" with evidence-backed findings (factual corrections, non-vacuity gaps,
+a translation-unsafe marker, a scope ceiling breached by construction, and
 forward-compatibility of the overlay API). At that point, the plan still
 awaited approval of the recorded deviations and an answer to the open question
 on file-reading filters. The user settled that question on 2026-09-27 and
@@ -2529,5 +2555,12 @@ the recorded deviations remained pending; the user approved them on 2026-10-14.
 changed: the header now says `APPROVED`, recording the user’s explicit
 instruction; the existing approval of the listed deviations remains in force.
 Why: establish approval before the history rewrite. Effect on remaining work:
-after rebase and before further code changes, return the header to
-`IN PROGRESS`; milestone scope and acceptance criteria remain unchanged.
+the rebase completed onto `origin/main` at `de81d5c3`, and the header now
+returns to `IN PROGRESS` as EP-M1 resumes; milestone scope and acceptance
+criteria remain unchanged.
+
+2026-10-25, after rebasing. What changed: refreshed obsolete ADR identifiers,
+documentation paths, and plan counts; recorded the new rebase and its audit.
+Why: the target branch had advanced and moved the ADR layout since the prior
+plan revision. Effect on remaining work: accepted implementation scope and
+milestones are unchanged; candidate gates remain pending, and EP-M1 is next.
