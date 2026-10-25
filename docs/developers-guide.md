@@ -7055,16 +7055,17 @@ holds it in place.
 Choose where a new compile-time check runs before writing it. The decision
 turns on what the check claims, not on where similar tests already live.
 
-For screen readers: The following flowchart routes a compile-time contract to
-where it runs. A positive API check becomes a workspace library fixture that
-Cargo compiles in its build phase, with no nested Cargo or direct `rustc`. A
-negative API check becomes a pinned `compile_fail` doctest that runs in the
-doctest phase, where compiler queueing meets no per-test timeout. Anything else
-is a runtime or source-only test in the timed Nextest suite.
+For screen readers: The following flowchart routes API contracts and
+runtime-only or source-only checks. A positive API check becomes a workspace
+library fixture that Cargo compiles in its build phase, with no nested Cargo or
+direct `rustc`. A negative API check becomes a pinned `compile_fail` doctest
+that runs in the doctest phase, where compiler queueing meets no per-test
+timeout. This flowchart does not route other compiler checks; place those only
+after accounting for their compiler inputs and timeout costs.
 
 ```mermaid
 flowchart TD
-    Contract["Compile-time contract"] --> Positive{"Positive API check?"}
+    Contract["API contract or runtime/source-only check"] --> Positive{"Positive API check?"}
     Positive -->|Yes| Fixture["Workspace library fixture"]
     Positive -->|No| Negative{"Negative API check?"}
     Negative -->|Yes| Doctest["Pinned compile_fail doctest"]
@@ -7076,8 +7077,8 @@ flowchart TD
     DoctestPhase --> NoTimedWait["No per-test timeout for compiler queueing"]
 ```
 
-*Figure: Routing a compile-time contract to the build phase, the doctest phase,
-or the timed Nextest suite.*
+*Figure: Routing API contracts and runtime/source-only checks to the build
+phase, the doctest phase, or the timed Nextest suite.*
 
 Do not repeat the patterns that #939 and ADR-0059 removed. Each one looked
 reasonable in isolation and failed only on a busy host:
