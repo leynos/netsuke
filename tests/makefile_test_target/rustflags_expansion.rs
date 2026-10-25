@@ -185,15 +185,20 @@ fn contracted_expressions() -> &'static [(&'static str, String)] {
         std::sync::OnceLock::new();
     // A `OnceLock` initializer cannot return `Result`, and a Makefile that will
     // not expand is not a bad property input but a broken repository, which the
-    // suite must abort on rather than skip past. Same shape as the `#[once]`
-    // fixture in tests/ninja_semantics_ui_tests.rs, and the message names the
+    // suite must abort on rather than skip past, and the message names the
     // variable so the abort says which contract broke.
     EXPRESSIONS.get_or_init(|| {
         RUSTFLAGS_VARIABLES
             .iter()
             .map(|variable| {
                 let expanded = shell_expression(variable.name)
-                    .expect("every contracted variable should expand in Make");
+                    .map_err(|error| {
+                        format!(
+                            "contracted variable `{}` should expand in Make: {error}",
+                            variable.name
+                        )
+                    })
+                    .expect("every contracted Make variable should expand");
                 (variable.name, expanded)
             })
             .collect()

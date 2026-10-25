@@ -43,17 +43,19 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 /// should not be here can only hide a source. Do not remove it for failing the
 /// rationale its neighbours share.
 ///
-/// `build_slice_fixture` is a workspace member, so `cargo clippy --workspace`
-/// lints it exactly as it lints the library, and it compiles production
-/// sources through `#[path]`. Listing it is what keeps that boundary honest:
-/// an inner attribute in the fixture would silence the policy for a crate the
-/// gates compile, and the coverage assertion below would otherwise be the only
-/// thing standing between that and silence.
-pub(super) const COMPILED_SOURCE_ROOTS: [&str; 8] = [
+/// `build_slice_fixture` and `public_api_fixture` are workspace members, so
+/// `cargo clippy --workspace` lints them exactly as it lints the library; the
+/// first compiles production sources through `#[path]`, and the second stands
+/// in for an external embedder. Listing them is what keeps that boundary
+/// honest: an inner attribute in either would silence the policy for a crate
+/// the gates compile, and the coverage assertion below would otherwise be the
+/// only thing standing between that and silence.
+pub(super) const COMPILED_SOURCE_ROOTS: [&str; 9] = [
     "src",
     "build_l10n_audit",
     "test_support/src",
     "build_slice_fixture",
+    "public_api_fixture",
     "tests",
     "benches",
     "examples",

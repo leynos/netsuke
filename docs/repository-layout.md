@@ -27,6 +27,7 @@ output and some leaf files so the long-lived structure remains visible.
 │   └── hello-world/
 ├── installer/
 ├── locales/
+├── public_api_fixture/
 ├── scripts/
 ├── src/
 │   ├── cli/
@@ -91,6 +92,10 @@ output and some leaf files so the long-lived structure remains visible.
   production build-script module slice before test execution. Its dependency
   subset is checked against the root build dependencies by a workflow contract;
   its doctests exercise the supported CLI boundary using the compiled library.
+- `public_api_fixture/`: Non-published workspace library that depends on
+  `netsuke` alone and type-checks its embedder-facing API as an external crate
+  would. Cargo compiles it in the build phase, so a visibility or signature
+  regression fails the build rather than a timed test.
 - `docs/`: Long-lived project documentation, guides, design documents, decision
   records, and planning material.
 - `docs/archive/`: Historical planning documents retained for traceability

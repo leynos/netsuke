@@ -45,18 +45,6 @@ REQUIRED_COVERAGE_INPUTS = {
     "doctests": "true",
 }
 
-#: Ambient-target UI checks select only the library whose artefacts they use.
-#: Isolated fixture and packaging builds intentionally retain shipped defaults.
-GATE_FEATURES_MODULE: Path = REPO_ROOT / "tests" / "support" / "cargo_features.rs"
-TEST_SUPPORT_MANIFEST: Path = REPO_ROOT / "test_support" / "Cargo.toml"
-AMBIENT_TARGET_NESTED_BUILD_PACKAGES: tuple[tuple[str, Path], ...] = (
-    ("test_support", REPO_ROOT / "tests" / "support" / "test_support_rlib.rs"),
-    ("netsuke-build", REPO_ROOT / "tests" / "command_env_ui_tests.rs"),
-)
-AMBIENT_TARGET_NESTED_BUILD_SOURCES: tuple[Path, ...] = tuple(
-    source for _, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES
-)
-
 #: Every job that measures coverage, and the event it is restricted to. Two
 #: coverage runs against one commit pay twice and give the ratchet baseline
 #: two writers.
@@ -212,71 +200,14 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
-def test_ambient_target_harnesses_check_only_the_library_they_consume() -> None:
-    """Keep direct-rustc preparation within each fixture's dependency graph.
+def test_only_the_mutation_gate_has_an_extended_budget() -> None:
+    """Keep every test the default suite runs on the ordinary allowance.
 
-    The support fixture selects its library; the production fixtures select
-    the application library, which also prepares its build dependencies. None
-    needs Cargo to check every workspace target.
+    Extended allowances existed for tests that compiled inside their own time
+    budget. ADR-0059 moved that work out of the suite, so the `#[ignore]`-gated
+    mutation compile gate, which runs in its own invocation, is the one test
+    left with a measured cold-build allowance.
     """
-    # `lint` marks the all-features lane; the default lane must not add it.
-    lanes = dict(
-        re.findall(
-            r'#\[cfg\((feature = "lint"|not\(feature = "lint"\))\)\]\s*'
-            r"pub const LIBRARY_BUILD_ARGUMENTS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
-            GATE_FEATURES_MODULE.read_text(encoding="utf-8"),
-            re.DOTALL,
-        )
-    )
-    for lane, expected in (
-        ('feature = "lint"', ["--lib", "--all-features"]),
-        ('not(feature = "lint")', ["--lib"]),
-    ):
-        arguments = re.findall(r'"([^"]+)"', lanes.get(lane, ""))
-        assert arguments == expected, f"cfg({lane}) must select exactly {expected}"
-    for package, source in AMBIENT_TARGET_NESTED_BUILD_PACKAGES:
-        text = source.read_text(encoding="utf-8")
-        required_composition = (
-            f'args(["--package", "{package}"])',
-            "cargo_features::LIBRARY_BUILD_ARGUMENTS",
-            'manifest_dir().join("Cargo.toml")',
-            '.arg("check")',
-        )
-        missing = [part for part in required_composition if part not in text]
-        assert not missing, (
-            f"{source.relative_to(REPO_ROOT)} must compose Cargo check with "
-            f"the {package} library selector and root manifest; missing {missing!r}"
-        )
-    manifest = tomllib.loads(TEST_SUPPORT_MANIFEST.read_text(encoding="utf-8"))
-    features = manifest.get("features")
-    assert isinstance(features, dict), "test_support must declare its features"
-    assert features.get("default") == [], "test_support defaults must stay empty"
-    assert features.get("legacy-digests") == ["netsuke/legacy-digests"], (
-        "test_support must forward legacy-digests exactly to netsuke-build"
-    )
-
-
-@pytest.mark.parametrize(
-    "source",
-    AMBIENT_TARGET_NESTED_BUILD_SOURCES,
-    ids=[source.name for source in AMBIENT_TARGET_NESTED_BUILD_SOURCES],
-)
-def test_ambient_ui_harnesses_do_not_rebuild_in_isolated_targets(source: Path) -> None:
-    """Keep public API checks on the ambient target directory.
-
-    The cached CLI configuration fixture previously selected a dedicated
-    target directory and rebuilt Netsuke's dependencies, exceeding Nextest's
-    300-second budget on a shared build host.
-    """
-    text = source.read_text(encoding="utf-8")
-    assert not re.search(r'\.env\(\s*"CARGO_TARGET_DIR"', text), (
-        f"{source.relative_to(REPO_ROOT)} must reuse ambient build artefacts "
-        "rather than compile into an isolated Cargo target directory"
-    )
-
-
-def test_cold_packaging_verification_has_a_scoped_budget() -> None:
-    """Allow measured cold package compilation without relaxing ordinary tests."""
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
     )
@@ -284,20 +215,12 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
     assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
         "ordinary tests must retain their five-minute budget"
     )
-    timed_overrides = [
-        override for override in profile["overrides"] if "slow-timeout" in override
-    ]
-    assert len(timed_overrides) == 4, (
-        "only remaining nested builds may need extended test budgets"
-    )
     configured = {
-        override["filter"]: override["slow-timeout"] for override in timed_overrides
+        override["filter"]: override["slow-timeout"]
+        for override in profile["overrides"]
+        if "slow-timeout" in override
     }
     expected = {
-        "test(/^packaged_manifest_retains_build_script_sources($|::)/)": {
-            "period": "60s",
-            "terminate-after": 15,
-        },
         (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
@@ -306,20 +229,13 @@ def test_cold_packaging_verification_has_a_scoped_budget() -> None:
             "terminate-after": 10,
         },
     }
-    expected.update({
-        f"test(/^{name}($|::)/)": {"period": "60s", "terminate-after": periods}
-        for name, periods in (
-            ("split_build_fixture_compiles_through_the_direct_rustc_harness", 15),
-            ("stub_env_default_does_not_compile", 15),
-        )
-    })
     assert configured == expected, (
-        "cold-build budgets must retain current-main allowances"
+        "only the mutation compile gate may carry an extended allowance"
     )
 
 
-def test_packaging_verification_preserves_cargo_build_configuration() -> None:
-    """Reuse Cargo build configuration while retaining package verification."""
+def test_packaging_list_check_compiles_nothing() -> None:
+    """Keep the packaging test to the file list, which spawns no build."""
     source = (REPO_ROOT / "tests" / "packaging_smoke_tests.rs").read_text(
         encoding="utf-8"
     )
@@ -328,17 +244,38 @@ def test_packaging_verification_preserves_cargo_build_configuration() -> None:
         r'\.env(?:_remove)?\(\s*"CARGO_(?:TARGET_DIR|BUILD_TARGET_DIR|BUILD_BUILD_DIR)"'
     )
     assert not re.search(forbidden, source), "preserve Cargo's build placement"
+    assert '"publish"' not in source, (
+        "publish verification compiles the package, so it belongs to "
+        "`make test-package-verify`, not to a timed test"
+    )
     required = (
-        ".args(PUBLISH_DRY_RUN_ARGS)",
         '.args(["package", "--list", "--allow-dirty", "-p", "netsuke-build"])',
         "assert_required_paths_present(&packaged_paths, &readme_paths, &source_paths);",
         "assert_forbidden_roots_absent(&packaged_paths);",
     )
     assert all(fragment in source for fragment in required), (
-        "package verification and source-list assertions must remain intact"
+        "the packaged file-list assertions must remain intact"
     )
-    linux = source.split("} else {", maxsplit=1)[1].split("};", maxsplit=1)[0]
-    assert '"--no-verify"' not in linux, "Linux must verify the extracted package"
+
+
+def test_package_verification_runs_outside_the_test_suite() -> None:
+    """Keep the verification build in a Makefile target the Linux lane runs."""
+    recipe = expand_makefile_variables(
+        makefile_recipe("test-package-verify"), makefile_definitions(load_makefile())
+    )
+    for fragment in ("publish --dry-run", "-p netsuke-build", "-D warnings"):
+        assert fragment in recipe, f"test-package-verify must pass {fragment!r}"
+    assert "--no-verify" not in recipe, (
+        "the target exists to run the verification build; skipping it would "
+        "leave the packaged crate's compilation untested"
+    )
+    step = named_step(
+        job_steps(load_workflow(WORKFLOW_DIR / "ci.yml"), "build-test"),
+        "Package verification",
+    )
+    assert step.get("run") == "make test-package-verify", (
+        "the Linux gate must run the package verification target"
+    )
 
 
 @pytest.mark.parametrize(
