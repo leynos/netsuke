@@ -3768,9 +3768,11 @@ what the tree ships: the runbook documents the `package-crate` seam and the
 offline policy modules and describes no job that does not exist, and the ADR
 addendum's `Status of the decision` section says outright that `release.yml`
 publishes nothing to crates.io yet and names the four pieces still to be
-written. Stage C's remaining work — the five new actions, the job graph, the
-registry exchange, the inventory verifier, the finalizer and the consumer smoke
-— is untouched by this revision, and Stage D stays open for the workflow-side
+written. Draft 4's historical inventory described five new actions as
+remaining, alongside the job graph and publication work. The current inventory
+under *Stage C — implementation* marks `package-crate` delivered, lists four
+remaining job/action pairs, and names `upload-declared-assets` separately.
+Draft 4 did not change that scope. Stage D stays open for the workflow-side
 mitigations Draft 3 flagged (notably the rehearsal lane's plan-versus-release
 gap recorded in the Decision log).
 
