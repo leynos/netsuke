@@ -2358,6 +2358,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   (98.20%; 6,221/6,335 items), `test` (4,712 passed, 6 skipped; doctests
   passed), `test-release-publication` (414 passed), `test-ci-scripts` (99
   passed), `markdownlint`, and `nixie`.
+- [x] (2026-10-25) Closed the current identity-reader, package-artefact I/O,
+  and asset-path review gaps. Generated tests cover missing identity fields,
+  invalid prerelease flags, and path classification under POSIX and Windows
+  rules. `package_crate_cli` diagnoses archive discovery, hashing, and record
+  persistence failures; package records use a sibling temporary file and atomic
+  replacement. Commits `6b3e69e1` and `8d4affc3` passed the nine sequential
+  gates: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.20%), `test`
+  (4,712 passed, 6 skipped; doctests passed), `test-release-publication` (424
+  passed), `mbake validate Makefile`, `markdownlint`, and `nixie`.
+  `cs delta origin/main HEAD` reports no issues. No release or registry setting
+  changed; Stage C remains partial and Stage D remains open.
 
 ## Surprises & discoveries
 
@@ -3864,3 +3875,12 @@ inside `publish_crates_io_cli`; result schemas, diagnostics, and exit choices
 stay with their subcommands. The nine sequential gates passed at commit
 `013baf3e`. Stage C remains partial and Stage D remains open. No publication
 path, release setting, or registry configuration changed.
+
+Draft 13, 2026-10-25: closed the current identity-reader, packaging I/O, and
+asset-name review gaps. Missing identity fields and prerelease-flag
+contradictions now have generated rejection coverage; package archive and
+record I/O failures return a diagnosed status; path strategies cover both
+platform flavours and normalization cases. Commits `6b3e69e1` and `8d4affc3`
+passed the nine sequential gates, and `cs delta origin/main HEAD` reports no
+issues. Stage C remains partial and Stage D remains open. No release or
+registry setting changed.
