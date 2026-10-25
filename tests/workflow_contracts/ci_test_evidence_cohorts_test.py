@@ -3,6 +3,24 @@
 import pytest
 from ci_test_evidence_cohorts import classify_cohort
 
+SAVED_PR_ASSOCIATION = {
+    "id": 9001,
+    "number": 17,
+    "base": {"repo": {"id": 42}},
+    "head": {"repo": {"id": 42}},
+}
+SAVED_PR_RESPONSE = {
+    "id": 9001,
+    "number": 17,
+    "base": {"repo": {"id": 42}},
+    "user": {"login": "dependabot[bot]"},
+}
+SAVED_PR_RESPONSE_WITHOUT_AUTHOR = {
+    "id": 9001,
+    "number": 17,
+    "base": {"repo": {"id": 42}},
+}
+
 
 @pytest.mark.parametrize(
     ("author", "base_id", "head_id", "expected"),
@@ -78,24 +96,26 @@ def test_repository_names_fallback_when_ids_are_unavailable() -> None:
 
 
 @pytest.mark.parametrize(
-    "pull_requests",
+    ("pull_requests", "pull_request"),
     [
-        None,
-        "unknown",
-        ([{"user": {"login": "dependabot[bot]"}}],),
-        [{}],
-        [{"user": {"login": "dependabot[bot]"}}] * 2,
+        (None, SAVED_PR_RESPONSE),
+        ("unknown", SAVED_PR_RESPONSE),
+        ((SAVED_PR_ASSOCIATION,), SAVED_PR_RESPONSE),
+        ([{}], SAVED_PR_RESPONSE),
+        ([SAVED_PR_ASSOCIATION, SAVED_PR_ASSOCIATION], SAVED_PR_RESPONSE),
+        ([SAVED_PR_ASSOCIATION], SAVED_PR_RESPONSE_WITHOUT_AUTHOR),
     ],
     ids=[
         "missing",
         "wrong-type",
         "tuple-not-list",
+        "missing-association-identities",
+        "ambiguous-identical-associations",
         "missing-author",
-        "ambiguous-authors",
     ],
 )
 def test_ambiguous_dependabot_identity_is_not_assumed(
-    pull_requests: object,
+    pull_requests: object, pull_request: dict[str, object]
 ) -> None:
     """Leave hosted runs unclassified when PR author evidence is ambiguous."""
     run = {
@@ -108,7 +128,7 @@ def test_ambiguous_dependabot_identity_is_not_assumed(
     }
     job = {"name": "build-test", "labels": ["ubuntu-latest"]}
 
-    assert classify_cohort(run, job) == "other", (
+    assert classify_cohort(run, job, pull_request) == "other", (
         "Missing or ambiguous PR metadata must not be labelled as Dependabot"
     )
 

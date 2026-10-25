@@ -106,6 +106,16 @@ def test_skipped_test_identity_is_retained_but_not_counted_as_executed() -> None
     )
 
 
+def test_unclosed_result_bracket_with_whitespace_is_ignored() -> None:
+    """Ignore malformed result lines with a long, unclosed duration bracket."""
+    malformed_result = "PASS [" + (" " * 4096)
+    evidence = parse_nextest_records([(None, malformed_result)])
+
+    assert evidence["tests"] == [], (
+        "A result without its closing bracket must not create a test record"
+    )
+
+
 def test_partial_nextest_summary_preserves_selected_and_executed_counts() -> None:
     """Keep fail-fast runs distinct from complete selected identity inventories."""
     evidence = parse_nextest_records([

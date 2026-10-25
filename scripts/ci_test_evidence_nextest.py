@@ -22,7 +22,7 @@ from ci_test_evidence_types import NextestEvidence, TestEvidence, empty_evidence
 TEST = re.compile(
     r"\s*(?:TRY (?P<try_number>\d+) )?"
     r"(?P<outcome>PASS|FAIL|SKIP|TIMEOUT|LEAK|ABORT|SIG[A-Z0-9]+) \[\s*"
-    r"(?P<seconds>\d{1,9}(?:\.\d{1,9})?s)?\s*\] "
+    r"(?:(?P<seconds>\d{1,9}(?:\.\d{1,9})?s)\s*)?\] "
     r"(?:\(\s*\d+/\d+\) )?"
     r"(?P<binary>[A-Za-z0-9_:/.-]+) (?P<name>[A-Za-z0-9_:.+-]+)$"
 )
