@@ -36,10 +36,11 @@ The migration is observable as: `cargo tree -i ortho_config` reports 0.10.0;
 `make test` passes with a superset of the pre-migration inventory; the
 release-help metadata snapshot records `ir_version: "2.0"`; every boolean
 spelling exits with the same status as before the migration; and
-`cargo-orthohelp` 0.10.0 regenerates a manual page that is byte-identical to
-the one the 0.9.0 reader renders from the migrated tree (SHA-256
-`cc81d1ed...af661a`), with the boolean flags still documented as bare switches
-rather than as `--flag[=BOOL]`.
+`cargo-orthohelp` 0.10.0 and the 0.9.0 reader render the migrated tree to a
+byte-identical man page (SHA-256 `cc81d1ed...af661a`), with the boolean flags
+still documented as bare switches rather than as `--flag[=BOOL]`. That reader
+A/B holds the tree constant; it is not a claim that the page matches its
+pre-migration form, which it does not in the SYNOPSIS section (#959).
 
 ## Constraints
 
@@ -231,9 +232,11 @@ rather than as `--flag[=BOOL]`.
   the Unix lane (exit 0, `man/man1/netsuke.1`, 8842 bytes) and the PowerShell
   arguments for the Windows lane (exit 0, all four artefacts). The 0.9.0 reader
   over the same tree produced a byte-identical man page, SHA-256
-  `cc81d1ed...af661a`. `presence_only_cli_metadata` is visible in the result:
-  four boolean flags render as bare switches, four value-taking flags keep
-  their value names, and no `BOOL` appears anywhere.
+  `cc81d1ed...af661a`. This is a reader-version A/B on one fixed tree, so it
+  establishes reader compatibility for IR 2.0, not pre-migration artefact
+  parity; see `Outcomes & retrospective`. `presence_only_cli_metadata` is
+  visible in the result: four boolean flags render as bare switches, four
+  value-taking flags keep their value names, and no `BOOL` appears anywhere.
 - [x] (2026-10-25) `make lint` regression fixed. The IR-2.0 commit
   (`f11e939b1`) grew `src/cli/release_help/mod.rs` to 423 raw lines, over
   Whitaker's 400-line `module_max_lines` cap. Split the parser-only selector
@@ -825,15 +828,37 @@ rather than as `--flag[=BOOL]`.
   replayed result, and the branch's only tracing-test edit is a one-line
   `FluentValue` re-export swap that does not touch callsite-interest mechanics.
   Date/Author: 2026-10-26, agent.
+- Decision: qualify every claim that the generated man page is unchanged, and
+  retract the parity reading of the reader A/B. Rationale: the recorded
+  comparison renders the *same migrated tree* under two `cargo-orthohelp`
+  versions, so it varies the reader and holds the input constant. It therefore
+  establishes that 0.10.0 accepts IR 2.0 — genuinely useful, because that was
+  Axiom A2 — but it cannot detect any difference between the pre-migration and
+  post-migration artefacts, since both sides of the comparison share the same
+  input. The plan contradicted itself: `Residual items` already records that
+  the root `synopsis_id` now inherits an unresolvable generated identifier
+  (#959), so the SYNOPSIS section demonstrably does not match its pre-migration
+  form, while `Outcomes & retrospective` claimed "nothing a release consumer
+  can read in the page" changed. Both statements were in the same document.
+  Rather than leave the stronger claim standing next to its own counterexample,
+  four sites now state the comparison's real scope: the `Purpose / big picture`
+  observability list, the Axiom A2 progress entry, the `Outcomes` paragraph,
+  and Verification step 6. No implementation change follows — the migration
+  itself is correct, and #959 is deliberately out of scope and filed — so this
+  is a documentation-accuracy repair, not a behavioural one. Date/Author:
+  2026-10-26, agent.
 
 ## Outcomes & retrospective
 
 Migrated Netsuke from `ortho_config` v0.9.0 to the published v0.10.0 release
 and closed #779 by adopting documentation IR 2.0. The dependency move needed no
-change to any Netsuke public type, and no Netsuke behaviour changed: every
-contract the migration brief listed — precedence, discovery, localized output,
-generated documentation, exit status, and stream routing — is preserved and
-pinned by a test.
+change to any Netsuke public type, and no Netsuke runtime behaviour changed:
+precedence, discovery, localized output, exit status, and stream routing are
+all preserved and pinned by a test. Generated documentation is preserved with
+one exception, the SYNOPSIS regression tracked as
+[leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959) and recorded
+under `Residual items` below; this plan does not claim artefact parity across
+the migration.
 
 What the source changes actually amounted to. The IR-2.0 literal completion
 (`value_optional`, `behaviour`, `profiles`) was mechanical. The one substantive
@@ -859,13 +884,18 @@ What the last validation added. Axiom A2 had been asserted rather than
 discharged. Installing `cargo-orthohelp` 0.10.0 into a private path and running
 `scripts/generate-release-help.sh` for real produced the expected artefact set
 for both the Unix and the PowerShell lanes, and running the older 0.9.0 reader
-over the same migrated tree produced a byte-identical man page. That is two
-facts at once: the 0.10.0 reader accepts IR 2.0, and the migration changed
-nothing a release consumer can read in the page. The exercise also supplied the
-non-vacuity evidence the projection needed — a rendered `OPTIONS` block in
-which four boolean flags have no value name while four value-taking flags keep
-one. A verification that only greps for an absent string is worth exactly as
-much as the section it searched, and this one searched a section that exists.
+over the same migrated tree produced a byte-identical man page. That is one
+fact, and its scope is narrower than parity: the 0.10.0 reader accepts IR 2.0,
+so a tree that renders identically under both readers is reading the same data
+the same way. Both runs used the *same migrated tree*, so the comparison varies
+the reader version and holds the input constant. It therefore says nothing
+about how the page differs from the pre-migration one; the SYNOPSIS regression
+above is exactly such a difference, and it is invisible to a same-tree
+comparison by construction. The exercise also supplied the non-vacuity evidence
+the projection needed — a rendered `OPTIONS` block in which four boolean flags
+have no value name while four value-taking flags keep one. A verification that
+only greps for an absent string is worth exactly as much as the section it
+searched, and this one searched a section that exists.
 
 Residual items, none blocking. `locales/en-US/messages.ftl` has no
 `clap-error-too-many-values` key, so an `--flag=false` invocation logs a
@@ -1320,9 +1350,11 @@ Acceptance is behavioural:
    with `cargo-orthohelp` 0.10.0: the Unix run exits 0 and writes exactly
    `man/man1/netsuke.1`; the PowerShell artefact set is the same four files;
    and the man page is byte-identical to the one the 0.9.0 reader renders from
-   the same tree. Axiom A2 records the hashes and the non-vacuity check that
-   the boolean flags render as bare switches while value-taking flags keep
-   their value names.
+   the same tree. That last clause verifies reader compatibility on a fixed
+   tree; it does not compare pre-migration and post-migration artefacts, and
+   the SYNOPSIS section does differ across the migration (#959). Axiom A2
+   records the hashes and the non-vacuity check that the boolean flags render
+   as bare switches while value-taking flags keep their value names.
 
 Quality criteria: all of `make check-fmt`, `make lint`, `make doc-coverage`,
 `make test`, and `make test-workflow-contracts` green; Markdown gates green for
