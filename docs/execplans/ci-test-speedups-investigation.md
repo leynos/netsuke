@@ -1084,6 +1084,17 @@ confirmed in-scope omission. The observed 91.08% hosted coverage is within the
 91.7% baseline tolerance but does not exceed the baseline. Formal review,
 finding reconciliation, and merge remain open work.
 
+Formal CodeRabbit review `5646916239` of published head `7cf6867` then found
+three parser robustness gaps: sccache JSON integer and nesting failures could
+abort collection, and native count and size fields accepted unbounded decimal
+runs. Commit `638971ef` catches those JSON decoding failures and bounds every
+converted count and size, with regressions for oversized values and deep JSON.
+The candidate passed `make check-fmt`, `make test` (4,712 passed, six skipped,
+doctests passed), `make typecheck`, `make lint`, `make doc-coverage` (98.20%),
+and `make test-workflow-contracts` (1,498 passed, three skipped, plus 27 script
+tests). The candidate still needs publication, bot-thread reconciliation, fresh
+exact-head review and hosted checks, then the guarded merge.
+
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
 [issue-checkpoint-one]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196022869
