@@ -344,13 +344,13 @@ rather than as `--flag[=BOOL]`.
   `00aa92478`; the only delta between that tree and the reviewed content is the
   blank line removed above, which the three gates listed immediately before
   this entry cover.
-- [x] (2026-10-26) Triaged the four residual help-metadata gaps and retracted
-  one false provenance claim. Established with an A/B probe and live-binary
-  probes that the `[missing: netsuke-usage]` SYNOPSIS line is a 0.10.0 derive
+- [x] (2026-10-26) Triaged the residual help-metadata gaps and retracted one
+  false provenance claim. Established with an A/B probe and live-binary probes
+  that the `[missing: netsuke-usage]` SYNOPSIS line is a 0.10.0 derive
   regression rather than the pre-existing catalogue gap this plan had recorded,
-  and that two of the other gaps need no upstream change at all. Corrected the
-  three affected passages here and the PR description. Gates for the
-  Markdown-and-prose delta: `make check-fmt`, `make markdownlint` and
+  and that three of the five gaps in total need no upstream change at all.
+  Corrected the three affected passages here and the PR description. Gates for
+  the Markdown-and-prose delta: `make check-fmt`, `make markdownlint` and
   `make nixie`, all green. Issues filed:
 
   - [leynos/netsuke#957](https://github.com/leynos/netsuke/issues/957), the
@@ -848,6 +848,17 @@ are netsuke-fixable; the invented spellings need an effective `cli_short` /
 [leynos/ortho-config#631](https://github.com/leynos/ortho-config/issues/631)
 and gated upstream by roadmap §12.3.1.
 
+A fifth, found while triaging the first: `LocalizedValueParser` in
+`src/cli/value_parser.rs` builds its errors through `Command::error`, which
+goes through `clap::Error::raw` and attaches no `ContextKind::InvalidArg` or
+`InvalidValue`. The catalogue's `clap-error-value-validation` message needs
+`{ $argument }` and `{ $value }`, so the format fails, the lookup falls through
+to a fallback, and the localized text never renders — for `--color`, `--jobs`,
+`--locale`, and the two fetch policy fields, while clap's own parsers localize
+the same key correctly. **Pre-existing and netsuke-fixable** using clap's public
+`Error::insert`; no upstream change is required. Tracked as
+[leynos/netsuke#961](https://github.com/leynos/netsuke/issues/961).
+
 Lessons. First, a sampled assertion is the wrong instrument for proving that a
 generator reaches a class: the first V1 non-vacuity check would have failed
 about 3% of runs, and replacing it with an eight-subset enumeration made
@@ -934,7 +945,7 @@ guide §5 boolean `=BOOL`       -> EP-M4 -> preserved: `--flag=false` still exit
 guide §1 cargo-orthohelp 0.10  -> EP-M1 -> CI grep asserts 0.10.0
 ```
 
-The four follow-up gaps recorded under `Outcomes & retrospective` are outside
+The five follow-up gaps recorded under `Outcomes & retrospective` are outside
 this plan's acceptance scope by construction: each would change behaviour or
 generated documentation, while the migration's acceptance evidence is that
 neither moved. They are tracked separately as netsuke #957–#961. Two of them
