@@ -344,6 +344,30 @@ rather than as `--flag[=BOOL]`.
   `00aa92478`; the only delta between that tree and the reviewed content is the
   blank line removed above, which the three gates listed immediately before
   this entry cover.
+- [x] (2026-10-26) Triaged the four residual help-metadata gaps and retracted
+  one false provenance claim. Established with an A/B probe and live-binary
+  probes that the `[missing: netsuke-usage]` SYNOPSIS line is a 0.10.0 derive
+  regression rather than the pre-existing catalogue gap this plan had recorded,
+  and that two of the other gaps need no upstream change at all. Corrected the
+  three affected passages here and the PR description. Gates for the
+  Markdown-and-prose delta: `make check-fmt`, `make markdownlint` and
+  `make nixie`, all green. Issues filed:
+
+  - [leynos/netsuke#957](https://github.com/leynos/netsuke/issues/957), the
+    missing `clap-error-too-many-values` key;
+  - [leynos/netsuke#958](https://github.com/leynos/netsuke/issues/958), the
+    undeclared `cli.value_name` values;
+  - [leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959), the
+    SYNOPSIS regression itself;
+  - [leynos/netsuke#960](https://github.com/leynos/netsuke/issues/960), the
+    man-page flag surface;
+  - [leynos/netsuke#961](https://github.com/leynos/netsuke/issues/961), the
+    dropped clap error context in `LocalizedValueParser`;
+  - [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630),
+    the unresolvable `synopsis_id` default and the missing
+    `LocalizationArgs`;
+  - [leynos/ortho-config#631](https://github.com/leynos/ortho-config/issues/631),
+    flag synthesis with no opt-out.
 
 ## Surprises & discoveries
 
@@ -392,15 +416,25 @@ rather than as `--flag[=BOOL]`.
 - Observation: the generated man page's SYNOPSIS section reads
   `[missing: netsuke-usage]`. Evidence:
   `grep -n -A2 SYNOPSIS /tmp/orthohelp-out-951/man/man1/netsuke.1` prints
-  `.B netsuke` followed by `[missing: netsuke-usage]`;
-  `grep -rn "netsuke-usage" locales src` finds no definition, and
-  `git grep netsuke-usage 88f20d588` finds nothing either. Impact: the defect
-  predates the migration and appears in both the 0.9.0 and 0.10.0 readers, so
-  it is a pre-existing catalogue gap (the renderer looks the key up in the
-  `netsuke` namespace, which no locale defines) rather than an IR-2.0 change.
-  `ReleaseHelpCli` sets `synopsis_id: None` at the root and in
-  `documented_subcommand`, which is why the renderer falls back to a generated
-  `netsuke-usage` identifier. Out of migration scope; recorded, not fixed.
+  `.B netsuke` followed by `[missing: netsuke-usage]`, and
+  `grep -rn "netsuke-usage" locales src` finds no definition. Impact: this is a
+  **0.10.0 derive regression**, not a pre-existing catalogue gap. The
+  identifier is never written to source — `ortho_config_macros` *generates* it
+  at derive time — so `git grep netsuke-usage 88f20d588` returning nothing is
+  not evidence of provenance at all. A minimal A/B probe with byte-identical
+  source, differing only in the dependency version, prints
+  `0.9.0 -> synopsis_id = None` and
+  `0.10.0 -> synopsis_id = Some("probe-usage")`: 0.10.0's `synopsis_id_tokens`
+  defaults to `Some(message_id_for(command_path, "usage"))` where 0.9.0 emitted
+  `None`, and `cargo-orthohelp`'s `synopsis_section` prints that text instead
+  of engaging the option-listing fallback that `None` selected.
+  `ReleaseHelpCli` sets `synopsis_id: None` only in `documented_subcommand`;
+  the root metadata comes from `CliConfig::get_doc_metadata()` and inherits the
+  derived id. Out of migration scope, and tracked as
+  [leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959) with the
+  upstream cause filed as
+  [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630);
+  recorded, not fixed.
 - Observation: the repository's CLI layer does not use OrthoConfig's generated
   CLI guard. `src/cli/merge/mod.rs` builds the CLI layer itself from
   `clap::ArgMatches::value_source(...) == ValueSource::CommandLine`, via
@@ -711,6 +745,33 @@ rather than as `--flag[=BOOL]`.
   for the YAML, then `check-fmt` and `markdownlint` for the prose. Nothing in
   the pushed delta touches Rust source, so the heavier gates were not re-run
   and are not claimed. Date/Author: 2026-10-25, agent.
+- Decision: retract the "pre-existing" classification of
+  `[missing: netsuke-usage]` and file a netsuke issue plus an upstream
+  `ortho-config` issue for it, rather than leaving the fourth residual gap as
+  recorded. Rationale: the classification rested entirely on
+  `git grep netsuke-usage 88f20d588` returning nothing, which is not a valid
+  provenance test for a macro-generated identifier. A two-directory A/B probe
+  holding the source fixed and varying only the dependency version returns
+  `0.9.0 -> synopsis_id = None` and `0.10.0 -> Some("probe-usage")`, so the
+  migration *introduced* the placeholder and, worse, suppressed a working
+  option-listing fallback. Leaving a regression labelled pre-existing in a
+  review description would have misdirected whoever triaged it next.
+  Date/Author: 2026-10-26, agent.
+- Decision: fix the two netsuke-reachable gaps locally in separate issues
+  rather than folding them into this migration, and record the two that need
+  upstream work as blocked on named upstream items. Rationale: the migration's
+  contract is preservation — its acceptance evidence is that behaviour does not
+  move. Adding a catalogue key, declaring `cli(value_name = …)` on every
+  configuration field, and repairing the synopsis would each change generated
+  documentation, which is exactly what this branch's `cargo-orthohelp`
+  byte-comparison pins. Each is a self-contained change with its own tests, and
+  netsuke #957/#958/#959/#960 carry them. Of the two upstream gaps, #630 (the
+  synopsis default and the missing `LocalizationArgs`) has no covering issue in
+  `leynos/ortho-config`, so an issue was required; #631 (flag synthesis with no
+  opt-out) has roadmap §12.3.1 behind it but no issue, and netsuke #960 needs a
+  concrete blocker, so an issue was raised there too. Netsuke #957's dependency
+  is roadmap §11.2.1 alone and has no upstream issue to link; the issue says so
+  explicitly rather than inventing a link. Date/Author: 2026-10-26, agent.
 
 ## Outcomes & retrospective
 
@@ -756,17 +817,36 @@ much as the section it searched, and this one searched a section that exists.
 Residual items, none blocking. `locales/en-US/messages.ftl` has no
 `clap-error-too-many-values` key, so an `--flag=false` invocation logs a
 localizer warning before clap's message; that gap predates the migration and is
-recorded under `Surprises & discoveries` rather than fixed inside it.
+recorded under `Surprises & discoveries` rather than fixed inside it, and is
+tracked as [leynos/netsuke#957](https://github.com/leynos/netsuke/issues/957)
+with upstream roadmap §11.2.1 named as the eventual source of the key.
 `FieldMetadata.cli.value_name` remains `None` for configuration fields while
 the parser supplies `FILE`, `N` and friends; that also predates the migration,
 and the parity test deliberately does not compare value names so the gap cannot
-be mistaken for a migration regression. Finally, the generated man page's
-SYNOPSIS section reads `[missing: netsuke-usage]`, because `synopsis_id` is
-`None` on the root and on every subcommand and no locale defines a
-`netsuke-usage` key. `git grep netsuke-usage 88f20d588` finds nothing, so the
-defect predates this work; it is a catalogue gap of the same kind as the two
-above and is left for a separate change rather than folded into a dependency
-migration.
+be mistaken for a migration regression. It is tracked as
+[leynos/netsuke#958](https://github.com/leynos/netsuke/issues/958), which needs
+no upstream change: `cli(value_name = "…")` already exists in both 0.9.0 and
+0.10.0. Finally, the generated man page's SYNOPSIS section reads
+`[missing: netsuke-usage]`. Unlike the two above, this one is *not*
+pre-existing: `ortho_config_macros` 0.10.0 changed `synopsis_id`'s default from
+`None` to a generated `<app>-usage` identifier, and `cargo-orthohelp` prints
+that identifier's resolution (or `[missing: …]`) instead of the option-listing
+fallback that `None` selected. Netsuke sets `synopsis_id: None` only for
+subcommands, so the root inherits the unresolvable id. Tracked as
+[leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959); the
+upstream cause — including the fact that no `LocalizationArgs` are ever passed
+for a synopsis, so even upstream's own `cli-usage` key cannot resolve — is
+[leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
+
+The man page's flag surface is a fourth item discovered by the same exercise
+and tracked separately as
+[leynos/netsuke#960](https://github.com/leynos/netsuke/issues/960): derived
+metadata advertises `--default-targets` and `-d` where the parser accepts only
+`--default-target`, and omits the five `skip_cli` policy flags. The omissions
+are netsuke-fixable; the invented spellings need an effective `cli_short` /
+`cli_long` opt-out in the derive, filed as
+[leynos/ortho-config#631](https://github.com/leynos/ortho-config/issues/631)
+and gated upstream by roadmap §12.3.1.
 
 Lessons. First, a sampled assertion is the wrong instrument for proving that a
 generator reaches a class: the first V1 non-vacuity check would have failed
@@ -785,6 +865,14 @@ exit codes look right" into a measured before/after. Fourth, an axiom that says
 carried that sentence for hours while no invocation of the real tool existed,
 and the cost of closing the gap was one `cargo binstall` and two script runs.
 Run the command the plan names before writing the sentence that cites it.
+Fifth, a provenance claim needs an instrument that can vary the thing it claims
+provenance over. `git grep` answers "is this string in the tree?", which is
+silent about strings a macro synthesizes; the honest test is an A/B probe that
+holds the source fixed and moves the generator. That one probe converted a
+recorded "pre-existing, out of scope" note into a regression report and two
+issues, and the same mistake was live in the PR description as well as here — a
+retraction in one place without the other would have left the wrong claim
+public.
 
 ## Context and orientation
 
@@ -845,6 +933,19 @@ guide §4 AgentContext/DocMeta  -> EP-M2 -> `profiles: None` compiles; literal i
 guide §5 boolean `=BOOL`       -> EP-M4 -> preserved: `--flag=false` still exits 2, `--flag false` still exits 2
 guide §1 cargo-orthohelp 0.10  -> EP-M1 -> CI grep asserts 0.10.0
 ```
+
+The four follow-up gaps recorded under `Outcomes & retrospective` are outside
+this plan's acceptance scope by construction: each would change behaviour or
+generated documentation, while the migration's acceptance evidence is that
+neither moved. They are tracked separately as netsuke #957–#961. Two of them
+depend on upstream work:
+
+- [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630) —
+  the `synopsis_id` default and the missing `LocalizationArgs`; blocks the
+  synopsis issue.
+- [leynos/ortho-config#631](https://github.com/leynos/ortho-config/issues/631) —
+  flag synthesis with no opt-out; blocks the invented-flag half of the man-page
+  issue.
 
 ## Verification plan
 
@@ -967,12 +1068,17 @@ tree:
   `presence_only_cli_metadata` exists to produce, and it is the contrast that
   makes the absent `=BOOL` suffix meaningful. The PowerShell MAML contains no
   `BOOL` either.
-- Residual gap, pre-existing and unchanged: the SYNOPSIS section renders
-  `[missing: netsuke-usage]` because `synopsis_id` is `None` for the root and
-  for every subcommand, and `netsuke-usage` is absent from every locale
-  catalogue. `git grep netsuke-usage 88f20d588` finds nothing, so this predates
-  the migration and is recorded in `Outcomes & retrospective` rather than fixed
-  here.
+- Residual gap introduced by 0.10.0: the SYNOPSIS section renders
+  `[missing: netsuke-usage]` because the derive now defaults `synopsis_id` to
+  `Some(message_id_for(command_path, "usage"))` and no catalogue defines that
+  key, while `cargo-orthohelp` prints the unresolved id in place of the
+  option-listing fallback that 0.9.0's `None` selected. The root metadata
+  inherits the derived id; netsuke sets `synopsis_id: None` only for
+  subcommands. `git grep netsuke-usage 88f20d588` returns nothing because the
+  identifier is generated, not written, so it is not evidence of provenance.
+  Recorded in `Outcomes & retrospective`; tracked as
+  [leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959) and
+  [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
 
 The axiom is the tool's documented interface, not its internal correctness:
 that 0.10.0 emits a *correct* man page is not claimed, only that it accepts the
@@ -1221,10 +1327,11 @@ adopted only because the field's type changed, and the value is
   Discharged Axiom A2 by running `cargo-orthohelp` 0.10.0 for real on both
   lanes, replacing the plan's previously unearned "Verified by running"
   sentence with the measured file sets, the shared SHA-256, and the non-vacuity
-  contrast between boolean and value-taking flags. Recorded the pre-existing
-  `[missing: netsuke-usage]` SYNOPSIS defect as a fourth residual catalogue gap
-  and added the matching lesson: an axiom citing a command is not verified
-  until that command has run. Ticked the stale authoring checkbox and added the
+  contrast between boolean and value-taking flags. Recorded the
+  `[missing: netsuke-usage]` SYNOPSIS defect as a fourth residual gap —
+  originally, and wrongly, as pre-existing; see the sixth revision — and added
+  the matching lesson: an axiom citing a command is not verified until that
+  command has run. Ticked the stale authoring checkbox and added the
   `### Changed` changelog entry.
 - 2026-10-25: fifth revision, after `Release Dry Run` failed on the Windows
   lane. Recorded the root cause (`cargo-orthohelp` 0.10.0's nested bridge build
@@ -1237,3 +1344,28 @@ adopted only because the field's type changed, and the value is
   reasoning for not re-running the Rust gates over a YAML-and-prose delta.
   Confirmed both Windows lanes green on
   [40238479467](https://github.com/leynos/netsuke/actions/runs/40238479467).
+- 2026-10-26: sixth revision, retracting a false provenance claim. The plan had
+  classified `[missing: netsuke-usage]` as pre-existing on the strength of
+  `git grep netsuke-usage 88f20d588` returning nothing. That inference was
+  unsound: the identifier is synthesized by `ortho_config_macros` at derive
+  time and was never in source, so no `git grep` over any revision could have
+  found it. A two-directory A/B probe with byte-identical source and only the
+  dependency version differing returns `0.9.0 -> synopsis_id = None` and
+  `0.10.0 -> Some("probe-usage")`, which makes this a 0.10.0 derive regression
+  that suppressed the option-listing fallback `cargo-orthohelp` renders for
+  `None`. Corrected all three affected passages, then filed the downstream and
+  upstream issues the triage called for: netsuke
+  [#957](https://github.com/leynos/netsuke/issues/957) (missing
+  `clap-error-too-many-values` key; upstream roadmap §11.2.1 named, no upstream
+  issue exists), [#958](https://github.com/leynos/netsuke/issues/958)
+  (`cli.value_name`; no upstream dependency),
+  [#959](https://github.com/leynos/netsuke/issues/959) (this synopsis
+  regression), [#960](https://github.com/leynos/netsuke/issues/960) (man-page
+  flag surface), and [#961](https://github.com/leynos/netsuke/issues/961)
+  (`LocalizedValueParser` dropping clap error context); and upstream
+  [ortho-config#630](https://github.com/leynos/ortho-config/issues/630) and
+  [#631](https://github.com/leynos/ortho-config/issues/631) for the two gaps
+  whose only complete fix is upstream. Lesson: "absent from source" is not
+  "absent from output" when a macro generates the string; a provenance claim
+  about a generated identifier needs a probe that varies the generator, not a
+  search of the tree that never held it.
