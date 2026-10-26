@@ -133,46 +133,35 @@ impl BuildGraph {
                 return Err(error);
             }
 
-            let (action_id, progress_label) = match &target.recipe {
+            let (recipe, rule_template, progress_label) = match &target.recipe {
                 Recipe::Rule { rule } => {
                     let target_name = get_target_display_name(&outputs);
                     let tmpl = resolve_rule(rule, context.rule_map, &target_name)?;
                     // Target descriptions remain discovery metadata. Named
                     // rule descriptions stay authoritative; inline edges carry
                     // their own edge-local progress label.
-                    (
-                        register_action(
-                            &mut graph.actions,
-                            tmpl.recipe.clone(),
-                            tmpl.description.as_deref(),
-                            ActionBindings {
-                                inputs: &inputs,
-                                outputs: &outputs,
-                                shell: context.shell,
-                            },
-                        )?,
-                        None,
-                    )
+                    (tmpl.recipe.clone(), Some(tmpl), None)
                 }
                 Recipe::Command { .. } | Recipe::Script { .. } => {
                     let progress_label = (!target.recipe.is_dependency_only())
                         .then(|| get_target_display_name(&outputs))
                         .filter(|name| !name.is_empty());
-                    (
-                        register_action(
-                            &mut graph.actions,
-                            target.recipe.clone(),
-                            None,
-                            ActionBindings {
-                                inputs: &inputs,
-                                outputs: &outputs,
-                                shell: context.shell,
-                            },
-                        )?,
-                        progress_label,
-                    )
+                    (target.recipe.clone(), None, progress_label)
                 }
             };
+            let description = rule_template
+                .as_ref()
+                .and_then(|template| template.description.as_deref());
+            let action_id = register_action(
+                &mut graph.actions,
+                recipe,
+                description,
+                ActionBindings {
+                    inputs: &inputs,
+                    outputs: &outputs,
+                    shell: context.shell,
+                },
+            )?;
 
             let edge = BuildEdge {
                 action_id,
