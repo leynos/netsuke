@@ -368,6 +368,17 @@ rather than as `--flag[=BOOL]`.
     `LocalizationArgs`;
   - [leynos/ortho-config#631](https://github.com/leynos/ortho-config/issues/631),
     flag synthesis with no opt-out.
+- [x] (2026-10-26) Rebased onto `origin/main` at `0a28fee38`, a plain linear
+  replay of 20 commits from `88f20d588` with zero conflicts. Replayed head is
+  `277974048`. Both sides' work survived: main's `Makefile`, `pyproject.toml`
+  and `src/main.rs` are byte-identical to the target in the result, main's
+  `scripts/ci` helpers and `test-ci-scripts` target are intact, and this
+  branch's Windows-lane repair, guides and plan are unchanged. `Cargo.lock`
+  carries both main's `loom` additions and the branch's `ortho_config` 0.10.0,
+  and `cargo metadata --locked` exits 0, so the merged lock is resolved rather
+  than merely textually clean. `git diff --check` is clean. Main's new
+  `scripts/ci` convention was assessed and recorded as not pertinent; the
+  evidence is in the Decision log.
 
 ## Surprises & discoveries
 
@@ -788,6 +799,31 @@ rather than as `--flag[=BOOL]`.
   with an explicit URL; and each roadmap citation now points at the v0.10.0
   blob with a verified heading anchor, so it resolves to the section that was
   actually read rather than to the top of a document that has since moved on.
+  Date/Author: 2026-10-26, agent.
+- Decision: rebase onto `origin/main` (`0a28fee38`) as a plain linear replay
+  from `88f20d588`, keeping both sides' work, and judge main's new `scripts/ci`
+  helper convention *not* pertinent to this branch. Rationale: `88f20d588` is
+  an ancestor of both `HEAD` and `origin/main`, so the ordinary merge-base is a
+  genuine exclusive replay boundary and no squash-restack planner was needed;
+  all 20 commits replayed with zero conflicts, and `range-diff` reports 19
+  identical and one differing only in `Cargo.lock` hunk context, whose
+  added/removed line sets are byte-identical (133 lines each). `Cargo.lock`
+  auto-merged both sides — main's `loom`/`generator`/
+  `matchers`/`scoped-tls`/`windows-result` additions and the branch's
+  `ortho_config` 0.10.0 — and a textually clean lock merge is not a resolved
+  lock, so `cargo metadata --locked` was run and exits 0, which is what makes
+  the merged lock a real resolution rather than a plausible one. The
+  `main`-only lockfile rule therefore never had to be invoked. On pertinence:
+  main's `scripts/ci` is a CI-lane convention — the four CI workflows call it,
+  the release lane keeps `scripts/install_orthohelp.py` at the `scripts/` root,
+  main never touched `.github/workflows/build-and-package.yml`, and
+  `test-ci-scripts` globs only `scripts/tests/test_ci_*.py`, which this branch
+  never adds, so adopting it would relocate a release helper into a CI
+  namespace for no benefit. Main's `StartupWriter`/`run_with_args` refactor and
+  the conversion of `src/test_tracing_capture.rs` into a directory module are
+  likewise orthogonal: `src/main.rs` is byte-identical to the target in the
+  replayed result, and the branch's only tracing-test edit is a one-line
+  `FluentValue` re-export swap that does not touch callsite-interest mechanics.
   Date/Author: 2026-10-26, agent.
 
 ## Outcomes & retrospective
@@ -1423,3 +1459,13 @@ adopted only because the field's type changed, and the value is
   actually read. No Rust or Markdown content changed, but the plan is read by
   `tests/execplan_status_contract_tests.rs`, so the edit still owes the full
   gate set recorded in `Progress`.
+- 2026-10-26: eighth revision, rebased onto `origin/main` at `0a28fee38`. A
+  plain linear replay was correct here rather than a squash restack, because
+  the old base `88f20d588` is an ancestor of both the branch head and the new
+  target, which makes the merge-base a genuine boundary. All 20 commits
+  replayed with no conflicts, and `range-diff` shows 19 identical plus one
+  whose only difference is `Cargo.lock` hunk context. `Cargo.lock` merged both
+  sides and was probed with `cargo metadata --locked` rather than trusted from
+  a clean auto-merge; it exits 0. Main's new `scripts/ci` convention was
+  assessed and recorded as not pertinent, with the evidence stated so a later
+  reader need not repeat the survey. The replayed head is `277974048`.
