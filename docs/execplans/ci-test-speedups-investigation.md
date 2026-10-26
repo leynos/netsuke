@@ -15,6 +15,16 @@ tests), sequentially. These results cover the test changes before this plan
 update; the final documentation candidate still needs its gates, then a
 current-head hosted review and CI before merge.
 
+After publishing `bb8aad8ad3c13863afa416af33bdcaa361db9cd5`, CodeScene result
+8122706 failed its advisory code-health gate because the new output-contract
+test was one 89-line method. Its follow-up keeps saved-input setup, variant
+execution, and schema projection helpers private to that test module; the
+developers' guide records their ownership and reuse boundary. CodeRabbit's
+status for this head was `Review paused`, and its summary still named
+`1ef4de4d11c4157a11bd2f573c5bf29a927dbdd7` as the last reviewed commit. This
+candidate's focused CodeScene review now scores 10.0 with no findings; it needs
+fresh local gates, hosted checks, and formal review after the bounded refactor.
+
 On 25 October, the 39-commit branch was rebased from
 `0a7a0d58dbc4930d12c9ae4ed1c52e7fff039458` onto `origin/main` at
 `88f20d588f936b810a2f700a76ceda970451ca7f`. The replay had no conflicts, and

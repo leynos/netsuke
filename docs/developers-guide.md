@@ -3257,6 +3257,12 @@ introduced, add a targeted `--ignore-regex` for that stub only because
 Interrogate 1.7.0 cannot recognize the configured `typ.overload` spelling;
 leave Ruff's real-implementation docstring rule enabled.
 
+Keep workflow-contract helpers for one output contract private to its owning
+test module, and compose them only from that module's tests. Promote them to
+`conftest.py` or shared test support only when another contract needs the same
+semantics. The CI evidence JSONL snapshot test follows this boundary for saved
+inputs and its schema projection; these helpers are not a collector API.
+
 ### Release-admission runtime tests
 
 `make test-release-admission` is the runtime gate for the release-admission
