@@ -1,6 +1,9 @@
 //! Verify target attribution for failing command lists in serial CLI builds.
 
 use super::{cli_workspace, run_netsuke};
+use crate::command_list_failure_support::{
+    contains_full_fingerprint, contains_target_clause, failure_marker_suffix, identifies_entry,
+};
 use anyhow::{Context, Result, ensure};
 
 const FAILING_CHECK_FMT_MANIFEST: &str = concat!(
@@ -22,18 +25,6 @@ const FAILING_CHECK_FMT_MANIFEST: &str = concat!(
     "defaults: [all]\n",
 );
 
-/// Return the diagnostic suffix after the unchanged command-list marker.
-fn command_list_failure_suffix(stderr: &str) -> Option<&str> {
-    stderr
-        .split_once("netsuke command-list failure: action ")
-        .map(|(_, suffix)| suffix.lines().next().unwrap_or_default())
-}
-
-/// Match a quoted target clause in either human or tracing output.
-fn contains_target_clause(stderr: &str, clause: &str) -> bool {
-    stderr.contains(clause) || stderr.contains(&clause.replace('"', "\\\""))
-}
-
 #[test]
 fn serial_all_reports_the_failing_direct_target_with_or_without_progress() -> Result<()> {
     let (directory, root) = cli_workspace(FAILING_CHECK_FMT_MANIFEST)?;
@@ -46,20 +37,19 @@ fn serial_all_reports_the_failing_direct_target_with_or_without_progress() -> Re
             "the failing check-fmt entry must fail with progress={progress}"
         );
         let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
-        let suffix = command_list_failure_suffix(&stderr)
+        let suffix = failure_marker_suffix(&stderr)
             .context("failure output should retain the command-list marker")?;
-        let (fingerprint, entry_and_target) = suffix
+        let (fingerprint, _) = suffix
             .split_once(", entry ")
             .context("marker should retain its fingerprint and entry index")?;
         ensure!(
-            fingerprint.len() == 64 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit()),
+            contains_full_fingerprint(&stderr),
             "diagnostic should retain the full action fingerprint: {stderr}"
         );
-        let entry = entry_and_target
-            .split_whitespace()
-            .next()
-            .context("marker should retain its entry index")?;
-        ensure!(entry == "2", "diagnostic should identify entry 2: {stderr}");
+        ensure!(
+            identifies_entry(&stderr, 2),
+            "diagnostic should identify entry 2: {stderr}"
+        );
         ensure!(
             contains_target_clause(&stderr, "target \"check-fmt\""),
             "diagnostic should name check-fmt: {stderr}"
@@ -68,7 +58,7 @@ fn serial_all_reports_the_failing_direct_target_with_or_without_progress() -> Re
             !contains_target_clause(&stderr, "target \"all\""),
             "the aggregate target must not replace the failing action: {stderr}"
         );
-        diagnostics.push((fingerprint.to_owned(), entry.to_owned()));
+        diagnostics.push((fingerprint.to_owned(), "2".to_owned()));
     }
 
     let [progress_enabled, progress_disabled] = diagnostics.as_slice() else {

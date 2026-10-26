@@ -1,5 +1,8 @@
 //! Verify bounded command-list target indexing and marker-key parity.
 
+use crate::runner::process::test_fixtures::{
+    graph_with_identity_action as shared_graph_with_identity_action, insert_edge,
+};
 use crate::{
     ast::{CommandIsolation, Recipe, StringOrList},
     ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
@@ -13,45 +16,10 @@ use crate::{
 use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
 
-/// Return a graph action that renders one command-list entry.
-fn command_list_action() -> Action {
-    Action {
-        recipe: Recipe::Command {
-            command: StringOrList::List(vec!["true".to_owned()]),
-            isolation: CommandIsolation::Shared,
-        },
-        description: None,
-        depfile: None,
-        deps_format: None,
-        pool: None,
-        restat: false,
-    }
-}
-
 /// Build a graph with the shared action used by target-index tests.
 #[fixture]
 fn graph_with_identity_action() -> BuildGraph {
-    let mut graph = BuildGraph::default();
-    graph
-        .actions
-        .insert("identity".to_owned(), command_list_action());
-    graph
-}
-
-/// Insert one canonical edge with the supplied explicit outputs.
-fn insert_edge(graph: &mut BuildGraph, action_id: &str, explicit_outputs: &[&str], phony: bool) {
-    let result = graph.insert_edge(BuildEdge {
-        action_id: action_id.to_owned(),
-        inputs: Vec::new(),
-        implicit_deps: Vec::new(),
-        dependency_order: DependencyOrder::Parallel,
-        explicit_outputs: explicit_outputs.iter().map(Utf8PathBuf::from).collect(),
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony,
-        always: false,
-    });
-    assert!(result.is_ok(), "test edge outputs should be unique");
+    shared_graph_with_identity_action()
 }
 
 #[rstest]
@@ -211,20 +179,25 @@ fn escaped_output_names_stay_within_the_display_byte_limit(
 }
 
 #[rstest]
+#[case::line_feed("line\nbreak", "target \"line\\nbreak\"")]
+#[case::double_quote("double\"quote", "target \"double\\\"quote\"")]
+#[case::apostrophe("single'quote", "target \"single'quote\"")]
 fn output_names_escape_control_characters_and_quote_them(
     mut graph_with_identity_action: BuildGraph,
+    #[case] target: &str,
+    #[case] expected_clause: &str,
 ) {
     insert_edge(
         &mut graph_with_identity_action,
         "identity",
-        &["line\nbreak"],
+        &[target],
         false,
     );
     let index = CommandListTargetIndex::from_graph(&graph_with_identity_action);
 
     assert_eq!(
         index.clause(&action_identity("identity")).as_deref(),
-        Some("target \"line\\nbreak\"")
+        Some(expected_clause)
     );
 }
 

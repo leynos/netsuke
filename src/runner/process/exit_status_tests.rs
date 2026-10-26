@@ -1,11 +1,13 @@
 //! Focused tests for Ninja exit diagnostics and execution operation labels.
 
 use super::child_exit::check_exit_status_with_context;
+use super::test_fixtures::{
+    TEST_ACTION_ID, add_target_edge, graph_with_identity_action as build_identity_graph,
+};
 use super::*;
 use crate::test_tracing_capture::with_test_subscriber;
 use crate::{
-    ast::{CommandIsolation, Recipe, StringOrList},
-    ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
+    ir::BuildGraph,
     ninja_gen::command_list::{COMMAND_LIST_FAILURE_PREFIX, action_identity},
 };
 use monotony::test_util::FixedMonotonicClock;
@@ -17,44 +19,10 @@ use std::{
 };
 use tracing_subscriber::filter::LevelFilter;
 
-/// Stable action id used by command-list exit-status cases.
-const TEST_ACTION_ID: &str = "identity";
-
-/// Build a graph that contains the command-list action under test.
+/// Build the graph fixture shared with command-list target-index tests.
 #[fixture]
 fn graph_with_identity_action() -> BuildGraph {
-    let mut graph = BuildGraph::default();
-    graph.actions.insert(
-        TEST_ACTION_ID.to_owned(),
-        Action {
-            recipe: Recipe::Command {
-                command: StringOrList::List(vec!["true".to_owned()]),
-                isolation: CommandIsolation::Shared,
-            },
-            description: None,
-            depfile: None,
-            deps_format: None,
-            pool: None,
-            restat: false,
-        },
-    );
-    graph
-}
-
-/// Add one canonical edge with one explicit output to `graph`.
-fn add_target_edge(graph: &mut BuildGraph, target: &str) {
-    let result = graph.insert_edge(BuildEdge {
-        action_id: TEST_ACTION_ID.to_owned(),
-        inputs: Vec::new(),
-        implicit_deps: Vec::new(),
-        dependency_order: DependencyOrder::Parallel,
-        explicit_outputs: vec![target.into()],
-        implicit_outputs: Vec::new(),
-        order_only_deps: Vec::new(),
-        phony: false,
-        always: false,
-    });
-    assert!(result.is_ok(), "test target outputs should be unique");
+    build_identity_graph()
 }
 
 /// Parse one command-list marker into the failure value used by exit handling.

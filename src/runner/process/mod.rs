@@ -23,6 +23,8 @@ mod paths;
 mod redaction;
 mod streaming;
 #[cfg(test)]
+mod test_fixtures;
+#[cfg(test)]
 mod tests;
 
 use child_exit::{ExitFailureContext, check_exit_status_with_context};

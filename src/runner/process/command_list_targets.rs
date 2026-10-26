@@ -142,38 +142,31 @@ fn first_output(edge: &BuildEdge) -> Option<&camino::Utf8PathBuf> {
 /// For example, a line feed in `check-fmt` remains visible as `"check\nfmt"`.
 fn bound_target_name(target: &str) -> String {
     let content_limit = MAX_TARGET_NAME_BYTES - TARGET_NAME_QUOTES_BYTES;
-    let escaped_length = target.chars().fold(0usize, |length, character| {
-        length.saturating_add(debug_escaped_character_len(character))
-    });
-    let truncation_marker = if escaped_length > content_limit {
-        TRUNCATION_MARKER
-    } else {
-        ""
-    };
-    let prefix_limit = content_limit - truncation_marker.len();
-    let mut escaped_prefix_bytes = 0usize;
-    let mut escaped = String::with_capacity(prefix_limit);
-    target
-        .chars()
-        .take_while(|character| {
-            let character_length = debug_escaped_character_len(*character);
-            let next_length = escaped_prefix_bytes.saturating_add(character_length);
-            let fits = next_length <= prefix_limit;
-            escaped_prefix_bytes = next_length;
-            fits
-        })
-        .for_each(|character| push_debug_escaped_character(&mut escaped, character));
-    escaped.push_str(truncation_marker);
-    format!("\"{escaped}\"")
-}
+    let truncated_content_limit = content_limit - TRUNCATION_MARKER.len();
+    let mut escaped = String::with_capacity(content_limit);
+    let mut character_starts = Vec::with_capacity(content_limit);
+    let mut is_truncated = false;
 
-/// Count the UTF-8 bytes used by one Rust debug-escaped string character.
-fn debug_escaped_character_len(character: char) -> usize {
-    match character {
-        '"' => 2,
-        '\'' => 1,
-        _ => character.escape_debug().map(char::len_utf8).sum(),
+    for character in target.chars() {
+        let character_start = escaped.len();
+        push_debug_escaped_character(&mut escaped, character);
+        if escaped.len() > content_limit {
+            is_truncated = true;
+            escaped.truncate(character_start);
+            while escaped.len() > truncated_content_limit
+                && let Some(start) = character_starts.pop()
+            {
+                escaped.truncate(start);
+            }
+            break;
+        }
+        character_starts.push(character_start);
     }
+
+    if is_truncated {
+        escaped.push_str(TRUNCATION_MARKER);
+    }
+    format!("\"{escaped}\"")
 }
 
 /// Append one character using Rust string debug escaping without surrounding quotes.
@@ -184,3 +177,7 @@ fn push_debug_escaped_character(escaped: &mut String, character: char) {
         _ => escaped.extend(character.escape_debug()),
     }
 }
+
+#[cfg(test)]
+#[path = "command_list_targets_property_tests.rs"]
+mod property_tests;

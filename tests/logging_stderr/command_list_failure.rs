@@ -1,34 +1,15 @@
 //! Runtime diagnostics for failed entries in command-list recipes.
 
-use super::support::open_workspace;
+use super::support::{normalized_diagnostic_fragment, open_workspace};
+use crate::command_list_failure_support::{
+    FAILURE_PREFIX, contains_full_fingerprint, contains_target_clause, identifies_entry,
+};
 use anyhow::{Context, Result, ensure};
 use cap_std::fs_utf8::Dir;
 use netsuke::runner::NINJA_ENV;
 use serde_json::Value;
 use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
-
-const FAILURE_PREFIX: &str = "netsuke command-list failure: action ";
-
-fn identifies_entry(message: &str, entry: usize) -> bool {
-    message.contains(FAILURE_PREFIX) && message.contains(&format!(", entry {entry}"))
-}
-
-/// Verify that `message` retains the full fixed-width action fingerprint.
-fn contains_full_fingerprint(message: &str) -> bool {
-    let Some(marker) = message.split_once(FAILURE_PREFIX).map(|(_, marker)| marker) else {
-        return false;
-    };
-    let Some((fingerprint, _)) = marker.split_once(", entry ") else {
-        return false;
-    };
-    fingerprint.len() == 64 && fingerprint.bytes().all(|byte| byte.is_ascii_hexdigit())
-}
-
-/// Verify that `message` contains a quoted target clause in plain or escaped form.
-fn contains_target_clause(message: &str, clause: &str) -> bool {
-    message.contains(clause) || message.contains(&clause.replace('"', "\\\""))
-}
 
 fn failing_command_list_workspace(first_entry: &str) -> Result<Option<TempDir>> {
     let temp = match ninja_integration_workspace() {
@@ -117,6 +98,11 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
         contains_target_clause(&stderr, "target \"result.txt\""),
         "human diagnostics should name the resolved target: {stderr}"
     );
+    insta::assert_snapshot!(
+        "command_list_failure_human_diagnostic",
+        normalized_diagnostic_fragment(&stderr, FAILURE_PREFIX)
+            .context("human diagnostic should contain its marker line")?
+    );
     let output_file = open_workspace(&temp)?
         .read_to_string("result.txt")
         .context("read the partial command-list output")?;
@@ -151,6 +137,11 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
         contains_target_clause(&diagnostics.to_string(), "target \"result.txt\""),
         "JSON diagnostics should name the resolved target: {diagnostics}"
     );
+    insta::assert_snapshot!(
+        "command_list_failure_json_diagnostic",
+        normalized_diagnostic_fragment(&stderr, FAILURE_PREFIX)
+            .context("JSON diagnostic should contain its marker line")?
+    );
     ensure!(
         !stderr.contains("false"),
         "JSON attribution must not expose the command text: {stderr}"
@@ -181,6 +172,11 @@ fn failed_command_list_entry_is_attributed_in_tracing_output() -> Result<()> {
         stderr.contains("command_list_target")
             && contains_target_clause(&stderr, "target \"result.txt\""),
         "tracing should name the resolved target: {stderr}"
+    );
+    insta::assert_snapshot!(
+        "command_list_failure_tracing_diagnostic",
+        normalized_diagnostic_fragment(&stderr, "command_list_action=")
+            .context("tracing should contain the target field")?
     );
     Ok(())
 }
