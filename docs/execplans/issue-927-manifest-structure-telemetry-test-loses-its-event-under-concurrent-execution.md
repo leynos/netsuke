@@ -412,13 +412,21 @@ seeded duplicate.
   `46f453122080d29278074407e89be428351cf0da`. The CodeRabbit status is
   `Review completed`; all hosted checks are terminal with zero failures or
   pending jobs. The Out of Scope Changes check now passes after the startup-
-  diagnostics rationale was added to the PR description. The pre-merge table
-  still has one Developer Documentation warning because the EP-M3 remaining-
-  work text below is stale, and the review added a minor grammar comment on
-  this progress entry. GitHub's review decision is `CHANGES_REQUESTED`.
-- [ ] Correct the current-state text and grammar, run the documentation gates,
-  publish the updated plan, reconcile its exact-head review and hosted checks,
-  then merge PR #943 with the verified head commit.
+  diagnostics rationale was added to the PR description. At that review, the
+  pre-merge table had one Developer Documentation warning because the EP-M3
+  remaining-work text was stale; the review also added a minor grammar comment
+  on this progress entry. GitHub's review decision was `CHANGES_REQUESTED`.
+- [x] (2026-10-26) Commit `19dbe56456110c865ae3dfae38579b3888645ecc` corrected
+  the plan wording and remaining-work summary. `make fmt`, `make check-fmt`,
+  `make markdownlint` (200 files, zero issues), and `make nixie` passed. The
+  bot marked the grammar thread resolved in
+  [its reply](https://github.com/leynos/netsuke/pull/943#discussion_r4373048332).
+  On that head's last check read, 10 hosted jobs were pending and none had
+  failed; CodeRabbit was `Review paused`, with resume request `b04b648d`
+  queued. The PR review decision remained `CHANGES_REQUESTED` from review
+  `5646074205` on `46f4531`.
+- [ ] Reconcile the exact-head CodeRabbit review, hosted checks, and required
+  approval outcome, then merge PR #943 with the verified head commit.
 
 - [x] (2026-10-24) Published and validated head
   `73f83cbdea021143b1d01dee8b1f37012135caad` over base
@@ -874,15 +882,16 @@ PR whose title contains `(#927)`, summary says `Closes #927`, and terminal
   consolidation are complete. The latest source change passed the focused
   regression and all repository gates; local CodeScene delta found no issues.
   Post-fix manifest runs are clean in the recorded default/high-thread matrix.
-  Exact-head hosted checks and the latest CodeRabbit review are complete. On
-  head `46f453122080d29278074407e89be428351cf0da`, all hosted jobs are terminal
-  with zero failures or pending jobs; CodeRabbit's current pre-merge table has
-  14 passed checks and one Developer Documentation warning caused by stale
-  ExecPlan remaining-work text. The Out of Scope Changes check passes, and
-  GitHub's review decision is `CHANGES_REQUESTED` because the current review
-  also left one minor grammar comment on this plan. Remaining work: correct the
-  plan text, run the documentation gates, publish the correction, reconcile the
-  new exact-head review and checks, and merge PR #943.
+  Exact-head hosted checks and CodeRabbit review completed on head
+  `46f453122080d29278074407e89be428351cf0da`. That review's pre-merge table had
+  14 passed checks and one Developer Documentation warning caused by the stale
+  ExecPlan remaining-work text; its Out of Scope Changes check passed. Commit
+  `19dbe56456110c865ae3dfae38579b3888645ecc` corrected that text and the
+  grammar finding, and the bot resolved the inline thread. At the last
+  observation on `19dbe564`, 10 hosted jobs were pending, CodeRabbit was
+  `Review paused`, and the PR review decision remained `CHANGES_REQUESTED` from
+  review `5646074205` on `46f4531`. Remaining work: reconcile the current-head
+  review, checks, and approval outcome, then merge PR #943.
 
 ## Concrete steps
 
