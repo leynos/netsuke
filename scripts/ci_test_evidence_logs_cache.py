@@ -77,12 +77,12 @@ def _record_restore(
 def _record_miss(body: str, missed: set[str]) -> None:
     """Remember a requested key only when the restore action reported a miss."""
     miss = re.fullmatch(
-        r"Cache not found for input keys: (netsuke-[A-Za-z0-9_.-]+)"
-        r"(?:, netsuke-[A-Za-z0-9_.-]+)*",
+        r"Cache not found for input keys: ((?:netsuke-[A-Za-z0-9_.-]+)"
+        r"(?:, netsuke-[A-Za-z0-9_.-]+)*)",
         body,
     )
     if miss:
-        missed.add(miss[1])
+        missed.update(miss[1].split(", "))
 
 
 def _record_cache_key(

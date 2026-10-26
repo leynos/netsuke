@@ -33,6 +33,7 @@ def validate_attempt_response(run: dict, response: dict) -> None:
     _validate_complete_jobs_response(jobs, response.get("total_count"))
     _validate_job_identities(run, jobs)
     _validate_job_attempts(run, jobs)
+    _validate_job_fields(jobs)
 
 
 def _is_mapping(value: object) -> typ.TypeGuard[dict]:
@@ -73,28 +74,63 @@ def _validate_job_attempts(run: dict, jobs: list[dict]) -> None:
             raise ValueError(message)
 
 
-def validate_evidence_maps(values: CollectorInputs) -> None:
+def _validate_job_fields(jobs: list[dict]) -> None:
+    """Require collection fields to have their expected JSON container shapes.
+
+    Raises
+    ------
+    TypeError
+        If a present ``steps`` field is not a list of mappings or a present
+        ``labels`` field is not a list.
+
+    Examples
+    --------
+    A job without a ``steps`` key is accepted; ``steps=[None]`` is rejected.
+    """
+    for job in jobs:
+        steps = job.get("steps", [])
+        labels = job.get("labels", [])
+        if not isinstance(steps, list) or not all(_is_mapping(step) for step in steps):
+            message = "job steps must be a list of objects"
+            raise TypeError(message)
+        if not isinstance(labels, list):
+            message = "job labels must be a list"
+            raise TypeError(message)
+
+
+def validate_evidence_maps(values: CollectorInputs, job_ids: set[str]) -> None:
     """Validate optional evidence maps before recording measurements.
 
     Parameters
     ----------
     values
         Collector inputs that may contain string-keyed logs and inventories.
+    job_ids
+        Exact string forms of the job IDs in the complete jobs response.
 
     Raises
     ------
     TypeError
         If either value is not a mapping with string job IDs, or a log value
         is not text.
+    ValueError
+        If an evidence map refers to a job outside the complete response.
+
+    Examples
+    --------
+    An evidence key ``"456"`` matches job ID 456; ``"0456"`` does not.
     """
     for key in ("logs", "inventories"):
         evidence_map = values.get(key, {})
         match evidence_map:
             case dict() as mapping if all(_is_string(job_id) for job_id in mapping):
-                continue
+                pass
             case _:
                 message = f"{key} must be a string job-ID mapping"
                 raise TypeError(message)
+        if not mapping.keys() <= job_ids:
+            message = f"{key} contains an unknown job ID"
+            raise ValueError(message)
     _validate_log_values(values.get("logs", {}))
 
 

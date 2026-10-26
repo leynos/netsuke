@@ -67,3 +67,20 @@ def test_oversized_native_counts_and_sizes_remain_unknown() -> None:
     assert evidence["doctests"]["counts"] is None, (
         "An oversized doctest result must not create a count section"
     )
+
+
+@pytest.mark.parametrize(
+    ("label", "field"),
+    [("Current", "current_percent"), ("Baseline", "baseline_percent")],
+)
+def test_coverage_percentages_are_bounded(label: str, field: str) -> None:
+    """Retain the 100% boundary and reject coverage percentages above it."""
+    at_boundary = parse_log(f"{label} coverage: 100%")
+    above_boundary = parse_log(f"{label} coverage: 101%")
+
+    assert at_boundary["coverage"][field] == 100, (
+        "The maximum possible coverage percentage must be retained"
+    )
+    assert above_boundary["coverage"][field] is None, (
+        "Impossible coverage percentages must remain unknown"
+    )

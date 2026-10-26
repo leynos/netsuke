@@ -45,3 +45,33 @@ def test_cli_rejects_a_saved_jobs_error_body(
 
     with pytest.raises(TypeError, match="jobs response must contain a jobs list"):
         app(arguments, result_action="return_value")
+
+
+@pytest.mark.parametrize("key", ["0456", "789"])
+@pytest.mark.parametrize("field", ["logs", "inventories"])
+def test_collect_attempt_rejects_evidence_for_unknown_job(
+    attempt: tuple[dict, dict], key: str, field: str
+) -> None:
+    """Bind each saved evidence entry to an exact job ID in the response."""
+    run, jobs = attempt
+    with pytest.raises(ValueError, match=f"{field} contains an unknown job ID"):
+        collect_attempt(run, jobs, {field: {key: ""}})
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("steps", None, "job steps must be a list of objects"),
+        ("steps", [None], "job steps must be a list of objects"),
+        ("labels", None, "job labels must be a list"),
+        ("labels", "ubicloud-standard-4-ubuntu-2404", "job labels must be a list"),
+    ],
+)
+def test_collect_attempt_rejects_malformed_job_containers(
+    attempt: tuple[dict, dict], field: str, value: object, message: str
+) -> None:
+    """Reject malformed API container shapes before collection reads them."""
+    run, jobs = attempt
+    jobs["jobs"][0][field] = value
+    with pytest.raises(TypeError, match=message):
+        collect_attempt(run, jobs)

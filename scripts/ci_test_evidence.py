@@ -260,7 +260,7 @@ def collect_attempt(
     validate_attempt_response(run, response)
     values = _normalized_inputs(inputs)
     jobs = response["jobs"]
-    validate_evidence_maps(values)
+    validate_evidence_maps(values, {str(job["id"]) for job in jobs})
     cost = _attempt_cost(jobs)
     records = [_job_record(run, job, values, pull_request) for job in jobs]
     for record in records:

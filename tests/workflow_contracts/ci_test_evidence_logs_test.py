@@ -345,6 +345,17 @@ def test_native_miss_includes_restore_prefix() -> None:
     )
 
 
+def test_native_miss_tracks_every_requested_key() -> None:
+    """Classify a requested key as missing when it follows a prefix key."""
+    evidence = parse_log(
+        "Cache not found for input keys: netsuke-cargo-v1-old, netsuke-cargo-v1-new\n"
+        "- registry key: `netsuke-cargo-v1-new` hit: `false`"
+    )
+    assert evidence["caches"]["registry"]["state"] == "miss", (
+        "Every key in the reported miss list must retain the miss classification"
+    )
+
+
 def test_native_archive_bytes_are_bound_to_restored_key() -> None:
     """Use the native byte size, not a rounded MB figure or another archive."""
     evidence = parse_log(
