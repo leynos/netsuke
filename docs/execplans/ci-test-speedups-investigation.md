@@ -1092,23 +1092,37 @@ converted count and size, with regressions for oversized values and deep JSON.
 The candidate passed `make check-fmt`, `make test` (4,712 passed, six skipped,
 doctests passed), `make typecheck`, `make lint`, `make doc-coverage` (98.20%),
 and `make test-workflow-contracts` (1,498 passed, three skipped, plus 27 script
-tests). The candidate still needs publication, bot-thread reconciliation, fresh
-exact-head review and hosted checks, then the guarded merge.
+tests). At that stage, the candidate still needed publication, bot-thread
+reconciliation, fresh exact-head review and hosted checks before the guarded
+merge.
 
-Before publication, remote `main` advanced from `de81d5c` to `0a28fee`. The
+Remote `main` advanced from `de81d5c` to `0a28fee` before publication. The
 50-commit branch range was rebased onto that target with Git's built-in
 `zdiff3` merge; the user-wide Weave attribute was disabled for the replay.
 There were no conflicts. `git range-diff` matched all 50 commits, the 31
 branch-owned paths are unchanged, all 22 target-only paths remain
-byte-identical, and `Cargo.lock` matches the target. The rebased head is
-`6e109c6`.
+byte-identical, and `Cargo.lock` matches the target. The rebase candidate was
+published with an exact force-with-lease; PR #918 now targets `main` at
+`0a28fee` and its published head is `3229ccf`.
 
-All post-rebase local gates passed on that head: `make check-fmt`, `make test`
-(4,725 passed, seven skipped, doctests passed), `make typecheck`, `make lint`,
-`make doc-coverage` (98.19%, 6,231/6,346), and `make test-workflow-contracts`
-(1,498 passed, three skipped, plus 27 script tests). The rebased candidate
-still needs publication, thread reconciliation, fresh exact-head review and
-hosted checks before the guarded merge.
+All post-rebase local gates passed on code head `6e109c6`: `make check-fmt`,
+`make test` (4,725 passed, seven skipped, doctests passed), `make typecheck`,
+`make lint`, `make doc-coverage` (98.19%, 6,231/6,346), and
+`make test-workflow-contracts` (1,498 passed, three skipped, plus 27 script
+tests). The subsequent plan-only head `3229ccf` passed `make check-fmt`,
+`make markdownlint` (203 files, zero issues), and `make nixie`.
+
+The hosted CI run `40266573227`, Netsukefile run `40266573252`, Release Dry Run
+`40266573521`, CodeScene result `8124723`, and Gecko checks all passed on head
+`3229ccf`. This includes the Linux and Windows test jobs and Windows Whitaker
+lint. Three CodeRabbit findings from review `5646916239` on superseded head
+`7cf6867` were repaired in `eb0c1cf`. Candidate-bound replies were posted to
+each original thread; CodeRabbit confirmed all three repairs and resolved all
+three threads. Its current-head status still reads `Review paused`, while the
+aggregate review decision remains `CHANGES_REQUESTED` from the superseded
+review. The updated plan must pass its documentation gates and hosted checks;
+then request one managed CodeRabbit resume for that checked head, reconcile any
+resulting decision, and merge only with exact-head evidence.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
