@@ -513,10 +513,16 @@ identical actions belong to more than one target, the diagnostic lists sorted
 candidates, for example
 `netsuke command-list failure: action HASH, entry 2
 (targets "check-fmt", "lint")`.
-These brace-group, `eval`, background-job, and `exec` restrictions apply only
-to the Unix renderer and the explicit Windows Bash compatibility route; the
-Windows PowerShell route uses its native-command and error checks instead.
-PowerShell command-list recipes emit no attribution marker.
+Target names are escaped for readable diagnostics and capped at 64 UTF-8
+bytes, including their quotes and the visible `…` marker when shortened.
+Ambiguous diagnostics show at most three sorted candidates, then `and N more`
+when additional matches exist. If no target resolves, including when the
+invocation has no index, the diagnostic keeps the marker-only form:
+`netsuke command-list failure: action HASH, entry 2`. These brace-group,
+`eval`, background-job, and `exec` restrictions apply only to the Unix renderer
+and the explicit Windows Bash compatibility route; the Windows PowerShell route
+uses its native-command and error checks instead. PowerShell command-list
+recipes emit no attribution marker.
 
 <!-- tested-example: guide-command-list -->
 
