@@ -16,6 +16,7 @@ if typ.TYPE_CHECKING:
 CACHE = re.compile(
     r"- (registry|tools|whitaker) key: `(netsuke-[A-Za-z0-9_.-]+)` hit: `(true|false)`$"
 )
+MAX_COUNTER = 10**18 - 1
 
 
 def cache_records(lines: list[tuple[str | None, str]]) -> dict[str, CacheEvidence]:
@@ -157,7 +158,7 @@ def _record_sccache_json(body: str, result: dict[str, int | None]) -> None:
             result.update({
                 key: scalar
                 for key, scalar in counters.items()
-                if key in result and type(scalar) is int and scalar >= 0
+                if key in result and type(scalar) is int and 0 <= scalar <= MAX_COUNTER
             })
         case _:
             return

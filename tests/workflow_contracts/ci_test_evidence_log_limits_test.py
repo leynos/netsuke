@@ -24,6 +24,15 @@ def test_malformed_sccache_json_does_not_abort_log_parsing(line: str) -> None:
     )
 
 
+def test_oversized_sccache_json_counter_remains_unknown() -> None:
+    """Keep JSON counters within the same bound as text counters."""
+    evidence = parse_log('{"stats":{"compile_requests":1000000000000000000}}')
+
+    assert evidence["sccache"]["compile_requests"] is None, (
+        "A 19-digit sccache counter must remain unknown"
+    )
+
+
 def test_oversized_native_counts_and_sizes_remain_unknown() -> None:
     """Ignore digit runs beyond the bounded native evidence format."""
     oversized = "9" * 5000

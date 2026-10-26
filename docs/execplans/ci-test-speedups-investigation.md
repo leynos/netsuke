@@ -654,12 +654,10 @@ fidelity comparisons block adoption.
   matched and no conflicts occurred.
 - [x] After the nightly toolchain update, pass `make check-fmt`, `make lint`,
   and `make doc-coverage` (98.19%).
-- [ ] Resolve the local `make test` timeout in
-  `cli_configuration_fixture_compiles::case_1_public_api`; it left 24 tests
-  unrun and prevented doctests from starting, and the log contains no child
-  Cargo diagnostic. The exact-head hosted suite later passed all 4,864 tests,
-  including this fixture in 22.476 seconds, so the local cause remains
-  unestablished rather than a reproduced source failure.
+- [x] Re-run the local and hosted suites after the earlier
+  `cli_configuration_fixture_compiles::case_1_public_api` timeout. Both later
+  suites passed, including that fixture; the cause of the isolated 300-second
+  timeout remains unestablished, and no source failure was reproduced.
 - [x] Pass `make typecheck` and `make test-workflow-contracts` on the new base
   (1,460 passed, 3 skipped, plus 27 supplementary script tests).
 - [x] Validate final documentation with `make check-fmt`, `make markdownlint`
@@ -718,9 +716,21 @@ fidelity comparisons block adoption.
 - [x] Publish repair candidate `2d31ee8`; its exact-head CI, Netsukefile,
   Release Dry Run, CodeScene, and Gecko checks passed. Reply to the two inline
   findings; CodeRabbit confirmed both repairs and the threads are resolved.
-- [ ] Validate this plan-only successor on its published head; reconcile the
-  stale Developer Documentation row, obtain a current-head EP-1 assessment and
-  formal review, then merge at equilibrium.
+- [x] Validate plan-only head `3229ccf` with `make check-fmt`,
+  `make markdownlint` (203 files, zero issues), and `make nixie`; exact-head
+  hosted checks and the full CodeRabbit review completed on successor `222ba09`
+  with all 15 pre-merge rows passing.
+- [x] Resolve the three findings from the full review of `222ba09`: clarify
+  that `trunk` is a prefix, apply the Oxford commas requested by the style
+  guide, and bound JSON sccache counters to 18 digits with a 19-digit
+  regression. On the four-file working candidate atop `222ba09`, pass
+  `make check-fmt`, `make lint`, `make doc-coverage` (98.19%), `make test`
+  (4,725 passed, seven skipped, doctests passed), `make typecheck`,
+  `make test-workflow-contracts` (1,499 passed, three skipped, plus 27 script
+  tests), `make markdownlint` (203 files, zero issues), and `make nixie`.
+- [ ] Commit and publish the validated repair, reply to each review finding,
+  reconcile fresh exact-head checks and the applicable plan assessment, then
+  request final approval and merge.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -1118,11 +1128,17 @@ The hosted CI run `40266573227`, Netsukefile run `40266573252`, Release Dry Run
 lint. Three CodeRabbit findings from review `5646916239` on superseded head
 `7cf6867` were repaired in `eb0c1cf`. Candidate-bound replies were posted to
 each original thread; CodeRabbit confirmed all three repairs and resolved all
-three threads. Its current-head status still reads `Review paused`, while the
-aggregate review decision remains `CHANGES_REQUESTED` from the superseded
-review. The updated plan must pass its documentation gates and hosted checks;
-then request one managed CodeRabbit resume for that checked head, reconcile any
-resulting decision, and merge only with exact-head evidence.
+three threads. Its current-head status then read `Review paused`, while the
+aggregate review decision remained `CHANGES_REQUESTED` from the superseded
+review. Plan-only head `222ba09` subsequently passed its documentation gates
+and all exact-head hosted checks. CodeRabbit completed a full review on that
+head, with all 15 pre-merge rows passing and three new findings: the `trunk`
+prefix wording, four Oxford-comma corrections, and a missing upper bound on
+JSON sccache counters. The current working tree contains those repairs and a
+19-digit counter regression. All eight local gates passed sequentially on the
+four-file candidate; `cs delta origin/main` found no issues. Commit and
+publication, finding replies, fresh exact-head checks, the applicable plan
+assessment, and final approval remain before merge.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

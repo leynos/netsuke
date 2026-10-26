@@ -7,9 +7,9 @@ one job attempt. The original harvest is `observations.jsonl`; dated
 supplements remain separate. Keep raw CI logs outside the repository, such as
 under `/tmp`.
 
-Here, the fixed `trunk` cohort label names push-triggered runs on the
-repository's `main` branch. The collector retains `trunk_coverage` and
-`trunk_cache_writer` as fixed cohort labels.
+Here, the `trunk` prefix identifies push-triggered runs on the repository's
+`main` branch. The collector emits `trunk_coverage` and `trunk_cache_writer` as
+fixed cohort labels.
 
 For `ci.yml` pull-request jobs, `pr_coverage` identifies the Ubicloud lane,
 `fork_hosted` requires distinct base and head repository identities, and
@@ -70,7 +70,7 @@ The collector emits schema `2`. The retained observation files preserve their
 original schema `1` records. This abbreviated example shows current top-level
 fields, not an observation. Each record also contains `steps` and a nested
 `evidence` object with versions, runner facts, cache states, sccache
-statistics, Nextest/doctest outcomes, resources, phases and profile inventory:
+statistics, Nextest/doctest outcomes, resources, phases, and profile inventory:
 
 ```json
 {
@@ -152,14 +152,14 @@ Use billing evidence when available. Otherwise call runner-seconds a cost
 proxy, not invoice savings. For adoption, the one-sided 95% upper uncertainty
 bound for candidate-minus-control consumption must be at most zero. No positive
 cost increase is tolerated. Include failed attempts, telemetry, migration,
-storage and transfer costs.
+storage costs, and transfer costs.
 
 ## Evidence inventory
 
 Each record should include run/job links or IDs, attempt, event, source and
 tested merge SHAs, variant and relevant diff, runner label/image/architecture/
 capacity, Rust/Cargo/LLVM/Nextest/cargo-llvm-cov versions, shared action SHAs,
-feature and target selection, compiler flags, profile and worker limits.
+feature and target selection, compiler flags, profile, and worker limits.
 Extract action pins only from native runner `Download action repository` log
 records with immutable SHA references. Each `action_pins` key is the full
 `repository@sha` reference, so multiple revisions of one repository remain
@@ -174,7 +174,7 @@ coverage merge/export/report/ratchet, doctests, uploads, cleanup and whole-job
 execution. Include raw-profile count/bytes, `.profdata` size,
 instrumented-object count, peak memory, CPU and available I/O indicators.
 
-Missing matched keys, inventories, per-test durations, memory or phase
+Missing matched keys, inventories, per-test durations, memory, or phase
 boundaries must be recorded as missing. Do not reconstruct them from historical
 durations. Do not add overlapping per-test times or claim queue changes as paid
 compute savings.
