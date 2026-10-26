@@ -263,3 +263,30 @@ keeps the shell's statuses: `127` when the program does not exist, `126` for
 any other refusal. Neither translation changes a published `error_category`;
 they keep it, because a timed-out operation is identified by the statuses the
 shell produced rather than the negative numbers Python reports.
+
+## Addendum (2026-10-26): Crate-package operation telemetry
+
+This addendum extends the release-operation vocabulary without changing the
+release-admission gate or the release-versus-publication guards.
+
+The `package-crate` job records the `release_package` operation with exactly
+two phases. `crate_packaging` brackets the package action, and
+`artifact_upload` brackets the upload of the `release-crate-package` workflow
+artefact containing the crate archive and identity record. The telemetry
+artefact upload is separate and is not a phase. These same phase boundaries
+apply during rehearsals and tagged release runs.
+
+An always-run step writes the bounded operation summary to
+`GITHUB_STEP_SUMMARY` and writes metric and phase-event records to
+`release-operation-observability.jsonl` under `runner.temp`. A separate
+always-run step uploads that file as
+`release-operation-observability-package-crate`. The package and telemetry
+artefacts do not set a retention override, so GitHub Actions applies the
+configured retention policy. The records use fixed operation, phase, outcome,
+and error-category values and omit release tags, artefact names, raw errors,
+and secrets.
+
+The helper remains diagnostic: it does not change the release mode or convert a
+failed package or artefact-upload step into success. The package job is not a
+dependency of either publication job until the registry publisher consumes its
+artefact.

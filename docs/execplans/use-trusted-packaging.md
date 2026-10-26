@@ -2397,6 +2397,20 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   failure was followed by a successful full lint after the three Ruff findings
   were corrected. No release or registry setting changed; Stage C remains
   partial and Stage D remains open.
+- [x] (2026-10-26) Reconciled the live Developer Documentation warning in
+  CodeRabbit's pre-merge report for `fecf03f9`. The developers' guide now
+  documents the `release_package` operation, its two phases, the package and
+  telemetry artefacts, and their default retention; ADR-0020 records the
+  extension in a dated addendum. The full local suite passed sequentially on
+  tree `2aca0125`: `check-fmt`, `lint`, `doc-coverage` (98.20%), `typecheck`,
+  `test` (4,712 passed, 6 skipped; doctests passed), `test-release-publication`
+  (429 passed), `markdownlint` (199 files, zero issues), and `nixie`. After
+  recording those results here, the final plan-note-only tree passed
+  `check-fmt`, `markdownlint` (199 files, zero issues), and `nixie`. The
+  hook-reported Whitaker and Nixie failures did not recur; no code or
+  temporary-directory configuration changed. The Domain Architecture warning
+  asks to move record-shape validation from policy to adapters, which conflicts
+  with this plan's stated in-memory mapping boundary; disposition is pending.
 
 ## Surprises & discoveries
 
@@ -3921,3 +3935,12 @@ status that preserves conflict diagnostics. Commit `e99a6039` passed the full
 sequential code gate set; the stop-hook's Nixie temporary-directory failure did
 not recur. The plan's delivery scope is unchanged: Stage C remains partial and
 Stage D remains open, and no release or registry setting changed.
+
+Draft 15, 2026-10-26: reconciled the live observability documentation warning on
+`fecf03f9`. The developers' guide and ADR-0020 now describe the
+`release_package` telemetry operation and its package and telemetry artefacts.
+The full local suite passed on tree `2aca0125`; after recording its results,
+the final plan-note-only tree passed `check-fmt`, `markdownlint`, and `nixie`.
+The stop-hook's Whitaker and Nixie failures did not recur in the sequential
+rerun. The Domain Architecture warning's disposition remains pending; no
+release or registry setting changed.

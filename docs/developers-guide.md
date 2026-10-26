@@ -2417,6 +2417,30 @@ registry publisher, which is not yet part of the workflow. Adding it to
 `publish-release` today would make GitHub publication wait for a package
 nothing downstream reads.
 
+### Crate-package operation telemetry
+
+The `package-crate` job records the `release_package` operation through
+`scripts/release_operation_observability.py`. The operation has two phases:
+`crate_packaging` brackets the package action, and `artifact_upload` brackets
+the upload of the `release-crate-package` artefact containing the `.crate` and
+`identity.json`. The same phase set applies to rehearsals and tagged release
+runs. The telemetry upload is separate and is not counted as a third phase.
+
+An always-run step writes the job and phase outcomes, durations, dry-run mode,
+and fixed error category to `GITHUB_STEP_SUMMARY`. It also writes
+`release-operation-observability.jsonl` under `runner.temp`; a following
+always-run step uploads that file as
+`release-operation-observability-package-crate`. The JSONL contains bounded
+metrics and phase events. Both workflow artefacts use the repository's
+configured GitHub Actions retention policy because neither upload overrides
+retention.
+
+The operation uses fixed operation, phase, outcome, and error-category labels.
+It omits release tags, artefact names, raw errors, and secrets. This telemetry
+does not alter the `should_publish` guard or make `package-crate` a
+prerequisite of the publication jobs; the registry publisher will consume its
+package artefact in a later stage.
+
 ### Package and asset identity
 
 The Cargo package and the binary it installs are different names, and every
