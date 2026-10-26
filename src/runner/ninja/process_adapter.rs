@@ -59,7 +59,7 @@ pub(in crate::runner) fn run_ninja_with_command_list_targets(
     request: process::NinjaBuildRequest<'_>,
     command_list_targets: &CommandListTargetIndex,
 ) -> std::io::Result<()> {
-    process::run_ninja_with_command_list_targets(request, command_list_targets)
+    process::run_ninja_with_command_list_targets(request, None, command_list_targets)
 }
 
 /// Invoke a Ninja tool with the provided CLI settings.

@@ -636,6 +636,18 @@ public process request types, and the public command-list AST remain unchanged.
 The external `public_api_fixture` continues to validate the AST boundary
 without exposing runtime attribution.
 
+Target-name escaping and byte truncation are private to
+`src/runner/process/command_list_targets.rs` and serve only this diagnostic
+formatter; they are not general path-formatting interfaces. The runner resolves
+the marker and emits failure telemetry on the caller thread after the stderr
+worker joins. Tests observe that event on the same thread, so the separate
+test-process callsite-interest support does not change this production
+boundary. The build and `-t` tool adapters use the private
+`NinjaInternalCommand` variants to share process execution while retaining
+command-specific configuration and diagnostic metadata. Keep those variants and
+their settings private to the runner process module; public build and tool
+request types remain unchanged.
+
 Netsuke should add four complementary capabilities.
 
 #### Backend dollar escaping (implemented)

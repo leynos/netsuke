@@ -252,9 +252,9 @@ fn execute_build(
     };
     if context.progress_enabled {
         let mut on_task_progress = on_task_progress_callback(context.reporter);
-        process::run_ninja_with_status_and_command_list_targets(
+        process::run_ninja_with_command_list_targets(
             build_request,
-            &mut on_task_progress,
+            Some(&mut on_task_progress),
             &command_list_targets,
         )
         .with_context(ctx)?;

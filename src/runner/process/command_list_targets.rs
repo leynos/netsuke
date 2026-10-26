@@ -137,31 +137,34 @@ fn first_output(edge: &BuildEdge) -> Option<&camino::Utf8PathBuf> {
         .or_else(|| edge.implicit_outputs.first())
 }
 
-/// Escape and bound one quoted output name while preserving complete escapes.
+/// Escape and bound one output name for a human-readable diagnostic.
+///
+/// For example, a line feed in `check-fmt` remains visible as `"check\nfmt"`.
 fn bound_target_name(target: &str) -> String {
     let content_limit = MAX_TARGET_NAME_BYTES - TARGET_NAME_QUOTES_BYTES;
     let escaped_length = target.chars().fold(0usize, |length, character| {
         length.saturating_add(debug_escaped_character_len(character))
     });
-    if escaped_length <= content_limit {
-        let mut escaped = String::with_capacity(escaped_length);
-        for character in target.chars() {
-            push_debug_escaped_character(&mut escaped, character);
-        }
-        return format!("\"{escaped}\"");
-    }
-
-    let prefix_limit = content_limit - TRUNCATION_MARKER.len();
-    let mut prefix = String::with_capacity(prefix_limit);
-    for character in target.chars() {
-        let character_length = debug_escaped_character_len(character);
-        if prefix.len() + character_length > prefix_limit {
-            break;
-        }
-        push_debug_escaped_character(&mut prefix, character);
-    }
-    prefix.push_str(TRUNCATION_MARKER);
-    format!("\"{prefix}\"")
+    let truncation_marker = if escaped_length > content_limit {
+        TRUNCATION_MARKER
+    } else {
+        ""
+    };
+    let prefix_limit = content_limit - truncation_marker.len();
+    let mut escaped_prefix_bytes = 0usize;
+    let mut escaped = String::with_capacity(prefix_limit);
+    target
+        .chars()
+        .take_while(|character| {
+            let character_length = debug_escaped_character_len(*character);
+            let next_length = escaped_prefix_bytes.saturating_add(character_length);
+            let fits = next_length <= prefix_limit;
+            escaped_prefix_bytes = next_length;
+            fits
+        })
+        .for_each(|character| push_debug_escaped_character(&mut escaped, character));
+    escaped.push_str(truncation_marker);
+    format!("\"{escaped}\"")
 }
 
 /// Count the UTF-8 bytes used by one Rust debug-escaped string character.
