@@ -774,18 +774,22 @@ pre-migration form, which it does not in the SYNOPSIS section (#959).
 - Decision: fix the two netsuke-reachable gaps locally in separate issues
   rather than folding them into this migration, and record the two that need
   upstream work as blocked on named upstream items. Rationale: the migration's
-  contract is preservation — its acceptance evidence is that behaviour does not
-  move. Adding a catalogue key, declaring `cli(value_name = …)` on every
-  configuration field, and repairing the synopsis would each change generated
-  documentation, which is exactly what this branch's `cargo-orthohelp`
-  byte-comparison pins. Each is a self-contained change with its own tests, and
-  netsuke #957/#958/#959/#960 carry them. Of the two upstream gaps, #630 (the
-  synopsis default and the missing `LocalizationArgs`) has no covering issue in
-  `leynos/ortho-config`, so an issue was required; #631 (flag synthesis with no
-  opt-out) has roadmap §12.3.1 behind it but no issue, and netsuke #960 needs a
-  concrete blocker, so an issue was raised there too. Netsuke #957's dependency
-  is roadmap §11.2.1 alone and has no upstream issue to link; the issue says so
-  explicitly rather than inventing a link. Date/Author: 2026-10-26, agent.
+  contract is behaviour preservation — its acceptance evidence is that runtime
+  behaviour does not move, and that is pinned by tests. Adding a catalogue key,
+  declaring `cli(value_name = …)` on every configuration field, and repairing
+  the synopsis would each change generated documentation. Those changes stay
+  out of scope because each is a separate user-visible change with its own
+  tests, not because the byte-comparison forbids them: that comparison renders
+  one fixed tree under two reader versions, so it pins reader compatibility and
+  says nothing about the page's pre-migration form. Each is a self-contained
+  change with its own tests, and netsuke #957/#958/#959/#960 carry them. Of the
+  two upstream gaps, #630 (the synopsis default and the missing
+  `LocalizationArgs`) has no covering issue in `leynos/ortho-config`, so an
+  issue was required; #631 (flag synthesis with no opt-out) has roadmap §12.3.1
+  behind it but no issue, and netsuke #960 needs a concrete blocker, so an
+  issue was raised there too. Netsuke #957's dependency is roadmap §11.2.1
+  alone and has no upstream issue to link; the issue says so explicitly rather
+  than inventing a link. Date/Author: 2026-10-26, agent.
 - Decision: give every one of the five netsuke issues an explicit
   cross-reference section rather than leaving the dependency to prose.
   Rationale: the brief asked for "the relevant blocking notice with a link to
@@ -1035,9 +1039,12 @@ guide §1 cargo-orthohelp 0.10  -> EP-M1 -> CI grep asserts 0.10.0
 The five follow-up gaps recorded under `Outcomes & retrospective` are outside
 this plan's acceptance scope by construction: each would change behaviour or
 generated documentation, while the migration's acceptance evidence is that
-neither moved. They are tracked separately as netsuke #957–#961, and each of
-those issues now carries its own cross-reference section. Two are blocked on
-upstream work:
+runtime behaviour did not move. It does not establish that generated
+documentation is unchanged across the migration — the SYNOPSIS section does
+differ (#959), and the reader A/B that renders a byte-identical page holds the
+tree constant, so it cannot detect a cross-migration difference. They are
+tracked separately as netsuke #957–#961, and each of those issues now carries
+its own cross-reference section. Two are blocked on upstream work:
 
 - [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630) —
   the `synopsis_id` default and the missing `LocalizationArgs`; blocks Option B
