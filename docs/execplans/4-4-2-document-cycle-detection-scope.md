@@ -6,10 +6,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-Approved by explicit user instruction on 2026-10-24, before rebase or
-implementation. Execution began after rebasing onto the PR target `main` at
+Approved by explicit user instruction on 2026-10-25, before this continuation's
+rebase and implementation work. The earlier implementation attempt began after
+rebasing onto the PR target `main` at
 `8a961000859c02862454338fda6c4dd65bda2aa1`.
 
 Revision 3, reconciled on 2026-10-24. Drafted on 2026-09-27 against
@@ -62,10 +63,10 @@ After this change:
   entry of a multi-output `name` list and every IR implicit output, names the
   same build step; and `dependency_order: serial` adds no dependency of its own.
 - A new Architectural Decision Record (ADR),
-  `docs/adrs/adr-0060-every-dependency-kind-participates-in-cycle-detection.md`,
-  records the decision and why the earlier "order-only dependencies only
-  affect freshness" rationale was wrong. The design document, the
-  formal-verification document, and the developers' guide point at it.
+  `docs/adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md`, records
+  the decision and why the earlier "order-only dependencies only affect
+  freshness" rationale was wrong. The design document, the formal-verification
+  document, and the developers' guide point at it.
 - Unit, property, bounded-model-checking (Kani), behavioural (`rstest-bdd`),
   and end-to-end tests pin the rule, including an independent-oracle property
   test showing the per-output traversal finds a cycle exactly when the
@@ -336,7 +337,8 @@ ADR-0011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
 
 - Production code: if more than 3 non-test source files or more than 40 net
   production lines change (Rustdoc included), stop and escalate. The planned
-  production edit is one call in `cycle/detector.rs` plus Rustdoc.
+  production edits are one detector call, a narrow human diagnostic branch in
+  `src/main.rs`, and Rustdoc.
 - Overall scope: if more than 35 files or more than 1,200 net added lines
   change (tests, fixtures, patches, and documentation included), stop and
   escalate. The planned inventory is about 30 files.
@@ -597,10 +599,9 @@ as a `sources` cycle, and Ninja is never started.
   `NETSUKE_NINJA` pointing at a fake Ninja that writes a sentinel file, and
   asserts failure, the `Circular dependency detected` message, and an absent
   sentinel. `order_only_cycle_json_diagnostic` runs
-  `netsuke --json --no-input generate` and snapshots stderr after
-  `normalize_fluent_isolates` and an `insta` filter for the temporary
-  directory, with the locale pinned by `--locale en-US` and
-  `Command::env("LANG", "C")` in the child.
+  `netsuke --json --no-input generate`, normalizes the generator version, and
+  snapshots stderr after `normalize_fluent_isolates`, with the locale pinned by
+  `--locale en-US` and `Command::env("LANG", "C")` in the child.
   `documented_order_only_cycle_is_rejected` loads
   `guide-order-only-cycle-manifest` through `manifest_workspace` and asserts
   rejection and the cycle path, following the precedent at
@@ -705,13 +706,12 @@ for `order_only_deps` and confirm none closes a cycle.
 
 Move the canonicalization-only helpers of `src/ir/cycle/verification.rs`
 (`assert_kernel_canonical_properties` through `is_closed_id_cycle`, about 220
-lines) into a new harness-free `src/ir/cycle/verification_support.rs`, declared
-from `cycle/verification.rs` with
-`#[path = "verification_support.rs"] mod support;`. The path is relative to
-`verification.rs`'s directory because the declaration is outside an inline
-module block. The harnesses stay in `cycle/verification.rs`, so every existing
-mutation-patch name stays valid. Run `make kani-ir` to confirm the move is
-behaviour-neutral.
+lines) into a new harness-free `src/ir/cycle/verification/support.rs`, declared
+from `cycle/verification.rs` with `mod support;`. The directory keeps the
+helper grouped under its parent module and satisfies the repository's module
+layout contract. The harnesses stay in `cycle/verification.rs`, so every
+existing mutation-patch name stays valid. Run `make kani-ir` to confirm the
+move is behaviour-neutral.
 
 Create `src/ir/cycle/participation_tests.rs` with a `build_edge` fixture taking
 an `EdgeSpec` struct with named path-list fields (keeping the argument count
@@ -1039,21 +1039,24 @@ No public interface changes. New crate-private test and harness support modules:
 
 - `src/ir/cycle/participation_tests.rs` (`#[cfg(test)]`).
 - `src/ir/cycle/property_tests/participation_tests.rs` (`#[cfg(test)]`).
-- `src/ir/cycle/verification_support.rs` (`#[cfg(kani)]`, harness-free,
+- `src/ir/cycle/verification/support.rs` (`#[cfg(kani)]`, harness-free,
   declared from `cycle/verification.rs`).
 - `tests/cycle_participation_e2e_tests.rs`. Cargo auto-discovers it;
   `tests/integration_test_wiring_tests.rs` checks that discovery.
 - `TestWorld::generation_cycle: Slot<Vec<String>>` in
   `tests/bdd/fixtures/mod.rs`.
 
-The only production edit is inside
-`crate::ir::cycle::detector::CycleDetector::visit_known_edge`. No configuration
-surface is added, so `ortho_config` is not involved. From the
+The detector edit is inside
+`crate::ir::cycle::detector::CycleDetector::visit_known_edge`. A second
+production edit in `src/main.rs` exposes a typed circular-dependency cause in
+human CLI output; the generic graph-building context had hidden the cycle path
+from users. JSON diagnostics keep their existing outer message and cause chain.
+No configuration surface is added, so `ortho_config` is not involved. From the
 hexagonal-architecture view, the cycle rule is domain policy inside the IR
 core; it has no port, and none is introduced. Ninja is the driven adapter whose
-semantics the domain rule now matches; the adapter (`src/ninja_gen`), the graph
-renderer (`src/graph_view`), and the runner do not change, and all three
-already treat order-only dependencies as graph arcs.
+semantics the domain rule now matches; the adapter (`src/ninja_gen`) and graph
+renderer (`src/graph_view`) do not change, and both already treat order-only
+dependencies as graph arcs.
 
 ## Progress
 
@@ -1075,15 +1078,137 @@ already treat order-only dependencies as graph arcs.
 - [x] (2026-10-24) Reconciled active plan paths and ADR references with the
   rebased module and document layout; refreshed branch-wide ADR allocation
   evidence.
+- [x] (2026-10-24) Implemented the EP-M2 detector traversal and added the
+  planned unit, property, BDD, CLI, Kani, mutation, and documentation
+  artefacts. Focused tests and integrated gates are pending; EP-M2 is not yet
+  accepted.
+- [x] (2026-10-24) The initial focused library test invocation remained in
+  Cargo's package-cache lock wait, with intermittent supervisor query timeouts
+  and no compiler-admission refusal. The later full post-rebase `make test` run
+  passed; see the final gate record below.
+- [x] (2026-10-25) Refreshed the PR target `origin/main` to
+  `de81d5c34ab3c0103a5de71a0518b89980187c11`; rebase is pending below.
+- [x] (2026-10-25) Reapproved before resuming; verified PR #806 still targets
+  `main`, recorded its remote head, and established `8a961000` as the replay
+  boundary. `range-diff` pairs both remote commits with the first two local
+  commits; three local plan commits follow them.
+- [x] (2026-10-25) Rebased the five-commit plan series onto remote `main` at
+  `de81d5c34ab3c0103a5de71a0518b89980187c11`. The replay was conflict-free;
+  `range-diff` matched all five commits to their predecessors.
+- [x] (2026-10-25) Restored the outstanding implementation changes from the
+  pre-rebase stash. Resolved the sole `docs/contents.md` conflict by retaining
+  main's ADR-0059 entry and ADR-0033 supersession, then adding ADR-0060 after
+  ADR-0059. `git diff --check origin/main` passed.
+- [x] (2026-10-25) First resumed gate pass: `make check-fmt` passed; `make lint`
+  stopped at Clippy's `shadow_unrelated` finding on the second local `cycle`
+  binding in `visit_known_edge`. Renamed that binding to `implicit_cycle`; all
+  later gates remain pending on the updated candidate.
+- [x] (2026-10-25) Second resumed gate pass: `make check-fmt` passed and lint
+  then found an unused import, obsolete generator definitions, and indexing in
+  the new property-test oracle. The generator now uses zipped iteration and
+  checked access; later gates remain pending on the corrected candidate.
+- [x] (2026-10-25) Third resumed gate pass: `make check-fmt` and lint's rustdoc
+  stage passed, but Clippy could not spawn a thread (`EAGAIN`). The
+  `lody-daemon.service` cgroup was at 16,241 of 16,384 tasks while the build
+  supervisor remained healthy. No source diagnostic appeared; later gates are
+  pending until host task capacity recovers.
+- [x] (2026-10-26) Fourth resumed gate pass: `make check-fmt` and lint's Rustdoc
+  stage passed. Clippy found that the shared documentation-example assertion
+  helper is unused in the new cycle-participation integration binary; the
+  updated candidate still needs the full gate sequence.
+- [x] (2026-10-26) Fifth resumed gate pass: `make check-fmt` passed, then
+  `make lint` rejected the attempted `dead_code` allowance under
+  `allow_attributes` and `allow_attributes_without_reason`. Moved the shared
+  assertion into a dedicated module imported only by test binaries that use it;
+  the updated candidate still needs the full gate sequence.
+- [x] (2026-10-26) Sixth resumed gate pass: `make check-fmt`, `make lint`, and
+  `make typecheck` passed. `make test` ran 3,112 of 4,728 tests before
+  fail-fast: 3,109 passed, 3 failed, 6 skipped, and 1,616 were cancelled. The
+  failures showed that the CLI rendered only the generic graph-building context
+  in human mode, hiding the typed cycle message; JSON retained the expected
+  cycle cause. Updated the human error boundary to show the localized
+  `CircularDependency` message and made the JSON snapshot version-stable. The
+  complete sequential gate suite remains pending on this updated candidate.
+- [x] (2026-10-26) Seventh resumed gate pass: `make check-fmt` passed, then
+  Clippy rejected the cycle-cause helper's nested `cause` binding as
+  `shadow_reuse`. Renamed the inner binding to `ir_error`; rerun the full
+  sequential suite on the updated candidate.
+- [x] (2026-10-26) Eighth resumed gate pass: check-fmt, lint, and typecheck
+  passed. `make test` ran 3,541 of 4,728 tests: 3,540 passed, 1 failed, and 6
+  were skipped; 1,187 were cancelled. The only failure was the order-only Kani
+  mutation patch no longer applying after the detector gained the implicit
+  dependency traversal. Regenerated the patch against the current line and
+  confirmed `git apply --check` passes; no production source was mutated.
+  Restart the full sequential suite on this updated candidate.
+- [x] (2026-10-26) Ninth resumed gate pass: `make check-fmt`, `make test`,
+  `make typecheck`, `make lint`, doc coverage, Markdown, Mermaid, documentation
+  contracts, and workflow contracts passed. The additional
+  `make test-kani-mutations` compile guard timed out at 600 seconds amid shared
+  compiler-slot waits; its log contains no source diagnostic.
+- [x] (2026-10-26) A capped post-change `make kani-ir` run reached the two new
+  cycle harnesses. Both exposed multi-byte path fixtures against the existing
+  one-byte Kani path-key invariant in `BuildGraph::index_output`. Changed the
+  harness fixtures to one-byte identifiers while preserving their graph
+  structure. The corrected capped `make kani-ir` then verified all 17
+  harnesses. The separate mutation compile guard timed out twice at 600 seconds
+  amid shared compiler-slot waits, without a source diagnostic. The order-only
+  mutation produced its expected counterexample. The implicit-output mutation
+  instead verified successfully because the harness assumed three indexed
+  outputs, excluding the mutant state. Removed that output-count assumption
+  while retaining the two-edge witness. Both isolated mutations now produce the
+  intended Kani assertion counterexample. The latest capped Kani run verified
+  13 harnesses, including both changed cycle harnesses, before reaching the
+  limit during an unrelated manifest harness; the previous full run verified
+  all 17 before this assumption-only correction. The separate
+  `make test-kani-mutations` compile guard timed out twice at 600 seconds with
+  compiler-slot waits and no source diagnostic.
+- [x] (2026-10-26) Reran the standard and documentation gates on the corrected
+  candidate: check-fmt, lint, typecheck, doc coverage (98.20%), test (4,728
+  passed, 6 skipped, plus doctests), Markdown, Mermaid, documentation
+  contracts, and workflow contracts all passed.
+- [x] (2026-10-26) Rebased the five-commit plan series onto the refreshed
+  `origin/main` at `0a28fee383061c76aebe94cb38236c6cfa597f35`. The replay was
+  conflict-free, and `git range-diff` paired all five commits with their
+  predecessors. Restored the staged implementation without conflicts; main's
+  telemetry changes remain intact and `Cargo.lock` has no candidate diff.
+- [x] (2026-10-26) Revalidated the final closeout tree, staged on top of
+  `fdcab42972f8d5070a66a7290f3fc504762f78eb`, with all nine sequential gates:
+  `make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage` (98.19%),
+  `make test` (4,741 passed, 7 skipped, plus doctests), `make markdownlint`
+  (202 files, zero issues), `make nixie`, `make test-documentation-contracts`
+  (15 passed), and `make test-workflow-contracts` (1,351 passed, 3 skipped,
+  plus 27 script tests). The capped `make kani-ir` run passed all 17 harnesses
+  with zero failures. Logs for this final pass use the `-19.out` suffix. The
+  separate ignored-only mutation compile guard had timed out twice on an
+  earlier candidate amid shared compiler-slot waits without source diagnostics;
+  it was not repeated under the prior gate instruction. Both isolated mutation
+  patches produced their expected Kani counterexamples.
+- [x] (2026-10-26) Closed EP-M4: ticked roadmap 4.4.2 and its sub-items,
+  recorded ADR-0060 as the decision, and reconciled this plan's outcome with
+  the passing final candidate gates.
 - [x] (2026-10-24) Attempted the unchanged-tree `make kani-ir` baseline in the
   prescribed capped scope. Compiler admission remained healthy but queued this
   worktree's Cargo metadata probe until the eight-minute scope timeout; Kani
   printed its version banner but enumerated no harnesses. This is not proof
   evidence; the post-change Kani run remains required.
-- [ ] EP-M1.
-- [ ] EP-M2.
-- [ ] EP-M3.
-- [ ] EP-M4.
+- [x] (2026-10-24) Reached the first EP-M1 validation checkpoint: formatting,
+  Markdown, Mermaid, and documentation-example contracts passed. The full test
+  run passed 4,653 tests, including all three new implicit-output cases, then
+  timed out an unchanged CLI-configuration fixture at its 300-second limit.
+  Typecheck reached a `build-limits: ... launch-failed` refusal; lint and doc
+  coverage were not run. The workflow-contract gate found that the extracted
+  verification helper violated the module-layout convention. After moving the
+  helper under `verification/`, `make check-fmt`,
+  `make test-workflow-contracts` (1,337 contract and 27 script tests passed;
+  three skipped), and `make nixie` passed.
+- [x] EP-M1. Implicit-output alias behaviour is covered by tests, the current
+  Kani harness, and its non-vacuous mutation counterexample.
+- [x] EP-M2. Order-only cycles are rejected across tests, the current Kani
+  harness, and its mutation counterexample; the shared quality gates pass.
+- [x] EP-M3. ADR-0060 and the user, developer, design, and verification docs
+  agree; the stale-rule search returned no matches.
+- [x] EP-M4. The roadmap and plan now record the completed contract and its
+  validation evidence.
 
 ## Surprises & discoveries
 
@@ -1150,8 +1275,9 @@ already treat order-only dependencies as graph arcs.
 - Observation (rebase): main moved cycle detection into `src/ir/cycle/` and
   split property tests into `cycle/property_tests/`. Impact: active plan paths
   now refer to the rebased locations; Kani harnesses stay in
-  `cycle/verification.rs`, while helper extraction targets
-  `cycle/verification_support.rs` rather than production `cycle/support.rs`.
+  `cycle/verification.rs`, while helper extraction targets the nested
+  `cycle/verification/support.rs` module rather than production
+  `cycle/support.rs`.
 - Observation (rebase): main already includes the `rstest-bdd` 0.6.0
   migration. Impact: the earlier PR-805 migration risk is resolved; Stage A
   will verify the merged API and use it directly.
@@ -1159,6 +1285,10 @@ already treat order-only dependencies as graph arcs.
   are reserved on live branches, and the branch sweep found ADR-0060 available.
   Impact: references use ADR-0060, with a fresh sweep required immediately
   before authoring it.
+- Observation (2026-10-25 rebase): main added ADR-0059 and marked ADR-0033 as
+  superseded while this branch added ADR-0060 at the same index insertion
+  point. The conflict stages contained independent entries; the resolution
+  keeps both records in numeric order and preserves main's supersession text.
 
 ## Decision log
 
@@ -1216,15 +1346,15 @@ already treat order-only dependencies as graph arcs.
   additive hint as a follow-up in the PR description. Date/Author: 2026-09-27,
   planning agent.
 - D8. Decision: allocate ADR-0060. Rationale: ADR-0041 is occupied on `main`;
-  ADR-0057 through ADR-0059 are reserved on live branches, and a sweep of 74
-  remote branch tips found 0060 available. Re-sweep before authoring.
-  Date/Author: 2026-10-24, implementation.
+  ADR-0057 through ADR-0059 are reserved on live branches, and a sweep of 76
+  refreshed remote branch tips found 0060 available immediately before
+  authoring. Date/Author: 2026-10-24, implementation.
 - D9. Decision: add the two new Kani harnesses to `src/ir/cycle/verification.rs`
-  and move its canonicalization-only helpers into a harness-free
-  `src/ir/cycle/verification_support.rs`. Rationale: keeps harness paths under
-  `ir::cycle::verification`, matching the mutation-evidence contract, and keeps
-  the file under 400 lines without extending the contract test. Date/Author:
-  2026-09-27, planning agent.
+  and move its canonicalization-only helpers into the harness-free
+  `src/ir/cycle/verification/support.rs` module. Rationale: keeps harness paths
+  under `ir::cycle::verification`, matches the directory-module layout
+  contract, and keeps each source file under 400 lines. Date/Author:
+  2026-09-27, planning agent; path refined 2026-10-24 after contract feedback.
 - D10. Decision: add `TestWorld::generation_cycle: Slot<Vec<String>>`, filled
   by downcasting to `IrGenError::CircularDependency`, and assert the cycle path
   in BDD scenarios. Rationale: asserting only failure lets a YAML parse error
@@ -1239,10 +1369,35 @@ already treat order-only dependencies as graph arcs.
   call into verified code; `rstest` covers the self-edge, and the DAG-based
   oracle strategy guarantees every class by construction. Date/Author:
   2026-09-27, planning agent.
+- D13. Decision: render a typed `CircularDependency` cause directly in human
+  CLI output when the graph-building context wraps it; preserve the current
+  JSON envelope and cause chain. Rationale: the approved behaviour promises a
+  localized cycle path before Ninja starts, but the generic context hid that
+  message from human users. Date/Author: 2026-10-26, implementation.
 
 ## Outcomes & retrospective
 
-Not started.
+The IR cycle detector now follows explicit inputs, implicit dependencies, and
+order-only dependencies across the whole manifest. Explicit and implicit output
+aliases resolve to their producing edge, while `dependency_order: serial`
+remains a scheduling policy that adds no dependency arc. Human-mode errors
+expose the localized cycle path; the JSON diagnostic envelope remains
+unchanged. ADR-0060 and the user, developer, design, formal-verification,
+migration, and changelog documents describe the same contract.
+
+The final post-rebase candidate passed all nine sequential repository gates,
+including the full Rust test suite and all documentation contracts. Its
+resource-capped `make kani-ir` run completed all 17 harnesses successfully. The
+separate ignored-only mutation compile guard timed out twice on an earlier
+candidate during shared compiler-slot waits, without source diagnostics; both
+new mutation patches were independently checked and produced the intended Kani
+counterexamples. This infrastructure limitation is recorded rather than
+reported as a pass.
+
+The accepted scope keeps cycle detection whole-manifest, matching the existing
+whole-graph treatment of `sources` and `deps` and preventing `generate` from
+emitting a Ninja graph that cannot be scheduled. The additive dependency-kind
+hint in cycle diagnostics remains a proposed D7 follow-up; no issue was filed.
 
 ## Revision note
 
@@ -1268,3 +1423,89 @@ merged Terms of Reference; corrected user-guide signposts and Rust `#[path]`
 resolution; recorded that the baseline Kani attempt timed out in healthy
 compiler admission before harness enumeration. The approved scope and
 acceptance obligations are unchanged.
+
+Revision 4 (2026-10-25): recorded renewed user approval, the live PR target and
+head, and the five-commit replay boundary after `main` advanced. The remote's
+two plan commits match the first two local commits; no scope or D1 decision
+changed. Status returned to `IN PROGRESS` for the refreshed rebase, outstanding
+implementation validation, and plan closure.
+
+Revision 5 (2026-10-25): recorded the conflict-free five-commit replay onto
+`de81d5c3` and the stash restoration. Reconciled the `docs/contents.md`
+insertion-point conflict by retaining both branches' ADR entries and main's
+ADR-0033 supersession. Validation and EP-M1 through EP-M4 acceptance remain
+pending.
+
+Revision 6 (2026-10-25): recorded the first resumed gate result, corrected the
+planned ADR filename to the allocated ADR-0060 path, and renamed the detector's
+shadowing local binding found by Clippy. The complete sequential gate run is
+pending on this updated candidate.
+
+Revision 7 (2026-10-25): recorded the second gate result and removed the unused
+property-test declarations and indexing Clippy rejected. The complete
+sequential gate run is pending again.
+
+Revision 8 (2026-10-25): recorded that Clippy reached the workspace without
+source findings but could not spawn a thread while the Lody daemon cgroup was
+near its task limit. The service remains untouched; the sequential suite is
+pending until host task capacity recovers.
+
+Revision 9 (2026-10-26): recorded the fourth gate run. Rustdoc passed, while
+Clippy identified a shared test helper unused in one integration binary. The
+first narrow allowance was rejected by the repository's lint policy; move the
+helper into a module imported only where it is used, then rerun the full suite.
+
+Revision 10 (2026-10-26): recorded the fifth gate run and the failed allowance
+attempt. Moved the documentation assertion helper into its own module and
+limited its imports to the integration binaries that use it; rerun the full
+sequential suite on this candidate.
+
+Revision 11 (2026-10-26): recorded the check-fmt, lint, and typecheck passes
+and the first complete nextest build. The partial test run exposed that the
+human CLI boundary hid a typed cycle error behind its generic graph context.
+D13 records the narrow rendering fix; the JSON diagnostic schema remains
+unchanged. The failed run stopped before doctests and later documentation/Kani
+gates, so the sequential suite must be repeated against the corrected candidate.
+
+Revision 12 (2026-10-26): recorded that check-fmt passed and Clippy rejected
+the first error-rendering helper for reusing a closure binding. Renamed the
+inner binding; all subsequent gates remain pending.
+
+Revision 13 (2026-10-26): recorded the check-fmt, lint, and typecheck passes
+and the second test-suite stop. Regenerated the order-only Kani mutation patch
+against the new detector traversal and confirmed that it applies cleanly.
+Regular Kani and manual mutation evidence remain pending.
+
+Revision 14 (2026-10-26): recorded the complete standard and documentation gate
+passes, the external timeout of the mutation compile guard, and the two new
+Kani harness failures. Both witnesses used path names longer than the graph's
+bounded one-byte Kani identifiers; corrected the fixtures and retained the
+proof and mutation gates as acceptance criteria.
+
+Revision 15 (2026-10-26): the corrected, resource-capped `make kani-ir` passed
+all 17 harnesses, including both new cycle properties. The separate mutation
+compile guard again reached its 600-second Nextest limit while compiler work
+was queued, with no source diagnostic. The order-only mutation produced the
+expected counterexample; the implicit-output mutation exposed an overstrong
+output-count assumption. Removed that assumption so the alias-index mutation
+remains within the Kani state space; repeat the proof and isolated experiments.
+
+Revision 16 (2026-10-26): both current mutation snapshots now produce their
+intended assertion counterexamples. The current capped Kani run verified all
+changed cycle harnesses and 13 harnesses overall, then reached its time cap
+during a later manifest harness; a prior full run verified all 17 before the
+single-harness assumption correction. All standard and documentation gates
+passed again on the corrected candidate. The compile-only mutation guard
+remains an external timeout; CodeRabbit review and PR delivery remain pending.
+
+Revision 17 (2026-10-26): rebased the approved plan series onto the refreshed
+`origin/main` at `0a28fee3`, restored the implementation without conflicts,
+reran the full sequential gate set on the post-rebase candidate, and completed
+all 17 capped Kani harnesses. Ticked roadmap 4.4.2 and its sub-items, recorded
+the successful outcome and the separate mutation compile-guard timeout, and
+closed EP-M4.
+
+Revision 18 (2026-10-26): reran all nine sequential gates and the capped Kani
+suite after the roadmap and plan closeout edits. The final candidate passed
+every gate and all 17 Kani harnesses; the ignored-only mutation compile guard
+remains recorded as an earlier shared-compiler timeout, not a pass.

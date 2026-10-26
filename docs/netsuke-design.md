@@ -2572,21 +2572,26 @@ This transformation involves several steps:
    search maintaining a visitation state) on the dependency graph to fail early
    on circular dependencies.
 
-   The implemented algorithm performs a depth-first traversal of the target
-   graph and maintains a recursion stack. Order-only dependencies are ignored
-   during this search. Self-edges are rejected immediately, and encountering an
+   The implemented algorithm performs a depth-first traversal of the complete
+   target graph and maintains a recursion stack. `sources`, `deps`, and
+   `order_only_deps` all participate: each prerequisite must be ready before
+   its dependent can run, even though order-only dependencies do not affect
+   freshness. Explicit and implicit output aliases resolve to their one
+   producing edge. Self-edges are rejected immediately, and encountering an
    already visiting node indicates a cycle. The stack slice from the first
    occurrence of that node forms the cycle and is returned in
    `IrGenError::CircularDependency` for improved debugging. The cycle list is
    rotated so the lexicographically smallest node appears first, ensuring
-   deterministic error messages.
+   deterministic error messages. The whole-manifest scope and the separate
+   scheduling-only role of `dependency_order` are recorded in
+   [ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md).
 
    Traversal state is implemented in the dedicated `ir::cycle` module. Its
    `CycleDetector` helper exposes a `detect` API and owns the recursion stack
-   and visitation map. Keys are cloned from the `targets` map so traversal
-   leaves the input graph untouched. Missing dependencies encountered during
-   traversal are logged, collected, and returned alongside any cycle to aid
-   diagnostics.
+   and visitation map. It borrows target keys from the canonical output index
+   so traversal leaves the input graph untouched without cloning keys. Missing
+   dependencies encountered during traversal are logged, collected, and
+   returned alongside any cycle to aid diagnostics.
 
 #### Structured-command shell selection vocabulary
 

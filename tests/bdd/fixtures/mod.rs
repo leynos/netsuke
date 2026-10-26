@@ -60,6 +60,8 @@ pub struct TestWorld {
     pub removed_action_id: Slot<String>,
     /// Error text captured when IR generation fails.
     pub generation_error: Slot<String>,
+    /// Canonical cycle paths captured from an IR generation error.
+    pub generation_cycle: Slot<Vec<String>>,
 
     // Ninja state (Clone)
     /// Generated Ninja file content.

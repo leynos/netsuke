@@ -43,10 +43,11 @@ required job covering every harness on pushes to `main`, nightly schedules, and
 manual dispatches, and on pull requests it runs only when a proof input changes
 (see
 [ADR-0039](adrs/adr-0039-run-the-kani-proofs-on-a-pull-request-only-when-their-inputs-change.md)).[^3]
-The 15 harnesses live in three verification modules:
-`src/ir/cycle/verification.rs` (9), `src/ir/from_manifest/verification.rs` (4),
-and `src/ir/cmd_interpolate/verification.rs` (2). `src/ir/graph/kani_map.rs` is
-`cfg(kani)` support code those harnesses use, not a harness location.
+The 17 harnesses live in three verification modules:
+`src/ir/cycle/verification.rs` (11), `src/ir/from_manifest/verification.rs`
+(4), and `src/ir/cmd_interpolate/verification.rs` (2).
+`src/ir/graph/kani_map.rs` is `cfg(kani)` support code those harnesses use, not
+a harness location.
 
 That earlier absence still shapes the design. Netsuke did not need a new
 verification workspace as a first step: the strongest verification targets
@@ -311,7 +312,7 @@ When the proofs run, it:
 
 - installs the pinned Kani front-end and release bundle from checksummed
   archives, then checks the reported version against `tools/kani/VERSION`,
-- runs the bounded harness suite through `make kani-ir` (15 harnesses across
+- runs the bounded harness suite through `make kani-ir` (17 harnesses across
   the manifest, cycle, and command-interpolation verification modules), then
   `make install-build-tools` and the mutation patch compile gate through
   `make test-kani-mutations`,
@@ -371,10 +372,14 @@ three questions this section raised are now answered:
 
 `BuildEdge` records explicit inputs, implicit dependencies, explicit outputs,
 implicit outputs, and order-only dependencies.[^5][^7] Cycle detection walks
-explicit inputs and implicit dependencies: in manifest terms, `sources` and
-`deps` participate. Order-only dependencies do not participate, because they
-only enforce build ordering and do not affect rebuild freshness. The user guide
-documents the same contract in its target dependency-field section.
+all three prerequisite classes: in manifest terms, `sources`, `deps`, and
+`order_only_deps` participate. An order-only prerequisite does not trigger a
+rebuild when it changes, but the dependent still must wait for it. Explicit and
+implicit output aliases resolve to the same producing edge, and
+`dependency_order` adds no graph arc. Validation covers the complete manifest,
+including targets never requested by Ninja. The users' guide and
+[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md)
+document this contract.
 
 ### Determinism contract
 

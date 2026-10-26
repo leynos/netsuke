@@ -2,6 +2,9 @@
 
 mod documentation_examples;
 
+#[path = "documentation_examples/assertions.rs"]
+mod documentation_example_assertions;
+
 #[path = "documentation_examples_tests/cli_examples.rs"]
 mod cli_examples;
 
@@ -13,9 +16,8 @@ mod lint_examples;
 mod release_wix_extension;
 
 use anyhow::{Context, Result, ensure};
-use documentation_examples::{
-    assert_success, documented_example, load_documented_examples, manifest_workspace,
-};
+use documentation_example_assertions::assert_success;
+use documentation_examples::{documented_example, load_documented_examples, manifest_workspace};
 use rstest::rstest;
 use serde_json::Value;
 use std::collections::BTreeSet;
@@ -54,6 +56,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-foreach-manifest",
     "guide-help-targets",
     "guide-help-targets-edges-json",
+    "guide-order-only-cycle-manifest",
     "guide-json-command",
     "guide-json-output",
     "guide-macro-manifest",

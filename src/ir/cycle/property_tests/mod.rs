@@ -14,6 +14,8 @@ mod analyse_tests;
 
 mod issue322_property_tests;
 
+mod participation_tests;
+
 fn path(name: &str) -> camino::Utf8PathBuf {
     camino::Utf8PathBuf::from(name)
 }
