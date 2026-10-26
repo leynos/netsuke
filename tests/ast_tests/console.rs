@@ -1,6 +1,7 @@
 //! Tests for the opt-in Ninja console scheduling field.
 
 use anyhow::{Context, Result, ensure};
+use netsuke::localization::{self, keys};
 use rstest::rstest;
 
 use super::support::parse_manifest;
@@ -49,8 +50,9 @@ fn dependency_only_console_manifest_error_is_localized() -> Result<()> {
         "manifest validation should retain the parse diagnostic path: {error:#}"
     );
     let rendered = format!("{error:#}");
+    let expected = localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY).to_string();
     ensure!(
-        rendered.contains("arête de compilation"),
+        rendered.contains(&expected),
         "dependency-only console diagnostic should use the French catalogue: {rendered}"
     );
     Ok(())

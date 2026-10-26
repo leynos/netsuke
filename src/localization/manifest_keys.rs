@@ -59,4 +59,5 @@ define_keys! {
     MANIFEST_COMMAND_LIST_EMPTY => "manifest.command_list_empty",
     MANIFEST_COMMAND_ISOLATION_RECIPE => "manifest.command_isolation_recipe",
     MANIFEST_COMMAND_ISOLATION_SCALAR => "manifest.command_isolation_scalar",
+    MANIFEST_CONSOLE_DEPENDENCY_ONLY => "manifest.console_dependency_only",
 }
