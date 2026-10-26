@@ -3,6 +3,8 @@
 //! Provides execution orchestration; build work streams through Ninja (default
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
+#[cfg(test)]
+mod callsite_interest_reproduction;
 #[cfg(feature = "lint")]
 mod check;
 mod dispatch;

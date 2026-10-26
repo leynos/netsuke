@@ -5039,6 +5039,44 @@ repeated in the `test-workflow-contracts` and `typecheck-python` recipes, and
 `tests/workflow_contracts/kani_smoke_metrics_test.py::test_dependency_pins_match_the_makefile`
 holds them equal.
 
+### Loom callsite-interest model
+
+The root manifest declares `loom = "0.7.2"` as a compatible development
+dependency requirement; `Cargo.lock` resolves it to 0.7.2. That version
+supports the bounded model in
+[`tests/tracing_interest_model.rs`](../tests/tracing_interest_model.rs). It
+models the stale `Interest::never()` write in `tracing-core` 0.1.36 and checks
+whether two inert registrar anchors prevent that write from replacing a more
+permissive callsite interest. The model complements the fresh-process schedule
+in the reproduction module; it does not model the real thread-local dispatcher,
+allocator timing, or full `tracing-subscriber` layers.
+
+The model explores at most three threads, 10,000 branches, and three
+preemptions. Its builder disables permutation and duration caps, checkpoints,
+location reporting, and logging, overriding the corresponding ambient `LOOM_*`
+settings so those bounds describe the search. `Builder::new` parses numeric
+`LOOM_*` settings before the overrides, so malformed numeric values still fail
+the test. Loom does not provide `Weak` registrars; the model uses a separate
+liveness token to model pruning without retaining the dispatch. This is not a
+full `Weak::upgrade` model: dispatch owners remain alive through the final
+observation, so the model does not cover concurrent drops of the last owner or
+registrar churn.
+
+The final cached-interest check runs after both modelled threads have joined.
+That read uses `SeqCst`, while `tracing-core` reads the cache with `Relaxed`.
+The model checks the stale competing write, not a concurrent cache read.
+
+Run the focused model with:
+
+```bash
+cargo nextest run -p netsuke-build --test tracing_interest_model
+```
+
+The model's source mapping and limits are recorded in
+[ADR-0057](adrs/adr-0057-anchor-tracing-test-callsite-interest-rebuilds.md) and
+the
+[Issue 927 ExecPlan](execplans/issue-927-manifest-structure-telemetry-test-loses-its-event-under-concurrent-execution.md).
+
 ## Test execution
 
 ### Which job executes which tests
@@ -7367,7 +7405,7 @@ where resolution itself fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 
-`src/test_tracing_capture.rs` (`crate::test_tracing_capture`) is the root
+`src/test_tracing_capture/mod.rs` (`crate::test_tracing_capture`) is the root
 crate's `#[cfg(test)]` capture boundary for unit tests. `with_test_subscriber`
 installs a capturing `Layer` as the default subscriber for the duration of a
 closure, then returns the closure's result. Each event's fields are rendered as
@@ -7389,7 +7427,62 @@ with_test_subscriber(LevelFilter::TRACE, |captured| {
 `with_test_subscriber` installs the subscriber through
 [`tracing::subscriber::with_default`], which registers a *thread-local*
 default. Only events emitted on the calling thread are captured; events emitted
-from threads spawned inside the closure are silently dropped.
+from threads spawned inside the closure are not forwarded to this capture. That
+caveat is real, but it does not explain the manifest summary loss:
+`record_manifest_structure` emits synchronously, and the failing schedule
+retained all six structural span fields while losing only the event.
+
+The demonstrated cause is the `Rebuilder::JustOne` fast path in `tracing-core`
+0.1.36. When the process has at most one live dispatcher, a first-time callsite
+registration reads interest from the registering thread's default. A concurrent
+dispatcher registration can rebuild and publish a more permissive interest
+before the first registration publishes its older `Interest::never()` result.
+That stale write then suppresses the event for other thread-local dispatchers.
+The bounded Loom model and fresh-process schedule under
+`src/runner/callsite_interest_reproduction/` cover this ordering. The model
+cites the pinned `callsite.rs` implementation; the production summary emission
+remains synchronous.
+
+Both capture helpers call
+`test_support::tracing_capture::ensure_test_interest_anchors_registered` before
+constructing a capture dispatch. The runner's private span-only helper does the
+same. That function retains two inert dispatches in a `OnceLock` as registrars
+only. They return `Interest::never()`, reject every event from `enabled`, and
+advertise `LevelFilter::OFF`; they are never installed as scoped or global
+defaults. Since `tracing-core` prunes dead weak registrars before checking the
+count, two retained dispatches keep `has_just_one` false even after all test
+scopes have ended. New registrations therefore take the registry read-lock
+path, which prevents a concurrent dispatch registration from publishing between
+the interest read and its write.
+
+The anchors add `Interest::sometimes()` when their `never` interest is combined
+with a different live subscriber interest. This is conservative: the active
+thread-local dispatch still runs its own `enabled` filter. It also makes each
+callsite rebuild walk the live registrar list under the registry read lock.
+Subscriber callbacks on that path must not re-enter tracing or register a
+dispatch: a writer-preferring `RwLock` can deadlock when a callback tries to
+acquire a read lock while a writer is waiting. The capture layers only render
+fields and update mutex-protected buffers; they emit no tracing.
+
+Use `with_test_subscriber_registration_hooks` only for deterministic tests that
+coordinate a capture dispatch with another registrar. Its thread-local scope
+provides one callback immediately before dispatch creation and an observer for
+the capture layer's callsite registrations. Wrap it around the public
+`with_test_subscriber` helper so that helper remains the sole owner of anchor
+registration. Ordinary tests should call `with_test_subscriber` directly; hook
+callbacks must not emit tracing or register a dispatch.
+
+Anchors prevent new `JustOne` selections after initialization. They cannot
+cancel a `JustOne` registration that already took its snapshot, so a narrow
+in-flight window remains if another test reaches a cold callsite before the
+first helper registers the anchors. The deterministic mitigated worker
+registers them before T1 creates its subscriber.
+
+The intermittent symptom was measured under libtest, where multiple tests share
+one process-wide callsite registry. Nextest launches each test in a separate
+process, so it hides this cross-test registrar race; the mutation baseline used
+libtest. Do not add retries or change the nextest thread policy: the
+exact-cardinality oracle and the gated worker must keep detecting a lost event.
 
 The root-crate module is `#[cfg(test)]`, so it is available to unit tests only;
 integration tests under `tests/` compile as separate crates and cannot reach it.
@@ -7399,7 +7492,14 @@ integration tests. It is limited to test code: callers choose the
 install a global subscriber or use it from production modules. Reuse it for
 in-process observability assertions such as configuration merging. Coverage
 that needs the real binary's tracing output continues to assert on the
-process's stderr — see `tests/logging_stderr/config_tracing.rs`.
+process's stderr — see `tests/logging_stderr/config_tracing.rs`. The
+test-process interest anchors and their read-lock trade-offs are recorded in
+[ADR-057](adrs/adr-0057-anchor-tracing-test-callsite-interest-rebuilds.md).
+
+The crate-private `uninstalled_test_subscriber` constructor in the root helper
+is reserved for the issue 927 fresh-process worker, which must control the
+moment T2 installs its dispatch. Ordinary unit tests use `with_test_subscriber`
+so anchor registration cannot be skipped accidentally.
 
 `CapturedEvents` has no `Default` implementation — obtain it only from the
 handle passed into the `with_test_subscriber` closure. `snapshot()` recovers a
@@ -7414,7 +7514,7 @@ under test never set; a span name with no captured fields returns an empty
 collection rather than an error. `discovery_span_fields()` is the bound
 accessor for the configuration-discovery span. See
 `span_fields_are_captured_by_name_and_recording_point` in
-`src/test_tracing_capture.rs`.
+`src/test_tracing_capture/mod.rs`.
 
 `span_fields` exists on the root-crate helper's `CapturedEvents` only. The
 reusable `test_support::tracing_capture::CapturedEvents` exposes `snapshot()`

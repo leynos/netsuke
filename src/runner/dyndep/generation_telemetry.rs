@@ -161,6 +161,7 @@ mod tests {
     }
 
     fn with_span_capture<T>(test: impl FnOnce(CapturedSpanFields) -> T) -> T {
+        test_support::tracing_capture::ensure_test_interest_anchors_registered();
         let captured = CapturedSpanFields::default();
         let subscriber =
             tracing_subscriber::registry().with(captured.clone().with_filter(LevelFilter::TRACE));
