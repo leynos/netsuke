@@ -66,7 +66,9 @@ use crate::ninja_gen::generate_bundle;
 use camino::Utf8PathBuf;
 use capability::{ninja_property_config, prepare_ninja_capability};
 use proptest::prelude::*;
-use proptest::test_runner::{TestCaseError, TestRunner};
+use proptest::test_runner::{
+    FailurePersistence, FileFailurePersistence, TestCaseError, TestRunner,
+};
 use std::cell::Cell;
 use workspace::BundleWorkspace;
 
@@ -94,6 +96,25 @@ fn arb_ninja_spec() -> impl Strategy<Value = GraphSpec> {
     arb_graph_spec_within(NINJA_BOUNDS)
 }
 
+#[test]
+fn oracle_config_loads_the_committed_regression_seed() {
+    let config = ninja_property_config(file!(), "oracle regression replay");
+    let expected = FileFailurePersistence::Direct(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/proptest-regressions/ninja_gen/determinism/property_tests/ninja_oracle/mod.txt"
+    ))
+    .load_persisted_failures2(None);
+    assert!(
+        !expected.is_empty(),
+        "the committed regression seed must exist"
+    );
+    let actual = FileFailurePersistence::default().load_persisted_failures2(config.source_file);
+    assert_eq!(
+        actual, expected,
+        "the oracle must replay its committed seeds"
+    );
+}
+
 /// Real Ninja accepts both insertion orders of the emitted bundle.
 ///
 /// Both orders are checked rather than only the first because the obligation
@@ -105,10 +126,10 @@ fn real_ninja_accepts_both_insertion_orders() -> Result<(), TestCaseError> {
     let Some(ninja) = prepare_ninja_capability()? else {
         return Ok(());
     };
-    let mut runner = TestRunner::new(ninja_property_config(concat!(
-        module_path!(),
-        "::real_ninja_accepts_both_insertion_orders"
-    )));
+    let mut runner = TestRunner::new(ninja_property_config(
+        file!(),
+        concat!(module_path!(), "::real_ninja_accepts_both_insertion_orders"),
+    ));
     runner
         .run(&arb_ninja_spec(), |spec| {
             for order in [spec.orders().0, spec.orders().1] {
@@ -135,10 +156,13 @@ fn real_ninja_yields_the_same_commands_under_both_orders() -> Result<(), TestCas
     let Some(ninja) = prepare_ninja_capability()? else {
         return Ok(());
     };
-    let mut runner = TestRunner::new(ninja_property_config(concat!(
-        module_path!(),
-        "::real_ninja_yields_the_same_commands_under_both_orders"
-    )));
+    let mut runner = TestRunner::new(ninja_property_config(
+        file!(),
+        concat!(
+            module_path!(),
+            "::real_ninja_yields_the_same_commands_under_both_orders"
+        ),
+    ));
     runner
         .run(&arb_ninja_spec(), |spec| {
             let mut lists = Vec::new();

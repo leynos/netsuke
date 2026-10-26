@@ -40,13 +40,16 @@ pub(super) fn prepare_ninja_capability() -> Result<Option<NinjaCapability>, Test
 /// The oracle is prepared before sampling, so these properties use a manual
 /// runner instead of `proptest!`. Keep its contextualized settings, source file,
 /// and full test name identical to the macro so persisted seeds still replay.
-pub(super) fn ninja_property_config(test_name: &'static str) -> ProptestConfig {
+pub(super) fn ninja_property_config(
+    source_file: &'static str,
+    test_name: &'static str,
+) -> ProptestConfig {
     let mut config = contextualize_config(ProptestConfig {
         cases: 64,
         max_shrink_time: super::super::support::HEAVY_SHRINK_TIME_MS,
         ..ProptestConfig::default()
     });
-    config.source_file = Some(file!());
+    config.source_file = Some(source_file);
     config.test_name = Some(test_name);
     config
 }
