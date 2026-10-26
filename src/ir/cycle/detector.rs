@@ -201,7 +201,7 @@ impl<'targets> CycleDetector<'targets> {
         }
     }
 
-    /// Visit the `inputs` and `implicit_deps` of a known edge in order,
+    /// Visit every dependency of a known edge in declaration order,
     /// returning early on the first detected cycle.
     ///
     /// `edge` must be borrowed from the `'targets`-lifetime target map so
@@ -217,7 +217,11 @@ impl<'targets> CycleDetector<'targets> {
         if cycle.is_cycle() {
             return cycle;
         }
-        self.visit_dependencies(node, &edge.implicit_deps, search)
+        let implicit_cycle = self.visit_dependencies(node, &edge.implicit_deps, search);
+        if implicit_cycle.is_cycle() {
+            return implicit_cycle;
+        }
+        self.visit_dependencies(node, &edge.order_only_deps, search)
     }
 
     /// Visit `node` depth-first.

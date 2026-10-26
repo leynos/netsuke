@@ -1,9 +1,8 @@
 //! Property tests for PR #315 cycle-detection invariants.
 //!
 //! These generated graph properties verify that `analyse` rejects false
-//! positives on DAGs, detects explicit and implicit back-edges, excludes
-//! order-only dependencies from traversal, reports missing dependencies, and
-//! remains stable across `HashMap` insertion order.
+//! positives on DAGs, detects back-edges of every dependency kind, reports
+//! missing dependencies, and remains stable across insertion order.
 
 use std::collections::HashSet;
 
@@ -13,6 +12,29 @@ use proptest::prelude::*;
 use super::super::super::graph::{BuildEdge, BuildGraph};
 use super::super::{CycleDetectionReport, analyse};
 
+/// Classify the dependency field receiving one generated arc.
+#[derive(Clone, Copy, Debug)]
+enum DependencyKind {
+    Input,
+    Implicit,
+    OrderOnly,
+}
+
+/// Generate each dependency kind without filtering any generated case.
+fn dependency_kind_strategy() -> impl Strategy<Value = DependencyKind> {
+    prop_oneof![
+        Just(DependencyKind::Input),
+        Just(DependencyKind::Implicit),
+        Just(DependencyKind::OrderOnly),
+    ]
+}
+
+/// Generate an input or implicit dependency kind.
+fn ordinary_dependency_kind_strategy() -> impl Strategy<Value = DependencyKind> {
+    prop_oneof![Just(DependencyKind::Input), Just(DependencyKind::Implicit),]
+}
+
+/// Return a named node path for one generated target.
 fn node(index: usize) -> Utf8PathBuf {
     Utf8PathBuf::from(format!("n{index}"))
 }
@@ -31,22 +53,24 @@ fn build_edge(output: Utf8PathBuf) -> BuildEdge {
     }
 }
 
-fn push_dependency(edge: &mut BuildEdge, dep: Utf8PathBuf, is_implicit: bool) {
-    if is_implicit {
-        edge.implicit_deps.push(dep);
-    } else {
-        edge.inputs.push(dep);
+/// Add `dep` to the field selected by `kind`.
+fn push_dependency(edge: &mut BuildEdge, dep: Utf8PathBuf, kind: DependencyKind) {
+    match kind {
+        DependencyKind::Input => edge.inputs.push(dep),
+        DependencyKind::Implicit => edge.implicit_deps.push(dep),
+        DependencyKind::OrderOnly => edge.order_only_deps.push(dep),
     }
 }
 
-fn dag_from_edges(node_count: usize, edges: &[(usize, usize, bool)]) -> BuildGraph {
+/// Build a graph whose generated dependencies point only to earlier nodes.
+fn dag_from_edges(node_count: usize, edges: &[(usize, usize, DependencyKind)]) -> BuildGraph {
     let mut graph = BuildGraph::default();
     for index in 0..node_count {
         let output = node(index);
         let mut edge = build_edge(output.clone());
-        for &(from, to, is_implicit) in edges {
+        for &(from, to, kind) in edges {
             if from == index && to < from {
-                push_dependency(&mut edge, node(to), is_implicit);
+                push_dependency(&mut edge, node(to), kind);
             }
         }
         assert!(
@@ -57,27 +81,28 @@ fn dag_from_edges(node_count: usize, edges: &[(usize, usize, bool)]) -> BuildGra
     graph
 }
 
+/// Generate a DAG with dependencies from any supported field.
 fn dag_strategy() -> impl Strategy<Value = BuildGraph> {
     (
         1usize..50,
-        proptest::collection::vec((0usize..50, 0usize..50, any::<bool>()), 0..250),
+        proptest::collection::vec((0usize..50, 0usize..50, dependency_kind_strategy()), 0..250),
     )
         .prop_map(|(node_count, edges)| dag_from_edges(node_count, &edges))
 }
 
-/// Build a linear graph and replace `n0` with an edge back to its final node.
+/// Build a linear graph and replace `n0` with a back-edge of the requested kind.
 fn graph_with_back_edge(
     node_count: usize,
-    add_back_edge: impl FnOnce(&mut BuildEdge, Utf8PathBuf),
+    back_edge_kind: DependencyKind,
 ) -> (BuildGraph, Utf8PathBuf, Utf8PathBuf) {
     let chain_edges: Vec<_> = (1..node_count)
-        .map(|index| (index, index - 1, false))
+        .map(|index| (index, index - 1, DependencyKind::Input))
         .collect();
     let mut graph = dag_from_edges(node_count, &chain_edges);
     let from = node(0);
     let to = node(node_count - 1);
     let mut edge = build_edge(from.clone());
-    add_back_edge(&mut edge, to.clone());
+    push_dependency(&mut edge, to.clone(), back_edge_kind);
     assert!(
         graph.replace_edge_for_output(from.as_path(), edge),
         "the generated graph must contain n0",
@@ -85,43 +110,53 @@ fn graph_with_back_edge(
     (graph, from, to)
 }
 
+/// Generate a cyclic graph whose closing arc is explicit or implicit.
 fn cyclic_graph_strategy() -> impl Strategy<Value = (BuildGraph, Utf8PathBuf, Utf8PathBuf)> {
-    (2usize..50, any::<bool>()).prop_map(|(node_count, back_edge_is_implicit)| {
-        graph_with_back_edge(node_count, |edge, to| {
-            push_dependency(edge, to, back_edge_is_implicit);
-        })
-    })
+    (2usize..50, ordinary_dependency_kind_strategy())
+        .prop_map(|(node_count, kind)| graph_with_back_edge(node_count, kind))
 }
 
-fn order_only_back_edge_strategy() -> impl Strategy<Value = BuildGraph> {
-    (2usize..50).prop_map(|node_count| {
-        graph_with_back_edge(node_count, |edge, to| {
-            edge.order_only_deps.push(to);
-        })
-        .0
-    })
+/// Generate a graph with exactly one order-only back-edge.
+fn order_only_back_edge_strategy() -> impl Strategy<Value = (BuildGraph, Utf8PathBuf, Utf8PathBuf)>
+{
+    (2usize..50).prop_map(|node_count| graph_with_back_edge(node_count, DependencyKind::OrderOnly))
 }
 
+/// Generate a graph with no cycles and at least one injected missing path.
 fn missing_graph_strategy() -> impl Strategy<Value = BuildGraph> {
     (
         dag_strategy(),
-        proptest::collection::vec((0usize..50, 0usize..20, any::<bool>()), 1..50),
+        proptest::collection::vec((0usize..50, 0usize..20, dependency_kind_strategy()), 1..50),
+        (0usize..50, 0usize..20),
     )
-        .prop_map(|(mut graph, missing_edges)| {
-            let node_count = graph.edge_count();
-            for (from, missing_index, is_implicit) in missing_edges {
-                let bounded_from = from.min(node_count.saturating_sub(1));
+        .prop_map(
+            |(mut graph, missing_edges, (order_only_from, order_only_index))| {
+                let node_count = graph.edge_count();
+                for (from, missing_index, kind) in missing_edges {
+                    let bounded_from = from.min(node_count.saturating_sub(1));
+                    let output = node(bounded_from);
+                    let Some((_, edge)) = graph.target_for_output(output.as_path()) else {
+                        continue;
+                    };
+                    let missing = Utf8PathBuf::from(format!("missing-{missing_index}"));
+                    let mut replacement = edge.clone();
+                    push_dependency(&mut replacement, missing, kind);
+                    let _ = graph.replace_edge_for_output(output.as_path(), replacement);
+                }
+                let bounded_from = order_only_from.min(node_count.saturating_sub(1));
                 let output = node(bounded_from);
-                let Some((_, edge)) = graph.target_for_output(output.as_path()) else {
-                    continue;
-                };
-                let missing = Utf8PathBuf::from(format!("missing-{missing_index}"));
-                let mut replacement = edge.clone();
-                push_dependency(&mut replacement, missing, is_implicit);
-                let _ = graph.replace_edge_for_output(output.as_path(), replacement);
-            }
-            graph
-        })
+                if let Some((_, edge)) = graph.target_for_output(output.as_path()) {
+                    let mut replacement = edge.clone();
+                    push_dependency(
+                        &mut replacement,
+                        Utf8PathBuf::from(format!("missing-order-only-{order_only_index}")),
+                        DependencyKind::OrderOnly,
+                    );
+                    let _ = graph.replace_edge_for_output(output.as_path(), replacement);
+                }
+                graph
+            },
+        )
 }
 
 // Accept short, duplicate, or out-of-range order vectors. Chosen entries are
@@ -170,10 +205,45 @@ fn sorted_missing(report: &CycleDetectionReport) -> Vec<(Utf8PathBuf, Utf8PathBu
     missing
 }
 
+/// Replace every edge's ordering mode while preserving its aliases.
+fn graph_with_dependency_order(
+    graph: &BuildGraph,
+    dependency_order: crate::ir::DependencyOrder,
+) -> BuildGraph {
+    let mut ordered = graph.clone();
+    for edge in graph.edges() {
+        let Some(output) = edge.explicit_outputs.first() else {
+            continue;
+        };
+        let mut replacement = edge.clone();
+        replacement.dependency_order = dependency_order;
+        assert!(
+            ordered.replace_edge_for_output(output.as_path(), replacement),
+            "generated edge output aliases must remain indexed",
+        );
+    }
+    ordered
+}
+
+/// Generate both acyclic and cyclic graphs for the ordering metamorphic test.
+fn dependency_order_graph_strategy() -> impl Strategy<Value = BuildGraph> {
+    prop_oneof![
+        missing_graph_strategy(),
+        cyclic_graph_strategy().prop_map(|(graph, _, _)| graph),
+        order_only_back_edge_strategy().prop_map(|(graph, _, _)| graph),
+    ]
+}
+
+/// Return the dependency paths injected with the `missing-` prefix.
 fn injected_missing_deps(graph: &BuildGraph) -> HashSet<Utf8PathBuf> {
     graph
         .edges()
-        .flat_map(|edge| edge.inputs.iter().chain(&edge.implicit_deps))
+        .flat_map(|edge| {
+            edge.inputs
+                .iter()
+                .chain(&edge.implicit_deps)
+                .chain(&edge.order_only_deps)
+        })
         .filter(|dep| dep.as_str().starts_with("missing-"))
         .cloned()
         .collect()
@@ -201,8 +271,18 @@ proptest! {
     }
 
     #[test]
-    fn order_only_back_edge_has_no_cycle(graph in order_only_back_edge_strategy()) {
-        prop_assert!(analyse(&graph).cycle.is_none());
+    fn order_only_back_edge_produces_cycle((graph, from, to) in order_only_back_edge_strategy()) {
+        let cycle = analyse(&graph).cycle.expect("order-only back-edge should produce cycle");
+        let cycle_edges: HashSet<_> = cycle
+            .windows(2)
+            .filter_map(|pair| {
+                let [left, right] = pair else {
+                    return None;
+                };
+                Some((left.clone(), right.clone()))
+            })
+            .collect();
+        prop_assert!(cycle_edges.contains(&(from, to)));
     }
 
     #[test]
@@ -238,5 +318,20 @@ proptest! {
 
         prop_assert_eq!(&baseline.cycle, &reordered_report.cycle);
         prop_assert_eq!(sorted_missing(&baseline), sorted_missing(&reordered_report));
+    }
+
+    #[test]
+    fn dependency_order_does_not_change_analysis(graph in dependency_order_graph_strategy()) {
+        let parallel = analyse(&graph_with_dependency_order(
+            &graph,
+            crate::ir::DependencyOrder::Parallel,
+        ));
+        let serial = analyse(&graph_with_dependency_order(
+            &graph,
+            crate::ir::DependencyOrder::Serial,
+        ));
+
+        prop_assert_eq!(&parallel.cycle, &serial.cycle);
+        prop_assert_eq!(sorted_missing(&parallel), sorted_missing(&serial));
     }
 }

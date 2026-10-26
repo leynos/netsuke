@@ -196,6 +196,21 @@ fn ir_generation_fails(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+/// Assert that IR generation reports the expected canonical cycle path.
+#[then("the IR cycle is {path:string}")]
+fn ir_cycle_is(world: &TestWorld, path: &str) -> Result<()> {
+    let expected = path.split(" -> ").map(str::to_owned).collect::<Vec<_>>();
+    let actual = world
+        .generation_cycle
+        .get()
+        .context("IR generation error should carry a circular dependency")?;
+    ensure!(
+        actual == expected,
+        "expected IR cycle {expected:?}, got {actual:?}"
+    );
+    Ok(())
+}
+
 #[then("the graph target {target:string} has inputs {paths:string}")]
 fn graph_target_inputs(world: &TestWorld, target: &str, paths: &str) -> Result<()> {
     assert_target_paths(world, target, paths, TargetPathField::Inputs)
@@ -231,7 +246,7 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
         &env_reader,
         world.manifest_env_access_policy.borrow().clone(),
     );
-    let outcome = netsuke::manifest::from_path_with_policy_and_environment(
+    let result = netsuke::manifest::from_path_with_policy_and_environment(
         &resolved,
         NetworkPolicy::default(),
         &environment,
@@ -241,7 +256,15 @@ fn compile_manifest_impl(world: &TestWorld, path: &str) {
         BuildGraph::from_manifest_for_shell(&m, RecipeShell::Posix)
             .context("building IR from manifest")
     })
-    .with_context(|| format!("IR generation failed for {path}"))
-    .map_err(|e| e.to_string());
+    .with_context(|| format!("IR generation failed for {path}"));
+    if let Err(error) = &result
+        && let Some(netsuke::ir::IrGenError::CircularDependency { cycle, .. }) =
+            error.downcast_ref::<netsuke::ir::IrGenError>()
+    {
+        world
+            .generation_cycle
+            .set(cycle.iter().map(ToString::to_string).collect());
+    }
+    let outcome = result.map_err(|error| error.to_string());
     store_parse_outcome(&world.build_graph, &world.generation_error, outcome);
 }

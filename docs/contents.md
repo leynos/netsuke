@@ -309,6 +309,9 @@ operator, user, and contributor references are easier to find.
   Compiling public-API contracts as a workspace library and rejections as
   pinned compile-fail doctests, retiring the direct-`rustc` test harness and
   moving package verification into `make test-package-verify`.
+- [ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md):
+  Include every prerequisite kind in whole-manifest cycle detection while
+  keeping output aliases and serial scheduling semantics explicit.
 
 ## Proposals
 

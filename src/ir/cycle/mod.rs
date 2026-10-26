@@ -5,7 +5,8 @@
 //! returns a [`CycleDetectionReport`].  The report carries an optional
 //! detected cycle — an ordered, canonicalized list of paths — together
 //! with any dependencies referenced by a target but absent from the map.
-//! `order_only_deps` are intentionally excluded from traversal.
+//! Explicit inputs, implicit dependencies, and order-only dependencies all
+//! participate because each must be schedulable.
 //!
 //! Traversal state is owned by the private [`CycleDetector`] struct in the
 //! sibling `detector` module; the iteration walks every output alias in
@@ -20,6 +21,9 @@ use super::graph::BuildGraph;
 
 #[cfg(test)]
 mod property_tests;
+
+#[cfg(test)]
+mod participation_tests;
 
 pub(super) mod support;
 
@@ -45,8 +49,8 @@ pub(crate) struct CycleDetectionReport {
 
 /// Detect cycles and collect missing dependencies in `graph`.
 ///
-/// Performs a depth-first traversal of each [`BuildEdge`](super::BuildEdge)'s `inputs` and
-/// `implicit_deps`.  `order_only_deps` are intentionally excluded.
+/// Performs a depth-first traversal of each [`BuildEdge`](super::BuildEdge)'s
+/// `inputs`, `implicit_deps`, and `order_only_deps`.
 ///
 /// Returns any detected cycle path and missing dependencies encountered
 /// before that cycle.  Missing dependencies emit debug-level tracing events.
