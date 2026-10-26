@@ -1095,6 +1095,21 @@ and `make test-workflow-contracts` (1,498 passed, three skipped, plus 27 script
 tests). The candidate still needs publication, bot-thread reconciliation, fresh
 exact-head review and hosted checks, then the guarded merge.
 
+Before publication, remote `main` advanced from `de81d5c` to `0a28fee`. The
+50-commit branch range was rebased onto that target with Git's built-in
+`zdiff3` merge; the user-wide Weave attribute was disabled for the replay.
+There were no conflicts. `git range-diff` matched all 50 commits, the 31
+branch-owned paths are unchanged, all 22 target-only paths remain
+byte-identical, and `Cargo.lock` matches the target. The rebased head is
+`6e109c6`.
+
+All post-rebase local gates passed on that head: `make check-fmt`, `make test`
+(4,725 passed, seven skipped, doctests passed), `make typecheck`, `make lint`,
+`make doc-coverage` (98.19%, 6,231/6,346), and `make test-workflow-contracts`
+(1,498 passed, three skipped, plus 27 script tests). The rebased candidate
+still needs publication, thread reconciliation, fresh exact-head review and
+hosted checks before the guarded merge.
+
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
 [issue-checkpoint-one]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196022869
