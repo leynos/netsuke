@@ -75,27 +75,50 @@ def _validate_job_attempts(run: dict, jobs: list[dict]) -> None:
 
 
 def _validate_job_fields(jobs: list[dict]) -> None:
-    """Require collection fields to have their expected JSON container shapes.
+    """Validate the collection fields on every job.
+
+    Examples
+    --------
+    A job without ``steps`` or ``labels`` uses accepted empty lists.
+    """
+    for job in jobs:
+        _validate_job_steps(job.get("steps", []))
+        _validate_job_labels(job.get("labels", []))
+
+
+def _validate_job_steps(steps: object) -> None:
+    """Require steps to be a list of JSON objects.
 
     Raises
     ------
     TypeError
-        If a present ``steps`` field is not a list of mappings or a present
-        ``labels`` field is not a list.
+        If steps is not a list of mappings.
 
     Examples
     --------
-    A job without a ``steps`` key is accepted; ``steps=[None]`` is rejected.
+    An omitted steps field defaults to an accepted empty list; ``[None]`` is
+    rejected.
     """
-    for job in jobs:
-        steps = job.get("steps", [])
-        labels = job.get("labels", [])
-        if not isinstance(steps, list) or not all(_is_mapping(step) for step in steps):
-            message = "job steps must be a list of objects"
-            raise TypeError(message)
-        if not isinstance(labels, list):
-            message = "job labels must be a list"
-            raise TypeError(message)
+    if not isinstance(steps, list) or not all(_is_mapping(step) for step in steps):
+        message = "job steps must be a list of objects"
+        raise TypeError(message)
+
+
+def _validate_job_labels(labels: object) -> None:
+    """Require labels to use the JSON list container.
+
+    Raises
+    ------
+    TypeError
+        If labels is not a list.
+
+    Examples
+    --------
+    An omitted labels field defaults to an accepted empty list.
+    """
+    if not isinstance(labels, list):
+        message = "job labels must be a list"
+        raise TypeError(message)
 
 
 def validate_evidence_maps(values: CollectorInputs, job_ids: set[str]) -> None:

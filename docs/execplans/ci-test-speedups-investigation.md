@@ -1182,6 +1182,18 @@ accepted the scoped implementation. The latest formal review found the
 plan-status correction recorded above; a fresh review of that correction, final
 approval, and merge remain outstanding.
 
+The subsequent published head `1339fd73` passed CI, Netsukefile, and Release
+Dry Run, but CodeScene rejected the new job-field validation module at mean
+cyclomatic complexity 4.22 across nine functions. The local follow-up separates
+the steps and labels checks into private helpers and documents their module-
+local scope in the CI performance guide. `cs delta origin/main` now reports no
+issues. The follow-up passed `make check-fmt`, `make test` (4,725 passed, seven
+skipped, doctests passed), `make typecheck`, `make lint`,
+`make test-workflow-contracts` (1,519 passed, three skipped, plus 27 script
+tests), `make doc-coverage` (98.19%, 6,231/6,346), `make markdownlint` (203
+files, zero issues), and `make nixie`. It still needs publication, hosted
+checks and review of the published head, final approval, and the guarded merge.
+
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
 [issue-checkpoint-one]: https://github.com/leynos/netsuke/issues/894#issuecomment-6196022869

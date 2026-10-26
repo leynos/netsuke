@@ -59,6 +59,11 @@ associated pull request. It is needed only to identify the author of a hosted
 PR run; without a matching response, the collector leaves author-dependent
 classification in `other`. The collector reads only local files.
 
+The saved jobs response shape is validated by private helpers in
+`ci_test_evidence_validation.py`. Keep the steps and labels checks local to
+that module and composed only by its attempt-response validator; they reflect
+the GitHub jobs response and are not a general collector API.
+
 Before collection, choose a separately named destination for schema `2`, such as
 `/tmp/ci-test-evidence-v2.jsonl`, and write the output there. Never append
 schema `2` records to the retained schema `1` files `observations.jsonl` or
