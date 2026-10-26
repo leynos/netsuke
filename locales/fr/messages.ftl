@@ -184,6 +184,7 @@ manifest.glob.unknown_io_error = erreur d'E/S inconnue.
 manifest.command_list_empty = Le champ « command » ne doit pas être vide : indiquez une chaîne de commande ou une liste non vide.
 manifest.command_isolation_recipe = Le champ « command_isolation » exige une recette avec une liste de commandes.
 manifest.command_isolation_scalar = « command_isolation: isolated » exige une liste de commandes.
+manifest.console_dependency_only = Les entrées qui ne déclarent que des dépendances ne peuvent pas sélectionner le pool console.
 
 # Erreurs de la représentation intermédiaire.
 ir.rule_not_found = La règle « { $rule } » référencée par la cible « { $target } » est introuvable.

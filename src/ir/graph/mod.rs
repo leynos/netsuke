@@ -309,3 +309,4 @@ mod error;
 mod property_tests;
 
 pub use error::IrGenError;
+pub(crate) use error::manifest_recipe_validation_message;

@@ -4,7 +4,6 @@
 //! parses its `define_keys!` invocation, and the macro itself is defined in
 //! the parent module. The `netsuke check` keys live in `check_keys.rs` and
 //! are re-exported here, so every key is still reached as `keys::NAME`.
-
 pub use super::check_keys::*;
 
 define_keys! {
@@ -166,6 +165,7 @@ define_keys! {
     MANIFEST_COMMAND_LIST_EMPTY => "manifest.command_list_empty",
     MANIFEST_COMMAND_ISOLATION_RECIPE => "manifest.command_isolation_recipe",
     MANIFEST_COMMAND_ISOLATION_SCALAR => "manifest.command_isolation_scalar",
+    MANIFEST_CONSOLE_DEPENDENCY_ONLY => "manifest.console_dependency_only",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
     IR_EMPTY_RULE => "ir.empty_rule",

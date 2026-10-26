@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = خطای ورودی/خروجی ناشناخته
 manifest.command_list_empty = فیلد «command» نباید خالی باشد: یک رشتهٔ فرمان یا فهرستی ناتهی ارائه دهید.
 manifest.command_isolation_recipe = فیلد «command_isolation» به دستوری با فهرست فرمان‌ها نیاز دارد.
 manifest.command_isolation_scalar = ‏«command_isolation: isolated» به فهرست فرمان‌ها نیاز دارد.
+manifest.console_dependency_only = ورودی‌هایی که فقط وابستگی‌ها را اعلام می‌کنند نمی‌توانند مخزن کنسول را انتخاب کنند.
 
 # خطاهای بازنمایی میانی.
 ir.rule_not_found = قاعدهٔ «{ $rule }» که هدف «{ $target }» به آن ارجاع می‌دهد یافت نشد.

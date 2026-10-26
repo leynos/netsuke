@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = eroare de intrare/ieșire necunoscută.
 manifest.command_list_empty = Câmpul „command” nu trebuie să fie gol: furnizați un șir de comandă sau o listă nevidă.
 manifest.command_isolation_recipe = Câmpul „command_isolation” necesită o rețetă cu o listă de comenzi.
 manifest.command_isolation_scalar = „command_isolation: isolated” necesită o listă de comenzi.
+manifest.console_dependency_only = Intrările care declară doar dependențe nu pot selecta grupul console.
 
 # Erori ale reprezentării intermediare.
 ir.rule_not_found = Regula „{ $rule }” la care face referire ținta „{ $target }” nu a fost găsită.

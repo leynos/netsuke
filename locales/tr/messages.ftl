@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = bilinmeyen G/Ç hatası.
 manifest.command_list_empty = "command" alanı boş olmamalıdır: bir komut dizesi veya boş olmayan bir liste verin.
 manifest.command_isolation_recipe = "command_isolation" alanı, komut listesi içeren bir tarif gerektirir.
 manifest.command_isolation_scalar = "command_isolation: isolated" bir komut listesi gerektirir.
+manifest.console_dependency_only = Yalnızca bağımlılık bildiren girdiler konsol havuzunu seçemez.
 
 # Ara gösterim hataları.
 ir.rule_not_found = "{ $target }" hedefinin başvurduğu "{ $rule }" kuralı bulunamadı.

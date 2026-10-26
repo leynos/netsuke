@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = mearachd ion-chuir/às-chuir neo-aithnichte.
 manifest.command_list_empty = Chan fhaod an raon “command” a bhith falamh: thoir seachad sreang àithne no liosta nach eil falamh.
 manifest.command_isolation_recipe = Feumaidh an raon ‘command_isolation’ reasabaidh le liosta àitheantan.
 manifest.command_isolation_scalar = Feumaidh ‘command_isolation: isolated’ liosta àitheantan.
+manifest.console_dependency_only = Chan urrainn do dh’inntrigidhean a tha ag ainmeachadh eisimeileachdan a-mhàin amar a’ chonsail a thaghadh.
 
 # Mearachdan an riochdachaidh mheadhanaich.
 ir.rule_not_found = Cha deach an riaghailt “{ $rule }” air a bheil an targaid “{ $target }” a' toirt iomradh a lorg.

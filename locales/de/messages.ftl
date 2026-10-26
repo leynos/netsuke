@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = unbekannter E/A-Fehler.
 manifest.command_list_empty = Das Feld „command“ darf nicht leer sein: Geben Sie eine Befehlszeichenkette oder eine nicht leere Liste an.
 manifest.command_isolation_recipe = Das Feld „command_isolation“ erfordert ein Rezept mit einer Befehlsliste.
 manifest.command_isolation_scalar = „command_isolation: isolated“ erfordert eine Befehlsliste.
+manifest.console_dependency_only = Einträge, die nur Abhängigkeiten angeben, können den Konsolen-Pool nicht auswählen.
 
 # Fehler der Zwischendarstellung.
 ir.rule_not_found = Die vom Ziel „{ $target }“ referenzierte Regel „{ $rule }“ wurde nicht gefunden.

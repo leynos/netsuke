@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = tuntematon siirräntävirhe.
 manifest.command_list_empty = Kenttä ”command” ei saa olla tyhjä: anna komentomerkkijono tai ei-tyhjä luettelo.
 manifest.command_isolation_recipe = Kenttä ”command_isolation” edellyttää komentoluetteloreseptiä.
 manifest.command_isolation_scalar = ”command_isolation: isolated” edellyttää komentoluetteloa.
+manifest.console_dependency_only = Vain riippuvuuksia ilmoittavat tietueet eivät voi valita konsolipoolia.
 
 # Välimuotoesityksen virheet.
 ir.rule_not_found = Sääntöä ”{ $rule }”, johon kohde ”{ $target }” viittaa, ei löytynyt.

@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = ข้อผิดพลาดรับส่�
 manifest.command_list_empty = ฟิลด์ “command” ต้องไม่ว่าง: ระบุสตริงคำสั่งหรือรายการที่ไม่ว่าง
 manifest.command_isolation_recipe = ฟิลด์ “command_isolation” ต้องใช้สูตรที่มีรายการคำสั่ง
 manifest.command_isolation_scalar = “command_isolation: isolated” ต้องใช้รายการคำสั่ง
+manifest.console_dependency_only = รายการที่ระบุเฉพาะการพึ่งพาไม่สามารถเลือกพูลคอนโซลได้
 
 # ข้อผิดพลาดของรูปแทนระดับกลาง
 ir.rule_not_found = ไม่พบกฎ “{ $rule }” ที่เป้าหมาย “{ $target }” อ้างถึง

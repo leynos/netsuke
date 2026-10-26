@@ -182,6 +182,7 @@ manifest.glob.unknown_io_error = 未知的輸入輸出錯誤。
 manifest.command_list_empty = 「command」欄位不得為空：請提供命令字串或非空清單。
 manifest.command_isolation_recipe = 「command_isolation」欄位需要包含命令清單的配方。
 manifest.command_isolation_scalar = 「command_isolation: isolated」需要命令清單。
+manifest.console_dependency_only = 僅宣告相依項目的項目無法選取主控台集區。
 
 # 中介表示法的錯誤。
 ir.rule_not_found = 找不到目標「{ $target }」所參照的規則「{ $rule }」。

@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
 manifest.command_list_empty = يجب ألّا يكون الحقل «command» فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
 manifest.command_isolation_recipe = يتطلب الحقل «command_isolation» وصفةً تتضمن قائمة أوامر.
 manifest.command_isolation_scalar = يتطلب «command_isolation: isolated» قائمة أوامر.
+manifest.console_dependency_only = لا يمكن للإدخالات التي تقتصر على التبعيات اختيار مجموعة وحدة التحكم.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».

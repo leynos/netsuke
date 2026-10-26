@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = neznámá vstupně-výstupní chyba.
 manifest.command_list_empty = Pole „command“ nesmí být prázdné: zadejte řetězec s příkazem nebo neprázdný seznam.
 manifest.command_isolation_recipe = Pole „command_isolation“ vyžaduje recept se seznamem příkazů.
 manifest.command_isolation_scalar = „command_isolation: isolated“ vyžaduje seznam příkazů.
+manifest.console_dependency_only = Položky obsahující pouze závislosti nemohou vybrat fond konzole.
 
 # Chyby mezikódu.
 ir.rule_not_found = Pravidlo „{ $rule }“, na které odkazuje cíl „{ $target }“, nebylo nalezeno.

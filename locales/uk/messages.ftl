@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = невідома помилка вводу-ви
 manifest.command_list_empty = Поле «command» не має бути порожнім: укажіть рядок команди або непорожній список.
 manifest.command_isolation_recipe = Поле «command_isolation» потребує рецепта зі списком команд.
 manifest.command_isolation_scalar = «command_isolation: isolated» потребує списку команд.
+manifest.console_dependency_only = Записи, що містять лише залежності, не можуть вибрати пул консолі.
 
 # Помилки проміжного подання.
 ir.rule_not_found = Правило «{ $rule }», на яке посилається ціль «{ $target }», не знайдено.
