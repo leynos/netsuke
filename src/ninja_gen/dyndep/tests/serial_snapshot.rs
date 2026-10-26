@@ -6,7 +6,8 @@
 //! identity and every reference to it while keeping the snapshot portable.
 
 use super::{graph_with_edge, serial_edge};
-use crate::ninja_gen::{GeneratedNinja, generate_bundle};
+use crate::ninja_gen::dyndep::generate_bundle_for_shell;
+use crate::ninja_gen::{GeneratedNinja, RecipeShell};
 use crate::snapshot_test_support::snapshot_settings;
 use anyhow::Result;
 use camino::Utf8PathBuf;
@@ -108,7 +109,8 @@ fn replace_namespace_hashes(
 fn serial_bundle_with_relays_matches_snapshot() -> Result<()> {
     let mut graph = graph_with_edge(serial_edge("all", &["check-fmt", "lint", "test"]));
     graph.default_targets = vec![Utf8PathBuf::from("all")];
-    let bundle = generate_bundle(&graph)?;
+    // Fix the recipe shell so the snapshot compares the same bundle on every host.
+    let bundle = generate_bundle_for_shell(&graph, RecipeShell::Posix)?;
     let rendered = rendered_serial_bundle(&bundle)?;
 
     snapshot_settings("ninja_dyndep").bind(|| {
