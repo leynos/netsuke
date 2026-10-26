@@ -2420,6 +2420,19 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `markdownlint` (199 files, zero issues), and `nixie`. Earlier Ruff findings
   and the 400-line limit were corrected before the final run. The Domain
   Architecture disposition remains pending separately.
+- [x] (2026-10-26) Rebased the 71-commit series from exclusive boundary
+  `de81d5c3` onto target `0a28fee3`. The first child commit directly names the
+  boundary as its parent, matching the PR's previous base; `git range-diff`
+  maps all 71 commits unchanged, and the replay had no conflicts. Added the
+  requested NumPy-style parameters to `observation_from_environment` and
+  tightened existing prose so its module remains within the 400-line limit.
+  `cs delta origin/main` found no issues. All eight sequential gates passed on
+  staged tree `0ba0ee1c` at `4ec502ab`: `check-fmt`, `lint`, `typecheck`,
+  `doc-coverage` (98.19%), `test` (4,725 passed, 7 skipped; doctests passed),
+  `test-workflow-contracts` (1,497 passed, 3 skipped, plus 28 script tests),
+  `markdownlint` (201 files, zero issues), and `nixie`. The Domain Architecture
+  disposition remains pending; Stage C remains partial and Stage D remains
+  open. No release or registry setting changed.
 
 ## Surprises & discoveries
 
@@ -3962,3 +3975,11 @@ earlier lint attempts found missing docstring details, a typing-only import
 rule, a float comparison, and the module's 400-line limit. Those were corrected
 before the passing run. Stage C remains partial and Stage D remains open; no
 release or registry setting changed.
+
+Draft 17, 2026-10-26: rebased the 71-commit series from `de81d5c3` onto
+`0a28fee3` without conflicts; the range-diff preserved every commit. Documented
+the observation parser's parameters and kept its module within the 400-line
+limit. All eight sequential gates passed on staged tree `0ba0ee1c`, with 98.19%
+documentation coverage, 4,725 Rust tests passing, 7 skipped, and all doctests
+passing. The Domain Architecture disposition is still pending; Stage C remains
+partial, Stage D remains open, and no release or registry setting changed.

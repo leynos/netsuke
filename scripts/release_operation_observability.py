@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Write bounded release-operation summaries and telemetry.
 
-The workflow's always-run step calls this helper after staging, publication,
-or crate packaging. It writes a GitHub summary and JSONL records with fixed
-operation, phase, outcome, and error-category labels, omitting release tags,
-asset names, raw errors, and tokens.
-
-Operation-specific phases keep packaging's unrelated steps out of its record.
+The workflow calls this after staging, publication, or crate packaging to write
+a GitHub summary and JSONL records. They use fixed operation, phase, outcome,
+and error-category labels, and omit release tags, asset names, raw errors, and
+tokens. Operation-specific phases keep unrelated packaging steps out.
 """
 
 import dataclasses as dc
@@ -55,17 +53,17 @@ PHASE_OUTCOMES = frozenset({"success", "failure", "cancelled"})
 
 
 def _phases(operation: str) -> tuple[str, ...]:
-    """Return the phases ``operation`` has, refusing an unknown label.
+    """Return the ordered phases for ``operation``.
 
     Returns
     -------
     tuple[str, ...]
-        The phase names the operation declares, in the order they run.
+        The declared phase names in run order.
 
     Raises
     ------
     ValueError
-        If ``operation`` is not one of the fixed low-cardinality labels.
+        If ``operation`` is unknown.
     """
     try:
         return OPERATION_PHASES[operation]
@@ -255,18 +253,15 @@ def _trace_records(observation: OperationObservation) -> list[dict[str, object]]
 
 
 def _sanitised_step(observation: OperationObservation, phase: str) -> StepState:
-    """Return one phase's outcome and timings, bounded to known labels.
+    """Return one phase's bounded outcome and timing.
 
-    A phase the operation has but the caller omitted is reported ``skipped``.
-    This renders rather than raising, because an observability record that
-    refuses to be written during an incident is worth less than one that says
-    it does not know.
+    Render an omitted phase as ``skipped`` rather than failing. A partial
+    observability record is more useful during an incident than no record.
 
     Returns
     -------
     StepState
-        The phase's bounded outcome and nanosecond timings, or an all-absent
-        record when the caller omitted that phase.
+        Bounded outcome and timings, or an empty state when the phase is absent.
     """
     step = observation.steps.get(phase)
     if step is None:
@@ -329,6 +324,13 @@ def observation_from_environment(
 ) -> OperationObservation:
     """Build an observation using the caller's time for deterministic parsing.
 
+    Parameters
+    ----------
+    environment
+        Workflow environment values used to build the observation.
+    ended_ns
+        Nanosecond end timestamp captured by the caller.
+
     Returns
     -------
     OperationObservation
@@ -341,11 +343,9 @@ def observation_from_environment(
 
     Examples
     --------
-    >>> observation_from_environment(
-    ...     {"RELEASE_OPERATION": "release_staging",
-    ...      "RELEASE_DRY_RUN": "true", "UPLOAD_ERROR_PRESENT": "false"},
-    ...     ended_ns=1_600_000_000,
-    ... ).ended_ns
+    >>> values = {"RELEASE_OPERATION": "release_staging",
+    ...     "RELEASE_DRY_RUN": "true", "UPLOAD_ERROR_PRESENT": "false"}
+    >>> observation_from_environment(values, ended_ns=1_600_000_000).ended_ns
     1600000000
     """
     operation = environment["RELEASE_OPERATION"]
