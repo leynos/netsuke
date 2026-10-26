@@ -60,7 +60,7 @@ fn dependency_only_console_manifest_error_is_localized() -> Result<()> {
 
 /// Keep contention fields unknown until RFC 0024 defines a manifest schema.
 #[test]
-fn contention_remains_an_unknown_manifest_field() {
+fn contention_remains_an_unknown_manifest_field() -> Result<()> {
     let yaml = r#"
         netsuke_version: "1.0.0"
         targets:
@@ -69,8 +69,11 @@ fn contention_remains_an_unknown_manifest_field() {
             console: true
             contention: developer-gates
     "#;
-    assert!(
-        parse_manifest(yaml).is_err(),
-        "contention should remain an unknown manifest field"
+    let error = parse_manifest(yaml).expect_err("contention must be rejected");
+    let rendered = format!("{error:#}");
+    ensure!(
+        rendered.contains("unknown field `contention`"),
+        "contention should fail as an unknown manifest field: {rendered}"
     );
+    Ok(())
 }

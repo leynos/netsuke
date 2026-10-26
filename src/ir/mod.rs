@@ -1,8 +1,8 @@
 //! Intermediate Representation structures.
 //!
-//! This module defines the backend-agnostic build graph used by Netsuke after
-//! validation. The IR mirrors the conceptual model of Ninja without embedding
-//! any Ninja-specific syntax.
+//! This module defines the validated build graph Netsuke passes to Ninja
+//! generation. Recipe and command data contain no Ninja syntax; the deliberate
+//! [`BuildEdge::console`] annotation selects Ninja's console pool per edge.
 //!
 //! # Examples
 //!

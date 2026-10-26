@@ -11,7 +11,7 @@ use cap_std::fs_utf8::Dir;
 /// Keep two console recipes from overlapping under a parallel Ninja job limit.
 #[test]
 fn console_edges_are_exclusive_with_parallel_jobs_enabled() -> Result<()> {
-    let Some(workspace) = runtime_workspace() else {
+    let Some(workspace) = runtime_workspace()? else {
         return Ok(());
     };
     let root = workspace_dir(&workspace)?;
