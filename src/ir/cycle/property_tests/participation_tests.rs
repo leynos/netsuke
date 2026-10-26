@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
 
-use super::super::super::graph::{BuildEdge, BuildGraph};
+use super::super::super::graph::{BuildEdge, BuildGraph, EdgeId};
 use super::super::analyse;
 
 #[derive(Clone, Copy, Debug)]
@@ -156,7 +156,14 @@ fn push_dependency(edge: &mut BuildEdge, dependency: Utf8PathBuf, kind: Dependen
 
 /// Check for a cycle in the edge graph using Kahn's topological sort.
 fn edge_graph_has_cycle(graph: &BuildGraph) -> bool {
-    let edge_ids = graph
+    let edge_ids = indexed_edge_ids(graph);
+    let (indegrees, successors) = edge_graph_adjacency(graph, &edge_ids);
+    kahn_reports_cycle(edge_ids.len(), indegrees, &successors)
+}
+
+/// Map each generated edge's primary output to its stable graph identifier.
+fn indexed_edge_ids(graph: &BuildGraph) -> Vec<EdgeId> {
+    graph
         .edges()
         .map(|edge| {
             let output = edge
@@ -167,7 +174,14 @@ fn edge_graph_has_cycle(graph: &BuildGraph) -> bool {
                 .edge_id_for_output(output.as_path())
                 .expect("every generated output alias is indexed")
         })
-        .collect::<Vec<_>>();
+        .collect()
+}
+
+/// Build successor sets and in-degrees for the independent edge-level oracle.
+fn edge_graph_adjacency(
+    graph: &BuildGraph,
+    edge_ids: &[EdgeId],
+) -> (HashMap<EdgeId, usize>, HashMap<EdgeId, HashSet<EdgeId>>) {
     let mut indegrees = edge_ids
         .iter()
         .copied()
@@ -201,6 +215,15 @@ fn edge_graph_has_cycle(graph: &BuildGraph) -> bool {
         }
     }
 
+    (indegrees, successors)
+}
+
+/// Return whether Kahn's queue leaves any edge in the graph.
+fn kahn_reports_cycle(
+    edge_count: usize,
+    mut indegrees: HashMap<EdgeId, usize>,
+    successors: &HashMap<EdgeId, HashSet<EdgeId>>,
+) -> bool {
     let mut ready = indegrees
         .iter()
         .filter_map(|(edge_id, degree)| (*degree == 0).then_some(*edge_id))
@@ -222,7 +245,7 @@ fn edge_graph_has_cycle(graph: &BuildGraph) -> bool {
         }
     }
 
-    removed != edge_ids.len()
+    removed != edge_count
 }
 
 proptest! {

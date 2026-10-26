@@ -81,8 +81,10 @@ but Netsuke deliberately rejects it before generating a build file.
 
 Human CLI output renders the localized `CircularDependency` cause directly. The
 runner's generic graph-building context otherwise masks the cycle path in human
-mode. JSON output retains the stable outer graph-building message and the typed
-cycle message in its `causes` array; its schema is unchanged.
+mode. The tracing event records only the fixed `circular_dependency` category;
+the manifest-derived cycle path is written to human stderr, not logs. JSON
+output retains the stable outer graph-building message and the typed cycle
+message in its `causes` array; its schema is unchanged.
 
 Dependencies naming explicit or implicit outputs resolve to their producing
 edge. The cycle path retains the alias used by the dependency, and aliases do

@@ -50,12 +50,18 @@ fn two_node_cycle_reports_cycle_b_first() {
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn implicit_output_alias_cycle_reports_cycle() {
-    let mut graph = BuildGraph::default();
-    graph.insert_edge(edge_with("a", deps("b"), Vec::new(), deps("c"), Vec::new()));
-    graph.insert_edge(edge("b", deps("c"), Vec::new()));
+    let graph = two_edge_graph(
+        edge_with(EdgeSpec {
+            output: "a",
+            inputs: deps("b"),
+            implicit_deps: Vec::new(),
+            implicit_outputs: deps("c"),
+            order_only_deps: Vec::new(),
+        }),
+        edge("b", deps("c"), Vec::new()),
+    );
     // Keep the state space independent of the alias index being tested.
     kani::assume(graph.edge_count() == 2);
-
     kani::assert(
         contains_cycle(&graph),
         "cycle through an implicit output is detected",
@@ -67,17 +73,17 @@ fn implicit_output_alias_cycle_reports_cycle() {
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn order_only_two_node_cycle_reports_cycle() {
-    let mut graph = BuildGraph::default();
-    graph.insert_edge(edge_with(
-        "a",
-        Vec::new(),
-        Vec::new(),
-        Vec::new(),
-        deps("b"),
-    ));
-    graph.insert_edge(edge("b", deps("a"), Vec::new()));
+    let graph = two_edge_graph(
+        edge_with(EdgeSpec {
+            output: "a",
+            inputs: Vec::new(),
+            implicit_deps: Vec::new(),
+            implicit_outputs: Vec::new(),
+            order_only_deps: deps("b"),
+        }),
+        edge("b", deps("a"), Vec::new()),
+    );
     kani::assume(graph.output_count() == 2 && graph.edge_count() == 2);
-
     kani::assert(
         contains_cycle(&graph),
         "cycle closed by an order-only dependency is detected",
@@ -143,31 +149,52 @@ fn canonicalize_four_node_cycle_is_canonical() {
 #[kani::solver(kissat)]
 #[kani::unwind(6)]
 fn canonicalize_path_wrapper_matches_u8_kernel_for_two_nodes() {
-    support::assert_path_wrapper_matches_kernel(0, 1);
-    support::assert_path_wrapper_matches_kernel(1, 0);
+    support::assert_path_wrapper_matches_kernel();
 }
 
 /// Build a Kani graph edge without additional output aliases or order-only deps.
 fn edge(output: &str, inputs: Vec<Utf8PathBuf>, implicit_deps: Vec<Utf8PathBuf>) -> BuildEdge {
-    edge_with(output, inputs, implicit_deps, Vec::new(), Vec::new())
-}
-
-/// Build a Kani graph edge with explicit alias and dependency lists.
-fn edge_with(
-    output: &str,
-    inputs: Vec<Utf8PathBuf>,
-    implicit_deps: Vec<Utf8PathBuf>,
-    implicit_outputs: Vec<Utf8PathBuf>,
-    order_only_deps: Vec<Utf8PathBuf>,
-) -> BuildEdge {
-    BuildEdge {
-        action_id: "id".to_owned(),
+    edge_with(EdgeSpec {
+        output,
         inputs,
         implicit_deps,
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+    })
+}
+
+/// Assemble two test edges without changing the graph's output aliases.
+fn two_edge_graph(first: BuildEdge, second: BuildEdge) -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.insert_edge(first);
+    graph.insert_edge(second);
+    graph
+}
+
+/// Hold path fields for one private Kani cycle-fixture edge.
+struct EdgeSpec<'a> {
+    /// Name the edge's primary explicit output.
+    output: &'a str,
+    /// Name explicit input dependencies.
+    inputs: Vec<Utf8PathBuf>,
+    /// Name implicit input dependencies.
+    implicit_deps: Vec<Utf8PathBuf>,
+    /// Name implicit output aliases.
+    implicit_outputs: Vec<Utf8PathBuf>,
+    /// Name order-only input dependencies.
+    order_only_deps: Vec<Utf8PathBuf>,
+}
+
+/// Build a Kani graph edge from its test-only fixture specification.
+fn edge_with(spec: EdgeSpec<'_>) -> BuildEdge {
+    BuildEdge {
+        action_id: "id".to_owned(),
+        inputs: spec.inputs,
+        implicit_deps: spec.implicit_deps,
         dependency_order: crate::ir::DependencyOrder::Parallel,
-        explicit_outputs: vec![path(output)],
-        implicit_outputs,
-        order_only_deps,
+        explicit_outputs: vec![path(spec.output)],
+        implicit_outputs: spec.implicit_outputs,
+        order_only_deps: spec.order_only_deps,
         phony: false,
         always: false,
     }
