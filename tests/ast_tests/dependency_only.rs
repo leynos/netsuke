@@ -235,8 +235,9 @@ fn dependency_only_console_entries_are_rejected(#[case] sections: &str) -> Resul
     let error =
         parse_manifest(&yaml).expect_err("dependency-only entries cannot use the console pool");
     let chain = display_error_chain(error.as_ref());
+    let expected = localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY).to_string();
     ensure!(
-        chain.contains("console pool") && chain.contains("dependency-only"),
+        chain.contains(&expected),
         "unexpected console dependency-only diagnostic: {chain}"
     );
     Ok(())
@@ -265,9 +266,11 @@ fn direct_ir_lowering_preserves_console_dependency_only_diagnostic() -> Result<(
         ),
         "direct AST lowering should preserve the console diagnostic code: {error}"
     );
+    let rendered = error.to_string();
+    let expected = localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY).to_string();
     ensure!(
-        error.to_string().contains("arête de compilation"),
-        "direct AST lowering should localize the console diagnostic: {error}"
+        rendered == expected,
+        "direct AST lowering should render exactly the localized manifest diagnostic: {rendered}"
     );
     Ok(())
 }

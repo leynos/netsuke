@@ -153,14 +153,6 @@ struct ExpansionRequest<'name, 'a, 'stage> {
     on_stage: &'a mut Option<&'stage mut dyn FnMut(ManifestLoadStage)>,
 }
 
-/// Localize recipe validation errors that have a matching user-facing message.
-fn recipe_validation_message(detail: &'static str) -> Option<localization::LocalizedMessage> {
-    (detail == crate::ast::CONSOLE_DEPENDENCY_ONLY_ERROR).then(|| {
-        localization::message(keys::NINJA_GEN_CONSOLE_DEPENDENCY_ONLY)
-            .with_arg("output", "dependency-only entry")
-    })
-}
-
 /// Parse, render, and validate a manifest with injected loading boundaries.
 ///
 /// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
@@ -271,7 +263,7 @@ fn expand_and_render(request: ExpansionRequest<'_, '_, '_>) -> Result<NetsukeMan
         render::render_manifest_with_budget(manifest, &jinja, budget)?
     };
     rendered_manifest.validate_recipes().map_err(|detail| {
-        let diagnostic_details = recipe_validation_message(detail)
+        let diagnostic_details = crate::ir::manifest_recipe_validation_message(detail)
             .map_or_else(|| detail.to_owned(), |message| message.to_string());
         ManifestError::Parse {
             source: map_data_error(serde_json::Error::custom(diagnostic_details), name),
