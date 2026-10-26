@@ -772,6 +772,23 @@ rather than as `--flag[=BOOL]`.
   concrete blocker, so an issue was raised there too. Netsuke #957's dependency
   is roadmap §11.2.1 alone and has no upstream issue to link; the issue says so
   explicitly rather than inventing a link. Date/Author: 2026-10-26, agent.
+- Decision: give every one of the five netsuke issues an explicit
+  cross-reference section rather than leaving the dependency to prose.
+  Rationale: the brief asked for "the relevant blocking notice with a link to
+  the relevant ortho_config roadmap task or GitHub issue", and three of the
+  five bodies were written before the upstream issues existed, so two carried a
+  future-tense "an upstream issue is being raised" sentence with nothing to
+  click. All five now state either the upstream issue with a live URL, the
+  roadmap section with a live URL where no issue exists (§11.2.1), or — for
+  #958 and #961 — the affirmative finding that no upstream dependency exists,
+  so a later reader does not have to re-derive that absence. Two further
+  hazards were found and fixed while doing it: a bare `#630` / `#631` inside a
+  `leynos/netsuke` issue autolinks to netsuke's own issues of those numbers,
+  which exist, so the upstream references are spelled `leynos/ortho-config#NNN`
+  with an explicit URL; and each roadmap citation now points at the v0.10.0
+  blob with a verified heading anchor, so it resolves to the section that was
+  actually read rather than to the top of a document that has since moved on.
+  Date/Author: 2026-10-26, agent.
 
 ## Outcomes & retrospective
 
@@ -819,7 +836,10 @@ Residual items, none blocking. `locales/en-US/messages.ftl` has no
 localizer warning before clap's message; that gap predates the migration and is
 recorded under `Surprises & discoveries` rather than fixed inside it, and is
 tracked as [leynos/netsuke#957](https://github.com/leynos/netsuke/issues/957)
-with upstream roadmap §11.2.1 named as the eventual source of the key.
+with upstream
+[roadmap §11.2.1](https://github.com/leynos/ortho-config/blob/v0.10.0/docs/roadmap.md#112-widen-clap-error-coverage-and-preserve-claps-rich-context)
+named as the eventual source of the key. That dependency is not blocking,
+since netsuke can carry the key locally until upstream ships it.
 `FieldMetadata.cli.value_name` remains `None` for configuration fields while
 the parser supplies `FILE`, `N` and friends; that also predates the migration,
 and the parity test deliberately does not compare value names so the gap cannot
@@ -846,7 +866,8 @@ metadata advertises `--default-targets` and `-d` where the parser accepts only
 are netsuke-fixable; the invented spellings need an effective `cli_short` /
 `cli_long` opt-out in the derive, filed as
 [leynos/ortho-config#631](https://github.com/leynos/ortho-config/issues/631)
-and gated upstream by roadmap §12.3.1.
+and gated upstream by
+[roadmap §12.3.1](https://github.com/leynos/ortho-config/blob/v0.10.0/docs/roadmap.md#123-separate-documenting-a-type-from-loading-it).
 
 A fifth, found while triaging the first: `LocalizedValueParser` in
 `src/cli/value_parser.rs` builds its errors through `Command::error`, which
@@ -948,15 +969,21 @@ guide §1 cargo-orthohelp 0.10  -> EP-M1 -> CI grep asserts 0.10.0
 The five follow-up gaps recorded under `Outcomes & retrospective` are outside
 this plan's acceptance scope by construction: each would change behaviour or
 generated documentation, while the migration's acceptance evidence is that
-neither moved. They are tracked separately as netsuke #957–#961. Two of them
-depend on upstream work:
+neither moved. They are tracked separately as netsuke #957–#961, and each of
+those issues now carries its own cross-reference section. Two are blocked on
+upstream work:
 
 - [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630) —
-  the `synopsis_id` default and the missing `LocalizationArgs`; blocks the
-  synopsis issue.
+  the `synopsis_id` default and the missing `LocalizationArgs`; blocks Option B
+  of the synopsis issue, while Option A (the migration corrective) needs
+  nothing upstream.
 - [leynos/ortho-config#631](https://github.com/leynos/ortho-config/issues/631) —
-  flag synthesis with no opt-out; blocks the invented-flag half of the man-page
-  issue.
+  flag synthesis with no opt-out; blocks the short-flag and `skip_cli` halves
+  of the man-page issue, while its long-flag half is netsuke-fixable now.
+
+A third, netsuke #957, names upstream roadmap §11.2.1 as the item that would
+eventually supply the missing clap-error key, but that dependency is not
+blocking: netsuke can carry the key locally until it ships.
 
 ## Verification plan
 
@@ -1380,3 +1407,19 @@ adopted only because the field's type changed, and the value is
   "absent from output" when a macro generates the string; a provenance claim
   about a generated identifier needs a probe that varies the generator, not a
   search of the tree that never held it.
+- 2026-10-26: seventh revision, completing the issues' upstream
+  cross-references. Three of the five issue bodies were written before the two
+  upstream issues existed, so two of them still said an upstream issue was
+  "being raised" and none carried a link. Every one of the five now states its
+  upstream status explicitly — a live issue URL for #959 and #960, a live
+  roadmap-section URL for #957 where no issue exists, and an affirmative "no
+  upstream dependency" for #958 and #961 — and #959 gained the
+  `Blocking notice` heading the other two already had, so all five share one
+  shape. Two defects were caught in the process: a bare `#630` / `#631` inside a
+  `leynos/netsuke` issue autolinks to netsuke's own issues with those numbers,
+  which exist, so upstream references are spelled `leynos/ortho-config#NNN`
+  with an explicit URL; and the roadmap citations were checked against GitHub's
+  rendered heading ids before use, so each resolves to the section that was
+  actually read. No Rust or Markdown content changed, but the plan is read by
+  `tests/execplan_status_contract_tests.rs`, so the edit still owes the full
+  gate set recorded in `Progress`.
