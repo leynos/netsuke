@@ -46,9 +46,17 @@ pub struct GeneratedNinja {
     pub(super) build_file: String,
     /// Dyndep sidecars `build_file` requires, in generation order.
     pub(super) dyndep_files: Vec<GeneratedDyndep>,
+    /// Number of user build edges selecting the console pool.
+    pub(super) console_edge_count: usize,
 }
 
 impl GeneratedNinja {
+    /// Return the console-edge aggregate retained for runner telemetry.
+    #[must_use]
+    pub(crate) const fn console_edge_count(&self) -> usize {
+        self.console_edge_count
+    }
+
     /// Borrow the main Ninja build file text.
     #[must_use]
     pub fn build_file(&self) -> &str {

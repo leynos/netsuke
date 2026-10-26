@@ -228,10 +228,9 @@ fn generate_bundle_inner(
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
     super::validation::validate_console_scheduling(graph)?;
-    let serial_present = graph_requires_dyndep(graph);
 
     let mut out = String::new();
-    if serial_present {
+    if graph_requires_dyndep(graph) {
         writeln!(out, "ninja_required_version = 1.10\n")?;
     }
 
@@ -248,6 +247,7 @@ fn generate_bundle_inner(
     Ok(GeneratedNinja {
         build_file: out,
         dyndep_files,
+        console_edge_count: graph.edges().filter(|edge| edge.console).count(),
     })
 }
 
