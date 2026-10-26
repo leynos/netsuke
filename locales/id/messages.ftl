@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = galat masukan/keluaran yang tidak dikenal.
 manifest.command_list_empty = Bidang "command" tidak boleh kosong: berikan string perintah atau daftar yang tidak kosong.
 manifest.command_isolation_recipe = Bidang ‘command_isolation’ memerlukan resep dengan daftar perintah.
 manifest.command_isolation_scalar = ‘command_isolation: isolated’ memerlukan daftar perintah.
+manifest.console_dependency_only = Entri yang hanya menyatakan dependensi tidak dapat memilih pool konsol.
 
 # Galat representasi antara.
 ir.rule_not_found = Aturan "{ $rule }" yang dirujuk target "{ $target }" tidak ditemukan.

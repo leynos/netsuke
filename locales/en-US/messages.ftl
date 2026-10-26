@@ -188,6 +188,7 @@ manifest.glob.unknown_io_error = unknown IO error.
 manifest.command_list_empty = The 'command' field must not be empty: provide a command string or a non-empty list.
 manifest.command_isolation_recipe = The 'command_isolation' field requires a command-list recipe.
 manifest.command_isolation_scalar = 'command_isolation: isolated' requires a command list.
+manifest.console_dependency_only = Dependency-only entries cannot select the console pool.
 
 # IR errors.
 ir.rule_not_found = Rule '{ $rule }' referenced by target '{ $target }' was not found.

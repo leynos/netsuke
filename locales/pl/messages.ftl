@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = nieznany błąd wejścia/wyjścia.
 manifest.command_list_empty = Pole „command” nie może być puste: podaj łańcuch polecenia lub niepustą listę.
 manifest.command_isolation_recipe = Pole „command_isolation” wymaga receptury z listą poleceń.
 manifest.command_isolation_scalar = „command_isolation: isolated” wymaga listy poleceń.
+manifest.console_dependency_only = Wpisy, które deklarują wyłącznie zależności, nie mogą wybrać puli konsoli.
 
 # Błędy reprezentacji pośredniej.
 ir.rule_not_found = Nie znaleziono reguły „{ $rule }”, do której odwołuje się cel „{ $target }”.
@@ -197,8 +198,8 @@ ir.invalid_command = Nieprawidłowa interpolacja w poleceniu: { $snippet }.
 
 # Błędy generowania plików Ninja.
 ninja_gen.missing_action = Brakuje akcji „{ $id }”, do której odwołuje się krawędź budowania.
-ninja_gen.console_dependency_only = Krawędź kompilacji „{ $output }” nie może wybrać puli konsoli, ponieważ jej akcja zawiera tylko zależności.
-ninja_gen.console_pool_conflict = Krawędź kompilacji „{ $output }” wybiera pulę konsoli, ale jej akcja żąda niestandardowej puli „{ $pool }”.
+ninja_gen.console_dependency_only = Krawędź budowania „{ $output }” nie może wybrać puli konsoli, ponieważ jej akcja zawiera tylko zależności.
+ninja_gen.console_pool_conflict = Krawędź budowania „{ $output }” wybiera pulę konsoli, ale jej akcja żąda niestandardowej puli „{ $pool }”.
 ninja_gen.format = Nie udało się sformatować wyjścia manifestu Ninja.
 ninja_gen.dyndep_files_required = Ta operacja wymaga wygenerowanego pakietu Ninja; użyj `netsuke build`, `netsuke clean` lub `netsuke generate`, aby utworzyć pliki dyndep.
 ninja_gen.reserved_output_path = Ścieżka '{ $path }' jest zarezerwowana dla stanu szeregowych zależności Netsuke.

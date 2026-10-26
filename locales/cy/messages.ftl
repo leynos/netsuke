@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = gwall mewnbwn/allbwn anhysbys.
 manifest.command_list_empty = Rhaid i’r maes ‘command’ beidio â bod yn wag: rhowch linyn gorchymyn neu restr nad yw’n wag.
 manifest.command_isolation_recipe = Mae’r maes ‘command_isolation’ yn gofyn am rysáit rhestr orchmynion.
 manifest.command_isolation_scalar = Mae ‘command_isolation: isolated’ yn gofyn am restr orchmynion.
+manifest.console_dependency_only = Ni all cofnodion sy'n cynnwys dibyniaethau yn unig ddewis pwll y consol.
 
 # Gwallau'r cynrychioliad canolradd.
 ir.rule_not_found = Ni chafwyd hyd i'r rheol ‘{ $rule }’ y cyfeirir ati gan y targed ‘{ $target }’.

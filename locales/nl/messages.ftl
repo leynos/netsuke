@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = onbekende I/O-fout.
 manifest.command_list_empty = Het veld ‘command’ mag niet leeg zijn: geef een opdrachtreeks of een niet-lege lijst op.
 manifest.command_isolation_recipe = Het veld ‘command_isolation’ vereist een recept met een opdrachtenlijst.
 manifest.command_isolation_scalar = ‘command_isolation: isolated’ vereist een opdrachtenlijst.
+manifest.console_dependency_only = Items die alleen afhankelijkheden aangeven, kunnen de consolepool niet selecteren.
 
 # Fouten in de tussenrepresentatie.
 ir.rule_not_found = De regel ‘{ $rule }’ waarnaar doel ‘{ $target }’ verwijst, is niet gevonden.

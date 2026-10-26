@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = ukjent I/U-feil.
 manifest.command_list_empty = Feltet «command» kan ikke være tomt: oppgi en kommandostreng eller en ikke-tom liste.
 manifest.command_isolation_recipe = Feltet ‘command_isolation’ krever en oppskrift med en kommandoliste.
 manifest.command_isolation_scalar = ‘command_isolation: isolated’ krever en kommandoliste.
+manifest.console_dependency_only = Oppføringer som bare angir avhengigheter, kan ikke velge konsollpuljen.
 
 # Feil i den interne representasjonen.
 ir.rule_not_found = Regelen «{ $rule }» som målet «{ $target }» viser til, ble ikke funnet.

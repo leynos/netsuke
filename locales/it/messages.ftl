@@ -186,6 +186,7 @@ manifest.glob.unknown_io_error = errore di I/O sconosciuto.
 manifest.command_list_empty = Il campo «command» non deve essere vuoto: fornire una stringa di comando o un elenco non vuoto.
 manifest.command_isolation_recipe = Il campo «command_isolation» richiede una ricetta con un elenco di comandi.
 manifest.command_isolation_scalar = «command_isolation: isolated» richiede un elenco di comandi.
+manifest.console_dependency_only = Le voci che dichiarano solo dipendenze non possono selezionare il pool console.
 
 # Errori della rappresentazione intermedia.
 ir.rule_not_found = La regola «{ $rule }» referenziata dal target «{ $target }» non è stata trovata.

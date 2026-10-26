@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = lỗi vào/ra không xác định.
 manifest.command_list_empty = Trường “command” không được để trống: hãy cung cấp một chuỗi lệnh hoặc một danh sách không rỗng.
 manifest.command_isolation_recipe = Trường “command_isolation” yêu cầu công thức có danh sách lệnh.
 manifest.command_isolation_scalar = “command_isolation: isolated” yêu cầu danh sách lệnh.
+manifest.console_dependency_only = Các mục chỉ khai báo phần phụ thuộc không thể chọn nhóm console.
 
 # Lỗi của biểu diễn trung gian.
 ir.rule_not_found = Không tìm thấy quy tắc “{ $rule }” mà đích “{ $target }” tham chiếu.

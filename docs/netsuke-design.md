@@ -2353,12 +2353,14 @@ distributed build system), only a new generator module (`IR -> NewBackend`)
 would need to be written, leaving the entire front-end parsing and validation
 logic untouched.
 
-Importantly, the IR contains **no Ninja-isms**. Netsuke markers such as
-`{{ ins }}` and `{{ outs }}` are resolved to plain lists of file paths, and
-command strings are expanded before hashing. This deliberate absence of
-Ninja-specific syntax makes the IR a stable contract that future
-back-ends--distributed builders, remote executors, or otherwise--can consume
-without modification.
+The IR keeps recipe and command data free of Ninja-specific syntax. Netsuke
+markers such as `{{ ins }}` and `{{ outs }}` are resolved to plain lists of
+file paths, and command strings are expanded before hashing. The
+`BuildEdge.console` scheduling flag described in §5.5 is a deliberate
+Ninja-specific exception: it records a Boolean choice without storing a pool
+name or placeholder. Recipe and command data therefore provide a stable
+contract that future back-ends--distributed builders, remote executors, or
+otherwise--can consume without modification.
 
 Furthermore, the IR is the ideal stage at which to perform graph-level analysis
 and optimizations, such as detecting circular dependencies, pruning unused
@@ -2865,14 +2867,15 @@ default my_app
 The live IR structures defined in
 [src/ir/graph/mod.rs](../src/ir/graph/mod.rs), and re-exported through
 [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers that mirror Ninja's
-conceptual model while remaining backend-agnostic. `BuildGraph` collects
-actions in a hash map, canonical edges in an insertion-ordered arena, and
-output aliases in a `Utf8PathBuf` to `EdgeId` hash map. Actions hold the parsed
-`Recipe` and optional execution metadata. `BuildEdge` connects inputs to
-outputs using an action identifier and carries the `phony`, `always`, and
-`console` flags verbatim from the manifest. `console` is edge-level scheduling
-metadata and does not affect action identity. No Ninja-specific placeholders
-are stored in the IR to keep the representation portable.
+conceptual model while keeping most scheduling data backend-agnostic.
+`BuildGraph` collects actions in a hash map, canonical edges in an
+insertion-ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash
+map. Actions hold the parsed `Recipe` and optional execution metadata.
+`BuildEdge` connects inputs to outputs using an action identifier and carries
+the `phony`, `always`, and `console` flags verbatim from the manifest. The
+`console` flag is a deliberate Ninja-specific edge annotation; the IR stores a
+Boolean scheduling choice, not a pool name or placeholder. It does not affect
+action identity.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed

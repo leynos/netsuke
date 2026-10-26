@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = ismeretlen be- és kiviteli hiba.
 manifest.command_list_empty = A „command” mező nem lehet üres: adjon meg egy parancs-karakterláncot vagy egy nem üres listát.
 manifest.command_isolation_recipe = Az „command_isolation” mezőhöz parancslistás recept szükséges.
 manifest.command_isolation_scalar = Az „command_isolation: isolated” értékhez parancslista szükséges.
+manifest.console_dependency_only = A csak függőségeket megadó bejegyzések nem választhatják ki a konzolkészletet.
 
 # A köztes ábrázolás hibái.
 ir.rule_not_found = A(z) „{ $target }” cél által hivatkozott „{ $rule }” szabály nem található.

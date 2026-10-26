@@ -6427,6 +6427,13 @@ custom action pools that conflict with `console`; it accepts an existing
 `Action.pool` value of `console`. Synthetic serial gates and dyndep sidecars
 never inherit either binding.
 
+AST validation keeps stable diagnostic details separate from localized display
+text. `src/ir/graph/error.rs::manifest_recipe_validation_message` maps a
+recognized manifest detail to the same user-facing message for parsing and
+direct IR lowering. Ninja generator errors use a separate message when an
+output edge is available; the build-script localization slice does not depend
+on this library-only mapping.
+
 `src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
 `implicit_deps` when detecting cycles. It intentionally does not traverse
 `order_only_deps`, because order-only dependencies express scheduling order

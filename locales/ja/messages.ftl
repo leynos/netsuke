@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = 不明な入出力エラー。
 manifest.command_list_empty = 「command」フィールドは空にできません: コマンド文字列または空でないリストを指定してください。
 manifest.command_isolation_recipe = 「command_isolation」フィールドにはコマンドリストのレシピが必要です。
 manifest.command_isolation_scalar = 「command_isolation: isolated」にはコマンドリストが必要です。
+manifest.console_dependency_only = 依存関係のみを宣言する項目は、コンソールプールを選択できません。
 
 # 中間表現のエラー。
 ir.rule_not_found = ターゲット「{ $target }」が参照する規則「{ $rule }」が見つかりません。
