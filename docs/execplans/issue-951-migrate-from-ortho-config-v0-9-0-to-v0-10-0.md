@@ -851,6 +851,30 @@ pre-migration form, which it does not in the SYNOPSIS section (#959).
   itself is correct, and #959 is deliberately out of scope and filed — so this
   is a documentation-accuracy repair, not a behavioural one. Date/Author:
   2026-10-26, agent.
+- Decision: restate obligations V1, V2, and V3 in the `Verification plan` so
+  they describe the tests that were actually accepted, rather than the drafts
+  they superseded. Rationale: the Progress log, Decision log, and Lessons had
+  all been updated as the implementation moved, but the obligations themselves
+  still carried their original wording, so the document required evidence its
+  own accepted tests no longer produce — an internal contradiction of the same
+  kind as the parity claim above. V1 still demanded that the *generator* reach
+  the all-three and file-only classes, while the accepted non-vacuity evidence
+  is the deterministic eight-subset sweep, adopted precisely because a sampled
+  assertion would have failed about 3% of runs; the obligation now names that
+  sweep. V2 still used `--jobs 4` with `NETSUKE_JOBS=8` and a file value of 16,
+  but the accepted test exercises `manifest_fuel`: it passes `--manifest-fuel`
+  equal to `CliConfig::default().manifest_fuel` against `manifest_fuel = 7` in
+  the file layer and `NETSUKE_MANIFEST_FUEL=9` in the environment layer, and
+  the obligation now records those fields and values. V3 collapsed both
+  rejected spellings into one `unexpected argument 'false' found` message,
+  whereas the measured contract has two shapes — `--flag=false` is exit 2 with
+  `unexpected value 'false'`, and `--flag false` is exit 2 with
+  `Unknown subcommand` at the root or `Unknown argument` in a subcommand — plus
+  the `--json false` exception, which exits 1 because the pre-clap JSON hint
+  scanner routes that same error as a JSON document. The obligation now records
+  each case, its status code, and its stream separately. No implementation or
+  test change follows: the accepted tests already behave as restated, and the
+  correction makes the plan describe them. Date/Author: 2026-10-26, agent.
 
 ## Outcomes & retrospective
 
@@ -1065,62 +1089,81 @@ layer, an environment layer, and an explicit CLI value, the merged value equals
 the highest-precedence layer that supplied it, and list-valued fields append in
 layer order.
 
-- Method: property test over generated layer subsets (extends the existing
-  `tests/cli_tests/merge_precedence_proptests.rs`).
-- Rationale: open-ended input space over layer subsets; a table would only
-  cover the cases the author thought of.
-- Domain: subsets of {file, env, cli} × present/absent × scalar and list
-  fields.
+- Method: a randomized property test over generated layer subsets for breadth
+  (`merge_precedence_holds_for_generated_layers`), plus a deterministic
+  eight-subset sweep
+  (`every_layer_subset_resolves_to_its_highest_present_layer`) that enumerates
+  all subsets of {file, env, cli}.
+- Rationale: the generated space gives breadth across scalar and list fields;
+  the enumeration is what makes the non-vacuity claim structural rather than
+  statistical. A table alone would only cover the cases the author thought of,
+  and a sampled assertion still relies on the seed — see the Decision log entry
+  on the first, flaky non-vacuity attempt.
+- Domain: all eight subsets of {file, env, cli} × present/absent × scalar and
+  list fields.
 - Artefact: `tests/cli_tests/merge_precedence_proptests.rs`.
-- Evidence: `make test` runs the property; a deliberately inverted precedence
-  in `push_cli_layer` must make it fail.
-- Non-vacuity: the generator must produce at least one case with all three
-  layers present and disagreeing, and at least one case with only the file
-  layer — assert those classes are reached rather than relying on the seed.
+- Evidence: `make test` runs both; a deliberately inverted precedence in
+  `push_cli_layer` must make the enumeration fail at subset `011`.
+- Non-vacuity: discharged structurally by the enumeration. Every subset is
+  built on every run from the same values, so the all-three/disagreeing case —
+  the only one that separates "highest layer wins" from "whichever layer was
+  present won" — and the file-only case are both guaranteed to be exercised,
+  with no reliance on generator sampling.
 
-Obligation V2 — *Explicit value equal to the default*: `--jobs 4` with
-`NETSUKE_JOBS=8` and a file saying 16 resolves to 4, even though 4 is also the
-compiled default for an unrelated field. This is the behaviour the v0.10.0
-correction protects. Netsuke does not consume OrthoConfig's generated CLI
-guard, so the correction cannot change netsuke's behaviour; the obligation is
-therefore a *preservation* contract, pinned so that a later switch to the
-generated loader cannot silently regress it.
+Obligation V2 — *Explicit value equal to the default*: passing
+`--manifest-fuel` with a value equal to the compiled default still wins over a
+file layer saying `manifest_fuel = 7` and an environment layer saying
+`NETSUKE_MANIFEST_FUEL=9`, resolving to the default rather than to 7 or 9. This
+is the behaviour the v0.10.0 correction protects. Netsuke does not consume
+OrthoConfig's generated CLI guard, so the correction cannot change netsuke's
+behaviour; the obligation is therefore a *preservation* contract, pinned so
+that a later switch to the generated loader cannot silently regress it.
 
-- Method: named unit/behavioural tests, one per tier, using the existing
-  injected-environment seam (never process-environment mutation).
+- Method: a named behavioural test using the existing injected-environment
+  seam (never process-environment mutation). The default is read from
+  `CliConfig::default().manifest_fuel` rather than restated, so the case stays
+  "explicit value == default" if the default moves.
 - Rationale: one scenario with a crisp expected value; a property would dilute
   the specification.
-- Artefact: `tests/cli_tests/merge/explicit_cli_wins.rs`, plus the
-  `merge_precedence_proptests.rs` extension.
-- Evidence: with the CLI layer suppressed, the test must fail with 8 (env) not
-  4 (cli).
-- Non-vacuity: the test must set the environment value to something *different*
-  from both the default and the CLI value, so "CLI wins" is distinguishable
-  from "default wins" and from "env wins".
+- Artefact: `tests/cli_tests/merge/explicit_cli_wins.rs`, as
+  `explicit_cli_value_equal_to_the_default_still_wins`.
+- Evidence: with the CLI layer suppressed, the test must fail with 9 (env) not
+  the default (cli).
+- Non-vacuity: the file layer's 7 and the environment layer's 9 are both
+  *different* from each other and from the compiled default, so "CLI wins" is
+  distinguishable from "default wins" and from "env wins".
 
 Obligation V3 — *Boolean flag spellings are unchanged*: `--flag` yields `true`,
-omitting the flag yields the configured or default value, `--flag=false` exits
-non-zero with clap's `unexpected argument 'false' found` message on stderr and
-nothing on stdout, and `--flag false` exits non-zero the same way.
+and omitting the flag yields the configured or default value. The two rejected
+spellings then diverge, so each is recorded separately:
+
+- `--flag=false` (attached) is rejected as an invalid value: exit status 2,
+  clap's `unexpected value 'false'` on stderr, nothing on stdout.
+- `--flag false` (space-separated) is rejected as a stray word: exit status 2,
+  `Unknown subcommand` at the root and `Unknown argument` inside a subcommand,
+  naming `false` on stderr, nothing on stdout. The one exception is
+  `--json false`, which exits 1: the pre-clap JSON hint scanner selects JSON
+  diagnostics first, so the same subcommand error is rendered as a JSON
+  document on stderr. The word is still rejected; only the routing differs.
 
 - Method: `assert_cmd` behavioural tests against the real binary, since the
   contract is about exit status and streams.
 - Rationale: exit status and stream routing are process-level observable
   behaviour; in-process tests cannot assert them faithfully.
-- Artefact: a new `tests/` binary-level test module covering `--json`,
-  `--verbose`, `--fetch-default-deny`, `--trust-project-fetch-policy`,
-  `--no-input`, and `GraphArgs::html`.
+- Artefact: the process-level suite `tests/boolean_flag_spelling_tests.rs`,
+  covering `--json`, `--verbose`, `--fetch-default-deny`,
+  `--trust-project-fetch-policy`, `--no-input`, and `GraphArgs::html`.
 - Evidence: this obligation records *preservation*, not red-green. Netsuke's
   booleans are handwritten clap flags on `src/cli/command.rs::Cli`, not
   OrthoConfig-generated ones, so the v0.10.0
   `num_args = 0..=1, require_equals = true` emission never reaches them and
-  `--flag=false` keeps its pre-migration rejection. The evidence is therefore
+  both spellings keep their pre-migration rejection. The evidence is therefore
   that every asserted status code and stream is *identical* before and after
   the dependency bump.
-- Non-vacuity: assert the *specific* status codes (0 / 2) and both streams, not
-  merely "not success". At least one case must show a bare boolean flag
-  successfully producing `true`, so the rejection cases are distinguishable
-  from a generally broken binary.
+- Non-vacuity: assert the *specific* status codes (0 / 1 / 2) and both streams
+  per case, not merely "not success". At least one case must show a bare
+  boolean flag successfully producing `true`, so the rejection cases are
+  distinguishable from a generally broken binary.
 
 Obligation V4 — *Localized identifier stability*: a dotted field name and an
 underscored field name each compose to a stable, correct identifier across the
