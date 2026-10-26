@@ -6,11 +6,21 @@ On 26 October, the full review of published head `da69b1b` identified missing
 step-output and fractional-telemetry assertions, optional-file read errors
 being hidden, and a stale publication status in this plan. The local repair
 adds those contracts, propagates non-missing filesystem errors, and records the
-actual publication state. Its sequential local gates pass: 4,725 Rust tests,
-1,508 workflow-contract tests plus 27 supplementary script tests, typecheck,
-lint, and formatting; Rustdoc coverage is 98.19%. CodeScene reports no issues.
-The repair is not yet published; fresh exact-head review, hosted checks, and
-merge remain outstanding.
+actual publication state. The repair was published as
+`8a32912012c705bdfbd246f27acc1b487df4bb14` after its sequential local gates
+passed: 4,725 Rust tests, 1,508 workflow-contract tests plus 27 supplementary
+script tests, typecheck, lint, and formatting; Rustdoc coverage is 98.19%.
+Exact-head CI
+[40353596192](https://github.com/leynos/netsuke/actions/runs/40353596192),
+Netsukefile
+[40353595949](https://github.com/leynos/netsuke/actions/runs/40353595949),
+Release Dry Run
+[40353596050](https://github.com/leynos/netsuke/actions/runs/40353596050),
+CodeScene [8136311](https://codescene.io/projects/69281/delta/results/8136311),
+and Gecko passed. CodeRabbit's focused reconciliation confirmed the Testing and
+Unit Architecture rows and requested this published-state correction for the
+Developer Documentation row. A fresh formal review, the affected EP-1
+assessment, final approval, and merge remain outstanding.
 
 On 26 October, formal CodeRabbit review `5645777679` of published head
 `1ef4de4d11c4157a11bd2f573c5bf29a927dbdd7` requested changes for two missing
@@ -748,9 +758,11 @@ fidelity comparisons block adoption.
   typecheck and lint passed; workflow contracts passed 1,508 tests with three
   skipped plus 27 supplementary script tests; doc coverage is 98.19% (6,231/
   6,346); formatting, Markdownlint (203 files), Nixie, and CodeScene passed.
-- [ ] Commit and publish the validated repair, reply to every pre-merge row
-  and await CodeRabbit confirmation, reconcile fresh exact-head checks and the
-  affected assessment, then request final approval and merge.
+- [x] Commit and publish the validated repair as `8a329120`. Its exact-head
+  CI, Netsukefile, Release Dry Run, CodeScene, and Gecko checks passed.
+- [ ] Complete the current Developer Documentation row reconciliation, obtain
+  the affected EP-1 assessment, request a fresh managed formal review and
+  resolve any findings, then request final approval and merge.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -1159,9 +1171,11 @@ counter regression; its hosted CI and the eight sequential local gates passed,
 and `cs delta origin/main` found no issues. The completed EP-1 assessment found
 no confirmed in-scope omission. A further CodeRabbit review on `da69b1b` found
 missing populated-step and fractional-telemetry assertions, optional-file I/O
-tests, and requested that this plan reflect the published state. Repair
-validation and reconciliation for that latest review, final approval, and merge
-remain outstanding.
+tests, and requested that this plan reflect the published state. Commit
+`8a329120` repairs the tests and readers; the focused reconciliation confirmed
+the Testing and Unit Architecture rows and requested the correction now
+recorded above. Confirmation of the documentation row, the affected EP-1
+assessment, a fresh formal review, final approval, and merge remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
