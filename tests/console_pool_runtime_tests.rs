@@ -19,7 +19,7 @@ use std::{
     time::{Duration, Instant},
 };
 use tempfile::TempDir;
-use test_support::ninja::ninja_integration_workspace;
+use test_support::ninja::{NinjaWorkspaceError, ninja_integration_workspace};
 
 const PROCESS_DEADLINE: Duration = Duration::from_secs(60);
 const POLL_INTERVAL: Duration = Duration::from_millis(10);
@@ -211,21 +211,30 @@ fn finish_successfully(cleanup: &mut ChildCleanup) -> Result<()> {
     Ok(())
 }
 
-/// Probe Ninja or skip this optional local runtime test when it is unavailable.
-fn runtime_workspace() -> Option<TempDir> {
+/// Probe Ninja and skip this optional local runtime test when it cannot run.
+///
+/// # Errors
+///
+/// Returns a workspace-creation error instead of silently skipping the test.
+fn runtime_workspace() -> Result<Option<TempDir>, NinjaWorkspaceError> {
     match ninja_integration_workspace() {
-        Ok(workspace) => Some(workspace),
-        Err(error) => {
+        Ok(workspace) => Ok(Some(workspace)),
+        Err(
+            error @ (NinjaWorkspaceError::ProbeSpawn(_)
+            | NinjaWorkspaceError::ProbeFailed(_)
+            | NinjaWorkspaceError::ProbeTimeout(_)),
+        ) => {
             tracing::warn!(%error, "skipping console runtime test without Ninja");
-            None
+            Ok(None)
         }
+        Err(error) => Err(error),
     }
 }
 
 /// Forward a flushed console-pool marker before the blocked command completes.
 #[test]
 fn console_output_reaches_piped_stdout_before_the_recipe_exits() -> Result<()> {
-    let Some(workspace) = runtime_workspace() else {
+    let Some(workspace) = runtime_workspace()? else {
         return Ok(());
     };
     let root = workspace_dir(&workspace)?;

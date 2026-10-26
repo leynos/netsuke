@@ -7135,6 +7135,17 @@ The production generator has its own `netsuke::ninja_gen::GeneratedNinja`
 output type; `test_support::ninja_semantics::GeneratedNinja` is the test-side
 borrowed view of generated text.
 
+### `test_support::ninja_edge`
+
+`test_support::ninja_edge::edge_has_console_pool`
+(`test_support/src/ninja_edge.rs`) checks edge-local pool metadata on a named
+generated `build` statement. Snapshot, BDD, and documentation-example tests use
+this shared helper so their assertions agree about which edge owns an indented
+`pool = console` binding. Its scope is deliberately narrow: it inspects the
+generated text used by these tests and does not parse general Ninja syntax.
+Permitted call sites are test-support and test code only; production code must
+not depend on `test_support`.
+
 ### Temporary Ninja build files
 
 `runner::process::create_temp_ninja_file` writes, flushes, and synchronizes a
@@ -10073,6 +10084,37 @@ no fixture sentinel text. The governing decision record is
 `docs/adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md`,
 which forbids unbounded or caller-controlled values in metric labels and trace
 fields.
+
+### Module: `runner::console_telemetry`
+
+`src/runner/console_telemetry.rs` instruments only the actual Ninja build
+invocation in `execute_build`. It supplements the complete legacy-recipe
+operation timing with subprocess duration and outcome grouped by
+`console_scheduling=enabled|disabled`. Its `runner.ninja.build` span and
+completion event include the aggregate `console_edge_count`, scheduling state,
+`outcome=success|error`, and `error_category=none|io`. Paths, action
+identities, recipe contents, and process error text never enter this boundary.
+
+The generator stores the count of selected user edges privately in
+`GeneratedNinja`; the runner reads that aggregate before consuming the bundle.
+Synthetic serial gates and dyndep sidecars do not contribute to it. The count
+describes configured edges in each attempted build graph, rather than edges
+that Ninja actually executed or time spent in its pool. The subprocess boundary
+emits `netsuke_runner_ninja_build_executions_total`,
+`netsuke_runner_ninja_build_execution_duration_seconds`, and
+`netsuke_runner_ninja_build_console_edges_total`. The first two use scheduling,
+outcome, and error-category labels; the edge counter uses only outcome.
+
+Bundle-generation telemetry records the same scheduling state and aggregate
+count. `netsuke_ninja_dyndep_bundle_generations_total` and
+`netsuke_ninja_dyndep_bundle_generation_duration_seconds` carry scheduling,
+outcome, and the generator's fixed error category, including
+`console_dependency_only` and `console_pool_conflict`.
+`netsuke_ninja_dyndep_bundle_console_edges_total` counts configured console
+edges by generation outcome. `src/observability/recorder/console.rs` owns the
+production retention policy for these six series: it admits their exact kinds
+and finite label sets, rejecting unknown values, extra labels, and missing
+labels. Both emission and retention tests use local recorders.
 
 ### Module: `runner::recipe_shell::telemetry`
 

@@ -1,7 +1,7 @@
 //! Tests for edge-level Ninja console pool selection.
 
 use super::command_action;
-use super::{NinjaGenError, generate, generate_bundle};
+use super::{NinjaGenError, generate, generate_bundle, generate_posix};
 use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
@@ -30,18 +30,17 @@ fn console_pool_is_edge_level_and_keeps_shared_action_rules() -> Result<()> {
             .expect("test graph output aliases must be unique");
     }
 
-    let ninja = generate(&graph)?;
-    ensure!(
-        ninja.matches("rule shared\n").count() == 1,
-        "shared action must have one rule definition:\n{ninja}"
+    let ninja = generate_posix(&graph)?;
+    let expected = concat!(
+        "rule shared\n",
+        "  command = echo ready\n\n",
+        "build console.out: shared\n",
+        "  pool = console\n\n",
+        "build ordinary.out: shared\n\n",
     );
     ensure!(
-        ninja.contains("build console.out: shared\n  pool = console\n\n"),
-        "console binding must be emitted on its edge:\n{ninja}"
-    );
-    ensure!(
-        ninja.contains("build ordinary.out: shared\n\n"),
-        "ordinary edge must not inherit console scheduling:\n{ninja}"
+        ninja == expected,
+        "expected Ninja manifest:\n{expected}\nactual:\n{ninja}"
     );
     Ok(())
 }
@@ -70,7 +69,7 @@ fn ordinary_edge_clears_a_shared_console_action_pool() -> Result<()> {
             .expect("test graph output aliases must be unique");
     }
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     ensure!(
         ninja.contains("pool = console\n\nbuild console.out: shared\n  pool = console\n"),
         "selected edge must retain console scheduling:\n{ninja}"
@@ -104,7 +103,7 @@ fn console_pool_accepts_matching_action_pool() -> Result<()> {
         })
         .expect("test graph output aliases must be unique");
 
-    let ninja = generate(&graph)?;
+    let ninja = generate_posix(&graph)?;
     ensure!(
         ninja.contains("  pool = console\n\nbuild console.out: shared\n  pool = console\n\n"),
         "matching action and edge pools must both be accepted:\n{ninja}"

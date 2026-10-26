@@ -12,6 +12,10 @@ fn console_serial_parent_does_not_mark_gates_or_sidecars() -> Result<()> {
     edge.console = true;
     let graph = graph_with_edge(edge);
     let bundle = generate_bundle(&graph)?;
+    ensure!(
+        bundle.console_edge_count() == 1,
+        "console telemetry must count the user edge without synthetic gates or sidecars"
+    );
     let file = bundle.build_file();
     let lines: Vec<_> = file.lines().collect();
     let parent_line = lines

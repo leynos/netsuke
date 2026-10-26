@@ -9,6 +9,7 @@
 //! retained snapshot.
 
 mod check;
+mod console;
 mod labels;
 
 #[cfg(feature = "lint")]
@@ -155,6 +156,7 @@ impl ConfigMetricsRecorder {
                 | NINJA_STATUS_OVERSIZED_LINES_TOTAL
                 | SHELL_QUOTE_DIALECT_TOTAL
         ) || is_check_metric(name)
+            || console::is_console_metric(name)
     }
 
     /// Admit exact bounded counter series by their registered name.
@@ -216,7 +218,7 @@ impl ConfigMetricsRecorder {
             | SHELL_QUOTE_DIALECT_TOTAL => accepts_stdlib_counter_registration(key),
             #[cfg(feature = "lint")]
             CHECK_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
-            _ => false,
+            _ => console::accepts_registration(key, MetricKind::Counter),
         }
     }
 
@@ -238,7 +240,7 @@ impl ConfigMetricsRecorder {
             ),
             #[cfg(feature = "lint")]
             CHECK_DURATION => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
-            _ => false,
+            _ => console::accepts_registration(key, MetricKind::Histogram),
         }
     }
 

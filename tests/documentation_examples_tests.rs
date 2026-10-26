@@ -258,13 +258,10 @@ fn documented_console_example_selects_the_console_pool() -> Result<()> {
     let run = run_netsuke_in(workspace.path(), &["--progress", "never", "generate"])?;
 
     assert_success(&run, "guide console-pool target")?;
-    let lint_edge = run
-        .stdout
-        .split_once("build lint:")
-        .map(|(_, following)| following.split("\nbuild ").next().unwrap_or(following))
+    let has_console_pool = test_support::ninja_edge::edge_has_console_pool(&run.stdout, "lint")
         .context("generated Ninja should contain the lint build edge")?;
     ensure!(
-        lint_edge.contains("  pool = console"),
+        has_console_pool,
         "the documented lint target should select the console pool: {}",
         run.stdout
     );
