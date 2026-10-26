@@ -1,16 +1,12 @@
 #!/usr/bin/env python3
-"""Write bounded summaries and telemetry for release operations.
+"""Write bounded release-operation summaries and telemetry.
 
-The release workflow calls this helper from an always-run summary step after
-staging, publication, or crate packaging. It writes a concise GitHub step
-summary and JSONL records with fixed operation, phase, outcome, and
-error-category labels. The records deliberately omit release tags, artefact
-names, raw errors, and tokens.
+The workflow's always-run step calls this helper after staging, publication,
+or crate packaging. It writes a GitHub summary and JSONL records with fixed
+operation, phase, outcome, and error-category labels, omitting release tags,
+asset names, raw errors, and tokens.
 
-Which phases an operation has is stated per operation. The packaging job builds
-a crate and hands it on, so it has no draft, download, hoist, or upload-plan
-phase; reporting those as permanently ``skipped`` would read as phases that
-never fail rather than ones the job does not run.
+Operation-specific phases keep packaging's unrelated steps out of its record.
 """
 
 import dataclasses as dc
@@ -328,8 +324,30 @@ def _optional_timestamp(value: str) -> int | None:
 def observation_from_environment(
     # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
     environment: "cabc.Mapping[str, str]",
+    *,
+    ended_ns: int,
 ) -> OperationObservation:
-    """Create a bounded observation from the workflow's fixed environment."""
+    """Build an observation using the caller's time for deterministic parsing.
+
+    Returns
+    -------
+    OperationObservation
+        Parsed values with the supplied end timestamp.
+
+    Raises
+    ------
+    ValueError
+        For an invalid operation, flag, or timestamp.
+
+    Examples
+    --------
+    >>> observation_from_environment(
+    ...     {"RELEASE_OPERATION": "release_staging",
+    ...      "RELEASE_DRY_RUN": "true", "UPLOAD_ERROR_PRESENT": "false"},
+    ...     ended_ns=1_600_000_000,
+    ... ).ended_ns
+    1600000000
+    """
     operation = environment["RELEASE_OPERATION"]
     dry_run_value = environment["RELEASE_DRY_RUN"]
     if dry_run_value not in {"true", "false"}:
@@ -356,7 +374,7 @@ def observation_from_environment(
         dry_run=dry_run_value == "true",
         job_status=environment.get("JOB_STATUS", "unknown"),
         started_ns=_optional_timestamp(environment.get("OPERATION_STARTED_NS", "")),
-        ended_ns=time.time_ns(),
+        ended_ns=ended_ns,
         steps=steps,
         upload_error_present=error_present_value == "true",
     )
@@ -368,7 +386,7 @@ def main(
 ) -> None:
     """Write a summary and local JSONL; publication retains the JSONL artifact."""
     values = os.environ if environment is None else environment
-    observation = observation_from_environment(values)
+    observation = observation_from_environment(values, ended_ns=time.time_ns())
     summary, jsonl = render_observation(observation)
     summary_path = Path(values["GITHUB_STEP_SUMMARY"])
     telemetry_path = Path(values["OBSERVABILITY_PATH"])

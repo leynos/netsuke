@@ -2411,6 +2411,15 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   temporary-directory configuration changed. The Domain Architecture warning
   asks to move record-shape validation from policy to adapters, which conflicts
   with this plan's stated in-memory mapping boundary; disposition is pending.
+- [x] (2026-10-26) Addressed the observability clock-injection suggestion in
+  the current review report: `main` supplies the captured end timestamp to the
+  pure environment parser, and the contract test pins that timestamp and the
+  CLI duration. The developers' guide records the boundary. All seven gates
+  passed on tree `5578f0bd`: `check-fmt`, `lint`, `typecheck`, `test` (4,712
+  passed, 6 skipped; doctests passed), `test-workflow-contracts`,
+  `markdownlint` (199 files, zero issues), and `nixie`. Earlier Ruff findings
+  and the 400-line limit were corrected before the final run. The Domain
+  Architecture disposition remains pending separately.
 
 ## Surprises & discoveries
 
@@ -3943,4 +3952,13 @@ The full local suite passed on tree `2aca0125`; after recording its results,
 the final plan-note-only tree passed `check-fmt`, `markdownlint`, and `nixie`.
 The stop-hook's Whitaker and Nixie failures did not recur in the sequential
 rerun. The Domain Architecture warning's disposition remains pending; no
+release or registry setting changed.
+
+Draft 16, 2026-10-26: moved the telemetry end-time read from the observation
+parser to `main`, keeping the parser deterministic and making its duration
+contract explicit in the workflow suite and developers' guide. All seven local
+gates passed on tree `5578f0bd`; the exact results are in `Progress`. Two
+earlier lint attempts found missing docstring details, a typing-only import
+rule, a float comparison, and the module's 400-line limit. Those were corrected
+before the passing run. Stage C remains partial and Stage D remains open; no
 release or registry setting changed.

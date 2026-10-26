@@ -2435,6 +2435,10 @@ metrics and phase events. Both workflow artefacts use the repository's
 configured GitHub Actions retention policy because neither upload overrides
 retention.
 
+The CLI captures the observation end time and passes it into the environment
+parser. Tests supply a fixed timestamp to keep duration calculations
+deterministic.
+
 The operation uses fixed operation, phase, outcome, and error-category labels.
 It omits release tags, artefact names, raw errors, and secrets. This telemetry
 does not alter the `should_publish` guard or make `package-crate` a

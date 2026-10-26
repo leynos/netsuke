@@ -14,8 +14,10 @@ Run via ``make test-workflow-contracts``.
 """
 
 import json
+import typing as typ
 
 import pytest
+import release_operation_observability as observability
 from release_operation_observability import (
     OperationObservation,
     StepState,
@@ -38,6 +40,9 @@ from release_operation_observability_support import (
     timed_phases,
 )
 from workflow_loading import RELEASE_WORKFLOW_PATH, job_steps, load_workflow
+
+if typ.TYPE_CHECKING:
+    import pathlib
 
 
 @pytest.fixture(scope="module")
@@ -173,7 +178,7 @@ def test_observability_reads_fixed_step_values_from_the_environment() -> None:
         "UPLOAD_ERROR_PRESENT": "false",
     }
 
-    observation = observation_from_environment(environment)
+    observation = observation_from_environment(environment, ended_ns=1_700_000_000)
 
     assert observation.operation == "release_staging", (
         "the environment operation label must be preserved"
@@ -187,6 +192,9 @@ def test_observability_reads_fixed_step_values_from_the_environment() -> None:
     )
     assert observation.steps["upload_plan_validation"].ended_ns == 1_600_000_000, (
         "the upload plan end time must be parsed"
+    )
+    assert observation.ended_ns == 1_700_000_000, (
+        "the observation must retain its caller-supplied capture time"
     )
     assert observation.upload_error_present is False, (
         "the environment must not claim an upload error"
@@ -289,7 +297,7 @@ def test_observability_reads_packaging_values_from_the_environment() -> None:
         "UPLOAD_ERROR_PRESENT": "false",
     }
 
-    observation = observation_from_environment(environment)
+    observation = observation_from_environment(environment, ended_ns=1_700_000_000)
     summary, _ = render_observation(observation)
 
     assert set(observation.steps) == set(PACKAGING_PHASES), (
@@ -300,4 +308,36 @@ def test_observability_reads_packaging_values_from_the_environment() -> None:
     )
     assert "Error category: `crate_packaging`" in summary, (
         "a failed packaging step must map to the fixed crate-packaging category"
+    )
+
+
+def test_main_captures_the_observation_time_at_the_cli_boundary(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Use the CLI clock for duration telemetry while keeping parsing deterministic."""
+    summary_path = tmp_path / "summary.md"
+    telemetry_path = tmp_path / "observability.jsonl"
+    ended_ns = 1_700_000_000
+    monkeypatch.setattr(observability.time, "time_ns", lambda: ended_ns)
+
+    observability.main({
+        "RELEASE_OPERATION": "release_staging",
+        "RELEASE_DRY_RUN": "true",
+        "UPLOAD_ERROR_PRESENT": "false",
+        "OPERATION_STARTED_NS": "1000000000",
+        "GITHUB_STEP_SUMMARY": str(summary_path),
+        "OBSERVABILITY_PATH": str(telemetry_path),
+    })
+
+    records = [
+        json.loads(line)
+        for line in telemetry_path.read_text(encoding="utf-8").splitlines()
+    ]
+    duration = next(
+        record["value"]
+        for record in records
+        if record.get("metric") == "release_operation_duration_seconds"
+    )
+    assert duration == pytest.approx(0.7), (
+        "main must pass its captured clock value to the observation"
     )
