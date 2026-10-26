@@ -18,9 +18,10 @@ Release Dry Run
 [40353596050](https://github.com/leynos/netsuke/actions/runs/40353596050),
 CodeScene [8136311](https://codescene.io/projects/69281/delta/results/8136311),
 and Gecko passed. CodeRabbit's focused reconciliation confirmed the Testing and
-Unit Architecture rows and requested this published-state correction for the
-Developer Documentation row. A fresh formal review, the affected EP-1
-assessment, final approval, and merge remain outstanding.
+Unit Architecture rows; its follow-up confirmed the Developer Documentation
+row. The candidate-bound EP-1 assessment for `ec53ee08` accepted the scoped
+implementation. A fresh formal review of the corrected plan, final approval,
+and merge remain outstanding.
 
 On 26 October, formal CodeRabbit review `5645777679` of published head
 `1ef4de4d11c4157a11bd2f573c5bf29a927dbdd7` requested changes for two missing
@@ -760,9 +761,11 @@ fidelity comparisons block adoption.
   6,346); formatting, Markdownlint (203 files), Nixie, and CodeScene passed.
 - [x] Commit and publish the validated repair as `8a329120`. Its exact-head
   CI, Netsukefile, Release Dry Run, CodeScene, and Gecko checks passed.
-- [ ] Complete the current Developer Documentation row reconciliation, obtain
-  the affected EP-1 assessment, request a fresh managed formal review and
-  resolve any findings, then request final approval and merge.
+- [x] Complete the Developer Documentation row reconciliation and obtain the
+  candidate-bound EP-1 assessment for `ec53ee08`; it accepted the scoped
+  implementation.
+- [ ] Complete a fresh managed formal review of this plan correction, resolve
+  any findings, then request final approval and merge.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -1173,9 +1176,11 @@ no confirmed in-scope omission. A further CodeRabbit review on `da69b1b` found
 missing populated-step and fractional-telemetry assertions, optional-file I/O
 tests, and requested that this plan reflect the published state. Commit
 `8a329120` repairs the tests and readers; the focused reconciliation confirmed
-the Testing and Unit Architecture rows and requested the correction now
-recorded above. Confirmation of the documentation row, the affected EP-1
-assessment, a fresh formal review, final approval, and merge remain outstanding.
+the Testing and Unit Architecture rows and its follow-up confirmed the
+Developer Documentation row. The candidate-bound EP-1 assessment for `ec53ee08`
+accepted the scoped implementation. The latest formal review found the
+plan-status correction recorded above; a fresh review of that correction, final
+approval, and merge remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
