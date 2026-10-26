@@ -290,7 +290,11 @@ fn manifest_ninja_snapshot(
         );
     }
     for (output, expected) in expected_console_bindings {
-        assert_console_edge_binding(&ninja_content, output, *expected)?;
+        let actual = test_support::ninja_edge::edge_has_console_pool(&ninja_content, output)?;
+        ensure!(
+            actual == *expected,
+            "edge {output} console binding should be {expected}, generated Ninja:\n{ninja_content}"
+        );
     }
     let mut settings = Settings::new();
     settings.set_snapshot_path(concat!(
@@ -301,30 +305,6 @@ fn manifest_ninja_snapshot(
         assert_snapshot!(snapshot_name, ninja_content);
     });
 
-    Ok(())
-}
-
-/// Assert whether one named edge has a console binding.
-///
-/// # Errors
-///
-/// Returns an error when the edge is missing or its binding does not match.
-fn assert_console_edge_binding(ninja: &str, output: &str, expected: bool) -> Result<()> {
-    let lines: Vec<_> = ninja.lines().collect();
-    let prefix = format!("build {output}:");
-    let edge_index = lines
-        .iter()
-        .position(|line| line.starts_with(&prefix))
-        .with_context(|| format!("missing Ninja build edge for {output}"))?;
-    let actual = lines
-        .iter()
-        .skip(edge_index + 1)
-        .take_while(|line| line.starts_with("  "))
-        .any(|line| *line == "  pool = console");
-    ensure!(
-        actual == expected,
-        "edge {output} console binding should be {expected}, generated Ninja:\n{ninja}"
-    );
     Ok(())
 }
 

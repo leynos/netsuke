@@ -231,6 +231,7 @@ fn direct_ast_deserialisation_is_validated_before_ir_lowering() -> Result<()> {
 #[case::action("actions:\n  - name: all\n    deps: [lint]\n    console: true\ntargets: []\n")]
 #[case::target("actions: []\ntargets:\n  - name: release\n    deps: [build]\n    console: true\n")]
 fn dependency_only_console_entries_are_rejected(#[case] sections: &str) -> Result<()> {
+    let _locale = locale_localizer("en-US");
     let yaml = format!("netsuke_version: '1.0.0'\n{sections}");
     let error =
         parse_manifest(&yaml).expect_err("dependency-only entries cannot use the console pool");

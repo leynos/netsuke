@@ -23,7 +23,7 @@ pub(crate) fn manifest_recipe_validation_message(detail: &'static str) -> Option
         .then(|| localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY))
 }
 
-/// Render a manifest validation diagnostic in the active locale when possible.
+/// Render a manifest diagnostic in the active locale when available.
 fn invalid_manifest_message(message: &'static str) -> String {
     manifest_recipe_validation_message(message)
         .map_or_else(|| message.to_owned(), |localized| localized.to_string())
