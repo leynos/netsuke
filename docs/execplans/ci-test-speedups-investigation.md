@@ -2,6 +2,16 @@
 
 Status: IN PROGRESS
 
+On 26 October, the full review of published head `da69b1b` identified missing
+step-output and fractional-telemetry assertions, optional-file read errors
+being hidden, and a stale publication status in this plan. The local repair
+adds those contracts, propagates non-missing filesystem errors, and records the
+actual publication state. Its sequential local gates pass: 4,725 Rust tests,
+1,508 workflow-contract tests plus 27 supplementary script tests, typecheck,
+lint, and formatting; Rustdoc coverage is 98.19%. CodeScene reports no issues.
+The repair is not yet published; fresh exact-head review, hosted checks, and
+merge remain outstanding.
+
 On 26 October, formal CodeRabbit review `5645777679` of published head
 `1ef4de4d11c4157a11bd2f573c5bf29a927dbdd7` requested changes for two missing
 regressions: rejection of an unknown experiment variant and a stable schema-2
@@ -723,14 +733,24 @@ fidelity comparisons block adoption.
 - [x] Resolve the three findings from the full review of `222ba09`: clarify
   that `trunk` is a prefix, apply the Oxford commas requested by the style
   guide, and bound JSON sccache counters to 18 digits with a 19-digit
-  regression. On the four-file working candidate atop `222ba09`, pass
-  `make check-fmt`, `make lint`, `make doc-coverage` (98.19%), `make test`
-  (4,725 passed, seven skipped, doctests passed), `make typecheck`,
-  `make test-workflow-contracts` (1,499 passed, three skipped, plus 27 script
-  tests), `make markdownlint` (203 files, zero issues), and `make nixie`.
-- [ ] Commit and publish the validated repair, reply to each review finding,
-  reconcile fresh exact-head checks and the applicable plan assessment, then
-  request final approval and merge.
+  regression. Publish the repair as `da69b1b`; its exact-head CI, Netsukefile,
+  Release Dry Run, CodeScene, and Gecko checks passed. The full CodeRabbit
+  review completed on `da69b1b` and reported two Errors (missing step and
+  fractional-telemetry assertions; optional file reads can hide filesystem
+  errors) and one Developer Documentation Warning.
+- [x] Receive the EP-1 completeness/correctness assessment for `da69b1b` in
+  comment `6415566707` (request `6415539638`); it found no confirmed in-scope
+  omission. No proof assessment applies.
+- [x] Repair all current pre-merge rows from review `5654165349`: add contract
+  tests for populated step output, optional-file I/O failures, and fractional
+  telemetry, and update this plan. The sequential gates pass on the repair
+  candidate: 4,725 Rust tests passed with seven skipped and doctests passed;
+  typecheck and lint passed; workflow contracts passed 1,508 tests with three
+  skipped plus 27 supplementary script tests; doc coverage is 98.19% (6,231/
+  6,346); formatting, Markdownlint (203 files), Nixie, and CodeScene passed.
+- [ ] Commit and publish the validated repair, reply to every pre-merge row
+  and await CodeRabbit confirmation, reconcile fresh exact-head checks and the
+  affected assessment, then request final approval and merge.
 - [ ] Propose separate bounded telemetry only after phase-one review.
 - [ ] Evaluate A, B and C independently, or record why each is
       rejected/deferred.
@@ -1134,11 +1154,14 @@ review. Plan-only head `222ba09` subsequently passed its documentation gates
 and all exact-head hosted checks. CodeRabbit completed a full review on that
 head, with all 15 pre-merge rows passing and three new findings: the `trunk`
 prefix wording, four Oxford-comma corrections, and a missing upper bound on
-JSON sccache counters. The current working tree contains those repairs and a
-19-digit counter regression. All eight local gates passed sequentially on the
-four-file candidate; `cs delta origin/main` found no issues. Commit and
-publication, finding replies, fresh exact-head checks, the applicable plan
-assessment, and final approval remain before merge.
+JSON sccache counters. Commit `da69b1b` published those repairs and a 19-digit
+counter regression; its hosted CI and the eight sequential local gates passed,
+and `cs delta origin/main` found no issues. The completed EP-1 assessment found
+no confirmed in-scope omission. A further CodeRabbit review on `da69b1b` found
+missing populated-step and fractional-telemetry assertions, optional-file I/O
+tests, and requested that this plan reflect the published state. Repair
+validation and reconciliation for that latest review, final approval, and merge
+remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

@@ -16,10 +16,10 @@ from pathlib import (
 )
 
 from ci_test_evidence_cohorts import classify_cohort
+from ci_test_evidence_files import read_inventories, read_logs
 from ci_test_evidence_logs import parse_log
 from ci_test_evidence_telemetry import (
     apply_inventory,
-    load_inventory,
     validate_inventory,
 )
 from ci_test_evidence_types import (
@@ -340,8 +340,8 @@ def main(
     run, jobs, pull_request = _read_saved_attempt(files)
     validate_attempt_response(run, jobs)
     inputs: CollectorInputs = {
-        "logs": _read_logs(files.log_dir, jobs["jobs"]),
-        "inventories": _read_inventories(files.telemetry_dir, run, jobs["jobs"]),
+        "logs": read_logs(files.log_dir, jobs["jobs"]),
+        "inventories": read_inventories(files.telemetry_dir, run, jobs["jobs"]),
         "variant": variant,
     }
     _write_records(collect_attempt(run, jobs, inputs, pull_request=pull_request))
@@ -361,30 +361,6 @@ def _read_saved_attempt(
     )
     pull_request = response if isinstance(response, dict) else None
     return run, jobs, pull_request
-
-
-def _read_logs(log_dir: Path | None, jobs: list[dict]) -> dict[str, str]:
-    """Load any retained text logs without inventing missing observations."""
-    if log_dir is None:
-        return {}
-    return {
-        str(job["id"]): path.read_text(encoding="utf-8")
-        for job in jobs
-        if (path := log_dir / f"{job['id']}.log").is_file()
-    }
-
-
-def _read_inventories(
-    telemetry_dir: Path | None, run: dict, jobs: list[dict]
-) -> dict[str, object]:
-    """Load inventory files only when they exist for this saved attempt."""
-    if telemetry_dir is None:
-        return {}
-    return {
-        str(job["id"]): load_inventory(path, (run["id"], run["run_attempt"], job["id"]))
-        for job in jobs
-        if (path := telemetry_dir / f"{job['id']}.json").is_file()
-    }
 
 
 def _write_records(records: list[JobRecord]) -> None:

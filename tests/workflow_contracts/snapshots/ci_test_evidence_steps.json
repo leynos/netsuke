@@ -1,0 +1,10 @@
+[
+  {
+    "completed_at": "2026-10-12T00:00:02.500Z",
+    "number": 3,
+    "outcome": "unknown",
+    "phase": "tool_installation",
+    "seconds": 2.5,
+    "started_at": "2026-10-12T00:00:00Z"
+  }
+]

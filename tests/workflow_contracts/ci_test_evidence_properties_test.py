@@ -285,6 +285,31 @@ def test_inventory_copies_only_generated_allowlisted_measurements(
     )
 
 
+def test_inventory_accepts_fractional_seconds_only() -> None:
+    """Retain fractional durations while rejecting fractional counts and sizes."""
+    evidence = parse_log("")
+    apply_inventory(
+        evidence,
+        {
+            "profiles": {"export_seconds": 0.25, "raw_count": 1.5},
+            "resources": {"cpu_seconds": 1.5, "peak_rss_mib": 2.5},
+        },
+    )
+
+    assert evidence["profiles"]["export_seconds"] == pytest.approx(0.25), (
+        "Fractional seconds are valid duration measurements"
+    )
+    assert evidence["resources"]["cpu_seconds"] == pytest.approx(1.5), (
+        "Fractional CPU seconds are valid duration measurements"
+    )
+    assert evidence["profiles"]["raw_count"] is None, (
+        "Fractional counts must remain unknown"
+    )
+    assert evidence["resources"]["peak_rss_mib"] is None, (
+        "Fractional memory sizes must remain unknown"
+    )
+
+
 @settings(max_examples=80, derandomize=True, deadline=None)
 @given(
     measurement=st.sampled_from(INVENTORY_MEASUREMENTS),

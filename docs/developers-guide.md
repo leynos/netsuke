@@ -19,6 +19,12 @@ code and workflow execution must not import them. No equivalent collector
 exists in the release-operation observability helper, which instead measures
 its release phases from an injected environment.
 
+The `ci_test_evidence_files.py` helper is the collector's only owner of
+optional per-job log and inventory reads. It omits only `FileNotFoundError` and
+lets other filesystem errors reach the CLI caller. Keep this boundary private
+to the offline collector; do not reuse it from application code or workflow
+execution.
+
 The collector's types module (`scripts/ci_test_evidence_types.py`) owns its
 fixed runner, outcome, and phase vocabularies, positive-integer API identity,
 and non-negative step-number validation. Only the offline collector may call
