@@ -353,7 +353,7 @@ fn handle_runner_error(
     }
     let prefix = prefs.error_prefix();
     if let Some(cycle_error) = circular_dependency_cause(&err) {
-        tracing::error!(error = %cycle_error, "runner failed");
+        tracing::error!(error_kind = "circular_dependency", "runner failed");
         drop(writeln!(io::stderr(), "{prefix} {cycle_error}"));
         return ExitCode::FAILURE;
     }

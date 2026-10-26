@@ -1186,6 +1186,14 @@ dependencies as graph arcs.
 - [x] (2026-10-26) Closed EP-M4: ticked roadmap 4.4.2 and its sub-items,
   recorded ADR-0060 as the decision, and reconciled this plan's outcome with
   the passing final candidate gates.
+- [x] (2026-10-26) Post-push review follow-up: refactored the property oracle
+  and Kani fixtures in response to CodeScene findings, and changed cycle-error
+  tracing to record only the fixed category. A regression test confirms
+  manifest target names stay out of the event. The full sequential gates pass:
+  check-fmt, lint, typecheck, 98.19% doc coverage, 4,742 tests plus doctests,
+  Markdown lint, Mermaid validation, and all 17 capped Kani harnesses. An
+  initial Kani compiler panic from an extracted assertion helper was resolved
+  by keeping proof intrinsics in their harnesses. Logs use the `-23.out` suffix.
 - [x] (2026-10-24) Attempted the unchanged-tree `make kani-ir` baseline in the
   prescribed capped scope. Compiler admission remained healthy but queued this
   worktree's Cargo metadata probe until the eight-minute scope timeout; Kani
@@ -1381,9 +1389,10 @@ The IR cycle detector now follows explicit inputs, implicit dependencies, and
 order-only dependencies across the whole manifest. Explicit and implicit output
 aliases resolve to their producing edge, while `dependency_order: serial`
 remains a scheduling policy that adds no dependency arc. Human-mode errors
-expose the localized cycle path; the JSON diagnostic envelope remains
-unchanged. ADR-0060 and the user, developer, design, formal-verification,
-migration, and changelog documents describe the same contract.
+expose the localized cycle path, while tracing records only the fixed cycle
+error category; the JSON diagnostic envelope remains unchanged. ADR-0060 and
+the user, developer, design, formal-verification, migration, and changelog
+documents describe the same contract.
 
 The final post-rebase candidate passed all nine sequential repository gates,
 including the full Rust test suite and all documentation contracts. Its
