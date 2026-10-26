@@ -177,7 +177,7 @@ def _sccache_version(body: str) -> str | None:
         return None
     try:
         payload = json.loads(body)
-    except json.JSONDecodeError:
+    except ValueError, RecursionError:
         return None
     match payload:
         case {"version": selected_version}:
@@ -241,8 +241,10 @@ def _resource_record(
     body: str, evidence: LogEvidence, *, in_runner_image: bool
 ) -> None:
     """Read used memory; ``- memory: 3 MiB on 4 vCPUs`` records 3 MiB."""
-    memory = re.fullmatch(r"- memory: (\d+) MiB on (\d+) vCPUs", body)
-    disk = re.fullmatch(r"- disk used: (\d+) MiB, least free: (\d+) MiB", body)
+    memory = re.fullmatch(r"- memory: (\d{1,18}) MiB on (\d{1,18}) vCPUs", body)
+    disk = re.fullmatch(
+        r"- disk used: (\d{1,18}) MiB, least free: (\d{1,18}) MiB", body
+    )
     if memory:
         evidence["resources"].update(
             system_used_peak_mib=int(memory[1]), vcpus=int(memory[2])

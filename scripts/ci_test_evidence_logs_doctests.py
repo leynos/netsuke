@@ -12,7 +12,8 @@ if typ.TYPE_CHECKING:
     from ci_test_evidence_types import DoctestEvidence, DoctestSection
 
 RESULT = re.compile(
-    r"test result: (?:ok|FAILED)\. (\d+) passed; (\d+) failed; (\d+) ignored;"
+    r"test result: (?:ok|FAILED)\. (\d{1,18}) passed; "
+    r"(\d{1,18}) failed; (\d{1,18}) ignored;"
 )
 
 
@@ -72,7 +73,7 @@ class _DoctestAccumulator:
 
     def start_batch(self, timestamp: str | None, body: str) -> None:
         """Start a target batch when Cargo announces tests to execute."""
-        starts_batch = re.fullmatch(r"running \d+ tests?", body) is not None
+        starts_batch = re.fullmatch(r"running \d{1,18} tests?", body) is not None
         if self.target is None or self.current is not None:
             return
         if not starts_batch and not _body_matches_doctest_target(body):

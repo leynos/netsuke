@@ -52,7 +52,10 @@ def _observed_archive_size(body: str, current: int | None) -> int | None:
     """Return the current cache archive size, if a restore reports one."""
     if body.startswith("##[start-action"):
         return None
-    match = re.fullmatch(r"Cache Size: ~[\d.]+ [A-Za-z]+ \((\d+) B\)", body)
+    match = re.fullmatch(
+        r"Cache Size: ~\d{1,18}(?:\.\d{1,9})? [A-Za-z]+ \((\d{1,18}) B\)",
+        body,
+    )
     return int(match[1]) if match else current
 
 
@@ -136,7 +139,7 @@ def sccache_records(lines: list[tuple[str | None, str]]) -> dict[str, int | None
 
 def _record_sccache_line(body: str, result: dict[str, int | None]) -> None:
     """Read one text or JSON sccache counter line."""
-    counter = re.fullmatch(r"Cache (hits|misses)\s+(\d+)", body)
+    counter = re.fullmatch(r"Cache (hits|misses)\s+(\d{1,18})", body)
     if counter:
         result[counter[1]] = int(counter[2])
     elif body.startswith('{"stats":'):
@@ -147,7 +150,7 @@ def _record_sccache_json(body: str, result: dict[str, int | None]) -> None:
     """Copy only non-negative integer counters from sccache JSON."""
     try:
         stats = json.loads(body).get("stats", {})
-    except json.JSONDecodeError:
+    except ValueError, RecursionError:
         return
     match stats:
         case dict() as counters:

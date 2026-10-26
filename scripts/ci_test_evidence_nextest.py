@@ -20,21 +20,22 @@ import re
 from ci_test_evidence_types import NextestEvidence, TestEvidence, empty_evidence
 
 TEST = re.compile(
-    r"\s*(?:TRY (?P<try_number>\d+) )?"
+    r"\s*(?:TRY (?P<try_number>\d{1,18}) )?"
     r"(?P<outcome>PASS|FAIL|SKIP|TIMEOUT|LEAK|ABORT|SIG[A-Z0-9]+) \[\s*"
     r"(?:(?P<seconds>\d{1,9}(?:\.\d{1,9})?s)\s*)?\] "
-    r"(?:\(\s*\d+/\d+\) )?"
+    r"(?:\(\s*\d{1,18}/\d{1,18}\) )?"
     r"(?P<binary>[A-Za-z0-9_:/.-]+) (?P<name>[A-Za-z0-9_:.+-]+)$"
 )
 SUMMARY = re.compile(
-    r"\s*Summary \[\s*(\d{1,9}(?:\.\d{1,9})?)s\] (\d+)(?:/\d+)? "
+    r"\s*Summary \[\s*(\d{1,9}(?:\.\d{1,9})?)s\] "
+    r"(\d{1,18})(?:/\d{1,18})? "
     r"tests? run: (.*)$"
 )
 STARTING = re.compile(
-    r"\s*Starting (?P<selected>\d+) tests? across \d+ binar(?:y|ies)"
-    r"(?: \((?:(?P<skipped_tests>\d+) tests?"
-    r"(?: and \d+ binar(?:y|ies))?|"
-    r"(?P<skipped_binaries>\d+) binar(?:y|ies)) skipped"
+    r"\s*Starting (?P<selected>\d{1,18}) tests? across \d{1,18} binar(?:y|ies)"
+    r"(?: \((?:(?P<skipped_tests>\d{1,18}) tests?"
+    r"(?: and \d{1,18} binar(?:y|ies))?|"
+    r"(?P<skipped_binaries>\d{1,18}) binar(?:y|ies)) skipped"
     r"(?: via [^)]+)?\))?"
 )
 
@@ -205,7 +206,9 @@ def _record_summary(result: NextestEvidence, summary: re.Match[str]) -> None:
         outcomes={
             label: int(count)
             for count, label in re.findall(
-                r"(\d+) (passed|failed|skipped|timed out|leaky)", summary[3]
+                r"(?<!\d)(\d{1,18})(?!\d) "
+                r"(passed|failed|skipped|timed out|leaky)",
+                summary[3],
             )
         },
     )

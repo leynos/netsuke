@@ -116,6 +116,36 @@ def test_unclosed_result_bracket_with_whitespace_is_ignored() -> None:
     )
 
 
+def test_oversized_nextest_counts_remain_unknown() -> None:
+    """Ignore count and retry fields whose decimal runs exceed the bound."""
+    oversized = "9" * 5000
+    invalid_start = parse_nextest_records([
+        (None, f"Starting {oversized} tests across 1 binary"),
+    ])
+    invalid_summary_count = parse_nextest_records([
+        (None, "Starting 1 test across 1 binary"),
+        (None, f"Summary [ 0.100s] {oversized} tests run: 1 passed"),
+    ])
+    bounded_outcomes = parse_nextest_records([
+        (None, "Starting 1 test across 1 binary"),
+        (None, f"TRY {oversized} PASS [ 0.100s] fixture::unit ignored"),
+        (None, f"Summary [ 0.100s] 1 test run: {oversized} passed"),
+    ])
+
+    assert invalid_start["selected_count"] is None, (
+        "An oversized selected-test count must remain unknown"
+    )
+    assert invalid_summary_count["executed_count"] is None, (
+        "An oversized executed-test count must remain unknown"
+    )
+    assert bounded_outcomes["retries"] is None, (
+        "An oversized retry number must not be converted"
+    )
+    assert bounded_outcomes["outcomes"] == {}, (
+        "An oversized outcome count must be omitted"
+    )
+
+
 def test_partial_nextest_summary_preserves_selected_and_executed_counts() -> None:
     """Keep fail-fast runs distinct from complete selected identity inventories."""
     evidence = parse_nextest_records([
