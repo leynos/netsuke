@@ -1211,19 +1211,23 @@ CI, Netsukefile, Release Dry Run, CodeScene, and Gecko checks passed. The PR
 title now has the recommended `Plan:` prefix, and CodeRabbit confirmed that the
 structural matching repair leaves no defect.
 
-The `40f4ef41` review also warned that the step snapshot included timestamps
-and elapsed seconds. The current local repair removes those variable fields
-from the schema snapshot while retaining focused assertions for the fixed start
+The `40f4ef41` walkthrough also warned that the step snapshot included
+timestamps and elapsed seconds. Commit `2af03115` projects those fields out of
+the schema snapshot while retaining focused assertions for the fixed start
 timestamp, completion timestamp, and elapsed duration. Invalid-time cases and
 the raw-log marker assertion remain covered. All eight sequential local gates
-passed on these two test-only changes: `make check-fmt`, `make test` (4,725
-passed, seven skipped, doctests passed), `make typecheck`, `make lint`,
+passed on these test changes: `make check-fmt`, `make test` (4,725 passed,
+seven skipped, doctests passed), `make typecheck`, `make lint`,
 `make doc-coverage` (98.19%), `make test-workflow-contracts` (1,519 passed,
 three skipped, plus 27 auxiliary tests), `make markdownlint` (203 files, zero
-issues), and `make nixie`. The timestamp disposition still needs fresh review
-on the updated head. These test changes and this plan update remain
-uncommitted; after their documentation checks, they need publication,
-exact-head hosted checks and review, final approval, and the guarded merge.
+issues), and `make nixie`.
+
+In comment `6433548305`, CodeRabbit confirmed the warning resolved on exact head
+`2af03115`, verified the snapshot projection and separate assertions, and
+withdrew the claim that literal fixture timestamps established nondeterminism.
+It did not rerun tests or hosted checks, and its response is not PR approval.
+The current formal review and approval, exact-head hosted checks, and guarded
+merge remain outstanding.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918
