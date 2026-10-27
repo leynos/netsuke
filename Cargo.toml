@@ -149,7 +149,7 @@ time = { version = "0.3.44", features = ["formatting", "macros", "parsing", "ser
 ureq = { version = "3.4.0" }
 wait-timeout = "0.2"
 url = "^2.5.0"
-ortho_config = { version = "0.9.0", features = ["serde_json"] }
+ortho_config = { version = "0.10.0", features = ["serde_json"] }
 sys-locale = "0.3.2"
 unicode-width = "0.2.1"
 
@@ -159,7 +159,7 @@ camino = { version = "1.2.0", features = ["serde1"] }
 clap = { version = "4.5.0", features = ["derive"] }
 clap_complete = "4.5.0"
 clap_mangen = "0.3.0"
-ortho_config = { version = "0.9.0", features = ["serde_json"] }
+ortho_config = { version = "0.10.0", features = ["serde_json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 thiserror = "1"
@@ -195,11 +195,10 @@ regex = "1.12.2"
 # comment or a literal quoting the same name is not one. Full syntax, because
 # the items being read are ordinary source files.
 syn = { version = "2", features = ["full", "visit"] }
-# Plural-selection tests must pass numeric arguments to Fluent. `ortho_config`
-# exposes `LocalizationArgs` as a map of `FluentValue`, but does not re-export
-# the value type, so the tests need `fluent-bundle` directly. Constrained to
-# the version `ortho_config` resolves, or the `FluentValue` types would differ.
-fluent-bundle = "0.16.0"
+# Plural-selection tests pass numeric arguments to Fluent through
+# `ortho_config::LocalizationArgs`. `ortho_config` re-exports `FluentValue`, so
+# the tests reach the value type through it rather than depending on
+# `fluent-bundle` directly; one crate owns that version choice.
 
 [workspace]
 members = ["test_support", "build_slice_fixture", "public_api_fixture"]

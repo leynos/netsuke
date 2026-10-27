@@ -5,13 +5,16 @@
 //! for `CliConfig` and adds parser-only arguments and Clap subcommands that
 //! users can invoke.
 
-use anyhow::{Context, Result, bail};
-use clap::{Arg, ArgAction, Command, CommandFactory};
-use ortho_config::docs::{CliMetadata, DocMetadata, FieldMetadata, OrthoConfigDocs, ValueType};
-use std::collections::HashSet;
+use anyhow::{Context, Result};
+use clap::CommandFactory;
+use ortho_config::docs::{DocMetadata, FieldMetadata, OrthoConfigDocs, ValueType};
 
 use super::{Cli, CliConfig};
 use crate::{cli::l10n::top_level_flag_help_key, localization::keys};
+
+mod parser_fields;
+
+use parser_fields::documented_clap_parser_fields;
 
 /// Documentation root used by release help generators.
 ///
@@ -72,99 +75,33 @@ fn localized_config_help(fields: Vec<FieldMetadata>) -> Result<Vec<FieldMetadata
             })?;
             help_key.clone_into(&mut field.help_id);
             field.long_help_id = None;
+            presence_only_cli_metadata(&mut field);
             Ok(field)
         })
         .collect()
 }
 
-/// Build release-help metadata for every parser-only top-level selector.
+/// Describe a boolean configuration flag as the presence-only switch Netsuke
+/// exposes.
 ///
-/// The selectors have no configuration, environment, or file source. Discovery
-/// retains their policy in `discovery.rs` under ADR-0048.
-///
-/// # Errors
-///
-/// Returns an error when a parser-only selector lacks a Fluent key or path
-/// metadata, which would leave generated release help incomplete.
-fn documented_clap_parser_fields(
-    command: &Command,
-    configuration_fields: &[FieldMetadata],
-) -> Result<Vec<FieldMetadata>> {
-    let configuration_field_names = configuration_fields
-        .iter()
-        .map(|field| field.name.as_str())
-        .collect::<HashSet<_>>();
-
-    command
-        .get_arguments()
-        .filter(|argument| argument.get_id() != "help")
-        .filter(|argument| !configuration_field_names.contains(argument.get_id().as_str()))
-        .map(|argument| documented_clap_parser_field(command, argument.get_id().as_str()))
-        .collect()
-}
-
-/// Build release-help metadata for one parser-only top-level selector.
-///
-/// # Errors
-///
-/// Returns an error when the parser no longer exposes the selector, omits its
-/// Fluent key, or changes its path value type.
-fn documented_clap_parser_field(command: &Command, argument_id: &str) -> Result<FieldMetadata> {
-    let argument = command
-        .get_arguments()
-        .find(|argument| argument.get_id() == argument_id)
-        .with_context(|| {
-            format!("Cli::command() should expose its parser-only {argument_id} argument")
-        })?;
-    let help_id = top_level_flag_help_key(argument_id).with_context(|| {
-        format!("parser-only {argument_id} argument must declare a top-level Fluent help key")
-    })?;
-
-    Ok(FieldMetadata {
-        name: argument.get_id().as_str().to_owned(),
-        help_id: help_id.to_owned(),
-        long_help_id: None,
-        value: Some(parser_only_value_type(argument)?),
-        default: None,
-        required: argument.is_required_set(),
-        deprecated: None,
-        cli: Some(CliMetadata {
-            long: argument.get_long().map(str::to_owned),
-            short: argument.get_short(),
-            value_name: argument
-                .get_value_names()
-                .and_then(|names| names.first())
-                .map(ToString::to_string),
-            multiple: matches!(argument.get_action(), &ArgAction::Append),
-            takes_value: argument.get_action().takes_values(),
-            possible_values: argument
-                .get_possible_values()
-                .iter()
-                .map(|value| value.get_name().to_owned())
-                .collect(),
-            hide_in_help: argument.is_hide_set(),
-        }),
-        env: None,
-        file: None,
-        examples: Vec::new(),
-        links: Vec::new(),
-        notes: Vec::new(),
-    })
-}
-
-/// Return the metadata value type for a parser-only selector.
-///
-/// # Errors
-///
-/// Returns an error when a new parser-only selector requires a value type that
-/// release help does not yet model.
-fn parser_only_value_type(argument: &Arg) -> Result<ValueType> {
-    match argument.get_id().as_str() {
-        "config" | "directory" => Ok(ValueType::Path),
-        argument_id => {
-            bail!("parser-only {argument_id} argument requires an explicit release-help value type")
-        }
+/// `ortho_config` 0.10.0 documents every boolean field as `--flag[=BOOL]`,
+/// because its *generated* clap parser accepts an optional value. Netsuke does
+/// not use that parser: `src/cli/command.rs` declares the flags by hand, and
+/// they reject `--verbose=false` with clap's `unexpected value` error. Release
+/// help must describe the parser users actually run, so the generated
+/// optional-value surface is reduced to the plain switch that exists. Without
+/// this, the man page would document a spelling the binary refuses.
+fn presence_only_cli_metadata(field: &mut FieldMetadata) {
+    if !matches!(field.value.as_ref(), Some(ValueType::Bool)) {
+        return;
     }
+    let Some(cli) = field.cli.as_mut() else {
+        return;
+    };
+    cli.takes_value = false;
+    cli.value_name = None;
+    cli.value_optional = false;
+    cli.possible_values.clear();
 }
 
 /// Return documentation metadata for every Clap subcommand with an about key.
@@ -190,6 +127,9 @@ fn documented_subcommand(root: &DocMetadata, name: &str, about_id: &str) -> DocM
         fields: Vec::new(),
         subcommands: Vec::new(),
         windows: None,
+        // Netsuke declares no behavioural metadata and no profile selector.
+        behaviour: None,
+        profiles: None,
     }
 }
 

@@ -2,7 +2,7 @@
 source: tests/ortho_config_metadata_snapshot_tests.rs
 expression: metadata_snapshot()
 ---
-ir_version: "1.1"
+ir_version: "2.0"
 precedence:
   - Defaults
   - File

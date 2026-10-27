@@ -1,7 +1,11 @@
 //! Configuration merge tests.
 //!
 //! These tests validate `OrthoConfig` layer precedence (defaults, file, env,
-//! CLI) and list-value appending.
+//! CLI) and list-value appending. The explicit-value preservation contract
+//! lives in `merge/explicit_cli_wins.rs` so this file stays within the module
+//! size cap.
+mod explicit_cli_wins;
+
 use super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
 use netsuke::cli::{CliConfig, ProgressPolicy};

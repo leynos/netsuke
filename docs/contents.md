@@ -333,9 +333,21 @@ operator, user, and contributor references are easier to find.
 - [stdlib-yaml-and-jinja-guide.md](stdlib-yaml-and-jinja-guide.md): Complete
   template standard-library reference with executable YAML and Jinja examples.
 - [ortho-config-users-guide.md](ortho-config-users-guide.md): Configuration
-  system guide and precedence reference.
+  system guide and precedence reference. Vendored byte-for-byte from
+  <https://github.com/leynos/ortho-config> at tag `v0.10.0`, so its relative
+  links and its code examples are written for that repository. Read the links
+  as follows: `users-guide.md` is this file, and `v0-9-0-migration-guide.md` and
+  `v0-10-0-migration-guide.md` are the `ortho-config-` prefixed local files
+  indexed here. Its examples are upstream text and are not executed by
+  `make test-documentation-contracts`, which reads only the local guides, so a
+  `tested-example` marker inside a vendored file is documentation of upstream's
+  intent rather than a contract this repository enforces.
 - [ortho-config-v0-9-0-migration-guide.md](ortho-config-v0-9-0-migration-guide.md):
   Migration guidance for the OrthoConfig v0.9.0 release.
+- [ortho-config-v0-10-0-migration-guide.md](ortho-config-v0-10-0-migration-guide.md):
+  Migration guidance for the OrthoConfig v0.10.0 release. Vendored
+  byte-for-byte on the same terms, so its `users-guide.md` links point at
+  `ortho-config-users-guide.md`, also indexed here.
 - [translators-guide.md](translators-guide.md): Localization workflow,
   translation guidance, the locale registry that owns the supported-tag list,
   and the fallback policy that keeps regional and script variants distinct.

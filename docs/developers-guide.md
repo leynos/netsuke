@@ -3644,15 +3644,31 @@ environment or file source. It omits the structural `cmds` container. Keep
 project-discovery rooting and manifest lookup in that discovery boundary, as
 required by [ADR 0049]. During ordinary Cargo builds, `build.rs` generates the
 local manual page and shell completions, and audits the localization keys.
-Release automation delegates installation to
+
+The adapter is also where generated metadata is reconciled with the parser
+Netsuke actually ships. It replaces every `help_id` with the corresponding key
+from `src/localization/keys.rs`, which is why the OrthoConfig v0.10.0
+identifier re-keying described in
+[the imported migration guide](ortho-config-v0-10-0-migration-guide.md) does
+not reach Netsuke's catalogues: no generated identifier survives to be looked
+up. The same reasoning applies to value shapes. `ortho_config` 0.10.0 documents
+every derived boolean as `--flag[=BOOL]`, because its *generated* clap parser
+accepts an optional value; Netsuke declares its flags by hand in
+`src/cli/command.rs` and rejects that spelling, so the adapter reduces boolean
+fields back to presence-only switches. Two tests hold both projections:
+`release_help_identifiers_are_netsuke_declared_not_generated` and
+`release_help_cli_value_shapes_match_the_parser` in
+`src/cli/release_help/metadata_tests.rs`. A new derived field, or a new
+upstream metadata change, is expected to reach one of them. Release automation
+delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
 version supplied as `INPUT_VERSION`. The helper probes the cached binary and,
 on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
 workflow does not fall back to compiling the tool from source. The cache entry
 owns `~/.cargo/bin`, and its key includes the tool version and pinned
 `rust-build-release` revision because that action provisions `cargo-binstall`
-there. Only cargo-orthohelp 0.9.1 and later publish the required assets; see
-[leynos/ortho-config#479][ortho-config-479],
+there. Only cargo-orthohelp 0.9.1 and later publish the required assets, and
+the lane pins 0.10.0; see [leynos/ortho-config#479][ortho-config-479],
 [leynos/ortho-config#480][ortho-config-480].
 
 Three workflow and cache contracts hold this boundary. The Rust
@@ -3707,8 +3723,42 @@ when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
 tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
-`src/cli/discovery/path_precedence_tests.rs` is the canonical exhaustive
-state-enumeration example.
+
+### The Windows nested build in the release workflow
+
+`cargo-orthohelp` 0.10.0 compiles a bridge binary at generation time, so
+`Generate release help` now runs a nested host Cargo build that 0.9.1 did not.
+On Windows, that nested build resolves `link.exe` through `PATH`, and every
+Bash step on the lane starts with Git's `/usr/bin` ahead of Visual Studio,
+whose coreutils `link` answers first and fails with "extra operand". The
+release binary has already linked successfully by then, so the fault surfaces
+only on the Windows lanes and nothing else in the job catches it.
+
+`.github/workflows/build-and-package.yml` therefore carries a
+`Configure MSVC for nested Cargo builds` step. It is Windows-only
+(`inputs.platform == 'windows'`), runs under `pwsh`, and discovers the x64 MSVC
+and Windows SDK environment through `VsDevCmd.bat`, reading the values back
+from a child `cmd.exe` because `VsDevCmd.bat` sets its variables in the process
+it runs in. Because the nested build forwards target linker overrides by name,
+the step also pins `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` to the linker
+that `vswhere` found and appends it to `GITHUB_PATH`, and probes `kernel32.lib`
+to prove the SDK joined the search path.
+
+The step's placement looks wrong at a glance and must not be "corrected". It
+runs **after** `Build release binary` but **before** `Generate release help`.
+The exported `INCLUDE` and `LIB` name x64 libraries, and `Build release binary`
+cross-compiles the aarch64 Windows lane, so leaving those variables in scope
+would let that build link against x64 objects. Nothing is lost by the ordering:
+`Build release binary` passes `skip-man-page-discovery: 'true'`, making
+`Generate release help` the only step on the job that runs the nested build.
+
+`tests/workflow_contracts/package_tooling_contract_test.py` holds this contract.
+`test_build_job_configures_msvc_before_the_nested_cargo_build` requires the
+step exactly once, Windows-only under `pwsh`, retaining `VsDevCmd.bat`, the
+`kernel32.lib` probe, the linker variable, and `GITHUB_PATH`, and asserts the
+ordering above. Update that test and this section together when the Windows
+lane changes. `src/cli/discovery/path_precedence_tests.rs` is the canonical
+exhaustive state-enumeration example.
 
 When a future parser-only flag needs generated help, inject it through
 `ReleaseHelpCli`; do not add it to `CliConfig` or create another parser

@@ -56,6 +56,7 @@ sources = [
   "src/cli/policy/values.rs",
   "src/cli/preferences.rs",
   "src/cli/release_help/mod.rs",
+  "src/cli/release_help/parser_fields.rs",
   "src/cli/validation.rs",
   "src/cli/value_parser.rs",
   "src/diagnostics.rs",

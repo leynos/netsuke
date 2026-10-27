@@ -2,7 +2,10 @@
 
 use super::*;
 use anyhow::{Context, Result, ensure};
+use clap::Command;
 use rstest::rstest;
+
+use super::parser_fields::documented_clap_parser_field;
 
 struct ParserOnlyFieldExpectation {
     long: &'static str,
@@ -125,6 +128,95 @@ fn parser_only_metadata_requires_the_parser_argument(#[case] argument_id: &str) 
     Ok(())
 }
 
+/// Verify that documented CLI value shapes match the parser users actually run.
+///
+/// `ortho_config` 0.10.0 documents every derived boolean as `--flag[=BOOL]`,
+/// because its generated parser accepts an optional value. Netsuke declares its
+/// flags by hand and rejects that spelling, so release help normalizes boolean
+/// fields back to presence-only switches. Comparing against `Cli::command()`
+/// makes the parity a standing contract: a future metadata drift fails here
+/// instead of shipping a manual page the binary contradicts.
+///
+/// Value *names* are deliberately not compared. Netsuke sets no
+/// `cli_value_name`, so the generated metadata has always reported `None` while
+/// the handwritten parser supplies `FILE`, `N`, and friends; that gap predates
+/// the v0.10.0 migration and is not this contract's subject.
+#[test]
+fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
+    let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
+    let command = Cli::command();
+    let mut compared = Vec::new();
+
+    for field in &metadata.fields {
+        let Some(documentation) = field.cli.as_ref() else {
+            continue;
+        };
+        let argument = command
+            .get_arguments()
+            .find(|argument| argument.get_id().as_str() == field.name)
+            .with_context(|| {
+                format!(
+                    "release help documents {}, but the parser accepts no such \
+                     argument; the manual page would advertise a flag this \
+                     binary rejects",
+                    field.name,
+                )
+            })?;
+
+        let takes_value = argument.get_action().takes_values();
+        ensure!(
+            documentation.takes_value == takes_value,
+            "release help should document the value shape {name} parses: \
+             documented {documented}, parser {parsed}",
+            name = field.name,
+            documented = documentation.takes_value,
+            parsed = takes_value,
+        );
+        ensure!(
+            !documentation.value_optional,
+            "release help must not offer the optional-value spelling for {}",
+            field.name
+        );
+        if takes_value {
+            ensure!(
+                documentation.possible_values
+                    == argument
+                        .get_possible_values()
+                        .iter()
+                        .map(|value| value.get_name().to_owned())
+                        .collect::<Vec<_>>(),
+                "release help should document the accepted values for {}",
+                field.name
+            );
+        } else {
+            // A presence-only switch parses no value at all. Clap still records
+            // `possible_values` for `SetTrue` actions, so copying them would
+            // describe a value surface no invocation can reach.
+            ensure!(
+                documentation.value_name.is_none() && documentation.possible_values.is_empty(),
+                "release help should describe {} as a switch with no value",
+                field.name
+            );
+        }
+        compared.push(field.name.as_str());
+    }
+
+    // The four boolean flags that 0.10.0 first documented as `--flag[=BOOL]`
+    // are the reason this contract exists, so their absence proves nothing.
+    for expected in [
+        "verbose",
+        "fetch_default_deny",
+        "trust_project_fetch_policy",
+        "json",
+    ] {
+        ensure!(
+            compared.contains(&expected),
+            "release help should compare {expected} against the parser: {compared:?}"
+        );
+    }
+    Ok(())
+}
+
 /// Verify that release help includes every parser-only selector.
 #[test]
 fn release_help_metadata_composes_every_parser_only_selector() -> Result<()> {
@@ -201,5 +293,61 @@ fn config_metadata_localization_rejects_unknown_fields() -> Result<()> {
             .contains("must declare a top-level Fluent help key"),
         "unknown field error should identify the missing Fluent key: {error}"
     );
+    Ok(())
+}
+
+/// Verify that release help never emits an OrthoConfig-generated identifier.
+///
+/// The v0.10.0 migration guide describes re-keying catalogues from
+/// `{app}.fields.{field}.help` to `{mounted-path}-args-{field}-help`. Netsuke
+/// needs none of that because `localized_config_help` replaces every generated
+/// `help_id` with its own `define_keys!` identifier before release help sees it.
+/// This test pins the consequence: every published identifier is a key
+/// `build_l10n_audit` can attribute to `src/localization`, and none carries the
+/// upstream shapes. Were the projection to stop applying, the audit would not
+/// catch it — the generated keys are absent from the catalogues, so a stray one
+/// becomes a runtime miss rather than a build failure.
+#[test]
+fn release_help_identifiers_are_netsuke_declared_not_generated() -> Result<()> {
+    let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
+    let mut identifiers = metadata
+        .fields
+        .iter()
+        .map(|field| field.help_id.as_str())
+        .chain(std::iter::once(metadata.about_id.as_str()))
+        .collect::<Vec<_>>();
+    identifiers.extend(
+        metadata
+            .subcommands
+            .iter()
+            .map(|command| command.about_id.as_str()),
+    );
+
+    let generated_shapes = [".fields.", "-args-"];
+    for identifier in &identifiers {
+        for shape in generated_shapes {
+            ensure!(
+                !identifier.contains(shape),
+                "release help should not emit the generated identifier {identifier}"
+            );
+        }
+        ensure!(
+            identifier.starts_with("cli."),
+            "release help should name a netsuke-declared key, got {identifier}"
+        );
+    }
+
+    // The localizer resolves against `locales/<tag>/messages.ftl`, so a key that
+    // is missing there would surface as a runtime `[missing: ...]` string.
+    let localizer = crate::cli_localization::build_localizer(Some("en-US"));
+    for identifier in identifiers {
+        let message = localizer
+            .lookup(identifier, None)
+            .with_context(|| format!("release help should resolve {identifier}"))?;
+        ensure!(
+            !message.starts_with("[missing:"),
+            "release help identifier {identifier} should exist in the catalogue: {message}"
+        );
+    }
     Ok(())
 }
