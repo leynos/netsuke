@@ -6,8 +6,10 @@ asset, and writes a result only after the whole release passes.
 
 import json
 import typing as typ
+from unittest import mock
 
 import pytest
+import verify_release_inventory_cli as verifier
 from release_staging_support import ARCHIVE, PACKAGE, SIDECAR
 from release_staging_support import stage_archive as _stage
 from release_staging_support import stage_package as _stage_package
@@ -18,6 +20,7 @@ from verify_release_inventory_cli import (
     EXIT_INPUT_UNREADABLE,
     EXIT_INVENTORY_REJECTED,
     EXIT_OK,
+    EXIT_OUTPUT_UNWRITABLE,
     build_parser,
     main,
 )
@@ -247,3 +250,63 @@ def test_the_cli_requires_its_four_inputs(missing: str) -> None:
 
     with pytest.raises(SystemExit):
         _ = build_parser().parse_args(argv)
+
+
+@pytest.mark.parametrize(
+    "failure", ["directory", "metadata", "archive", "sidecar", "output"]
+)
+def test_filesystem_failures_are_diagnosed_and_preserve_existing_output(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    failure: str,
+) -> None:
+    """Diagnose filesystem failures without replacing an earlier record."""
+    staging = tmp_path / "dist"
+    _stage(staging)
+    declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
+    trusted = _write_record(tmp_path / "trusted.json", _trusted(staging))
+    destination = tmp_path / "verified.json"
+    _ = destination.write_text("previous record\n", encoding="utf-8")
+    fault = mock.Mock(side_effect=PermissionError("simulated access failure"))
+
+    match failure:
+        case "directory":
+            staging = tmp_path / "absent"
+        case "metadata":
+            entry = mock.MagicMock()
+            entry.is_file.return_value = True
+            entry.stat.side_effect = PermissionError("simulated access failure")
+            scan = mock.MagicMock()
+            scan.__enter__.return_value = [entry]
+            monkeypatch.setattr(verifier.os, "scandir", mock.Mock(return_value=scan))
+        case "archive":
+            monkeypatch.setattr(verifier.release_digest_files, "digest_of_file", fault)
+        case "sidecar":
+            monkeypatch.setattr(
+                verifier.release_digest_files, "verify_file_against_sidecar", fault
+            )
+        case _:
+            monkeypatch.setattr(verifier.pathlib.Path, "replace", fault)
+
+    code = main([
+        "--directory",
+        str(staging),
+        "--expected",
+        str(declaration),
+        "--trusted",
+        str(trusted),
+        "--output",
+        str(destination),
+    ])
+
+    assert code == (
+        EXIT_OUTPUT_UNWRITABLE if failure == "output" else EXIT_INPUT_UNREADABLE
+    ), f"{failure} failure returned unexpected status {code}"
+    assert destination.read_text(encoding="utf-8") == "previous record\n", (
+        f"{failure} failure changed the previous record"
+    )
+    diagnostic = capsys.readouterr().err
+    assert ("unwritable" if failure == "output" else "unreadable") in diagnostic, (
+        f"{failure} failure lacked a diagnostic: {diagnostic}"
+    )

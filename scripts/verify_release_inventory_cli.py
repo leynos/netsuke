@@ -32,6 +32,7 @@ import json
 import os
 import pathlib
 import sys
+import tempfile
 import typing as typ
 
 import release_digest
@@ -46,6 +47,7 @@ if typ.TYPE_CHECKING:
 EXIT_OK = 0
 EXIT_INVENTORY_REJECTED = 1
 EXIT_INPUT_UNREADABLE = 2
+EXIT_OUTPUT_UNWRITABLE = 3
 
 
 def verify(
@@ -208,6 +210,31 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _write_verified_record(output: pathlib.Path, verified: dict[str, str]) -> None:
+    """Replace the verified digest record after writing it completely.
+
+    A temporary sibling directory keeps replacement on the same filesystem and
+    preserves an existing record if writing fails.
+
+    Examples
+    --------
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     output = pathlib.Path(directory) / "verified.json"
+    ...     _write_verified_record(output, {"archive": "digest"})
+    ...     json.loads(output.read_text(encoding="utf-8"))["assets"]
+    {'archive': 'digest'}
+    """
+    with tempfile.TemporaryDirectory(
+        dir=output.parent, prefix=f".{output.name}."
+    ) as tmp:
+        staged = pathlib.Path(tmp) / output.name
+        _ = staged.write_text(
+            json.dumps({"assets": verified}, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        _ = staged.replace(output)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Verify the inventory and write the digests that were confirmed.
 
@@ -222,8 +249,8 @@ def main(argv: list[str] | None = None) -> int:
         ``EXIT_OK`` when every declared asset is present, matches its sidecar,
         and matches the digest the build recorded before upload;
         ``EXIT_INVENTORY_REJECTED`` when any of those agreements fails; or
-        ``EXIT_INPUT_UNREADABLE`` when the declaration or the trusted record
-        could not be read at all.
+        ``EXIT_INPUT_UNREADABLE`` when an input could not be read; or
+        ``EXIT_OUTPUT_UNWRITABLE`` when the verified record could not be written.
 
     Notes
     -----
@@ -278,11 +305,17 @@ def main(argv: list[str] | None = None) -> int:
     ) as error:
         print(f"release inventory rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
-    arguments.output.write_text(
-        json.dumps({"assets": verified}, indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    return EXIT_OK
+    except OSError as error:
+        print(f"release inventory unreadable: {error}", file=sys.stderr)
+        return EXIT_INPUT_UNREADABLE
+    try:
+        _write_verified_record(arguments.output, verified)
+    except OSError as error:
+        print(f"verified digest record unwritable: {error}", file=sys.stderr)
+        status = EXIT_OUTPUT_UNWRITABLE
+    else:
+        status = EXIT_OK
+    return status
 
 
 if __name__ == "__main__":

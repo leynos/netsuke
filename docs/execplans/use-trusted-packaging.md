@@ -2476,6 +2476,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   files, zero issues), and `nixie`. Push remains pending. The preceding entry
   records the earlier `0a28fee3` base and remains a historical account of that
   candidate.
+- [x] (2026-10-27) Fixed inventory-verification I/O handling on working-tree
+  tree `270a1c36` over HEAD `78e555fd`. The verifier now treats filesystem
+  `OSError` as unreadable input, reports verified-output write failure
+  separately, and stages verified output before replacement so a prior record
+  survives a failed write. Tests cover a missing directory, metadata, archive,
+  sidecar, and output-replacement errors. All nine sequential gates passed:
+  `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.20%),
+  `test-release-publication` (435 passed), `test-workflow-contracts` (1,666
+  passed, 3 skipped, plus 28 script tests), `test` (4,766 passed, 7 skipped;
+  doctests passed), `markdownlint` (206 files, zero issues), and `nixie`. The
+  declaration-output atomicity issue remains open, as does its reviewer
+  disposition.
 
 ## Surprises & discoveries
 

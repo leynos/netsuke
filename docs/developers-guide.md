@@ -2601,6 +2601,12 @@ replacement so a failed write cannot expose partial JSON. Keep it within this
 CLI: other release records have their own schemas, validation, and I/O
 boundaries, so this helper is not a general release-record writer.
 
+`verify_release_inventory_cli` reports unreadable inputs, including directory
+scans and asset reads, with status 2; a verified-record write failure returns
+status 3. Its private `_write_verified_record` stages only this CLI's verified
+digest record beside its destination before replacement. Keep it inside the
+verifier: other records have their own schemas and persistence boundaries.
+
 ### Policy and adapter boundaries
 
 The policy modules make decisions from values that their callers have already
