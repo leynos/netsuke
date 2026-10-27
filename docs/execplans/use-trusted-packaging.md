@@ -2510,6 +2510,16 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `test` (4,766 passed, 7 skipped; doctests passed), `markdownlint` (206 files,
   zero issues), and `nixie`. The inventory verifier's separate CodeScene Large
   Method finding remains for a later refactor.
+- [x] (2026-10-27) Moved inventory output writing and status handling into the
+  verifier-private `_record_verification` helper on tree `2af35e0d` over HEAD
+  `c1318fbe`. Added a doctest while retaining the existing behavioural
+  coverage; this clears CodeScene's inventory Large Method finding.
+  `cs delta origin/main` reports no issues. All nine sequential gates passed:
+  `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.20%),
+  `test-release-publication` (449 passed), `test-workflow-contracts` (1,666
+  passed, 3 skipped, plus 28 script checks), `test` (4,766 passed, 7 skipped;
+  doctests passed), `markdownlint` (206 files, zero issues), and `nixie`. The
+  prior review disposition remains pending.
 
 ## Surprises & discoveries
 

@@ -2605,7 +2605,9 @@ boundaries, so this helper is not a general release-record writer.
 scans and asset reads, with status 2; a verified-record write failure returns
 status 3. Its private `_write_verified_record` stages only this CLI's verified
 digest record beside its destination before replacement. Keep it inside the
-verifier: other records have their own schemas and persistence boundaries.
+verifier: other records have their own schemas and persistence boundaries. Its
+private `_record_verification` maps only this write to the verifier's exit
+status and diagnostic.
 
 `release_declaration_cli` stages its declaration and digest record before
 replacing either destination. Its private `_write_outputs` owns this pair only:

@@ -235,6 +235,28 @@ def _write_verified_record(output: pathlib.Path, verified: dict[str, str]) -> No
         _ = staged.replace(output)
 
 
+def _record_verification(output: pathlib.Path, verified: dict[str, str]) -> int:
+    """Write the verified record and report any output failure.
+
+    Returns
+    -------
+    int
+        ``EXIT_OK`` on success or ``EXIT_OUTPUT_UNWRITABLE`` on failure.
+
+    Examples
+    --------
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     _record_verification(pathlib.Path(directory) / "record", {})
+    0
+    """
+    try:
+        _write_verified_record(output, verified)
+    except OSError as error:
+        print(f"verified digest record unwritable: {error}", file=sys.stderr)
+        return EXIT_OUTPUT_UNWRITABLE
+    return EXIT_OK
+
+
 def main(argv: list[str] | None = None) -> int:
     """Verify the inventory and write the digests that were confirmed.
 
@@ -308,14 +330,7 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as error:
         print(f"release inventory unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
-    try:
-        _write_verified_record(arguments.output, verified)
-    except OSError as error:
-        print(f"verified digest record unwritable: {error}", file=sys.stderr)
-        status = EXIT_OUTPUT_UNWRITABLE
-    else:
-        status = EXIT_OK
-    return status
+    return _record_verification(arguments.output, verified)
 
 
 if __name__ == "__main__":
