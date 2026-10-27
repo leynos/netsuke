@@ -1,5 +1,9 @@
 ---
 source: tests/logging_stderr/command_list_failure.rs
-expression: "normalized_diagnostic_fragment(&stderr,\nFAILURE_PREFIX).context(\"JSON diagnostic should contain its marker line\")?"
+expression: "serde_json::to_string_pretty(&stable_projection).context(\"serialize the stable JSON diagnostic projection\")?"
 ---
-netsuke command-list failure: action <fingerprint>, entry 2 (target \"result.txt\")",
+{
+  "schema_version": 1,
+  "severity": "error",
+  "command_list_failure": "netsuke command-list failure: action <fingerprint>, entry 2 (target \"result.txt\")"
+}

@@ -142,14 +142,42 @@ fn failed_command_list_entry_is_attributed_in_json_diagnostics() -> Result<()> {
         contains_target_clause(&diagnostics.to_string(), "target \"result.txt\""),
         "JSON diagnostics should name the resolved target: {diagnostics}"
     );
-    insta::assert_snapshot!(
-        "command_list_failure_json_diagnostic",
-        normalized_diagnostic_fragment(&stderr, FAILURE_PREFIX)
-            .context("JSON diagnostic should contain its marker line")?
-    );
     ensure!(
         !stderr.contains("false"),
         "JSON attribution must not expose the command text: {stderr}"
+    );
+    let diagnostic = diagnostics
+        .get("diagnostics")
+        .and_then(Value::as_array)
+        .and_then(|entries| entries.first())
+        .context("JSON document should contain a diagnostic")?;
+    let command_list_cause = diagnostic
+        .get("causes")
+        .and_then(Value::as_array)
+        .and_then(|causes| {
+            causes
+                .iter()
+                .filter_map(Value::as_str)
+                .find(|cause| cause.contains(FAILURE_PREFIX))
+        })
+        .context("JSON diagnostic should preserve its command-list cause")?;
+    let normalized_cause = normalized_diagnostic_fragment(command_list_cause, FAILURE_PREFIX)
+        .context("JSON command-list cause should have a stable marker fragment")?;
+    let schema_version = diagnostics
+        .get("schema_version")
+        .context("JSON document should include its schema version")?;
+    let severity = diagnostic
+        .get("severity")
+        .context("JSON diagnostic should include its severity")?;
+    let stable_projection = serde_json::json!({
+        "schema_version": schema_version,
+        "severity": severity,
+        "command_list_failure": normalized_cause,
+    });
+    insta::assert_snapshot!(
+        "command_list_failure_json_diagnostic",
+        serde_json::to_string_pretty(&stable_projection)
+            .context("serialize the stable JSON diagnostic projection")?
     );
     Ok(())
 }

@@ -42,6 +42,12 @@ fn marker_fingerprint_matches_the_generator_key(mut graph_with_identity_action: 
         index.clause(&fingerprint).as_deref(),
         Some("target \"check-fmt\"")
     );
+    insta::assert_snapshot!(
+        "command_list_target_clause_unique",
+        index
+            .clause(&fingerprint)
+            .unwrap_or_else(|| "<unresolved>".to_owned())
+    );
 }
 
 #[rstest]
@@ -89,16 +95,18 @@ fn implicit_output_is_used_when_an_edge_has_no_explicit_output(
 }
 
 #[rstest]
-#[case::single_candidate(&["check-fmt"], Some("target \"check-fmt\""))]
+#[case::single_candidate(&["check-fmt"], Some("target \"check-fmt\""), None)]
 #[case::ambiguous_candidates(
     &["lint", "check-fmt"],
-    Some("targets \"check-fmt\", \"lint\"")
+    Some("targets \"check-fmt\", \"lint\""),
+    Some("command_list_target_clause_ambiguous")
 )]
-#[case::without_outputs(&[], None)]
+#[case::without_outputs(&[], None, None)]
 fn explicit_outputs_resolve_canonical_edge_candidates(
     mut graph_with_identity_action: BuildGraph,
     #[case] outputs: &[&str],
     #[case] expected_clause: Option<&str>,
+    #[case] snapshot_name: Option<&str>,
 ) {
     for output in outputs {
         insert_edge(
@@ -117,6 +125,14 @@ fn explicit_outputs_resolve_canonical_edge_candidates(
         index.clause(&action_identity("identity")).as_deref(),
         expected_clause
     );
+    if let Some(snapshot_label) = snapshot_name {
+        insta::assert_snapshot!(
+            snapshot_label,
+            index
+                .clause(&action_identity("identity"))
+                .unwrap_or_else(|| "<unresolved>".to_owned())
+        );
+    }
 }
 
 #[rstest]
@@ -131,10 +147,14 @@ fn candidate_list_reports_omitted_names(mut graph_with_identity_action: BuildGra
     }
     let index = CommandListTargetIndex::from_graph(&graph_with_identity_action);
 
+    let clause = index
+        .clause(&action_identity("identity"))
+        .unwrap_or_else(|| "<unresolved>".to_owned());
     assert_eq!(
-        index.clause(&action_identity("identity")).as_deref(),
-        Some("targets \"alpha\", \"bravo\", \"charlie\" and 2 more")
+        clause,
+        "targets \"alpha\", \"bravo\", \"charlie\" and 2 more"
     );
+    insta::assert_snapshot!("command_list_target_clause_candidate_limit", clause);
 }
 
 #[rstest]
@@ -148,11 +168,12 @@ fn long_output_names_are_truncated_on_a_utf8_boundary(mut graph_with_identity_ac
     );
     let index = CommandListTargetIndex::from_graph(&graph_with_identity_action);
     let expected = format!("target \"{}…\"", "x".repeat(59));
+    let clause = index
+        .clause(&action_identity("identity"))
+        .unwrap_or_else(|| "<unresolved>".to_owned());
 
-    assert_eq!(
-        index.clause(&action_identity("identity")).as_deref(),
-        Some(expected.as_str())
-    );
+    assert_eq!(clause, expected);
+    insta::assert_snapshot!("command_list_target_clause_utf8_truncation", clause);
 }
 
 #[rstest]
@@ -176,16 +197,30 @@ fn escaped_output_names_stay_within_the_display_byte_limit(
 
     assert_eq!(display_name.len(), 64);
     assert_eq!(display_name, format!("\"{}\\n…\"", "x".repeat(57)));
+    insta::assert_snapshot!("command_list_target_clause_escaped_byte_limit", clause);
 }
 
 #[rstest]
-#[case::line_feed("line\nbreak", "target \"line\\nbreak\"")]
-#[case::double_quote("double\"quote", "target \"double\\\"quote\"")]
-#[case::apostrophe("single'quote", "target \"single'quote\"")]
+#[case::line_feed(
+    "line\nbreak",
+    "target \"line\\nbreak\"",
+    "command_list_target_clause_line_feed"
+)]
+#[case::double_quote(
+    "double\"quote",
+    "target \"double\\\"quote\"",
+    "command_list_target_clause_double_quote"
+)]
+#[case::apostrophe(
+    "single'quote",
+    "target \"single'quote\"",
+    "command_list_target_clause_apostrophe"
+)]
 fn output_names_escape_control_characters_and_quote_them(
     mut graph_with_identity_action: BuildGraph,
     #[case] target: &str,
     #[case] expected_clause: &str,
+    #[case] snapshot_name: &str,
 ) {
     insert_edge(
         &mut graph_with_identity_action,
@@ -199,6 +234,12 @@ fn output_names_escape_control_characters_and_quote_them(
         index.clause(&action_identity("identity")).as_deref(),
         Some(expected_clause)
     );
+    insta::assert_snapshot!(
+        snapshot_name,
+        index
+            .clause(&action_identity("identity"))
+            .unwrap_or_else(|| "<unresolved>".to_owned())
+    );
 }
 
 #[rstest]
@@ -211,7 +252,12 @@ fn unknown_fingerprints_have_no_clause(mut graph_with_identity_action: BuildGrap
     );
     let index = CommandListTargetIndex::from_graph(&graph_with_identity_action);
 
-    assert_eq!(index.clause(&"0".repeat(64)), None);
+    let clause = index.clause(&"0".repeat(64));
+    assert_eq!(clause, None);
+    insta::assert_snapshot!(
+        "command_list_target_clause_unknown_fingerprint",
+        clause.unwrap_or_else(|| "<unresolved>".to_owned())
+    );
 }
 
 #[rstest]

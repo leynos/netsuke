@@ -1,0 +1,5 @@
+---
+source: src/runner/process/tests/command_list_targets.rs
+expression: clause
+---
+targets "alpha", "bravo", "charlie" and 2 more
