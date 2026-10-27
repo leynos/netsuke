@@ -3690,11 +3690,11 @@ unit tests, and `rstest-bdd` release-help scenarios.
 
 `cargo-orthohelp` 0.10.0 compiles a bridge binary at generation time, so
 `Generate release help` now runs a nested host Cargo build that 0.9.1 did not.
-On Windows that nested build resolves `link.exe` through `PATH`, and every Bash
-step on the lane starts with Git's `/usr/bin` ahead of Visual Studio, whose
-coreutils `link` answers first and fails with "extra operand". The release
-binary has already linked successfully by then, so the fault surfaces only on
-the Windows lanes and nothing else in the job catches it.
+On Windows, that nested build resolves `link.exe` through `PATH`, and every
+Bash step on the lane starts with Git's `/usr/bin` ahead of Visual Studio,
+whose coreutils `link` answers first and fails with "extra operand". The
+release binary has already linked successfully by then, so the fault surfaces
+only on the Windows lanes and nothing else in the job catches it.
 
 `.github/workflows/build-and-package.yml` therefore carries a
 `Configure MSVC for nested Cargo builds` step. It is Windows-only
