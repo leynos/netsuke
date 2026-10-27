@@ -6353,6 +6353,10 @@ custom action pools that conflict with `console`; it accepts an existing
 `Action.pool` value of `console`. Synthetic serial gates and dyndep sidecars
 never inherit either binding.
 
+The emitted `pool = console` binding requires Ninja 1.5 or newer. This minimum
+is separate from the conditional Ninja 1.10 requirement for staged serial
+dependency bundles described below.
+
 AST validation keeps stable diagnostic details separate from localized display
 text. `src/ir/graph/error.rs::manifest_recipe_validation_message` maps a
 recognized manifest detail to the same user-facing message for parsing and
@@ -7140,7 +7144,7 @@ borrowed view of generated text.
 `test_support::ninja_edge::edge_has_console_pool`
 (`test_support/src/ninja_edge.rs`) checks edge-local pool metadata on a named
 generated `build` statement. Snapshot, BDD, and documentation-example tests use
-this shared helper so their assertions agree about which edge owns an indented
+this shared helper, so their assertions agree about which edge owns an indented
 `pool = console` binding. Its scope is deliberately narrow: it inspects the
 generated text used by these tests and does not parse general Ninja syntax.
 Permitted call sites are test-support and test code only; production code must

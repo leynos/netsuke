@@ -196,8 +196,8 @@ ir.invalid_command = Penyisipan tidak sah pada perintah: { $snippet }.
 
 # Galat pembuatan berkas Ninja.
 ninja_gen.missing_action = Tindakan "{ $id }" yang dirujuk sebuah sisi build tidak ada.
-ninja_gen.console_dependency_only = Edge build ‘{ $output }’ tidak dapat memilih pool konsol karena aksinya hanya berisi dependensi.
-ninja_gen.console_pool_conflict = Edge build ‘{ $output }’ memilih pool konsol, tetapi aksinya meminta pool khusus ‘{ $pool }’.
+ninja_gen.console_dependency_only = Sisi build ‘{ $output }’ tidak dapat memilih pool konsol karena aksinya hanya berisi dependensi.
+ninja_gen.console_pool_conflict = Sisi build ‘{ $output }’ memilih pool konsol, tetapi aksinya meminta pool khusus ‘{ $pool }’.
 ninja_gen.format = Keluaran manifes Ninja tidak dapat diformat.
 ninja_gen.dyndep_files_required = Build ini memerlukan bundel Ninja yang dibuat; gunakan `netsuke build`, `netsuke clean`, atau `netsuke generate` agar berkas dyndep diwujudkan.
 ninja_gen.reserved_output_path = Jalur '{ $path }' dicadangkan untuk status dependensi serial Netsuke.

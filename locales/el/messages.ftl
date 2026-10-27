@@ -197,8 +197,8 @@ ir.invalid_command = Μη έγκυρη παρεμβολή στην εντολή:
 
 # Σφάλματα παραγωγής αρχείων Ninja.
 ninja_gen.missing_action = Λείπει η ενέργεια «{ $id }» στην οποία παραπέμπει ακμή δόμησης.
-ninja_gen.console_dependency_only = Η ακμή δόμησης «{ $output }» δεν μπορεί να επιλέξει την ομάδα κονσόλας, επειδή η ενέργειά της περιλαμβάνει μόνο εξαρτήσεις.
-ninja_gen.console_pool_conflict = Η ακμή δόμησης «{ $output }» επιλέγει την ομάδα κονσόλας, αλλά η ενέργειά της ζητά την προσαρμοσμένη ομάδα «{ $pool }».
+ninja_gen.console_dependency_only = Η ακμή δόμησης «{ $output }» δεν μπορεί να επιλέξει το pool της κονσόλας, επειδή η ενέργειά της περιλαμβάνει μόνο εξαρτήσεις.
+ninja_gen.console_pool_conflict = Η ακμή δόμησης «{ $output }» επιλέγει το pool της κονσόλας, αλλά η ενέργειά της ζητά το προσαρμοσμένο pool «{ $pool }».
 ninja_gen.format = Δεν ήταν δυνατή η μορφοποίηση της εξόδου του δηλωτικού Ninja.
 ninja_gen.dyndep_files_required = Αυτή η δόμηση απαιτεί παραγόμενο πακέτο Ninja· χρησιμοποιήστε `netsuke build`, `netsuke clean` ή `netsuke generate`, ώστε να δημιουργηθούν τα αρχεία dyndep.
 ninja_gen.reserved_output_path = Η διαδρομή '{ $path }' είναι δεσμευμένη για την κατάσταση σειριακών εξαρτήσεων του Netsuke.
