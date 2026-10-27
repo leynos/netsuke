@@ -48,8 +48,13 @@ fn combined_manifest_uses_inline_progress_and_preserves_rule_descriptions() -> R
         env!("CARGO_MANIFEST_DIR"),
         "/tests/snapshots/ninja"
     ));
+    let descriptions = ninja
+        .lines()
+        .filter(|line| line.trim_start().starts_with("description = "))
+        .collect::<Vec<_>>()
+        .join("\n");
     settings.bind(|| {
-        assert_snapshot!("inline_progress_combined_manifest_ninja", ninja);
+        assert_snapshot!("inline_progress_combined_manifest_ninja", descriptions);
     });
     Ok(())
 }

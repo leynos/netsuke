@@ -97,6 +97,7 @@ mod tests {
     use camino::Utf8PathBuf;
     use proptest::prelude::*;
     use rstest::rstest;
+    use std::fmt::Write as _;
 
     /// Build a scalar command action for a progress-label case.
     ///
@@ -224,6 +225,67 @@ mod tests {
             let actual = for_edge(&edge, &action, localizer.as_ref());
 
             prop_assert_eq!(actual.as_deref(), Some(expected.as_str()));
+        }
+
+        #[test]
+        fn inline_labels_sanitize_arbitrary_unicode_and_controls(
+            unicode_scalars in prop::collection::vec(any::<char>(), 0..=120),
+            injected_controls in prop::collection::vec(
+                prop_oneof![
+                    (0_u8..=0x1f).prop_map(char::from),
+                    (0x7f_u8..=0x9f).prop_map(char::from),
+                    prop::sample::select(vec![
+                        '\u{061c}', '\u{200e}', '\u{200f}', '\u{202a}',
+                        '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}',
+                        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+                    ]),
+                ],
+                1..=4,
+            ),
+        ) {
+            let mut raw_name: String = injected_controls.iter().copied().collect();
+            raw_name.extend(unicode_scalars.iter().copied());
+            let is_terminal_control = |character: char| matches!(
+                character,
+                '\0'..='\u{001f}'
+                    | '\u{007f}'..='\u{009f}'
+                    | '\u{061c}' | '\u{200e}' | '\u{200f}'
+                    | '\u{202a}'..='\u{202e}'
+                    | '\u{2066}'..='\u{2069}'
+            );
+            let mut expected_safe_name = String::new();
+            for character in raw_name.chars() {
+                match character {
+                    '\n' => expected_safe_name.push_str("\\n"),
+                    '\r' => expected_safe_name.push_str("\\r"),
+                    '\t' => expected_safe_name.push_str("\\t"),
+                    control if is_terminal_control(control) => {
+                        write!(expected_safe_name, "\\u{{{:x}}}", u32::from(control))
+                            .expect("writing to a string cannot fail");
+                    }
+                    printable => expected_safe_name.push(printable),
+                }
+            }
+            let expected_name = if expected_safe_name.chars().count() > 80 {
+                let mut prefix: String = expected_safe_name
+                    .chars()
+                    .take(79)
+                    .collect();
+                prefix.push('…');
+                prefix
+            } else {
+                expected_safe_name
+            };
+            let action = scalar_action();
+            let edge = edge(Some(&raw_name));
+            let localizer = build_localizer(Some("en-US"));
+            let actual = for_edge(&edge, &action, localizer.as_ref())
+                .expect("the inline scalar edge has a progress label");
+            let expected = format!("Building {expected_name}");
+
+            prop_assert!(expected_name.chars().count() <= 80);
+            prop_assert_eq!(actual.as_str(), expected.as_str());
+            prop_assert!(actual.chars().all(|character| !is_terminal_control(character)));
         }
     }
 

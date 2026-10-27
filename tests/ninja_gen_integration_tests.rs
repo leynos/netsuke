@@ -10,6 +10,7 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::Recipe;
 use netsuke::ir::{Action, BuildEdge, BuildGraph};
+use netsuke::manifest;
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 #[cfg(unix)]
 use rstest::fixture;
@@ -18,6 +19,7 @@ use rstest::rstest;
 use std::process::Command;
 #[cfg(unix)]
 use tempfile::TempDir;
+use test_support::localizer::locale_localizer;
 #[cfg(unix)]
 use test_support::ninja_gen::{self, AssertionType, NinjaIntegrationCase};
 
@@ -356,5 +358,34 @@ fn bundle_generation_for_serial_graph_materializes_sidecars() -> Result<()> {
             "sidecar must start with dyndep version header"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn german_inline_progress_uses_localized_scalar_and_list_counts() -> Result<()> {
+    let _localizer = locale_localizer("de-DE");
+    let manifest = manifest::from_str(concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: scalar-check\n",
+        "    command: echo scalar\n",
+        "  - name: singleton-check\n",
+        "    command:\n",
+        "      - echo only\n",
+        "  - name: multi-check\n",
+        "    command:\n",
+        "      - echo first\n",
+        "      - echo second\n",
+    ))?;
+    let graph = BuildGraph::from_manifest(&manifest)?;
+    let ninja = generate(&graph)?;
+
+    ensure!(
+        ninja.contains("description = Wird gebaut: scalar-check")
+            && ninja.contains("description = Wird gebaut: singleton-check (1 Befehl)")
+            && ninja.contains("description = Wird gebaut: multi-check (2 Befehle)")
+            && !ninja.contains("description = Building "),
+        "the German catalogue should supply generated progress text: {ninja}"
+    );
     Ok(())
 }

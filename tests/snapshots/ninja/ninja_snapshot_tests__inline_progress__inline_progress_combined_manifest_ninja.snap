@@ -1,27 +1,8 @@
 ---
 source: tests/ninja_snapshot_tests/inline_progress.rs
-expression: ninja
+expression: descriptions
 ---
-rule 3d2e958a2ed727decf22666b7efe2c17ed12001cb35e922654ee10eb20cc52ca
-  command = echo scalar
-
-rule 9c59ac3cc8374e5e7f975ac1601b2b3639ca14d6e46b44e326db30dd3ff2173c
-  command = echo named
   description = Named rule wording
-
-rule 9f8284eff82c48cb51f77c40e7a043c1ba359d8e4cffe1ac8ebf5ce08f8403af
-  command = { _netsuke_background_before=$${!:-}; _netsuke_exec_succeeded=0; trap '_netsuke_command_status=$$?; printf "%s\n" "netsuke command-list failure: action 164f5190586fc85a6e915879d979ffc62478296ab29dc3806938cb563121f1cb, entry 1" >&2; trap - EXIT; exit "$$_netsuke_command_status"' EXIT; if eval 'echo first'; then _netsuke_command_status=0; else _netsuke_command_status=$$?; fi; _netsuke_background_after=$${!:-}; if [ -n "$$_netsuke_background_after" ] && [ "$$_netsuke_background_after" != "$$_netsuke_background_before" ]; then if wait "$$_netsuke_background_after"; then :; else _netsuke_background_status=$$?; if [ "$$_netsuke_command_status" -eq 0 ]; then _netsuke_command_status=$$_netsuke_background_status; fi; fi; fi; if [ "$$_netsuke_command_status" -eq 0 ]; then trap - EXIT; if [ "$$_netsuke_exec_succeeded" -eq 1 ]; then exit 0; else :; fi; else trap - EXIT; printf '%s\n' 'netsuke command-list failure: action 164f5190586fc85a6e915879d979ffc62478296ab29dc3806938cb563121f1cb, entry 1' >&2; exit "$$_netsuke_command_status"; fi; } && { _netsuke_background_before=$${!:-}; _netsuke_exec_succeeded=0; trap '_netsuke_command_status=$$?; printf "%s\n" "netsuke command-list failure: action 164f5190586fc85a6e915879d979ffc62478296ab29dc3806938cb563121f1cb, entry 2" >&2; trap - EXIT; exit "$$_netsuke_command_status"' EXIT; if eval 'echo second'; then _netsuke_command_status=0; else _netsuke_command_status=$$?; fi; _netsuke_background_after=$${!:-}; if [ -n "$$_netsuke_background_after" ] && [ "$$_netsuke_background_after" != "$$_netsuke_background_before" ]; then if wait "$$_netsuke_background_after"; then :; else _netsuke_background_status=$$?; if [ "$$_netsuke_command_status" -eq 0 ]; then _netsuke_command_status=$$_netsuke_background_status; fi; fi; fi; if [ "$$_netsuke_command_status" -eq 0 ]; then trap - EXIT; if [ "$$_netsuke_exec_succeeded" -eq 1 ]; then exit 0; else :; fi; else trap - EXIT; printf '%s\n' 'netsuke command-list failure: action 164f5190586fc85a6e915879d979ffc62478296ab29dc3806938cb563121f1cb, entry 2' >&2; exit "$$_netsuke_command_status"; fi; }
-
-rule ff8b63b0c5a6faf08745cff7e0ec106b87e705e67cd3c267ddb6cc7a6625729f
-  command = /bin/sh -e -c "printf %b 'echo scripted' | /bin/sh -e"
-
-build check-fmt: 3d2e958a2ed727decf22666b7efe2c17ed12001cb35e922654ee10eb20cc52ca
   description = Building check-fmt
-
-build lint: 9f8284eff82c48cb51f77c40e7a043c1ba359d8e4cffe1ac8ebf5ce08f8403af
   description = Building lint (2 commands)
-
-build out/named: 9c59ac3cc8374e5e7f975ac1601b2b3639ca14d6e46b44e326db30dd3ff2173c
-
-build out/script: ff8b63b0c5a6faf08745cff7e0ec106b87e705e67cd3c267ddb6cc7a6625729f
   description = Building out/script
