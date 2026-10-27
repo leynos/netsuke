@@ -2440,27 +2440,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   lint found zero issues across 201 files, and all diagrams validated. The
   hook-reported lint and Nixie failures did not recur. CodeRabbit's completed
   review on this head (2026-10-26 08:10 UTC) requested changes and added no
-  inline comments; GitHub reports all 29 inline threads resolved. Its pre-merge
-  walkthrough still raises the Testing (Unit and Behavioural) and Unit
+  inline comments; GitHub reported all 29 inline threads resolved. Its
+  pre-merge walkthrough raised the Testing (Unit and Behavioural) and Unit
   Architecture rows as errors and the Domain Architecture row as a warning. A
   read-only audit validated the Unit Architecture claim: `_read_inventory` and
   inventory hashing, sidecar, and output writes in
   `verify_release_inventory_cli.py` can propagate `OSError` outside the
-  existing catches, and no corresponding permission/error tests exist. This
-  remains an open finding; the CLI needs a diagnosed failure outcome and
-  regression coverage before that row can be closed. The declaration writer has
-  a separate verified output-atomicity finding: its module docstring promises
-  both output files only on success, but it writes the declaration before the
-  digest record, so a later write failure can leave partial output. The
-  existing refusal test covers pre-write validation only. Follow-up must cover
-  failures writing either output and pre-existing outputs, including whether
-  they are preserved or replaced. The Testing row repeats the earlier disputed
-  Python 3.14 annotation-collection claim; the current-head row still needs
-  explicit reconciliation against the current candidate. The Domain
-  Architecture disagreement concerns the existing mapping-boundary decision
-  below and remains for maintainer disposition. Since the rebase, remote `main`
-  has advanced from `0a28fee3` to `1abfd22d`; GitHub now reports the PR merge
-  state as `DIRTY`. This candidate has not been rebased onto that newer target.
+  existing catches, and no corresponding permission/error tests existed. At
+  that point this was an open finding; the verifier fix and its coverage are
+  recorded below. The declaration writer also had a verified output-atomicity
+  finding: its module docstring promised both output files only on success, but
+  it wrote the declaration before the digest record, so a later write failure
+  could leave partial output. The existing refusal test covered pre-write
+  validation only, so follow-up was required for both output failures and
+  pre-existing outputs. The Testing row repeated the earlier disputed Python
+  3.14 annotation-collection claim; at that point the current-head row still
+  needed explicit reconciliation. The Domain Architecture disagreement concerns
+  the existing mapping-boundary decision below and remains pending. At that
+  time remote `main` had advanced from `0a28fee3` to `1abfd22d` and GitHub
+  reported the PR merge state as `DIRTY`; the candidate had not yet been
+  rebased onto that target. The later rebase entry below records the update.
   Stage C remains partial and Stage D remains open; no release or registry
   setting changed.
 - [x] (2026-10-27) Rebased from boundary `0a28fee3` and old head
@@ -2473,29 +2472,31 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `typecheck`, `doc-coverage` (98.20%), `test` (4,766 passed, 7 skipped;
   doctests passed), `test-workflow-contracts` (1,666 passed, 3 skipped, plus 28
   script tests), `test-release-publication` (429 passed), `markdownlint` (206
-  files, zero issues), and `nixie`. Push remains pending. The preceding entry
-  records the earlier `0a28fee3` base and remains a historical account of that
-  candidate.
-- [x] (2026-10-27) Fixed inventory-verification I/O handling on working-tree
-  tree `270a1c36` over HEAD `78e555fd`. The verifier now treats filesystem
-  `OSError` as unreadable input, reports verified-output write failure
-  separately, and stages verified output before replacement so a prior record
-  survives a failed write. Tests cover a missing directory, metadata, archive,
-  sidecar, and output-replacement errors. All nine sequential gates passed:
-  `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.20%),
-  `test-release-publication` (435 passed), `test-workflow-contracts` (1,666
-  passed, 3 skipped, plus 28 script tests), `test` (4,766 passed, 7 skipped;
-  doctests passed), `markdownlint` (206 files, zero issues), and `nixie`. The
-  declaration-output atomicity issue remains open, as does its reviewer
-  disposition.
-- [x] (2026-10-27) Fixed declaration-output handling on working-tree tree
-  `26e01805` over HEAD `75ac1719`. Both outputs are staged beside their
+  files, zero issues), and `nixie`. The rebased candidate was force-pushed;
+  subsequent implementation commits below are on the branch. The preceding
+  entry records the earlier `0a28fee3` base and remains a historical account of
+  that candidate.
+- [x] (2026-10-27) Fixed inventory-verification I/O handling in commit
+  `75ac1719` (working-tree tree `270a1c36` over HEAD `78e555fd`). The verifier
+  treats filesystem `OSError` as unreadable input, reports verified-output
+  write failure separately, and stages verified output before replacement,
+  preserving a prior record on failure. Tests cover missing-directory,
+  metadata, archive, sidecar, and output-replacement errors. All nine
+  sequential gates passed: `check-fmt`, `lint`, `typecheck`, `doc-coverage`
+  (98.20%), `test-release-publication` (435 passed), `test-workflow-contracts`
+  (1,666 passed, 3 skipped, plus 28 script tests), `test` (4,766 passed, 7
+  skipped; doctests passed), `markdownlint` (206 files, zero issues), and
+  `nixie`. The declaration-output atomicity issue remains open, as does its
+  reviewer disposition.
+- [x] (2026-10-27) Fixed declaration-output handling, first validated on
+  working-tree tree `26e01805` over HEAD `75ac1719` and committed after the
+  refinement below as `c1318fbe`. Both outputs are staged beside their
   destinations; aliased destinations are rejected. If digest-record
-  installation fails, the previous declaration is restored; if rollback also
-  fails, the recovery directory is retained. Output failures use separate
-  status 3. The two paths are not atomic across abrupt process or machine
-  failure. Regression tests cover both staged writes, both replacements with
-  and without prior outputs, aliasing, and rollback failure. All nine
+  installation fails, the previous declaration is restored. The recovery
+  directory is retained if rollback also fails. Output write failures use
+  separate status 3. The two paths are not atomic across abrupt process or
+  machine failure. Regression tests cover both staged writes, both replacements
+  with and without prior outputs, aliasing, and rollback failure. All nine
   sequential gates passed: `check-fmt`, `lint`, `typecheck`, `doc-coverage`
   (98.20%), `test-release-publication` (446 passed), `test-workflow-contracts`
   (1,666 passed, 3 skipped, plus 28 script checks), `test` (4,766 passed, 7
@@ -2511,15 +2512,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   zero issues), and `nixie`. The inventory verifier's separate CodeScene Large
   Method finding remains for a later refactor.
 - [x] (2026-10-27) Moved inventory output writing and status handling into the
-  verifier-private `_record_verification` helper on tree `2af35e0d` over HEAD
-  `c1318fbe`. Added a doctest while retaining the existing behavioural
-  coverage; this clears CodeScene's inventory Large Method finding.
-  `cs delta origin/main` reports no issues. All nine sequential gates passed:
-  `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.20%),
+  verifier-private `_record_verification` helper in commit `3490f772` (tree
+  `2af35e0d` over HEAD `c1318fbe`). Added a doctest while retaining the
+  existing behavioural coverage; this clears CodeScene's inventory Large Method
+  finding. `cs delta origin/main` reports no issues. All nine sequential gates
+  passed: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.20%),
   `test-release-publication` (449 passed), `test-workflow-contracts` (1,666
   passed, 3 skipped, plus 28 script checks), `test` (4,766 passed, 7 skipped;
   doctests passed), `markdownlint` (206 files, zero issues), and `nixie`. The
-  prior review disposition remains pending.
+  prior review disposition remains pending. Current status: CodeScene passes on
+  `3490f772`, CI is in progress, a CodeRabbit resume is queued, and the
+  maintainer's domain-boundary choice remains pending.
 
 ## Surprises & discoveries
 
