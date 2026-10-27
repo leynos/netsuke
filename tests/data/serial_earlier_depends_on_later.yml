@@ -1,0 +1,14 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: b
+    command: "echo b >> build-order && touch b"
+  - name: a
+    command: "echo a >> build-order && touch a"
+    deps: b
+actions:
+  - name: all
+    dependency_order: serial
+    deps:
+      - a
+      - b
+defaults: [all]

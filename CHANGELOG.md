@@ -28,6 +28,11 @@ _If you are upgrading: see the
 
 ### Changed
 
+- **Breaking:** reject dependency cycles through `sources`, `deps`, or
+  `order_only_deps` during whole-manifest IR validation, including cycles in
+  targets not requested by Ninja. The crate-private `missing_dependencies`
+  report also includes unresolved order-only paths
+  ([ADR-0060](docs/adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md)).
 - **Breaking:** make `which` and `command_available` search only `PATH` by
   default; manifests that intentionally resolve checkout executables must use
   `cwd_mode='workspace-recursive'`

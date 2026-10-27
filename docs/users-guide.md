@@ -285,6 +285,10 @@ A `Netsukefile` is executable build configuration, not passive data. Commands,
 scripts, and impure template helpers can access the host. Review an untrusted
 manifest with the same care as an untrusted `Makefile`.
 
+Before Ninja starts, Netsuke checks the complete graph for cycles across all
+prerequisite fields; see
+[Dependency and build-graph semantics](#dependency-and-build-graph-semantics).
+
 ## Author a manifest
 
 `Netsukefile` is a YAML mapping. Unknown fields and duplicate mapping keys are
@@ -598,8 +602,9 @@ text must be byte-stable. Both are correct only in unquoted argv position. See
 for the full contract, and "Write recipes that work on Windows" below for why
 the default differs.
 
-Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
-ordering but do not participate in cycle detection.
+See
+[Dependency and build-graph semantics](#dependency-and-build-graph-semantics)
+for how these fields participate in cycle detection.
 
 ### Run direct dependencies serially
 
@@ -675,6 +680,49 @@ When migrating an existing manifest, see the
 [v0.1.0 migration guide](v0-1-0-migration-guide.md#opting-into-serial-dependency-ordering)
 for the opt-in syntax, Ninja version requirement, and generated-state
 reservation.
+
+### Dependency and build-graph semantics
+
+A dependency cycle exists when a build step must wait, directly or through
+other steps, for itself. `sources`, `deps`, and `order_only_deps` all
+participate in cycle detection: each names work that must be ready before a
+target can run. Order-only dependencies do not trigger a rebuild when they
+change, but they still have to be built first.
+
+Netsuke checks the whole manifest before generating Ninja, including targets
+that are not requested as defaults. A cycle in an unrequested part of the
+manifest is rejected even if a particular Ninja invocation would never reach
+it. This keeps `generate` from emitting a build file with a latent cycle.
+
+Every path in a multi-output `name` identifies the same build step. A
+dependency on any of those paths therefore reaches that step for cycle
+detection. A dependency path that no target produces is treated as an existing
+file; it does not add a graph edge and cannot close a cycle. The internal Rust
+IR follows the same rule for both explicit and implicit outputs. A target or
+action's `dependency_order: serial` controls how its direct `deps` list is
+scheduled; it does not add a dependency edge.
+
+The following manifest is rejected during IR generation because its order-only
+edge closes a cycle:
+
+<!-- tested-example: guide-order-only-cycle-manifest -->
+
+```yaml
+netsuke_version: "1.0.0"
+targets:
+  - name: tool
+    command: "touch tool"
+    order_only_deps: headers.stamp
+  - name: headers.stamp
+    command: "touch headers.stamp"
+    deps: tool
+```
+
+Running `netsuke generate` reports `Circular dependency detected` and the path
+`headers.stamp -> tool -> headers.stamp` before it emits Ninja text. The same
+diagnostic structure is available in JSON mode. See
+[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md) for
+the decision and its compatibility notes.
 
 ## Use Jinja safely
 
@@ -1224,6 +1272,10 @@ Add `--edges` to the JSON help-targets command to include a separate v1 `graph`
 object alongside the existing action and target catalogue. The root-level
 `--json` option is required before `help`, as in
 `netsuke --json help targets --edges`:
+
+The exported `order_only_deps` edges participate in cycle detection under the
+same whole-manifest rule described in
+[Dependency and build-graph semantics](#dependency-and-build-graph-semantics).
 
 <!-- tested-example: guide-help-targets-edges-json -->
 
@@ -2057,8 +2109,10 @@ Netsuke reports failures at the earliest stage that can identify them:
 - YAML failures include locations when the parser provides them.
 - Schema failures identify unknown or malformed fields.
 - Jinja failures identify missing variables or invalid helpers.
-- IR failures report missing rules, duplicate outputs, and cycles before Ninja
-  starts.
+- IR failures report missing rules, duplicate outputs, and dependency cycles
+  before Ninja starts. See
+  [Dependency and build-graph semantics](#dependency-and-build-graph-semantics)
+  for the cycle scope.
 - Ninja failures retain the subprocess exit status and output.
 
 Human diagnostics include remediation hints where one is available. JSON mode

@@ -4716,10 +4716,11 @@ the 4.2.2 and 4.2.3 ExecPlans under `docs/execplans/`.
 ### Kani harness inventory
 
 The IR harnesses are declared by the modules they verify, under
-`#[cfg(kani)] mod verification`, with harness bodies stored in sibling
-`*_verification.rs` files. They are private to those modules unless a future
-proof genuinely needs a wider helper. This keeps production modules below the
-400-line source-file limit while preserving access to private helpers.
+`#[cfg(kani)] mod verification`, with harness bodies stored in either a nested
+`verification.rs` or sibling `*_verification.rs` file. They are private to
+those modules unless a future proof genuinely needs a wider helper. This keeps
+production modules below the 400-line source-file limit while preserving access
+to private helpers.
 
 The manifest harnesses drive production helpers rather than constructing
 expected errors by hand. The cycle-detection harnesses drive
@@ -4753,6 +4754,8 @@ Table: Kani harnesses for Netsuke's intermediate-representation invariants.
 | `self_dependency_reports_cycle`                             | `src/ir/cycle/verification.rs`           | A self-dependency is reported as a cycle by production traversal.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`, which reuses `CycleDetector::visit` in boolean mode.                                                                                  |
 | `two_node_cycle_reports_cycle_a_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `a` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; the separate insertion-order harnesses cover deterministic map-entry traversal under the Kani map.                                    |
 | `two_node_cycle_reports_cycle_b_first`                      | `src/ir/cycle/verification.rs`           | A two-node cycle is reported when the `b` node is inserted first.                                       | `#[kani::unwind(5)]`  | Drives production `contains_cycle`; this complements the `a`-first harness, so the proof is not tied to one insertion order.                                              |
+| `implicit_output_alias_cycle_reports_cycle`                 | `src/ir/cycle/verification.rs`           | A dependency on an implicit output resolves to its producing edge and closes a cycle.                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle`; a mutation that omits implicit-output aliases makes the dependency missing and the proof fail.                                        |
+| `order_only_two_node_cycle_reports_cycle`                   | `src/ir/cycle/verification.rs`           | A two-node cycle closed by an order-only dependency is reported by production traversal.                | `#[kani::unwind(6)]`  | Drives production `contains_cycle`; a mutation that omits the order-only dependency visit makes the proof fail.                                                           |
 | `direct_missing_dependency_does_not_report_cycle`           | `src/ir/cycle/verification.rs`           | A single target with an absent dependency is not reported as a cycle.                                   | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that a missing direct dependency does not enter the cycle branch.                                                           |
 | `transitive_missing_dependency_does_not_report_cycle`       | `src/ir/cycle/verification.rs`           | A two-target chain whose deeper dependency is absent is not reported as a cycle.                        | `#[kani::unwind(6)]`  | Drives production `contains_cycle` and proves that an absent dependency below another target does not synthesize a false cycle.                                           |
 | `canonicalize_two_node_cycle_is_canonical`                  | `src/ir/cycle/verification.rs`           | Two-node canonicalization preserves length, closure, interior multiset, smallest start, and rotation.   | `#[kani::unwind(6)]`  | Drives private production `canonicalize_cycle_by` over distinct symbolic `u8` interior IDs. Direct `Utf8PathBuf` proof attempts exceeded the local 8 GiB cap.             |
@@ -5785,10 +5788,11 @@ variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
-`src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
-`implicit_deps` when detecting cycles. It intentionally does not traverse
-`order_only_deps`, because order-only dependencies express scheduling order
-rather than rebuild freshness.
+`src/ir/cycle/detector.rs::CycleDetector::visit_known_edge` traverses `inputs`,
+`implicit_deps`, and `order_only_deps` when detecting cycles. Order-only
+dependencies do not trigger a rebuild when they change, but they still have to
+be built first. The decision and whole-manifest scope are recorded in
+[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md).
 
 ### Serial dependency bundles
 
@@ -9858,6 +9862,12 @@ Accepts the canonical `BuildGraph` produced by IR lowering and returns a
   for acyclic graphs.
 - `missing_dependencies: Vec<(Utf8PathBuf, Utf8PathBuf)>` —
   `(dependent, missing_dep)` pairs encountered before the first detected cycle.
+
+The traversal follows explicit inputs, implicit dependencies, and order-only
+dependencies. Every explicit or implicit output alias resolves to its producing
+edge. `dependency_order` does not add a graph edge, and unresolved paths remain
+missing dependencies rather than cycle arcs; see
+[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md).
 
 **`CycleDetector`**
 
