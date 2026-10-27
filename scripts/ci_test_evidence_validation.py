@@ -99,9 +99,12 @@ def _validate_job_steps(steps: object) -> None:
     An omitted steps field defaults to an accepted empty list; ``[None]`` is
     rejected.
     """
-    if not isinstance(steps, list) or not all(_is_mapping(step) for step in steps):
-        message = "job steps must be a list of objects"
-        raise TypeError(message)
+    match steps:
+        case list() as job_steps if all(_is_mapping(step) for step in job_steps):
+            pass
+        case _:
+            message = "job steps must be a list of objects"
+            raise TypeError(message)
 
 
 def _validate_job_labels(labels: object) -> None:
@@ -116,9 +119,12 @@ def _validate_job_labels(labels: object) -> None:
     --------
     An omitted labels field defaults to an accepted empty list.
     """
-    if not isinstance(labels, list):
-        message = "job labels must be a list"
-        raise TypeError(message)
+    match labels:
+        case list():
+            pass
+        case _:
+            message = "job labels must be a list"
+            raise TypeError(message)
 
 
 def validate_evidence_maps(values: CollectorInputs, job_ids: set[str]) -> None:
