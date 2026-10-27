@@ -24,6 +24,8 @@ mod check_dispatch_tests;
 
 mod manifest_structure_telemetry_tests;
 
+mod ninja_build_telemetry_tests;
+
 #[path = "shell_seam_tests.rs"]
 mod shell_seam_tests;
 
