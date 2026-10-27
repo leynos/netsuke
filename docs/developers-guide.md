@@ -3685,8 +3685,42 @@ when adding, renaming, or removing user-facing options. Changes to CLI
 documentation metadata should be covered by `rstest` workflow/script contract
 tests, plain `#[rstest]` parametrized cases for exhaustive state-enumeration
 unit tests, and `rstest-bdd` release-help scenarios.
-`src/cli/discovery/path_precedence_tests.rs` is the canonical exhaustive
-state-enumeration example.
+
+### The Windows nested build in the release workflow
+
+`cargo-orthohelp` 0.10.0 compiles a bridge binary at generation time, so
+`Generate release help` now runs a nested host Cargo build that 0.9.1 did not.
+On Windows that nested build resolves `link.exe` through `PATH`, and every Bash
+step on the lane starts with Git's `/usr/bin` ahead of Visual Studio, whose
+coreutils `link` answers first and fails with "extra operand". The release
+binary has already linked successfully by then, so the fault surfaces only on
+the Windows lanes and nothing else in the job catches it.
+
+`.github/workflows/build-and-package.yml` therefore carries a
+`Configure MSVC for nested Cargo builds` step. It is Windows-only
+(`inputs.platform == 'windows'`), runs under `pwsh`, and discovers the x64 MSVC
+and Windows SDK environment through `VsDevCmd.bat`, reading the values back
+from a child `cmd.exe` because `VsDevCmd.bat` sets its variables in the process
+it runs in. Because the nested build forwards target linker overrides by name,
+the step also pins `CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER` to the linker
+that `vswhere` found and appends it to `GITHUB_PATH`, and probes `kernel32.lib`
+to prove the SDK joined the search path.
+
+The step's placement looks wrong at a glance and must not be "corrected". It
+runs **after** `Build release binary` but **before** `Generate release help`.
+The exported `INCLUDE` and `LIB` name x64 libraries, and `Build release binary`
+cross-compiles the aarch64 Windows lane, so leaving those variables in scope
+would let that build link against x64 objects. Nothing is lost by the ordering:
+`Build release binary` passes `skip-man-page-discovery: 'true'`, making
+`Generate release help` the only step on the job that runs the nested build.
+
+`tests/workflow_contracts/package_tooling_contract_test.py` holds this contract.
+`test_build_job_configures_msvc_before_the_nested_cargo_build` requires the
+step exactly once, Windows-only under `pwsh`, retaining `VsDevCmd.bat`, the
+`kernel32.lib` probe, the linker variable, and `GITHUB_PATH`, and asserts the
+ordering above. Update that test and this section together when the Windows
+lane changes. `src/cli/discovery/path_precedence_tests.rs` is the canonical
+exhaustive state-enumeration example.
 
 When a future parser-only flag needs generated help, inject it through
 `ReleaseHelpCli`; do not add it to `CliConfig` or create another parser
