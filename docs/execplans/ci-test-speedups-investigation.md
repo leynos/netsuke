@@ -1198,7 +1198,7 @@ checks passed.
 
 CodeRabbit review `5661877547` on `0ada0961` requested structural `match`
 patterns for both job-container checks; the existing workflow-contract tests
-cover malformed values and error messages. The local repair replaces both
+cover malformed values and error messages. The repair replaces both
 `isinstance()` checks with `list()` patterns and preserves their existing
 errors and the per-step object guard. It passed the sequential local gates:
 `make check-fmt`, `make test` (4,725 passed, seven skipped, doctests passed),
@@ -1206,13 +1206,24 @@ errors and the per-step object guard. It passed the sequential local gates:
 `make test-workflow-contracts` (1,519 passed, three skipped, plus 27 script
 tests), `make markdownlint` (203 files, zero issues), and `make nixie`. The
 semantic diff found only the two intended files, and `cs delta origin/main`
-found no issues. The PR title now has the recommended `Plan:` prefix. The
-review also repeated a warning about timestamps in a step snapshot. The
-timestamps are fixed test inputs, and the candidate- bound EP-1 assessment
-confirms that the snapshot checks their preservation; the warning still needs a
-focused disposition. This validated repair has not yet been published. It needs
-publication, exact-head hosted checks and review, final approval, and the
-guarded merge.
+found no issues. This repair was published as `40f4ef41` on base `0a28fee`; its
+CI, Netsukefile, Release Dry Run, CodeScene, and Gecko checks passed. The PR
+title now has the recommended `Plan:` prefix, and CodeRabbit confirmed that the
+structural matching repair leaves no defect.
+
+The `40f4ef41` review also warned that the step snapshot included timestamps
+and elapsed seconds. The current local repair removes those variable fields
+from the schema snapshot while retaining focused assertions for the fixed start
+timestamp, completion timestamp, and elapsed duration. Invalid-time cases and
+the raw-log marker assertion remain covered. All eight sequential local gates
+passed on these two test-only changes: `make check-fmt`, `make test` (4,725
+passed, seven skipped, doctests passed), `make typecheck`, `make lint`,
+`make doc-coverage` (98.19%), `make test-workflow-contracts` (1,519 passed,
+three skipped, plus 27 auxiliary tests), `make markdownlint` (203 files, zero
+issues), and `make nixie`. The timestamp disposition still needs fresh review
+on the updated head. These test changes and this plan update remain
+uncommitted; after their documentation checks, they need publication,
+exact-head hosted checks and review, final approval, and the guarded merge.
 
 [local-timeout-plan]: ../debugging/debugging-plan-2026-10-15-ci-evidence-local-gate-timeout.md
 [draft PR #918]: https://github.com/leynos/netsuke/pull/918

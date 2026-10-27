@@ -22,11 +22,26 @@ def test_collector_serializes_populated_step_facts(
         }
     ]
 
-    record = json.loads(json.dumps(collect_attempt(run, jobs)[0]))
+    step = json.loads(json.dumps(collect_attempt(run, jobs)[0]))["steps"][0]
     snapshot = Path(__file__).parent / "snapshots" / "ci_test_evidence_steps.json"
 
-    assert record["steps"] == json.loads(snapshot.read_text(encoding="utf-8")), (
-        "Serialized steps must retain their normalized API facts"
+    assert step["started_at"] == "2026-10-12T00:00:00Z", (
+        "Serialized steps must retain valid start timestamps"
+    )
+    assert step["completed_at"] == "2026-10-12T00:00:02.500Z", (
+        "Serialized steps must retain valid completion timestamps"
+    )
+    assert step["seconds"] == pytest.approx(2.5), (
+        "Serialized steps must retain elapsed seconds"
+    )
+    stable_fields = {
+        key: value
+        for key, value in step.items()
+        if key not in {"started_at", "completed_at", "seconds"}
+    }
+
+    assert [stable_fields] == json.loads(snapshot.read_text(encoding="utf-8")), (
+        "Serialized steps must retain their stable normalized API facts"
     )
 
 
