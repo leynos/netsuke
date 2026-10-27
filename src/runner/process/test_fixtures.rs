@@ -46,6 +46,7 @@ pub(super) fn insert_edge(
             .collect(),
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony,
         always: false,
     });

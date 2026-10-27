@@ -291,8 +291,6 @@ operator, user, and contributor references are easier to find.
 - [ADR-057](adrs/adr-0057-anchor-tracing-test-callsite-interest-rebuilds.md):
   Retaining two inert test dispatches to prevent stale single-registrar
   callsite-interest writes during concurrent capture setup.
-- [ADR-0057](adrs/adr-0057-readable-inline-recipe-progress.md):
-  Bounded, localized Ninja progress labels for inline recipe edges.
 - [ADR-0046-agent-consistent-human-first-cli.md](adrs/adr-0046-agent-consistent-human-first-cli.md):
   Human-first, agent-consistent CLI doctrine decision record.
 - [ADR-0047: Kani IR harnesses](adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md):
@@ -311,6 +309,8 @@ operator, user, and contributor references are easier to find.
   Compiling public-API contracts as a workspace library and rejections as
   pinned compile-fail doctests, retiring the direct-`rustc` test harness and
   moving package verification into `make test-package-verify`.
+- [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
+  Bounded, localized Ninja progress labels for inline recipe edges.
 
 ## Proposals
 

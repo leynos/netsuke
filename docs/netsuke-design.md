@@ -422,7 +422,7 @@ rule:
   driven by the referenced rule's `description` for named-rule recipes. Inline
   command and script recipes use the first declared output as a localized
   progress label; see
-  [ADR 0057](adrs/adr-0057-readable-inline-recipe-progress.md).
+  [ADR 0060](adrs/adr-0060-readable-inline-recipe-progress.md).
 
 - `env`: A planned mapping of environment variables to apply when this target or
   action runs. Target-level values override rule-level values after the rule is
@@ -779,7 +779,7 @@ and action descriptions are discovery metadata displayed by
 `netsuke help targets`; they do not affect Ninja progress output. Inline
 command and script edges instead carry a localized, bounded progress label
 derived from their first declared output, as decided in
-[ADR 0057](adrs/adr-0057-readable-inline-recipe-progress.md). Planned
+[ADR 0060](adrs/adr-0060-readable-inline-recipe-progress.md). Planned
 target/action environment mappings remain separate future work under roadmap
 item 3.14.9. Conditional branch-selection messages belong in Netsuke's verbose
 diagnostics, not in mandatory recipe output:

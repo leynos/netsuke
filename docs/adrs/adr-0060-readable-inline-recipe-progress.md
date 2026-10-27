@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0057: Readable progress for inline recipes
+# Architectural decision record (ADR) 0060: Readable progress for inline recipes
 
 ## Status
 

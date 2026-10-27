@@ -432,7 +432,7 @@ identifier remains reserved, not checked off as implemented.
   - Note: target/action `description` remains discovery metadata rendered by
     `netsuke help targets`. Named-rule descriptions remain authoritative for
     Ninja progress; inline recipes use generated edge descriptions as recorded
-    in [ADR-0057](adrs/adr-0057-readable-inline-recipe-progress.md). This does
+    in [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md). This does
     not complete the outstanding `when`-branch work. Target/action environment
     mappings remain future work under 3.14.9.
 
