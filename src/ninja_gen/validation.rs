@@ -3,7 +3,7 @@
 use super::command_list::{CommandListEntry, CommandListEntryError, command_list_entry_error};
 use super::{NinjaGenError, RecipeShell, escape::validate_ninja_value};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
-use crate::ir::BuildGraph;
+use crate::ir::{Action, BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
 
 /// Reject console scheduling that conflicts with an edge's action.
@@ -14,31 +14,41 @@ use crate::localization::{self, keys};
 /// conflicts with an action's custom pool.
 pub(super) fn validate_console_scheduling(graph: &BuildGraph) -> Result<(), NinjaGenError> {
     for edge in graph.edges().filter(|edge| edge.console) {
-        let Some(action) = graph.actions.get(&edge.action_id) else {
-            continue;
-        };
-        let output = edge
-            .explicit_outputs
-            .first()
-            .map_or_else(|| "<no explicit output>".to_owned(), ToString::to_string);
-        if action.recipe.is_dependency_only() {
-            return Err(NinjaGenError::ConsoleDependencyOnly {
-                message: localization::message(keys::NINJA_GEN_CONSOLE_DEPENDENCY_ONLY)
-                    .with_arg("output", &output),
-                output,
-            });
+        if let Some(action) = graph.actions.get(&edge.action_id) {
+            validate_console_edge(edge, action)?;
         }
-        if let Some(pool) = action.pool.as_deref() {
-            validate_ninja_value(pool)?;
-            if pool != "console" {
-                return Err(NinjaGenError::ConsolePoolConflict {
-                    message: localization::message(keys::NINJA_GEN_CONSOLE_POOL_CONFLICT)
-                        .with_arg("output", &output)
-                        .with_arg("pool", pool),
-                    output,
-                    pool: pool.to_owned(),
-                });
-            }
+    }
+    Ok(())
+}
+
+/// Reject a console edge whose action conflicts with console scheduling.
+///
+/// # Errors
+///
+/// Returns an error for dependency-only recipes, conflicting pools, or invalid
+/// Ninja pool values.
+fn validate_console_edge(edge: &BuildEdge, action: &Action) -> Result<(), NinjaGenError> {
+    let output = edge
+        .explicit_outputs
+        .first()
+        .map_or_else(|| "<no explicit output>".to_owned(), ToString::to_string);
+    if action.recipe.is_dependency_only() {
+        return Err(NinjaGenError::ConsoleDependencyOnly {
+            message: localization::message(keys::NINJA_GEN_CONSOLE_DEPENDENCY_ONLY)
+                .with_arg("output", &output),
+            output,
+        });
+    }
+    if let Some(pool) = action.pool.as_deref() {
+        validate_ninja_value(pool)?;
+        if pool != "console" {
+            return Err(NinjaGenError::ConsolePoolConflict {
+                message: localization::message(keys::NINJA_GEN_CONSOLE_POOL_CONFLICT)
+                    .with_arg("output", &output)
+                    .with_arg("pool", pool),
+                output,
+                pool: pool.to_owned(),
+            });
         }
     }
     Ok(())

@@ -16,6 +16,9 @@ use std::{
     },
 };
 
+#[path = "tests/flush_tests.rs"]
+mod flush_tests;
+
 #[derive(Clone)]
 struct FailingWriter {
     writes: Arc<AtomicUsize>,

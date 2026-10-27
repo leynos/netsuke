@@ -196,6 +196,62 @@ fn clamp_u64_to_usize(value: u64) -> usize {
     usize::try_from(value).unwrap_or(usize::MAX)
 }
 
+/// Read one child-output chunk, retrying interrupted reads.
+///
+/// # Errors
+///
+/// Returns an error when the reader fails.
+fn read_next_chunk<R>(reader: &mut R, buffer: &mut [u8]) -> io::Result<usize>
+where
+    R: Read,
+{
+    loop {
+        match reader.read(buffer) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            result => break result,
+        }
+    }
+}
+
+/// Write a complete child-output chunk and flush it to the destination.
+///
+/// # Errors
+///
+/// Returns an error when the writer rejects the chunk or its flush.
+fn write_and_flush_chunk<W>(writer: &mut W, chunk: &[u8]) -> io::Result<()>
+where
+    W: Write,
+{
+    writer.write_all(chunk)?;
+    writer.flush()
+}
+
+/// Copy and flush each child-read chunk before reading the next one.
+///
+/// Keeping the flush separate from `Write::write` ensures a flush failure
+/// cannot cause accepted bytes to be retried as another write.
+///
+/// # Errors
+///
+/// Returns the first error encountered while reading, writing, or flushing.
+fn copy_and_flush<R, W>(reader: &mut R, writer: &mut W) -> io::Result<()>
+where
+    R: Read,
+    W: Write,
+{
+    let mut buffer = [0_u8; 8 * 1024];
+    loop {
+        let count = read_next_chunk(reader, &mut buffer)?;
+        if count == 0 {
+            return Ok(());
+        }
+        let chunk = buffer
+            .get(..count)
+            .ok_or_else(|| io::Error::other("reader reported an invalid byte count"))?;
+        write_and_flush_chunk(writer, chunk)?;
+    }
+}
+
 /// Copy `reader` to `writer`, tracking statistics and draining on failure.
 fn copy_with_stats<R, W>(reader: &mut R, writer: &mut W, stream_name: &'static str) -> ForwardStats
 where
@@ -212,8 +268,8 @@ where
         written: 0,
     };
 
-    match io::copy(&mut counting_reader, &mut counting_writer) {
-        Ok(_) => {
+    match copy_and_flush(&mut counting_reader, &mut counting_writer) {
+        Ok(()) => {
             stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
             stats.bytes_written = clamp_u64_to_usize(counting_writer.written);
         }
