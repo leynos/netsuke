@@ -2523,6 +2523,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   prior review disposition remains pending. Current status: CodeScene passes on
   `3490f772`, CI is in progress, a CodeRabbit resume is queued, and the
   maintainer's domain-boundary choice remains pending.
+- [x] (2026-10-27) CodeRabbit's focused reply in issue comment
+  `6448190491` assessed published head `a6565d69`: it withdrew the Testing
+  collection-error claim, accepted the Unit Architecture I/O fixes as resolved,
+  and retained Domain Architecture for maintainer disposition. This reply is
+  not a formal review; the generated report remains stale, and resume request
+  `d7cbf557` is still queued. Hosted checks passed on `a6565d69`: CI
+  `40541448045`, Release Dry Run `40541447941`, Netsukefile Build Test
+  `40541447656`, and CodeScene `8155561`. The Release Dry Run's
+  `publish-release` and `windows-native-recipe-smoke` jobs remained skipped as
+  expected. No architecture decision was made; Domain Architecture remains
+  pending maintainer disposition.
 
 ## Surprises & discoveries
 
