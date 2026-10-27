@@ -41,6 +41,8 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-cli-usage",
     "guide-command-available-manifest",
     "guide-command-list",
+    "guide-command-list-failure-ambiguous-diagnostic",
+    "guide-command-list-failure-unique-diagnostic",
     "guide-complete-manifest",
     "guide-configuration-observability",
     "guide-crates-io-install",
@@ -275,6 +277,40 @@ fn documented_fetch_expression_is_registered_but_not_executed() -> Result<()> {
     ensure!(
         example.body == "{{ fetch('https://example.com/toolchain.json', cache=true) }}\n",
         "fetch expression drifted"
+    );
+    Ok(())
+}
+
+#[derive(Clone, Copy)]
+enum CommandListFailureDiagnosticExample {
+    Unique,
+    Ambiguous,
+}
+
+#[rstest]
+#[case(CommandListFailureDiagnosticExample::Unique)]
+#[case(CommandListFailureDiagnosticExample::Ambiguous)]
+fn command_list_failure_diagnostic_examples_match_exact_output(
+    #[case] diagnostic_case: CommandListFailureDiagnosticExample,
+) -> Result<()> {
+    let (example_id, expected) = match diagnostic_case {
+        CommandListFailureDiagnosticExample::Unique => (
+            "guide-command-list-failure-unique-diagnostic",
+            "netsuke command-list failure: action HASH, entry 2 (target \"check-fmt\")\n",
+        ),
+        CommandListFailureDiagnosticExample::Ambiguous => (
+            "guide-command-list-failure-ambiguous-diagnostic",
+            "netsuke command-list failure: action HASH, entry 2 (targets \"check-fmt\", \"lint\")\n",
+        ),
+    };
+    let documented = documented_example(example_id)?;
+    ensure!(
+        documented.language == "text",
+        "{example_id} should use a text fence"
+    );
+    ensure!(
+        documented.body == expected,
+        "{example_id} should match the diagnostic output exactly"
     );
     Ok(())
 }
