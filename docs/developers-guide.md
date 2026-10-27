@@ -2607,6 +2607,16 @@ status 3. Its private `_write_verified_record` stages only this CLI's verified
 digest record beside its destination before replacement. Keep it inside the
 verifier: other records have their own schemas and persistence boundaries.
 
+`release_declaration_cli` stages its declaration and digest record before
+replacing either destination. Its private `_write_outputs` owns this pair only:
+if the second replacement fails, it restores the earlier declaration or removes
+the newly created one. A failed restoration reports the retained recovery
+directory. The pair cannot be atomic across a process or machine failure.
+Output failures return status 3; the destinations must be distinct. The
+producer's private `_backup_declaration` and `_restore_declaration` helpers
+serve only this output pair; other release records keep their own persistence
+boundaries.
+
 ### Policy and adapter boundaries
 
 The policy modules make decisions from values that their callers have already

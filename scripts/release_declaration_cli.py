@@ -17,9 +17,10 @@ The same run also writes the trusted digest record, because this is the only
 stage holding both the declared names and the staged bytes, and it is the last
 point before upload at which the bytes are still the build's own. The verifier
 compares the download against that record, so a substituted package or a
-replaced archive/sidecar pair is caught. Both files are written only on
-success; a partial record would be worse than none, because it would read as
-permission to verify less.
+replaced archive/sidecar pair is caught. Both files are staged before either
+destination changes. If the second replacement fails, the first is restored;
+if restoration also fails, the backup is retained for recovery. Two separate
+paths cannot be replaced atomically across a process or machine failure.
 
 Nothing here reaches the network. Every job that runs this has already
 downloaded the artefacts; this module lists what should be there.
@@ -30,7 +31,9 @@ behavioural coverage lives in ``scripts/tests/test_release_declaration_cli.py``.
 
 import argparse
 import pathlib
+import shutil
 import sys
+import tempfile
 import tomllib
 
 import hoist_binstall_discovery
@@ -42,6 +45,7 @@ import release_staged_digests
 EXIT_OK = 0
 EXIT_MISSING_ASSETS = 1
 EXIT_INPUT_UNUSABLE = 2
+EXIT_OUTPUT_UNWRITABLE = 3
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -114,7 +118,8 @@ def main(argv: list[str] | None = None) -> int:
         ``EXIT_MISSING_ASSETS`` when the staged tree disagrees with the
         configured targets and formats, or ``EXIT_INPUT_UNUSABLE`` when a
         configuration or manifest could not be read or does not describe a
-        releasable build.
+        releasable build, or ``EXIT_OUTPUT_UNWRITABLE`` when the output pair
+        cannot be written.
 
     Examples
     --------
@@ -145,11 +150,120 @@ def main(argv: list[str] | None = None) -> int:
     except (OSError, KeyError, ValueError) as error:
         print(f"release declaration inputs unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNUSABLE
-    arguments.output.write_text(
-        "".join(f"{name}\n" for name in names), encoding="utf-8"
-    )
-    release_digest_record_files.write_digest_record(digests, arguments.digest_record)
+    try:
+        if arguments.output.resolve() == arguments.digest_record.resolve():
+            print(
+                "declaration and digest record must have different paths",
+                file=sys.stderr,
+            )
+            return EXIT_OUTPUT_UNWRITABLE
+        _write_outputs(arguments.output, arguments.digest_record, names, digests)
+    except OSError as error:
+        print(f"release declaration outputs unwritable: {error}", file=sys.stderr)
+        return EXIT_OUTPUT_UNWRITABLE
     return EXIT_OK
+
+
+def _backup_declaration(
+    output: pathlib.Path, work: pathlib.Path
+) -> pathlib.Path | None:
+    """Copy the previous declaration into the producer's recovery directory.
+
+    Returns
+    -------
+    pathlib.Path | None
+        The backup path, or ``None`` when no declaration existed.
+
+    Examples
+    --------
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     root = pathlib.Path(directory)
+    ...     _backup_declaration(root / "absent", root) is None
+    True
+    """
+    try:
+        _ = output.lstat()
+    except FileNotFoundError:
+        return None
+    backup = work / "previous"
+    _ = shutil.copy2(output, backup, follow_symlinks=False)
+    return backup
+
+
+def _restore_declaration(output: pathlib.Path, backup: pathlib.Path | None) -> None:
+    """Restore the producer's prior declaration after an installation failure.
+
+    Examples
+    --------
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     output = pathlib.Path(directory) / "names"
+    ...     _ = output.write_text("new", encoding="utf-8")
+    ...     _restore_declaration(output, None)
+    ...     output.exists()
+    False
+    """
+    if backup is None:
+        output.unlink()
+    else:
+        _ = backup.replace(output)
+
+
+def _write_outputs(
+    output: pathlib.Path,
+    record: pathlib.Path,
+    names: tuple[str, ...],
+    digests: dict[str, str],
+) -> None:
+    """Stage both outputs and restore the declaration if installation fails.
+
+    Each temporary directory is a sibling of its destination, so replacement
+    does not cross filesystems. A backup is retained if rollback itself fails.
+
+    Raises
+    ------
+    OSError
+        If an output cannot be staged, installed, or restored.
+
+    Examples
+    --------
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     root = pathlib.Path(directory)
+    ...     _write_outputs(root / "names", root / "record", ("asset",),
+    ...                    {"asset": "ab" * 32})
+    ...     (root / "names").read_text(encoding="utf-8").splitlines()
+    ['asset']
+    """
+    work = pathlib.Path(tempfile.mkdtemp(dir=output.parent, prefix=f".{output.name}."))
+    retain_backup = False
+    try:
+        with tempfile.TemporaryDirectory(
+            dir=record.parent, prefix=f".{record.name}."
+        ) as tmp:
+            staged_names = work / "names"
+            staged_record = pathlib.Path(tmp) / "record"
+            _ = staged_names.write_text(
+                "".join(f"{name}\n" for name in names), encoding="utf-8"
+            )
+            release_digest_record_files.write_digest_record(digests, staged_record)
+            backup = _backup_declaration(output, work)
+            _ = staged_names.replace(output)
+            try:
+                _ = staged_record.replace(record)
+            except OSError as failure:
+                try:
+                    _restore_declaration(output, backup)
+                except OSError as rollback:
+                    retain_backup = True
+                    message = (
+                        f"record installation failed ({failure}); "
+                        f"declaration rollback failed ({rollback}); "
+                        f"recovery files retained at {work}"
+                    )
+                    raise OSError(message) from rollback
+                raise
+    finally:
+        if not retain_backup:
+            shutil.rmtree(work)
 
 
 def _compute_declaration(

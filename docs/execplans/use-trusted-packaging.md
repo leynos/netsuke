@@ -2488,6 +2488,28 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   doctests passed), `markdownlint` (206 files, zero issues), and `nixie`. The
   declaration-output atomicity issue remains open, as does its reviewer
   disposition.
+- [x] (2026-10-27) Fixed declaration-output handling on working-tree tree
+  `26e01805` over HEAD `75ac1719`. Both outputs are staged beside their
+  destinations; aliased destinations are rejected. If digest-record
+  installation fails, the previous declaration is restored; if rollback also
+  fails, the recovery directory is retained. Output failures use separate
+  status 3. The two paths are not atomic across abrupt process or machine
+  failure. Regression tests cover both staged writes, both replacements with
+  and without prior outputs, aliasing, and rollback failure. All nine
+  sequential gates passed: `check-fmt`, `lint`, `typecheck`, `doc-coverage`
+  (98.20%), `test-release-publication` (446 passed), `test-workflow-contracts`
+  (1,666 passed, 3 skipped, plus 28 script checks), `test` (4,766 passed, 7
+  skipped; doctests passed), `markdownlint` (206 files, zero issues), and
+  `nixie`. Review disposition remains pending.
+- [x] (2026-10-27) After the initial passing tree `26e01805`, split declaration
+  backup and restoration into producer-private helpers to clear CodeScene's
+  declaration complexity finding. All nine sequential gates passed again on tree
+  `40d74637` over HEAD `75ac1719`: `check-fmt`, `lint`, `typecheck`,
+  `doc-coverage` (98.20%), `test-release-publication` (448 passed),
+  `test-workflow-contracts` (1,666 passed, 3 skipped, plus 28 script checks),
+  `test` (4,766 passed, 7 skipped; doctests passed), `markdownlint` (206 files,
+  zero issues), and `nixie`. The inventory verifier's separate CodeScene Large
+  Method finding remains for a later refactor.
 
 ## Surprises & discoveries
 

@@ -9,8 +9,10 @@ release. Nothing here opens a socket.
 """
 
 import typing as typ
+from unittest import mock
 
 import pytest
+import release_declaration_cli as declaration_cli
 import release_digest_files
 import release_digest_record_files
 import release_inventory
@@ -18,6 +20,7 @@ from release_declaration_cli import (
     EXIT_INPUT_UNUSABLE,
     EXIT_MISSING_ASSETS,
     EXIT_OK,
+    EXIT_OUTPUT_UNWRITABLE,
     build_parser,
     main,
 )
@@ -122,6 +125,106 @@ def test_the_declaration_names_every_asset_the_release_stages(tmp_path: Path) ->
     assert "netsuke-0.1.0-1.x86_64.rpm" in declared, (
         "a staged package is declared under its staged name"
     )
+
+
+@pytest.mark.parametrize(
+    "scenario",
+    [
+        (stage, existing)
+        for stage in ("names-write", "record-write", "names-replace", "record-replace")
+        for existing in (False, True)
+    ],
+)
+def test_output_failure_preserves_previous_pair(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    scenario: tuple[str, bool],
+) -> None:
+    """Keep the prior pair, or no pair, when either output fails."""
+    failure, existing = scenario
+    workspace = _workspace(tmp_path)
+    if existing:
+        _ = workspace["output"].write_text("old names\n", encoding="utf-8")
+        _ = workspace["record"].write_text("old record\n", encoding="utf-8")
+    path_type = declaration_cli.pathlib.Path
+    replace = path_type.replace
+    failing_name, _ = failure.split("-")
+
+    def fail_replace(path: Path, target: Path) -> Path:
+        """Fail the chosen output installation."""
+        if path.name == failing_name:
+            message = "simulated replacement failure"
+            raise PermissionError(message)
+        return replace(path, target)
+
+    fault = mock.Mock(side_effect=PermissionError("simulated write failure"))
+    match failure:
+        case "names-write":
+            monkeypatch.setattr(path_type, "write_text", fault)
+        case "record-write":
+            monkeypatch.setattr(
+                declaration_cli.release_digest_record_files,
+                "write_digest_record",
+                fault,
+            )
+        case _:
+            monkeypatch.setattr(path_type, "replace", fail_replace)
+    code = main(_argv(workspace))
+
+    assert code == EXIT_OUTPUT_UNWRITABLE, f"{failure} returned {code}"
+    assert "unwritable" in capsys.readouterr().err, f"{failure} was not diagnosed"
+    for key, previous in (("output", "old names\n"), ("record", "old record\n")):
+        path = workspace[key]
+        assert path.exists() == existing, f"{failure} changed {key} existence"
+        if existing:
+            assert path.read_text(encoding="utf-8") == previous, (
+                f"{failure} changed the earlier {key}"
+            )
+    assert not list(tmp_path.glob(".declared.txt.*")), "staged files were not cleaned"
+    assert not list(tmp_path.glob(".trusted.json.*")), "staged files were not cleaned"
+
+
+def test_failed_rollback_retains_the_previous_declaration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Keep recovery evidence when installing and restoring both fail."""
+    workspace = _workspace(tmp_path)
+    _ = workspace["output"].write_text("old names\n", encoding="utf-8")
+    _ = workspace["record"].write_text("old record\n", encoding="utf-8")
+    path_type = declaration_cli.pathlib.Path
+    replace = path_type.replace
+
+    def fail_replace(path: Path, target: Path) -> Path:
+        """Fail both the digest installation and declaration rollback."""
+        if path.name in {"record", "previous"}:
+            message = "simulated replacement failure"
+            raise PermissionError(message)
+        return replace(path, target)
+
+    monkeypatch.setattr(path_type, "replace", fail_replace)
+    code = main(_argv(workspace))
+
+    assert code == EXIT_OUTPUT_UNWRITABLE, f"rollback failure returned {code}"
+    backups = list(tmp_path.glob(".declared.txt.*/previous"))
+    assert len(backups) == 1, f"expected a retained backup, got {backups}"
+    assert backups[0].read_text(encoding="utf-8") == "old names\n", (
+        "the retained backup must contain the previous declaration"
+    )
+    assert str(backups[0].parent) in capsys.readouterr().err, (
+        "the diagnostic must name the recovery directory"
+    )
+
+
+def test_output_paths_must_be_distinct(tmp_path: Path) -> None:
+    """Refuse to overwrite the declaration with its digest record."""
+    workspace = _workspace(tmp_path)
+    workspace["record"] = workspace["output"]
+
+    code = main(_argv(workspace))
+
+    assert code == EXIT_OUTPUT_UNWRITABLE, f"aliased outputs returned {code}"
+    assert not workspace["output"].exists(), "aliased outputs must not be written"
 
 
 def test_a_refused_declaration_writes_no_file(tmp_path: Path) -> None:
