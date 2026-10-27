@@ -15,6 +15,7 @@ mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::keys;
 use crate::manifest;
+use crate::ninja_gen::command_list::COMMAND_LIST_FAILURE_PREFIX;
 use crate::output_mode;
 use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
@@ -233,7 +234,6 @@ fn execute_build(
 
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
-
     let ctx = || {
         format!(
             "running {} with build file {}",
@@ -250,18 +250,25 @@ fn execute_build(
         env: &env,
         stderr_mode: StderrMode::from_json_enabled(cli.json),
     };
-    if context.progress_enabled {
+    let ninja_result = if context.progress_enabled {
         let mut on_task_progress = on_task_progress_callback(context.reporter);
         process::run_ninja_with_command_list_targets(
             build_request,
             Some(&mut on_task_progress),
             &command_list_targets,
         )
-        .with_context(ctx)?;
     } else {
         ninja::run_ninja_with_command_list_targets(build_request, &command_list_targets)
-            .with_context(ctx)?;
-    }
+    };
+    ninja_result.map_err(|error| {
+        // Keep marker text in the CLI's outer context.
+        let error_context = if error.to_string().contains(COMMAND_LIST_FAILURE_PREFIX) {
+            format!("{}: {error}", ctx())
+        } else {
+            ctx()
+        };
+        anyhow::Error::new(error).context(error_context)
+    })?;
     context
         .reporter
         .report_complete(keys::STATUS_TOOL_BUILD.into());

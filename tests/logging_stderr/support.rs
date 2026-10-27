@@ -68,6 +68,30 @@ pub(super) fn normalized_diagnostic_fragment(
     Some(normalize_fingerprints(line.get(start..)?))
 }
 
+/// Select the rendered human error and replace its action fingerprint.
+#[cfg(unix)]
+pub(super) fn normalized_human_error_fragment(
+    message: &str,
+    failure_prefix: &str,
+) -> Option<String> {
+    let error = human_error_fragment(message, failure_prefix)?;
+    let diagnostic_start = error.find("ninja exited with")?;
+    Some(normalize_fingerprints(error.get(diagnostic_start..)?))
+}
+
+/// Return the rendered human error line carrying command-list attribution.
+#[cfg(unix)]
+pub(super) fn human_error_fragment<'message>(
+    message: &'message str,
+    failure_prefix: &str,
+) -> Option<&'message str> {
+    message.lines().find(|line| {
+        line.contains("Error:")
+            && line.contains("ninja exited with")
+            && line.contains(failure_prefix)
+    })
+}
+
 /// Replace every fixed-width hexadecimal fingerprint in a diagnostic fragment.
 #[cfg(unix)]
 fn normalize_fingerprints(fragment: &str) -> String {

@@ -1,6 +1,9 @@
 //! Runtime diagnostics for failed entries in command-list recipes.
 
-use super::support::{normalized_diagnostic_fragment, open_workspace};
+use super::support::{
+    human_error_fragment, normalized_diagnostic_fragment, normalized_human_error_fragment,
+    open_workspace,
+};
 use crate::command_list_failure_support::{
     FAILURE_PREFIX, contains_full_fingerprint, contains_target_clause, identifies_entry,
 };
@@ -86,22 +89,24 @@ fn failed_command_list_entry_is_attributed_in_human_output() -> Result<()> {
         "a failing list entry must fail the build"
     );
     let stderr = String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?;
+    let human_error = human_error_fragment(&stderr, FAILURE_PREFIX)
+        .with_context(|| format!("rendered human error should contain its marker: {stderr}"))?;
     ensure!(
-        identifies_entry(&stderr, 2),
-        "human diagnostics should name the bounded failing entry: {stderr}"
+        identifies_entry(human_error, 2),
+        "human diagnostics should name the bounded failing entry: {human_error}"
     );
     ensure!(
-        contains_full_fingerprint(&stderr),
-        "human diagnostics should retain the full action fingerprint: {stderr}"
+        contains_full_fingerprint(human_error),
+        "human diagnostics should retain the full action fingerprint: {human_error}"
     );
     ensure!(
-        contains_target_clause(&stderr, "target \"result.txt\""),
-        "human diagnostics should name the resolved target: {stderr}"
+        contains_target_clause(human_error, "target \"result.txt\""),
+        "human diagnostics should name the resolved target: {human_error}"
     );
     insta::assert_snapshot!(
         "command_list_failure_human_diagnostic",
-        normalized_diagnostic_fragment(&stderr, FAILURE_PREFIX)
-            .context("human diagnostic should contain its marker line")?
+        normalized_human_error_fragment(&stderr, FAILURE_PREFIX)
+            .context("human diagnostic should contain a stable error fragment")?
     );
     let output_file = open_workspace(&temp)?
         .read_to_string("result.txt")
