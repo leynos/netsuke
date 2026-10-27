@@ -2463,6 +2463,19 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   state as `DIRTY`. This candidate has not been rebased onto that newer target.
   Stage C remains partial and Stage D remains open; no release or registry
   setting changed.
+- [x] (2026-10-27) Rebased from boundary `0a28fee3` and old head
+  `7247466b` onto target `1abfd22d`, replaying 73 commits. The single conflict
+  in `tests/workflow_contracts/conftest.py` was resolved by retaining main's CI
+  attempt fixture and this branch's archive-basename rationale.
+  `git range-diff` shows one modified commit attributable to that resolution;
+  all other replayed commits are unchanged. All sequential gates passed on
+  working-tree tree `03be389c` at replay head `9d78b41f`: `check-fmt`, `lint`,
+  `typecheck`, `doc-coverage` (98.20%), `test` (4,766 passed, 7 skipped;
+  doctests passed), `test-workflow-contracts` (1,666 passed, 3 skipped, plus 28
+  script tests), `test-release-publication` (429 passed), `markdownlint` (206
+  files, zero issues), and `nixie`. Push remains pending. The preceding entry
+  records the earlier `0a28fee3` base and remains a historical account of that
+  candidate.
 
 ## Surprises & discoveries
 
