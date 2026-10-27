@@ -2433,6 +2433,36 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `markdownlint` (201 files, zero issues), and `nixie`. The Domain Architecture
   disposition remains pending; Stage C remains partial and Stage D remains
   open. No release or registry setting changed.
+- [x] (2026-10-26; status reconciled 2026-10-27) Re-ran all six local gates
+  sequentially on the pushed candidate `7c8fcc19` (tree `2a795a28`):
+  `check-fmt`, `lint`, `typecheck`, `test`, `markdownlint`, and `nixie` all
+  passed; 4,725 nextest tests passed, 7 were skipped, doctests passed, Markdown
+  lint found zero issues across 201 files, and all diagrams validated. The
+  hook-reported lint and Nixie failures did not recur. CodeRabbit's completed
+  review on this head (2026-10-26 08:10 UTC) requested changes and added no
+  inline comments; GitHub reports all 29 inline threads resolved. Its pre-merge
+  walkthrough still raises the Testing (Unit and Behavioural) and Unit
+  Architecture rows as errors and the Domain Architecture row as a warning. A
+  read-only audit validated the Unit Architecture claim: `_read_inventory` and
+  inventory hashing, sidecar, and output writes in
+  `verify_release_inventory_cli.py` can propagate `OSError` outside the
+  existing catches, and no corresponding permission/error tests exist. This
+  remains an open finding; the CLI needs a diagnosed failure outcome and
+  regression coverage before that row can be closed. The declaration writer has
+  a separate verified output-atomicity finding: its module docstring promises
+  both output files only on success, but it writes the declaration before the
+  digest record, so a later write failure can leave partial output. The
+  existing refusal test covers pre-write validation only. Follow-up must cover
+  failures writing either output and pre-existing outputs, including whether
+  they are preserved or replaced. The Testing row repeats the earlier disputed
+  Python 3.14 annotation-collection claim; the current-head row still needs
+  explicit reconciliation against the current candidate. The Domain
+  Architecture disagreement concerns the existing mapping-boundary decision
+  below and remains for maintainer disposition. Since the rebase, remote `main`
+  has advanced from `0a28fee3` to `1abfd22d`; GitHub now reports the PR merge
+  state as `DIRTY`. This candidate has not been rebased onto that newer target.
+  Stage C remains partial and Stage D remains open; no release or registry
+  setting changed.
 
 ## Surprises & discoveries
 
@@ -3807,6 +3837,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   rather than introducing a general port layer. The `POLICY_MODULES` contract
   rejects file/JSON/TOML/HTTP/provider-format effects in policy sources, with
   positive controls. Date/Author: 2026-10-24, implementation agent.
+
+- Decision status: **awaiting maintainer disposition** (2026-10-27). The
+  implementation follows the 2026-10-24 decision above: policy functions decide
+  over in-memory values, including mappings where the record contract is
+  mapping-shaped; filesystem, serialization, HTTP response, and provider-format
+  handling stays in the named adapters and CLIs. CodeRabbit's Domain
+  Architecture warning asks to move record-shape validation out of policy and
+  into adapters, which would revise that accepted boundary. The maintainer must
+  choose whether to reaffirm the current mapping/value boundary and leave the
+  warning as a documented disagreement, or to authorize a typed record boundary
+  and revise the plan and implementation scope accordingly. Neither choice is
+  recorded as made here. Date/Author: 2026-10-27, implementation agent.
 
 - Decision: keep GitHub's asset-name rewrite in its own boundary adapter.
   Rationale: `release_declaration` is policy and must not normalize a name
