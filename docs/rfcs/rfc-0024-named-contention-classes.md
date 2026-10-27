@@ -109,8 +109,8 @@ combining their names into a new class would not enforce the original limits.
 Ninja's special `console` pool cannot simultaneously be combined with a custom
 pool on the same edge. When a manifest edge opts into `console`, generation
 rejects an existing custom `Action.pool` value other than `console`; an existing
-`Action.pool: console` is redundant and accepted. A console edge with a
-resolved contention class is rejected as well. Console selection remains
+`Action.pool` setting to `console` is redundant and accepted. A console edge
+with a resolved contention class is rejected as well. Console selection remains
 available without contention, and neither behaviour is silently discarded.
 
 Serialize resolved class definitions and references in generated plans and

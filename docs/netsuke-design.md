@@ -2869,8 +2869,8 @@ The live IR structures defined in
 [src/ir/mod.rs](../src/ir/mod.rs), are minimal containers that mirror Ninja's
 conceptual model while keeping most scheduling data backend-agnostic.
 `BuildGraph` collects actions in a hash map, canonical edges in an
-insertion-ordered arena, and output aliases in a `Utf8PathBuf` to `EdgeId` hash
-map. Actions hold the parsed `Recipe` and optional execution metadata.
+insertion-ordered arena, and a map from `Utf8PathBuf` to `EdgeId` for output
+aliases. Actions hold the parsed `Recipe` and optional execution metadata.
 `BuildEdge` connects inputs to outputs using an action identifier and carries
 the `phony`, `always`, and `console` flags verbatim from the manifest. The
 `console` flag is a deliberate Ninja-specific edge annotation; the IR stores a

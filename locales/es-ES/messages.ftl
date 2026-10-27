@@ -185,7 +185,7 @@ manifest.glob.unknown_io_error = error de E/S desconocido.
 manifest.command_list_empty = El campo 'command' no debe estar vacío: proporcione una cadena de comando o una lista no vacía.
 manifest.command_isolation_recipe = El campo 'command_isolation' requiere una receta con una lista de comandos.
 manifest.command_isolation_scalar = 'command_isolation: isolated' requiere una lista de comandos.
-manifest.console_dependency_only = Las entradas que solo declaran dependencias no pueden seleccionar el grupo de la consola.
+manifest.console_dependency_only = Las entradas que solo declaran dependencias no pueden seleccionar el grupo de consola.
 
 # Errores de IR.
 ir.rule_not_found = No se encontró la regla '{ $rule }' referenciada por el objetivo '{ $target }'.
