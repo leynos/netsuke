@@ -3,6 +3,9 @@
 #[cfg(unix)]
 #[path = "logging_stderr/command_list_failure.rs"]
 mod command_list_failure;
+#[cfg(unix)]
+#[path = "support/command_list_failure.rs"]
+mod command_list_failure_support;
 #[path = "logging_stderr/config_tracing.rs"]
 mod config_tracing;
 #[path = "logging_stderr/json.rs"]

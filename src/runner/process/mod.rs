@@ -2,11 +2,13 @@
 //! Internal to `runner`; public API is defined in `runner.rs`.
 
 use super::BuildTargets;
+use command_list_targets::CommandListTargetIndex;
 use monotony::{MonotonicClock, StdMonotonicClock};
 use std::{io, process::Command};
 
 use camino::Utf8Path;
 mod child_exit;
+pub(in crate::runner) mod command_list_targets;
 mod list_failure_telemetry;
 mod logging;
 
@@ -20,6 +22,8 @@ mod output_forwarding;
 mod paths;
 mod redaction;
 mod streaming;
+#[cfg(test)]
+mod test_fixtures;
 #[cfg(test)]
 mod tests;
 
@@ -54,6 +58,8 @@ struct CommandExecutionContext<'a, Clock> {
     captures_ninja_failure_output: bool,
     /// Monotonic clock measuring the child run.
     clock: &'a Clock,
+    /// Invocation-local output-name lookup for command-list fingerprints.
+    command_list_targets: Option<&'a CommandListTargetIndex>,
 }
 
 // Public helpers for doctests only. This exposes internal helpers as a stable
@@ -106,6 +112,7 @@ fn run_command_and_stream_with_context<Clock: MonotonicClock>(
         operation: execution.operation,
         stderr_mode: execution.stderr_mode,
         command_list_failure: command_list_failure.as_ref(),
+        command_list_targets: execution.command_list_targets,
         clock: execution.clock,
         started_at,
     };
@@ -168,6 +175,24 @@ fn run_ninja_with_clock(
     run_ninja_build_internal(*request, None, clock)
 }
 
+/// Run a Ninja build with target attribution and optional progress observation.
+///
+/// # Errors
+///
+/// Returns an error when Ninja cannot be spawned or exits unsuccessfully.
+pub(in crate::runner) fn run_ninja_with_command_list_targets(
+    request: NinjaBuildRequest<'_>,
+    status_observer: Option<StatusObserver<'_>>,
+    command_list_targets: &CommandListTargetIndex,
+) -> io::Result<()> {
+    run_ninja_build_internal_with_targets(
+        request,
+        status_observer,
+        Some(command_list_targets),
+        &StdMonotonicClock,
+    )
+}
+
 /// Invoke a Ninja tool with an explicit child-process environment.
 ///
 /// # Examples
@@ -198,18 +223,72 @@ pub fn run_ninja_tool_with(request: &NinjaToolRequest<'_>) -> io::Result<()> {
     run_ninja_tool_internal(*request, None, &StdMonotonicClock)
 }
 
-/// Caller-supplied parameters shared across Ninja invocation variants.
-struct NinjaInternalRequest<'request, 'observer> {
+/// Identify a configured Ninja command and its diagnostic metadata.
+enum NinjaInternalCommand<'request, 'targets> {
+    /// Run a build and optionally resolve command-list fingerprints.
+    Build {
+        /// Build configuration passed to Ninja.
+        request: NinjaBuildRequest<'request>,
+        /// Invocation-local output-name lookup for command-list fingerprints.
+        command_list_targets: Option<&'targets CommandListTargetIndex>,
+    },
+    /// Run a `ninja -t` tool command.
+    Tool(NinjaToolRequest<'request>),
+}
+
+/// Process metadata derived from a build or tool command.
+struct NinjaInternalSettings<'request, 'targets> {
     /// Ninja executable to invoke.
     program: &'request Utf8Path,
     /// Child stderr policy controlling forwarding and attribution.
     stderr_mode: StderrMode,
-    /// Optional callback receiving parsed task-progress updates.
-    status_observer: Option<StatusObserver<'observer>>,
     /// Invocation description attached to logs and spans.
     operation: &'request str,
     /// Whether stdout forwarding should retain the bounded failure tail.
     captures_ninja_failure_output: bool,
+    /// Invocation-local output-name lookup for command-list fingerprints.
+    command_list_targets: Option<&'targets CommandListTargetIndex>,
+}
+
+impl NinjaInternalCommand<'_, '_> {
+    /// Derive the process metadata appropriate to this command kind.
+    const fn settings(&self) -> NinjaInternalSettings<'_, '_> {
+        match self {
+            Self::Build {
+                request,
+                command_list_targets,
+            } => NinjaInternalSettings {
+                program: request.program,
+                stderr_mode: request.stderr_mode,
+                operation: "build",
+                captures_ninja_failure_output: true,
+                command_list_targets: *command_list_targets,
+            },
+            Self::Tool(request) => NinjaInternalSettings {
+                program: request.program,
+                stderr_mode: request.stderr_mode,
+                operation: request.tool,
+                captures_ninja_failure_output: false,
+                command_list_targets: None,
+            },
+        }
+    }
+
+    /// Configure the child command for this build or tool request.
+    fn configure(&self, command: &mut Command) -> io::Result<()> {
+        match self {
+            Self::Build { request, .. } => configure_ninja_build_command(command, request),
+            Self::Tool(request) => configure_ninja_tool_command(command, request),
+        }
+    }
+}
+
+/// Parameters retained while the shared Ninja process runner executes.
+struct NinjaInternalRequest<'request, 'observer, 'targets> {
+    /// Build or tool command and its diagnostic metadata source.
+    command: NinjaInternalCommand<'request, 'targets>,
+    /// Optional callback receiving parsed task-progress updates.
+    status_observer: Option<StatusObserver<'observer>>,
 }
 
 /// Build, spawn, and stream a Ninja invocation through a shared core.
@@ -219,22 +298,22 @@ struct NinjaInternalRequest<'request, 'observer> {
 /// Returns an error when command configuration fails, the Ninja process
 /// cannot be spawned, a child standard stream is unavailable, or Ninja
 /// reports a non-zero exit status.
-fn run_ninja_internal<F, Clock>(
-    request: NinjaInternalRequest<'_, '_>,
+fn run_ninja_internal<Clock>(
+    request: NinjaInternalRequest<'_, '_, '_>,
     clock: &Clock,
-    configure: F,
 ) -> io::Result<()>
 where
-    F: FnOnce(&mut Command) -> io::Result<()>,
     Clock: MonotonicClock,
 {
-    let mut cmd = Command::new(request.program.as_std_path());
-    configure(&mut cmd)?;
+    let settings = request.command.settings();
+    let mut cmd = Command::new(settings.program.as_std_path());
+    request.command.configure(&mut cmd)?;
     let execution = CommandExecutionContext {
-        operation: request.operation,
-        stderr_mode: request.stderr_mode,
-        captures_ninja_failure_output: request.captures_ninja_failure_output,
+        operation: settings.operation,
+        stderr_mode: settings.stderr_mode,
+        captures_ninja_failure_output: settings.captures_ninja_failure_output,
         clock,
+        command_list_targets: settings.command_list_targets,
     };
     run_command_and_stream_with_context(cmd, request.status_observer, &execution)
 }
@@ -249,16 +328,29 @@ fn run_ninja_build_internal(
     status_observer: Option<StatusObserver<'_>>,
     clock: &impl MonotonicClock,
 ) -> io::Result<()> {
+    run_ninja_build_internal_with_targets(request, status_observer, None, clock)
+}
+
+/// Run a Ninja build with optional progress observation and target attribution.
+///
+/// # Errors
+///
+/// Returns an error when Ninja cannot be spawned or exits unsuccessfully.
+fn run_ninja_build_internal_with_targets(
+    request: NinjaBuildRequest<'_>,
+    status_observer: Option<StatusObserver<'_>>,
+    command_list_targets: Option<&CommandListTargetIndex>,
+    clock: &impl MonotonicClock,
+) -> io::Result<()> {
     run_ninja_internal(
         NinjaInternalRequest {
-            program: request.program,
-            stderr_mode: request.stderr_mode,
+            command: NinjaInternalCommand::Build {
+                request,
+                command_list_targets,
+            },
             status_observer,
-            operation: "build",
-            captures_ninja_failure_output: true,
         },
         clock,
-        |cmd| configure_ninja_build_command(cmd, &request),
     )
 }
 
@@ -275,28 +367,11 @@ fn run_ninja_tool_internal(
 ) -> io::Result<()> {
     run_ninja_internal(
         NinjaInternalRequest {
-            program: request.program,
-            stderr_mode: request.stderr_mode,
+            command: NinjaInternalCommand::Tool(request),
             status_observer,
-            operation: request.tool,
-            captures_ninja_failure_output: false,
         },
         clock,
-        |cmd| configure_ninja_tool_command(cmd, &request),
     )
-}
-
-/// Invoke `ninja` build and stream parsed task updates from status lines.
-///
-/// # Errors
-///
-/// Returns an [`io::Error`] if the Ninja process fails to spawn, the standard
-/// streams are unavailable, or when Ninja reports a non-zero exit status.
-pub(crate) fn run_ninja_with_status(
-    request: NinjaBuildRequest<'_>,
-    status_observer: StatusObserver<'_>,
-) -> io::Result<()> {
-    run_ninja_build_internal(request, Some(status_observer), &StdMonotonicClock)
 }
 
 /// Invoke `ninja -t` and stream parsed task updates from status lines.

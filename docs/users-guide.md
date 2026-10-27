@@ -506,11 +506,34 @@ rather than a subshell, so a changed working directory, environment assignment,
 or shell variable can be used by later entries. In `isolated` mode, each
 brace/eval wrapper runs inside a subshell and its state changes do not reach
 later entries. A failed entry stops the chain, and the diagnostic identifies
-the generated action and one-based list-entry positions, for example
+the generated action and one-based list-entry positions. When the runner
+resolves one output target, its name follows the entry index:
+
+<!-- tested-example: guide-command-list-failure-unique-diagnostic -->
+
+```text
+netsuke command-list failure: action HASH, entry 2 (target "check-fmt")
+```
+
+When identical actions belong to more than one target, the diagnostic lists
+sorted candidates:
+
+<!-- tested-example: guide-command-list-failure-ambiguous-diagnostic -->
+
+```text
+netsuke command-list failure: action HASH, entry 2 (targets "check-fmt", "lint")
+```
+
+Target names are escaped for readable diagnostics and capped at 64 UTF-8 bytes,
+including their quotes and the visible `…` marker when shortened. Ambiguous
+diagnostics show at most three sorted candidates, then `and N more` when
+additional matches exist. If no target resolves, including when the invocation
+has no index, the diagnostic keeps the marker-only form:
 `netsuke command-list failure: action HASH, entry 2`. These brace-group,
 `eval`, background-job, and `exec` restrictions apply only to the Unix renderer
 and the explicit Windows Bash compatibility route; the Windows PowerShell route
-uses its native-command and error checks instead.
+uses its native-command and error checks instead. PowerShell command-list
+recipes emit no attribution marker.
 
 <!-- tested-example: guide-command-list -->
 

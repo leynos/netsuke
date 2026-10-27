@@ -55,6 +55,74 @@ pub(super) fn open_workspace(temp: &TempDir) -> Result<Dir> {
         .with_context(|| format!("open temporary workspace {workspace_path}"))
 }
 
+/// Return a stable diagnostic fragment with its fingerprints replaced.
+#[cfg(unix)]
+pub(super) fn normalized_diagnostic_fragment(
+    message: &str,
+    identifying_field: &str,
+) -> Option<String> {
+    let line = message
+        .lines()
+        .find(|line| line.contains(identifying_field))?;
+    let start = line.find(identifying_field)?;
+    Some(normalize_fingerprints(line.get(start..)?))
+}
+
+/// Select the rendered human error and replace its action fingerprint.
+#[cfg(unix)]
+pub(super) fn normalized_human_error_fragment(
+    message: &str,
+    failure_prefix: &str,
+) -> Option<String> {
+    let error = human_error_fragment(message, failure_prefix)?;
+    let diagnostic_start = error.find("ninja exited with")?;
+    Some(normalize_fingerprints(error.get(diagnostic_start..)?))
+}
+
+/// Return the rendered human error line carrying command-list attribution.
+#[cfg(unix)]
+pub(super) fn human_error_fragment<'message>(
+    message: &'message str,
+    failure_prefix: &str,
+) -> Option<&'message str> {
+    message.lines().find(|line| {
+        line.contains("Error:")
+            && line.contains("ninja exited with")
+            && line.contains(failure_prefix)
+    })
+}
+
+/// Replace every fixed-width hexadecimal fingerprint in a diagnostic fragment.
+#[cfg(unix)]
+fn normalize_fingerprints(fragment: &str) -> String {
+    let bytes = fragment.as_bytes();
+    let mut normalized = String::with_capacity(fragment.len());
+    let mut cursor = 0;
+    let mut replaced = false;
+
+    for (start, window) in bytes.windows(64).enumerate() {
+        if start < cursor || !window.iter().all(u8::is_ascii_hexdigit) {
+            continue;
+        }
+        let Some(prefix) = fragment.get(cursor..start) else {
+            return fragment.to_owned();
+        };
+        normalized.push_str(prefix);
+        normalized.push_str("<fingerprint>");
+        cursor = start + 64;
+        replaced = true;
+    }
+
+    if !replaced {
+        return fragment.to_owned();
+    }
+    let Some(suffix) = fragment.get(cursor..) else {
+        return fragment.to_owned();
+    };
+    normalized.push_str(suffix);
+    normalized
+}
+
 pub(super) fn write_fake_ninja_script(
     dir: &Dir,
     path: &Utf8Path,

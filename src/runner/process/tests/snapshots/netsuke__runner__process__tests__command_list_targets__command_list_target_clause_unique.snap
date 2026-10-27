@@ -1,0 +1,5 @@
+---
+source: src/runner/process/tests/command_list_targets.rs
+expression: "index.clause(&fingerprint).unwrap_or_else(|| \"<unresolved>\".to_owned())"
+---
+target "check-fmt"

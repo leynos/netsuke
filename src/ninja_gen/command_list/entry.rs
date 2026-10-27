@@ -6,12 +6,18 @@ use crate::hex::to_lower_hex;
 
 use super::{ActionId, CommandListEntry};
 
+impl AsRef<str> for ActionId<'_> {
+    fn as_ref(&self) -> &str {
+        self.0
+    }
+}
+
 /// Return a fixed-width fingerprint for an action identifier.
 ///
 /// IR-generated identifiers are already hashes, but hashing again prevents a
 /// programmatically supplied identifier from disclosing arbitrary content.
-pub(super) fn action_identity(action_id: ActionId<'_>) -> String {
-    to_lower_hex(&Sha256::digest(action_id.0.as_bytes()))
+pub(crate) fn action_identity(action_id: impl AsRef<str>) -> String {
+    to_lower_hex(&Sha256::digest(action_id.as_ref().as_bytes()))
 }
 
 /// Quote `value` as one literal POSIX shell argument.

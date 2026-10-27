@@ -10,13 +10,18 @@ const COMMAND_LIST_FAILURES_TOTAL: &str = "netsuke_ninja_command_list_failures_t
 pub(super) const COMMAND_LIST_FAILURE_DURATION: &str =
     "netsuke_ninja_command_list_failure_duration_seconds";
 
-/// Record the only observable per-entry outcome: a safely attributed failure.
-pub(super) fn record_failure(failure: &CommandListFailure, elapsed: Duration) {
+/// Record bounded tracing context and metrics for an attributed failure.
+pub(super) fn record_failure(
+    failure: &CommandListFailure,
+    elapsed: Duration,
+    target_clause: Option<&str>,
+) {
     describe_metrics();
     tracing::warn!(
         command_list_action = failure.action_identity(),
         command_list_entry = failure.entry_index(),
         command_list_failure = %failure,
+        command_list_target = target_clause,
         "Ninja command-list entry failed"
     );
     counter!(COMMAND_LIST_FAILURES_TOTAL, "outcome" => "failure").increment(1);
@@ -68,7 +73,11 @@ mod tests {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
         metrics::with_local_recorder(&recorder, || {
-            record_failure(&failure, Duration::from_millis(1));
+            record_failure(
+                &failure,
+                Duration::from_millis(1),
+                Some("target \"check-fmt\""),
+            );
         });
         let snapshot = snapshotter.snapshot().into_vec();
         let has_counter = snapshot.iter().any(|(key, _, _, value)| {
@@ -83,5 +92,30 @@ mod tests {
         });
         assert!(has_counter, "failure counter should record exactly once");
         assert!(has_duration, "failure duration should record one sample");
+
+        let failure_series = snapshot
+            .iter()
+            .filter(|(key, _, _, _)| {
+                key.key().name() == COMMAND_LIST_FAILURES_TOTAL
+                    || key.key().name() == COMMAND_LIST_FAILURE_DURATION
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            failure_series.len(),
+            2,
+            "failure should emit only its counter and duration series"
+        );
+        for (key, _, _, _) in failure_series {
+            let labels = key
+                .key()
+                .labels()
+                .map(|label| (label.key(), label.value()))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                labels,
+                vec![("outcome", "failure")],
+                "target names must never become metric labels"
+            );
+        }
     }
 }

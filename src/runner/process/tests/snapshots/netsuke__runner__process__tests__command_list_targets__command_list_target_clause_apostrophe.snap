@@ -1,0 +1,5 @@
+---
+source: src/runner/process/tests/command_list_targets.rs
+expression: "index.clause(&action_identity(\"identity\")).unwrap_or_else(||\n\"<unresolved>\".to_owned())"
+---
+target "single'quote"

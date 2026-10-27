@@ -1,0 +1,5 @@
+---
+source: tests/logging_stderr/command_list_failure.rs
+expression: "normalized_human_error_fragment(&stderr,\nFAILURE_PREFIX).context(\"human diagnostic should contain a stable error fragment\")?"
+---
+ninja exited with exit status: 1: netsuke command-list failure: action <fingerprint>, entry 2 (target "result.txt")

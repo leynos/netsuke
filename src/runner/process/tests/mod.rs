@@ -25,6 +25,7 @@ use std::thread;
 use std::time::Duration;
 use tracing_subscriber::filter::LevelFilter;
 
+mod command_list_targets;
 #[cfg(unix)]
 mod public_ninja_execution_tests;
 
@@ -92,6 +93,7 @@ fn command_list_failure_duration_uses_the_injected_monotonic_clock() {
         stderr_mode: StderrMode::Suppress,
         captures_ninja_failure_output: false,
         clock: &clock,
+        command_list_targets: None,
     };
     let result = metrics::with_local_recorder(&recorder, || {
         run_command_and_stream_with_context(command, None, &execution)
@@ -140,6 +142,7 @@ fn large_stdout_cannot_supply_command_list_attribution() -> anyhow::Result<()> {
         // An arbitrary command's large stdout must be forwarded untouched.
         captures_ninja_failure_output: false,
         clock: &StdMonotonicClock,
+        command_list_targets: None,
     };
 
     let Err(error) = run_command_and_stream_with_context(command, None, &execution) else {

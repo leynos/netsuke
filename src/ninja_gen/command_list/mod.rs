@@ -6,7 +6,8 @@ mod entry;
 mod render;
 mod scanner;
 
-use entry::{action_identity, shell_single_quote};
+pub(crate) use entry::action_identity;
+use entry::shell_single_quote;
 pub(super) use render::command_list_shell_text;
 use scanner::background_operator_count;
 
@@ -97,7 +98,7 @@ pub(super) fn command_list_entry(
     entry_index: usize,
     isolation: CommandIsolation,
 ) -> String {
-    let identity = action_identity(action_id);
+    let identity = action_identity(action_id.0);
     let context = format!("{COMMAND_LIST_FAILURE_PREFIX}{identity}, entry {entry_index}");
     let evaluator = command_evaluator(command);
     let failure_trap = match isolation {

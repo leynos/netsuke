@@ -887,6 +887,29 @@ The lowering stages have deliberately separate responsibilities:
   hashed action fingerprint and one-based entry index to the Ninja failure
   error.
 
+The CLI runner builds an invocation-local target index from canonical graph
+edges before the graph is dropped. It includes only edges with a non-empty
+command-list recipe and an output, and excludes phony or dependency-only edges.
+Each edge contributes one candidate, even when it has several outputs; the
+label is its first explicit output, or its first implicit output when no
+explicit output exists. For IR-generated IDs, the marker fingerprint is a
+double SHA-256 identity. The generator and runner both call `action_identity`,
+which hashes the textual `ActionId` bytes; the runner does not decode and hash
+the marker digest again.
+
+The edge-eligibility selector remains private to the CLI index and is not a
+Ninja-generation interface.
+
+After the stderr worker has joined, the exit boundary resolves the marker once
+against that index. A unique edge adds a quoted target name to the failure
+message. Multiple edges add sorted, quoted candidates. Names use Rust
+debug-style escaping for control characters. Each quoted display name is
+bounded to 64 UTF-8 bytes, including its quotes and any visible truncation
+marker; truncation preserves complete escape sequences. At most three
+candidates are shown, followed by `and N more` when others remain. An absent
+index or unknown fingerprint leaves the existing marker and error text
+unchanged.
+
 Failure attribution is private to Ninja process execution:
 `FailureAttributionWriter` parses only Ninja's stderr. Because Ninja relays a
 failed subcommand's stderr on its own stdout, build runs retain only a fixed
@@ -947,12 +970,15 @@ delimiter table.
 Attributed list failures emit the bounded tracing fields `command_list_action`
 (a fixed-width action fingerprint) and `command_list_entry` (the one-based
 entry index), plus the matching `command_list_failure` marker. The process
-boundary records `netsuke_ninja_command_list_failures_total` and
-`netsuke_ninja_command_list_failure_duration_seconds`, with an `outcome` label
-of `failure`. Elapsed failure duration is measured through the injected
-`monotony::MonotonicClock`; production uses `StdMonotonicClock`, while tests
-use deterministic test clocks. These diagnostics and metrics contain no command
-text.
+boundary adds `command_list_target` when output names resolve. This field holds
+the same bounded clause used by the error; it contains output names but no
+command text and is never a metric label. The process boundary records
+`netsuke_ninja_command_list_failures_total` and
+`netsuke_ninja_command_list_failure_duration_seconds` with only the `outcome`
+label set to `failure`. Elapsed failure duration is measured through the
+injected `monotony::MonotonicClock`; production uses `StdMonotonicClock`, while
+tests use deterministic test clocks. These diagnostics and metrics contain no
+command text.
 
 Changes to this pipeline must preserve the scalar/list distinction, per-entry
 rendering, current-shell state sharing, and failure attribution. The focused

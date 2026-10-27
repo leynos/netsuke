@@ -15,6 +15,7 @@ mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
 use crate::localization::keys;
 use crate::manifest;
+use crate::ninja_gen::command_list::COMMAND_LIST_FAILURE_PREFIX;
 use crate::output_mode;
 use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
@@ -215,12 +216,13 @@ fn execute_build(
     context: &ExecutionContext<'_>,
     graph_generation: &GraphGenerationContext<'_>,
 ) -> Result<()> {
-    let bundle = generate_ninja_with_shell(
+    let generated = generate_ninja_with_shell(
         cli,
         context.reporter,
         Some(keys::STATUS_TOOL_BUILD.into()),
         graph_generation,
     )?;
+    let (bundle, command_list_targets) = generated.into_build_parts();
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);
@@ -232,31 +234,41 @@ fn execute_build(
 
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
-
     let ctx = || {
         format!(
             "running {} with build file {}",
             context.ninja_program, build_path
         )
     };
-    if context.progress_enabled {
-        let options = ninja::ninja_process_options(cli)?;
+    let options = ninja::ninja_process_options(cli)?;
+    let env = CommandEnv::inherit();
+    let build_request = process::NinjaBuildRequest {
+        program: context.ninja_program,
+        options: &options,
+        build_file: build_path,
+        targets: &targets,
+        env: &env,
+        stderr_mode: StderrMode::from_json_enabled(cli.json),
+    };
+    let ninja_result = if context.progress_enabled {
         let mut on_task_progress = on_task_progress_callback(context.reporter);
-        process::run_ninja_with_status(
-            process::NinjaBuildRequest {
-                program: context.ninja_program,
-                options: &options,
-                build_file: build_path,
-                targets: &targets,
-                env: &CommandEnv::inherit(),
-                stderr_mode: StderrMode::from_json_enabled(cli.json),
-            },
-            &mut on_task_progress,
+        process::run_ninja_with_command_list_targets(
+            build_request,
+            Some(&mut on_task_progress),
+            &command_list_targets,
         )
-        .with_context(ctx)?;
     } else {
-        run_ninja(context.ninja_program, cli, build_path, &targets).with_context(ctx)?;
-    }
+        ninja::run_ninja_with_command_list_targets(build_request, &command_list_targets)
+    };
+    ninja_result.map_err(|error| {
+        // Keep marker text in the CLI's outer context.
+        let error_context = if error.to_string().contains(COMMAND_LIST_FAILURE_PREFIX) {
+            format!("{}: {error}", ctx())
+        } else {
+            ctx()
+        };
+        anyhow::Error::new(error).context(error_context)
+    })?;
     context
         .reporter
         .report_complete(keys::STATUS_TOOL_BUILD.into());
@@ -317,7 +329,8 @@ fn execute_ninja_tool(
         "Preparing Ninja tool invocation"
     );
     let bundle =
-        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?;
+        generate_ninja_with_shell(cli, context.reporter, Some(tool.key), graph_generation)?
+            .into_bundle();
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     let (ninja_file, dyndep_files) = bundle.into_parts();
     let ninja = NinjaContent::new(ninja_file);
