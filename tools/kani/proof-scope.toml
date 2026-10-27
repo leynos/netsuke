@@ -122,7 +122,6 @@ sources = [
   "src/output/prefs/mod.rs",
   "src/recipe_shell.rs",
   "src/shell_word.rs",
-  "src/terminal_text.rs",
   "src/stdlib/canonical_value/admission.rs",
   "src/stdlib/canonical_value/error.rs",
   "src/stdlib/canonical_value/mod.rs",
@@ -181,6 +180,7 @@ sources = [
   "src/stdlib/which/resolve_error.rs",
   "src/stdlib/which/telemetry/mod.rs",
   "src/stdlib/which/workspace_switch/mod.rs",
+  "src/terminal_text.rs",
   "src/theme/mod.rs",
 ]
 
