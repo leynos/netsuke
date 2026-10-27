@@ -1,7 +1,30 @@
 //! Verify each forwarded output chunk becomes visible before the next read.
 
 use super::{ChunkedReader, forward_child_output};
-use std::io::{self, Write};
+use std::{
+    cell::RefCell,
+    io::{self, Read, Write},
+    rc::Rc,
+};
+
+#[derive(Debug, PartialEq, Eq)]
+enum ForwardingEvent {
+    Read(usize),
+    Flush,
+}
+
+struct ObservedReader<R> {
+    inner: R,
+    events: Rc<RefCell<Vec<ForwardingEvent>>>,
+}
+
+impl<R: Read> Read for ObservedReader<R> {
+    fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+        let count = self.inner.read(buffer)?;
+        self.events.borrow_mut().push(ForwardingEvent::Read(count));
+        Ok(count)
+    }
+}
 
 #[derive(Default)]
 struct FlushBufferWriter {
@@ -9,12 +32,14 @@ struct FlushBufferWriter {
     visible: Vec<u8>,
     snapshots: Vec<Vec<u8>>,
     maximum_write: usize,
+    events: Rc<RefCell<Vec<ForwardingEvent>>>,
 }
 
 impl FlushBufferWriter {
-    fn new(maximum_write: usize) -> Self {
+    fn new(maximum_write: usize, events: Rc<RefCell<Vec<ForwardingEvent>>>) -> Self {
         Self {
             maximum_write,
+            events,
             ..Self::default()
         }
     }
@@ -31,6 +56,7 @@ impl Write for FlushBufferWriter {
     }
 
     fn flush(&mut self) -> io::Result<()> {
+        self.events.borrow_mut().push(ForwardingEvent::Flush);
         self.visible.append(&mut self.pending);
         self.snapshots.push(self.visible.clone());
         Ok(())
@@ -40,14 +66,28 @@ impl Write for FlushBufferWriter {
 #[test]
 fn forward_output_flushes_each_complete_chunk_before_reading_more() {
     let input = b"firstlast".to_vec();
-    let reader = ChunkedReader::new(input.clone(), vec![5, 4]);
-    let mut writer = FlushBufferWriter::new(2);
+    let events = Rc::default();
+    let reader = ObservedReader {
+        inner: ChunkedReader::new(input.clone(), vec![5, 4]),
+        events: Rc::clone(&events),
+    };
+    let mut writer = FlushBufferWriter::new(2, Rc::clone(&events));
 
     let stats = forward_child_output(reader, &mut writer, "stdout");
 
     assert_eq!(stats.bytes_read, input.len());
     assert_eq!(stats.bytes_written, input.len());
     assert!(!stats.write_failed);
+    assert_eq!(
+        *events.borrow(),
+        vec![
+            ForwardingEvent::Read(5),
+            ForwardingEvent::Flush,
+            ForwardingEvent::Read(4),
+            ForwardingEvent::Flush,
+            ForwardingEvent::Read(0),
+        ]
+    );
     assert_eq!(
         writer.snapshots,
         vec![b"first".to_vec(), b"firstlast".to_vec()]
