@@ -56,6 +56,7 @@ pub(super) fn open_workspace(temp: &TempDir) -> Result<Dir> {
 }
 
 /// Return a stable diagnostic fragment with its fingerprints replaced.
+#[cfg(unix)]
 pub(super) fn normalized_diagnostic_fragment(
     message: &str,
     identifying_field: &str,
@@ -68,6 +69,7 @@ pub(super) fn normalized_diagnostic_fragment(
 }
 
 /// Replace every fixed-width hexadecimal fingerprint in a diagnostic fragment.
+#[cfg(unix)]
 fn normalize_fingerprints(fragment: &str) -> String {
     let bytes = fragment.as_bytes();
     let mut normalized = String::with_capacity(fragment.len());

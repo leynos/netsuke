@@ -142,29 +142,20 @@ fn first_output(edge: &BuildEdge) -> Option<&camino::Utf8PathBuf> {
 /// For example, a line feed in `check-fmt` remains visible as `"check\nfmt"`.
 fn bound_target_name(target: &str) -> String {
     let content_limit = MAX_TARGET_NAME_BYTES - TARGET_NAME_QUOTES_BYTES;
-    let truncated_content_limit = content_limit - TRUNCATION_MARKER.len();
+    let prefix_limit = content_limit - TRUNCATION_MARKER.len();
     let mut escaped = String::with_capacity(content_limit);
-    let mut character_starts = Vec::with_capacity(content_limit);
-    let mut is_truncated = false;
+    let mut bounded_prefix_len = 0;
 
     for character in target.chars() {
-        let character_start = escaped.len();
         push_debug_escaped_character(&mut escaped, character);
         if escaped.len() > content_limit {
-            is_truncated = true;
-            escaped.truncate(character_start);
-            while escaped.len() > truncated_content_limit
-                && let Some(start) = character_starts.pop()
-            {
-                escaped.truncate(start);
-            }
+            escaped.truncate(bounded_prefix_len);
+            escaped.push_str(TRUNCATION_MARKER);
             break;
         }
-        character_starts.push(character_start);
-    }
-
-    if is_truncated {
-        escaped.push_str(TRUNCATION_MARKER);
+        if escaped.len() <= prefix_limit {
+            bounded_prefix_len = escaped.len();
+        }
     }
     format!("\"{escaped}\"")
 }
@@ -179,5 +170,5 @@ fn push_debug_escaped_character(escaped: &mut String, character: char) {
 }
 
 #[cfg(test)]
-#[path = "command_list_targets_property_tests.rs"]
+#[path = "target_name_property_tests.rs"]
 mod property_tests;
