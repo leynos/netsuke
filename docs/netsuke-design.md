@@ -786,8 +786,8 @@ diagnostics, not in mandatory recipe output:
 
 - In `netsuke help targets`, target and action `description` values explain the
   operations available in the manifest.
-- In normal Ninja output, the referenced rule's `description` explains the task
-  being run.
+- For named-rule recipes, the referenced rule's `description` explains the task
+  in normal Ninja output.
 - In verbose output, Netsuke reports why manifest-time conditional branches were
   included or skipped.
 - Netsuke should not add generic mutually exclusive `debug`, `info`, or `warn`

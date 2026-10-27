@@ -95,6 +95,7 @@ mod tests {
     use crate::ninja_gen::escape::escape_metadata_value;
     use crate::ninja_gen::{RecipeShell, generate_with_shell};
     use camino::Utf8PathBuf;
+    use proptest::prelude::*;
     use rstest::rstest;
 
     /// Build a scalar command action for a progress-label case.
@@ -196,6 +197,34 @@ mod tests {
             for_edge(&edge, &action, localizer.as_ref()).as_deref(),
             Some(expected)
         );
+    }
+
+    proptest! {
+        #[test]
+        fn command_list_labels_match_generated_english_contract(
+            name in "[a-zA-Z0-9_-]{1,120}",
+            count in 1_usize..=64,
+        ) {
+            let expected_name = if name.len() > 80 {
+                format!("{}…", name.chars().take(79).collect::<String>())
+            } else {
+                name.clone()
+            };
+            let expected_plural = if count == 1 { "command" } else { "commands" };
+            let expected = format!("Building {expected_name} ({count} {expected_plural})");
+            let action = Action {
+                recipe: Recipe::Command {
+                    command: StringOrList::List(vec!["echo ready".into(); count]),
+                    isolation: CommandIsolation::Shared,
+                },
+                ..scalar_action()
+            };
+            let edge = edge(Some(&name));
+            let localizer = build_localizer(Some("en-US"));
+            let actual = for_edge(&edge, &action, localizer.as_ref());
+
+            prop_assert_eq!(actual.as_deref(), Some(expected.as_str()));
+        }
     }
 
     /// Leave directly constructed edges without provenance undescribed.

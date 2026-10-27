@@ -423,8 +423,9 @@ identifier remains reserved, not checked off as implemented.
     `netsuke help targets`.
   - [x] Keep target/action descriptions as discovery metadata; they do not
     override the referenced rule description for Ninja progress.
-  - [x] Keep normal Ninja progress sourced from the referenced rule description;
-    do not report target/action descriptions there.
+  - [x] Keep normal Ninja progress for named-rule recipes sourced from the
+    referenced rule description; do not report target/action descriptions
+    there.
   - [ ] In verbose mode, report why manifest-time `when` branches were included
     or skipped.
   - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a

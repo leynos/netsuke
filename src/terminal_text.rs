@@ -89,6 +89,7 @@ mod tests {
     //! Pin scalar-boundary truncation and visible terminal-control escaping.
 
     use super::{bound_scalars, terminal_safe};
+    use proptest::prelude::*;
     use rstest::rstest;
 
     /// Preserve text that already fits the scalar limit.
@@ -117,6 +118,84 @@ mod tests {
         let bounded = bound_scalars(input, limit);
         assert_eq!(bounded, expected);
         assert!(bounded.chars().count() <= limit);
+    }
+
+    proptest! {
+        #[test]
+        fn bounds_arbitrary_unicode_by_scalar_count(
+            scalars in prop::collection::vec(any::<char>(), 0..=160),
+            limit in 0usize..=100,
+        ) {
+            let input: String = scalars.into_iter().collect();
+            let bounded = bound_scalars(&input, limit);
+            let bounded_len = bounded.chars().count();
+
+            prop_assert!(bounded_len <= limit);
+
+            let input_len = input.chars().count();
+            if limit == 0 {
+                prop_assert!(bounded.is_empty());
+            } else if input_len <= limit {
+                prop_assert_eq!(bounded.as_ref(), input.as_str());
+            } else {
+                let prefix: String = input.chars().take(limit - 1).collect();
+                prop_assert_eq!(bounded_len, limit);
+                prop_assert!(bounded.ends_with('…'));
+                prop_assert_eq!(bounded.strip_suffix('…'), Some(prefix.as_str()));
+            }
+        }
+
+        #[test]
+        fn makes_arbitrary_and_injected_terminal_controls_visible(
+            arbitrary_scalars in prop::collection::vec(any::<char>(), 0..=160),
+            injected_controls in prop::collection::vec(
+                prop_oneof![
+                    (0_u8..=0x1f).prop_map(char::from),
+                    (0x7f_u8..=0x9f).prop_map(char::from),
+                    prop::sample::select(vec![
+                        '\u{061C}', '\u{200E}', '\u{200F}', '\u{202A}',
+                        '\u{202B}', '\u{202C}', '\u{202D}', '\u{202E}',
+                        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+                    ]),
+                ],
+                1..=24,
+            ),
+        ) {
+            let arbitrary: String = arbitrary_scalars.iter().copied().collect();
+            let mut input = arbitrary.clone();
+            input.extend(injected_controls.iter().copied());
+            let is_unsafe = |character: char| matches!(
+                character,
+                '\u{0000}'..='\u{001F}'
+                    | '\u{007F}'..='\u{009F}'
+                    | '\u{061C}' | '\u{200E}' | '\u{200F}'
+                    | '\u{202A}'..='\u{202E}'
+                    | '\u{2066}'..='\u{2069}'
+            );
+
+            let safe = terminal_safe(&input);
+            prop_assert!(safe.chars().all(|character| !is_unsafe(character)));
+
+            let printable: String = arbitrary_scalars
+                .iter()
+                .copied()
+                .filter(|character| !is_unsafe(*character))
+                .collect();
+            let safe_printable = terminal_safe(&printable);
+            prop_assert_eq!(safe_printable.as_ref(), printable.as_str());
+
+            let mut visible_suffix = String::new();
+            for control in injected_controls {
+                let visible = match control {
+                    '\n' => "\\n".to_owned(),
+                    '\r' => "\\r".to_owned(),
+                    '\t' => "\\t".to_owned(),
+                    other => format!("\\u{{{:x}}}", u32::from(other)),
+                };
+                visible_suffix.push_str(&visible);
+            }
+            prop_assert!(safe.ends_with(&visible_suffix));
+        }
     }
 
     /// Make terminal controls and reading-order overrides visible.
