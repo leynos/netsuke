@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0060: Select Ninja's console pool per build edge
+# Architectural decision record (ADR) 0061: Select Ninja's console pool per build edge
 
 ## Status
 

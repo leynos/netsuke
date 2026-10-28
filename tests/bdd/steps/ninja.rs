@@ -51,6 +51,7 @@ fn dependency_only_console_graph(world: &TestWorld) -> Result<()> {
             explicit_outputs: vec!["all".into()],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
+            progress_label: None,
             phony: true,
             always: false,
             console: true,
