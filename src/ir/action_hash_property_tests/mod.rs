@@ -33,6 +33,7 @@
 //! content in one file was over it. Generation and assertion also change for
 //! different reasons — a new field widens one, a new law joins the other.
 
+mod command_text_tests;
 mod generator;
 
 use crate::ast::{CommandIsolation, Recipe, StringOrList};

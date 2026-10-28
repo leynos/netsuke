@@ -6298,10 +6298,11 @@ makes absence a failure.
 Mutation evidence is registered in
 `tests/kani_mutation_evidence_tests/contracts.rs`. A Proptest-only obligation
 lists its patch stem in `SUPPLEMENTAL_PROPERTY_PATCHES`, and each stem must
-name a property a candidate source declares and match a committed patch. One
-obligation may not borrow another's stem: the contract compares sets, so a
-shared stem leaves the second obligation with no evidence at all. Where one
-fault demonstrates two obligations, commit the same hunk under two stems.
+name a property a candidate source declares and match a committed patch. The
+contracts do not compare that list against an independent obligation inventory:
+removing a stem and its patch together can therefore go undetected. When one
+fault demonstrates two properties, register a separate stem and patch for each
+property so both associations remain visible.
 
 ### Parametrized unit tests with rstest
 
