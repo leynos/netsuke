@@ -20,10 +20,14 @@ const PROGRESS_NAME_LIMIT: usize = 80;
 /// inspected only to distinguish scalar/script recipes from command lists and
 /// to count list entries.
 ///
+/// Keep Fluent's formatter-added directional isolates around interpolated
+/// names and counts. They are generated after the manifest name has been
+/// sanitized and keep the arguments correctly isolated for RTL catalogues.
+///
 /// # Examples
 ///
 /// With the English catalogue, an inline recipe for `check-fmt` renders as
-/// `Building check-fmt`.
+/// `Building \u{2068}check-fmt\u{2069}`.
 #[must_use]
 pub(crate) fn for_edge(
     edge: &BuildEdge,
@@ -41,10 +45,9 @@ pub(crate) fn for_edge(
     let safe_name = terminal_safe(name);
     let bounded_name = bound_scalars(&safe_name, PROGRESS_NAME_LIMIT);
     let scalar_label = || {
-        let rendered_message = localization::message(keys::NINJA_GEN_PROGRESS_INLINE)
+        localization::message(keys::NINJA_GEN_PROGRESS_INLINE)
             .with_arg("name", bounded_name.as_ref())
-            .render_with(localizer);
-        remove_fluent_isolates(&rendered_message)
+            .render_with(localizer)
     };
 
     match &action.recipe {
@@ -56,7 +59,7 @@ pub(crate) fn for_edge(
                 .with_arg("name", bounded_name.as_ref())
                 .with_count("count", commands.len())
                 .render_with(localizer);
-            Some(remove_fluent_isolates(&rendered_message))
+            Some(rendered_message)
         }
         Recipe::Command {
             command: StringOrList::String(_),
@@ -69,19 +72,6 @@ pub(crate) fn for_edge(
         }
         | Recipe::Rule { .. } => None,
     }
-}
-
-/// Remove the invisible directional wrappers Fluent adds around arguments.
-///
-/// The raw name is sanitized before localization, so these remaining
-/// `FSI`/`PDI` characters are formatter scaffolding rather than manifest text.
-/// For example, Fluent's `Building \u{2068}check-fmt\u{2069}` becomes
-/// `Building check-fmt`.
-fn remove_fluent_isolates(message: &str) -> String {
-    message
-        .chars()
-        .filter(|character| !matches!(character, '\u{2068}' | '\u{2069}'))
-        .collect()
 }
 
 #[cfg(test)]
@@ -136,9 +126,9 @@ mod tests {
 
     /// Escape localized labels through the same metadata path as edge output.
     #[rstest]
-    #[case::dollar("cash$target", "Building cash$$target")]
-    #[case::newline("left\nright", "Building left\\nright")]
-    #[case::bidi("left\u{202e}right", "Building left\\u{202e}right")]
+    #[case::dollar("cash$target", "Building \u{2068}cash$$target\u{2069}")]
+    #[case::newline("left\nright", "Building \u{2068}left\\nright\u{2069}")]
+    #[case::bidi("left\u{202e}right", "Building \u{2068}left\\u{202e}right\u{2069}")]
     fn scalar_labels_are_sanitized_and_ninja_escaped(#[case] name: &str, #[case] expected: &str) {
         let action = scalar_action();
         let edge = edge(Some(name));
@@ -151,6 +141,19 @@ mod tests {
         assert_eq!(
             escaped.map(|value| value.to_string()).as_deref(),
             Some(expected)
+        );
+    }
+
+    /// Preserve Fluent's argument isolation after sanitizing raw bidi controls.
+    #[test]
+    fn rtl_catalogue_keeps_fluent_isolates_after_user_bidi_controls_are_sanitized() {
+        let action = scalar_action();
+        let edge = edge(Some("left\u{202e}right"));
+        let localizer = build_localizer(Some("ar"));
+
+        assert_eq!(
+            for_edge(&edge, &action, localizer.as_ref()).as_deref(),
+            Some("\u{200f}بناء \u{2068}left\\u{202e}right\u{2069}")
         );
     }
 
@@ -171,9 +174,12 @@ mod tests {
         let localizer = build_localizer(Some("en-US"));
         let localized = for_edge(&edge, &action, localizer.as_ref())
             .expect("the inline scalar edge has a progress label");
-        let bounded_name = localized
-            .strip_prefix("Building ")
+        let isolated_name = localized
+            .strip_prefix("Building \u{2068}")
             .expect("the English catalogue prefixes scalar labels");
+        let bounded_name = isolated_name
+            .strip_suffix('\u{2069}')
+            .expect("the English catalogue closes the isolated argument");
 
         assert_eq!(bounded_name.chars().count(), length.min(80));
         assert_eq!(bounded_name.ends_with('…'), truncated);
@@ -181,8 +187,8 @@ mod tests {
 
     /// Select singular and plural Fluent variants with the numeric list count.
     #[rstest]
-    #[case::singular(1, "Building check-fmt (1 command)")]
-    #[case::plural(2, "Building check-fmt (2 commands)")]
+    #[case::singular(1, "Building \u{2068}check-fmt\u{2069} (\u{2068}1\u{2069} command)")]
+    #[case::plural(2, "Building \u{2068}check-fmt\u{2069} (\u{2068}2\u{2069} commands)")]
     fn command_list_labels_include_localized_counts(#[case] count: usize, #[case] expected: &str) {
         let action = Action {
             recipe: Recipe::Command {
@@ -212,7 +218,10 @@ mod tests {
                 name.clone()
             };
             let expected_plural = if count == 1 { "command" } else { "commands" };
-            let expected = format!("Building {expected_name} ({count} {expected_plural})");
+            let expected_count = format!("\u{2068}{count}\u{2069}");
+            let expected = format!(
+                "Building \u{2068}{expected_name}\u{2069} ({expected_count} {expected_plural})"
+            );
             let action = Action {
                 recipe: Recipe::Command {
                     command: StringOrList::List(vec!["echo ready".into(); count]),
@@ -281,11 +290,13 @@ mod tests {
             let localizer = build_localizer(Some("en-US"));
             let actual = for_edge(&edge, &action, localizer.as_ref())
                 .expect("the inline scalar edge has a progress label");
-            let expected = format!("Building {expected_name}");
+            let expected = format!("Building \u{2068}{expected_name}\u{2069}");
 
             prop_assert!(expected_name.chars().count() <= 80);
+            prop_assert!(expected_name.chars().all(|character| !is_terminal_control(character)));
             prop_assert_eq!(actual.as_str(), expected.as_str());
-            prop_assert!(actual.chars().all(|character| !is_terminal_control(character)));
+            prop_assert_eq!(actual.matches('\u{2068}').count(), 1);
+            prop_assert_eq!(actual.matches('\u{2069}').count(), 1);
         }
     }
 

@@ -8,8 +8,8 @@ use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 #[cfg(unix)]
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use netsuke::ast::Recipe;
-use netsuke::ir::{Action, BuildEdge, BuildGraph};
+use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
+use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use netsuke::manifest;
 use netsuke::ninja_gen::{NinjaGenError, generate, generate_into};
 #[cfg(unix)]
@@ -379,13 +379,59 @@ fn german_inline_progress_uses_localized_scalar_and_list_counts() -> Result<()> 
     ))?;
     let graph = BuildGraph::from_manifest(&manifest)?;
     let ninja = generate(&graph)?;
+    let singular_list_label = concat!(
+        "description = Wird gebaut: \u{2068}singleton-check\u{2069} ",
+        "(\u{2068}1\u{2069} Befehl)"
+    );
+    let plural_list_label = concat!(
+        "description = Wird gebaut: \u{2068}multi-check\u{2069} ",
+        "(\u{2068}2\u{2069} Befehle)"
+    );
 
     ensure!(
-        ninja.contains("description = Wird gebaut: scalar-check")
-            && ninja.contains("description = Wird gebaut: singleton-check (1 Befehl)")
-            && ninja.contains("description = Wird gebaut: multi-check (2 Befehle)")
+        ninja.contains("description = Wird gebaut: \u{2068}scalar-check\u{2069}")
+            && ninja.contains(singular_list_label)
+            && ninja.contains(plural_list_label)
             && !ninja.contains("description = Building "),
         "the German catalogue should supply generated progress text: {ninja}"
+    );
+    Ok(())
+}
+
+#[test]
+fn arabic_generation_preserves_fluent_isolates_and_sanitizes_input() -> Result<()> {
+    let _localizer = locale_localizer("ar");
+    let action = Action {
+        recipe: Recipe::Command {
+            command: StringOrList::String("echo ready".into()),
+            isolation: CommandIsolation::Shared,
+        },
+        description: None,
+        depfile: None,
+        deps_format: None,
+        pool: None,
+        restat: false,
+    };
+    let edge = BuildEdge {
+        action_id: "rtl-progress".into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
+        explicit_outputs: vec![Utf8PathBuf::from("out")],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        progress_label: Some("left\u{202e}right".into()),
+        phony: false,
+        always: false,
+    };
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(edge.action_id.clone(), action);
+    graph.insert_edge(edge)?;
+
+    let ninja = generate(&graph)?;
+    ensure!(
+        ninja.contains("description = \u{200f}بناء \u{2068}left\\u{202e}right\u{2069}"),
+        "Arabic progress should preserve Fluent isolation around visibly escaped input: {ninja}"
     );
     Ok(())
 }

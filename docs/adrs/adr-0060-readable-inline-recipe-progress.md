@@ -43,9 +43,11 @@ text helper, then bound the sanitized name to 80 Unicode scalar values,
 including a trailing `…` when truncation is needed. Localize a short scalar or
 script label, or a command-list label that includes the recipe's entry count.
 Use the resolved action recipe to choose the message and count; never use
-command text or target/action discovery descriptions. Remove Fluent's
-formatter-added directional isolates after rendering; raw bidi controls in the
-name have already been made visible before interpolation.
+command text or target/action discovery descriptions. Retain Fluent's
+formatter-added directional isolates around localized names and numeric list
+counts so RTL catalogues preserve their reading order. These isolates are
+generated after the raw name has been sanitized; manifest-supplied bidi
+controls remain visible escaped text and are not trusted as formatter output.
 
 Emit the localized label as an edge-level Ninja `description` binding beside
 `restat`, in both ordinary and dyndep output. Escape it with the existing
@@ -69,6 +71,10 @@ recipe execution.
 - The shared terminal-text module owns terminal sanitization and bounded text
   operations. Terminal-facing callers may reuse it; metadata serialization,
   shell quoting, and general text normalization remain separate concerns.
+- Fluent owns the First Strong Isolate (FSI, U+2068) and Pop Directional Isolate
+  (PDI, U+2069) around localized arguments, including names and numeric list
+  counts. Preserve them after rendering; manifest text is sanitized before
+  localization so its bidi controls remain visible escaped text.
 - The Fluent catalogue owns scalar/script wording and list wording, including
   locale-specific plural selection.
 - The first declared output is the stable display name for a multi-output

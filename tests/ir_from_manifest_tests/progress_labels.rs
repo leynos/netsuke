@@ -140,8 +140,8 @@ fn deduplicated_inline_edges_keep_distinct_labels_and_shared_failure_identity() 
 
     let ninja = ninja_gen::generate_with_shell(&graph, RecipeShell::Posix)?;
     ensure!(
-        ninja.contains("description = Building check-fmt")
-            && ninja.contains("description = Building lint"),
+        ninja.contains("description = Building \u{2068}check-fmt\u{2069}")
+            && ninja.contains("description = Building \u{2068}lint\u{2069}"),
         "each edge should retain its own readable label: {ninja}"
     );
     let identity = sha256_hex(first_edge.action_id.as_bytes());

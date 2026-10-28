@@ -42,8 +42,8 @@ fn run_command_list(
 
 /// Run a command list while assigning optional edge-local progress provenance.
 ///
-/// For example, `Some("check-fmt")` yields a `Building check-fmt` progress
-/// label for the command-list edge.
+/// For example, `Some("check-fmt")` yields a `Building \u{2068}check-fmt\u{2069}`
+/// progress label for the command-list edge.
 fn run_command_list_with_progress(
     workspace: Option<TempDir>,
     entries: &[&str],
@@ -130,7 +130,7 @@ fn command_list_fails_fast_at_first_nonzero_exit(
         .find(|line| line.starts_with("[1/1]"))
         .context("Ninja should print a progress line for the failing command list")?;
     ensure!(
-        progress_line.contains("Building check-fmt (3 commands)"),
+        progress_line.contains("Building \u{2068}check-fmt\u{2069} (\u{2068}3\u{2069} commands)"),
         "command-list progress should use the bounded readable label: {progress_line}"
     );
     ensure!(

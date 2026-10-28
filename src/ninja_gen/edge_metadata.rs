@@ -29,7 +29,7 @@ pub(super) struct EdgeMetadata<'a> {
 ///
 /// For an inline edge named `check-fmt` with `restat` disabled, the result
 /// carries `action_name = "check-fmt"`, `restat = false` and the description
-/// `Some("Building check-fmt")` under the English localizer.
+/// `Some("Building \u{2068}check-fmt\u{2069}")` under the English localizer.
 ///
 /// # Errors
 ///

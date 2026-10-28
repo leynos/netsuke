@@ -114,8 +114,8 @@ fn inline_multi_output_progress_uses_first_declared_name() -> Result<()> {
         canonical.progress_label
     );
     ensure!(
-        ninja.contains("description = Building first.out")
-            && !ninja.contains("Building second.out"),
+        ninja.contains("description = Building \u{2068}first.out\u{2069}")
+            && !ninja.contains("Building \u{2068}second.out\u{2069}"),
         "the canonical edge should emit one first-output label: {ninja}"
     );
     Ok(())

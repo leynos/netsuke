@@ -1012,9 +1012,12 @@ controls through `src/terminal_text.rs`, bounds the name to 80 Unicode scalar
 values, then renders `ninja_gen.progress.inline` or
 `ninja_gen.progress.command_list` from the resolved Fluent localizer. List
 counts remain numeric so Fluent selects the locale's plural form. Fluent's
-formatter-added directional isolates are removed after rendering; raw bidi
-controls in the name were already made visible before interpolation. The helper
-must not read command text or target/action discovery descriptions.
+formatter-added First Strong Isolate (FSI, U+2068) and Pop Directional Isolate
+(PDI, U+2069) remain around localized names after rendering so RTL catalogues
+keep embedded names isolated. Fluent also isolates numeric list counts; retain
+that pair with the name. The isolates are generated after the raw name has been
+sanitized, so manifest-provided bidi controls remain visible escaped text. The
+helper must not read command text or target/action discovery descriptions.
 
 `src/terminal_text.rs` owns manifest-text terminal sanitization and scalar
 bounding. Its allowed callers are help output and inline Ninja progress labels;

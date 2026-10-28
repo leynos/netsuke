@@ -105,7 +105,7 @@ fn output_text(run: &NinjaRun) -> String {
 
 /// Return the first task-progress line emitted by this one-edge build.
 ///
-/// For example, `[1/1] Building check-fmt` is returned as one line.
+/// For example, `[1/1] Building \u{2068}check-fmt\u{2069}` is returned as one line.
 fn progress_line(output: &str) -> Result<&str> {
     output
         .lines()
@@ -131,7 +131,7 @@ fn scalar_inline_recipe_prints_its_readable_name(
     let output = output_text(&run);
     let line = progress_line(&output)?;
     ensure!(
-        line.contains("Building check-fmt"),
+        line.contains("Building \u{2068}check-fmt\u{2069}"),
         "scalar progress should use its readable name: {line}"
     );
     ensure!(
@@ -165,7 +165,7 @@ fn command_list_progress_keeps_tool_stdout_in_declaration_order(
     let stdout = String::from_utf8_lossy(&run.output.stdout);
     let line = progress_line(&stdout)?;
     ensure!(
-        line.contains("Building check-fmt (2 commands)"),
+        line.contains("Building \u{2068}check-fmt\u{2069} (\u{2068}2\u{2069} commands)"),
         "list progress should include the localized entry count: {line}"
     );
     ensure!(

@@ -35,9 +35,11 @@ fn combined_manifest_uses_inline_progress_and_preserves_rule_descriptions() -> R
     let ninja = ninja_gen::generate_with_shell(&graph, RecipeShell::Posix)?;
 
     ensure!(
-        ninja.contains("description = Building check-fmt")
-            && ninja.contains("description = Building lint (2 commands)")
-            && ninja.contains("description = Building out/script")
+        ninja.contains("description = Building \u{2068}check-fmt\u{2069}")
+            && ninja.contains(
+                "description = Building \u{2068}lint\u{2069} (\u{2068}2\u{2069} commands)"
+            )
+            && ninja.contains("description = Building \u{2068}out/script\u{2069}")
             && ninja.contains("description = Named rule wording")
             && !ninja.contains("Discovery metadata only"),
         "combined output should localize inline progress without using discovery metadata: {ninja}"
@@ -81,7 +83,7 @@ fn serial_multi_output_edge_keeps_first_output_progress_description() -> Result<
         .context("expected one canonical serial build edge")?;
 
     ensure!(
-        edge.contains("description = Building check-fmt"),
+        edge.contains("description = Building \u{2068}check-fmt\u{2069}"),
         "serial multi-output edge should use its first output label: {edge}"
     );
     ensure!(
