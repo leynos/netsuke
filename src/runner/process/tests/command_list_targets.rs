@@ -81,6 +81,7 @@ fn implicit_output_is_used_when_an_edge_has_no_explicit_output(
         explicit_outputs: Vec::new(),
         implicit_outputs: vec![Utf8PathBuf::from("implicit-target")],
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     });

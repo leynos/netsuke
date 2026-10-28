@@ -199,6 +199,13 @@ ninja_gen.format = Cha b' urrainnear às-chur an fhoirm-liosta Ninja fhòrmatadh
 ninja_gen.dyndep_files_required = Feumaidh an togail seo pasgan Ninja a chaidh a chruthachadh; cleachd `netsuke build`, `netsuke clean` no `netsuke generate` gus na faidhlichean dyndep a chruthachadh.
 ninja_gen.reserved_output_path = Tha an t-slighe '{ $path }' glèidhte airson staid eisimeileachdan shreathach Netsuke.
 ninja_gen.unsupported_path_character = Tha an t-slighe '{ $path }' a’ gabhail a-steach caractar slighe Ninja nach eil a’ faighinn taic, '{ $character }'.
+ninja_gen.progress.inline = A’ togail { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] A’ togail { $name } ({ $count } àithne)
+    [two] A’ togail { $name } ({ $count } àithne)
+    [few] A’ togail { $name } ({ $count } àitheantan)
+   *[other] A’ togail { $name } ({ $count } àithne)
+}
 
 # Dearbhadh phàtranan òstair.
 host_pattern.empty = Chan fhaod pàtran an òstair a bhith falamh.

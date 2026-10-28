@@ -33,6 +33,7 @@ fn run_command_list(
         explicit_outputs: vec![target.clone()],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };

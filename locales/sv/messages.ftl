@@ -199,6 +199,11 @@ ninja_gen.format = Ninja-manifestets utdata kunde inte formateras.
 ninja_gen.dyndep_files_required = Den här åtgärden kräver ett genererat Ninja-paket; använd `netsuke build`, `netsuke clean` eller `netsuke generate` för att materialisera dyndep-filerna.
 ninja_gen.reserved_output_path = Sökvägen '{ $path }' är reserverad för Netsukes seriella beroendetillstånd.
 ninja_gen.unsupported_path_character = Sökvägen '{ $path }' innehåller ett tecken som inte stöds i Ninja-sökvägar: '{ $character }'.
+ninja_gen.progress.inline = Bygger { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Bygger { $name } ({ $count } kommando)
+   *[other] Bygger { $name } ({ $count } kommandon)
+}
 
 # Validering av värdmönster.
 host_pattern.empty = Värdmönstret får inte vara tomt.

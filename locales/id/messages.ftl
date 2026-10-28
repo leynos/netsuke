@@ -199,6 +199,10 @@ ninja_gen.format = Keluaran manifes Ninja tidak dapat diformat.
 ninja_gen.dyndep_files_required = Build ini memerlukan bundel Ninja yang dibuat; gunakan `netsuke build`, `netsuke clean`, atau `netsuke generate` agar berkas dyndep diwujudkan.
 ninja_gen.reserved_output_path = Jalur '{ $path }' dicadangkan untuk status dependensi serial Netsuke.
 ninja_gen.unsupported_path_character = Jalur '{ $path }' berisi karakter jalur Ninja yang tidak didukung, yaitu '{ $character }'.
+ninja_gen.progress.inline = Membangun { $name }
+ninja_gen.progress.command_list = { $count ->
+   *[other] Membangun { $name } ({ $count } perintah)
+}
 
 # Validasi pola host.
 host_pattern.empty = Pola host tidak boleh kosong.

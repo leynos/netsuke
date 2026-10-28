@@ -6,6 +6,7 @@ use netsuke::{
     ir::{BuildGraph, IrGenError},
     manifest, ninja_gen,
 };
+use test_support::{localizer_test_lock, set_en_localizer};
 
 /// Verify that every output alias resolves to one canonical edge.
 fn assert_canonical_output_aliases(
@@ -91,6 +92,31 @@ fn multi_output_target_uses_linear_canonical_storage() -> Result<()> {
     ensure!(
         generated_outputs == expected_outputs,
         "the Ninja build statement must list every explicit output in order"
+    );
+    Ok(())
+}
+
+/// Keep progress provenance on one canonical edge using its first output.
+#[test]
+fn inline_multi_output_progress_uses_first_declared_name() -> Result<()> {
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
+    let manifest = manifest::from_str(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: [first.out, second.out]\n    command: echo built\n",
+    )?;
+    let graph = BuildGraph::from_manifest(&manifest)?;
+    let canonical = assert_canonical_output_aliases(&graph, 2)?;
+    let ninja = ninja_gen::generate(&graph)?;
+
+    ensure!(
+        canonical.progress_label.as_deref() == Some("first.out"),
+        "the edge label should use the first declared output: {:?}",
+        canonical.progress_label
+    );
+    ensure!(
+        ninja.contains("description = Building \u{2068}first.out\u{2069}")
+            && !ninja.contains("Building \u{2068}second.out\u{2069}"),
+        "the canonical edge should emit one first-output label: {ninja}"
     );
     Ok(())
 }

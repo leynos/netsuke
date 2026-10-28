@@ -1,13 +1,9 @@
 netsuke_version: "1.0.0"
 
-rules:
-  - name: isolated-check
+targets:
+  - name: out/location.txt
+    sources: in/source.txt
     command_isolation: isolated
     command:
       - cd nested
       - "printf '%s\\n' \"$PWD\" > {{ outs }}"
-
-targets:
-  - name: out/location.txt
-    sources: in/source.txt
-    rule: isolated-check

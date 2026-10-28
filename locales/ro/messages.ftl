@@ -199,6 +199,12 @@ ninja_gen.format = Ieșirea manifestului Ninja nu a putut fi formatată.
 ninja_gen.dyndep_files_required = Această operație necesită un pachet Ninja generat; utilizați `netsuke build`, `netsuke clean` sau `netsuke generate` pentru a materializa fișierele dyndep.
 ninja_gen.reserved_output_path = Calea '{ $path }' este rezervată pentru starea dependențelor seriale Netsuke.
 ninja_gen.unsupported_path_character = Calea '{ $path }' conține caracterul de cale Ninja nesuportat '{ $character }'.
+ninja_gen.progress.inline = Se construiește { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Se construiește { $name } ({ $count } comandă)
+    [few] Se construiește { $name } ({ $count } comenzi)
+   *[other] Se construiește { $name } ({ $count } de comenzi)
+}
 
 # Validarea tiparelor de gazdă.
 host_pattern.empty = Tiparul de gazdă nu trebuie să fie gol.

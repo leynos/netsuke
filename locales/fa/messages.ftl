@@ -199,6 +199,11 @@ ninja_gen.format = قالب‌بندی خروجی مانیفست Ninja ممکن 
 ninja_gen.dyndep_files_required = ‏ این ساخت به بستهٔ تولیدشدهٔ Ninja نیاز دارد؛ از `netsuke build`، `netsuke clean` یا `netsuke generate` استفاده کنید تا فایل‌های dyndep ایجاد شوند.
 ninja_gen.reserved_output_path = ‏ مسیر '{ $path }' برای وضعیت وابستگی‌های ترتیبی Netsuke رزرو شده است.
 ninja_gen.unsupported_path_character = ‏ مسیر '{ $path }' شامل نویسهٔ مسیر پشتیبانی‌نشدهٔ Ninja یعنی '{ $character }' است.
+ninja_gen.progress.inline = ‏ساخت { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] ‏ساخت { $name } ({ $count } فرمان)
+   *[other] ‏ساخت { $name } ({ $count } فرمان)
+}
 
 # اعتبارسنجی الگوهای میزبان.
 host_pattern.empty = الگوی میزبان نباید تهی باشد.

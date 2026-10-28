@@ -1,5 +1,6 @@
 //! Ninja build-edge display rendering.
 
+use super::escape::NinjaValue;
 use super::join;
 use crate::ir::BuildEdge;
 use camino::Utf8PathBuf;
@@ -15,6 +16,8 @@ pub(crate) struct DisplayEdge<'a> {
     pub(crate) action_restat: bool,
     /// Dependencies rendered after `|`, either the edge's implicit deps or lowered serial gates.
     pub(crate) implicit_deps: &'a [Utf8PathBuf],
+    /// Optional localized inline-recipe progress description, escaped for Ninja.
+    pub(super) description: Option<&'a NinjaValue>,
 }
 
 impl Display for DisplayEdge<'_> {
@@ -35,6 +38,7 @@ impl Display for DisplayEdge<'_> {
         }
         writeln!(output)?;
         write_flag!(output, "restat", self.edge.always && !self.action_restat);
+        write_kv!(output, "description", self.description);
         writeln!(output)
     }
 }

@@ -1,0 +1,8 @@
+---
+source: tests/ninja_snapshot_tests/inline_progress.rs
+expression: descriptions
+---
+  description = Named rule wording
+  description = Building ⁨check-fmt⁩
+  description = Building ⁨lint⁩ (⁨2⁩ commands)
+  description = Building ⁨out/script⁩

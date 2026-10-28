@@ -52,6 +52,7 @@ fn edge_strategy_with_ranges(
                     explicit_outputs,
                     implicit_outputs,
                     order_only_deps,
+                    progress_label: None,
                     phony: false,
                     always: false,
                 }
@@ -65,6 +66,7 @@ fn format_edge(edge: &BuildEdge) -> String {
         action_name: &edge.action_id,
         action_restat: false,
         implicit_deps: &edge.implicit_deps,
+        description: None,
     }
     .to_string()
 }
@@ -118,6 +120,7 @@ fn serial_graph(dependencies: Vec<Utf8PathBuf>) -> BuildGraph {
                 explicit_outputs: vec![Utf8PathBuf::from("aggregate")],
                 implicit_outputs: Vec::new(),
                 order_only_deps: Vec::new(),
+                progress_label: None,
                 phony: false,
                 always: false,
             })

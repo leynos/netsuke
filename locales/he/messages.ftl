@@ -199,6 +199,13 @@ ninja_gen.format = לא ניתן היה לעצב את פלט מניפסט Ninja.
 ninja_gen.dyndep_files_required = ‏בנייה זו דורשת חבילת Ninja שנוצרה; השתמשו ב־`netsuke build`, ב־`netsuke clean` או ב־`netsuke generate` כדי ליצור את קובצי dyndep.
 ninja_gen.reserved_output_path = ‏הנתיב '{ $path }' שמור למצב התלויות הסדרתיות של Netsuke.
 ninja_gen.unsupported_path_character = ‏הנתיב '{ $path }' מכיל את תו הנתיב הלא נתמך של Ninja, '{ $character }'.
+ninja_gen.progress.inline = ‏בונה { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] ‏בונה { $name } ({ $count } פקודה)
+    [two] ‏בונה { $name } ({ $count } פקודות)
+    [many] ‏בונה { $name } ({ $count } פקודות)
+   *[other] ‏בונה { $name } ({ $count } פקודות)
+}
 
 # אימות תבניות מארח.
 host_pattern.empty = תבנית המארח אינה יכולה להיות ריקה.

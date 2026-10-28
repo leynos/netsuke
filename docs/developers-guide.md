@@ -998,6 +998,47 @@ are doubled and newline, carriage-return, and NUL characters are rejected. Add
 a separate, explicitly documented conversion for any new Ninja grammar position
 rather than reusing command escaping.
 
+### Inline recipe progress labels
+
+`BuildEdge.progress_label` in `src/ir/graph/mod.rs` retains the raw first
+declared output name for an inline command or script. Manifest lowering sets it
+only on the canonical edge that owns those outputs. Dependency-only recipes and
+referenced rules leave it empty, so target and action identity, action hashes,
+deduplication, and failure fingerprints do not depend on display wording.
+
+`src/ninja_gen/progress_label.rs` owns edge-description composition. It reads
+only this edge field and the resolved recipe variant, sanitizes terminal
+controls through `src/terminal_text.rs`, bounds the name to 80 Unicode scalar
+values, then renders `ninja_gen.progress.inline` or
+`ninja_gen.progress.command_list` from the resolved Fluent localizer. List
+counts remain numeric so Fluent selects the locale's plural form.
+`LocalizedMessage::render_with` takes this caller-resolved localizer;
+`LocalizedMessage`'s `Display` implementation instead resolves the
+process-global localizer. Fluent's formatter-added First Strong Isolate (FSI,
+U+2068) and Pop Directional Isolate (PDI, U+2069) remain around localized names
+after rendering so RTL catalogues keep embedded names isolated. Fluent also
+isolates numeric list counts; retain that pair with the name. The isolates are
+generated after the raw name has been sanitized, so manifest-provided bidi
+controls remain visible escaped text. The helper must not read command text or
+target/action discovery descriptions.
+
+`src/terminal_text.rs` owns manifest-text terminal sanitization and scalar
+bounding. Its allowed callers are help output and inline Ninja progress labels;
+other callers need an explicit ownership decision. Callers sanitize before
+localization, apply the progress bound where required, and let the output
+backend perform format-specific escaping afterwards. Ordinary and dyndep edge
+rendering both emit the localized value through `DisplayEdge` as an escaped
+edge-level `description`. Named-rule metadata remains on the rule, where its
+description continues to control progress.
+
+`src/ninja_gen/edge_metadata.rs` owns the shared action lookup, rule-name
+selection, `restat` value and escaped progress description for generated edges.
+Its only callers are `generate_into_with_shell` and
+`EdgeRenderer::render_edge`; each passes the graph edge and the localizer
+resolved once for generation, then forwards the returned metadata to
+`DisplayEdge`. Keep action identity, command text, named-rule metadata and
+Ninja text emission outside this helper.
+
 ## Adding a lint rule
 
 `netsuke check` is driven by a static registry in `src/lint/registry/mod.rs`.

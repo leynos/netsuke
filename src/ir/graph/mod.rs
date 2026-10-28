@@ -273,6 +273,11 @@ pub struct Action {
 pub struct BuildEdge {
     /// Identifier of the [`Action`] used for this edge.
     pub action_id: String,
+    /// Raw first declared output name for an inline recipe's progress label.
+    ///
+    /// This edge-local provenance keeps deduplicated actions independent of
+    /// target names and discovery descriptions.
+    pub progress_label: Option<String>,
     /// Explicit inputs that trigger a rebuild when changed.
     pub inputs: Vec<Utf8PathBuf>,
     /// Implicit dependencies that trigger a rebuild without entering recipes.

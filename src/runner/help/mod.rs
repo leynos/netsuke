@@ -16,6 +16,7 @@ use crate::localization::{self, keys};
 use crate::output_mode;
 use crate::output_prefs::{self, OutputPrefs};
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
+use crate::terminal_text::terminal_safe;
 use crate::theme::ThemeContext;
 
 use super::{RunnerError, process};
@@ -185,43 +186,6 @@ fn render_section(
         }
         out.push('\n');
     }
-}
-
-/// Render manifest-controlled text safely for a terminal.
-///
-/// Catalogue names and descriptions can contain arbitrary rendered template
-/// values.  Keep printable Unicode intact, while making every control
-/// character visible so a manifest cannot inject terminal controls or rows.
-fn terminal_safe(input: &str) -> Cow<'_, str> {
-    if !input.chars().any(is_terminal_control) {
-        return Cow::Borrowed(input);
-    }
-
-    let mut escaped = String::with_capacity(input.len());
-    for character in input.chars() {
-        match character {
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            control if is_terminal_control(control) => escaped.extend(control.escape_unicode()),
-            printable => escaped.push(printable),
-        }
-    }
-    Cow::Owned(escaped)
-}
-
-/// Return whether a character can control terminal display or reading order.
-const fn is_terminal_control(character: char) -> bool {
-    matches!(
-        character,
-        '\0'..='\u{001F}'
-            | '\u{007F}'..='\u{009F}'
-            | '\u{061C}'
-            | '\u{200E}'
-            | '\u{200F}'
-            | '\u{202A}'..='\u{202E}'
-            | '\u{2066}'..='\u{2069}'
-    )
 }
 
 /// The localized default marker, pairing a theme glyph with a translated label

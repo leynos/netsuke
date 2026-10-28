@@ -75,6 +75,12 @@ fn run_verbose_build_with_fake_ninja_and_assert_log(
         NinjaOverride::FullPath => format!("Executing command: {} ", ninja_path.display()),
     };
     ensure!(stderr.contains(&expected), "{description}, got:\n{stderr}");
+    ensure!(
+        !stderr.lines().any(|line| {
+            line.contains("Executing command:") && line.split_whitespace().any(|word| word == "-v")
+        }),
+        "--verbose should log Ninja without enabling Ninja's -v output: {stderr}"
+    );
     Ok(())
 }
 

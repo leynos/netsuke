@@ -199,6 +199,15 @@ ninja_gen.format = Methwyd â fformatio allbwn y maniffest Ninja.
 ninja_gen.dyndep_files_required = Mae'r adeilad hwn yn gofyn am fwndel Ninja a gynhyrchwyd; defnyddiwch `netsuke build`, `netsuke clean` neu `netsuke generate` er mwyn deunyddoli ffeiliau dyndep.
 ninja_gen.reserved_output_path = Mae'r llwybr '{ $path }' wedi'i gadw ar gyfer cyflwr dibyniaethau cyfresol Netsuke.
 ninja_gen.unsupported_path_character = Mae'r llwybr '{ $path }' yn cynnwys nod llwybr Ninja nas cynhelir, sef '{ $character }'.
+ninja_gen.progress.inline = Adeiladu { $name }
+ninja_gen.progress.command_list = { $count ->
+    [zero] Adeiladu { $name } ({ $count } gorchymyn)
+    [one] Adeiladu { $name } ({ $count } gorchymyn)
+    [two] Adeiladu { $name } ({ $count } orchymyn)
+    [few] Adeiladu { $name } ({ $count } gorchymyn)
+    [many] Adeiladu { $name } ({ $count } gorchymyn)
+   *[other] Adeiladu { $name } ({ $count } gorchymyn)
+}
 
 # Dilysu patrymau gwesteiwyr.
 host_pattern.empty = Rhaid i'r patrwm gwesteiwr beidio â bod yn wag.

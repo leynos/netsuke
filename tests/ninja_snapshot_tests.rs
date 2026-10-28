@@ -21,6 +21,8 @@ use test_support::fs;
 #[cfg(unix)]
 #[path = "ninja_snapshot_tests/conditional_action_deps.rs"]
 mod conditional_action_deps;
+#[path = "ninja_snapshot_tests/inline_progress.rs"]
+mod inline_progress;
 
 /// Run a command and return its UTF-8 standard output when it succeeds.
 #[cfg(unix)]

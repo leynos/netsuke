@@ -40,6 +40,7 @@ fn create_action_and_edge() {
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: true,
     };
@@ -103,6 +104,7 @@ fn build_graph_indexes_canonical_targets() {
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: vec![Utf8PathBuf::from("out.d")],
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };
@@ -136,6 +138,7 @@ fn build_graph_rejects_duplicate_aliases_before_mutation() {
         explicit_outputs: vec![duplicate_output.clone(), duplicate_output],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };

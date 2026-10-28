@@ -199,6 +199,11 @@ ninja_gen.format = Ninja-manifestets output kunne ikke formateres.
 ninja_gen.dyndep_files_required = Dette build kræver en genereret Ninja-pakke; brug `netsuke build`, `netsuke clean` eller `netsuke generate`, så dyndep-filerne materialiseres.
 ninja_gen.reserved_output_path = Stien '{ $path }' er reserveret til Netsukes serielle afhængighedstilstand.
 ninja_gen.unsupported_path_character = Stien '{ $path }' indeholder det ikke-understøttede Ninja-stitegn '{ $character }'.
+ninja_gen.progress.inline = Bygger { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Bygger { $name } ({ $count } kommando)
+   *[other] Bygger { $name } ({ $count } kommandoer)
+}
 
 # Validering af værtsmønstre.
 host_pattern.empty = Værtsmønsteret må ikke være tomt.

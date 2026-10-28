@@ -199,6 +199,13 @@ ninja_gen.format = Не удалось отформатировать вывод
 ninja_gen.dyndep_files_required = Для этой операции требуется созданный пакет Ninja; используйте `netsuke build`, `netsuke clean` или `netsuke generate`, чтобы материализовать файлы dyndep.
 ninja_gen.reserved_output_path = Путь '{ $path }' зарезервирован для состояния последовательных зависимостей Netsuke.
 ninja_gen.unsupported_path_character = Путь '{ $path }' содержит неподдерживаемый символ пути Ninja: '{ $character }'.
+ninja_gen.progress.inline = Сборка { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Сборка { $name } ({ $count } команда)
+    [few] Сборка { $name } ({ $count } команды)
+    [many] Сборка { $name } ({ $count } команд)
+   *[other] Сборка { $name } ({ $count } команды)
+}
 
 # Проверка шаблонов узлов.
 host_pattern.empty = Шаблон узла не должен быть пустым.

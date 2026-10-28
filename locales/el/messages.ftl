@@ -200,6 +200,11 @@ ninja_gen.format = Δεν ήταν δυνατή η μορφοποίηση της
 ninja_gen.dyndep_files_required = Αυτή η δόμηση απαιτεί παραγόμενο πακέτο Ninja· χρησιμοποιήστε `netsuke build`, `netsuke clean` ή `netsuke generate`, ώστε να δημιουργηθούν τα αρχεία dyndep.
 ninja_gen.reserved_output_path = Η διαδρομή '{ $path }' είναι δεσμευμένη για την κατάσταση σειριακών εξαρτήσεων του Netsuke.
 ninja_gen.unsupported_path_character = Η διαδρομή '{ $path }' περιέχει τον μη υποστηριζόμενο χαρακτήρα διαδρομής Ninja '{ $character }'.
+ninja_gen.progress.inline = Δημιουργείται: { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] Δημιουργείται: { $name } ({ $count } εντολή)
+   *[other] Δημιουργείται: { $name } ({ $count } εντολές)
+}
 
 # Έλεγχος μοτίβων κόμβων.
 host_pattern.empty = Το μοτίβο κόμβου δεν πρέπει να είναι κενό.

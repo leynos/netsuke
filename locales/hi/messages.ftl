@@ -199,6 +199,11 @@ ninja_gen.format = Ninja मैनिफ़ेस्ट का निर्ग�
 ninja_gen.dyndep_files_required = इस बिल्ड के लिए जनरेट किया गया Ninja बंडल आवश्यक है; dyndep फ़ाइलों को मूर्त रूप देने के लिए `netsuke build`, `netsuke clean` या `netsuke generate` का उपयोग करें।
 ninja_gen.reserved_output_path = पथ '{ $path }' Netsuke की क्रमिक निर्भरता स्थिति के लिए आरक्षित है।
 ninja_gen.unsupported_path_character = पथ '{ $path }' में असमर्थित Ninja पथ वर्ण '{ $character }' है।
+ninja_gen.progress.inline = निर्माण { $name }
+ninja_gen.progress.command_list = { $count ->
+    [one] निर्माण { $name } ({ $count } कमांड)
+   *[other] निर्माण { $name } ({ $count } कमांड)
+}
 
 # होस्ट प्रतिरूपों का सत्यापन।
 host_pattern.empty = होस्ट प्रतिरूप रिक्त नहीं होना चाहिए।

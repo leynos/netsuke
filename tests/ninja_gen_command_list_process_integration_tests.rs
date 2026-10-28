@@ -15,7 +15,7 @@ use netsuke::ninja_gen::generate;
 use rstest::{fixture, rstest};
 use std::process::Command;
 use tempfile::TempDir;
-use test_support::ninja_gen;
+use test_support::{localizer_test_lock, ninja_gen, set_en_localizer};
 
 #[fixture]
 fn ninja_integration_setup() -> Option<TempDir> {
@@ -28,10 +28,27 @@ struct CommandListRun {
     output: std::process::Output,
 }
 
+/// Run one command list without adding inline progress provenance.
+///
+/// For example, `run_command_list(workspace, &["echo ready"],
+/// CommandIsolation::Shared)` exercises the direct-IR fallback path.
 fn run_command_list(
     workspace: Option<TempDir>,
     entries: &[&str],
     isolation: CommandIsolation,
+) -> Result<Option<CommandListRun>> {
+    run_command_list_with_progress(workspace, entries, isolation, None)
+}
+
+/// Run a command list while assigning optional edge-local progress provenance.
+///
+/// For example, `Some("check-fmt")` yields a `Building \u{2068}check-fmt\u{2069}`
+/// progress label for the command-list edge.
+fn run_command_list_with_progress(
+    workspace: Option<TempDir>,
+    entries: &[&str],
+    isolation: CommandIsolation,
+    progress_label: Option<&str>,
 ) -> Result<Option<CommandListRun>> {
     let Some(tempdir) = workspace else {
         return Ok(None);
@@ -57,6 +74,7 @@ fn run_command_list(
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: progress_label.map(str::to_owned),
         phony: false,
         always: false,
     };
@@ -87,10 +105,13 @@ fn run_command_list(
 fn command_list_fails_fast_at_first_nonzero_exit(
     ninja_integration_setup: Option<TempDir>,
 ) -> Result<()> {
-    let Some(run) = run_command_list(
+    let _lock = localizer_test_lock().map_err(|error| anyhow::anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
+    let Some(run) = run_command_list_with_progress(
         ninja_integration_setup,
         &["echo one > first.txt", "false", "echo never > last.txt"],
         CommandIsolation::Shared,
+        Some("check-fmt"),
     )?
     else {
         return Ok(());
@@ -103,6 +124,18 @@ fn command_list_fails_fast_at_first_nonzero_exit(
         "{}{}",
         String::from_utf8_lossy(&run.output.stdout),
         String::from_utf8_lossy(&run.output.stderr)
+    );
+    let progress_line = diagnostics
+        .lines()
+        .find(|line| line.starts_with("[1/1]"))
+        .context("Ninja should print a progress line for the failing command list")?;
+    ensure!(
+        progress_line.contains("Building \u{2068}check-fmt\u{2069} (\u{2068}3\u{2069} commands)"),
+        "command-list progress should use the bounded readable label: {progress_line}"
+    );
+    ensure!(
+        !progress_line.contains("_netsuke_background_before"),
+        "progress must not expose the generated shell wrapper: {progress_line}"
     );
     ensure!(
         diagnostics.contains("netsuke command-list failure:") && diagnostics.contains(", entry 2"),

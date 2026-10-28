@@ -199,6 +199,10 @@ ninja_gen.format = จัดรูปแบบผลลัพธ์ของไ�
 ninja_gen.dyndep_files_required = การดำเนินการนี้ต้องใช้บันเดิล Ninja ที่สร้างขึ้น ให้ใช้ `netsuke build`, `netsuke clean` หรือ `netsuke generate` เพื่อทำให้ไฟล์ dyndep พร้อมใช้งาน
 ninja_gen.reserved_output_path = เส้นทาง '{ $path }' สงวนไว้สำหรับสถานะการขึ้นต่อกันแบบลำดับของ Netsuke
 ninja_gen.unsupported_path_character = เส้นทาง '{ $path }' มีอักขระเส้นทาง Ninja ที่ไม่รองรับคือ '{ $character }'
+ninja_gen.progress.inline = กำลังสร้าง { $name }
+ninja_gen.progress.command_list = { $count ->
+   *[other] กำลังสร้าง { $name } ({ $count } คำสั่ง)
+}
 
 # การตรวจสอบรูปแบบโฮสต์
 host_pattern.empty = รูปแบบโฮสต์ต้องไม่ว่างเปล่า

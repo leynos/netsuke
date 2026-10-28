@@ -423,16 +423,19 @@ identifier remains reserved, not checked off as implemented.
     `netsuke help targets`.
   - [x] Keep target/action descriptions as discovery metadata; they do not
     override the referenced rule description for Ninja progress.
-  - [x] Keep normal Ninja progress sourced from the referenced rule description;
-    do not report target/action descriptions there.
+  - [x] Keep normal Ninja progress for named-rule recipes sourced from the
+    referenced rule description; do not report target/action descriptions
+    there.
   - [ ] In verbose mode, report why manifest-time `when` branches were included
     or skipped.
   - [ ] Do not add generic `debug`, `info`, or `warn` manifest keys unless a
     later diagnostics design defines severity semantics.
-  - Note: target/action `description` is discovery metadata rendered by
-    `netsuke help targets`; Ninja progress remains sourced from the referenced
-    rule's `description`. Target/action environment mappings remain future work
-    under 3.14.9.
+  - Note: target/action `description` remains discovery metadata rendered by
+    `netsuke help targets`. Named-rule descriptions remain authoritative for
+    Ninja progress; inline recipes use generated edge descriptions as recorded
+    in [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md). This does
+    not complete the outstanding `when`-branch work. Target/action environment
+    mappings remain future work under 3.14.9.
 
 ### 3.15. Canonical CLI redesign
 

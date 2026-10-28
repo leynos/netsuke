@@ -309,6 +309,8 @@ operator, user, and contributor references are easier to find.
   Compiling public-API contracts as a workspace library and rejections as
   pinned compile-fail doctests, retiring the direct-`rustc` test harness and
   moving package verification into `make test-package-verify`.
+- [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
+  Bounded, localized Ninja progress labels for inline recipe edges.
 
 ## Proposals
 

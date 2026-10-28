@@ -21,6 +21,9 @@ use tempfile::TempDir;
 #[cfg(unix)]
 use test_support::ninja_gen::{self, AssertionType, NinjaIntegrationCase};
 
+#[path = "ninja_gen_integration_tests/progress_localization.rs"]
+mod progress_localization;
+
 /// Provide a temporary directory when Ninja is available, skipping otherwise.
 #[cfg(unix)]
 #[fixture]
@@ -48,6 +51,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     },
@@ -72,6 +76,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     },
@@ -96,6 +101,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     },
@@ -120,6 +126,7 @@ fn ninja_integration_setup() -> Option<TempDir> {
         explicit_outputs: vec![Utf8PathBuf::from("say-hello")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: true,
         always: false,
     },
@@ -214,6 +221,7 @@ fn errors_when_action_missing() -> Result<()> {
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };
@@ -260,6 +268,7 @@ fn generate_format_error() -> Result<()> {
         explicit_outputs: vec![Utf8PathBuf::from("out")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };
@@ -300,6 +309,7 @@ fn serial_graph(command: &str, dependencies: &[&str]) -> Result<BuildGraph> {
         explicit_outputs: vec![Utf8PathBuf::from("all")],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };

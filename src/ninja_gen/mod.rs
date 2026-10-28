@@ -61,6 +61,8 @@ macro_rules! write_flag {
 
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
+mod edge_metadata;
+mod progress_label;
 /// Generate a Ninja build file as a string.
 ///
 /// # Examples
@@ -83,7 +85,7 @@ pub(crate) use display_edge::DisplayEdge;
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
-///     phony: false, always: false
+///     progress_label: None, phony: false, always: false
 /// }).expect("test graph output aliases must be unique");
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
 /// let text = netsuke::ninja_gen::generate(&graph)?;
@@ -131,7 +133,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
-///     phony: false, always: false
+///     progress_label: None, phony: false, always: false
 /// }).expect("test graph output aliases must be unique");
 /// let mut out = String::new();
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
@@ -167,6 +169,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     out: &mut W,
     shell: RecipeShell,
 ) -> Result<(), NinjaGenError> {
+    let localizer = localization::localizer();
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
     if graph_requires_dyndep(graph) {
@@ -178,27 +181,16 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     let mut edges: Vec<_> = graph.edges().collect();
     edges.sort_by_key(|a| path_key(&a.explicit_outputs));
     for edge in edges {
-        let action =
-            graph
-                .actions
-                .get(&edge.action_id)
-                .ok_or_else(|| NinjaGenError::MissingAction {
-                    id: edge.action_id.clone(),
-                    message: localization::message(keys::NINJA_GEN_MISSING_ACTION)
-                        .with_arg("id", &edge.action_id),
-                })?;
+        let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
         write!(
             out,
             "{}",
             DisplayEdge {
                 edge,
-                action_name: if action.recipe.is_dependency_only() {
-                    "phony"
-                } else {
-                    &edge.action_id
-                },
-                action_restat: action.restat,
+                action_name: metadata.action_name,
+                action_restat: metadata.restat,
                 implicit_deps: &edge.implicit_deps,
+                description: metadata.description.as_ref(),
             }
         )?;
     }

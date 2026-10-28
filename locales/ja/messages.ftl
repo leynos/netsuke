@@ -199,6 +199,10 @@ ninja_gen.format = Ninja マニフェストの出力を整形できませんで�
 ninja_gen.dyndep_files_required = この操作には生成済み Ninja バンドルが必要です。dyndep ファイルを具体化するには `netsuke build`、`netsuke clean`、または `netsuke generate` を使用してください。
 ninja_gen.reserved_output_path = パス '{ $path }' は Netsuke の直列依存関係の状態用に予約されています。
 ninja_gen.unsupported_path_character = パス '{ $path }' にサポートされていない Ninja パス文字 '{ $character }' が含まれています。
+ninja_gen.progress.inline = ビルド中: { $name }
+ninja_gen.progress.command_list = { $count ->
+   *[other] ビルド中: { $name } ({ $count } 件のコマンド)
+}
 
 # ホストパターンの検証。
 host_pattern.empty = ホストパターンを空にすることはできません。

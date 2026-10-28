@@ -93,8 +93,7 @@ impl BuildGraph {
     /// Rules are stored verbatim and expanded later when targets reference
     /// them. This allows each target's input and output paths to be embedded in
     /// the resulting command, meaning identical rule definitions may yield
-    /// distinct actions once interpolated. Target descriptions remain discovery
-    /// metadata and never take part in recipe resolution or Ninja progress.
+    /// distinct actions once interpolated.
     fn process_rules(manifest: &NetsukeManifest, rule_map: &mut IrHashMap<String, Arc<Rule>>) {
         for rule in &manifest.rules {
             rule_map.insert(rule.name.clone(), Arc::new(rule.clone()));
@@ -107,6 +106,9 @@ impl BuildGraph {
     /// targets interpolate their command directly. Each resolved action is
     /// registered once under its content hash, and the resulting edge is
     /// stored once and indexed by every explicit output.
+    /// Target descriptions remain discovery metadata; named-rule descriptions
+    /// control progress. Inline recipes carry an edge-local label so Ninja
+    /// avoids its generated-command fallback.
     ///
     /// # Errors
     ///
@@ -131,38 +133,39 @@ impl BuildGraph {
                 return Err(error);
             }
 
-            let action_id = match &target.recipe {
+            let (recipe, rule_template, progress_label) = match &target.recipe {
                 Recipe::Rule { rule } => {
                     let target_name = get_target_display_name(&outputs);
                     let tmpl = resolve_rule(rule, context.rule_map, &target_name)?;
-                    // Target descriptions are deliberately omitted: rule
-                    // descriptions remain the sole source of Ninja progress
-                    // text.
-                    register_action(
-                        &mut graph.actions,
-                        tmpl.recipe.clone(),
-                        tmpl.description.as_deref(),
-                        ActionBindings {
-                            inputs: &inputs,
-                            outputs: &outputs,
-                            shell: context.shell,
-                        },
-                    )?
+                    // Target descriptions remain discovery metadata. Named
+                    // rule descriptions stay authoritative; inline edges carry
+                    // their own edge-local progress label.
+                    (tmpl.recipe.clone(), Some(tmpl), None)
                 }
-                Recipe::Command { .. } | Recipe::Script { .. } => register_action(
-                    &mut graph.actions,
-                    target.recipe.clone(),
-                    None,
-                    ActionBindings {
-                        inputs: &inputs,
-                        outputs: &outputs,
-                        shell: context.shell,
-                    },
-                )?,
+                Recipe::Command { .. } | Recipe::Script { .. } => {
+                    let progress_label = (!target.recipe.is_dependency_only())
+                        .then(|| get_target_display_name(&outputs))
+                        .filter(|name| !name.is_empty());
+                    (target.recipe.clone(), None, progress_label)
+                }
             };
+            let description = rule_template
+                .as_ref()
+                .and_then(|template| template.description.as_deref());
+            let action_id = register_action(
+                &mut graph.actions,
+                recipe,
+                description,
+                ActionBindings {
+                    inputs: &inputs,
+                    outputs: &outputs,
+                    shell: context.shell,
+                },
+            )?;
 
             let edge = BuildEdge {
                 action_id,
+                progress_label,
                 inputs,
                 implicit_deps,
                 dependency_order: target.dependency_order.into(),

@@ -26,6 +26,7 @@ fn build_edge(output: Utf8PathBuf) -> BuildEdge {
         explicit_outputs: vec![output],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     }
