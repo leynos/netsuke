@@ -184,13 +184,6 @@ fn run_with_ninja_program_resolver(
     dispatch::execute(cli, command, &context)
 }
 
-/// Adapt the reporter's task-progress method into a mutable callback.
-fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
-    move |current: u32, total: u32, description: &str| {
-        reporter.report_task_progress(current, total, description);
-    }
-}
-
 /// Resolve the manifest, generate the Ninja file and invoke the build.
 ///
 /// # Errors
@@ -256,7 +249,7 @@ fn execute_build(
     };
     let ninja_result = console_telemetry::instrument_ninja_build(console_edge_count, || {
         if context.progress_enabled {
-            let mut on_task_progress = on_task_progress_callback(context.reporter);
+            let mut on_task_progress = reporter::on_task_progress_callback(context.reporter);
             process::run_ninja_with_command_list_targets(
                 build_request,
                 Some(&mut on_task_progress),
@@ -352,7 +345,7 @@ fn execute_ninja_tool(
     };
     if context.progress_enabled {
         let options = ninja::ninja_process_options(cli)?;
-        let mut on_task_progress = on_task_progress_callback(context.reporter);
+        let mut on_task_progress = reporter::on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
                 program: context.ninja_program,
