@@ -254,10 +254,11 @@ mod tests {
         graph
     }
 
-    /// Build the controlled console error used to verify finite categories.
-    fn console_error(category: &str) -> NinjaGenError {
+    /// Build a controlled generation error with the requested fixed category.
+    fn generation_error(category: &str) -> NinjaGenError {
         use crate::localization::{self, keys};
         match category {
+            "command_list" => NinjaGenError::EmptyCommandRecipe { action_index: 1 },
             "console_dependency_only" => NinjaGenError::ConsoleDependencyOnly {
                 output: "private-output".into(),
                 message: localization::message(keys::NINJA_GEN_CONSOLE_DEPENDENCY_ONLY)
@@ -302,6 +303,7 @@ mod tests {
     #[rstest]
     #[case::ordinary_success(0, "disabled", "none")]
     #[case::console_success(2, "enabled", "none")]
+    #[case::command_list_error(0, "disabled", "command_list")]
     #[case::dependency_only_error(2, "enabled", "console_dependency_only")]
     #[case::pool_conflict_error(2, "enabled", "console_pool_conflict")]
     fn generation_records_console_shape_and_bounded_outcomes(
@@ -318,7 +320,7 @@ mod tests {
                     if category == "none" {
                         Ok(())
                     } else {
-                        Err(console_error(category))
+                        Err(generation_error(category))
                     }
                 })
             });
