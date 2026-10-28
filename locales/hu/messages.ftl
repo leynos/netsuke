@@ -82,6 +82,7 @@ clap-error-missing-argument = Hiányzó kötelező argumentum: { $argument }
 clap-error-missing-subcommand = Hiányzó alparancs. Elérhető lehetőségek: { $valid_subcommands }
 clap-error-unknown-argument = Ismeretlen argumentum: { $argument }
 clap-error-invalid-value = Érvénytelen érték ehhez: { $argument }: { $value }
+clap-error-too-many-values = Váratlan érték ehhez: { $argument }: { $value }
 clap-error-invalid-subcommand = Ismeretlen alparancs: { $subcommand }
 # Megjegyzés: a value-validation megfogalmazása szándékosan eltér az
 # invalid-value szövegétől, hogy elkülönüljenek a saját ellenőrzők hibái

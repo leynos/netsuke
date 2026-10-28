@@ -82,6 +82,7 @@ clap-error-missing-argument = مُعامل مطلوب مفقود: { $argument }
 clap-error-missing-subcommand = الأمر الفرعي مفقود. الخيارات المتاحة: { $valid_subcommands }
 clap-error-unknown-argument = مُعامل غير معروف: { $argument }
 clap-error-invalid-value = قيمة غير صالحة للمُعامل { $argument }: { $value }
+clap-error-too-many-values = قيمة غير متوقعة للمُعامل { $argument }: { $value }
 clap-error-invalid-subcommand = أمر فرعي غير معروف: { $subcommand }
 # ملاحظة: صيغة value-validation تختلف عن invalid-value لتمييز إخفاقات
 # المدقّقات المخصّصة (ErrorKind::ValueValidation) عن عدم تطابق الأنواع

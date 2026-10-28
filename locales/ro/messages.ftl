@@ -82,6 +82,7 @@ clap-error-missing-argument = Lipsește un argument obligatoriu: { $argument }
 clap-error-missing-subcommand = Lipsește subcomanda. Opțiuni disponibile: { $valid_subcommands }
 clap-error-unknown-argument = Argument necunoscut: { $argument }
 clap-error-invalid-value = Valoare nevalidă pentru { $argument }: { $value }
+clap-error-too-many-values = Valoare neașteptată pentru { $argument }: { $value }
 clap-error-invalid-subcommand = Subcomandă necunoscută: { $subcommand }
 # Notă: value-validation este formulat diferit de invalid-value pentru a
 # deosebi erorile validatoarelor proprii (ErrorKind::ValueValidation) de

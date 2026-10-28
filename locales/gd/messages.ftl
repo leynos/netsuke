@@ -82,6 +82,7 @@ clap-error-missing-argument = Tha argamaid riatanach a dhìth: { $argument }
 clap-error-missing-subcommand = Tha fo-àithne a dhìth. Roghainnean rim faighinn: { $valid_subcommands }
 clap-error-unknown-argument = Argamaid neo-aithnichte: { $argument }
 clap-error-invalid-value = Luach mì-dhligheach airson { $argument }: { $value }
+clap-error-too-many-values = Luach ris nach robh dùil airson { $argument }: { $value }
 clap-error-invalid-subcommand = Fo-àithne neo-aithnichte: { $subcommand }
 # Nòta: tha faclan value-validation eadar-dhealaichte o invalid-value gus
 # fàiligidhean dhearbhairean gnàthaichte (ErrorKind::ValueValidation) a

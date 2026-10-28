@@ -82,6 +82,7 @@ clap-error-missing-argument = Mangler påkrevd argument: { $argument }
 clap-error-missing-subcommand = Mangler underkommando. Tilgjengelige valg: { $valid_subcommands }
 clap-error-unknown-argument = Ukjent argument: { $argument }
 clap-error-invalid-value = Ugyldig verdi for { $argument }: { $value }
+clap-error-too-many-values = Uventet verdi for { $argument }: { $value }
 clap-error-invalid-subcommand = Ukjent underkommando: { $subcommand }
 # Merk: value-validation er formulert annerledes enn invalid-value for å skille
 # feil fra egne validatorer (ErrorKind::ValueValidation) fra typekonflikter

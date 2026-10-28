@@ -82,6 +82,7 @@ clap-error-missing-argument = Відсутній обов’язковий ар�
 clap-error-missing-subcommand = Відсутня підкоманда. Доступні варіанти: { $valid_subcommands }
 clap-error-unknown-argument = Невідомий аргумент: { $argument }
 clap-error-invalid-value = Неприпустиме значення для { $argument }: { $value }
+clap-error-too-many-values = Неочікуване значення для { $argument }: { $value }
 clap-error-invalid-subcommand = Невідома підкоманда: { $subcommand }
 # Примітка: формулювання value-validation відрізняється від invalid-value, щоб
 # відрізняти помилки власних перевіряльників (ErrorKind::ValueValidation) від

@@ -63,6 +63,7 @@ define_keys! {
     CLAP_ERROR_MISSING_SUBCOMMAND => "clap-error-missing-subcommand",
     CLAP_ERROR_UNKNOWN_ARGUMENT => "clap-error-unknown-argument",
     CLAP_ERROR_INVALID_VALUE => "clap-error-invalid-value",
+    CLAP_ERROR_TOO_MANY_VALUES => "clap-error-too-many-values",
     CLAP_ERROR_INVALID_SUBCOMMAND => "clap-error-invalid-subcommand",
     CLAP_ERROR_VALUE_VALIDATION => "clap-error-value-validation",
     CLI_JOBS_INVALID_NUMBER => "cli.validation.jobs.invalid_number",

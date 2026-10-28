@@ -82,6 +82,7 @@ clap-error-missing-argument = Falta um argumento obrigatório: { $argument }
 clap-error-missing-subcommand = Falta o subcomando. Opções disponíveis: { $valid_subcommands }
 clap-error-unknown-argument = Argumento desconhecido: { $argument }
 clap-error-invalid-value = Valor inválido para { $argument }: { $value }
+clap-error-too-many-values = Valor inesperado para { $argument }: { $value }
 clap-error-invalid-subcommand = Subcomando desconhecido: { $subcommand }
 # Nota: value-validation usa uma formulação distinta de invalid-value para
 # diferenciar falhas de validadores personalizados

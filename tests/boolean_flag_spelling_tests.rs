@@ -129,9 +129,8 @@ fn a_bare_subcommand_switch_is_accepted_and_applied() -> Result<()> {
 
 /// The `--flag=false` spelling is rejected as an unexpected value.
 ///
-/// Clap reports this as an invalid-value error, so the process exits 2 and
-/// prints `unexpected value 'false'` on standard error. The message names the
-/// flag, which distinguishes this case from a generally broken invocation.
+/// Clap reports too many values, so the process exits 2 and prints a localized
+/// message naming the flag and its unexpected value on standard error.
 #[rstest]
 #[case::verbose(&["--verbose=false", "graph"])]
 #[case::json(&["--json=false", "graph"])]
@@ -143,9 +142,20 @@ fn an_equals_attached_value_is_rejected_as_an_unexpected_value(
     #[case] arguments: &[&str],
 ) -> Result<()> {
     let stderr = rejected_stderr(arguments, 2)?;
+    let flag = arguments
+        .iter()
+        .find_map(|arg| arg.strip_suffix("=false"))
+        .context("case should contain a flag with an attached value")?;
     ensure!(
-        stderr.contains("unexpected value 'false'"),
+        stderr.contains("Unexpected value for")
+            && stderr.contains(flag)
+            && stderr.contains("false"),
         "{} should report an unexpected value, got: {stderr}",
+        arguments.join(" "),
+    );
+    ensure!(
+        !stderr.contains("missing translation"),
+        "{} should not log a missing translation warning: {stderr}",
         arguments.join(" "),
     );
     Ok(())
