@@ -5,28 +5,39 @@ use super::{NinjaGenError, generate, generate_bundle, generate_posix};
 use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
+use rstest::{fixture, rstest};
+
+type EdgeFactory = fn(&str, &str, bool) -> BuildEdge;
+
+/// Construct parallel, single-output edges for console generator tests.
+#[fixture]
+fn edge_factory() -> EdgeFactory {
+    |action_id, output, console| BuildEdge {
+        action_id: action_id.into(),
+        inputs: Vec::new(),
+        implicit_deps: Vec::new(),
+        dependency_order: DependencyOrder::Parallel,
+        explicit_outputs: vec![Utf8PathBuf::from(output)],
+        implicit_outputs: Vec::new(),
+        order_only_deps: Vec::new(),
+        phony: false,
+        always: false,
+        console,
+    }
+}
 
 /// Emit console selection on one edge while reusing the action's rule normally.
-#[test]
-fn console_pool_is_edge_level_and_keeps_shared_action_rules() -> Result<()> {
+#[rstest]
+fn console_pool_is_edge_level_and_keeps_shared_action_rules(
+    edge_factory: EdgeFactory,
+) -> Result<()> {
     let mut graph = BuildGraph::default();
     graph
         .actions
         .insert("shared".into(), command_action("echo ready".into()));
     for (output, console) in [("console.out", true), ("ordinary.out", false)] {
         graph
-            .insert_edge(BuildEdge {
-                action_id: "shared".into(),
-                inputs: Vec::new(),
-                implicit_deps: Vec::new(),
-                dependency_order: DependencyOrder::Parallel,
-                explicit_outputs: vec![Utf8PathBuf::from(output)],
-                implicit_outputs: Vec::new(),
-                order_only_deps: Vec::new(),
-                phony: false,
-                always: false,
-                console,
-            })
+            .insert_edge(edge_factory("shared", output, console))
             .expect("test graph output aliases must be unique");
     }
 
@@ -46,26 +57,15 @@ fn console_pool_is_edge_level_and_keeps_shared_action_rules() -> Result<()> {
 }
 
 /// Clear rule-level console scheduling from an edge without the opt-in.
-#[test]
-fn ordinary_edge_clears_a_shared_console_action_pool() -> Result<()> {
+#[rstest]
+fn ordinary_edge_clears_a_shared_console_action_pool(edge_factory: EdgeFactory) -> Result<()> {
     let mut graph = BuildGraph::default();
     let mut action = command_action("echo ready".into());
     action.pool = Some("console".into());
     graph.actions.insert("shared".into(), action);
     for (output, console) in [("console.out", true), ("ordinary.out", false)] {
         graph
-            .insert_edge(BuildEdge {
-                action_id: "shared".into(),
-                inputs: Vec::new(),
-                implicit_deps: Vec::new(),
-                dependency_order: DependencyOrder::Parallel,
-                explicit_outputs: vec![Utf8PathBuf::from(output)],
-                implicit_outputs: Vec::new(),
-                order_only_deps: Vec::new(),
-                phony: false,
-                always: false,
-                console,
-            })
+            .insert_edge(edge_factory("shared", output, console))
             .expect("test graph output aliases must be unique");
     }
 
@@ -82,25 +82,14 @@ fn ordinary_edge_clears_a_shared_console_action_pool() -> Result<()> {
 }
 
 /// Accept the redundant combination of an edge flag and `pool = console` metadata.
-#[test]
-fn console_pool_accepts_matching_action_pool() -> Result<()> {
+#[rstest]
+fn console_pool_accepts_matching_action_pool(edge_factory: EdgeFactory) -> Result<()> {
     let mut graph = BuildGraph::default();
     let mut action = command_action("echo ready".into());
     action.pool = Some("console".into());
     graph.actions.insert("shared".into(), action);
     graph
-        .insert_edge(BuildEdge {
-            action_id: "shared".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("console.out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-            console: true,
-        })
+        .insert_edge(edge_factory("shared", "console.out", true))
         .expect("test graph output aliases must be unique");
 
     let ninja = generate_posix(&graph)?;
@@ -112,22 +101,13 @@ fn console_pool_accepts_matching_action_pool() -> Result<()> {
 }
 
 /// Preserve the existing missing-action error when a console edge has no action.
-#[test]
-fn console_validation_leaves_missing_actions_to_generation() -> Result<()> {
+#[rstest]
+fn console_validation_leaves_missing_actions_to_generation(
+    edge_factory: EdgeFactory,
+) -> Result<()> {
     let mut graph = BuildGraph::default();
     graph
-        .insert_edge(BuildEdge {
-            action_id: "missing".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("console.out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            phony: false,
-            always: false,
-            console: true,
-        })
+        .insert_edge(edge_factory("missing", "console.out", true))
         .expect("test graph output aliases must be unique");
 
     let generate_error = generate(&graph).expect_err("missing action must remain an error");

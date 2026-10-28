@@ -7150,6 +7150,10 @@ generated text used by these tests and does not parse general Ninja syntax.
 Permitted call sites are test-support and test code only; production code must
 not depend on `test_support`.
 
+The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
+parallel, single-output edges for console generator tests. Keep it within that
+module; other graph shapes use their own fixtures.
+
 ### Temporary Ninja build files
 
 `runner::process::create_temp_ninja_file` writes, flushes, and synchronizes a
