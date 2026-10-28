@@ -653,6 +653,18 @@ The separate `upload-declared-assets/` helper also remains to be added for the
 existing `publish-release` job; the Decision log records why the upload step
 becomes a composite action instead of an inline `run` block.
 
+**Open integration requirement — bind operating-system packages to this release
+run.** CodeRabbit confirmed that `release_declaration` checks package suffixes,
+per-platform counts, and duplicate names, but those checks do not prove that a
+package came from the current release candidate. The declaration CLI observes
+staged basenames; it does not establish artefact provenance. The workflow
+wiring must bind checkout and inputs to the candidate commit, download only the
+current run's expected artefacts for each target, exclude retained or otherwise
+unrelated files, and hash the resulting staged set before declaring it. Add
+negative workflow-contract cases for stale artefacts, a missing target, and
+duplicate target artefacts. This remains open work; the existing suffix and
+count policy is not evidence that same-run provenance is enforced.
+
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
 
@@ -766,7 +778,8 @@ exists to prevent.
 
 Each new job's body is a single `uses: ./.github/actions/...` step. The
 justification for extracting them is that the composite-action convention is
-the repository's own documented practice (`docs/developers-guide.md:1606-1607`
+the repository's own documented practice
+([cache ownership and bounded CI resources](../developers-guide.md#cache-ownership-and-bounded-ci-resources)
 records it for the cache steps), **not** that a contract enforces a 400-line
 cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 `main` and is not failing anything.
@@ -790,6 +803,13 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   both repairs are recorded in `Surprises & discoveries`; neither file is
   otherwise touched by this branch, and neither repair adds an exemption.
 - `.github/workflows/ci.yml`: wire the remaining new targets into `build-test`.
+- Workflow provenance contract: bind the package declaration job to the
+  candidate commit and its declared inputs; select only that run's expected
+  artefact per target; reject stale, retained, unrelated, missing, or duplicate
+  target artefacts before hashing and declaration. Add negative contract cases
+  for stale, missing, and duplicate target artefacts. This protects the
+  integration boundary because the declaration policy validates suffixes and
+  counts, not same-run provenance.
 - `docs/developers-guide.md`: the release runbook — job graph, package and
   asset identity contract, provenance verification, re-run procedure, and
   partial-publication recovery.
@@ -838,7 +858,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   extracted to a composite action so the job graph stays readable at a glance.
   (Not "under 400 lines": no contract caps workflow YAML, and `release.yml` is
   already 688 lines on `main`. The extraction follows the repository's
-  documented composite-action convention, `docs/developers-guide.md:1606-1607`.)
+  documented composite-action convention
+  ([cache ownership and bounded CI resources](../developers-guide.md#cache-ownership-and-bounded-ci-resources)).)
 - Requirements: INV-1, LEM-5, and LEM-6 are assigned here; the workflow and
   permission-separation portions remain open.
 - Acceptance evidence: the target is `make test-workflow-contracts` passing
@@ -2547,7 +2568,19 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   unverified concern yet. Hosted CI, Release Dry Run, Netsukefile Build Test,
   and CodeScene pass on `a6f71aeb`; CodeRabbit's formal review requests
   changes. Stage C remains partial and Stage D remains open, so this candidate
-  does not yet provide an active crates.io publication path.
+  does not yet provide an active crates.io publication path. The review's
+  Developer Documentation row identified stale line-number references for the
+  composite-action convention; current references now link to the guide's
+  `Cache ownership and bounded CI resources` heading. The dated rebase record
+  retains its historical line numbers.
+- [x] (2026-10-28) CodeRabbit confirmed an integration risk in
+  [its review comment](https://github.com/leynos/netsuke/pull/903#issuecomment-6466926698):
+  declaration policy checks package suffixes and counts but does not bind
+  observed packages to the current candidate's build. The workflow must bind
+  checkout and inputs to the candidate, consume only expected current-run
+  artefacts by target, exclude retained or unrelated files, and hash the staged
+  set. Negative stale, missing-target, and duplicate-target artefact cases are
+  required. This is not implemented or verified; it remains Stage C/D work.
 
 ## Surprises & discoveries
 

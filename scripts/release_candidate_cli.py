@@ -15,11 +15,13 @@ import argparse
 import json
 import pathlib
 import sys
+import tempfile
 
 import release_candidate
 
 EXIT_OK = 0
 EXIT_IDENTITY_REJECTED = 1
+EXIT_OUTPUT_UNWRITABLE = 2
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -62,7 +64,8 @@ def main(argv: list[str] | None = None) -> int:
     -------
     int
         ``EXIT_OK`` when the identity was recorded, or
-        ``EXIT_IDENTITY_REJECTED`` when validation refused the facts.
+        ``EXIT_IDENTITY_REJECTED`` when validation refused the facts, or
+        ``EXIT_OUTPUT_UNWRITABLE`` when the record cannot be installed.
 
     Examples
     --------
@@ -91,7 +94,16 @@ def main(argv: list[str] | None = None) -> int:
         print(f"release identity rejected: {error}", file=sys.stderr)
         return EXIT_IDENTITY_REJECTED
     record = json.dumps(identity.as_record(), sort_keys=True, indent=2) + "\n"
-    arguments.output.write_text(record, encoding="utf-8")
+    try:
+        with tempfile.TemporaryDirectory(
+            dir=arguments.output.parent, prefix=f".{arguments.output.name}."
+        ) as temporary:
+            staged = pathlib.Path(temporary) / arguments.output.name
+            _ = staged.write_text(record, encoding="utf-8")
+            _ = staged.replace(arguments.output)
+    except OSError as error:
+        print(f"release identity record unwritable: {error}", file=sys.stderr)
+        return EXIT_OUTPUT_UNWRITABLE
     return EXIT_OK
 
 

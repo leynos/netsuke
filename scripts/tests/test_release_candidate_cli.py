@@ -9,11 +9,13 @@ network.
 import json
 import pathlib
 import typing as typ
+from unittest import mock
 
 import pytest
 from release_candidate_cli import (
     EXIT_IDENTITY_REJECTED,
     EXIT_OK,
+    EXIT_OUTPUT_UNWRITABLE,
     build_parser,
     main,
 )
@@ -115,3 +117,43 @@ def test_the_cli_exposes_the_output_path() -> None:
     parsed = _parse(_argv(chosen))
 
     assert parsed.output == chosen, "the caller must choose where the record lands"
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        ("staging", "absent"),
+        ("staging", "present"),
+        ("replace", "absent"),
+        ("replace", "present"),
+    ],
+)
+def test_output_failures_preserve_the_previous_identity(
+    tmp_path: pathlib.Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    case: tuple[str, str],
+) -> None:
+    """Diagnose failed writes without exposing partial candidate identities."""
+    failure, existing = case
+    destination = tmp_path / "identity.json"
+    if existing == "present":
+        _ = destination.write_text("previous identity\n", encoding="utf-8")
+
+    fail = mock.Mock(side_effect=PermissionError("simulated output failure"))
+
+    monkeypatch.setattr(
+        pathlib.Path, "write_text" if failure == "staging" else "replace", fail
+    )
+    status = main(_argv(destination))
+
+    assert status == EXIT_OUTPUT_UNWRITABLE, f"{failure} returned {status}"
+    assert "identity record unwritable" in capsys.readouterr().err, (
+        f"{failure} must be diagnosed"
+    )
+    if existing == "present":
+        assert destination.read_text(encoding="utf-8") == "previous identity\n", (
+            f"{failure} changed the previous identity"
+        )
+    else:
+        assert not destination.exists(), f"{failure} created an identity"

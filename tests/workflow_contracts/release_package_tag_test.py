@@ -21,6 +21,7 @@ the local suites and only appears in a pull-request run.
 Run via ``make test-workflow-contracts``.
 """
 
+import re
 import typing as typ
 
 import pytest
@@ -186,15 +187,6 @@ def test_the_action_accepts_a_tag_and_a_rehearsal() -> None:
     )
 
 
-#: Each fragment the action's ``run`` body must carry, with the reason it is
-#: required. A table rather than three similar assertions, so a reader sees the
-#: complete set of selectors the CLI's mutual exclusion depends on.
-SELECTOR_FRAGMENTS = (
-    ("--dry-run", "the action must be able to select a rehearsal"),
-    ('--tag "$RELEASE_TAG"', "the action must select the release tag"),
-    ("case", "the action must branch on the mode rather than pass both selectors"),
-)
-
 #: Each manifest input that must reach the CLI: the input name, the environment
 #: reference the step assigns it to, and the CLI flag that reads it back.
 #: ``package-name`` and ``bin-name`` are the pair that differ — the crate is
@@ -246,22 +238,27 @@ OUTPUT_FORMATS = (
 
 
 @pytest.mark.parametrize(
-    ("fragment", "reason"),
-    SELECTOR_FRAGMENTS,
-    ids=[row[0] for row in SELECTOR_FRAGMENTS],
+    ("mode", "expected"),
+    [("true", "--dry-run"), ("false", '--tag "$RELEASE_TAG"')],
 )
 def test_the_action_selects_the_selector_before_invoking_the_cli(
-    fragment: str, reason: str
+    mode: str, expected: str
 ) -> None:
-    """Give the CLI exactly one of ``--tag`` and ``--dry-run``, never both.
-
-    The CLI refuses the pair, so an action that passed both would fail every
-    run; an action that passed neither would fail too. The body therefore has
-    to branch, and the assertion is that both selector strings reach it.
-    """
+    """Parse each case arm and require the exact exclusive selector assignment."""
     run = _action_run_body()
-
-    assert fragment in run, reason
+    case = re.search(
+        r'case "\$RELEASE_DRY_RUN" in\n(?P<arms>.*?)\n\s*esac', run, re.DOTALL
+    )
+    assert case is not None, "the action must select a mode using RELEASE_DRY_RUN"
+    arms = case.group("arms")
+    arm = re.search(rf"^\s*{mode}\)\s*(.*?)\s*;;\s*$", arms, re.MULTILINE)
+    assert arm is not None, f"missing {mode!r} case arm"
+    assert arm.group(1) == f"release_selector=({expected})", (
+        f"mode {mode!r} must select only {expected!r}, got {arm.group(1)!r}"
+    )
+    assert '"${release_selector[@]}"' in run, (
+        "the selected arguments must reach the CLI"
+    )
 
 
 @pytest.mark.parametrize(
@@ -314,15 +311,19 @@ def test_the_action_maps_the_record_onto_its_declared_outputs() -> None:
 
 
 def test_the_action_refuses_an_unrecognised_mode() -> None:
-    """Fail the step on any mode other than ``true`` or ``false``.
-
-    The ``case`` has a branch for each real mode. Without a catch-all, an empty
-    or malformed value would fall through with no selector set and the CLI
-    would report a missing argument instead of the input that caused it.
-    """
+    """Require the case fallback to diagnose and reject every other mode."""
     run = _action_run_body()
-
-    assert "dry-run must be true or false" in run, (
-        "an unrecognised mode must be named rather than fall through"
+    case = re.search(
+        r'case "\$RELEASE_DRY_RUN" in\n(?P<arms>.*?)\n\s*esac', run, re.DOTALL
     )
-    assert "exit 1" in run, "an unrecognised mode must fail the step"
+    assert case is not None, "the action must branch on RELEASE_DRY_RUN"
+    fallback = re.search(
+        r"^\s*\*\)\s*(.*?)\s*;;", case.group("arms"), re.DOTALL | re.MULTILINE
+    )
+    assert fallback is not None, "unknown modes must enter a catch-all arm"
+    assert "dry-run must be true or false" in fallback.group(1), (
+        "the catch-all must diagnose an unknown mode"
+    )
+    assert re.search(r"^\s*exit 1\s*$", fallback.group(1), re.MULTILINE), (
+        "the catch-all must fail before invoking the CLI"
+    )
