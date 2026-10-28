@@ -1,5 +1,4 @@
 //! Fluent message identifiers used by Netsuke.
-//!
 //! This file holds the general key table: the build-time localization audit
 //! parses its `define_keys!` invocation, and the macro itself is defined in
 //! the parent module. The `netsuke check` keys live in `check_keys.rs` and
@@ -29,7 +28,6 @@ define_keys! {
     CLI_FLAG_FETCH_BLOCK_HOST_HELP => "cli.flag.fetch_block_host.help",
     CLI_FLAG_FETCH_DEFAULT_DENY_HELP => "cli.flag.fetch_default_deny.help",
     CLI_FLAG_TRUST_PROJECT_FETCH_POLICY_HELP => "cli.flag.trust_project_fetch_policy.help",
-
     CLI_FLAG_MANIFEST_EVALUATION_FUEL_HELP => "cli.flag.manifest_evaluation_fuel.help",
     CLI_FLAG_MANIFEST_FUEL_HELP => "cli.flag.manifest_fuel.help",
     CLI_FLAG_MANIFEST_RENDERED_VALUE_BYTES_HELP => "cli.flag.manifest_rendered_value_bytes.help",

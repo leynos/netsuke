@@ -17,6 +17,7 @@ pub fn console_edge() -> BuildEdge {
         explicit_outputs: vec!["lint".into()],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
         console: true,

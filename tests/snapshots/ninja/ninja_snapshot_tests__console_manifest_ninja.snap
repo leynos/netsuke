@@ -15,6 +15,7 @@ rule aed5f83a13f8763315f10af13630dd88eccbc70c46a8f0a4c2ac132e7f6f2858
   command = echo ordinary-action
 
 build inline-console: 04ca8490eedc2a14f7ea86f319edd5b7ea47a9b1dc3deab48f610cfba9a50fe0
+  description = Building ⁨inline-console⁩
   pool = console
 
 build ordinary-action: aed5f83a13f8763315f10af13630dd88eccbc70c46a8f0a4c2ac132e7f6f2858
