@@ -54,6 +54,7 @@ fn run_action(
         progress_label: progress_label.map(str::to_owned),
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);

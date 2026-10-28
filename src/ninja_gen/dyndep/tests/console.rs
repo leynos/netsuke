@@ -68,6 +68,7 @@ fn ordinary_dyndep_edge_clears_a_shared_console_action_pool() -> Result<()> {
             explicit_outputs: vec![Utf8PathBuf::from("ordinary")],
             implicit_outputs: Vec::new(),
             order_only_deps: Vec::new(),
+            progress_label: None,
             phony: false,
             always: false,
             console: false,

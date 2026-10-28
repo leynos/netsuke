@@ -121,6 +121,7 @@ mod tests {
             progress_label: progress_label.map(str::to_owned),
             phony: false,
             always: false,
+            console: false,
         }
     }
 
