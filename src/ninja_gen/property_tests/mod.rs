@@ -18,6 +18,7 @@ use crate::{
 use camino::Utf8PathBuf;
 use std::collections::{HashMap, HashSet};
 
+mod console;
 mod dependency_only;
 
 mod ninja_oracle;

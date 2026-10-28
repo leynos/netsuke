@@ -6,8 +6,12 @@ use metrics_util::{
     CompositeKey, MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
+use monotony::test_util::FixedMonotonicClock;
 use rstest::rstest;
 use tracing_subscriber::filter::LevelFilter;
+
+/// Duration reported by the injected clock for each test invocation.
+const BUILD_ELAPSED: Duration = Duration::from_millis(1_250);
 
 /// Represent the local recorder's drained metric series.
 type Snapshot = Vec<(
@@ -55,7 +59,7 @@ fn assert_metrics(snapshot: &Snapshot, console_edges: usize, labels: [(&str, &st
         Some(DebugValue::Counter(1))
     ));
     assert!(
-        matches!(metric(snapshot, NINJA_BUILD_EXECUTION_DURATION, MetricKind::Histogram, &labels), Some(DebugValue::Histogram(samples)) if samples.len() == 1)
+        matches!(metric(snapshot, NINJA_BUILD_EXECUTION_DURATION, MetricKind::Histogram, &labels), Some(DebugValue::Histogram(samples)) if samples.iter().map(|sample| sample.0).eq([BUILD_ELAPSED.as_secs_f64()]))
     );
     let outcome = labels[1].1;
     assert!(
@@ -80,9 +84,10 @@ fn invocation_records_bounded_scheduling_outcome_and_duration(
     };
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
+    let clock = FixedMonotonicClock::with_elapsed(BUILD_ELAPSED);
     let (result, events) = metrics::with_local_recorder(&recorder, || {
         with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = instrument_ninja_build(console_edges, || {
+            let result = instrument_ninja_build(&clock, console_edges, || {
                 if fail {
                     Err(io::Error::other("private process detail"))
                 } else {
