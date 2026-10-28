@@ -3,5 +3,5 @@
 # nightly-only. The dated pin keeps builds reproducible; see
 # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md before changing the channel.
 [toolchain]
-channel = "nightly-2026-10-22"
+channel = "nightly-2026-10-27"
 components = ["rustfmt", "clippy", "rust-analyzer"]
