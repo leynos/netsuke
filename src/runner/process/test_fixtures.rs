@@ -49,6 +49,7 @@ pub(super) fn insert_edge(
         progress_label: None,
         phony,
         always: false,
+        console: false,
     });
     assert!(result.is_ok(), "test edge outputs should be unique");
 }
