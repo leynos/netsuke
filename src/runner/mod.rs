@@ -247,7 +247,8 @@ fn execute_build(
         env: &env,
         stderr_mode: StderrMode::from_json_enabled(cli.json),
     };
-    let ninja_result = console_telemetry::instrument_ninja_build(console_edge_count, || {
+    let clock = graph_generation.clock;
+    let ninja_result = console_telemetry::instrument_ninja_build(clock, console_edge_count, || {
         if context.progress_enabled {
             let mut on_task_progress = reporter::on_task_progress_callback(context.reporter);
             process::run_ninja_with_command_list_targets(

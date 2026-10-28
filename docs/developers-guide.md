@@ -6463,11 +6463,12 @@ or add manifest-controlled values to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
-optional preflighted `BashExecutable`, and injected monotonic clock solely for
-this graph-generation composition path. Build and Ninja-tool operations attach
-the runtime binding after preflight; query-only generation leaves it absent. It
-is not a general runner context, shared state container, or reusable public
-API; keep unrelated runner inputs and concerns outside it.
+optional preflighted `BashExecutable`, and injected monotonic clock for the
+graph-generation composition path. The build runner also uses that clock to
+measure its Ninja invocation. Build and Ninja-tool operations attach the
+runtime binding after preflight; query-only generation leaves it absent. It is
+not a general runner context, shared state container, or reusable public API;
+keep unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -10095,13 +10096,14 @@ fields.
 
 ### Module: `runner::console_telemetry`
 
-`src/runner/console_telemetry.rs` instruments only the actual Ninja build
+`src/runner/console_telemetry/mod.rs` instruments only the actual Ninja build
 invocation in `execute_build`. It supplements the complete legacy-recipe
 operation timing with subprocess duration and outcome grouped by
 `console_scheduling=enabled|disabled`. Its `runner.ninja.build` span and
 completion event include the aggregate `console_edge_count`, scheduling state,
 `outcome=success|error`, and `error_category=none|io`. Paths, action
 identities, recipe contents, and process error text never enter this boundary.
+The runner's injected monotonic clock supplies the duration measurement.
 
 The generator stores the count of selected user edges privately in
 `GeneratedNinja`; the runner reads that aggregate before consuming the bundle.

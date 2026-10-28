@@ -4,11 +4,8 @@
 //! closure. It emits no paths, identifiers, commands, or process error text.
 
 use metrics::{counter, describe_counter, describe_histogram, histogram};
-use std::{
-    io,
-    sync::Once,
-    time::{Duration, Instant},
-};
+use monotony::MonotonicClock;
+use std::{io, sync::Once, time::Duration};
 use tracing::field;
 
 /// Metric counting actual runner-owned Ninja build invocations.
@@ -37,6 +34,7 @@ pub(in crate::runner) const fn scheduling_label(console_edge_count: usize) -> &'
 ///
 /// Returns the invocation's I/O error unchanged when Ninja execution fails.
 pub(in crate::runner) fn instrument_ninja_build<T>(
+    clock: &dyn MonotonicClock,
     console_edge_count: usize,
     invoke: impl FnOnce() -> io::Result<T>,
 ) -> io::Result<T> {
@@ -50,9 +48,14 @@ pub(in crate::runner) fn instrument_ninja_build<T>(
         error_category = field::Empty,
     );
     let _guard = span.enter();
-    let started = Instant::now();
+    let started = clock.now();
     let result = invoke();
-    record_result(&span, console_edge_count, started.elapsed(), &result);
+    record_result(
+        &span,
+        console_edge_count,
+        clock.now().duration_since(started),
+        &result,
+    );
     result
 }
 
