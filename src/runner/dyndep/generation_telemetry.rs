@@ -255,9 +255,13 @@ mod tests {
     }
 
     /// Build a controlled generation error with the requested fixed category.
-    fn generation_error(category: &str) -> NinjaGenError {
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when the category is not a supported fixture value.
+    fn generation_error(category: &str) -> anyhow::Result<NinjaGenError> {
         use crate::localization::{self, keys};
-        match category {
+        Ok(match category {
             "command_list" => NinjaGenError::EmptyCommandRecipe { action_index: 1 },
             "console_dependency_only" => NinjaGenError::ConsoleDependencyOnly {
                 output: "private-output".into(),
@@ -271,8 +275,8 @@ mod tests {
                     .with_arg("output", "private-output")
                     .with_arg("pool", "private-pool"),
             },
-            _ => panic!("fixture must name a known category"),
-        }
+            _ => anyhow::bail!("unknown generation fixture category: {category}"),
+        })
     }
 
     /// Assert one bounded operation, one duration sample, and the configured-edge count.
@@ -310,19 +314,18 @@ mod tests {
         #[case] console_edges: usize,
         #[case] scheduling: &str,
         #[case] category: &str,
-    ) {
+    ) -> anyhow::Result<()> {
         let recorder = DebuggingRecorder::new();
         let snapshotter = recorder.snapshotter();
         let graph = graph_with_console_edges(console_edges);
+        let error = if category == "none" {
+            None
+        } else {
+            Some(generation_error(category)?)
+        };
         let (result, fields) = with_span_capture(|captured| {
             let result = metrics::with_local_recorder(&recorder, || {
-                instrument_bundle_generation(&graph, || {
-                    if category == "none" {
-                        Ok(())
-                    } else {
-                        Err(generation_error(category))
-                    }
-                })
+                instrument_bundle_generation(&graph, || error.map_or(Ok(()), Err))
             });
             (result, captured.snapshot())
         });
@@ -331,7 +334,10 @@ mod tests {
         } else {
             "error"
         };
-        assert_eq!(result.is_err(), category != "none");
+        anyhow::ensure!(
+            result.is_err() == (category != "none"),
+            "unexpected generation result for {category}: {result:?}"
+        );
         let snapshot = snapshotter.snapshot().into_vec();
         let labels = [
             ("outcome", outcome),
@@ -345,11 +351,15 @@ mod tests {
             format!("outcome={outcome:?}"),
             format!("error_category={category:?}"),
         ] {
-            assert!(
+            anyhow::ensure!(
                 fields.contains(&expected),
                 "span must record {expected}: {fields:?}"
             );
         }
-        assert!(fields.iter().all(|field| !field.contains("private-")));
+        anyhow::ensure!(
+            fields.iter().all(|field| !field.contains("private-")),
+            "span fields must not include private values: {fields:?}"
+        );
+        Ok(())
     }
 }
