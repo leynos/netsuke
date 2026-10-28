@@ -306,7 +306,7 @@ def main(argv: list[str] | None = None) -> int:
     arguments = build_parser().parse_args(argv)
     try:
         declared_text = arguments.expected.read_text(encoding="utf-8")
-    except OSError as error:
+    except (OSError, UnicodeDecodeError) as error:
         print(f"declaration unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
     try:
@@ -324,6 +324,7 @@ def main(argv: list[str] | None = None) -> int:
         release_inventory.InventoryError,
         release_digest.DigestError,
         release_digest_record.DigestRecordError,
+        UnicodeDecodeError,
     ) as error:
         print(f"release inventory rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED

@@ -296,6 +296,8 @@ def _compute_declaration(
     refused
     """
     config = tomllib.loads(arguments.staging_config.read_text(encoding="utf-8"))
+    # Validate target tables before the discovery adapter iterates them.
+    _ = release_declaration.platform_target_counts(config)
     archive_names = hoist_binstall_discovery.expected_archive_names(
         arguments.staging_config, arguments.manifest, arguments.version
     )

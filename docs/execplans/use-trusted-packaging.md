@@ -112,10 +112,12 @@ imprecise: the action computes a namespaced name but passes it as `gh`'s
 `#label`, and `gh release upload` names the asset from the source file's
 basename, so nesting does not survive the upload either way. The observed
 consequence is recorded under `Surprises & discoveries`: the 86 candidate files
-the beta4 run uploaded collapsed onto 29 published names. The root placement is
-still required, for a different reason — the binstall `pkg-url` template
-resolves from the release root, and the basename rule means a nested archive
-would publish under its last path segment. The hoist's docstring and the
+the beta4 run uploaded collapsed onto 29 published names. Root placement is a
+staging convention for the later declared-asset uploader; hoisting alone
+neither selects nor uploads files. The planned uploader must select the
+declared paths and upload them. Once published, the binstall `pkg-url` template
+resolves assets from the release root, and the basename rule means a nested
+archive would publish under its last path segment. The hoist's docstring and the
 `conftest.py` that describes it were corrected on 2026-10-19; the behaviour is
 unchanged and no test asserted the false reason.
 
@@ -2534,6 +2536,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `publish-release` and `windows-native-recipe-smoke` jobs remained skipped as
   expected. No architecture decision was made; Domain Architecture remains
   pending maintainer disposition.
+- [x] (2026-10-28) The maintainer selected the documented mapping boundary for
+  this PR and asked to track the typed-record proposal separately in
+  [netsuke#964](https://github.com/leynos/netsuke/issues/964). This settles the
+  scope of CodeRabbit's Domain Architecture warning for this change. A new
+  CodeRabbit review on `a6f71aeb` raised four additional actionable items
+  (release target validation, invalid UTF-8 handling, and two documentation
+  clarifications) plus an unverified mixed-version package concern. The four
+  actionable items are under review; no disposition is recorded for the
+  unverified concern yet. Hosted CI, Release Dry Run, Netsukefile Build Test,
+  and CodeScene pass on `a6f71aeb`; CodeRabbit's formal review requests
+  changes. Stage C remains partial and Stage D remains open, so this candidate
+  does not yet provide an active crates.io publication path.
 
 ## Surprises & discoveries
 
@@ -3802,7 +3816,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   without that prefix — so every asset the release already held would have been
   planned as a `CONFLICT`, and `finalize_github_release_cli` would have refused
   a correct release — and it nested the mapping under `"assets"`, which is the
-  *identity* record's shape, whereas `--assets` reads a top-level mapping. It
+  trusted digest record's envelope, which is distinct from the candidate
+  identity record, whereas `--assets` reads a top-level asset mapping. It
   therefore matched neither consumer. Second, its private `_bare_digest`
   re-implemented the already-exported `normalise_digest`, and its "an absent
   digest is refused rather than treated as unverified" policy is already
@@ -3909,17 +3924,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   rejects file/JSON/TOML/HTTP/provider-format effects in policy sources, with
   positive controls. Date/Author: 2026-10-24, implementation agent.
 
-- Decision status: **awaiting maintainer disposition** (2026-10-27). The
-  implementation follows the 2026-10-24 decision above: policy functions decide
-  over in-memory values, including mappings where the record contract is
-  mapping-shaped; filesystem, serialization, HTTP response, and provider-format
-  handling stays in the named adapters and CLIs. CodeRabbit's Domain
-  Architecture warning asks to move record-shape validation out of policy and
-  into adapters, which would revise that accepted boundary. The maintainer must
-  choose whether to reaffirm the current mapping/value boundary and leave the
-  warning as a documented disagreement, or to authorize a typed record boundary
-  and revise the plan and implementation scope accordingly. Neither choice is
-  recorded as made here. Date/Author: 2026-10-27, implementation agent.
+- Decision status: **retain the mapping boundary for this PR** (2026-10-28).
+  The typed-record proposal is tracked separately in
+  [netsuke#964](https://github.com/leynos/netsuke/issues/964). For this PR, the
+  implementation continues to follow the 2026-10-24 decision above: policy
+  functions decide over in-memory values, including mappings where the record
+  contract is mapping-shaped; filesystem, serialization, HTTP response, and
+  provider-format handling stays in the named adapters and CLIs. CodeRabbit's
+  Domain Architecture warning asks to move record-shape validation out of
+  policy and into adapters. That alternative is deferred for the follow-up
+  issue and does not change this PR's accepted boundary. Date/Author:
+  2026-10-28, maintainer instruction relayed by implementation agent.
 
 - Decision: keep GitHub's asset-name rewrite in its own boundary adapter.
   Rationale: `release_declaration` is policy and must not normalize a name
@@ -4096,3 +4111,12 @@ limit. All eight sequential gates passed on staged tree `0ba0ee1c`, with 98.19%
 documentation coverage, 4,725 Rust tests passing, 7 skipped, and all doctests
 passing. The Domain Architecture disposition is still pending; Stage C remains
 partial, Stage D remains open, and no release or registry setting changed.
+
+Draft 18, 2026-10-28: recorded the maintainer's decision to retain the mapping
+boundary for PR #903 and opened follow-up issue #964 for the typed-record
+proposal. Corrected the plan to distinguish the trusted digest record from the
+candidate identity and to state that `--assets` receives a top-level asset
+mapping. Corrected the workflow-contract fixture description so archive
+hoisting claims only to move files into the expected location. Recorded the
+current review findings and hosted status. Stage C remains partial and Stage D
+remains open; no release or registry setting changed.

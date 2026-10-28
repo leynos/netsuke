@@ -1,15 +1,12 @@
 """Share fixtures and helpers across workflow-contract test modules.
 
 ``scripts/hoist_binstall_archives.py`` moves the staged
-``{package}-{version}-{target}.tar.gz`` archives (and their ``.sha256``
-sidecars) from the downloaded workflow-artefact layout to the ``dist/`` root,
-so they upload under the plain names the binstall metadata in ``Cargo.toml``
-resolves: ``gh release upload`` names an asset from the source basename, so
-the root placement is what makes the name the template expects. The
-example-based, rollback, and generated-layout suites all stage workspaces
-through the fixture and helpers here, so the staging shape and the invocation
-seam live in one place. CI evidence tests use a shared attempt fixture for
-consistent API responses.
+``{package}-{version}-{target}.tar.gz`` archives and their ``.sha256``
+sidecars from the downloaded workflow-artefact layout to the ``dist/`` root,
+the expected location for the later release steps. The example-based,
+rollback, and generated-layout suites all stage workspaces through the fixture
+and helpers here, so the staging shape and invocation seam live in one place.
+CI evidence tests use a shared attempt fixture for consistent API responses.
 
 Run via ``make test-workflow-contracts``.
 """

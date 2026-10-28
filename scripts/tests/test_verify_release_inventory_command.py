@@ -310,3 +310,39 @@ def test_filesystem_failures_are_diagnosed_and_preserve_existing_output(
     assert ("unwritable" if failure == "output" else "unreadable") in diagnostic, (
         f"{failure} failure lacked a diagnostic: {diagnostic}"
     )
+
+
+@pytest.mark.parametrize("invalid", ["declaration", "sidecar"])
+def test_invalid_utf8_is_reported_without_writing_output(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str], invalid: str
+) -> None:
+    """Distinguish unreadable declarations from invalid downloaded sidecars."""
+    staging = tmp_path / "dist"
+    _stage(staging)
+    declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
+    if invalid == "sidecar":
+        _ = (staging / SIDECAR).write_bytes(b"\xff")
+    trusted = _write_record(tmp_path / "trusted.json", _trusted(staging))
+    if invalid == "declaration":
+        _ = declaration.write_bytes(b"\xff")
+    destination = tmp_path / "verified.json"
+    _ = destination.write_text("previous\n", encoding="utf-8")
+    code = main([
+        "--directory",
+        str(staging),
+        "--expected",
+        str(declaration),
+        "--trusted",
+        str(trusted),
+        "--output",
+        str(destination),
+    ])
+    assert code == (
+        EXIT_INPUT_UNREADABLE if invalid == "declaration" else EXIT_INVENTORY_REJECTED
+    ), f"invalid {invalid} returned {code}"
+    assert (
+        "declaration unreadable" if invalid == "declaration" else "inventory rejected"
+    ) in capsys.readouterr().err, f"invalid {invalid} lacked a diagnostic"
+    assert destination.read_text(encoding="utf-8") == "previous\n", (
+        f"invalid {invalid} changed the previous record"
+    )

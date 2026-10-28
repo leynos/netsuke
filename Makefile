@@ -384,6 +384,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_reconcile_github.py \
 		scripts/tests/test_release_declaration.py \
 		scripts/tests/test_release_declaration_cli.py \
+		scripts/tests/test_release_declaration_invalid_config.py \
 		scripts/tests/test_release_digest_record.py \
 		scripts/tests/test_release_digest_record_files.py \
 		scripts/tests/test_release_staged_digests.py \
