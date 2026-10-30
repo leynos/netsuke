@@ -318,6 +318,9 @@ operator, user, and contributor references are easier to find.
   moving package verification into `make test-package-verify`.
 - [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
   Bounded, localized Ninja progress labels for inline recipe edges.
+- [ADR-0068](adrs/adr-0068-typed-records-for-release-policy-boundaries.md):
+  Frozen slotted records at release policy boundaries, with adapters owning
+  external record shapes and domain-shaped mappings retained.
 - [ADR-0069](adrs/adr-0069-split-the-localization-key-tables.md): Splitting the
   Fluent key tables by audience under Whitaker's module line cap, while the
   build audit and `keys::ALL_KEYS` keep seeing one key set.
