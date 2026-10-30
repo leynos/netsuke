@@ -12,7 +12,8 @@
 //! Exit status and stream routing are process-level facts, so every case runs
 //! the real binary through `assert_cmd`. The child's environment is cleared and
 //! pointed at a sandbox `HOME` so host configuration cannot change the parsed
-//! values.
+//! values, and the locale is pinned to `en-US` so the wording these cases
+//! assert is the wording the host's preferred language cannot replace.
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::cargo::cargo_bin_cmd;
@@ -35,6 +36,12 @@ fn sandbox() -> Result<(TempDir, TempDir)> {
 }
 
 /// Run `netsuke` in the sandbox with the supplied arguments.
+///
+/// The locale is pinned to `en-US` ahead of the case's arguments: clearing the
+/// environment removes the `LC_*` and `LANG` variables the locale detector
+/// reads, but that leaves the choice to the host's fallback rather than making
+/// it explicit. Every assertion in this file names English wording, so the
+/// locale it was rendered in has to be part of the fixture.
 fn run_netsuke(workspace: &Path, home: &Path, arguments: &[&str]) -> Result<Output> {
     let mut command = cargo_bin_cmd!("netsuke");
     command
@@ -43,6 +50,7 @@ fn run_netsuke(workspace: &Path, home: &Path, arguments: &[&str]) -> Result<Outp
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_CONFIG_DIRS", home.join("empty-system-config"))
+        .args(["--locale", "en-US"])
         .args(arguments);
     command
         .output()
@@ -151,6 +159,31 @@ fn an_equals_attached_value_is_rejected_as_an_unexpected_value(
             && stderr.contains(flag)
             && stderr.contains("false"),
         "{} should report an unexpected value, got: {stderr}",
+        arguments.join(" "),
+    );
+    ensure!(
+        !stderr.contains("missing translation"),
+        "{} should not log a missing translation warning: {stderr}",
+        arguments.join(" "),
+    );
+    Ok(())
+}
+
+/// An empty attached value is localized like any other unexpected value.
+///
+/// `--flag=` carries no value at all, so `ortho_config` 0.10.0 drops the empty
+/// `InvalidValue` from the Fluent arguments and the message cannot resolve
+/// `$value`. Without the restoration in `src/cli/localization/mod.rs` this case
+/// logs a missing-translation warning and prints clap's untranslated text, so
+/// the assertions here are the regression guard for that restoration.
+#[rstest]
+#[case::verbose(&["--verbose=", "graph"])]
+#[case::html(&["graph", "--html="])]
+fn an_empty_attached_value_is_localized(#[case] arguments: &[&str]) -> Result<()> {
+    let stderr = rejected_stderr(arguments, 2)?;
+    ensure!(
+        stderr.contains("Unexpected value for") && stderr.contains("''"),
+        "{} should report an empty unexpected value, got: {stderr}",
         arguments.join(" "),
     );
     ensure!(
