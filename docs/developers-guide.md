@@ -235,9 +235,12 @@ make a helper reach both, so a helper registered privately to one surface is
 reachable from a build but invisible to `netsuke help targets`, or the reverse.
 Where the two surfaces must differ, the difference is a deliberate decision to
 record here rather than an accident of which function happened to be edited:
-the recipe-text dialect default above is the one live example, and
-`register_disabled_query_helpers` is the mechanism for a helper the query
-surface must *refuse* rather than serve.
+the recipe-text dialect default above is the one live example. A helper the
+query surface must *refuse* rather than serve is a row in the `SURFACE`
+inventory of `src/stdlib/restricted_helpers/mod.rs`; its disposition there
+drives `restricted_helpers::register_query_refusals` and the build surface's
+file-test names alike, so the inventory row, not a stub call site, is where a
+refusal belongs.
 
 Argument style follows the shape of the options, not the author's taste. A
 trailing sequence of `Option<T>` parameters, as in

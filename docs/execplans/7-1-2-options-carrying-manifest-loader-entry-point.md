@@ -845,9 +845,10 @@ and YAML fixtures, and were set from the inventory in Table 1.
     output names this plan, so "the contract passed" is the strongest available
     evidence that it read this file; the contract enumerates
     `docs/execplans/*.md` from disk.
-  - **The provenance brief I dispatched was wrong about the diff surface, and
-    the runner caught it.** I described the candidate as "docs-only — exactly
-    two files"; that describes `HEAD~1..HEAD`. Against the stated base
+  - **The provenance brief dispatched to the gate runner was wrong about the
+    diff surface, and the runner caught it.** The brief described the candidate
+    as "docs-only — exactly two files"; that describes `HEAD~1..HEAD`. Against
+    the stated base
     `6a6fed3a`, `git merge-base` is `486b876c` — the branch is *not* based on
     `origin/main` — and the surface is **44 paths, 40 of them non-Markdown**
     (`src/manifest/tests/*`, `src/stdlib/register.rs`, `test_support/*`,
@@ -1332,7 +1333,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   can drift apart while both stay green — so the finding was repaired on its
   own merits with the false premise recorded rather than inherited. A
   reviewer's stated *reason* being wrong is not by itself a reason to reject
-  the *request*; see [[netsuke-coderabbit-wrong-premise]].
+  the *request*; the two are verified separately, against source.
 
 - Observation: the scrutineer's closing recommendation — add a `slow-timeout`
   override for `cli_configuration_fixture_compiles` — is one the repository has

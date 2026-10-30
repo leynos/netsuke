@@ -22,9 +22,10 @@
 //! The rows are labelled by helper name and call shape, so a reader who greps
 //! for one helper lands on its block.
 //!
-//! The settings drop insta's module prefix, so EP-M1 can move this file into
-//! `src/stdlib/restricted_helpers/tests.rs` without renaming the snapshot — a
-//! rename during a pure move would read as a behaviour change.
+//! The settings drop insta's module prefix, so the snapshot is named for the
+//! assertion rather than for this file's path. A reorganisation that keeps
+//! `refusals.snap` in place therefore reads as no behaviour change at all,
+//! which is what let the rows move here from the retired query-helper module.
 //!
 //! # What is asserted
 //!
