@@ -1,4 +1,11 @@
-FROM docker.io/library/rockylinux:9@sha256:d7be1c094cc5845ee815d4632fe377514ee6ebcf8efaed6892889657e5ddaaa6
+# The release binary is linked on Ubuntu 24.04 and needs GLIBC_2.39, which
+# Rocky Linux 9 (2.34) cannot provide. Rocky Linux 10 ships 2.39, so the
+# installed binary can actually run the `--version` check.
+#
+# The declared runtime dependency is deliberately absent: `rpm -i --nodeps`
+# skips resolution, and the verifier reads the package's own requirements, so
+# an installed copy would only weaken the check.
+FROM docker.io/rockylinux/rockylinux:10@sha256:827d37bc128288ccf160ee318bb3cb92d591164cb217e92f8bc61e3982ae1834
 
 RUN set -eu; \
     sed -i -E '/^[[:space:]]*tsflags[[:space:]]*=[[:space:]]*nodocs[[:space:]]*$/d' /etc/dnf/dnf.conf; \

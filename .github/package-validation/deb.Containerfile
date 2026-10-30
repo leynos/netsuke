@@ -1,7 +1,14 @@
-FROM docker.io/library/debian:bookworm@sha256:f37a335e82bca302e955fa39f9dfe28f1be618f016f8a2b56318e5a5111afc26
+# The release binary is linked on Ubuntu 24.04 and needs GLIBC_2.39, which
+# Debian bookworm (2.36) cannot provide. Trixie ships 2.41, so the installed
+# binary can actually run the `--version` check.
+FROM docker.io/library/debian:trixie@sha256:2dc419c6d7fe3dad0a2f9fd469c34cc90b0f9ba642d8fde837fe3d7d34a0e7f1
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# `ninja-build` is installed, not because the check needs it present, but
+# because `dpkg -i` refuses to install a package whose declared dependencies
+# are missing. The verifier reads the package's Depends field, so an installed
+# copy cannot make an undeclared dependency pass.
 RUN set -eu; \
     for dpkg_config in /etc/dpkg/dpkg.cfg /etc/dpkg/dpkg.cfg.d/*; do \
         [ -f "$dpkg_config" ] || continue; \

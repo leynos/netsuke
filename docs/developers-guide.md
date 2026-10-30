@@ -1449,6 +1449,79 @@ specified licence file. The RPM check compares `PACKAGER`, `URL`, `LICENSE`,
 packaging job before artefact upload. Run `make test-linux-package-metadata`
 for the focused reader and package-validator tests.
 
+### Linux package installation validation
+
+Metadata checks cannot prove a package installs. The Linux packaging job
+therefore runs the pinned `validate-linux-packages` shared action after
+packaging and before the artefacts upload, so a broken package fails the lane
+instead of being published. The action is pinned to the same shared-actions
+revision as `linux-packages`, and the gate is unconditional: it runs on tags
+and in the release dry run.
+
+The action installs each package in a sandbox built from a repository-owned
+image. `.github/package-validation/deb.Containerfile` starts from digest-pinned
+Debian trixie and `.github/package-validation/rpm.Containerfile` from
+digest-pinned Rocky Linux 10. Both distributions provide GLIBC_2.39 or later,
+which the release binary requires; older bases cannot run `netsuke --version`
+at all. Both images remove their documentation exclusions
+(`path-exclude=/usr/share/man`, `tsflags=nodocs`, and `%_excludedocs`) and
+install `man-db`, because a stock minimal image would otherwise omit the manual
+page and fail the check for every package.
+
+The Debian image also installs `ninja-build`, because `dpkg -i` refuses to
+install a package whose declared dependencies are missing. The RPM image
+deliberately does not: `rpm -i --nodeps` skips resolution, so an installed copy
+would only weaken the check. In both cases the verifier reads the package's
+declared metadata, so a package that omits the dependency still fails.
+
+Inside the sandbox, `/usr/local/bin/verify-installed-package` (built from
+`.github/package-validation/verify-installed-package.sh`) checks that
+`netsuke --version` succeeds, that `man -w netsuke` resolves to a non-empty
+path, and that the package declares `ninja-build` through `dpkg-query` or
+`rpm -q --requires`. It fails when neither tool is available rather than
+passing vacuously.
+
+The workflow builds the images with `podman build --arch`, mapping
+`x86_64-unknown-linux-gnu` to `amd64` and `aarch64-unknown-linux-gnu` to
+`arm64`. When the package architecture differs from the runner's, it installs
+`qemu-user-static` and restarts `systemd-binfmt` first. Images are tagged under
+`localhost/` and never pushed, so the packaging job keeps `contents: read`
+permissions.
+
+The shared action resolves Polythene for itself, but its revision predates the
+local-image probe and would treat `localhost/...` as a registry host. The
+repository therefore passes
+`polythene-path: .github/package-validation/polythene_cli.py`, a PEP 723
+wrapper pinned to the Polythene commit that probes `podman image exists` before
+pulling. The filename must not be `polythene.py`: Python puts the script's
+directory first on `sys.path`, so that name shadows the package the wrapper
+imports.
+
+The shared action skips the sandbox install when the package architecture
+differs from the host's. Both Linux lanes currently run on x64 runners, so an
+arm64 package is checked against the archive's file list and metadata but is
+not installed. The architecture-matched images still make a future arm64 runner
+work without a workflow change.
+
+To reproduce locally from the repository root:
+
+```sh
+podman build --arch amd64 \
+  --file .github/package-validation/deb.Containerfile \
+  --tag localhost/netsuke-package-validation-deb:amd64 \
+  .github/package-validation
+podman run --rm -v "$PWD/dist:/packages:ro,z" \
+  localhost/netsuke-package-validation-deb:amd64 \
+  sh -c 'dpkg -i /packages/*.deb && verify-installed-package netsuke'
+```
+
+The contract tests are split across
+`tests/workflow_contracts/linux_package_validation_gate_test.py`, which holds
+the action pin, step order, inputs, dry-run wiring, and architecture mapping,
+and `tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
+holds the image contents, the verifier's pass and fail paths, and the Polythene
+pin. Run `make test-workflow-contracts`.
+
 ### Windows MSI packaging and upgrade validation
 
 The Windows packaging workflow passes the repository-owned authoring file as
