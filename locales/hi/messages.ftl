@@ -87,6 +87,7 @@ clap-error-invalid-subcommand = अज्ञात उपआदेश: { $subcom
 # अपने सत्यापकों की विफलता (ErrorKind::ValueValidation) और प्रकार की असंगति
 # (ErrorKind::InvalidValue) में अंतर बना रहे।
 clap-error-value-validation = { $argument } का सत्यापन विफल रहा: { $value }
+clap-error-invalid-utf8 = एक या अधिक तर्कों में अमान्य UTF-8 पाया गया।
 
 # चलाने के दौरान की त्रुटियाँ और संदर्भ।
 runner.manifest.not_found = मैनिफ़ेस्ट “{ $manifest_name }” { $directory } में नहीं मिला।

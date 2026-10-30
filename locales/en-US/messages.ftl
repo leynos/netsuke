@@ -89,6 +89,9 @@ clap-error-invalid-subcommand = Unknown subcommand: { $subcommand }
 # custom validator failures (ErrorKind::ValueValidation) from type mismatches
 # (ErrorKind::InvalidValue).
 clap-error-value-validation = Validation failed for { $argument }: { $value }
+# clap's InvalidUtf8 errors carry no context, so this message must
+# stay placeholder-free; the localizer formats it without arguments.
+clap-error-invalid-utf8 = Invalid UTF-8 was detected in one or more arguments
 
 # Runner errors and contexts.
 runner.manifest.not_found = Manifest '{ $manifest_name }' not found in { $directory }.

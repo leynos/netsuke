@@ -103,7 +103,10 @@ legacy-digests = ["sha1", "md5"]
 lint = ["dep:granit-parser"]
 
 [dependencies]
-clap = { version = "4.5.0", features = ["derive"] }
+# `error-context` is a clap default, but naming it documents that
+# `LocalizedValueParser` depends on `Error::insert` to attach the argument and
+# value context the localizer needs; see `src/cli/value_parser.rs`.
+clap = { version = "4.5.0", features = ["derive", "error-context"] }
 serde = { version = "1", features = ["derive"] }
 serde-saphyr = "1.2.0"
 # `serde-saphyr` parses manifests through `granit-parser`; the linter's span

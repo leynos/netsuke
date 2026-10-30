@@ -87,6 +87,7 @@ clap-error-invalid-subcommand = Neznámý podpříkaz: { $subcommand }
 # odlišily chyby vlastních ověřovačů (ErrorKind::ValueValidation) od neshody
 # typů (ErrorKind::InvalidValue).
 clap-error-value-validation = Ověření selhalo pro { $argument }: { $value }
+clap-error-invalid-utf8 = V jednom nebo více argumentech byla zjištěna neplatná UTF-8.
 
 # Chyby a kontext běhu.
 runner.manifest.not_found = Manifest „{ $manifest_name }“ nebyl v adresáři { $directory } nalezen.

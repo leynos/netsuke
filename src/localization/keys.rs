@@ -1,9 +1,6 @@
-//! Fluent message identifiers used by Netsuke.
-//!
-//! This file holds only the key table: the build-time localization audit
-//! parses its `define_keys!` invocation, and the macro itself is defined in
-//! the parent module. The `netsuke check` keys live in `check_keys.rs` and
-//! are re-exported here, so every key is still reached as `keys::NAME`.
+//! Fluent message identifiers used by Netsuke: the `define_keys!` table that
+//! the build-time localization audit parses. `check_keys.rs` holds the
+//! `netsuke check` keys and is re-exported here, so every key is `keys::NAME`.
 
 pub use super::check_keys::*;
 
@@ -65,6 +62,9 @@ define_keys! {
     CLAP_ERROR_INVALID_VALUE => "clap-error-invalid-value",
     CLAP_ERROR_INVALID_SUBCOMMAND => "clap-error-invalid-subcommand",
     CLAP_ERROR_VALUE_VALIDATION => "clap-error-value-validation",
+    // Derived from `ErrorKind::InvalidUtf8`; keep "utf8" unhyphenated. A `///`
+    // doc comment here would become an attribute token `define_keys!` rejects.
+    CLAP_ERROR_INVALID_UTF8 => "clap-error-invalid-utf8",
     CLI_JOBS_INVALID_NUMBER => "cli.validation.jobs.invalid_number",
     CLI_JOBS_OUT_OF_RANGE => "cli.validation.jobs.out_of_range",
     CLI_SCHEME_EMPTY => "cli.validation.scheme.empty",

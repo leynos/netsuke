@@ -87,6 +87,7 @@ clap-error-invalid-subcommand = زیرفرمان ناشناخته: { $subcommand
 # اعتبارسنج‌های سفارشی (ErrorKind::ValueValidation) از ناسازگاری نوع
 # (ErrorKind::InvalidValue) بازشناخته شود.
 clap-error-value-validation = اعتبارسنجی { $argument } ناکام ماند: { $value }
+clap-error-invalid-utf8 = UTF-8 نامعتبر در یک یا چند آرگومان شناسایی شد.
 
 # خطاها و بافتار زمان اجرا.
 runner.manifest.not_found = مانیفست «{ $manifest_name }» در { $directory } یافت نشد.

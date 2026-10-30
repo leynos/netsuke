@@ -973,6 +973,9 @@ to a fallback, and the localized text never renders — for `--color`, `--jobs`,
 the same key correctly. **Pre-existing and netsuke-fixable** using clap's public
 `Error::insert`; no upstream change is required. Tracked as
 [leynos/netsuke#961](https://github.com/leynos/netsuke/issues/961).
+**Resolved:** `LocalizedValueParser` now inserts `InvalidArg` and
+`InvalidValue`, so `clap-error-value-validation` renders in every catalogue,
+and the `InvalidUtf8` branch has its own `clap-error-invalid-utf8` key.
 
 Lessons. First, a sampled assertion is the wrong instrument for proving that a
 generator reaches a class: the first V1 non-vacuity check would have failed

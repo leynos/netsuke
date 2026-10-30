@@ -37,19 +37,19 @@ Feature: Canonical CLI policy flags
   Scenario: Invalid color policy value fails validation
     When the CLI is parsed with invalid arguments "--color loud"
     Then an error should be returned
-    And the localized error contains "Invalid color policy 'loud'"
+    And the localized error contains "Validation failed for --color <POLICY>: loud"
 
   Scenario: Invalid emoji policy value fails validation
     When the CLI is parsed with invalid arguments "--emoji sometimes"
     Then an error should be returned
-    And the localized error contains "Invalid emoji policy 'sometimes'"
+    And the localized error contains "Validation failed for --emoji <POLICY>: sometimes"
 
   Scenario: Invalid progress policy value fails validation
     When the CLI is parsed with invalid arguments "--progress paused"
     Then an error should be returned
-    And the localized error contains "Invalid progress policy 'paused'"
+    And the localized error contains "Validation failed for --progress <POLICY>: paused"
 
   Scenario: Invalid accessibility policy value fails validation
     When the CLI is parsed with invalid arguments "--accessibility yes"
     Then an error should be returned
-    And the localized error contains "Invalid accessibility policy 'yes'"
+    And the localized error contains "Validation failed for --accessibility <POLICY>: yes"
