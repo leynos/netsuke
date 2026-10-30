@@ -96,6 +96,14 @@ def test_installs_each_format_in_the_architecture_image(
         assert fragment in call, (
             f"the Podman call must contain {fragment!r}, got {call!r}"
         )
+    # The stub records the command without running it, so the fragments above
+    # only prove both commands are present. The contract is install *then*
+    # verify in one container: a swapped order would verify against a package
+    # that is not installed.
+    verifier = "/usr/local/bin/verify-installed-package"
+    assert call.index(install) < call.index(verifier), (
+        f"the package must be installed before the verifier runs, got {call!r}"
+    )
 
 
 def test_fails_when_the_package_is_absent(tmp_path: Path) -> None:
