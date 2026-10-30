@@ -25,7 +25,7 @@ pub use types::{
 #[derive(Debug, Clone)]
 pub struct StdlibConfig {
     /// Capability-scoped handle to the workspace root shared by helpers.
-    workspace_root: Arc<Dir>,
+    pub(super) workspace_root: Arc<Dir>,
     /// Optional absolute UTF-8 workspace path for host-side filesystem access.
     workspace_root_path: Option<Utf8PathBuf>,
     /// Cache directory for network fetches, relative to the workspace root.

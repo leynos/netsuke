@@ -229,6 +229,23 @@ pub(crate) fn render_stdlib_template(world: &TestWorld, template: &str, path: &s
     render_template(world, &template, &target)
 }
 
+/// Render a reading filter against the fixture prepared outside the
+/// workspace.
+///
+/// The path is passed through exactly as recorded, so the filter receives an
+/// absolute request the workspace capability cannot cover.
+#[when("I render template {template:string} at the stdlib outside path")]
+pub(crate) fn render_stdlib_template_at_outside_path(
+    world: &TestWorld,
+    template: &str,
+) -> Result<()> {
+    let content = TemplateContent::new(template);
+    let path = world.stdlib_outside_file.get().context(
+        "expected a stdlib outside fixture; add a 'a stdlib file ... outside the workspace contains ...' step",
+    )?;
+    render_template(world, &content, &TemplatePath::from(path))
+}
+
 #[expect(
     clippy::shadow_reuse,
     reason = "rstest-bdd macro generates wrapper; FIXME: https://github.com/leynos/rstest-bdd/issues/381"

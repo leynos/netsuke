@@ -10,7 +10,7 @@ use test_support::fluent::normalize_fluent_isolates;
 #[rstest]
 fn contents_and_linecount_filters() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    let mut env = fallible::stdlib_env()?;
+    let mut env = fallible::stdlib_env_for_workspace(&root)?;
     let file = root.join("file");
     let text = fallible::render(&mut env, "contents", "{{ path | contents }}", &file)
         .context("render contents filter")?;
@@ -53,7 +53,7 @@ fn contents_and_linecount_filters() -> Result<()> {
 #[rstest]
 fn contents_filter_unsupported_encoding() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    let mut env = fallible::stdlib_env()?;
+    let mut env = fallible::stdlib_env_for_workspace(&root)?;
     fallible::register_template(
         &mut env,
         "contents_bad_encoding",
@@ -84,7 +84,7 @@ fn contents_filter_unsupported_encoding() -> Result<()> {
 #[rstest]
 fn size_filter() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    let mut env = fallible::stdlib_env()?;
+    let mut env = fallible::stdlib_env_for_workspace(&root)?;
     let file = root.join("file");
     let size = fallible::render(&mut env, "size", "{{ path | size }}", &file)
         .context("render size filter")?;
@@ -96,7 +96,7 @@ fn size_filter() -> Result<()> {
 #[rstest]
 fn size_filter_missing_file() -> Result<()> {
     let (_temp, root) = fallible::filter_workspace()?;
-    let mut env = fallible::stdlib_env()?;
+    let mut env = fallible::stdlib_env_for_workspace(&root)?;
     fallible::register_template(&mut env, "size_missing", "{{ path | size }}")?;
     let template = env
         .get_template("size_missing")

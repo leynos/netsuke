@@ -147,10 +147,15 @@ pub(crate) fn register_manifest_query(env: &mut Environment<'_>) -> StdlibState 
 /// Register helpers that do not execute a command or make a network request.
 fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) {
     register_file_tests(env);
+    let reading_root = path::ReadingRoot::new(
+        Arc::clone(&config.workspace_root),
+        config.workspace_root_path().map(Utf8Path::to_path_buf),
+    );
     path::register_filters(
         env,
         config.home_directory().clone(),
         config.file_max_read_bytes(),
+        reading_root,
     );
     collections::register_filters(env);
     recipe_text::register_filters(env, config.dialect());
@@ -186,6 +191,9 @@ pub fn value_from_bytes(bytes: Vec<u8>) -> Value {
         Err(err) => Value::from_bytes(err.into_bytes()),
     }
 }
+
+
+
 
 /// Register inventoried `is <kind>` file tests, treating non-string inputs as
 /// a negative match.
@@ -228,14 +236,17 @@ fn file_test_predicate(name: &str) -> Option<fn(fs::FileType) -> bool> {
 fn is_dir(ft: fs::FileType) -> bool {
     ft.is_dir()
 }
+
 /// Test whether a file type is a regular file.
 fn is_file(ft: fs::FileType) -> bool {
     ft.is_file()
 }
+
 /// Test whether a file type is a symbolic link.
 fn is_symlink(ft: fs::FileType) -> bool {
     ft.is_symlink()
 }
+
 
 /// Test whether a file type is a named pipe (FIFO).
 #[cfg(unix)]
@@ -243,11 +254,13 @@ fn is_fifo(ft: fs::FileType) -> bool {
     ft.is_fifo()
 }
 
+
 /// Report whether a file type is a named pipe, always `false` off Unix.
 #[cfg(not(unix))]
 const fn is_fifo(_ft: fs::FileType) -> bool {
     false
 }
+
 
 /// Test whether a file type is a block device.
 #[cfg(unix)]
@@ -255,11 +268,13 @@ fn is_block_device(ft: fs::FileType) -> bool {
     ft.is_block_device()
 }
 
+
 /// Report whether a file type is a block device, always `false` off Unix.
 #[cfg(not(unix))]
 const fn is_block_device(_ft: fs::FileType) -> bool {
     false
 }
+
 
 /// Test whether a file type is a character device.
 #[cfg(unix)]
@@ -267,17 +282,20 @@ fn is_char_device(ft: fs::FileType) -> bool {
     ft.is_char_device()
 }
 
+
 /// Report whether a file type is a character device, always `false` off Unix.
 #[cfg(not(unix))]
 const fn is_char_device(_ft: fs::FileType) -> bool {
     false
 }
 
+
 /// Test whether a file type is a block or character device.
 #[cfg(unix)]
 fn is_device(ft: fs::FileType) -> bool {
     is_block_device(ft) || is_char_device(ft)
 }
+
 
 /// Report whether a file type is a device, always `false` off Unix.
 #[cfg(not(unix))]

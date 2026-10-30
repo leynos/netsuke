@@ -270,6 +270,7 @@ define_keys! {
     STDLIB_PATH_UNSUPPORTED_ENCODING => "stdlib.path.contents.unsupported_encoding",
     STDLIB_PATH_FILE_TOO_LARGE => "stdlib.path.contents.file_too_large",
     STDLIB_PATH_NOT_REGULAR_FILE => "stdlib.path.contents.not_regular_file",
+    STDLIB_PATH_OUTSIDE_WORKSPACE => "stdlib.path.contents.outside_workspace",
     STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM => "stdlib.path.hash.unsupported_algorithm",
     STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM_LEGACY => "stdlib.path.hash.unsupported_algorithm_legacy",
     STDLIB_COLLECTIONS_COMPACT_NOT_SEQUENCE => "stdlib.collections.compact.not_sequence",
@@ -349,3 +350,4 @@ define_keys! {
     EXAMPLE_FILES_PROCESSED => "example.files_processed",
     EXAMPLE_ERRORS_FOUND => "example.errors_found",
 }
+// weave: run 'weave explain src/localization/keys.rs' for per-hunk detail, 'weave check' to verify your resolution

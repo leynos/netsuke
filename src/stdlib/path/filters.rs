@@ -6,10 +6,10 @@
 use camino::Utf8Path;
 use minijinja::{Environment, Error, ErrorKind, value::Kwargs};
 
-use super::{bounded_read, fs_utils, hash_utils, path_utils, read_telemetry};
+use super::{ReadingRoot, bounded_read, fs_utils, hash_utils, path_utils, read_telemetry};
 use crate::localization::{self, keys};
 use crate::stdlib::config::types::HomeDirectory;
-use crate::stdlib::path::fs_utils::FileReadLimits;
+use crate::stdlib::path::fs_utils::{FileReadLimits, ReadScope};
 
 /// Register the `expanduser` filter.
 ///
@@ -66,11 +66,25 @@ pub(crate) fn register_query_filters(env: &mut Environment<'_>) {
     register_lexical_filters(env);
 }
 
+/// The operator-configured allowance and the workspace reads resolve through.
+///
+/// Both are fixed at registration: the ceiling comes from configuration and
+/// the capability from the configured workspace. A call may narrow the budget
+/// but cannot widen it, and cannot name a different root.
+#[derive(Clone, Copy)]
+struct ReadBudget<'a> {
+    /// Ceiling on the bytes any one read may consume.
+    max_bytes: u64,
+    /// Workspace capability the requested path resolves through.
+    root: &'a ReadingRoot,
+}
+
 /// Register the file-inspecting path filters and the `expanduser` filter.
 pub(crate) fn register_filters(
     env: &mut Environment<'_>,
     home_directory: HomeDirectory,
     file_max_read_bytes: u64,
+    reading_root: ReadingRoot,
 ) {
     register_lexical_filters(env);
     env.add_filter("realpath", |raw: String| -> Result<String, Error> {
@@ -80,24 +94,51 @@ pub(crate) fn register_filters(
     env.add_filter("size", |raw: String| -> Result<u64, Error> {
         fs_utils::file_size(Utf8Path::new(&raw))
     });
-    // Templates using `contents` read from the ambient file system; enable the stdlib only for trusted templates.
+    register_reading_filters(env, file_max_read_bytes, reading_root);
+}
+
+/// Register the filters that read a file's contents.
+///
+/// Reads resolve through the configured workspace capability, so a template
+/// path cannot reach a file the rest of the stdlib could not. Each closure
+/// owns a clone of the capability handle, which is a reference-count bump
+/// rather than a second open.
+fn register_reading_filters(
+    env: &mut Environment<'_>,
+    file_max_read_bytes: u64,
+    reading_root: ReadingRoot,
+) {
+    let contents_root = reading_root.clone();
     env.add_filter(
         "contents",
         move |raw: String, encoding: Option<String>, kwargs: Kwargs| -> Result<String, Error> {
-            read_contents(&raw, encoding.as_deref(), &kwargs, file_max_read_bytes)
+            read_contents(
+                &raw,
+                encoding.as_deref(),
+                &kwargs,
+                ReadBudget {
+                    max_bytes: file_max_read_bytes,
+                    root: &contents_root,
+                },
+            )
         },
     );
+    let linecount_root = reading_root.clone();
     env.add_filter(
         "linecount",
         move |raw: String, kwargs: Kwargs| -> Result<usize, Error> {
             read_bounded(
                 read_telemetry::FILTER_LINECOUNT,
                 &kwargs,
-                file_max_read_bytes,
-                |limits| bounded_read::linecount(Utf8Path::new(&raw), limits),
+                ReadBudget {
+                    max_bytes: file_max_read_bytes,
+                    root: &linecount_root,
+                },
+                |scope| bounded_read::linecount(Utf8Path::new(&raw), scope),
             )
         },
     );
+    let hash_root = reading_root.clone();
     env.add_filter(
         "hash",
         move |raw: String, alg: Option<String>, kwargs: Kwargs| -> Result<String, Error> {
@@ -105,8 +146,11 @@ pub(crate) fn register_filters(
             read_bounded(
                 read_telemetry::FILTER_HASH,
                 &kwargs,
-                file_max_read_bytes,
-                |limits| hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm, limits),
+                ReadBudget {
+                    max_bytes: file_max_read_bytes,
+                    root: &hash_root,
+                },
+                |scope| hash_utils::compute_hash(Utf8Path::new(&raw), &algorithm, scope),
             )
         },
     );
@@ -122,9 +166,12 @@ pub(crate) fn register_filters(
             read_bounded(
                 read_telemetry::FILTER_DIGEST,
                 &kwargs,
-                file_max_read_bytes,
-                |limits| {
-                    hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm, limits)
+                ReadBudget {
+                    max_bytes: file_max_read_bytes,
+                    root: &reading_root,
+                },
+                |scope| {
+                    hash_utils::compute_digest(Utf8Path::new(&raw), digest_len, &algorithm, scope)
                 },
             )
         },
@@ -154,10 +201,10 @@ fn read_contents(
     raw: &str,
     encoding: Option<&str>,
     kwargs: &Kwargs,
-    configured_max_read_bytes: u64,
+    budget: ReadBudget<'_>,
 ) -> Result<String, Error> {
     let filter = read_telemetry::FILTER_CONTENTS;
-    let limits = match path_call_limits(kwargs, configured_max_read_bytes) {
+    let limits = match path_call_limits(kwargs, budget.max_bytes) {
         Ok(limits) => limits,
         Err(err) => return read_telemetry::record_unresolved_read(filter, err),
     };
@@ -166,9 +213,11 @@ fn read_contents(
     }
     let chosen_encoding = encoding.unwrap_or("utf-8").to_ascii_lowercase();
     match chosen_encoding.as_str() {
-        "utf-8" | "utf8" => read_and_record(filter, &limits, |resolved| {
-            bounded_read::read_utf8(Utf8Path::new(raw), resolved)
-        }),
+        "utf-8" | "utf8" => {
+            read_and_record(filter, ReadScope::new(&limits, budget.root), |scope| {
+                bounded_read::read_utf8(Utf8Path::new(raw), scope)
+            })
+        }
         other => {
             let unsupported = Error::new(
                 ErrorKind::InvalidOperation,
@@ -193,17 +242,17 @@ fn read_contents(
 fn read_bounded<T>(
     filter: &'static str,
     kwargs: &Kwargs,
-    configured_max_read_bytes: u64,
-    read: impl FnOnce(&FileReadLimits) -> Result<T, Error>,
+    budget: ReadBudget<'_>,
+    read: impl FnOnce(ReadScope<'_>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    let limits = match path_call_limits(kwargs, configured_max_read_bytes) {
+    let limits = match path_call_limits(kwargs, budget.max_bytes) {
         Ok(limits) => limits,
         Err(err) => return read_telemetry::record_unresolved_read(filter, err),
     };
     if let Err(err) = kwargs.assert_all_used() {
         return read_telemetry::record_unresolved_read(filter, err);
     }
-    read_and_record(filter, &limits, read)
+    read_and_record(filter, ReadScope::new(&limits, budget.root), read)
 }
 
 /// Run one bounded read under `limits` and record its outcome once.
@@ -213,10 +262,10 @@ fn read_bounded<T>(
 /// through this call keeps exactly one recording per filter result.
 fn read_and_record<T>(
     filter: &'static str,
-    limits: &FileReadLimits,
-    read: impl FnOnce(&FileReadLimits) -> Result<T, Error>,
+    scope: ReadScope<'_>,
+    read: impl FnOnce(ReadScope<'_>) -> Result<T, Error>,
 ) -> Result<T, Error> {
-    read_telemetry::record_file_read(filter, Some(limits), read(limits))
+    read_telemetry::record_file_read(filter, Some(scope.limits), read(scope))
 }
 
 /// Resolve the per-call read limits from `max_bytes` and `follow_symlinks` kwargs.
