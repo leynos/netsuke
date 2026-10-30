@@ -40,6 +40,11 @@ def test_a_record_normalizes_digest_case() -> None:
         pytest.param((("a", DIGEST.upper()),), "lowercase", id="un-normalized"),
         pytest.param((("a", "nothex"),), "non-digest", id="not-hexadecimal"),
         pytest.param((("a", 1),), "as strings", id="non-string-digest"),
+        pytest.param(
+            (("a", DIGEST), ("a", OTHER)),
+            "each asset name once",
+            id="duplicate-name",
+        ),
     ],
 )
 def test_a_directly_constructed_record_is_validated(
