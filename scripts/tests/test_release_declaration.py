@@ -1,7 +1,12 @@
 """Specify the pure release-asset naming and package-count policy."""
 
+import typing as typ
+
 import pytest
 import release_declaration
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc
 
 ARCHIVES = (
     "netsuke-build-0.1.0-beta4-aarch64-apple-darwin.tar.gz",
@@ -105,10 +110,27 @@ def test_a_platform_with_no_declared_format_is_refused() -> None:
         )
 
 
-def test_a_configuration_without_targets_is_refused() -> None:
-    """Refuse an empty target set rather than declare a smaller release."""
+@pytest.mark.parametrize(
+    "build",
+    [
+        pytest.param(release_declaration.StagingTargets, id="direct-construction"),
+        pytest.param(release_declaration.StagingTargets.from_targets, id="factory"),
+    ],
+)
+def test_a_configuration_without_targets_is_refused(
+    build: cabc.Callable[
+        [tuple[release_declaration.StagingTarget, ...]],
+        release_declaration.StagingTargets,
+    ],
+) -> None:
+    """Refuse an empty target set rather than declare a smaller release.
+
+    Both construction paths are exercised: the invariant belongs to the
+    record, so a caller that skips the factory must not obtain a record the
+    policy would then under-declare from.
+    """
     with pytest.raises(release_declaration.MissingTargetsError):
-        _ = release_declaration.StagingTargets.from_targets(())
+        _ = build(())
 
 
 def test_package_names_are_observed_from_the_supplied_tree_facts() -> None:
