@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Onbekende subopdracht: { $subcommand }
 # van eigen validators (ErrorKind::ValueValidation) te onderscheiden van
 # typeconflicten (ErrorKind::InvalidValue).
 clap-error-value-validation = Validatie mislukt voor { $argument }: { $value }
+clap-error-invalid-utf8 = Ongeldige UTF-8 aangetroffen in een of meer argumenten.
 
 # Fouten en context van de uitvoering.
 runner.manifest.not_found = Manifest ‘{ $manifest_name }’ niet gevonden in { $directory }.

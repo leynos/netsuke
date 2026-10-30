@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = أمر فرعي غير معروف: { $subcommand
 # المدقّقات المخصّصة (ErrorKind::ValueValidation) عن عدم تطابق الأنواع
 # (ErrorKind::InvalidValue).
 clap-error-value-validation = فشل التحقق من { $argument }: { $value }
+clap-error-invalid-utf8 = تم اكتشاف ترميز UTF-8 غير صالح في مُعامل واحد أو أكثر.
 
 # أخطاء التنفيذ وسياقه.
 runner.manifest.not_found = تعذّر العثور على ملف البيانات «{ $manifest_name }» في { $directory }.

@@ -15,4 +15,7 @@ define_keys! {
     CLAP_ERROR_TOO_MANY_VALUES => "clap-error-too-many-values",
     CLAP_ERROR_INVALID_SUBCOMMAND => "clap-error-invalid-subcommand",
     CLAP_ERROR_VALUE_VALIDATION => "clap-error-value-validation",
+    // Derived from `ErrorKind::InvalidUtf8`; keep "utf8" unhyphenated. A `///`
+    // doc comment here would become an attribute token `define_keys!` rejects.
+    CLAP_ERROR_INVALID_UTF8 => "clap-error-invalid-utf8",
 }

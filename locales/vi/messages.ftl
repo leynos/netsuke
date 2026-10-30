@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Lệnh con không xác định: { $subcommand }
 # bộ kiểm tra riêng (ErrorKind::ValueValidation) với lỗi sai kiểu
 # (ErrorKind::InvalidValue).
 clap-error-value-validation = Kiểm tra thất bại cho { $argument }: { $value }
+clap-error-invalid-utf8 = Phát hiện UTF-8 không hợp lệ trong một hoặc nhiều đối số.
 
 # Lỗi và ngữ cảnh khi chạy.
 runner.manifest.not_found = Không tìm thấy tệp kê khai “{ $manifest_name }” trong { $directory }.

@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Subperintah tidak dikenal: { $subcommand }
 # validator khusus (ErrorKind::ValueValidation) terbedakan dari ketidakcocokan
 # tipe (ErrorKind::InvalidValue).
 clap-error-value-validation = Validasi gagal untuk { $argument }: { $value }
+clap-error-invalid-utf8 = UTF-8 tidak sah terdeteksi pada satu atau beberapa argumen.
 
 # Galat dan konteks saat berjalan.
 runner.manifest.not_found = Manifes "{ $manifest_name }" tidak ditemukan di { $directory }.

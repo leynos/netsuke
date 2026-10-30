@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Okänt underkommando: { $subcommand }
 # skilja fel från egna validerare (ErrorKind::ValueValidation) från
 # typkonflikter (ErrorKind::InvalidValue).
 clap-error-value-validation = Valideringen misslyckades för { $argument }: { $value }
+clap-error-invalid-utf8 = Ogiltig UTF-8 upptäcktes i ett eller flera argument.
 
 # Fel och sammanhang från körningen.
 runner.manifest.not_found = Manifestet ”{ $manifest_name }” hittades inte i { $directory }.

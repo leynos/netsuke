@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Subcomandă necunoscută: { $subcommand }
 # deosebi erorile validatoarelor proprii (ErrorKind::ValueValidation) de
 # nepotrivirile de tip (ErrorKind::InvalidValue).
 clap-error-value-validation = Validarea a eșuat pentru { $argument }: { $value }
+clap-error-invalid-utf8 = S-a detectat UTF-8 nevalid într-unul sau mai multe argumente.
 
 # Erori și context la execuție.
 runner.manifest.not_found = Manifestul „{ $manifest_name }” nu a fost găsit în { $directory }.

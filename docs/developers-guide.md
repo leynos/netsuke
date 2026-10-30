@@ -673,6 +673,18 @@ that differs from `en-US`. The `netsuke check` keys live in
 `src/localization/clap_error_keys.rs`, both re-exported by `keys.rs`; the audit
 reads all three files as one key set and rejects a key declared twice.
 
+A custom `TypedValueParser` that reports `ErrorKind::ValueValidation` must
+attach clap's `InvalidArg` context when clap supplies the argument and must
+always attach `InvalidValue`. `Command::error` attaches neither, so a catalogue
+message such as `clap-error-value-validation` cannot interpolate
+`{ $argument }` or `{ $value }`; the localizer then emits a missing-translation
+warning and returns the raw fallback text. `LocalizedValueParser` in
+`src/cli/value_parser.rs` shows the pattern. `LocalizedUtf8PathParser` in
+`src/cli/parser/mod.rs` is a deliberate exception: it reports an
+argument-specific UTF-8 message already localized under `cli.file.non_utf8` or
+`cli.directory.non_utf8`, so attaching the generic value-validation context
+would replace that tailored diagnostic.
+
 A *diagnostic* message whose text carries a bracketed code such as
 `[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
 every catalogue. The code is part of the message text rather than a field, so a

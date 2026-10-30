@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Неизвестная подкоманда: { $
 # различать ошибки собственных проверяющих (ErrorKind::ValueValidation) и
 # несовпадение типов (ErrorKind::InvalidValue).
 clap-error-value-validation = Проверка не пройдена для { $argument }: { $value }
+clap-error-invalid-utf8 = Обнаружен недопустимый UTF-8 в одном или нескольких аргументах.
 
 # Ошибки и контекст выполнения.
 runner.manifest.not_found = Манифест «{ $manifest_name }» не найден в каталоге { $directory }.
