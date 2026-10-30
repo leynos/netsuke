@@ -4069,9 +4069,10 @@ check.
 Release builds generate their manual and PowerShell help explicitly with
 `cargo-orthohelp`, rather than consuming the ordinary-build help artefacts from
 `build.rs`. The metadata root is `netsuke::cli::ReleaseHelpCli`, the sole
-permitted composition site for release help. `CliConfig` supplies only layered
-configuration fields; `Cli::command()` supplies parser-only flags such as
-`-C/--directory` and `--config`, plus documented subcommands, including
+permitted composition site for release help. `CliConfig` supplies the layered
+configuration fields and owns each configuration-derived value placeholder
+through `cli(value_name = "...")`; `Cli::command()` supplies parser-only flags
+such as `-C/--directory` and `--config`, plus documented subcommands, including
 `help targets`. The adapter projects existing CLI Fluent keys onto published
 configuration fields and adds parser-only help metadata without adding an
 environment or file source. It omits the structural `cmds` container. Keep
@@ -4110,6 +4111,18 @@ variable-free key declared in `src/localization/keys.rs` and present in every
 catalogue. The identifier guard collects `synopsis_id` alongside `help_id` and
 `about_id`, and the release-help metadata snapshot pins the published value, so
 a future derive default cannot reintroduce the placeholder silently.
+
+Value placeholders follow the same ownership split. A configuration-derived
+option declares its placeholder in `CliConfig` with `cli(value_name = "...")`;
+without that declaration the generator falls back to a machine type such as
+`UTF8PATHBUF`, `USIZE`, or `LIST`, and publishes it in the manual page and
+`PowerShell` help. `src/cli/release_help/parser_fields.rs` remains responsible
+only for parser-only selectors, which have no configuration source from which
+to derive a placeholder. The parity test compares every value-taking option's
+`cli.value_name` against the first value name `Cli::command()` declares, so
+adding a value-taking option requires matching declarations in both
+`src/cli/command.rs` and `src/cli/config/mod.rs`; a placeholder that disagrees
+with the parser fails the test rather than reaching a release artefact.
 
 Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned

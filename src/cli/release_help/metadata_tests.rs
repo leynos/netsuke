@@ -141,10 +141,11 @@ fn parser_only_metadata_requires_the_parser_argument(#[case] argument_id: &str) 
 /// makes the parity a standing contract: a future metadata drift fails here
 /// instead of shipping a manual page the binary contradicts.
 ///
-/// Value *names* are deliberately not compared. Netsuke sets no
-/// `cli_value_name`, so the generated metadata has always reported `None` while
-/// the handwritten parser supplies `FILE`, `N`, and friends; that gap predates
-/// the v0.10.0 migration and is not this contract's subject.
+/// Value names are compared too. `CliConfig` declares the placeholder for every
+/// configuration-derived option through `cli(value_name = "...")`; without that
+/// declaration the generator falls back to a machine type such as `UTF8PATHBUF`
+/// or `USIZE`, which no reader of the manual page should see. A name missing
+/// here, or one that disagrees with the parser, fails the test.
 #[test]
 fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
     let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
@@ -182,6 +183,23 @@ fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
             field.name
         );
         if takes_value {
+            let parser_value_name = argument
+                .get_value_names()
+                .and_then(|names| names.first())
+                .map(ToString::to_string);
+            ensure!(
+                parser_value_name.is_some(),
+                "parser argument {} should declare a value name to document",
+                field.name
+            );
+            ensure!(
+                documentation.value_name == parser_value_name,
+                "release help should document the value placeholder {name} \
+                 parses: documented {documented:?}, parser {parsed:?}",
+                name = field.name,
+                documented = documentation.value_name,
+                parsed = parser_value_name,
+            );
             ensure!(
                 documentation.possible_values
                     == argument
@@ -216,6 +234,16 @@ fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
         ensure!(
             compared.contains(&expected),
             "release help should compare {expected} against the parser: {compared:?}"
+        );
+    }
+
+    // Value-taking fields are where the generator's `UTF8PATHBUF` and `USIZE`
+    // fallbacks appeared, so their absence from the comparison would hide the
+    // very regression this contract now guards against.
+    for expected in ["file", "jobs", "locale", "manifest_fuel", "default_targets"] {
+        ensure!(
+            compared.contains(&expected),
+            "release help should compare the value placeholder for {expected}: {compared:?}"
         );
     }
     Ok(())
