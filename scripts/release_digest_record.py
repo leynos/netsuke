@@ -43,6 +43,37 @@ class DigestRecord:
     #: Asset names paired with their lowercase SHA-256 digest, sorted by name.
     entries: tuple[tuple[str, str], ...]
 
+    def __post_init__(self) -> None:
+        """Refuse a record that is empty or carries a malformed entry.
+
+        The comparison functions accept any :class:`DigestRecord`, so the
+        guarantee that a record is usable has to hold for every construction
+        path rather than only for the factory. Validation here is what makes
+        "validated record" a property of the type.
+
+        Raises
+        ------
+        DigestRecordError
+            If the record declares no asset, names an asset with a non-string
+            key, or carries a digest that is not a lowercase hexadecimal value.
+
+        Examples
+        --------
+        >>> DigestRecord((("a", "ab" * 32),)).names()
+        {'a'}
+        >>> DigestRecord(())  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+            ...
+        release_digest_record.DigestRecordError: the digest record declares no assets...
+        """
+        if not self.entries:
+            msg = "the digest record declares no assets, so there is nothing to verify"
+            raise DigestRecordError(msg)
+        for name, digest in self.entries:
+            if _validated_entry(name, digest) != (name, digest):
+                msg = f"the digest record must carry lowercase digests, got {digest!r}"
+                raise DigestRecordError(msg)
+
     @classmethod
     def from_mapping(cls, declared: cabc.Mapping[str, object]) -> DigestRecord:
         """Validate decoded entries and build the trusted record.
@@ -57,11 +88,11 @@ class DigestRecord:
         DigestRecord
             The entries with lowercase digests, sorted by asset name.
 
-        Raises
-        ------
-        DigestRecordError
-            If the mapping is empty or an entry is not a string name and a
-            valid hexadecimal digest.
+        Notes
+        -----
+        This factory normalizes case and sorts; the value invariant itself is
+        enforced by :meth:`__post_init__`, whose ``DigestRecordError`` reaches
+        the caller unchanged.
 
         Examples
         --------
@@ -72,11 +103,7 @@ class DigestRecord:
             ...
         release_digest_record.DigestRecordError: the digest record declares no assets...
         """
-        entries = tuple(sorted(_validated_entries(declared)))
-        if not entries:
-            msg = "the digest record declares no assets, so there is nothing to verify"
-            raise DigestRecordError(msg)
-        return cls(entries)
+        return cls(tuple(sorted(_validated_entries(declared))))
 
     def as_mapping(self) -> dict[str, str]:
         """Return the record as a name-to-digest mapping.
@@ -119,10 +146,13 @@ def _validated_entries(
     tuple[str, str]
         One asset name and its lowercase digest.
 
-    Raises
-    ------
-    DigestRecordError
-        If a digest is not a string or not a valid hexadecimal value.
+    Notes
+    -----
+    :func:`_validated_entry` raises ``DigestRecordError`` for a malformed
+    entry. Its check runs as each entry is yielded, so a malformed key is
+    refused before ``sorted`` compares it against a string key. Sorting first
+    would raise ``TypeError`` for mixed key types instead of the record's own
+    error.
 
     Examples
     --------
@@ -130,10 +160,32 @@ def _validated_entries(
     True
     """
     for name, digest in declared.items():
-        if not isinstance(digest, str):
-            msg = "the digest record must map asset names to digests as strings"
-            raise DigestRecordError(msg)
-        yield name, _validated_digest(name, digest)
+        yield _validated_entry(name, digest)
+
+
+def _validated_entry(name: object, digest: object) -> tuple[str, str]:
+    """Return one asset name and its lowercase digest, or refuse the entry.
+
+    Returns
+    -------
+    tuple[str, str]
+        The asset name and its lowercase digest.
+
+    Raises
+    ------
+    DigestRecordError
+        If either value is not a string, or the digest is not a valid
+        hexadecimal value.
+
+    Examples
+    --------
+    >>> _validated_entry("a", "AB" * 32)[1] == "ab" * 32
+    True
+    """
+    if not isinstance(name, str) or not isinstance(digest, str):
+        msg = "the digest record must map asset names to digests as strings"
+        raise DigestRecordError(msg)
+    return name, _validated_digest(name, digest)
 
 
 def _validated_digest(name: str, digest: str) -> str:
