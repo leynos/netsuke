@@ -13,17 +13,20 @@ loudly rather than passing vacuously. Run via `make test-workflow-contracts`.
 """
 
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script under test is checked in.
-from pathlib import Path
+import typing as typ
 
 import pytest
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
 SCRIPT = REPO_ROOT / ".github" / "package-validation" / "install-emulated-package.sh"
 EMULATION_STEP = "Install packages under emulation"
 

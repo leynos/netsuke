@@ -7,25 +7,28 @@ The gate installs each package in a sandbox and runs the repository's verifier:
 - kept documentation exclusions make ``man -w`` fail for every package; and
 - a verifier that cannot inspect dependencies would pass vacuously.
 
-Workflow-wiring contracts live in ``linux_package_validation_gate_test.py``.
-These cover the sandbox itself; run via ``make test-workflow-contracts``.
+Workflow-wiring contracts live in ``linux_package_validation_gate_test.py``;
+these cover the sandbox itself. Run via ``make test-workflow-contracts``.
 """
 
 import dataclasses
 import re
 import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the verifier's own script is under test.
-from pathlib import Path
+import typing as typ
 
 import pytest
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
 VALIDATION_DIR = REPO_ROOT / ".github" / "package-validation"
 VERIFY_SCRIPT = VALIDATION_DIR / "verify-installed-package.sh"
 POLYTHENE_WRAPPER = VALIDATION_DIR / "polythene_cli.py"
@@ -130,9 +133,7 @@ def _run_verifier(
     for name, body in stubs.items():
         _write_stub(bin_dir, name, body)
     _link_grep(bin_dir)
-    # A minimal PATH keeps the dependency probe deterministic: on a host with
-    # its own ``dpkg-query`` or ``rpm``, an inherited PATH would silently choose
-    # a different branch from the one a case means to exercise.
+    # A minimal PATH keeps each dependency probe deterministic for its case.
     return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the script under test is checked in.
         ["/bin/sh", str(VERIFY_SCRIPT), "netsuke"],
         check=False,
@@ -342,7 +343,7 @@ def test_sandbox_step_resolves_the_target_architecture(
 
     Emulation is installed only when the package architecture differs from the
     runner's, so the common lane pays no QEMU cost; an unsupported target fails
-    rather than silently validating an image for the wrong architecture.
+    rather than silently validate an image for the wrong architecture.
     """
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
