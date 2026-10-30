@@ -6421,7 +6421,7 @@ edges, and do not apply it to inputs or order-only dependencies.
 `implicit_deps`, and `order_only_deps` when detecting cycles. Order-only
 dependencies do not trigger a rebuild when they change, but they still have to
 be built first. The decision and whole-manifest scope are recorded in
-[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md).
+[ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md).
 
 ### Serial dependency bundles
 
@@ -10510,7 +10510,7 @@ The traversal follows explicit inputs, implicit dependencies, and order-only
 dependencies. Every explicit or implicit output alias resolves to its producing
 edge. `dependency_order` does not add a graph edge, and unresolved paths remain
 missing dependencies rather than cycle arcs; see
-[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md).
+[ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md).
 
 **`CycleDetector`**
 

@@ -2584,7 +2584,7 @@ This transformation involves several steps:
    rotated so the lexicographically smallest node appears first, ensuring
    deterministic error messages. The whole-manifest scope and the separate
    scheduling-only role of `dependency_order` are recorded in
-   [ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md).
+   [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md).
 
    Traversal state is implemented in the dedicated `ir::cycle` module. Its
    `CycleDetector` helper exposes a `detect` API and owns the recursion stack

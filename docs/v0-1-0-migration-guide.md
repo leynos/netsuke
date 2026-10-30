@@ -145,7 +145,7 @@ Remove the cycle by changing the dependency graph so that no target depends,
 directly or transitively, on itself. A multi-output target is one build step:
 referencing a different output path does not break the cycle. See the tested
 [order-only cycle example](users-guide.md#dependency-and-build-graph-semantics)
-and [ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md).
+and [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md).
 
 ## Bound manifest evaluation
 

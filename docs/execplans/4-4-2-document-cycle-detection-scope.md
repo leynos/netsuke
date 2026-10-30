@@ -63,7 +63,7 @@ After this change:
   entry of a multi-output `name` list and every IR implicit output, names the
   same build step; and `dependency_order: serial` adds no dependency of its own.
 - A new Architectural Decision Record (ADR),
-  `docs/adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md`, records
+  `docs/adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md`, records
   the decision and why the earlier "order-only dependencies only affect
   freshness" rationale was wrong. The design document, the formal-verification
   document, and the developers' guide point at it.
@@ -245,7 +245,7 @@ Skills to load: `rust-router` first; then `rust-unit-testing` (rstest tables,
 `kani` (the new harnesses), `rust-verification` if the rigour choice is
 revisited, `nll-to-polonius` before touching any borrow in the detector,
 `hexagonal-architecture` for the boundary check, `arch-decision-records` for
-ADR-0060, `execplans` to keep this plan current, `en-gb-oxendict-style` for
+ADR-0068, `execplans` to keep this plan current, `en-gb-oxendict-style` for
 prose, and `pr-creation` and `commit-message` when publishing.
 
 ## Conformance basis
@@ -274,7 +274,7 @@ are:
   dependency graph is acyclic and cycles are errors; §5.1 (`TOR-5.1`) requires
   order-only dependencies with no loss of generality. Neither section specifies
   whether order-only dependencies participate in Netsuke's whole-manifest cycle
-  check, so ADR-0060 records the implementation decision.
+  check, so ADR-0068 records the implementation decision.
 
 The Terms of Reference revision merged in PR 786 supplies this high-level
 basis; it does not answer the dependency-kind question. No additional ToR
@@ -283,17 +283,17 @@ revision is needed.
 Trace links:
 
 ```plaintext
-RM-4.4.2-a -> FV-CYCLE (revised) -> ADR-0060 -> EP-M2
+RM-4.4.2-a -> FV-CYCLE (revised) -> ADR-0068 -> EP-M2
   -> participation_tests::order_only_*; kani order_only_two_node_*
   -> e2e order_only_cycle_rejected_before_ninja
   -> bdd "Order-only dependency cycle is rejected"
-RM-4.4.2-b -> ADR-0060 -> EP-M1
+RM-4.4.2-b -> ADR-0068 -> EP-M1
   -> participation_tests::implicit_output_*; kani implicit_output_alias_*
   -> property alias_traversal_agrees_with_edge_oracle (EP-M2)
 RM-4.4.2-c -> EP-M3 -> users-guide "Dependency and build-graph semantics"
   -> documented example guide-order-only-cycle-manifest
 RM-4.4.2-d -> EP-M1..EP-M4 -> every gate green; roadmap 4.4.2 ticked
-DES-5.3-4 -> EP-M3 -> netsuke-design.md §5.3 step 4 revised, cites ADR-0060
+DES-5.3-4 -> EP-M3 -> netsuke-design.md §5.3 step 4 revised, cites ADR-0068
 ADR-0011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
   -> e2e serial_earlier_dependency_on_later_builds
 ```
@@ -380,7 +380,7 @@ ADR-0011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
 - Risk: Netsuke's scope stays wider than Ninja's. Netsuke checks the whole
   manifest; Ninja checks only what it is asked to build. Severity: low.
   Likelihood: certain. Mitigation: already true for `sources` and `deps`
-  cycles; ADR-0060 records that the whole-graph scope applies uniformly, and
+  cycles; ADR-0068 records that the whole-graph scope applies uniformly, and
   why the reachable-subgraph alternative was rejected (`netsuke generate` has
   no requested target set).
 - Risk: editing `cycle/detector.rs` stops existing cycle mutation patches from
@@ -405,7 +405,7 @@ ADR-0011 -> EP-M2 -> bdd "Serial ordering adds no cycle"
 - Risk: ADR number collision. ADR-0041 is occupied on main and ADR-0057 through
   ADR-0059 are reserved on live branches. Severity: low. Likelihood: low.
   Mitigation: sweep every remote branch for `docs/adrs/adr-0*` immediately
-  before writing ADR-0060; renumber this plan's ADR, never another.
+  before writing this plan's ADR; renumber this plan's ADR, never another.
 - Risk: a fixture uses a YAML 1.1 Boolean name (`y`, `n`, `on`, `yes`) and
   fails at parse time, so a "fails" assertion passes for the wrong reason.
   Severity: medium. Likelihood: medium. Mitigation: every cycle assertion
@@ -561,7 +561,7 @@ has a cycle.
   the traversal costs `O(sum over edges of |aliases(e)| * |deps(e)|)` hash
   lookups; 500 aliases against 500 order-only dependencies is about 250,000
   lookups. Edge-keyed visit state would remove the multiplier but touches
-  Polonius- and Kani-sensitive code, so it is deferred and noted in ADR-0060.
+  Polonius- and Kani-sensitive code, so it is deferred and noted in ADR-0068.
 - Method: property test against an independent oracle.
 - Rationale: the lemma is the correctness argument for walking aliases instead
   of edges and becomes load-bearing once every dependency kind participates.
@@ -654,7 +654,7 @@ existing property suites.
 
 ### EP-M3 — document the rule
 
-- Outcome: ADR-0060 exists; the users' guide gains *Dependency and build-graph
+- Outcome: ADR-0068 exists; the users' guide gains *Dependency and build-graph
   semantics* with a tested example; the design document, formal-verification
   document, developers' guide, Rustdoc, CHANGELOG, v0.1.0 migration guide, and
   `docs/contents.md` agree with it.
@@ -695,12 +695,13 @@ existing property suites.
 ### Stage A — confirm (no code changes)
 
 Re-sweep all live remote branch tips immediately before writing the ADR and
-confirm ADR-0060 is still free. Confirm the location of `visit_known_edge` and
-the `rstest-bdd` 0.6.0 world and step APIs. Record the `make kani-ir` attempt
-and outcome on the unchanged tree in `Artefacts and notes`; if compiler
-admission prevents harness enumeration, record that as an environmental timeout
-and retain the required post-change attempt. Grep `examples/` and `tests/data/`
-for `order_only_deps` and confirm none closes a cycle.
+confirm this plan's ADR serial is still free. Confirm the location of
+`visit_known_edge` and the `rstest-bdd` 0.6.0 world and step APIs. Record the
+`make kani-ir` attempt and outcome on the unchanged tree in
+`Artefacts and notes`; if compiler admission prevents harness enumeration,
+record that as an environmental timeout and retain the required post-change
+attempt. Grep `examples/` and `tests/data/` for `order_only_deps` and confirm
+none closes a cycle.
 
 ### Stage B — EP-M1 characterization
 
@@ -745,7 +746,7 @@ Green: in `src/ir/cycle/detector.rs::visit_known_edge`, after the
 `&edge.order_only_deps` with the same early return. Update the Rustdoc on
 `visit_known_edge`, the module doc of `src/ir/cycle/mod.rs`, and the doc on
 `analyse`, replacing "`order_only_deps` are intentionally excluded" with the
-new rule and a pointer to ADR-0060. Update the module doc of
+new rule and a pointer to ADR-0068. Update the module doc of
 `cycle/property_tests/issue322_property_tests.rs`. Run
 `cargo nextest run --test kani_mutation_evidence_tests`; regenerate only a
 patch that no longer applies, and add the new one. Run the focused tests, then
@@ -757,7 +758,7 @@ regress; otherwise keep the three calls and say why in a comment.
 
 ### Stage D — EP-M3 documentation, EP-M4 close
 
-Write ADR-0060 with *Status* (`Accepted`), *Date*, *Context and problem
+Write the plan's ADR with *Status* (`Accepted`), *Date*, *Context and problem
 statement*, *Decision Drivers*, *Options considered*, *Decision outcome*,
 *Known risks and limitations*, and *Consequences*, following the current ADR
 style guide's section names and casing. The options are: keep the exclusion and
@@ -790,7 +791,7 @@ edges and raw recipes*.
 
 Update `docs/formal-verification-methods-in-netsuke.md` *Cycle-participation
 contract*, `docs/netsuke-design.md` §5.3 step 4 (also correcting "Keys are
-cloned"), the two developers' guide passages, `docs/contents.md` (ADR-0060
+cloned"), the two developers' guide passages, `docs/contents.md` (ADR-0068
 under *Decision records*, newest first), `CHANGELOG.md` under *Unreleased* →
 *Changed* with a **Breaking** entry that also notes the `missing_dependencies`
 content change, and `docs/v0-1-0-migration-guide.md` *At-a-glance changes* plus
@@ -798,7 +799,7 @@ a short section *Remove order-only dependency cycles* (the release is still
 0.1.0, so the v0.1.1 guide's "every v0.1.0 manifest stays compatible" promise
 is untouched). Run `make fmt`, then the Markdown gates.
 
-Tick roadmap 4.4.2 and its sub-items with a completion note naming ADR-0060,
+Tick roadmap 4.4.2 and its sub-items with a completion note naming ADR-0068,
 set this plan to `COMPLETE`, and run every gate.
 
 ## Behavioural specification
@@ -1097,8 +1098,8 @@ dependencies as graph arcs.
   `range-diff` matched all five commits to their predecessors.
 - [x] (2026-10-25) Restored the outstanding implementation changes from the
   pre-rebase stash. Resolved the sole `docs/contents.md` conflict by retaining
-  main's ADR-0059 entry and ADR-0033 supersession, then adding ADR-0060 after
-  ADR-0059. `git diff --check origin/main` passed.
+  main's ADR-0059 entry and ADR-0033 supersession, then adding the cycle ADR
+  (now ADR-0068) after ADR-0059. `git diff --check origin/main` passed.
 - [x] (2026-10-25) First resumed gate pass: `make check-fmt` passed; `make lint`
   stopped at Clippy's `shadow_unrelated` finding on the second local `cycle`
   binding in `visit_known_edge`. Renamed that binding to `implicit_cycle`; all
@@ -1184,8 +1185,8 @@ dependencies as graph arcs.
   it was not repeated under the prior gate instruction. Both isolated mutation
   patches produced their expected Kani counterexamples.
 - [x] (2026-10-26) Closed EP-M4: ticked roadmap 4.4.2 and its sub-items,
-  recorded ADR-0060 as the decision, and reconciled this plan's outcome with
-  the passing final candidate gates.
+  recorded the cycle ADR (now ADR-0068) as the decision, and reconciled this
+  plan's outcome with the passing final candidate gates.
 - [x] (2026-10-26) Post-push review follow-up: refactored the property oracle
   and Kani fixtures in response to CodeScene findings, and changed cycle-error
   tracing to record only the fixed category. A regression test confirms
@@ -1213,10 +1214,23 @@ dependencies as graph arcs.
   Kani harness, and its non-vacuous mutation counterexample.
 - [x] EP-M2. Order-only cycles are rejected across tests, the current Kani
   harness, and its mutation counterexample; the shared quality gates pass.
-- [x] EP-M3. ADR-0060 and the user, developer, design, and verification docs
+- [x] EP-M3. ADR-0068 and the user, developer, design, and verification docs
   agree; the stale-rule search returned no matches.
 - [x] EP-M4. The roadmap and plan now record the completed contract and its
   validation evidence.
+- [x] (2026-10-30) Rebased the seven-commit branch series onto `origin/main` at
+  `7929a3fc2` (old head `fa6fb6268`, exclusive boundary `0a28fee38`). The
+  replay stopped twice in `src/ir/cycle/verification.rs`: the first conflict
+  combined the branch's dependency-spec fields with main's new `progress_label`
+  field, and the second combined the branch's `EdgeSpec` refactor with the same
+  field. Both resolutions keep the branch's semantics and add
+  `progress_label: None`; the two new test modules received the same field so
+  the tree compiles against main's `BuildEdge`. `docs/contents.md` conflicted
+  at the shared ADR insertion point and keeps both records. Main's ADR-0060
+  forced a re-sweep, so this plan's ADR was renumbered to ADR-0068 and every
+  reference was updated. The changelog entry moved from the released
+  `0.1.0-beta4` section to `Unreleased`. Validation and publication remain
+  pending on this candidate.
 
 ## Surprises & discoveries
 
@@ -1262,7 +1276,7 @@ dependencies as graph arcs.
   no root. Evidence: the fourth Ninja probe in `Artefacts and notes`
   (`[1/1] touch c`, exit 0). Impact: revision 1's claim that an order-only
   cycle "could never build" was too strong; Risk 1, the migration-guide text,
-  and ADR-0060 now say the change rejects such manifests even when the cycle
+  and ADR-0068 now say the change rejects such manifests even when the cycle
   was never requested.
 - Observation (design review): a second Kani file named
   `cycle_participation_verification.rs` would map to module
@@ -1289,14 +1303,25 @@ dependencies as graph arcs.
 - Observation (rebase): main already includes the `rstest-bdd` 0.6.0
   migration. Impact: the earlier PR-805 migration risk is resolved; Stage A
   will verify the merged API and use it directly.
-- Observation (rebase): ADR-0041 is occupied on main, ADR-0057 through ADR-0059
-  are reserved on live branches, and the branch sweep found ADR-0060 available.
-  Impact: references use ADR-0060, with a fresh sweep required immediately
-  before authoring it.
+- Observation (rebase, 2026-10-25): ADR-0041 was occupied on main, ADR-0057
+  through ADR-0059 were reserved on live branches, and that branch sweep found
+  ADR-0060 available. Impact: references then used ADR-0060, with a fresh sweep
+  required immediately before authoring it; the 2026-10-30 rebase renumbered
+  the record because main took ADR-0060 (see the next observation).
+- Observation (rebase, 2026-10-30): main landed ADR-0060 for readable inline
+  recipe progress, and live branches already hold ADR-0061 through ADR-0067.
+  Evidence: `git ls-tree` over all 73 `origin` refs and every local head.
+  Impact: this plan's ADR content and date are unchanged, but its serial moves
+  from ADR-0060 to ADR-0068 and its file is
+  `adr-0068-detect-cycles-across-all-prerequisite-kinds.md`; every reference in
+  the changelog, contents index, users', developers', design,
+  formal-verification, migration, and roadmap documents was updated. Main's
+  ADR-0060 was left untouched.
 - Observation (2026-10-25 rebase): main added ADR-0059 and marked ADR-0033 as
-  superseded while this branch added ADR-0060 at the same index insertion
-  point. The conflict stages contained independent entries; the resolution
-  keeps both records in numeric order and preserves main's supersession text.
+  superseded while this branch added its cycle-detection ADR (now ADR-0068) at
+  the same index insertion point. The conflict stages contained independent
+  entries; the resolution keeps both records in numeric order and preserves
+  main's supersession text.
 
 ## Decision log
 
@@ -1307,7 +1332,7 @@ dependencies as graph arcs.
   Ninja's untranslated message and lets `netsuke generate` emit a file Ninja
   refuses. This reverses the stated rationale in `FV-CYCLE`, the users' guide,
   the design document, and the developers' guide; that deviation is surfaced
-  for approval with this plan and recorded in ADR-0060. The panel's strongest
+  for approval with this plan and recorded in ADR-0068. The panel's strongest
   alternative, a tiered rollout (warn for one release, then reject), was
   weighed and rejected: it keeps `generate` emitting Ninja that Ninja refuses,
   no known manifest (examples or the three release-admission canaries) is
@@ -1353,10 +1378,12 @@ dependencies as graph arcs.
   most likely to confuse ("but it is only order-only"), so EP-M4 proposes an
   additive hint as a follow-up in the PR description. Date/Author: 2026-09-27,
   planning agent.
-- D8. Decision: allocate ADR-0060. Rationale: ADR-0041 is occupied on `main`;
-  ADR-0057 through ADR-0059 are reserved on live branches, and a sweep of 76
-  refreshed remote branch tips found 0060 available immediately before
-  authoring. Date/Author: 2026-10-24, implementation.
+- D8. Decision: allocate the next free ADR serial, ADR-0060 at the time and
+  renumbered to ADR-0068 on 2026-10-30 after main took ADR-0060. Rationale:
+  ADR-0041 was occupied on `main`; ADR-0057 through ADR-0059 were reserved on
+  live branches, and a sweep of 76 refreshed remote branch tips found 0060
+  available immediately before authoring. Date/Author: 2026-10-24,
+  implementation.
 - D9. Decision: add the two new Kani harnesses to `src/ir/cycle/verification.rs`
   and move its canonicalization-only helpers into the harness-free
   `src/ir/cycle/verification/support.rs` module. Rationale: keeps harness paths
@@ -1390,7 +1417,7 @@ order-only dependencies across the whole manifest. Explicit and implicit output
 aliases resolve to their producing edge, while `dependency_order: serial`
 remains a scheduling policy that adds no dependency arc. Human-mode errors
 expose the localized cycle path, while tracing records only the fixed cycle
-error category; the JSON diagnostic envelope remains unchanged. ADR-0060 and
+error category; the JSON diagnostic envelope remains unchanged. ADR-0068 and
 the user, developer, design, formal-verification, migration, and changelog
 documents describe the same contract.
 
@@ -1446,7 +1473,7 @@ ADR-0033 supersession. Validation and EP-M1 through EP-M4 acceptance remain
 pending.
 
 Revision 6 (2026-10-25): recorded the first resumed gate result, corrected the
-planned ADR filename to the allocated ADR-0060 path, and renamed the detector's
+planned ADR filename to the allocated ADR path, and renamed the detector's
 shadowing local binding found by Clippy. The complete sequential gate run is
 pending on this updated candidate.
 
@@ -1518,3 +1545,12 @@ Revision 18 (2026-10-26): reran all nine sequential gates and the capped Kani
 suite after the roadmap and plan closeout edits. The final candidate passed
 every gate and all 17 Kani harnesses; the ignored-only mutation compile guard
 remains recorded as an earlier shared-compiler timeout, not a pass.
+
+Revision 19 (2026-10-30): rebased the series onto the refreshed `origin/main` at
+`7929a3fc2`. Resolved `src/ir/cycle/verification.rs` twice by keeping the
+branch's traversal semantics while adding main's `progress_label` field, added
+that field to the two new test modules, kept both records in the shared
+`docs/contents.md` ADR insertion point, and moved the changelog entry to
+`Unreleased`. Main's new ADR-0060 required a fresh serial sweep: live branches
+hold ADR-0061 through ADR-0067, so this plan's ADR is now ADR-0068. Gate
+results for this candidate are recorded in `Progress` when complete.

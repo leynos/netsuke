@@ -674,7 +674,7 @@ and test workflow intact. See
     semantics chapter.
   - [x] Align implementation, tests, and documentation with the chosen rule.
   Completed:
-  [ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md)
+  [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md)
   records that every prerequisite kind participates in whole-manifest cycle
   detection and that explicit and implicit output aliases name their producing
   edge; unit, property, BDD, end-to-end, and Kani coverage enforce the rule.

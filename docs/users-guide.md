@@ -755,7 +755,7 @@ targets:
 Running `netsuke generate` reports `Circular dependency detected` and the path
 `headers.stamp -> tool -> headers.stamp` before it emits Ninja text. The same
 diagnostic structure is available in JSON mode. See
-[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md) for
+[ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md) for
 the decision and its compatibility notes.
 
 ## Use Jinja safely

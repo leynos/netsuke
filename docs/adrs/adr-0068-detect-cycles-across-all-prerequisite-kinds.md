@@ -1,4 +1,4 @@
-# ADR-0060: Detect cycles across all prerequisite kinds
+# ADR-0068: Detect cycles across all prerequisite kinds
 
 ## Status
 

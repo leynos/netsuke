@@ -378,7 +378,7 @@ rebuild when it changes, but the dependent still must wait for it. Explicit and
 implicit output aliases resolve to the same producing edge, and
 `dependency_order` adds no graph arc. Validation covers the complete manifest,
 including targets never requested by Ninja. The users' guide and
-[ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md)
+[ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md)
 document this contract.
 
 ### Determinism contract

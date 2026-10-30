@@ -318,7 +318,7 @@ operator, user, and contributor references are easier to find.
   moving package verification into `make test-package-verify`.
 - [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
   Bounded, localized Ninja progress labels for inline recipe edges.
-- [ADR-0060](adrs/adr-0060-detect-cycles-across-all-prerequisite-kinds.md):
+- [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md):
   Include every prerequisite kind in whole-manifest cycle detection while
   keeping output aliases and serial scheduling semantics explicit.
 - [ADR-0069](adrs/adr-0069-split-the-localization-key-tables.md): Splitting the
