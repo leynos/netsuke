@@ -7,7 +7,8 @@
 //! alongside `StdlibConfig` and `NetworkConfig`.
 
 use super::{
-    StdlibConfig, StdlibState, collections, command, network, path, recipe_text, time,
+    StdlibConfig, StdlibState, collections, command, network, path, recipe_text,
+    restricted_helpers, time,
     which::{self, WhichConfig, WorkspaceSkipList},
 };
 use anyhow::Context;
@@ -23,36 +24,6 @@ use std::sync::Arc;
 
 use crate::localization::{self, keys};
 use crate::shell_word::ShellDialect;
-
-#[path = "register/query_helpers.rs"]
-mod query_helpers;
-pub(crate) use query_helpers::is_manifest_query_disabled_error;
-use query_helpers::register_disabled_query_helpers;
-
-/// Characterization rows for the query refusals this module registers.
-///
-/// The rows live in a child file because the parent sits at AGENTS.md's
-/// 400-line cap. They are a `#[path]` child rather than a directory module
-/// because `register/` deliberately holds no `mod.rs`: `register.rs` owns the
-/// registrations and `register/` holds only the files it declares.
-#[cfg(test)]
-#[path = "register/refusal_snapshots.rs"]
-mod refusal_snapshots;
-
-/// A template file test: a registration name paired with a capability file
-/// type predicate.
-type FileTest = (&'static str, fn(fs::FileType) -> bool);
-
-/// Stable text identifying helpers deliberately unavailable to manifest queries.
-///
-/// Shared with the [`query_helpers`] child, which appends it to every
-/// deliberate failure and matches on it to recognize one. It stays declared
-/// here, in the parent, so both the child and this module's own consumers name
-/// the same constant.
-pub(super) const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
-    "is disabled while rendering `netsuke help targets`; manifest queries permit ",
-    "only non-disclosing, side-effect-free template helpers"
-);
 
 /// Register standard library helpers with the `MiniJinja` environment.
 ///
@@ -166,7 +137,7 @@ pub(crate) fn register_manifest_query(env: &mut Environment<'_>) -> StdlibState 
     let state = StdlibState::default();
     register_query_helpers(env);
     time::register_query_functions(env);
-    register_disabled_query_helpers(env);
+    restricted_helpers::register_query_refusals(env);
     state
 }
 
@@ -213,39 +184,17 @@ pub fn value_from_bytes(bytes: Vec<u8>) -> Value {
     }
 }
 
-/// The file tests registered as template tests on Unix.
-///
-/// Shared with the [`query_helpers`] child, which registers the same names as
-/// deliberate failures. Keeping one list means a file test added here cannot
-/// reach the build surface while staying silently unregistered — and therefore
-/// merely "unknown" — on the query surface.
-#[cfg(unix)]
-const FILE_TESTS: &[FileTest] = &[
-    ("dir", is_dir),
-    ("file", is_file),
-    ("symlink", is_symlink),
-    ("pipe", is_fifo),
-    ("block_device", is_block_device),
-    ("char_device", is_char_device),
-    ("device", is_device),
-];
-
-/// The file tests registered as template tests on non-Unix platforms.
-#[cfg(not(unix))]
-const FILE_TESTS: &[FileTest] = &[
-    ("dir", is_dir),
-    ("file", is_file),
-    ("symlink", is_symlink),
-    ("pipe", is_fifo),
-    ("block_device", is_block_device),
-    ("char_device", is_char_device),
-    ("device", is_device),
-];
-
-/// Register the `is <kind>` file tests, treating non-string inputs as a
-/// negative match.
+/// Register inventoried `is <kind>` file tests, treating non-string inputs as
+/// a negative match.
 fn register_file_tests(env: &mut Environment<'_>) {
-    for &(name, pred) in FILE_TESTS {
+    for name in restricted_helpers::file_test_names() {
+        let Some(pred) = file_test_predicate(name) else {
+            tracing::error!(
+                file_test = name,
+                "file-test inventory has no build predicate"
+            );
+            continue;
+        };
         env.add_test(name, move |val: Value| -> Result<bool, Error> {
             if let Some(s) = val.as_str() {
                 return path::file_type_matches(Utf8Path::new(s), pred);
@@ -255,6 +204,20 @@ fn register_file_tests(env: &mut Environment<'_>) {
             // `false` rather than raising a type error).
             Ok(false)
         });
+    }
+}
+
+/// Return the build-time predicate for an inventoried file-test name.
+fn file_test_predicate(name: &str) -> Option<fn(fs::FileType) -> bool> {
+    match name {
+        "dir" => Some(is_dir),
+        "file" => Some(is_file),
+        "symlink" => Some(is_symlink),
+        "pipe" => Some(is_fifo),
+        "block_device" => Some(is_block_device),
+        "char_device" => Some(is_char_device),
+        "device" => Some(is_device),
+        _ => None,
     }
 }
 

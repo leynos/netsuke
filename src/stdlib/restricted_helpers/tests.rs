@@ -41,7 +41,8 @@
 //! implementation instead of a stub would render successfully, and the text
 //! assertion alone would report only a missing error.
 
-use super::{is_manifest_query_disabled_error, register_manifest_query};
+use super::is_manifest_query_disabled_error;
+use crate::stdlib::register_manifest_query;
 use anyhow::Result;
 use minijinja::Environment;
 use rstest::rstest;
@@ -73,9 +74,9 @@ struct Refusal {
 /// dropped one would leave the other green.
 ///
 /// Every row here is a helper the surface *refuses*, which is a different set
-/// from the helpers `FILE_TESTS` names. Completeness is the requirement — a
+/// from the file-test rows in `SURFACE`. Completeness is the requirement — a
 /// refusal with no row is a message that can be reworded unobserved — so when
-/// adding a stub to `query_helpers.rs`, add its row here too. This list drifted
+/// adding a query refusal, add its row here too. This list drifted
 /// once already: `glob` was registered but unrowed until it was found by
 /// enumerating the registrations against this table.
 const REFUSALS: &[Refusal] = &[
@@ -172,6 +173,23 @@ const REFUSALS: &[Refusal] = &[
         template: "{{ 'Cargo.toml' is device }}",
     },
 ];
+
+#[test]
+fn refusal_rows_cover_the_query_restricted_inventory() {
+    let mut expected = super::SURFACE
+        .iter()
+        .filter(|entry| entry.query == super::QueryDisposition::Refused)
+        .map(|entry| entry.name)
+        .collect::<Vec<_>>();
+    let mut observed = REFUSALS
+        .iter()
+        .map(|refusal| refusal.name)
+        .collect::<Vec<_>>();
+    expected.sort_unstable();
+    observed.sort_unstable();
+
+    assert_eq!(observed, expected);
+}
 
 /// Snapshot every query refusal the restricted surface produces.
 ///
