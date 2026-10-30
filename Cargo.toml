@@ -170,7 +170,7 @@ time = { version = "0.3.44", features = ["formatting"] }
 tracing = "0.1"
 [dev-dependencies]
 libc = "0.2.189"
-nix = { version = "0.31.3", features = ["resource"] }
+nix = { version = "0.31.3", features = ["resource", "term", "fs", "signal"] }
 roxmltree = "0.21.1"
 rstest = "0.26.1"
 rstest-bdd = "0.6.0"

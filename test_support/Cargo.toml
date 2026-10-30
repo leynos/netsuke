@@ -39,3 +39,6 @@ rstest = "0.26.1"
 toml = "0.8"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["fmt"] }
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.31.3", features = ["term", "fs", "signal"] }

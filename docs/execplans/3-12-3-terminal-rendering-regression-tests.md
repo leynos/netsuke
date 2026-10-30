@@ -5,7 +5,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: APPROVED
+Status: IN PROGRESS
 
 On 2026-10-23 the user accepted the recommended outcomes of decisions `D3`,
 `D4` (Option A), `D8`, `D9`, and `D11`, and deferred implementation. The user
@@ -111,7 +111,7 @@ The four roadmap sub-bullets become observable, repeatable facts:
   `tests/cli_tests/display_policy_domain.rs` (397 lines today). Extract before
   adding.
 - The borrow checker is Polonius and the trait solver is next-generation
-  (pinned `nightly-2026-08-23`). Do not add turbofish, clones, or bounds to
+  (pinned `nightly-2026-10-22`). Do not add turbofish, clones, or bounds to
   appease an older analysis.
 - `unsafe_code` is forbidden, so the PTY harness must not use `pre_exec` or
   `setsid`; it uses the safe `CommandExt::process_group(0)` instead.
@@ -157,7 +157,11 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
     spawns into a new process group, drains the PTY master and every piped
     stream on dedicated threads, kills the whole group on timeout, and joins
     the readers with a bound. EP-M0 proves 20 clean stress runs before any
-    Netsuke PTY test exists.
+    Netsuke PTY test exists. The mutex coordinates PTY launches through this
+    helper only; an unrelated process spawn can race the short interval between
+    `openpty` and setting `FD_CLOEXEC`. Such a child may briefly retain an end
+    until it exits, so bounded EOF and reader waits plus stress runs under
+    concurrent load cover the residual risk.
 - Risk: the `tracing` ANSI decision must change after the subscriber is
   installed, because `--color` is known only after configuration merges.
   - Severity: medium. Likelihood: medium.
@@ -216,9 +220,53 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 - [x] (2026-10-23) User accepted decisions `D3`, `D4` (Option A), `D8`, `D9`,
   and `D11` as recommended; implementation was not yet authorized.
 - [x] (2026-10-24) User approved implementation.
-- [x] (2026-10-23) Merged `origin/main` (`8a9610008`) into the branch,
-  re-verified the plan's code and documentation references against it, and
-  remapped moved paths and renumbered ADRs (see `Surprises & discoveries`).
+- [x] (2026-10-24) Rebased the approved branch onto the live PR target,
+  `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`; retained the
+  branch commits and dropped an obsolete sync merge already contained in the
+  target.
+- [x] (2026-10-24) `make check-fmt` passed. The first `make test` reached
+  4,839 passing tests, then timed out in a nested public API `cargo check` at
+  the default 300-second limit while compiler admission was busy. Decision
+  `D13` records the scoped timeout adjustment; rerun the gates after that fix.
+- [x] (2026-10-24) Rechecked harness ownership and the locked `nix` APIs;
+  record the test-only scope, dependency feature gates, and PTY descriptor
+  inheritance limits in the relevant milestones below.
+- [x] (2026-10-24) Baseline `make lint`, `make doc-coverage`,
+  `make typecheck`, `make markdownlint`, `make nixie`, and
+  `make test-workflow-contracts` passed. The second `make test` run passed
+  4,856 tests, then timed out `case_2_compiler_diagnostic` at 900.139 seconds;
+  seven tests were not run. A contemporaneous status snapshot shows the
+  fixture's `rustc` request queued behind one retained cache drain and three
+  active compiler groups. This confirms shared contention at that snapshot, but
+  not that it accounts for the full test duration; Decision `D14` records the
+  limit and follow-up evidence.
+- [x] (2026-10-25) Implemented EP-M0's byte classifier and Unix PTY harness.
+  Focused `test_support` nextest passed 137/137 tests, and the PTY smoke suite
+  passed 20 iterations of all three cases while the host compile queue was
+  active. The full serial gates passed: `make check-fmt`, `make lint`,
+  `make doc-coverage` (98.21%), `make typecheck`, `make test` (4,884 passed, 6
+  skipped; all doctests passed), `make markdownlint`, `make nixie`, and
+  `make test-workflow-contracts` (1,339 passed, 3 skipped, plus 27 passed). The
+  separate PTY smoke stress run while another `make test` loads the host also
+  passed 20 iterations of all three cases (60/60 executions); an idle-pool run
+  remains to be recorded before EP-M0 is complete.
+- [x] (2026-10-25) Implemented the EP-M1 regression binary with 31 piped and
+  PTY cases. Its focused run passed 31/31. The PTY filter selected all 16 Unix
+  cases, and all 16 passed in each of 20 stress iterations while unrelated
+  `make test` jobs were active on other worktrees. The first full gate sequence
+  found seven Clippy diagnostics and a stale local permissions helper left by
+  the fake-Ninja promotion; both were corrected. The focused suite again passed
+  31/31 and the PTY stress run passed 16/16 for 20 iterations. The full gates
+  are being rerun on the corrected candidate.
+- [x] (2026-10-30) Rebased onto the current PR target, `origin/main` at
+  `7929a3fc24759d98ed3ffe70c8abf7b66861f17d`, which had advanced ten commits
+  past the previous base. Resolved conflicts in `.config/nextest.toml`,
+  `docs/developers-guide.md`, `tests/logging_stderr/support.rs`, and
+  `tests/workflow_contracts/test_execution_coverage_test.py`. ADR-0059 had
+  moved compile-time contracts out of timed tests, so decisions `D13` and `D14`
+  are superseded and the branch kept its fake-Ninja promotion plus the new
+  normalization helpers. The full gate set is being rerun on the rebased
+  candidate.
 - [ ] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour.
 - [ ] EP-M2: display-plan core and single resolution.
@@ -227,6 +275,19 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   roadmap.
 
 ## Surprises & discoveries
+
+- Observation: task-update text remains plain when stderr is a PTY and stdout
+  is piped, even while stage progress redraws on the PTY. Evidence:
+  `IndicatifReporter::report_task_progress` writes task lines separately from
+  the stage draw target, and the test captures the `Task` lines before
+  classifying them. Impact: the PTY assertion is scoped to task-update lines
+  rather than rejecting the valid stage redraws in the same stream.
+- Observation: moving the fake-Ninja script writer left the old local
+  executable-permission helper behind. Evidence: `make typecheck` and
+  `make test` both reported that `Permissions::set_mode` lacked its trait
+  import in `tests/logging_stderr/support.rs`. Impact: removed the now-unused
+  duplicate helper; the shared writer remains the single owner of platform
+  script permissions.
 
 - Observation: `--color` governs no ANSI emitter today; its only effect is on
   accessible-mode selection through `NO_COLOR` semantics. Evidence:
@@ -283,6 +344,19 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `src/runner/mod.rs`, and `src/runner/help/mod.rs`. The binary was not
   re-probed; EP-M3's red cells re-run each defect against the implementation
   base before fixing it.
+- Observation: the second baseline `make test` run timed out
+  `split_build_fixture_compiles_through_the_direct_rustc_harness::case_2_compiler_diagnostic`
+  at 900.139 seconds after 4,856 passes. The captured build-limits status
+  overlaps the case: all four tokens were held, with one retained
+  `server-drain` group, three active compiler groups from other worktrees, and
+  the fixture's `rustc` request waiting for 57 seconds. Impact: shared
+  admission delayed the fixture at that point, but the single snapshot does not
+  explain the full timeout. Keep the cap at 900 seconds and capture a process
+  timeline if the test fails again; do not intervene in automatic recovery.
+- Observation: Whitaker's `no_std_fs_operations` rejects `std::fs::File` even
+  when it only wraps a PTY descriptor. Impact: the harness keeps descriptors as
+  `OwnedFd`, passes them to `Stdio`, and reads the PTY master with nix so
+  terminal capture does not introduce an ambient filesystem API.
 
 ## Decision log
 
@@ -335,11 +409,14 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   emitters are bound, and the users' guide and CLI design document are updated
   to say "set to a non-empty value". Date/Author: 2026-10-23, user.
 - Decision D5: build the PTY harness on `nix::pty::openpty` by enabling the
-  `term` feature of the existing `nix` 0.31.3 dev-dependency. Rationale: no
-  crate is added to `Cargo.lock`; `portable-pty`, `expectrl`, and `rexpect`
-  would each add a dependency tree for a few dozen lines of harness. Windows
+  `term`, `fs`, and `signal` features of the existing `nix` 0.31.3
+  dev-dependency. The safe `fcntl` calls for `FD_CLOEXEC` require `fs`, and
+  `killpg` requires `signal`; `term` exposes `openpty`. Rationale: no crate is
+  added to `Cargo.lock`; `portable-pty`, `expectrl`, and `rexpect` would each
+  add a dependency tree for a few dozen lines of harness. Windows
   pseudo-console (ConPTY) coverage is a residual gap; Windows keeps the piped
-  suite and the pure-core tests. Date/Author: 2026-09-26, planning agent.
+  suite and the pure-core tests. Date/Author: 2026-09-26, planning agent;
+  feature gates verified 2026-10-24.
 - Decision D6: verify the finite resolution domain by exhaustive
   enumeration in an ordinary test instead of a Kani harness; use `proptest` plus
   `rstest` witness tables for the two string-facing lemmas; write no Verus
@@ -422,6 +499,30 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   no compatibility layer; a lint makes the structural invariant self-enforcing
   rather than a manual `rg` check. Date/Author: 2026-09-26, planning agent,
   after panel review.
+- Decision D13: retain the 300-second default Nextest timeout, and give only
+  `cli_configuration_fixture_compiles` a 900-second allowance in the serialized
+  `nested-cargo-builds` group. Its nested `cargo check --all-features` timed
+  out at 300 seconds during the first full run after rebase while compiler
+  admission was healthy but heavily queued; the other 4,839 completed tests
+  passed. This is a measured external build constraint, the same narrowly
+  scoped policy used by existing cold-build tests, and remains below the
+  960-second CI whole-run cap. No retry is added. Date/Author: 2026-10-24,
+  planning agent. Superseded on 2026-10-30: ADR-0059 removed
+  `cli_configuration_fixture_compiles` from the timed suite, so this allowance
+  no longer exists.
+- Decision D14: keep the
+  `split_build_fixture_compiles_through_the_direct_rustc_harness` allowance at
+  900 seconds and do not widen it. The second baseline run timed out
+  `case_2_compiler_diagnostic` at 900.139 seconds. Its contemporaneous
+  admission snapshot shows one retained cache drain, three active compiler
+  groups, and a waiting compiler request under the fixture target. This proves
+  shared admission contention at that point but does not account for the full
+  duration. A larger cap would conflict with the 960-second CI whole-run cap;
+  no source defect has been established. If reproduced, capture the child
+  process tree and admission state through termination. Date/Author:
+  2026-10-24, planning agent. Superseded on 2026-10-30: ADR-0059 removed
+  `split_build_fixture_compiles_through_the_direct_rustc_harness` from the
+  timed suite, so this allowance no longer exists.
 
 ## Outcomes & retrospective
 
@@ -473,7 +574,7 @@ process-global `miette` hook (currently the library default). `clap` renders
 Existing tests. `tests/cli_tests/display_policy_domain.rs` sweeps the pure
 resolvers against a handwritten truth model. `src/output/mode.rs`,
 `src/theme/mod.rs`, `src/output/prefs/mod.rs`, and `src/runner/reporter.rs` have
-`rstest` tables. Behavioural scenarios use `rstest-bdd` 0.5.0 with
+`rstest` tables. Behavioural scenarios use `rstest-bdd` 0.6.0 with
 `strict-compile-time-validation`: feature files in `tests/features/` (all
 platforms) and `tests/features_unix/` (Unix only) are collected by `scenarios!`
 in `tests/bdd_tests.rs`, sharing the `TestWorld` fixture in
@@ -521,8 +622,9 @@ before changing signatures. Read `docs/rust-testing-with-rstest-fixtures.md`,
 
 ## Conformance basis
 
-Upstream artefacts, all at commit `8a9610008` on `main` (merged into this
-branch on 2026-10-23; the draft was written against `ebcedaef`):
+Upstream artefacts are referenced at commit
+`f8df5d808f1bee4eb8554df0160119864ade6f39` on `main` (the live PR target at the
+2026-10-24 rebase; the draft was written against `ebcedaef`):
 
 - `docs/roadmap.md`, "3.12. Terminal rendering verification", task 3.12.3
   and its sub-bullets: `RM-3.12.3-COLOUR`, `RM-3.12.3-EMOJI`,
@@ -739,8 +841,9 @@ Outcome: `test_support/src/terminal/mod.rs` with two children. `classify.rs`
 `run_in_pty(PtyRequest) -> Result<PtyOutput>`. The harness:
 
 1. opens the pair with an explicit window size of 120 columns by 40 rows;
-2. sets `FD_CLOEXEC` on both ends under a process-wide mutex held until
-   `spawn` returns, so concurrently spawned children cannot inherit them;
+2. sets `FD_CLOEXEC` on both ends while holding the PTY runner's spawn mutex
+   until `spawn` returns; the mutex serializes this helper's PTY launches, and
+   the close-on-exec flag prevents descriptors surviving successful `exec`;
 3. attaches the slave to stdout, stderr, or both according to `Attach`
    (`Both`, `StderrOnly`, `StdoutOnly`), pipes the other stream, and sets stdin
    to `Stdio::null()` (otherwise `terminal_size` falls back to stdin and picks
@@ -878,9 +981,10 @@ core and the renderer agree. Delete `output_mode::resolve` and
 `resolve_display_plan(cli.display_policies(), TerminalFacts::default())`, and
 update any documentation example that calls `runner::run` or
 `run_with_ninja_program` (sweep with `rg -n 'runner::run' docs`; none exists on
-`main` at `8a9610008`, but re-check). Add `std::io::IsTerminal::is_terminal` to
-`disallowed-methods` in `clippy.toml` and run the negative control. Switch
-EP-M1's handwritten expectations to plan-derived ones.
+`main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`, but re-check). Add
+`std::io::IsTerminal::is_terminal` to `disallowed-methods` in `clippy.toml` and
+run the negative control. Switch EP-M1's handwritten expectations to
+plan-derived ones.
 
 Acceptance: all four gates pass after each commit; EP-M1's suite is green
 throughout, proving behaviour preservation; no snapshot changes. Conformance:
@@ -1198,10 +1302,10 @@ help-nocolor-tty                   sgr=0    cursor=0
 
 ## Interfaces and dependencies
 
-Libraries, all already in the dependency graph: `nix` 0.31.3 (`term` feature)
-for `openpty`; `googletest` 0.14.3 and `pretty_assertions` 1.4.1; `rstest`
-0.26.1 and `rstest-bdd` 0.5.0; `insta` 1 (`yaml`); `proptest` 1.11.0;
-`assert_cmd` 2; `cap-std` for fixture staging.
+Libraries, all already in the dependency graph: `nix` 0.31.3 (`term`, `fs`, and
+`signal` features) for PTY operations; `googletest` 0.14.3 and
+`pretty_assertions` 1.4.1; `rstest` 0.26.1 and `rstest-bdd` 0.6.0; `insta` 1
+(`yaml`); `proptest` 1.11.0; `assert_cmd` 2; `cap-std` for fixture staging.
 
 `FORCE_COLOR`, `CLICOLOR`, and `CLICOLOR_FORCE` are not Netsuke inputs. The
 `CLICOLOR` page now describes itself as deprecated in favour of `NO_COLOR` and
@@ -1345,12 +1449,23 @@ pub fn run_in_pty(request: PtyRequest) -> anyhow::Result<PtyOutput>;
   design document, repository layout). The remaining work is unchanged in
   shape: approval, then EP-M0 to EP-M4.
 - 2026-10-23: recorded the user's acceptance of decisions `D3`, `D4`
-  (Option A), `D8`, `D9`, and `D11`; implementation is still not authorized, so
-  the status stays `DRAFT`. Made the `D4` outcome concrete: `NO_COLOR` is set
-  only when non-empty, the change lands as EP-M3 step 4 with its own red cells,
-  and the `L-ENV-SIGNALS` empty-string row flips in that commit. Merged
-  `origin/main` (`8a9610008`) and remapped every path, ADR citation, and line
-  count to the reorganized tree. The core now lives at `src/output/plan/` and
-  the binary-local tracing module uses a plain `mod` declaration. The ADR
-  serial moved from ADR-041 (since taken) to ADR-0060 in `docs/adrs/`.
-  Milestone structure, obligations, and tolerances are unchanged.
+  (Option A), `D8`, `D9`, and `D11`; implementation was not yet authorized.
+  Made the `D4` outcome concrete: `NO_COLOR` is set only when non-empty, the
+  change lands as EP-M3 step 4 with its own red cells, and the `L-ENV-SIGNALS`
+  empty-string row flips in that commit. Merged `origin/main` (`8a9610008`) and
+  remapped every path, ADR citation, and line count to the reorganized tree.
+  The core now lives at `src/output/plan/` and the binary-local tracing module
+  uses a plain `mod` declaration. The ADR serial moved from ADR-041 (since
+  taken) to ADR-0060 in `docs/adrs/`. Milestone structure, obligations, and
+  tolerances are unchanged.
+- 2026-10-24: the user approved implementation. Replaced the old base and
+  dependency-version references with the rebased tree after rebasing onto
+  `origin/main` at `f8df5d808f1bee4eb8554df0160119864ade6f39`. Nix source
+  inspection showed `fs` and `signal` are required for safe descriptor flags
+  and process-group termination. Corrected the PTY mutex claim: it coordinates
+  only this helper, while `FD_CLOEXEC` protects descriptors across successful
+  `exec`; unrelated spawns can race the short interval before the flag is set.
+  Added D13 after the full suite timed out in a nested public API compile under
+  shared compiler pressure. The remaining baseline gates passed except
+  `make test`, where `case_2_compiler_diagnostic` reached the 900-second limit.
+  The captured admission evidence and its limits are recorded in D14.

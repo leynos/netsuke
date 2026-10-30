@@ -7626,6 +7626,26 @@ claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
 
+### `test_support::ninja_script`
+
+`test_support::ninja_script::write_fake_ninja_script` writes a small fake Ninja
+inside a caller-owned `cap_std::fs_utf8::Dir`. It emits configured stdout
+lines, an optional stderr marker, and exits successfully; on Unix it also sets
+the executable bit. The helper owns this formatting and permission work so
+tests do not repeat script-writing details or use ambient filesystem calls.
+
+Use it only for deterministic fake Ninja output with those behaviours. Tests
+that need to create build artefacts or model richer process behaviour keep that
+logic at their existing fixture boundary. `tests/logging_stderr/support.rs`
+re-exports the helper to preserve its existing call expressions, while the
+terminal-rendering integration tests use it directly.
+
+`tests/terminal_rendering/support.rs::TerminalWorkspace` is local to the
+terminal-rendering test binary. It stages the minimal manifest, owns the fake
+Ninja process fixture, and builds child commands with a cleared environment and
+an explicit allowlist. Do not reuse it for unrelated integration tests; those
+tests should compose their own workspace and environment needs.
+
 ### `test_support::ninja_semantics`
 
 `test_support::ninja_semantics` (`test_support/src/ninja_semantics.rs`) is the
