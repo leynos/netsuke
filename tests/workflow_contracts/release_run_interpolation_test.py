@@ -6,24 +6,26 @@ those values through step environments instead. Each bounded mutation restores
 one formerly unsafe step, and a second pass injects an expression into every
 current run step individually.
 
+The rule itself lives in ``action_run_sources``, which applies the identical
+predicate to the composite actions the release path extracts, so a job body
+moved into an action stays under the contract it was written for.
+
 Run via ``make test-workflow-contracts``.
 """
 
 import copy
-import typing as typ
 
 import pytest
+from action_run_sources import (
+    run_expression_violations,
+    workflow_step_contexts,
+)
 from workflow_loading import (
     PACKAGE_WORKFLOW_PATH,
     RELEASE_WORKFLOW_PATH,
     load_workflow,
     require_mapping,
 )
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
-
-EXPRESSION = "${{"
 
 # Keep each historical source expression in the step where it was expanded.
 # The test treats each whole step as one violation, even where the old source
@@ -152,68 +154,6 @@ def _workflow_sources() -> dict[str, dict[str, object]]:
     }
 
 
-def _step_contexts(
-    workflow_name: str, workflow: dict[str, object]
-) -> cabc.Iterator[tuple[str, int, dict[str, object]]]:
-    """Yield every step from jobs that define step lists.
-
-    Jobs calling another workflow have ``uses`` and no step list. Every other
-    job must provide a list, including jobs with no run blocks, so an invalid
-    shape cannot evade this contract.
-
-    Yields
-    ------
-    tuple[str, int, dict[str, object]]
-        Each job ID, step index, and step mapping.
-    """
-    jobs = require_mapping(workflow.get("jobs"), f"{workflow_name} jobs")
-    for job_id, raw_job in jobs.items():
-        job = require_mapping(raw_job, f"{workflow_name} job {job_id}")
-        if "uses" in job:
-            continue
-        steps = job.get("steps")
-        assert isinstance(steps, list), (
-            f"{workflow_name} job {job_id} must declare steps as a list"
-        )
-        for index, raw_step in enumerate(steps):
-            step = require_mapping(
-                raw_step, f"{workflow_name} job {job_id} step {index}"
-            )
-            yield str(job_id), index, step
-
-
-def run_expression_violations(
-    workflow_name: str, workflow: dict[str, object]
-) -> list[str]:
-    """Describe run blocks containing GitHub expression source text.
-
-    Returns
-    -------
-    list[str]
-        One diagnostic for each run block containing expression source text.
-
-    Examples
-    --------
-    >>> workflow = {
-    ...     "jobs": {
-    ...         "publish": {"steps": [{"name": "Tag", "run": "echo ${{ tag }}"}]}
-    ...     }
-    ... }
-    >>> run_expression_violations("release.yml", workflow)
-    ["release.yml job publish step 0 (Tag): run block contains '${{'"]
-    """
-    violations = []
-    for job_id, index, step in _step_contexts(workflow_name, workflow):
-        run = step.get("run")
-        if isinstance(run, str) and EXPRESSION in run:
-            step_name = str(step.get("name", "<unnamed>"))
-            violations.append(
-                f"{workflow_name} job {job_id} step {index} ({step_name}): "
-                "run block contains '${{'"
-            )
-    return violations
-
-
 def _find_step(
     workflow: dict[str, object], job_id: str, step_name: str
 ) -> dict[str, object]:
@@ -294,7 +234,7 @@ def test_wix_and_draft_release_inputs_use_environment_variables() -> None:
         "Ensure release exists (draft)",
     )
     draft_env = require_mapping(draft.get("env"), "draft-release environment")
-    assert draft_env.get("INPUT_TAG") == "${{ github.ref_name }}", (
+    assert draft_env.get("INPUT_TAG") == "${{ needs.metadata.outputs.release_tag }}", (
         "the release tag must be an environment value"
     )
     assert draft_env.get("GITHUB_TOKEN") == "${{ secrets.GITHUB_TOKEN }}", (
@@ -353,7 +293,9 @@ def test_each_historical_interpolation_is_rejected(
 def test_every_current_run_step_rejects_a_direct_expression() -> None:
     """Inject one expression at a time and require only that step to fail."""
     for workflow_name, baseline in _workflow_sources().items():
-        for job_id, index, original_step in _step_contexts(workflow_name, baseline):
+        for job_id, index, original_step in workflow_step_contexts(
+            workflow_name, baseline
+        ):
             run = original_step.get("run")
             if not isinstance(run, str):
                 continue

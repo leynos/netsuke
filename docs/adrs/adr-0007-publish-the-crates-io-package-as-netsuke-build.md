@@ -104,7 +104,10 @@ Publish as `netsuke-build`, and keep every user-facing name as `netsuke`.
 - [Repository layout](../repository-layout.md): the package-versus-target naming
   rule.
 - [Developer guide](../developers-guide.md): the day-to-day naming guidance and
-  the contract tests that enforce it.
+  the contract tests that enforce it, and the release-publication runbook that
+  the second addendum's mechanism plugs into.
+- [Trusted-packaging ExecPlan](../execplans/use-trusted-packaging.md): the
+  plan of work that delivers the registry exchange named in the second addendum.
 
 ## Addendum (2026-08-28)
 
@@ -112,3 +115,48 @@ A source-build fallback from `cargo binstall` requires the repository's pinned
 nightly toolchain. This requirement follows the repository toolchain policy;
 the fallback must not restore the retired `RUSTFLAGS=-Zpolonius=next`
 instruction.
+
+## Addendum (2026-10-24): the trusted publisher
+
+The decision above settles the *name* the registry sees. This addendum settles
+how the bytes reach the registry, which the original decision left open.
+
+**Decision.** Publish through crates.io Trusted Publishing, from the repository
+itself, with no long-lived registry credential stored anywhere.
+
+- The credential is exchanged, not stored. `rust-lang/crates-io-auth-action`
+  takes a GitHub OpenID Connect (OIDC) token and yields a short-lived registry
+  token, and the action revokes it in a post step. No `CARGO_REGISTRY_TOKEN`
+  secret exists in the repository, and none is to be added.
+- The exchange runs in a job declared in `release.yml` itself. crates.io
+  registers a publisher by repository owner, repository name, workflow
+  filename, and an optional environment, and it presents the OIDC
+  `job_workflow_ref` of the file that declares the job. A reusable workflow
+  would present its own filename, so moving the exchange into one silently
+  breaks publication.
+- The exchange job has `contents: read`, `id-token: write`, and the
+  `crates-io` environment. It has no GitHub release-write authority; that
+  permission remains in separate release jobs.
+- The first publication is not reachable this way. Trusted Publishing can only
+  publish a crate that already exists, so a brand-new package name still needs
+  one manual token-authenticated upload. `netsuke-build` is already published,
+  so this precondition is satisfied and no manual step is outstanding.
+
+**Status of the decision.** Accepted as the target mechanism; not yet
+implemented. `release.yml` currently packages the crate in `package-crate` and
+publishes nothing to crates.io. The job that performs the exchange, the
+inventory verifier that checks downloaded bytes against the pre-upload digest
+record, the release finalizer, and the consumer smoke test are described in the
+trusted-packaging ExecPlan and remain to be written. Until they land, a release
+run publishes GitHub assets only, and this addendum records the shape the
+registry path is to take rather than a mechanism in use.
+
+The offline policy modules that support the decision are already in place and
+are what the unwritten job will call. Policy modules compare in-memory facts;
+the CLI and named adapters own file access, JSON/TOML serialization, registry
+response schemas, HTTP status codes, and GitHub's digest spelling. In
+particular, `release_reconcile_crates` receives typed registry observations,
+`verify_crates_io_bytes` receives a typed download observation, and
+`release_reconcile_github` receives bare digest strings. Those modules reach
+neither the network nor filesystem or provider formats; workflow steps make the
+network requests, and the adapters translate their results.

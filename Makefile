@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -292,7 +292,8 @@ test-workflow-contracts: ## Validate the CV-005 contracts and the GitHub Actions
 			scripts/tests/test_resolve_wix_extension_version.py \
 			scripts/ensure_draft_release.py scripts/install_orthohelp.py \
 			scripts/report_glibc_floor.py scripts/resolve_wix_extension_version.py \
-			scripts/hoist_binstall_archives.py -q --doctest-modules
+			scripts/hoist_binstall_archives.py \
+			scripts/hoist_binstall_discovery.py -q --doctest-modules
 
 test-windows-msi-release-rank: ## Validate Windows MSI release-rank parsing
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
@@ -348,6 +349,65 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 		scripts/tests/test_ci_stage_test_shell.py \
 		scripts/tests/test_ci_support.py \
 		-c /dev/null --rootdir=. -p no:cacheprovider
+
+# Release-policy modules receive names, digests, mappings, or typed transport
+# observations. CLI and adapter modules own file, JSON, TOML, and provider
+# formats; the suites run beside the other script tests without a network job.
+#
+# The source modules are named here as well as their suites, and the run
+# carries --doctest-modules, so the examples in their docstrings execute.
+# Without the flag pytest collects test functions only and those examples are
+# prose nothing runs: deleting it breaks no import and changes no test, which
+# is how they would silently stop running. `test-workflow-contracts` pairs test
+# modules with doctested sources the same way.
+test-release-publication: ## Test release-candidate identity and staged inventory exactness
+	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
+		scripts/tests/test_release_candidate.py \
+		scripts/tests/test_release_candidate_cli.py \
+		scripts/tests/test_package_crate_cli.py \
+		scripts/tests/test_package_crate_cli_errors.py \
+		scripts/tests/test_publish_crates_io_cli.py \
+		scripts/tests/test_verify_release_inventory_cli.py \
+		scripts/tests/test_verify_release_inventory_command.py \
+		scripts/tests/test_finalize_github_release_cli.py \
+		scripts/tests/test_release_inventory.py \
+		scripts/tests/test_release_identity_record.py \
+		scripts/tests/test_release_semver.py \
+		scripts/tests/test_release_digest.py \
+		scripts/tests/test_release_digest_files.py \
+		scripts/tests/test_verify_crates_io_bytes.py \
+		scripts/tests/test_release_crates_io_adapter.py \
+		scripts/tests/test_release_github_assets_adapter.py \
+		scripts/tests/test_release_reconcile_crates.py \
+		scripts/tests/test_release_reconcile_crates_properties.py \
+		scripts/tests/test_release_reconcile_github.py \
+		scripts/tests/test_release_declaration.py \
+		scripts/tests/test_release_declaration_cli.py \
+		scripts/tests/test_release_declaration_invalid_config.py \
+		scripts/tests/test_release_digest_record.py \
+		scripts/tests/test_release_digest_record_files.py \
+		scripts/tests/test_release_staged_digests.py \
+		scripts/release_candidate.py scripts/release_candidate_cli.py \
+		scripts/release_identity_record.py \
+		scripts/package_crate_cli.py scripts/publish_crates_io_cli.py \
+		scripts/release_crates_io_adapter.py \
+		scripts/release_github_assets_adapter.py \
+		scripts/verify_release_inventory_cli.py \
+		scripts/finalize_github_release_cli.py \
+		scripts/release_inventory.py \
+		scripts/release_semver.py scripts/release_digest.py \
+		scripts/release_digest_files.py \
+		scripts/verify_crates_io_bytes.py \
+		scripts/release_registry_response.py \
+		scripts/release_reconcile_crates.py \
+		scripts/release_reconcile_github.py \
+		scripts/release_asset_names.py scripts/release_package_formats.py \
+		scripts/release_declaration.py scripts/release_declaration_cli.py \
+		scripts/release_digest_record.py scripts/release_digest_record_files.py \
+		scripts/release_staged_digests.py \
+		-c /dev/null --rootdir=. \
+		-p no:cacheprovider --doctest-modules
 
 # Split rather than a single `target/%/$(APP)` pattern: the two profiles no
 # longer share a command line. The debug build takes the standard; the release

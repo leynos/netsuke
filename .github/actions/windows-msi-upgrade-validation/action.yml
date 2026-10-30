@@ -1,3 +1,4 @@
+---
 name: Validate Windows MSI upgrades
 description: Build and exercise ordered Netsuke MSI upgrade fixtures.
 runs:

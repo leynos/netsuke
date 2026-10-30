@@ -240,6 +240,8 @@ jobs:
         # compile cannot be bounded by a per-test allowance (ADR-0059); what
         # Cargo packages does not vary by platform, so this lane alone runs it.
         run: make test-package-verify
+      - name: Release publication tests
+        run: make test-release-publication
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
         # instrumented run costs one compile instead of two, so the flags must

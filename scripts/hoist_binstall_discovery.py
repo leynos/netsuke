@@ -162,12 +162,15 @@ def _exists_any(path: Path) -> bool:
     return True
 
 
-def _walk_files(root: Path) -> list[Path]:
+def walk_files(root: Path) -> list[Path]:
     """Collect every file below ``root``, propagating traversal errors.
 
     ``Path.rglob`` suppresses errors such as ``PermissionError`` during
     traversal, which would let an unreadable directory masquerade as a
     missing asset; ``os.walk`` with an error callback surfaces them instead.
+    The function is public because the declared-name producer walks the same
+    tree for the operating-system packages, and a second traversal would have
+    to re-earn this error behaviour or silently differ from it.
 
     Parameters
     ----------
@@ -183,6 +186,16 @@ def _walk_files(root: Path) -> list[Path]:
     -----
     A directory that cannot be read propagates as ``OSError`` through the
     ``onerror`` callback rather than being silently skipped.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     _ = (Path(root) / "pkg.tar.gz").write_text("x", encoding="utf-8")
+    ...     found = sorted(path.name for path in walk_files(Path(root)))
+    >>> found
+    ['pkg.tar.gz']
     """
 
     def _raise(error: OSError) -> None:
@@ -287,7 +300,7 @@ def locate_archives(
     A dist tree that cannot be traversed, or an asset that cannot be probed,
     propagates as ``OSError``.
     """
-    staged = [path for path in _walk_files(dist_dir) if path.parent != dist_dir]
+    staged = [path for path in walk_files(dist_dir) if path.parent != dist_dir]
     located: list[StagedArchive] = []
     missing: list[str] = []
     for name in names:

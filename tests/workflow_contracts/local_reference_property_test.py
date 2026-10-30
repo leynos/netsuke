@@ -76,6 +76,12 @@ def _scan_graph(
     return covered_items(inventory, root_source_texts(root))
 
 
+#: Every example writes, scans, and removes two synthetic workspaces on disk,
+#: so the wall time tracks filesystem and scheduler contention rather than the
+#: code under test. A 296 ms example against Hypothesis's 200 ms default was
+#: observed while the rest of the suite was compiling, and the same example
+#: re-ran in 6 ms. The property is asserted over the generated graphs, so the
+#: deadline only adds a load-sensitive way to fail.
 @settings(deadline=None)
 @given(script_graphs())
 def test_coverage_matches_oracle_independent_of_reference_order(
