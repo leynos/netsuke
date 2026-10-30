@@ -1497,11 +1497,17 @@ pulling. The filename must not be `polythene.py`: Python puts the script's
 directory first on `sys.path`, so that name shadows the package the wrapper
 imports.
 
-The shared action skips the sandbox install when the package architecture
-differs from the host's. Both Linux lanes currently run on x64 runners, so an
-arm64 package is checked against the archive's file list and metadata but is
-not installed. The architecture-matched images still make a future arm64 runner
-work without a workflow change.
+The shared action skips both its sandbox install and its architecture check
+when the package architecture differs from the host's. Both Linux lanes run on
+x64 runners, so an arm64 package would otherwise reach upload having never run.
+The workflow therefore follows the action with an
+`Install packages under emulation` step, guarded on the sandbox step's
+`cross-arch` output, which runs
+`.github/package-validation/install-emulated-package.sh` for each package in
+the architecture-tagged image under the QEMU binfmt handlers the sandbox step
+registered. The script installs with `dpkg -i` or
+`rpm -i --nodeps --nosignature` and then runs the same verifier, so the arm64
+lane cannot pass without executing the package.
 
 To reproduce locally from the repository root:
 
@@ -1518,9 +1524,11 @@ podman run --rm -v "$PWD/dist:/packages:ro,z" \
 The contract tests are split across
 `tests/workflow_contracts/linux_package_validation_gate_test.py`, which holds
 the action pin, step order, inputs, dry-run wiring, and architecture mapping,
-and `tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
+`tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
 holds the image contents, the verifier's pass and fail paths, and the Polythene
-pin. Run `make test-workflow-contracts`.
+pin, and `tests/workflow_contracts/linux_package_emulation_test.py`, which
+holds the emulated install's per-format and failure paths. Run
+`make test-workflow-contracts`.
 
 ### Windows MSI packaging and upgrade validation
 

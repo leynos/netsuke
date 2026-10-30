@@ -49,6 +49,7 @@ DEB_IMAGE_STEP = "Build Debian validation image"
 RPM_IMAGE_STEP = "Build RPM validation image"
 VERSION_STEP = "Normalise Linux package validation version"
 VALIDATION_STEP = "Validate Linux packages"
+EMULATION_STEP = "Install packages under emulation"
 UPLOAD_STEP = "Upload Linux artefacts"
 
 #: The gate's steps in the order that makes it a gate: the packages exist, the
@@ -60,8 +61,23 @@ GATE_ORDER = (
     RPM_IMAGE_STEP,
     VERSION_STEP,
     VALIDATION_STEP,
+    EMULATION_STEP,
     UPLOAD_STEP,
 )
+
+LINUX_ONLY = "inputs.platform == 'linux'"
+CROSS_ARCH_ONLY = (
+    f"{LINUX_ONLY} && steps.validation_sandbox.outputs.cross-arch == 'true'"
+)
+#: Every step this gate adds, with the condition that keeps it unskippable.
+GATE_CONDITIONS = {
+    SANDBOX_STEP: LINUX_ONLY,
+    DEB_IMAGE_STEP: LINUX_ONLY,
+    RPM_IMAGE_STEP: LINUX_ONLY,
+    VERSION_STEP: LINUX_ONLY,
+    VALIDATION_STEP: LINUX_ONLY,
+    EMULATION_STEP: CROSS_ARCH_ONLY,
+}
 #: The steps this issue adds, each of which must be Linux-only and unskippable.
 NEW_GATE_STEPS = GATE_ORDER[1:-1]
 
@@ -95,9 +111,10 @@ def test_validation_runs_between_packaging_and_upload() -> None:
     )
     for name in NEW_GATE_STEPS:
         step = named_step(steps, name)
-        assert step.get("if") == "inputs.platform == 'linux'", (
-            f"{name!r} must be Linux-only and must not be conditioned on the "
-            f"dry run or the upload toggle, got {step.get('if')!r}"
+        assert step.get("if") == GATE_CONDITIONS[name], (
+            f"{name!r} must run unconditionally within its architecture and "
+            f"must not be conditioned on the dry run or the upload toggle, got "
+            f"{step.get('if')!r}"
         )
         assert "continue-on-error" not in step, (
             f"{name!r} must fail the lane rather than annotate it"
@@ -170,6 +187,43 @@ def test_validation_installs_the_packages_the_lane_built() -> None:
     assert str(validation["polythene-path"]).endswith(
         "/.github/package-validation/polythene_cli.py"
     ), "the validator must launch the repository's pinned Polythene wrapper"
+
+
+def test_cross_architecture_packages_are_installed_under_emulation() -> None:
+    """Install the packages the shared action would skip on an arch mismatch.
+
+    The action skips both its sandbox install and its architecture check when
+    the package architecture differs from the runner's, which is the arm64 lane
+    on an x64 release runner. Without this step those packages would reach
+    upload having never run. It must therefore be unconditional within the
+    cross-architecture lane, install both formats from the images this lane
+    built, and hand each package to the verifier with its architecture.
+    """
+    step = named_step(_linux_steps(), EMULATION_STEP)
+    env = require_mapping(step.get("env"), f"the {EMULATION_STEP} environment")
+    expected_env = {
+        "PACKAGE_ARCH": "${{ steps.validation_sandbox.outputs.arch }}",
+        "DEB_IMAGE": "${{ steps.validation_deb_image.outputs.image }}",
+        "RPM_IMAGE": "${{ steps.validation_rpm_image.outputs.image }}",
+        "BIN_NAME": "${{ inputs['bin-name'] }}",
+    }
+    for key, value in expected_env.items():
+        assert env.get(key) == value, (
+            f"{EMULATION_STEP!r} must read {key} from {value!r}, got {env.get(key)!r}"
+        )
+    run = str(step["run"])
+    fragments = (
+        "packages=(dist/*.deb dist/*.rpm)",
+        "*.deb) image=$DEB_IMAGE",
+        "*.rpm) image=$RPM_IMAGE",
+        ".github/package-validation/install-emulated-package.sh",
+        '"$image" "$PACKAGE_ARCH" "$package" "$BIN_NAME"',
+    )
+    for fragment in fragments:
+        assert fragment in run, (
+            f"{EMULATION_STEP!r} must install every package with {fragment!r}, "
+            f"got {run!r}"
+        )
 
 
 @pytest.mark.parametrize(

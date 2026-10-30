@@ -1,7 +1,6 @@
 """Contract tests for the Linux package validation sandbox.
 
-The gate installs each built package in a sandbox image and runs the
-repository's verification script inside it. Both halves are easy to weaken:
+The gate installs each package in a sandbox and runs the repository's verifier:
 
 - a tag-pinned base image can change under the gate;
 - an RPM image shipping the dependency would weaken the declared-dependency check;
@@ -60,11 +59,9 @@ def test_validation_images_are_pinned_and_carry_the_right_tools(
     The base image must be pinned by digest so the gate cannot change under a
     tag move, and must carry the manual-page tooling: a fresh image otherwise
     excludes documentation and ``man -w`` would always fail. The dependency
-    policy is per distribution -- Debian installs ``ninja-build`` because
-    ``dpkg -i`` refuses a package with unmet dependencies, the RPM image
-    withholds it because ``rpm -i --nodeps`` does not need it -- and the
-    verifier reads declared metadata either way, so Debian's installed copy
-    cannot satisfy the check.
+    policy is per distribution: Debian installs ``ninja-build`` because
+    ``dpkg -i`` refuses unmet dependencies, the RPM image withholds it, and
+    the verifier reads declared metadata either way.
     """
     text = (VALIDATION_DIR / containerfile).read_text(encoding="utf-8")
     from_lines = [line for line in text.splitlines() if line.startswith("FROM ")]
@@ -382,10 +379,13 @@ def test_sandbox_step_resolves_the_target_architecture(
             f"{result.stderr!r}"
         )
         return
+    runner_arch = "amd64" if case.runner_arch == "x86_64" else "arm64"
+    cross_arch = "true" if case.expected_arch != runner_arch else "false"
     assert output.read_text(encoding="utf-8").splitlines() == [
         f"arch={case.expected_arch}",
-        f"runner-arch={'amd64' if case.runner_arch == 'x86_64' else 'arm64'}",
-    ], "the step must expose both architectures for the image builds"
+        f"runner-arch={runner_arch}",
+        f"cross-arch={cross_arch}",
+    ], "the step must expose both architectures and whether they differ"
     calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     for call in case.expected_calls:
         assert call in calls, (
