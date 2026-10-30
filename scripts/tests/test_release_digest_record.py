@@ -74,29 +74,27 @@ def test_a_non_string_asset_name_is_refused_before_sorting() -> None:
         _ = _trusted(malformed)
 
 
-def test_an_empty_record_is_refused() -> None:
-    """Refuse a record that would verify nothing."""
-    with pytest.raises(release_digest_record.DigestRecordError):
-        _ = _trusted({})
+@pytest.mark.parametrize(
+    ("declared", "message"),
+    [
+        pytest.param({}, "declares no assets", id="empty"),
+        pytest.param({"a": 1}, "as strings", id="non-string-digest"),
+        pytest.param({"a": "nothex"}, "non-digest", id="not-hex"),
+        pytest.param({"a": "ab"}, "non-digest", id="too-short"),
+        pytest.param({"a": DIGEST, "b": 2}, "as strings", id="one-bad-entry"),
+    ],
+)
+def test_an_unusable_mapping_refuses_the_whole_record(
+    declared: dict[str, object], message: str
+) -> None:
+    """Refuse the record, not merely the entry, so no asset is left unchecked.
 
-
-def test_a_digest_that_is_not_a_string_is_refused() -> None:
-    """Refuse a value the comparison could never match."""
-    with pytest.raises(release_digest_record.DigestRecordError):
-        _ = _trusted({"a": 1})
-
-
-@pytest.mark.parametrize("digest", ["nothex", "ab"], ids=["not-hex", "too-short"])
-def test_a_digest_that_is_not_a_digest_is_refused(digest: str) -> None:
-    """Refuse a malformed digest rather than comparing it as text."""
-    with pytest.raises(release_digest_record.DigestRecordError):
-        _ = _trusted({"a": digest})
-
-
-def test_one_bad_entry_refuses_the_whole_record() -> None:
-    """Refuse the record, not merely the entry, so no asset is left unchecked."""
-    with pytest.raises(release_digest_record.DigestRecordError):
-        _ = _trusted({"a": DIGEST, "b": 2})
+    An empty mapping would verify nothing, a value the comparison could never
+    match would silently pass an equality check, and a malformed digest must be
+    diagnosed rather than compared as text.
+    """
+    with pytest.raises(release_digest_record.DigestRecordError, match=message):
+        _ = _trusted(declared)
 
 
 def test_a_covering_record_is_accepted() -> None:
