@@ -50,11 +50,13 @@ owner.
 - Validate these rules before both direct Ninja generation and dyndep-bundle
   generation, preserving the existing missing-action diagnostic path.
 
-Adding the field to the public `Target` struct breaks downstream Rust callers
-that construct it with a struct literal. The package currently declares version
-`0.1.0-beta4`, and this source break is accepted for the next pre-release API:
-callers must provide `console`. The default only preserves manifest
-compatibility through Serde.
+Adding the field to the public `Target` and `BuildEdge` structs breaks
+downstream Rust callers that construct either type with a struct literal. Both
+structs expose public fields and neither is `#[non_exhaustive]`, so an existing
+literal fails to compile until it names `console`. The package currently
+declares version `0.1.0-beta4`, and this source break is accepted for the next
+pre-release API: callers must provide `console`. The default only preserves
+manifest compatibility through Serde.
 
 Ninja runs console-pool edges one at a time in one invocation. Output from
 other edges is held while a console edge runs. Netsuke forwards Ninja output as
