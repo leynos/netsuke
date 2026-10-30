@@ -21,26 +21,22 @@ PACKAGES = (
     "netsuke-0.1.0.beta4-1_arm64.deb",
     "netsuke-0.1.0-beta4-arm64.msi",
 )
-TARGET_CONFIG = {
-    "targets": {
-        "linux-x86_64": {"platform": "linux"},
-        "linux-aarch64": {"platform": "linux"},
-        "windows-x86_64": {"platform": "windows"},
-        "windows-aarch64": {"platform": "windows"},
-        "macos-x86_64": {"platform": "macos"},
-        "macos-aarch64": {"platform": "macos"},
-    }
-}
+STAGING_TARGETS = release_declaration.StagingTargets(
+    tuple(
+        release_declaration.StagingTarget(platform)
+        for platform in ("linux", "linux", "windows", "windows", "macos", "macos")
+    )
+)
 
 
 def _declare(
     staged_packages: tuple[str, ...] = PACKAGES,
-    target_config: object = TARGET_CONFIG,
+    targets: release_declaration.StagingTargets = STAGING_TARGETS,
 ) -> tuple[str, ...]:
     """Declare the consumer set from typed facts, without reading files."""
     return release_declaration.declared_asset_names(
         archive_names=ARCHIVES,
-        target_config=target_config,
+        targets=targets,
         staged_package_names=staged_packages,
     )
 
@@ -103,29 +99,16 @@ def test_a_platform_with_no_declared_format_is_refused() -> None:
     with pytest.raises(release_declaration.UnknownPlatformError):
         _declare(
             (),
-            {"targets": {"solaris": {"platform": "solaris"}}},
+            release_declaration.StagingTargets((
+                release_declaration.StagingTarget("solaris"),
+            )),
         )
 
 
 def test_a_configuration_without_targets_is_refused() -> None:
-    """Refuse an empty target mapping rather than declare a smaller release."""
+    """Refuse an empty target set rather than declare a smaller release."""
     with pytest.raises(release_declaration.MissingTargetsError):
-        _declare((), {})
-
-
-def test_a_non_mapping_configuration_is_refused() -> None:
-    """Refuse malformed configuration before counting platform targets."""
-    with pytest.raises(
-        release_declaration.MalformedTargetError,
-        match="not a string-keyed mapping",
-    ):
-        _declare((), [])
-
-
-def test_a_target_without_a_platform_is_refused() -> None:
-    """Refuse a target the policy cannot count under a package platform."""
-    with pytest.raises(release_declaration.MalformedTargetError):
-        _declare((), {"targets": {"linux": {}}})
+        _ = release_declaration.StagingTargets.from_targets(())
 
 
 def test_package_names_are_observed_from_the_supplied_tree_facts() -> None:
