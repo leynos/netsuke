@@ -289,9 +289,12 @@ Review of the migration tightened where those invariants live. Both records now
 validate in `__post_init__` as well as in their factories, so a directly
 constructed record cannot reach the comparison functions unvalidated; the
 staging suite exercises both construction paths, and the digest suite rebuilds
-each refusal without the factory. One `_validated_entry` helper holds the
-digest record's type and hexadecimal checks, so the factory's case
-normalization and the record's canonical-form rule cannot drift apart.
+each refusal without the factory. The digest record also refuses a repeated
+asset name on that path, because a mapping cannot repeat a key and every
+accessor collapses the repetition, so the earlier digest would otherwise never
+be compared. One `_validated_entry` helper holds the digest record's type and
+hexadecimal checks, so the factory's case normalization and the record's
+canonical-form rule cannot drift apart.
 
 The regression evidence is pinned rather than incidental. The nine
 previously-rejected digest shapes and eight staging shapes were committed
