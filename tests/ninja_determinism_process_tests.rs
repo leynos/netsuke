@@ -71,6 +71,12 @@ const FIXTURES: &[(&str, &str)] = &[
 /// One emitted bundle: the build file and every dyndep sidecar beside it.
 #[derive(Debug)]
 struct Bundle {
+    /// The fixture manifest that produced this bundle, for diagnostics.
+    ///
+    /// The label travels with the bundle rather than beside it because every
+    /// comparison needs it and none would be meaningful over bundles from two
+    /// fixtures: a failure message must name the one fixture both runs share.
+    fixture: &'static str,
     /// The text written to `build.ninja`.
     build_file: String,
     /// The staged sidecars, sorted by relative path.
@@ -91,7 +97,7 @@ fn two_runs_emit_identical_bytes() -> Result<()> {
     for &(fixture, manifest) in FIXTURES {
         let first = emit_once(fixture, manifest, &[])?;
         let second = emit_once(fixture, manifest, &[])?;
-        assert_identical(fixture, &first, &second)?;
+        assert_identical(&first, &second)?;
     }
     Ok(())
 }
@@ -132,7 +138,7 @@ fn an_unrelated_environment_variable_does_not_change_the_bundle() -> Result<()> 
         &[("TMPDIR", scratch_path.as_str())],
     )?;
 
-    assert_identical(PROCESS_FIXTURE_NAME, &baseline, &perturbed)
+    assert_identical(&baseline, &perturbed)
 }
 
 /// A locale change rewrites the progress descriptions and nothing else.
@@ -165,7 +171,7 @@ fn a_locale_change_reaches_only_the_progress_descriptions() -> Result<()> {
         ],
     )?;
 
-    assert_only_descriptions_differ(PROCESS_FIXTURE_NAME, &english, &french)
+    assert_only_descriptions_differ(&english, &french)
 }
 
 /// Emit `manifest` once, in a fresh workspace, and read the resulting bundle.
@@ -173,7 +179,11 @@ fn a_locale_change_reaches_only_the_progress_descriptions() -> Result<()> {
 /// Each call gets its own temporary directory, so the two runs of a comparison
 /// cannot share output files, staged sidecars, or the dyndep directory that
 /// `generate` prunes. `environment` is applied to the child only.
-fn emit_once(fixture: &str, manifest: &str, environment: &[(&str, &str)]) -> Result<Bundle> {
+fn emit_once(
+    fixture: &'static str,
+    manifest: &str,
+    environment: &[(&str, &str)],
+) -> Result<Bundle> {
     let directory =
         tempfile::tempdir().with_context(|| format!("create a workspace for {fixture}"))?;
     let root = open_workspace(&directory)?;
@@ -200,6 +210,7 @@ fn emit_once(fixture: &str, manifest: &str, environment: &[(&str, &str)]) -> Res
         .read_to_string("build.ninja")
         .with_context(|| format!("read the {fixture} build file"))?;
     Ok(Bundle {
+        fixture,
         build_file,
         sidecars: read_sidecars(&root)?,
     })

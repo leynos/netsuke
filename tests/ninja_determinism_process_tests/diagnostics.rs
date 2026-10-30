@@ -11,8 +11,12 @@
 //! Split out rather than grown in place for the second reason the repository
 //! applies everywhere: `CodeScene` attributed the root's
 //! `String Heavy Function Arguments` finding to the *comparison's* mix of
-//! arguments, and moving the explanatory helpers out is what brings both files
-//! under the threshold without changing a single assertion.
+//! arguments, and moving the explanatory helpers out is what brings the root
+//! under the threshold. The label a comparison reports travels on the
+//! [`Bundle`] it names rather than beside it as a third parameter, so each
+//! comparison takes two bundles and no loose strings; the strings that remain
+//! are read, compared, and shortened by the text helpers, whose subject is the
+//! text itself.
 
 use super::Bundle;
 use anyhow::{Result, bail, ensure};
@@ -22,18 +26,35 @@ use anyhow::{Result, bail, ensure};
 /// A sidecar is identified by its content-addressed path as well as its body:
 /// two bundles differing only in a sidecar name are still different artefacts,
 /// and comparing bodies alone would miss it.
-pub(super) fn assert_identical(fixture: &str, first: &Bundle, second: &Bundle) -> Result<()> {
+pub(super) fn assert_identical(first: &Bundle, second: &Bundle) -> Result<()> {
+    let fixture = compared_fixture(first, second)?;
     if first.build_file != second.build_file {
         bail!(
             "{fixture}: two processes emitted different build files\n{}",
             describe_difference(&first.build_file, &second.build_file)
         );
     }
-    assert_sidecars_identical(fixture, first, second)
+    assert_sidecars_identical(first, second)
+}
+
+/// The fixture both bundles of a comparison came from.
+///
+/// Comparing bundles from two different fixtures is a caller error: every
+/// message would name one fixture while describing runs over another, so the
+/// guard fails loudly rather than reporting a misleading label.
+fn compared_fixture(first: &Bundle, second: &Bundle) -> Result<&'static str> {
+    ensure!(
+        first.fixture == second.fixture,
+        "a comparison needs two bundles from one fixture, got {} and {}",
+        first.fixture,
+        second.fixture,
+    );
+    Ok(first.fixture)
 }
 
 /// Assert that two runs staged the same sidecars at the same paths.
-fn assert_sidecars_identical(fixture: &str, first: &Bundle, second: &Bundle) -> Result<()> {
+fn assert_sidecars_identical(first: &Bundle, second: &Bundle) -> Result<()> {
+    let fixture = compared_fixture(first, second)?;
     if first.sidecars.len() != second.sidecars.len() {
         bail!(
             "{fixture}: two processes staged {} and {} dyndep sidecars: {:?} vs {:?}",
@@ -70,11 +91,8 @@ fn assert_sidecars_identical(fixture: &str, first: &Bundle, second: &Bundle) -> 
 /// at least one pair has to differ — otherwise the comparison would pass while
 /// proving nothing about what a locale change reaches. The sidecars carry no
 /// descriptions, so they must still match exactly.
-pub(super) fn assert_only_descriptions_differ(
-    fixture: &str,
-    english: &Bundle,
-    localised: &Bundle,
-) -> Result<()> {
+pub(super) fn assert_only_descriptions_differ(english: &Bundle, localised: &Bundle) -> Result<()> {
+    let fixture = compared_fixture(english, localised)?;
     let english_lines: Vec<&str> = english.build_file.lines().collect();
     let localised_lines: Vec<&str> = localised.build_file.lines().collect();
     if english_lines.len() != localised_lines.len() {
@@ -105,7 +123,7 @@ pub(super) fn assert_only_descriptions_differ(
         "{fixture}: the two locales emitted identical descriptions, so this run \
          cannot show that a locale change reaches anything at all",
     );
-    assert_sidecars_identical(fixture, english, localised)
+    assert_sidecars_identical(english, localised)
 }
 
 /// Whether a build-file line assigns an edge's `description` value.
