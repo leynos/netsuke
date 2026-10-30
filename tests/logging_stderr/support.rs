@@ -2,34 +2,13 @@
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-#[cfg(unix)]
-use cap_std::fs::PermissionsExt;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::runner::NINJA_ENV;
 use rstest::fixture;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
-
 #[cfg(unix)]
-fn make_script_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
-    let mut permissions = dir
-        .metadata(path)
-        .with_context(|| format!("read metadata for {path}"))?
-        .permissions();
-    permissions.set_mode(0o755);
-    dir.set_permissions(path, permissions)
-        .with_context(|| format!("set executable bit for {path}"))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the fallible signature must match the Unix variant so the shared call site needs no platform-specific handling"
-)]
-const fn make_script_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
-    Ok(())
-}
+pub(super) use test_support::ninja_script::write_fake_ninja_script;
 
 #[fixture]
 pub(super) fn temp_with_minimal_manifest() -> Result<TempDir> {
@@ -121,49 +100,6 @@ fn normalize_fingerprints(fragment: &str) -> String {
     };
     normalized.push_str(suffix);
     normalized
-}
-
-pub(super) fn write_fake_ninja_script(
-    dir: &Dir,
-    path: &Utf8Path,
-    stdout_lines: &[&str],
-    stderr_marker: Option<&str>,
-) -> Result<()> {
-    let script = if cfg!(windows) {
-        let mut script = String::from("@echo off\r\n");
-        for line in stdout_lines {
-            script.push_str("echo ");
-            script.push_str(line);
-            script.push_str("\r\n");
-        }
-        if let Some(marker) = stderr_marker {
-            script.push_str("echo ");
-            script.push_str(marker);
-            script.push_str(" 1>&2\r\n");
-        }
-        script.push_str("exit /B 0\r\n");
-        script
-    } else {
-        let mut script = String::from(
-            "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\ndone <<'NETSUKE_OUTPUT'\n",
-        );
-        for line in stdout_lines {
-            script.push_str(line);
-            script.push('\n');
-        }
-        script.push_str("NETSUKE_OUTPUT\n");
-        if let Some(marker) = stderr_marker {
-            script.push_str("printf '%s\\n' '");
-            script.push_str(marker);
-            script.push_str("' >&2\n");
-        }
-        script.push_str("exit 0\n");
-        script
-    };
-
-    dir.write(path, script)
-        .with_context(|| format!("write fake ninja script {path}"))?;
-    make_script_executable(dir, path)
 }
 
 pub(super) fn fake_ninja_name(stem: &str) -> String {

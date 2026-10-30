@@ -1,7 +1,7 @@
 //! Test-support crate for Netsuke.
 //!
 //! This crate provides test-only utilities for:
-//! - creating fake executables for process-related tests
+//! - creating fake executables and deterministic Ninja status scripts
 //! - composing injected and child-process environments
 //! - pinning the active locale for snapshot tests (`EnLocalizer`, `en_localizer`,
 //!   `LocalizerGuard`, `localizer_test_lock`, `set_en_localizer`)
@@ -34,10 +34,26 @@ pub mod manifest;
 pub mod netsuke;
 pub mod ninja;
 pub mod ninja_gen;
+pub mod ninja_script;
 pub mod ninja_semantics;
 pub mod stdlib_assert;
 pub mod temp_path_filter;
+pub mod terminal;
 pub mod windows_argv;
+/// Re-export the SHA-256 helper for concise call sites.
+pub use hash::sha256_hex;
+
+/// Re-export localizer helpers for integration tests.
+pub use localizer::{
+    EnLocalizer, LocalizerGuard, en_localizer, localizer_test_lock, set_en_localizer,
+};
+
+/// Re-export manifest helpers for integration tests.
+pub use manifest::ensure_manifest_exists;
+
+/// Helpers for writing executable stubs and setting executable bits in tests.
+pub use exec::{make_executable, write_exec, write_exec_with_content};
+
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
 
