@@ -1,14 +1,13 @@
-diff --git a/src/ninja_gen/dyndep/mod.rs b/src/ninja_gen/dyndep/mod.rs
---- a/src/ninja_gen/dyndep/mod.rs
-+++ b/src/ninja_gen/dyndep/mod.rs
-@@ -152,7 +152,10 @@ fn render_edges(
-     out: &mut String,
-     stages: &mut SerialStages,
- ) -> Result<(), NinjaGenError> {
+diff --git a/src/ninja_gen/dyndep/render.rs b/src/ninja_gen/dyndep/render.rs
+--- a/src/ninja_gen/dyndep/render.rs
++++ b/src/ninja_gen/dyndep/render.rs
+@@ -31,6 +31,9 @@
+         localizer,
+     };
      for edge in ordered_edges(graph.edges()) {
 +        if !edge.explicit_outputs.is_empty() {
 +            continue;
 +        }
-         render_edge(graph, edge, out, stages)?;
+         renderer.render_edge(edge)?;
      }
-     Ok(())
+     Ok(renderer.stages.dyndep_files)

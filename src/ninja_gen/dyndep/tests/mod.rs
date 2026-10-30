@@ -1,8 +1,8 @@
 //! Unit tests for staged dyndep bundle generation.
 
-use super::{BuildEdge, GeneratedDyndep, NinjaGenError, generate_bundle};
+use super::{GeneratedDyndep, NinjaGenError, generate_bundle};
 use crate::ast::{Recipe, StringOrList};
-use crate::ir::{Action, BuildGraph, DependencyOrder};
+use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 
@@ -347,7 +347,6 @@ fn repeated_dependency_keeps_separate_stage_sidecars() -> Result<()> {
     );
     Ok(())
 }
-
 
 mod dependency_only;
 

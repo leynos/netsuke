@@ -7920,6 +7920,19 @@ what `EP-M2`'s `make proptest` spelling depends on. The question is closed.
   controls all exited 0. Both corrections are recorded at the risk entry and in
   the `2026-10-21` surprise above rather than silently replaced.
 
+- Decision: name **the rendered graph**, not the manifest, as the published
+  guarantee's first parameter, and add `N-5` to `ADR-030` for rendering that
+  observes changing host state. Rationale: rendering runs before emission, so a
+  recipe calling the clock-dependent `now()` helper yields two different graphs
+  from one manifest and therefore two legitimate bundles. The earlier tuple
+  said "manifest", which promised byte-identity the emitter cannot deliver and
+  which `ADR-030`'s own "only for a fixed graph" precondition contradicts. The
+  dated entries above are left in their original wording per the `2026-10-10`
+  correction-beside-the-record decision; this entry supersedes their tuple.
+  `docs/users-guide.md`, `docs/netsuke-design.md` and `ADR-030` were corrected
+  together, since the defect recurred across all three. Date/Author: 2026-10-30
+  / implementation agent.
+
 ## Design review findings
 
 A six-lens review (structure, alternatives, scaling, contracts, failure modes,

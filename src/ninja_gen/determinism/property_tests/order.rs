@@ -325,6 +325,7 @@ fn the_edge_rule_keys_on_the_output_set() {
         explicit_outputs: outputs.map(Utf8PathBuf::from).to_vec(),
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     };

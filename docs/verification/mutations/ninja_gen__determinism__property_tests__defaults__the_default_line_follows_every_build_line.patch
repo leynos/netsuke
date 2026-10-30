@@ -1,28 +1,28 @@
 diff --git a/src/ninja_gen/dyndep/mod.rs b/src/ninja_gen/dyndep/mod.rs
 --- a/src/ninja_gen/dyndep/mod.rs
 +++ b/src/ninja_gen/dyndep/mod.rs
-@@ -151,14 +151,14 @@ fn generate_bundle_inner(
+@@ -156,14 +156,14 @@
  
      write_action_rules(graph, &mut out, shell, bash_executable)?;
  
--    let mut stages = SerialStages::default();
--    render_edges(graph, &mut out, &mut stages)?;
+-    let localizer = localization::localizer();
+-    let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;
 -
      let defaults = ordered_default_targets(graph);
      if !defaults.is_empty() {
          writeln!(out, "default {}", join(&defaults))?;
      }
  
-+    let mut stages = SerialStages::default();
-+    render_edges(graph, &mut out, &mut stages)?;
++    let localizer = localization::localizer();
++    let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;
 +
      Ok(GeneratedNinja {
          build_file: out,
-         dyndep_files: stages.dyndep_files,
+         dyndep_files,
 diff --git a/src/ninja_gen/mod.rs b/src/ninja_gen/mod.rs
 --- a/src/ninja_gen/mod.rs
 +++ b/src/ninja_gen/mod.rs
-@@ -175,6 +175,12 @@ pub(crate) fn generate_into_with_shell<W: Write>(
+@@ -178,6 +178,12 @@
          });
      }
      write_action_rules(graph, out, shell, None)?;
@@ -33,9 +33,9 @@ diff --git a/src/ninja_gen/mod.rs b/src/ninja_gen/mod.rs
 +    }
 +
      for edge in ordered_edges(graph.edges()) {
-         let action =
-             graph
-@@ -201,11 +207,6 @@ pub(crate) fn generate_into_with_shell<W: Write>(
+         let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
+         write!(
+@@ -193,11 +199,6 @@
          )?;
      }
  

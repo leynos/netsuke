@@ -169,6 +169,7 @@ pub(super) fn edge(index: usize) -> BuildEdge {
         explicit_outputs: vec![output_path(index)],
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     }

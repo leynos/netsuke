@@ -1,7 +1,9 @@
 //! How a failed two-run comparison explains itself.
 //!
-//! The comparison and its *explanation* are separate jobs. The crate root knows
-//! what counts as the same bundle; this module knows how to describe a
+//! The comparison and its *explanation* are separate jobs. The crate root
+//! decides which two bundles to compare and under what perturbation; this module
+//! knows what counts as the same bundle, including the one comparison whose
+//! answer is "the same apart from the localized wording", and how to describe a
 //! difference once one has been found. A failure message is read when the suite
 //! is red, never when it is green, so keeping it beside the comparison would
 //! make the comparison harder to follow without making the message any clearer.
@@ -13,7 +15,7 @@
 //! under the threshold without changing a single assertion.
 
 use super::Bundle;
-use anyhow::{Result, bail};
+use anyhow::{Result, bail, ensure};
 
 /// Assert that two runs produced the same bundle.
 ///
@@ -27,6 +29,11 @@ pub(super) fn assert_identical(fixture: &str, first: &Bundle, second: &Bundle) -
             describe_difference(&first.build_file, &second.build_file)
         );
     }
+    assert_sidecars_identical(fixture, first, second)
+}
+
+/// Assert that two runs staged the same sidecars at the same paths.
+fn assert_sidecars_identical(fixture: &str, first: &Bundle, second: &Bundle) -> Result<()> {
     if first.sidecars.len() != second.sidecars.len() {
         bail!(
             "{fixture}: two processes staged {} and {} dyndep sidecars: {:?} vs {:?}",
@@ -53,6 +60,57 @@ pub(super) fn assert_identical(fixture: &str, first: &Bundle, second: &Bundle) -
         }
     }
     Ok(())
+}
+
+/// Assert that two runs differed only in their progress descriptions.
+///
+/// Locale is an environment parameter of the guarantee, so differing wording is
+/// expected; the claim under test is that the wording is *all* that moved. A
+/// line pair therefore has to be either equal or two `description` values, and
+/// at least one pair has to differ — otherwise the comparison would pass while
+/// proving nothing about what a locale change reaches. The sidecars carry no
+/// descriptions, so they must still match exactly.
+pub(super) fn assert_only_descriptions_differ(
+    fixture: &str,
+    english: &Bundle,
+    localised: &Bundle,
+) -> Result<()> {
+    let english_lines: Vec<&str> = english.build_file.lines().collect();
+    let localised_lines: Vec<&str> = localised.build_file.lines().collect();
+    if english_lines.len() != localised_lines.len() {
+        bail!(
+            "{fixture}: a locale change altered the build file's line count, {} vs {}",
+            english_lines.len(),
+            localised_lines.len(),
+        );
+    }
+
+    let mut differences = 0_usize;
+    for (index, (left, right)) in english_lines.iter().zip(&localised_lines).enumerate() {
+        if left == right {
+            continue;
+        }
+        ensure!(
+            is_description_line(left) && is_description_line(right),
+            "{fixture}: a locale change reached more than the progress descriptions, \
+             at line {}:\n  english:   {}\n  localised: {}",
+            index + 1,
+            truncate(left),
+            truncate(right),
+        );
+        differences += 1;
+    }
+    ensure!(
+        differences > 0,
+        "{fixture}: the two locales emitted identical descriptions, so this run \
+         cannot show that a locale change reaches anything at all",
+    );
+    assert_sidecars_identical(fixture, english, localised)
+}
+
+/// Whether a build-file line assigns an edge's `description` value.
+fn is_description_line(line: &str) -> bool {
+    line.trim_start().starts_with("description = ")
 }
 
 /// The sidecar paths of one bundle, for a diagnostic.

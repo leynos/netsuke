@@ -41,7 +41,7 @@ mod diagnostics;
 use anyhow::{Context, Result, anyhow, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use diagnostics::assert_identical;
+use diagnostics::{assert_identical, assert_only_descriptions_differ};
 use std::io::ErrorKind;
 use tempfile::TempDir;
 
@@ -115,26 +115,57 @@ fn the_process_fixture_reaches_the_required_classes() -> Result<()> {
 }
 
 #[test]
-fn a_changed_environment_does_not_change_the_bundle() -> Result<()> {
+fn an_unrelated_environment_variable_does_not_change_the_bundle() -> Result<()> {
     let baseline = emit_once(PROCESS_FIXTURE_NAME, PROCESS_FIXTURE, &[])?;
-    // `TMPDIR` is where the second process may look for scratch space, and the
-    // locale changes the copy its diagnostics would use. Neither may reach the
-    // emitted bytes.
+    // `TMPDIR` is where the second process may look for scratch space. It is
+    // not a parameter of the guarantee, so it must not reach the emitted
+    // bytes. Locale variables are deliberately absent: progress labels are
+    // translated, which makes the locale *part of* the environment parameter;
+    // [`a_locale_change_reaches_only_the_progress_descriptions`] states what a
+    // locale change is and is not allowed to move.
     let scratch = tempfile::tempdir().context("create a scratch directory for the second run")?;
     let scratch_path = Utf8PathBuf::from_path_buf(scratch.path().to_path_buf())
         .map_err(|path| anyhow!("scratch directory is not UTF-8: {}", path.display()))?;
     let perturbed = emit_once(
         PROCESS_FIXTURE_NAME,
         PROCESS_FIXTURE,
+        &[("TMPDIR", scratch_path.as_str())],
+    )?;
+
+    assert_identical(PROCESS_FIXTURE_NAME, &baseline, &perturbed)
+}
+
+/// A locale change rewrites the progress descriptions and nothing else.
+///
+/// `G-1` fixes the environment, and the environment includes the locale, so two
+/// runs under different locales are two different inputs and are *expected* to
+/// differ. What must not happen is a locale change moving anything structural:
+/// the localized wording lives only in each edge's `description` value, and the
+/// rule names, paths, command text, and dependency order must survive it. Fixing
+/// the locale on both runs also keeps this test independent of the host's own,
+/// which the un-perturbed runs in the sibling tests inherit.
+#[test]
+fn a_locale_change_reaches_only_the_progress_descriptions() -> Result<()> {
+    let english = emit_once(
+        PROCESS_FIXTURE_NAME,
+        PROCESS_FIXTURE,
         &[
-            ("TMPDIR", scratch_path.as_str()),
+            ("NETSUKE_LOCALE", "en-US"),
+            ("LANG", "en_US.UTF-8"),
+            ("LC_ALL", "en_US.UTF-8"),
+        ],
+    )?;
+    let french = emit_once(
+        PROCESS_FIXTURE_NAME,
+        PROCESS_FIXTURE,
+        &[
             ("NETSUKE_LOCALE", "fr"),
             ("LANG", "fr_FR.UTF-8"),
             ("LC_ALL", "fr_FR.UTF-8"),
         ],
     )?;
 
-    assert_identical(PROCESS_FIXTURE_NAME, &baseline, &perturbed)
+    assert_only_descriptions_differ(PROCESS_FIXTURE_NAME, &english, &french)
 }
 
 /// Emit `manifest` once, in a fresh workspace, and read the resulting bundle.

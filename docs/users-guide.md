@@ -1452,10 +1452,13 @@ whose `result.command` is `check-explain`.
 ## Rely on deterministic emission
 
 `netsuke generate` publishes one determinism guarantee. For a fixed tuple of
-manifest, environment, platform, recipe-shell selection, and Netsuke version,
-the emitted bundle is byte-identical on every run. The bundle is the main build
-file plus every dyndep sidecar it names, so comparing only `build.ninja` is not
-a complete check.
+rendered graph, environment, platform, recipe-shell selection, and Netsuke
+version, the emitted bundle is byte-identical on every run. The first element
+is the rendered graph rather than the manifest text because rendering runs
+before emission: a recipe using the clock-dependent `now()` helper produces
+different command text on two runs of one manifest, so those runs have two
+different rendered graphs. The bundle is the main build file plus every dyndep
+sidecar it names, so comparing only `build.ninja` is not a complete check.
 
 The guarantee is deliberately narrow:
 
@@ -1466,8 +1469,16 @@ The guarantee is deliberately narrow:
 - **Not across platforms or shells.** Windows PowerShell and POSIX recipes are
   different renderers, and differ in response-file emission and script
   wrapping. Switching `NETSUKE_WINDOWS_SHELL` selects a different renderer.
-- **Only for a fixed graph.** Two graphs whose edges, inputs, or defaults
-  differ in content are different graphs; their output is expected to differ.
+- **Not across locales.** Progress labels are translated, and the locale is
+  part of the environment, so `NETSUKE_LOCALE`, `LANG`, and `LC_ALL` select the
+  wording of each edge's `description` value. Runs that disagree on their
+  locale are two different inputs. Only the wording moves; rule names, paths,
+  command text, and dependency order are unchanged.
+- **Only for a fixed graph.** Anything that changes the rendered graph changes
+  the contract's input, not its outcome. A manifest whose rendering reads host
+  state can render differently on every run, and two graphs whose edges,
+  inputs, or defaults differ in content are different graphs; their output is
+  expected to differ.
 
 Determinism is also not promised for an edge's own path-list order. Netsuke
 renders each path vector in declaration order, so permuting the entries of one

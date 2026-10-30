@@ -136,23 +136,38 @@ caching, reproducible artefacts, a claim already published in the README, and a
 verification hand-off from Kani that has nothing to verify against, the
 decision is to publish exactly one determinism guarantee — process-level
 reproducibility on an identical
-`(manifest, environment, platform, shell selection, Netsuke version)` tuple —
-and to record the order-invariance, declaration-invariance, and non-invariance
-statements as internal invariants with their own preconditions, accepting that
-byte stability across Netsuke versions is explicitly not promised, that the two
-domain-purity leaks remain unrepaired, and that a source-shape contract must
-carry the forward-looking half of the guarantee.
+`(rendered graph, environment, platform, shell selection, Netsuke version)`
+tuple — and to record the order-invariance, declaration-invariance, and
+non-invariance statements as internal invariants with their own preconditions,
+accepting that byte stability across Netsuke versions is explicitly not
+promised, that the two domain-purity leaks remain unrepaired, and that a
+source-shape contract must carry the forward-looking half of the guarantee.
 
 **Public guarantee (G-1).** For a fixed parameter tuple
 
 ```plaintext
-(manifest, environment, platform, recipe-shell selection, Netsuke version)
+(rendered graph, environment, platform, recipe-shell selection, Netsuke version)
 ```
 
 Netsuke emits byte-identical output. This is a _process-level_ statement,
 observable by running the binary twice, and it applies to the complete
 artefact: the main build file text, every dyndep sidecar's relative path, and
 every sidecar's content.
+
+The first element is the rendered graph rather than the manifest text.
+Rendering runs before emission and may itself observe host state: a recipe
+using the clock-dependent `now()` helper renders different command text on two
+runs of one manifest. Those runs name two different graphs, so `G-1` compares
+each run's emission with itself, not the two runs with each other.
+
+The environment element is load-bearing for the same reason, and the locale is
+the element most easily overlooked. Progress labels are translated, so
+`NETSUKE_LOCALE`, `LANG`, and `LC_ALL` select the wording of each edge's
+`description` value; two runs that disagree on their locale are two different
+inputs. The wording is the only thing the locale reaches — rule names, paths,
+command text, and dependency order are unaffected — and
+`tests/ninja_determinism_process_tests` states that boundary directly rather
+than leaving it to be inferred from the tuple.
 
 The entry point it covers is the `netsuke generate` invocation that writes the
 bundle — the subcommand a user runs to produce `build.ninja` and its sidecars.
@@ -218,7 +233,7 @@ they are the mechanism G-1 rests on and each carries its own preconditions.
   arena's insertion order. Emitting different diagnostics for the same two
   faults in different orders is permitted and untested.
 
-**Not promised (N-1 … N-4).** These are stated as loudly as G-1, because each
+**Not promised (N-1 … N-5).** These are stated as loudly as G-1, because each
 is an inference a reader would otherwise draw.
 
 - **N-1, cross-version.** Byte stability is **not** promised across Netsuke
@@ -237,6 +252,12 @@ is an inference a reader would otherwise draw.
   the order of one edge's `explicit_outputs` may emit different bytes while
   both being correct.
 - **N-4, error paths.** Covered by I-3.
+- **N-5, rendering that observes changing host state.** `G-1`'s first parameter
+  is the rendered graph. A manifest whose rendering reads state that changes
+  between runs — the clock-dependent `now()` helper is the documented case —
+  produces a different graph on each run and therefore a different bundle. This
+  is a change of input rather than non-determinism in emission, and it is
+  outside the guarantee rather than a violation of it.
 
 **Preconditions (P-1 … P-5).** A property may cite these rather than restating
 them, and a counter-example violating a precondition is out of contract rather

@@ -61,7 +61,6 @@ mod edge_metadata;
 mod named_action;
 mod order;
 mod progress_label;
-pub(crate) use display_edge::DisplayEdge;
 pub(crate) use named_action::NamedAction;
 use order::{ordered_default_targets, ordered_edges};
 /// Generate a Ninja build file as a string.

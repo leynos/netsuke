@@ -188,6 +188,7 @@ fn edge_with_explicit_outputs(outputs: &[&str]) -> BuildEdge {
         explicit_outputs: outputs.iter().copied().map(Utf8PathBuf::from).collect(),
         implicit_outputs: Vec::new(),
         order_only_deps: Vec::new(),
+        progress_label: None,
         phony: false,
         always: false,
     }

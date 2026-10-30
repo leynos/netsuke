@@ -123,9 +123,13 @@ before execution, a critical requirement for compatibility with Ninja.
    control to it for the final dependency checking and command-execution phase.
 
    Netsuke's pipeline is **deterministic** as a process-level statement: given
-   the same manifest, environment, platform, recipe-shell selection, and
+   the same rendered graph, environment, platform, recipe-shell selection, and
    Netsuke version, the generated `build.ninja` and its dyndep sidecars are
-   byte-for-byte identical. Byte stability is not promised across Netsuke
+   byte-for-byte identical. The first parameter is the rendered graph rather
+   than the manifest text, because rendering precedes emission and may observe
+   host state: the clock-dependent `now()` helper renders different command
+   text on two runs of one manifest, which is a different graph and therefore a
+   different output by design. Byte stability is not promised across Netsuke
    versions, across platforms, or across recipe-shell selections; the platform
    and shell qualifications are load-bearing, because PowerShell and POSIX are
    different renderers. This property is essential for reproducible builds and

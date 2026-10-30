@@ -146,6 +146,7 @@ impl Blueprint {
                 explicit_outputs,
                 implicit_outputs,
                 order_only_deps: resolve(pool, available, &plan.order_only_positions),
+                progress_label: None,
                 phony: plan.is_phony,
                 always: plan.is_always,
             });

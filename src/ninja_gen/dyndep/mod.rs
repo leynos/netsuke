@@ -61,16 +61,11 @@
 //! ```
 
 mod bundle;
-
 mod render;
-pub use bundle::{GeneratedDyndep, GeneratedNinja};
-
 mod staging;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 use render::render_edges;
 
-#[cfg(test)]
-use crate::ir::BuildEdge;
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
@@ -78,18 +73,6 @@ use crate::ninja_gen::{
     reject_unsupported_path_characters, write_action_rules,
 };
 use crate::recipe_shell::BashExecutable;
-use std::fmt::Write as _;
-
-use staging::{SerialStages, render_serial_block};
-
-use crate::ir::{BuildEdge, BuildGraph};
-use crate::localization::{self, keys};
-use crate::ninja_gen::{
-    NinjaGenError, RecipeShell, edge_requires_gates, graph_requires_dyndep, join,
-    ordered_default_targets, ordered_edges, reject_unsupported_path_characters, write_action_rules,
-};
-use crate::recipe_shell::BashExecutable;
-use camino::Utf8PathBuf;
 use std::fmt::Write as _;
 
 /// Reserved state namespace for serial gate paths.
@@ -186,7 +169,6 @@ fn generate_bundle_inner(
         dyndep_files,
     })
 }
-
 
 /// Reject user outputs or dependencies that collide with the reserved
 /// serial-ordering state namespace.
