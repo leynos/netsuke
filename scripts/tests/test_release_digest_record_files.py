@@ -43,3 +43,42 @@ def test_json_shape_errors_remain_policy_errors(tmp_path: pathlib.Path) -> None:
 
     with pytest.raises(release_digest_record.DigestRecordError):
         read_digest_record(path)
+
+
+@pytest.mark.parametrize(
+    ("payload", "fragment"),
+    [
+        ("not json at all", "not usable JSON text"),
+        ("[]", "must be a mapping"),
+        ('{"assets": null}', "must carry an 'assets' mapping"),
+        ('{"assets": []}', "must carry an 'assets' mapping"),
+        ('{"assets": {}}', "declares no assets"),
+        ('{"assets": {"a": 1}}', "map asset names to digests as strings"),
+        ('{"assets": {"a": "nothex"}}', "holds a non-digest"),
+        ('{"assets": {"a": "ab"}}', "holds a non-digest"),
+        (
+            '{"assets": {"a": "' + DIGEST + '", "b": 2}}',
+            "map asset names to digests as strings",
+        ),
+    ],
+    ids=[
+        "not-json",
+        "json-array",
+        "assets-null",
+        "assets-list",
+        "assets-empty",
+        "digest-is-an-integer",
+        "digest-not-hex",
+        "digest-too-short",
+        "one-bad-entry",
+    ],
+)
+def test_a_malformed_record_is_refused(
+    tmp_path: pathlib.Path, payload: str, fragment: str
+) -> None:
+    """Refuse every decoded shape that cannot support a comparison."""
+    path = tmp_path / "record.json"
+    _ = path.write_text(payload, encoding="utf-8")
+
+    with pytest.raises(release_digest_record.DigestRecordError, match=fragment):
+        read_digest_record(path)
