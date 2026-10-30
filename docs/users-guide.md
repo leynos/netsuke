@@ -578,15 +578,20 @@ Prefer `script` when the logic needs multi-line structure or shell constructs
 such as loops, conditionals, or variable assignment.
 
 On Unix and the explicit Windows Bash route, a `script` reaches its interpreter
-byte for byte, including literal backslash sequences. A value such as
-`\047;>injected;#`, whether it came from source text, `{{ ins }}`, `{{ outs }}`,
-`env()`, or `shell_quote`, stays inert: the transport does not reinterpret it
-as a quote, an escape, or a redirect. Two byte values cannot cross that
-transport, so Netsuke rejects a carriage return or NUL in script text before
-writing Ninja. The wrapper's final interpreter is `/bin/sh -e`, even when the
-Windows Bash compatibility route supplies the outer `bash.exe`; write POSIX
-script text on both routes. Values encoded with `shell_quote` still belong in
-unquoted argv position, as described in
+byte for byte, including literal backslash sequences. The transport preserves
+bytes; it neither adds nor removes shell quoting. Text the script already
+protects therefore stays protected: a single-quoted literal such as
+`'\047;>injected;#'`, a path inserted through `{{ ins }}` or `{{ outs }}`,
+which Netsuke quotes, and a value encoded with `shell_quote` all reach the
+interpreter unchanged, so none of them becomes a quote, an escape, or a
+redirect. Raw `env()` output and other Jinja values outside shell quotes are
+ordinary script text: a semicolon or redirect operator in such a value is shell
+syntax, so encode it with `shell_quote` when it must stay inert. Two byte
+values cannot cross the transport, so Netsuke rejects a carriage return or NUL
+in script text before writing Ninja. The wrapper's final interpreter is
+`/bin/sh -e`, even when the Windows Bash compatibility route supplies the outer
+`bash.exe`; write POSIX script text on both routes. Values encoded with
+`shell_quote` still belong in unquoted argv position, as described in
 [Targets, inputs, and dependencies](#targets-inputs-and-dependencies).
 
 Legacy recipes remain shell strings in v0.1.x. The structured command blocks
