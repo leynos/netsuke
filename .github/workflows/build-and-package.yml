@@ -604,7 +604,7 @@ jobs:
               *.deb) image=$DEB_IMAGE ;;
               *.rpm) image=$RPM_IMAGE ;;
             esac
-            .github/package-validation/install-emulated-package.sh \
+            sh .github/package-validation/install-emulated-package.sh \
               "$image" "$PACKAGE_ARCH" "$package" "$BIN_NAME"
           done
 
