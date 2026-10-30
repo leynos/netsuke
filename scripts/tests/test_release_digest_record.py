@@ -8,6 +8,8 @@ The record is constructed directly, as a decoded adapter would construct it;
 that produce each refusal.
 """
 
+import typing as typ
+
 import pytest
 import release_digest
 import release_digest_record
@@ -21,13 +23,50 @@ def _trusted(digests: dict[str, object]) -> release_digest_record.DigestRecord:
     return release_digest_record.DigestRecord.from_mapping(digests)
 
 
-def test_a_record_normalises_digest_case() -> None:
-    """Accept a digest written in either case, normalising on the way in."""
+def test_a_record_normalizes_digest_case() -> None:
+    """Accept a digest written in either case, normalizing on the way in."""
     record = _trusted({"a": DIGEST.upper()})
 
     assert record.as_mapping() == {"a": DIGEST}, (
         "an uppercase digest describes the same bytes and must compare equal"
     )
+
+
+@pytest.mark.parametrize(
+    ("entries", "message"),
+    [
+        pytest.param((), "declares no assets", id="empty"),
+        pytest.param(((1, DIGEST),), "as strings", id="non-string-name"),
+        pytest.param((("a", DIGEST.upper()),), "lowercase", id="un-normalized"),
+        pytest.param((("a", "nothex"),), "non-digest", id="not-hexadecimal"),
+        pytest.param((("a", 1),), "as strings", id="non-string-digest"),
+    ],
+)
+def test_a_directly_constructed_record_is_validated(
+    entries: tuple[tuple[object, object], ...], message: str
+) -> None:
+    """Refuse an invalid record however the caller built it.
+
+    The comparison functions accept any record, so the invariant has to hold at
+    construction rather than at the factory. These cases skip
+    :meth:`DigestRecord.from_mapping` entirely.
+    """
+    malformed = typ.cast("tuple[tuple[str, str], ...]", entries)
+
+    with pytest.raises(release_digest_record.DigestRecordError, match=message):
+        _ = release_digest_record.DigestRecord(malformed)
+
+
+def test_a_non_string_asset_name_is_refused_before_sorting() -> None:
+    """Raise the record's own error, not ``TypeError``, for a bad key type.
+
+    Sorting a mixed-type key set raises ``TypeError``, which callers do not
+    catch. The contract is that a malformed mapping is a rejected record.
+    """
+    malformed = typ.cast("dict[str, object]", {1: DIGEST})
+
+    with pytest.raises(release_digest_record.DigestRecordError, match="as strings"):
+        _ = _trusted(malformed)
 
 
 def test_an_empty_record_is_refused() -> None:

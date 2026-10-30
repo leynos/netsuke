@@ -264,7 +264,7 @@ decoded the record's field names into a validated identity.
 Nothing was weakened. Every rejection category survives with its original type
 and diagnosis: `MissingTargetsError`, `MalformedTargetError` with
 `MalformedTargetKind`, `DigestRecordError`, and `RecordedDigestMismatchError`.
-The empty-record, exact-coverage, missing- download, and multi-asset mismatch
+The empty-record, exact-coverage, missing-download, and multi-asset mismatch
 checks are unchanged, and commit identity is still an exact string comparison.
 The staging decode still runs before discovery, so a malformed table fails on
 the configuration rather than on a later adapter.
@@ -275,14 +275,23 @@ Three points were less mechanical than the estimate suggested:
   passed where `Mapping[str, object]` is expected. `DigestRecord.from_mapping`
   therefore accepts `Mapping[str, object]`, and the adapter narrows the decoded
   `assets` mapping with a string-key check before the cast.
-- Moving the decode moved a check with it. The digest record's "names must be
-  strings" rule now lives in the adapter's shape check, because JSON object
-  keys are always strings and a non-string key can only arrive as a decoded
-  value. The policy record's remaining invariant is that each digest is a
-  string and a well-formed hexadecimal value.
+- Moving the decode moved a check with it. The adapter rejects a payload whose
+  `assets` keys are not strings, because JSON object keys are always strings
+  and a non-string key can only arrive as an already decoded value. The record
+  keeps the same rule in `__post_init__` as well, so `from_mapping` fails with
+  `DigestRecordError` rather than `TypeError` when a mixed-type key set would
+  break `sorted`.
 - The fixture module that both verifier suites share now produces a
   `DigestRecord` rather than a dict, so `write_trusted_record` serializes the
   record instead of revalidating a mapping.
+
+Review of the migration tightened where those invariants live. Both records now
+validate in `__post_init__` as well as in their factories, so a directly
+constructed record cannot reach the comparison functions unvalidated; the
+staging suite exercises both construction paths, and the digest suite rebuilds
+each refusal without the factory. One `_validated_entry` helper holds the
+digest record's type and hexadecimal checks, so the factory's case
+normalization and the record's canonical-form rule cannot drift apart.
 
 The regression evidence is pinned rather than incidental. The nine
 previously-rejected digest shapes and eight staging shapes were committed

@@ -73,19 +73,44 @@ class StagingTargets:
     #: One entry per configured target.
     targets: tuple[StagingTarget, ...]
 
+    def __post_init__(self) -> None:
+        """Refuse a record that names no target.
+
+        Emptiness is refused here rather than in the factory, because
+        :func:`declared_asset_names` accepts any record. A directly built
+        empty record would declare archives and sidecars only, which is the
+        smaller release this check exists to prevent.
+
+        Raises
+        ------
+        MissingTargetsError
+            If the record carries no target.
+
+        Examples
+        --------
+        >>> StagingTargets((StagingTarget("linux"),)).targets
+        (StagingTarget(platform='linux'),)
+        >>> StagingTargets(())  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+            ...
+        release_package_formats.MissingTargetsError: staging configuration defines...
+        """
+        if not self.targets:
+            raise MissingTargetsError
+
     @classmethod
     def from_targets(cls, targets: cabc.Iterable[StagingTarget]) -> StagingTargets:
-        """Build the record, refusing a configuration that names no target.
+        """Build the record from a decoded configuration.
 
         Returns
         -------
         StagingTargets
             The decoded staging targets.
 
-        Raises
-        ------
-        MissingTargetsError
-            If ``targets`` is empty.
+        Notes
+        -----
+        The non-empty invariant belongs to :meth:`__post_init__`, so every
+        construction path refuses an empty configuration.
 
         Examples
         --------
@@ -96,10 +121,7 @@ class StagingTargets:
             ...
         release_package_formats.MissingTargetsError: staging configuration defines...
         """
-        entries = tuple(targets)
-        if not entries:
-            raise MissingTargetsError
-        return cls(entries)
+        return cls(tuple(targets))
 
 
 def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
