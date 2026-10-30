@@ -922,6 +922,10 @@ and YAML fixtures, and were set from the inventory in Table 1.
   180 target-only paths are byte-identical and no branch deletion remains
   against the target. Reapplied and reconciled the pre-existing plan
   corrections.
+- [ ] (2026-10-25) EP-M1 implementation is underway. This commit extracts the
+  shared surface inventory and the query refusals into
+  `src/stdlib/restricted_helpers/`; the query-classifier move remains, and
+  validation follows the rebase onto `origin/main`.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -929,6 +933,15 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - [ ] EP-M5 — documentation, ADR, and roadmap closure.
 
 ## Surprises & discoveries
+
+- Observation: the planned Kani-scope helper command was misidentified. In
+  this checkout, `make test-kani-scope-wrapper` exercises the systemd-run
+  wrapper; it neither derives proof-source paths nor prints additions and
+  removals. `tests/workflow_contracts/kani_proof_scope_test.py` recomputes the
+  harness closure and checks `tools/kani/proof-scope.toml`; validate scope
+  edits with `make test-workflow-contracts`. Correct the earlier instruction to
+  derive moved source paths from the contract's actual failure evidence rather
+  than relying on the unrelated wrapper test.
 
 - Observation: a gate report's "pre-existing base-red" verdict is only as good
   as the revision it compared against, and this batch's `nixie` verdict named
@@ -1658,13 +1671,13 @@ through pipeline actions.
   MiniJinja's unknown-function, -filter, or -test error under test. Method: a
   source-scanning unit test reading `src/stdlib/**/*.rs` (via
   `CARGO_MANIFEST_DIR` and `cap_std`) for `add_function("…"`, `add_filter("…"`,
-  and `add_test("…"` literals and the `FILE_TESTS` table, compared with
-  `SURFACE`; plus an `rstest` probe per inventory row loading a one-line
-  manifest through `from_str_with_options` in test mode. Rationale: MiniJinja
-  cannot list filters or tests, so the source is the only complete witness.
-  Artefact: `src/stdlib/restricted_helpers/tests.rs`. Evidence: red before
-  EP-M3; green after. Non-vacuity: add a scratch `env.add_filter("scratch", …)`
-  to `src/stdlib/collections` and confirm the scan fails naming it; delete the
+  and `add_test("…"` literals, compared with `SURFACE` including its file-test
+  rows; plus an `rstest` probe per inventory row loading a one-line manifest
+  through `from_str_with_options` in test mode. Rationale: MiniJinja cannot
+  list filters or tests, so the source is the only complete witness. Artefact:
+  `src/stdlib/restricted_helpers/tests.rs`. Evidence: red before EP-M3; green
+  after. Non-vacuity: add a scratch `env.add_filter("scratch", …)` to
+  `src/stdlib/collections` and confirm the scan fails naming it; delete the
   `digest` stub and confirm its probe fails with `UnknownFilter`. Revert both.
 
 - OBL-4 — test-mode refusals are named, coded, typed, and never classified.
@@ -1921,8 +1934,9 @@ After each milestone, perform the conformance check listed and update
   `#[kani::proof]` harnesses and
   `tests/workflow_contracts/kani_proof_scope_test.py` rejects both a missing
   file and an entry covering nothing a harness reaches, so the moved file's
-  entry must be re-derived — run `make test-kani-scope-wrapper`, which prints
-  the files to add or remove, rather than editing the list by guesswork.
+  entry must be re-derived. Run `make test-workflow-contracts` to validate the
+  updated list against that closure; `make test-kani-scope-wrapper` is an
+  unrelated systemd-run wrapper test and does not derive proof-source paths.
   Read-only recon taken 2026-10-15 while a gate batch held the candidate
   frozen; no `restricted_helpers` symbol existed in the tree at that point, so
   EP-M1 is genuinely unstarted.
