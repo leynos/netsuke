@@ -271,10 +271,12 @@ the configuration rather than on a later adapter.
 
 Three points were less mechanical than the estimate suggested:
 
-- `Mapping` is invariant in its key type, so `Mapping[str, str]` cannot be
-  passed where `Mapping[str, object]` is expected. `DigestRecord.from_mapping`
-  therefore accepts `Mapping[str, object]`, and the adapter narrows the decoded
-  `assets` mapping with a string-key check before the cast.
+- `DigestRecord.from_mapping` receives unvalidated decoded JSON values, so its
+  parameter accepts `Mapping[str, object]` rather than `Mapping[str, str]`.
+  `Mapping` is covariant in its value type, so an already typed mapping would
+  also be accepted; the wide value type is what lets the decoded payload in.
+  The adapter narrows the decoded `assets` mapping with a string-key check
+  before the cast.
 - Moving the decode moved a check with it. The adapter rejects a payload whose
   `assets` keys are not strings, because JSON object keys are always strings
   and a non-string key can only arrive as an already decoded value. The record
