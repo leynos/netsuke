@@ -102,7 +102,7 @@ jobs:
       - name: Setup uv
         # The sccache report is a scripts/ci helper run through
         # `uv run --script`; uv's own cache is not part of this lane's keys.
-        uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           python-version: '3.14'
           enable-cache: 'false'
