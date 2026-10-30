@@ -63,8 +63,14 @@ def test_validation_images_are_pinned_and_carry_the_right_tools(
     ``dpkg -i`` refuses unmet dependencies, the RPM image withholds it, and
     the verifier reads declared metadata either way.
     """
-    text = (VALIDATION_DIR / containerfile).read_text(encoding="utf-8")
-    from_lines = [line for line in text.splitlines() if line.startswith("FROM ")]
+    raw_text = (VALIDATION_DIR / containerfile).read_text(encoding="utf-8")
+    # Only instructions count: a comment naming a package must neither satisfy
+    # the required check nor trip the forbidden one.
+    instructions = [
+        line for line in raw_text.splitlines() if not line.lstrip().startswith("#")
+    ]
+    text = "\n".join(instructions)
+    from_lines = [line for line in instructions if line.startswith("FROM ")]
     assert len(from_lines) == 1, (
         f"{containerfile} must build one stage from one base image, got {from_lines!r}"
     )
