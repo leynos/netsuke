@@ -318,6 +318,9 @@ operator, user, and contributor references are easier to find.
   moving package verification into `make test-package-verify`.
 - [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
   Bounded, localized Ninja progress labels for inline recipe edges.
+- [ADR-0068](adrs/adr-0068-typed-records-for-release-policy-boundaries.md):
+  Frozen slotted records at release policy boundaries, with adapters owning
+  external record shapes and domain-shaped mappings retained.
 
 ## Proposals
 
