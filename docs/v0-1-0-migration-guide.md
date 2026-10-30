@@ -14,7 +14,8 @@ sections that match the features they use.
 | Required          | Checkout source builds | Use the pinned Rust toolchain before building from a checkout.      |
 | Required          | Linux checkout builds  | Install the pinned `mold` linker before building from a checkout.   |
 | Review if enabled | Manifest scheduling    | Opt in only where immediate console output is useful.               |
-| Required          | `Target`, `BuildEdge`  | Set `description` and `console` on the struct literals you build.   |
+| Required          | `Target` literals      | Add `description` and `console` to every literal.                   |
+| Required          | `BuildEdge` literals   | Add `console` to every literal.                                     |
 | Review if enabled | Existing pool choices  | Avoid dependency-only entries and conflicting action pools.         |
 | Optional          | Existing manifests     | Omit `console` to retain ordinary scheduling; it defaults to false. |
 
