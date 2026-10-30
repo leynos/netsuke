@@ -55,7 +55,8 @@ class DigestRecord:
         ------
         DigestRecordError
             If the record declares no asset, names an asset with a non-string
-            key, or carries a digest that is not a lowercase hexadecimal value.
+            key, lists an asset name more than once, or carries a digest that
+            is not a lowercase hexadecimal value.
 
         Examples
         --------
@@ -73,6 +74,7 @@ class DigestRecord:
             if _validated_entry(name, digest) != (name, digest):
                 msg = f"the digest record must carry lowercase digests, got {digest!r}"
                 raise DigestRecordError(msg)
+        _require_unique_names(self.entries)
 
     @classmethod
     def from_mapping(cls, declared: cabc.Mapping[str, object]) -> DigestRecord:
@@ -161,6 +163,35 @@ def _validated_entries(
     """
     for name, digest in declared.items():
         yield _validated_entry(name, digest)
+
+
+def _require_unique_names(entries: cabc.Iterable[tuple[str, str]]) -> None:
+    """Refuse a record that names one asset more than once.
+
+    A repeated name is reachable only by constructing the record directly,
+    because a mapping cannot repeat a key. Every accessor collapses the
+    repetition, so only the later digest would be compared and the earlier
+    digest would never be checked against anything.
+
+    Raises
+    ------
+    DigestRecordError
+        If two entries share an asset name.
+
+    Examples
+    --------
+    >>> _require_unique_names([("a", "ab" * 32), ("b", "ab" * 32)])
+    >>> _require_unique_names(  # doctest: +ELLIPSIS
+    ...     [("a", "ab" * 32), ("a", "ab" * 32)]
+    ... )
+    Traceback (most recent call last):
+        ...
+    release_digest_record.DigestRecordError: the digest record must list each...
+    """
+    names = [name for name, _ in entries]
+    if len(set(names)) != len(names):
+        msg = "the digest record must list each asset name once"
+        raise DigestRecordError(msg)
 
 
 def _validated_entry(name: object, digest: object) -> tuple[str, str]:
