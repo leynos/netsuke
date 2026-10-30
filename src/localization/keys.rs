@@ -1,6 +1,5 @@
-//! Fluent message identifiers used by Netsuke: the `define_keys!` table that
-//! the build-time localization audit parses. `check_keys.rs` holds the
-//! `netsuke check` keys and is re-exported here, so every key is `keys::NAME`.
+//! Fluent message identifiers used by Netsuke: the `define_keys!` table parsed
+//! by the build-time audit, with `check_keys.rs` re-exported as `keys::NAME`.
 
 pub use super::check_keys::*;
 
