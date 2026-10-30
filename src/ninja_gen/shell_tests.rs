@@ -4,13 +4,34 @@ use super::{
     ISOLATED_POWER_SHELL_CHILD_ARGUMENT_PREFIX, ISOLATED_POWER_SHELL_CHILD_EXECUTABLE,
     MAX_POWER_SHELL_COMMAND_LINE, MAX_POWER_SHELL_RECIPE_BYTES, POWER_SHELL_COMMAND_PREFIX,
     POWER_SHELL_RESPONSE_FILE_COMMAND, RecipeShell, RenderedRecipeCommand,
-    encode_power_shell_script, windows_argument,
+    encode_power_shell_script, escape_posix_script, windows_argument,
 };
 use crate::ninja_gen::escape::ShellText;
 use crate::recipe_shell::BashExecutable;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
+use rstest::rstest;
+
+/// Verify that each script character is encoded once per parser layer.
+///
+/// The expected text is the generated command's operand: the outer shell sees
+/// a double-quoted word, the inner shell sees a single-quoted `printf %b`
+/// operand, and `printf %b` decodes the innermost escapes. A literal backslash
+/// therefore becomes four generated backslashes, and the literal two-character
+/// sequence `\n` must not collapse into the one-character escape `printf %b`
+/// would decode to a line feed.
+#[rstest]
+#[case::backslash("\\", r"\\\\")]
+#[case::apostrophe("'", r"'\\''")]
+#[case::newline("\n", r"\\n")]
+#[case::dollar("$", r"\$")]
+#[case::double_quote("\"", r#"\""#)]
+#[case::backtick("`", r"\`")]
+#[case::literal_backslash_n(r"\n", r"\\\\n")]
+fn posix_script_escaping_applies_one_layer_per_parser(#[case] input: &str, #[case] expected: &str) {
+    assert_eq!(escape_posix_script(input), expected);
+}
 
 /// Verify that encoded PowerShell commands hide recipe dollars from Ninja.
 #[test]

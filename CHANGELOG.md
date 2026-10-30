@@ -30,6 +30,13 @@
   parser actually accepts
   ([#951](https://github.com/leynos/netsuke/issues/951), [#779](https://github.com/leynos/netsuke/issues/779))
 
+### Fixed
+
+- Preserve `script` bytes byte for byte through the `printf %b` transport, so a
+  literal backslash sequence supplied through a placeholder, `env()`, or
+  `shell_quote` cannot be reconstructed as shell syntax
+  ([#967](https://github.com/leynos/netsuke/issues/967))
+
 ## [0.1.0-beta4] - 2026-09-26
 
 _If you are upgrading: see the
@@ -122,6 +129,7 @@ _If you are upgrading: see the
 - Document the command placeholder contract in the README
   ([#699](https://github.com/leynos/netsuke/issues/699))
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Fixed
 
 - Require an explicit recursive-workspace opt-in before an empty or unset

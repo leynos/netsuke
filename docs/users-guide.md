@@ -577,6 +577,18 @@ Prefer a `command` list for a short, ordered sequence of distinct commands.
 Prefer `script` when the logic needs multi-line structure or shell constructs
 such as loops, conditionals, or variable assignment.
 
+On Unix and the explicit Windows Bash route, a `script` reaches its interpreter
+byte for byte, including literal backslash sequences. A value such as
+`\047;>injected;#`, whether it came from source text, `{{ ins }}`, `{{ outs }}`,
+`env()`, or `shell_quote`, stays inert: the transport does not reinterpret it
+as a quote, an escape, or a redirect. Two byte values cannot cross that
+transport, so Netsuke rejects a carriage return or NUL in script text before
+writing Ninja. The wrapper's final interpreter is `/bin/sh -e`, even when the
+Windows Bash compatibility route supplies the outer `bash.exe`; write POSIX
+script text on both routes. Values encoded with `shell_quote` still belong in
+unquoted argv position, as described in
+[Targets, inputs, and dependencies](#targets-inputs-and-dependencies).
+
 Legacy recipes remain shell strings in v0.1.x. The structured command blocks
 and argv templates proposed in
 [RFC #573](https://github.com/leynos/netsuke/pull/573) for v0.2.0 are intended
@@ -2174,7 +2186,9 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   shell-quoted.
 - On Windows, legacy recipes use the PowerShell contract above unless
   `NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility route.
-  On Unix, scripts use `/bin/sh -e`.
+  On Unix, scripts use `/bin/sh -e` as their final interpreter, including when
+  the Bash compatibility route supplies the outer `bash.exe`, and their bytes
+  reach it unchanged.
 - `shell`, `grep`, `fetch`, filesystem helpers, and ordinary recipes interact
   with the host.
 - The file-reading filters (`contents`, `linecount`, `hash`, `digest`) process

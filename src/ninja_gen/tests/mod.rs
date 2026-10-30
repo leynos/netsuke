@@ -184,7 +184,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
     let ninja = generate_posix(&graph)?;
     ensure!(ninja.contains("rule a"));
     ensure!(ninja.contains("command = /bin/sh -e -c"));
-    ensure!(ninja.contains(r"echo '\''a b'\''"));
+    ensure!(ninja.contains(r"echo '\\''a b'\\''"));
     ensure!(ninja.contains("\\\"\\$$HOME\\\""));
     ensure!(ninja.contains("\\`whoami\\`"));
     ensure!(ninja.contains("printf %b"));
