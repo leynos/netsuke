@@ -4153,3 +4153,15 @@ mapping. Corrected the workflow-contract fixture description so archive
 hoisting claims only to move files into the expected location. Recorded the
 current review findings and hosted status. Stage C remains partial and Stage D
 remains open; no release or registry setting changed.
+
+Draft 19, 2026-10-30: rebased the 81-commit series from `4ca88d7a0` onto
+`7929a3fc2` (`origin/main`) without conflicts. The range-diff preserved every
+commit, and the 96 paths `main` changed on its own stayed byte-identical. The
+rebase carries `main`'s Whitaker repin to installer 0.2.11, which addresses the
+`dylint_driver` `revparse_ext` failure in the previous hosted `build-test` and
+`lint-windows` runs. Seven sequential gates passed on tree `cc0860265`: 4,804
+Rust tests with 7 skipped, all doctests, 1,666 plus 28 workflow-contract tests,
+formatting, typecheck, Clippy, Whitaker, Python and GitHub Actions lint,
+Markdown lint and spelling, and Mermaid validation. The release-publication and
+release-admission suites also passed, with 457 and 118 tests. Stage C remains
+partial and Stage D remains open; no release or registry setting changed.
