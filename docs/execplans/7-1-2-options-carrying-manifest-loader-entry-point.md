@@ -101,8 +101,8 @@ Terms used throughout, defined here so that no prior reading is required.
   since roadmap 7.1.1 (`src/stdlib/time/clock/mod.rs`).
 - **Query classification.** In `netsuke help targets`, a `when` expression that
   calls a disabled helper does not fail; `classify_query_evaluation`
-  (`src/manifest/jinja_macros/mod.rs`) recognizes the query refusal and the
-  entry is kept with `conditional: true`.
+  (`src/manifest/jinja_macros/query_classification.rs`) recognizes the query
+  refusal and the entry is kept with `conditional: true`.
 - **Invariants I4, I5, I7.** Named obligations from the technical design §12.
   I4, semantic fidelity: a manifest with no doubles whose file observations are
   confined to the sandbox gives identical results under `netsuke test` and
@@ -922,10 +922,39 @@ and YAML fixtures, and were set from the inventory in Table 1.
   180 target-only paths are byte-identical and no branch deletion remains
   against the target. Reapplied and reconciled the pre-existing plan
   corrections.
-- [ ] (2026-10-25) EP-M1 implementation is underway. This commit extracts the
-  shared surface inventory and the query refusals into
-  `src/stdlib/restricted_helpers/`; the query-classifier move remains, and
-  validation follows the rebase onto `origin/main`.
+- [x] (2026-10-30) Rebased the 32-commit range `de81d5c34..a24f4ab9` onto
+  fetched `origin/main` `7929a3fc` with Git's built-in `zdiff3` backend. The
+  host still selects Weave from the legacy global block in
+  `~/.config/git/attributes`, so the unattended rebase bypassed it with
+  `-c core.attributesFile=/dev/null`; no merge driver participated. There were
+  no conflicts: `range-diff` matched all 32 replayed commits, all 201
+  target-only paths are byte-identical, and the only deletion against the
+  target is the intended move of `src/stdlib/register/query_helpers.rs`. All
+  eight gates pass at `dc6abe26`: `check-fmt` 2.7 s, `typecheck` 9 m 33 s,
+  `lint` 14 m 23 s, `doc-coverage` 98.22%, `test` 4826 passed / 7 skipped plus
+  3 doctests, `markdownlint` 0 issues, `nixie` 208 diagrams, and
+  `test-workflow-contracts` 1520 passed / 3 skipped. Logs:
+  `/tmp/check-fmt-dc6abe26.out`, `/tmp/typecheck-dc6abe26.out`,
+  `/tmp/lint-dc6abe26.out`, `/tmp/doc-coverage-dc6abe26.out`,
+  `/tmp/test-dc6abe26.out`, `/tmp/markdownlint-dc6abe26.out`,
+  `/tmp/nixie-dc6abe26.out`, and `/tmp/test-workflow-contracts-dc6abe26.out`.
+  Force-pushed with lease from `925f803e`, and local, remote, and tracking refs
+  then all read `dc6abe26`.
+- [x] (2026-10-30) EP-M1's first extraction, committed as `dc6abe26`: the
+  query refusals and the shared surface inventory moved to
+  `src/stdlib/restricted_helpers/`, the build registration derives its
+  file-test names from `SURFACE`, and the Kani scope names the two new source
+  files. The eight-gate batch above is its acceptance evidence; the refusal
+  text, registration shapes, and file-test names are unchanged.
+- [ ] (2026-10-30) EP-M1's second extraction, in the commit that carries
+  this record: `QueryEvaluation` and `classify_query_evaluation` moved to
+  `src/manifest/jinja_macros/query_classification.rs`, with the relocated
+  adapter's rationale rewritten for its new home. The parent falls from 394 to
+  358 lines. `tools/kani/proof-scope.toml` gains the new path, because the
+  harness closure still reaches the classifier through
+  `evaluate_when_expression`; `kani_proof_scope_test.py` failed on the move
+  before the entry was added and passes with it. Acceptance is the milestone
+  gate batch run against that commit.
 - [ ] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
