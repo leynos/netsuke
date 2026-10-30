@@ -33,6 +33,7 @@ from workflow_loading import (
     job_steps,
     load_workflow,
     named_step,
+    require_list,
     require_mapping,
     unique_step_index,
     workflow_job,
@@ -181,7 +182,11 @@ def test_validation_installs_the_packages_the_lane_built() -> None:
     assert verify_command.startswith("/usr/local/bin/verify-installed-package "), (
         "the sandbox must run the repository's verification script"
     )
-    assert packaging["bin-name"] in verify_command, (
+    bin_name = packaging["bin-name"]
+    assert isinstance(bin_name, str), (
+        f"the packaging step must name the binary as a string, got {bin_name!r}"
+    )
+    assert bin_name in verify_command, (
         "the verification script must be given the packaged binary's name"
     )
     assert str(validation["polythene-path"]).endswith(
@@ -333,7 +338,8 @@ def test_validation_runs_in_the_release_dry_run() -> None:
         "the Linux lane must select the Linux steps of the packaging workflow"
     )
     release_job = workflow_job(release, "release")
-    assert "build-linux" in release_job.get("needs", []), (
+    needs = require_list(release_job.get("needs", []), "the publishing job's needs")
+    assert "build-linux" in needs, (
         "publishing must wait for the Linux packaging lane's validation"
     )
     dry_run = load_workflow(REPO_ROOT / ".github" / "workflows" / "release-dry-run.yml")
