@@ -216,7 +216,7 @@ def test_cross_architecture_packages_are_installed_under_emulation() -> None:
         "packages=(dist/*.deb dist/*.rpm)",
         "*.deb) image=$DEB_IMAGE",
         "*.rpm) image=$RPM_IMAGE",
-        ".github/package-validation/install-emulated-package.sh",
+        "sh .github/package-validation/install-emulated-package.sh",
         '"$image" "$PACKAGE_ARCH" "$package" "$BIN_NAME"',
     )
     for fragment in fragments:
