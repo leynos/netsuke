@@ -9,6 +9,7 @@ precedence:
   - Env
   - Cli
 discovery: ~
+synopsis_id: ~
 fields:
   - name: file
     help_id: cli.flag.file.help
@@ -263,11 +264,16 @@ fields:
 subcommands:
   - name: build
     about_id: cli.subcommand.build.about
+    synopsis_id: ~
   - name: clean
     about_id: cli.subcommand.clean.about
+    synopsis_id: ~
   - name: graph
     about_id: cli.subcommand.graph.about
+    synopsis_id: ~
   - name: generate
     about_id: cli.subcommand.generate.about
+    synopsis_id: ~
   - name: help
     about_id: cli.subcommand.help.long_about
+    synopsis_id: ~
