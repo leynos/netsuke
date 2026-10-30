@@ -39,13 +39,12 @@ fn documented_cli(field_name: &str) -> Result<CliMetadata> {
 
 /// Verify that documented CLI value shapes match the parser users actually run.
 ///
-/// `ortho_config` 0.10.0 documents every derived boolean as `--flag[=BOOL]`,
-/// because its generated parser accepts an optional value. Netsuke declares its
-/// flags by hand and rejects that spelling, so release help normalizes boolean
-/// fields back to presence-only switches. Comparing every CLI member against
-/// `configured_command(None)` makes the parity a standing contract: a future
-/// metadata drift fails here instead of shipping a manual page the binary
-/// contradicts.
+/// `ortho_config` derives CLI metadata from Rust field names, and that metadata
+/// does not describe Netsuke's handwritten parser. Release help therefore
+/// replaces each field's CLI metadata with the shape `configured_command(None)`
+/// parses. Comparing every CLI member against that command makes the parity a
+/// standing contract: a future metadata drift fails here instead of shipping a
+/// manual page the binary contradicts.
 #[test]
 fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
     let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
@@ -62,11 +61,11 @@ fn release_help_cli_value_shapes_match_the_parser() -> Result<()> {
         compared.push(field.name.as_str());
     }
 
-    // The four boolean flags that 0.10.0 first documented as `--flag[=BOOL]`
-    // are the reason this contract exists, so their absence proves nothing.
-    // The five `skip_cli` policy fields and `default-target` are issue #960's
-    // regressions: before the reconciliation they were either undocumented or
-    // documented under invented spellings.
+    // The boolean flags that 0.10.0 first documented as `--flag[=BOOL]` must
+    // stay compared, so their absence proves nothing. The five `skip_cli`
+    // policy fields and `default-target` are issue #960's regressions: before
+    // the reconciliation they were either undocumented or documented under
+    // invented spellings.
     for expected in [
         "verbose",
         "fetch_default_deny",

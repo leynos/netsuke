@@ -4102,12 +4102,13 @@ Value names now come from the parser as well, so placeholders such as `FILE` and
 `N` are the ones the binary prints rather than the derive's `UTF8PATHBUF` and
 `USIZE`.
 
-Three tests in `src/cli/release_help/parity_tests.rs` hold that contract in
-both directions. `release_help_cli_value_shapes_match_the_parser` checks every
-documented flag against the parser.
+Three tests under `src/cli/release_help/parity_tests/` hold that contract in
+both directions. In `mod.rs`, `release_help_cli_value_shapes_match_the_parser`
+checks every documented flag against the parser, and
 `release_help_documents_every_parser_argument` checks that no parser flag is
-omitted or documented twice. `documented_flags_match_the_parser` pins the
-policy and selector flags individually. The identifier projection is held by
+omitted or documented twice. In `flag_cases.rs`,
+`documented_flags_match_the_parser` pins the policy flags and selected
+configuration flags individually. The identifier projection is held by
 `release_help_identifiers_are_netsuke_declared_not_generated` in
 `src/cli/release_help/metadata_tests.rs`. A new derived field, or a new
 upstream metadata change, is expected to reach one of them.
