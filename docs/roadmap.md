@@ -2022,9 +2022,9 @@ must share.
     first-version evidence needs external attestation.
   - Record substantive decisions as ADRs and update release architecture and
     developer documentation.
-  - See
-    [ADR-0068](adrs/adr-0068-typed-records-for-release-policy-boundaries.md)
-    for the release policy boundary decision.
+  - [x] Decide the release policy boundary: frozen slotted records at every
+    external-shape seam, with domain-shaped mappings retained. See
+    [ADR-0068](adrs/adr-0068-typed-records-for-release-policy-boundaries.md).
   - See [RFC 0005 §Open
     questions](rfcs/rfc-0005-harden-release-integrity-and-admission.md#open-questions)
     and

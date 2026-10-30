@@ -1,11 +1,11 @@
 # Issue 964: Evaluate typed records for release policy boundaries
 
-Status: DRAFT
+Status: IN PROGRESS
 
-This plan is in its evidence-gathering phase. The inventory and decision
-criteria below are complete; the architectural decision record, the migration,
-and the documentation updates are not yet started. No production code has
-changed for this issue.
+Implementation is complete and verified: the decision is recorded as ADR-0068,
+the migration has landed, and the full deterministic gate set is green on the
+migration commit `716f9b914`. Review and the draft pull request are
+outstanding, so the plan is not yet complete.
 
 ## Purpose
 
@@ -238,18 +238,68 @@ records and are unchanged.
       open pull request.
 - [x] Write ADR-0068 and update the documentation index, design section,
       roadmap item, developers' guide, and trusted-packaging decision log.
-- [ ] Add characterization tests.
-- [ ] Migrate the staging target and digest record seams.
-- [ ] Reclassify the identity decoder and update the boundary contracts.
-- [ ] Run the release-publication, workflow-contract, typecheck, lint, format,
-      Markdown, and spelling gates.
-- [ ] Update this plan's Outcomes and Status.
+- [x] Add characterization tests. Commit `032c503ec` pins eight malformed
+      staging configurations and nine decoded digest-record shapes at the
+      decoders' current seams, all passing against the pre-migration code.
+- [x] Migrate the staging target and digest record seams. Commit `716f9b914`.
+- [x] Reclassify the identity decoder and update the boundary contracts.
+- [x] Run the release-publication, workflow-contract, typecheck, lint, format,
+      Markdown, and spelling gates. All seven pass on `716f9b914`.
+- [x] Update this plan's Outcomes and Status, and the roadmap 9.1.1 checkbox.
 
 ## Outcomes and retrospective
 
-Not yet written. This section will record the ADR number, the migration result,
-any rejection that proved harder to preserve than expected, and the final gate
-evidence.
+The evaluation adopted Option B, narrowed to the external-shape seams, and
+recorded it as
+[ADR-0068](../adrs/adr-0068-typed-records-for-release-policy-boundaries.md).
+Two records now cross the boundary: `StagingTargets` (with `StagingTarget`
+entries) in `release_declaration`, and `DigestRecord` in
+`release_digest_record`. `release_declaration_cli` owns the `targets` and
+`platform` member names and decodes the staging configuration once, before
+discovery runs; `release_digest_record_files` owns `assets` and decodes the
+trusted record into a value. `release_identity_record` moved from
+`POLICY_MODULES` to `ADAPTER_MODULES` without a code change, because it already
+decoded the record's field names into a validated identity.
+
+Nothing was weakened. Every rejection category survives with its original type
+and diagnosis: `MissingTargetsError`, `MalformedTargetError` with
+`MalformedTargetKind`, `DigestRecordError`, and `RecordedDigestMismatchError`.
+The empty-record, exact-coverage, missing- download, and multi-asset mismatch
+checks are unchanged, and commit identity is still an exact string comparison.
+The staging decode still runs before discovery, so a malformed table fails on
+the configuration rather than on a later adapter.
+
+Three points were less mechanical than the estimate suggested:
+
+- `Mapping` is invariant in its key type, so `Mapping[str, str]` cannot be
+  passed where `Mapping[str, object]` is expected. `DigestRecord.from_mapping`
+  therefore accepts `Mapping[str, object]`, and the adapter narrows the decoded
+  `assets` mapping with a string-key check before the cast.
+- Moving the decode moved a check with it. The digest record's "names must be
+  strings" rule now lives in the adapter's shape check, because JSON object
+  keys are always strings and a non-string key can only arrive as a decoded
+  value. The policy record's remaining invariant is that each digest is a
+  string and a well-formed hexadecimal value.
+- The fixture module that both verifier suites share now produces a
+  `DigestRecord` rather than a dict, so `write_trusted_record` serializes the
+  record instead of revalidating a mapping.
+
+The regression evidence is pinned rather than incidental. The nine
+previously-rejected digest shapes and eight staging shapes were committed
+before the migration and still pass after it, now asserted through the new
+decoders; the policy suites construct records directly, so they test the
+decision rather than the decoding.
+
+Gate evidence, bound to the migration commit `716f9b914`: `make check-fmt` (366
+Python files, 209 Markdown files unchanged), `make typecheck`, `make lint`
+(Clippy, Whitaker, Ruff, Pylint, df12 lints, ambrleaks, Interrogate at 100%),
+`make doc-coverage` (98.21% against the 80% threshold), `make markdownlint`
+(209 files, no issues), `make test` (4804 tests passed, 7 skipped, doctests
+clean), and `make test-workflow-contracts` (1665 passed, 3 skipped). The
+documentation commit that carries this update is re-gated on the branch head.
+Roadmap item 9.1.1 stays open, because its success criterion covers thresholds,
+freshness rules, waivers, and retention as well; its policy-boundary sub-item
+is checked against ADR-0068.
 
 ## References
 
