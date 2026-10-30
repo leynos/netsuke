@@ -9,9 +9,31 @@ if typ.TYPE_CHECKING:
     from pathlib import Path
 
 
-@pytest.mark.parametrize("config", ['targets = "bad"\n', '[targets]\nlinux = "bad"\n'])
+@pytest.mark.parametrize(
+    ("config", "reason"),
+    [
+        ('targets = "bad"\n', "the targets member is not a table"),
+        ("targets = []\n", "a list is not a target table"),
+        ("targets = {}\n", "an empty table declares no release target"),
+        ("common = {}\n", "an absent targets table declares no release target"),
+        ('[targets]\nlinux = "bad"\n', "a target entry is not a table"),
+        ("[targets]\nlinux = 1\n", "a target entry is not a table"),
+        ("[targets]\nlinux = {}\n", "a target table has no platform"),
+        ("[targets]\nlinux = { platform = 1 }\n", "a platform must be a string"),
+    ],
+    ids=[
+        "targets-not-a-table",
+        "targets-is-a-list",
+        "targets-empty",
+        "targets-absent",
+        "entry-is-a-string",
+        "entry-is-an-integer",
+        "entry-has-no-platform",
+        "platform-is-an-integer",
+    ],
+)
 def test_malformed_targets_are_reported_as_input_faults(
-    tmp_path: Path, config: str, capsys: pytest.CaptureFixture[str]
+    tmp_path: Path, config: str, reason: str, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Reject malformed target tables without a traceback or output."""
     staging = tmp_path / "staging.toml"
@@ -32,7 +54,7 @@ def test_malformed_targets_are_reported_as_input_faults(
         "--digest-record",
         str(record),
     ])
-    assert code == EXIT_INPUT_UNUSABLE, f"malformed targets returned {code}"
+    assert code == EXIT_INPUT_UNUSABLE, f"{reason}: malformed targets returned {code}"
     assert "inputs unusable" in capsys.readouterr().err, "missing input diagnostic"
     assert not output.exists(), "malformed targets wrote a declaration"
     assert not record.exists(), "malformed targets wrote a digest record"
