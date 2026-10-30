@@ -594,11 +594,17 @@ jobs:
           # run. The sandbox step registered the QEMU binfmt handlers the
           # emulated container needs, so install there and verify as usual.
           shopt -s nullglob
-          packages=(dist/*.deb dist/*.rpm)
-          if (( ${#packages[@]} == 0 )); then
-            printf '::error title=No packages to install::dist holds no .deb or .rpm\n'
+          debs=(dist/*.deb)
+          rpms=(dist/*.rpm)
+          # Both formats are published from this lane and, on a cross-arch
+          # lane, this step is the only install they get. A packaging failure
+          # that produced one format must stop the lane rather than publish
+          # the other having never run.
+          if (( ${#debs[@]} == 0 || ${#rpms[@]} == 0 )); then
+            printf '::error title=Missing package format::dist must hold both a .deb and an .rpm\n'
             exit 1
           fi
+          packages=("${debs[@]}" "${rpms[@]}")
           for package in "${packages[@]}"; do
             case "$package" in
               *.deb) image=$DEB_IMAGE ;;

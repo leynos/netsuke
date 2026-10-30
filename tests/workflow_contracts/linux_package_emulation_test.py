@@ -1,24 +1,31 @@
-"""Contract tests for the emulated package installation script.
+"""Contract tests for emulated package installation.
 
 The shared `validate-linux-packages` action skips both its sandbox install and
 its architecture check when the package architecture differs from the runner's.
-That is the arm64 lane on an x64 release runner, so
-`install-emulated-package.sh` is what installs and verifies the packages the
+That is the arm64 lane on an x64 release runner, so the workflow's emulation
+step and `install-emulated-package.sh` install and verify the packages the
 action would have skipped.
 
-These tests hold the script to that job: choose the install command from the
-package format, run it in the architecture-tagged image that was built for the
-package, and fail loudly rather than passing vacuously. Run via
-`make test-workflow-contracts`.
+These tests hold that pair to the job: require both package formats before
+installing anything, choose the install command from the package format, run
+it in the architecture-tagged image that was built for the package, and fail
+loudly rather than passing vacuously. Run via `make test-workflow-contracts`.
 """
 
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script under test is checked in.
 from pathlib import Path
 
 import pytest
+from workflow_loading import (
+    PACKAGE_WORKFLOW_PATH,
+    job_steps,
+    load_workflow,
+    named_step,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = REPO_ROOT / ".github" / "package-validation" / "install-emulated-package.sh"
+EMULATION_STEP = "Install packages under emulation"
 
 
 def _run_script(
@@ -103,6 +110,49 @@ def test_installs_each_format_in_the_architecture_image(
     verifier = "/usr/local/bin/verify-installed-package"
     assert call.index(install) < call.index(verifier), (
         f"the package must be installed before the verifier runs, got {call!r}"
+    )
+
+
+@pytest.mark.parametrize(
+    "present",
+    ["netsuke_0.1.0-1_arm64.deb", "netsuke-0.1.0-1.aarch64.rpm"],
+    ids=["only-deb", "only-rpm"],
+)
+def test_workflow_step_requires_both_package_formats(
+    tmp_path: Path, present: str
+) -> None:
+    """Fail the lane when packaging produced only one of the two formats.
+
+    On a cross-architecture lane this step is the only install the packages
+    get, so a single-format `dist` must stop the lane rather than publish the
+    other format having never run. The step exits before it invokes Podman, so
+    this case needs no container tooling.
+    """
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / present).write_bytes(b"")
+    steps = job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build")
+    script = str(named_step(steps, EMULATION_STEP)["run"])
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the step's own script is under test.
+        ["/bin/bash", "-c", script],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": "/usr/bin:/bin",
+            "PACKAGE_ARCH": "arm64",
+            "DEB_IMAGE": "localhost/netsuke-package-validation-deb:arm64",
+            "RPM_IMAGE": "localhost/netsuke-package-validation-rpm:arm64",
+            "BIN_NAME": "netsuke",
+        },
+    )
+    assert result.returncode == 1, (
+        f"a dist holding only {present!r} must fail the step, got "
+        f"{result.returncode}: {result.stdout}{result.stderr}"
+    )
+    assert "::error title=Missing package format::" in result.stdout, (
+        f"the step must report the missing format, got {result.stdout!r}"
     )
 
 

@@ -1502,7 +1502,10 @@ when the package architecture differs from the host's. Both Linux lanes run on
 x64 runners, so an arm64 package would otherwise reach upload having never run.
 The workflow therefore follows the action with an
 `Install packages under emulation` step, guarded on the sandbox step's
-`cross-arch` output, which runs
+`cross-arch` output. That step first requires both a `.deb` and an `.rpm` in
+`dist`, because it is the only install these packages get and a packaging
+failure that produced one format must stop the lane rather than publish the
+other having never run. It then runs
 `.github/package-validation/install-emulated-package.sh` for each package in
 the architecture-tagged image under the QEMU binfmt handlers the sandbox step
 registered. The script installs with `dpkg -i` or
@@ -1527,8 +1530,8 @@ the action pin, step order, inputs, dry-run wiring, and architecture mapping,
 `tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
 holds the image contents, the verifier's pass and fail paths, and the Polythene
 pin, and `tests/workflow_contracts/linux_package_emulation_test.py`, which
-holds the emulated install's per-format and failure paths. Run
-`make test-workflow-contracts`.
+holds the both-formats requirement and the emulated install's per-format and
+failure paths. Run `make test-workflow-contracts`.
 
 ### Windows MSI packaging and upgrade validation
 

@@ -218,7 +218,9 @@ def test_cross_architecture_packages_are_installed_under_emulation() -> None:
         )
     run = str(step["run"])
     fragments = (
-        "packages=(dist/*.deb dist/*.rpm)",
+        "debs=(dist/*.deb)",
+        "rpms=(dist/*.rpm)",
+        'packages=("${debs[@]}" "${rpms[@]}")',
         "*.deb) image=$DEB_IMAGE",
         "*.rpm) image=$RPM_IMAGE",
         "sh .github/package-validation/install-emulated-package.sh",
