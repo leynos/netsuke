@@ -32,4 +32,5 @@ resolves to this file and fails with "``polythene`` is not a package".
 
 from polythene.__main__ import main
 
-main()
+if __name__ == "__main__":
+    main()
