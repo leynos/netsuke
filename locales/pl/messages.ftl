@@ -307,6 +307,7 @@ stdlib.shell.dialect_invalid = Nieznany dialekt powłoki { $dialect }; oczekiwan
 stdlib.shell.dialect_not_string = Opcja dialect w shell musi być łańcuchem znaków; typ otrzymanej wartości: { $kind }.
 stdlib.shell.join.not_sequence = shell_join oczekiwał sekwencji, ale otrzymał { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } w shell_join ma typ { $kind }, a nie ciąg.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join przekroczyłby limit { $limit } bajtów zakodowanego wyjścia przy elemencie { $index }. Skróć łączoną sekwencję.
 stdlib.shell.positional_option = { $filter } przyjmuje opcje jako słowa kluczowe; zapisz { $example }.
 
 # Diagnostyka pomocnika ścieżek.

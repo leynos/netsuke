@@ -309,6 +309,7 @@ stdlib.shell.dialect_invalid = Tafodiaith plisgyn anhysbys { $dialect }; disgwyl
 stdlib.shell.dialect_not_string = Rhaid i'r opsiwn dialect yn shell fod yn llinyn, derbyniwyd { $kind }.
 stdlib.shell.join.not_sequence = Roedd shell_join yn disgwyl dilyniant ond cafodd { $kind }.
 stdlib.shell.join.item_not_string = Mae eitem { $index } shell_join yn { $kind }, nid yn llinyn.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] Byddai shell_join yn mynd dros ei derfyn o { $limit } beit o allbwn amgodiedig wrth eitem { $index }. Byrhewch y dilyniant wedi'i ymuno.
 stdlib.shell.positional_option = Mae { $filter } yn cymryd ei opsiynau fel allweddair; ysgrifennwch { $example }.
 
 # Diagnosteg y cynorthwyydd llwybrau.

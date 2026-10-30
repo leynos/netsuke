@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Ismeretlen shell-dialektus: { $dialect }; a várt
 stdlib.shell.dialect_not_string = A shell dialect beállításának karakterláncnak kell lennie, ezt kaptuk: { $kind }.
 stdlib.shell.join.not_sequence = A shell_join sorozatot várt, de ezt kapta: { $kind }.
 stdlib.shell.join.item_not_string = A(z) { $index }. shell_join-elem típusa { $kind }, nem sztring.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] A shell_join a(z) { $index }. elemnél túllépné a(z) { $limit } bájtos kódolt kimeneti korlátot. Rövidítse le az összefűzött sorozatot.
 stdlib.shell.positional_option = A(z) { $filter } a beállításait kulcsszóként várja; írja ezt: { $example }.
 
 # Az útvonalakat kezelő segédfüggvény diagnosztikája.

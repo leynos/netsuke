@@ -303,6 +303,7 @@ stdlib.shell.dialect_invalid = 未知的 shell 方言 { $dialect }；應為 { $a
 stdlib.shell.dialect_not_string = shell 的 dialect 選項必須是字串，但收到 { $kind }。
 stdlib.shell.join.not_sequence = shell_join 預期序列，卻收到 { $kind }。
 stdlib.shell.join.item_not_string = shell_join 的第 { $index } 項為 { $kind }，不是字串。
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join 將在第 { $index } 項超過 { $limit } 位元組的編碼輸出上限。請縮短要連接的序列。
 stdlib.shell.positional_option = { $filter } 以關鍵字接收選項；請寫成 { $example }。
 
 # 路徑輔助函式的診斷。

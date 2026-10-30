@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Onbekend shell-dialect { $dialect }; verwacht een
 stdlib.shell.dialect_not_string = De optie dialect van shell moet een tekenreeks zijn, ontvangen { $kind }.
 stdlib.shell.join.not_sequence = shell_join verwachtte een reeks, maar kreeg { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } van shell_join is { $kind }, geen tekenreeks.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join zou bij element { $index } de limiet van { $limit } bytes gecodeerde uitvoer overschrijden. Verkort de samengevoegde reeks.
 stdlib.shell.positional_option = { $filter } neemt zijn opties als trefwoord; schrijf { $example }.
 
 # Diagnostiek van de padhelper.

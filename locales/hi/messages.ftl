@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = अज्ञात शेल बोली { $dial
 stdlib.shell.dialect_not_string = shell का dialect विकल्प स्ट्रिंग होना चाहिए, { $kind } प्राप्त हुआ।
 stdlib.shell.join.not_sequence = shell_join ने अनुक्रम की अपेक्षा की, किंतु { $kind } प्राप्त हुआ।
 stdlib.shell.join.item_not_string = shell_join का आइटम { $index } { $kind } है, स्ट्रिंग नहीं।
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join आइटम { $index } पर { $limit } बाइट की एन्कोडेड आउटपुट सीमा से अधिक हो जाएगा। जोड़े गए अनुक्रम को छोटा करें।
 stdlib.shell.positional_option = { $filter } अपने विकल्प कीवर्ड के रूप में लेता है; { $example } लिखें।
 
 # पथ सहायक के निदान।

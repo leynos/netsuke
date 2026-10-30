@@ -307,6 +307,7 @@ stdlib.shell.dialect_invalid = Невідомий діалект оболонк�
 stdlib.shell.dialect_not_string = Опція dialect у shell має бути рядком, отримано { $kind }.
 stdlib.shell.join.not_sequence = shell_join очікував послідовність, але отримав { $kind }.
 stdlib.shell.join.item_not_string = Елемент { $index } у shell_join має тип { $kind }, а не рядок.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join перевищить межу { $limit } байтів закодованого виводу на елементі { $index }. Скоротіть об'єднувану послідовність.
 stdlib.shell.positional_option = { $filter } приймає параметри за ключовими словами; напишіть { $example }.
 
 # Діагностика помічника для шляхів.

@@ -12,7 +12,7 @@
 //! runs the other way: `RecipeShell` knows its dialect, and this module never
 //! names `RecipeShell`.
 
-use shell_quote::{QuoteRefExt, Sh};
+use shell_quote::Sh;
 
 /// The shell dialect a word is encoded for.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -70,11 +70,17 @@ pub(crate) fn is_recipe_admissible(value: &str) -> bool {
     !value.contains(['\n', '\r', '\0'])
 }
 
-/// Encode `value` as one shell word for `dialect`.
+/// Append `value`, encoded as one shell word for `dialect`, to `out`.
 ///
-/// This function is total: the caller owns the question of which inputs a
-/// recipe may carry, and asks [`is_recipe_admissible`] separately. `quote_path`
-/// depends on that split to keep its existing total behaviour.
+/// This is the sanctioned call site of `shell_quote`'s encoder and the single
+/// implementation the rest of Netsuke delegates to. It appends rather than
+/// returning a fresh `String` so `shell_join` can fill one buffer under a byte
+/// ceiling, instead of materialising an owned encoded copy of every member and
+/// then a second, joined allocation.
+///
+/// It is total: the caller owns the question of which inputs a recipe may
+/// carry, and asks [`is_recipe_admissible`] separately. `quote_path` depends on
+/// that split to keep its existing total behaviour.
 ///
 /// The `Sh` arm delegates to `shell_quote`'s quoter, which is *suffix*-quoting
 /// rather than canonically enclosing: it leaves the longest safe prefix bare and
@@ -82,18 +88,48 @@ pub(crate) fn is_recipe_admissible(value: &str) -> bool {
 /// contract is therefore round-tripping, not any particular shape — every output
 /// decodes back to `value` under a POSIX shell. The table in
 /// `sh_quoting_is_minimal` pins the shapes this version actually produces.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "The one sanctioned implementation of recipe-shell word quoting; \
-              shell_word exists so every other call site delegates here."
-)]
-pub(crate) fn quote_word(dialect: ShellDialect, value: &str) -> String {
-    if dialect == ShellDialect::PowerShell {
-        return quote_power_shell_literal(value);
+pub(crate) fn encode_into(dialect: ShellDialect, value: &str, out: &mut Vec<u8>) {
+    match dialect {
+        ShellDialect::Sh => Sh::quote_into_vec(value, out),
+        ShellDialect::PowerShell => encode_power_shell_literal_into(value, out),
     }
-    // `shell_quote` returns bytes because a `Vec<u8>` argument need not be
-    // UTF-8; a `&str` always is, so this conversion cannot lose information.
-    let bytes: Vec<u8> = value.quoted(Sh);
+}
+
+/// Return the bytes [`encode_into`] appends for `value`, or a lower bound on
+/// them.
+///
+/// A caller that must not exceed a budget uses this to reject an element before
+/// encoding it, because encoding is what costs memory. The PowerShell encoder
+/// is fixed-shape, so its value is exact. The `Sh` encoder never emits fewer
+/// bytes than its input — escaping only adds bytes — except for the empty word,
+/// which becomes `''`. A non-empty `n`-byte input becomes at most `3n + 1`
+/// bytes, so a post-encode check can still see at most that much for one member.
+pub(crate) fn encoded_len_lower_bound(dialect: ShellDialect, value: &str) -> usize {
+    match dialect {
+        ShellDialect::Sh if value.is_empty() => 2,
+        ShellDialect::Sh => value.len(),
+        ShellDialect::PowerShell => power_shell_encoded_len(value),
+    }
+}
+
+/// Encode `value` as one shell word for `dialect`.
+///
+/// A convenience wrapper over [`encode_into`] for callers that want the word on
+/// its own. It adds one allocation, so a loop that accumulates words should
+/// call [`encode_into`] directly.
+pub(crate) fn quote_word(dialect: ShellDialect, value: &str) -> String {
+    let mut bytes = Vec::new();
+    encode_into(dialect, value, &mut bytes);
+    encoded_bytes_to_string(bytes)
+}
+
+/// Convert encoder output to text, preserving it byte for byte.
+///
+/// `shell_quote` returns bytes because its input need not be UTF-8; every input
+/// here is a `&str`, so the conversion is expected to succeed. The lossy arm
+/// keeps the function total without silently dropping an argument, and the
+/// assertion surfaces the contract violation in debug builds.
+pub(crate) fn encoded_bytes_to_string(bytes: Vec<u8>) -> String {
     match String::from_utf8(bytes) {
         Ok(text) => text,
         Err(err) => {
@@ -103,19 +139,37 @@ pub(crate) fn quote_word(dialect: ShellDialect, value: &str) -> String {
     }
 }
 
-/// Encode every PowerShell single-quote character inside a literal path.
-fn quote_power_shell_literal(value: &str) -> String {
-    let escaped = value.chars().fold(
-        String::with_capacity(value.len()),
-        |mut output, character| {
-            output.push(character);
-            if is_power_shell_single_quote(character) {
-                output.push(character);
-            }
-            output
-        },
-    );
-    format!("'{escaped}'")
+/// Append a PowerShell single-quoted literal, doubling every delimiter.
+///
+/// This is the exact inverse of [`decode_power_shell_literal`], so the output
+/// is byte-for-byte what `quote_word` produced before the append API existed.
+fn encode_power_shell_literal_into(value: &str, out: &mut Vec<u8>) {
+    out.push(b'\'');
+    for character in value.chars() {
+        let mut buffer = [0_u8; 4];
+        let encoded = character.encode_utf8(&mut buffer).as_bytes();
+        out.extend_from_slice(encoded);
+        if is_power_shell_single_quote(character) {
+            out.extend_from_slice(encoded);
+        }
+    }
+    out.push(b'\'');
+}
+
+/// Return the exact encoded length of a PowerShell single-quoted literal.
+///
+/// Saturating arithmetic keeps a hostile length from panicking: a saturated
+/// value is larger than any ceiling, so the caller rejects it either way.
+fn power_shell_encoded_len(value: &str) -> usize {
+    value.chars().fold(2_usize, |total, character| {
+        let width = character.len_utf8();
+        let width = if is_power_shell_single_quote(character) {
+            width * 2
+        } else {
+            width
+        };
+        total.saturating_add(width)
+    })
 }
 
 /// Report whether `character` is one of PowerShell's single-quote delimiters.

@@ -306,6 +306,7 @@ stdlib.shell.dialect_invalid = Dialetto della shell sconosciuto { $dialect }; at
 stdlib.shell.dialect_not_string = L'opzione dialect di shell deve essere una stringa, ricevuto { $kind }.
 stdlib.shell.join.not_sequence = shell_join si aspettava una sequenza ma ha ricevuto { $kind }.
 stdlib.shell.join.item_not_string = L'elemento { $index } di shell_join è { $kind }, non una stringa.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join supererebbe il limite di { $limit } byte di output codificato all'elemento { $index }. Accorciare la sequenza unita.
 stdlib.shell.positional_option = { $filter } accetta le sue opzioni per parola chiave; scrivere { $example }.
 
 # Diagnostica dell'helper dei percorsi.

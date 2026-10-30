@@ -1475,6 +1475,12 @@ for transforming data within templates.
   empty word, which is why `compact` is a separate filter rather than a flag
   here. It does not flatten nested lists. This is for deliberate shell recipes;
   structured `exec` recipes remain preferred when no shell syntax is needed.
+  The joined fragment is bounded at 1 MiB of encoded output. The filter
+  accumulates into one buffer rather than materializing an encoded copy of
+  every member and then the joined string, and it rejects a member that cannot
+  fit before encoding it. A host-supplied budget does not participate: the
+  ceiling is a fixed property of the filter, so `help targets` and build
+  rendering produce the same result on every machine.
 
 - `| compact`: A collection filter that removes `none`, undefined, and empty
   strings while preserving order. It drops nothing else: `0`, `false`, `[]`,

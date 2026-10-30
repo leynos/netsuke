@@ -346,7 +346,12 @@ across shells.
   exactly one space between elements. Every element must be a string, and no
   element is dropped — `['']` renders as one empty word, which is why `compact`
   is a separate filter rather than an option here. Nested lists are not
-  flattened.
+  flattened. The filter accumulates into one buffer and stops at a fixed 1 MiB
+  ceiling on the encoded command line. A join that would exceed the ceiling
+  fails with `netsuke::jinja::shell::join_limit`, naming the ceiling and the
+  member that could not fit without repeating that member's content. The
+  ceiling is not configurable and applies to `help targets` and build rendering
+  alike.
 - `dialect` accepts `sh` and `powershell`. Omit it and the dialect is the one
   implied by the recipe's shell: `sh` on Unix, `powershell` on Windows. Pin it
   when the generated text must be byte-stable, because the default depends on

@@ -269,6 +269,7 @@ define_keys! {
     STDLIB_SHELL_DIALECT_NOT_STRING => "stdlib.shell.dialect_not_string",
     STDLIB_SHELL_JOIN_NOT_SEQUENCE => "stdlib.shell.join.not_sequence",
     STDLIB_SHELL_JOIN_ITEM_NOT_STRING => "stdlib.shell.join.item_not_string",
+    STDLIB_SHELL_JOIN_LIMIT => "stdlib.shell.join.limit",
     STDLIB_SHELL_POSITIONAL_OPTION => "stdlib.shell.positional_option",
     STDLIB_PATH_IO_FAILED => "stdlib.path.io.failed",
     STDLIB_PATH_IO_FAILED_WITH_DETAIL => "stdlib.path.io.failed_with_detail",

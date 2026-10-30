@@ -307,6 +307,7 @@ stdlib.shell.dialect_invalid = דיאלקט מעטפת לא מוכר { $dialect 
 stdlib.shell.dialect_not_string = האפשרות dialect של shell חייבת להיות מחרוזת, התקבל { $kind }.
 stdlib.shell.join.not_sequence = ‏shell_join ציפה לרצף אך קיבל { $kind }.
 stdlib.shell.join.item_not_string = הפריט { $index } ב-shell_join הוא { $kind }, לא מחרוזת.
+stdlib.shell.join.limit = ‏[netsuke::jinja::shell::join_limit] shell_join יחרג ממגבלת { $limit } הבתים של פלט מקודד בפריט { $index }. קצרו את הרצף המאוחד.
 stdlib.shell.positional_option = ‏{ $filter } מקבל את אפשרויותיו כמילת מפתח; כתבו { $example }.
 
 # אבחון עוזר הנתיבים.

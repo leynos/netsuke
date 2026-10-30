@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Unbekannter Shell-Dialekt { $dialect }; erwartet 
 stdlib.shell.dialect_not_string = Die Option dialect von shell muss eine Zeichenkette sein, empfangen wurde { $kind }.
 stdlib.shell.join.not_sequence = shell_join erwartet eine Sequenz, erhielt aber { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } von shell_join ist { $kind }, keine Zeichenkette.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join würde beim Element { $index } die Obergrenze von { $limit } Byte kodierter Ausgabe überschreiten. Kürzen Sie die zusammengefügte Sequenz.
 stdlib.shell.positional_option = { $filter } nimmt seine Optionen als Schlüsselwort an; schreiben Sie { $example }.
 
 # Diagnosen des Pfadhelfers.

@@ -30,6 +30,14 @@
   parser actually accepts
   ([#951](https://github.com/leynos/netsuke/issues/951), [#779](https://github.com/leynos/netsuke/issues/779))
 
+### Fixed
+
+- Bound `shell_join`'s intermediate allocation: the filter appends into one
+  buffer under a fixed 1 MiB ceiling and rejects an over-limit join with
+  `netsuke::jinja::shell::join_limit`, instead of materializing an encoded copy
+  of every member and then the joined string
+  ([#970](https://github.com/leynos/netsuke/issues/970))
+
 ## [0.1.0-beta4] - 2026-09-26
 
 _If you are upgrading: see the
@@ -122,6 +130,7 @@ _If you are upgrading: see the
 - Document the command placeholder contract in the README
   ([#699](https://github.com/leynos/netsuke/issues/699))
 
+<!-- markdownlint-disable-next-line MD024 -->
 ### Fixed
 
 - Require an explicit recursive-workspace opt-in before an empty or unset

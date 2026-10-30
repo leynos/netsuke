@@ -15,6 +15,7 @@
 //! |--------|-------------|
 //! | [`round_trip_through_an_oracle`] | OBL-SH-ROUNDTRIP, OBL-PS-ROUNDTRIP |
 //! | [`word_and_join`] | OBL-ONE-WORD, OBL-JOIN-SPLIT, OBL-JOIN-QUOTE-AGREE |
+//! | [`join_budget`] | OBL-JOIN-BUDGET |
 //! | [`kind_gate`] | OBL-KIND-GATE |
 //! | [`manifest_rendering`] | OBL-NO-ESCAPE, OBL-CONTEXT |
 
@@ -26,6 +27,9 @@ mod round_trip_through_an_oracle;
 
 #[path = "shell_filter_property_tests/word_and_join.rs"]
 mod word_and_join;
+
+#[path = "shell_filter_property_tests/join_budget.rs"]
+mod join_budget;
 
 #[path = "shell_filter_property_tests/kind_gate.rs"]
 mod kind_gate;

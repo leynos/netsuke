@@ -304,6 +304,7 @@ stdlib.shell.dialect_invalid = Dialek shell tidak dikenal { $dialect }; diharapk
 stdlib.shell.dialect_not_string = Opsi dialect pada shell harus berupa untai, menerima { $kind }.
 stdlib.shell.join.not_sequence = shell_join mengharapkan urutan, tetapi menerima { $kind }.
 stdlib.shell.join.item_not_string = Item { $index } pada shell_join bertipe { $kind }, bukan string.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join akan melampaui batas keluaran terkode { $limit } bita pada item { $index }. Perpendek urutan yang digabungkan.
 stdlib.shell.positional_option = { $filter } mengambil opsinya sebagai kata kunci; tulis { $example }.
 
 # Diagnostik pembantu jalur.

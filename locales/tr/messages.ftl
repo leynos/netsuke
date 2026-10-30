@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Bilinmeyen kabuk lehçesi { $dialect }; şunlarda
 stdlib.shell.dialect_not_string = shell dialect seçeneği bir dizge olmalıdır, { $kind } alındı.
 stdlib.shell.join.not_sequence = shell_join bir dizi bekliyordu, ancak { $kind } aldı.
 stdlib.shell.join.item_not_string = shell_join öğesi { $index }, { $kind } türünde; dize değil.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join, { $index }. öğede { $limit } baytlık kodlanmış çıktı sınırını aşacak. Birleştirilen diziyi kısaltın.
 stdlib.shell.positional_option = { $filter } seçeneklerini anahtar sözcükle alır; şöyle yazın: { $example }.
 
 # Yol yardımcısının tanılaması.

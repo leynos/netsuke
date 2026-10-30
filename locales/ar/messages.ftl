@@ -309,6 +309,7 @@ stdlib.shell.dialect_invalid = لهجة صدفة غير معروفة { $dialect 
 stdlib.shell.dialect_not_string = يجب أن يكون خيار dialect في shell سلسلة نصية، وتم تلقّي { $kind }.
 stdlib.shell.join.not_sequence = يتوقّع shell_join تسلسلاً لكنه تلقّى { $kind }.
 stdlib.shell.join.item_not_string = العنصر { $index } في shell_join نوعه { $kind } وليس سلسلة نصية.
+stdlib.shell.join.limit = ‏[netsuke::jinja::shell::join_limit] سيتجاوز shell_join سقف مخرجات الترميز البالغ { $limit } بايت عند العنصر { $index }. اختصر التسلسل المدمج.
 stdlib.shell.positional_option = ‏{ $filter } يتلقّى خياراته ككلمات مفتاحية؛ اكتب { $example }.
 
 # تشخيصات مساعد المسارات.

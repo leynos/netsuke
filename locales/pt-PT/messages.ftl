@@ -306,6 +306,7 @@ stdlib.shell.dialect_invalid = Dialeto de shell desconhecido { $dialect }; esper
 stdlib.shell.dialect_not_string = A opção dialect de shell tem de ser uma cadeia de carateres, recebido { $kind }.
 stdlib.shell.join.not_sequence = O shell_join esperava uma sequência, mas recebeu { $kind }.
 stdlib.shell.join.item_not_string = O item { $index } de shell_join é { $kind }, não uma cadeia de caracteres.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] O shell_join excederia o limite de { $limit } bytes de saída codificada no item { $index }. Encurte a sequência unida.
 stdlib.shell.positional_option = { $filter } recebe as suas opções por palavra-chave; escreva { $example }.
 
 # Diagnósticos do auxiliar de caminhos.

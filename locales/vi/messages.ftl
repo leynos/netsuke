@@ -304,6 +304,7 @@ stdlib.shell.dialect_invalid = Phương ngữ shell không xác định { $diale
 stdlib.shell.dialect_not_string = Tùy chọn dialect của shell phải là chuỗi, nhưng nhận được { $kind }.
 stdlib.shell.join.not_sequence = shell_join mong đợi một dãy nhưng lại nhận { $kind }.
 stdlib.shell.join.item_not_string = Phần tử { $index } của shell_join có kiểu { $kind }, không phải chuỗi.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join sẽ vượt quá giới hạn { $limit } byte đầu ra được mã hóa tại phần tử { $index }. Hãy rút ngắn dãy được nối.
 stdlib.shell.positional_option = { $filter } nhận tùy chọn theo từ khóa; hãy viết { $example }.
 
 # Chẩn đoán của hàm trợ giúp đường dẫn.
