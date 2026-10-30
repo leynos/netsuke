@@ -1,7 +1,9 @@
 //! Script recipe integration cases for Ninja dollar escaping.
 
 use super::*;
+#[cfg(unix)]
 use netsuke::manifest::{EnvAccessPolicy, EnvReadError, EnvReader};
+#[cfg(unix)]
 use std::sync::Arc;
 
 /// Verify script `$in` and `$out` become literal shell variables in Ninja.
@@ -213,7 +215,9 @@ fn dollar_free_commands_remain_byte_identical() -> Result<()> {
 ///
 /// It begins with a backslash so `printf %b` reads `\047` as an octal
 /// apostrophe; the remainder turns the reconstructed byte into a command
-/// boundary and a redirect to `injected`.
+/// boundary and a redirect to `injected`. Only the Unix execution cases below
+/// consume it, so it is gated with them rather than left dead on Windows.
+#[cfg(unix)]
 const BACKSLASH_PAYLOAD: &str = r"\047;>injected;#";
 
 /// Run one generated script and return its byte-exact output and workspace.
