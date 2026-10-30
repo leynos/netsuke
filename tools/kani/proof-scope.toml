@@ -106,6 +106,7 @@ sources = [
   "src/manifest/jinja_macros/expression.rs",
   "src/manifest/jinja_macros/invocation.rs",
   "src/manifest/jinja_macros/mod.rs",
+  "src/manifest/jinja_macros/query_classification.rs",
   "src/manifest/jinja_macros/telemetry.rs",
   "src/manifest/load_stage.rs",
   "src/manifest/loading.rs",
