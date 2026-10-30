@@ -499,6 +499,11 @@ jobs:
           fi
           echo "arch=$target_arch" >> "$GITHUB_OUTPUT"
           echo "runner-arch=$runner_arch" >> "$GITHUB_OUTPUT"
+          if [[ "$target_arch" != "$runner_arch" ]]; then
+            echo "cross-arch=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cross-arch=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Build Debian validation image
         id: validation_deb_image
@@ -571,6 +576,37 @@ jobs:
           # This repository-owned PEP 723 wrapper pins the revision that probes
           # the local Podman store first.
           polythene-path: ${{ github.workspace }}/.github/package-validation/polythene_cli.py
+
+      - name: Install packages under emulation
+        if: inputs.platform == 'linux' && steps.validation_sandbox.outputs.cross-arch == 'true'
+        shell: bash
+        env:
+          PACKAGE_ARCH: ${{ steps.validation_sandbox.outputs.arch }}
+          DEB_IMAGE: ${{ steps.validation_deb_image.outputs.image }}
+          RPM_IMAGE: ${{ steps.validation_rpm_image.outputs.image }}
+          BIN_NAME: ${{ inputs['bin-name'] }}
+        run: |
+          set -euo pipefail
+          # The shared action skips its sandbox whenever the package
+          # architecture differs from the runner's, and skips the architecture
+          # check with it. That is exactly the arm64 lane on an x64 runner, so
+          # without this step arm64 packages would be published having never
+          # run. The sandbox step registered the QEMU binfmt handlers the
+          # emulated container needs, so install there and verify as usual.
+          shopt -s nullglob
+          packages=(dist/*.deb dist/*.rpm)
+          if (( ${#packages[@]} == 0 )); then
+            printf '::error title=No packages to install::dist holds no .deb or .rpm\n'
+            exit 1
+          fi
+          for package in "${packages[@]}"; do
+            case "$package" in
+              *.deb) image=$DEB_IMAGE ;;
+              *.rpm) image=$RPM_IMAGE ;;
+            esac
+            .github/package-validation/install-emulated-package.sh \
+              "$image" "$PACKAGE_ARCH" "$package" "$BIN_NAME"
+          done
 
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
