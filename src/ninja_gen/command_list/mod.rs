@@ -8,7 +8,7 @@ mod scanner;
 
 pub(crate) use entry::action_identity;
 use entry::shell_single_quote;
-pub(super) use render::command_list_shell_text;
+pub(in crate::ninja_gen) use render::command_list_shell_text;
 use scanner::background_operator_count;
 
 /// Prefix used to carry bounded list-entry failure attribution through Ninja.

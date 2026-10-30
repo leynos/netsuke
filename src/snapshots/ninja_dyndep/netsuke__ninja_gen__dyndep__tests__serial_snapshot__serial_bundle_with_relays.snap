@@ -1,0 +1,40 @@
+---
+source: src/ninja_gen/dyndep/tests/serial_snapshot.rs
+expression: rendered
+---
+=== build.ninja ===
+ninja_required_version = 1.10
+
+rule a
+  command = echo done
+
+build .netsuke/serial/<serial-01>/relay-000: phony | check-fmt
+build .netsuke/dyndep/<dyndep-01>.dd: phony
+build .netsuke/serial/<serial-01>/000: phony || .netsuke/dyndep/<dyndep-01>.dd
+  dyndep = .netsuke/dyndep/<dyndep-01>.dd
+
+build .netsuke/serial/<serial-01>/relay-001: phony | lint
+build .netsuke/dyndep/<dyndep-02>.dd: phony .netsuke/serial/<serial-01>/000
+build .netsuke/serial/<serial-01>/001: phony || .netsuke/dyndep/<dyndep-02>.dd
+  dyndep = .netsuke/dyndep/<dyndep-02>.dd
+
+build .netsuke/serial/<serial-01>/relay-002: phony | test
+build .netsuke/dyndep/<dyndep-03>.dd: phony .netsuke/serial/<serial-01>/001
+build .netsuke/serial/<serial-01>/002: phony || .netsuke/dyndep/<dyndep-03>.dd
+  dyndep = .netsuke/dyndep/<dyndep-03>.dd
+
+build all: a | .netsuke/serial/<serial-01>/000 .netsuke/serial/<serial-01>/001 .netsuke/serial/<serial-01>/002
+
+default all
+
+=== sidecar 0: .netsuke/dyndep/<dyndep-01>.dd ===
+ninja_dyndep_version = 1
+build .netsuke/serial/<serial-01>/000: dyndep | .netsuke/serial/<serial-01>/relay-000
+
+=== sidecar 1: .netsuke/dyndep/<dyndep-02>.dd ===
+ninja_dyndep_version = 1
+build .netsuke/serial/<serial-01>/001: dyndep | .netsuke/serial/<serial-01>/relay-001
+
+=== sidecar 2: .netsuke/dyndep/<dyndep-03>.dd ===
+ninja_dyndep_version = 1
+build .netsuke/serial/<serial-01>/002: dyndep | .netsuke/serial/<serial-01>/relay-002

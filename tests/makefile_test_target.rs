@@ -40,15 +40,20 @@ use toml::Value;
 /// the same runner over the `#[ignore]`-gated mutation compile gate, which is
 /// too expensive for the default profile.
 /// `test-rfc-stdlib-coverage` runs the RFC parser and coverage contract in
-/// isolation. A contributor sets the worker bounds once and expects them
-/// honoured wherever nextest runs, so the list is a contract rather than a
-/// note of what happens to be true today.
+/// isolation. `proptest` runs the property suites alone, which the roadmap
+/// determinism work added as a focused inner loop; it is a subset of what
+/// `test-nextest` already covers, but it invokes the runner directly, so it
+/// shares the bounds for the same reason every other entry does.
+/// A contributor sets the worker bounds once and expects them honoured
+/// wherever nextest runs, so the list is a contract rather than a note of what
+/// happens to be true today.
 ///
 /// The list is not trusted on its own.
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 6] = [
+const NEXTEST_TARGETS: [&str; 7] = [
+    "proptest",
     "test-default-features",
     "test-documentation-contracts",
     "test-kani-mutations",

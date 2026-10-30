@@ -554,11 +554,11 @@ and test workflow intact. See
   [ADR-0047](adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md).
   - [x] Prove duplicate-output rejection on bounded manifests. Kani covers the
     accepted small-N proof boundary; 4.3.1 closes the larger-N Proptest
-    coverage.
+    coverage. **Discharged:** `OBL-DUP` in execplan 4.3.1.
   - [x] Prove empty-rule, multiple-rule, and missing-rule error selection.
   - [x] Prove self-edge and small bounded multi-node cycle rejection. Kani
     covers the accepted small-N proof boundary; 4.3.1 closes the larger-N
-    Proptest coverage.
+    Proptest coverage. **Discharged:** `OBL-CYCLE` in execplan 4.3.1.
   - [x] Prove missing dependencies do not create false cycles.
   - [x] Record the implementation decision to keep the public `netsuke::ir`
     API unchanged and place Kani-only verification support behind `cfg(kani)`.
@@ -616,13 +616,29 @@ and test workflow intact. See
 
 ### 4.3. Determinism and manifest property testing
 
-- [ ] 4.3.1. Add Proptest coverage for deterministic Ninja emission. Requires
+- [x] 4.3.1. Add Proptest coverage for deterministic Ninja emission. Requires
   4.1.1. See the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).
-  - [ ] Prove Ninja output is stable across equivalent insertion orders
+  - [x] Prove Ninja output is stable across equivalent insertion orders
     (generated graphs bounded to 50 actions and 100 edges).
-  - [ ] Prove `default` target ordering is stable.
-  - [ ] Prove `path_key` is invariant for equivalent output sets.
+  - [x] Prove `default` target ordering is stable.
+  - [x] Prove `path_key` is invariant for equivalent output sets.
+  Completed:
+  [execplan 4.3.1](execplans/4-3-1-proptests-for-deterministic-ninja-emission.md)
+  delivers the suites under `src/ninja_gen/determinism/property_tests/` and
+  publishes the contract in
+  [ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md). The larger-N
+  hand-off from 4.2.1 is discharged, and each ordering rule is demonstrated by
+  a committed mutation patch that a named property fails. The real-`ninja` arm,
+  `OBL-NINJA`, now passes on its own terms. The emitter reveals a relay phony
+  per staged serial dependency, which avoids the upstream iterator-invalidation
+  defect
+  [ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662);
+  see
+  [ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md).
+  The directed regression for the measured crashing shape is
+  `src/ninja_gen/determinism/property_tests/ninja_oracle/relay_regression.rs`,
+  and the historical seed that reproduced the crash is not committed.
 - [ ] 4.3.2. Add Proptest coverage for manifest expansion invariants. Requires
   4.1.1. See the
   [Proptest section](formal-verification-methods-in-netsuke.md#proptest-for-determinism-and-manifest-semantics).

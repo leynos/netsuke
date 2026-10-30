@@ -1,0 +1,13 @@
+diff --git a/src/ninja_gen/dyndep/render.rs b/src/ninja_gen/dyndep/render.rs
+--- a/src/ninja_gen/dyndep/render.rs
++++ b/src/ninja_gen/dyndep/render.rs
+@@ -31,6 +31,9 @@
+         localizer,
+     };
+     for edge in ordered_edges(graph.edges()) {
++        if !edge.explicit_outputs.is_empty() {
++            continue;
++        }
+         renderer.render_edge(edge)?;
+     }
+     Ok(renderer.stages.dyndep_files)

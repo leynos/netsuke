@@ -3,10 +3,18 @@
 //! Netsuke keeps one top-level Ninja invocation. To make a `serial` `deps`
 //! list execute in declaration order, this module lowers each serial edge
 //! into a chain of phony gates plus content-addressed dyndep sidecars. Each
-//! gate names one sidecar through Ninja `dyndep` binding; the sidecar
-//! reveals exactly one real dependency. The next sidecar is not visible until
-//! the preceding gate completes, so Ninja cannot schedule a later dependency
-//! before an earlier one succeeds.
+//! gate names one sidecar through Ninja `dyndep` binding; the sidecar reveals
+//! exactly one *relay* phony, and the relay carries the real dependency. The
+//! next sidecar is not visible until the preceding gate completes, so Ninja
+//! cannot schedule a later dependency before an earlier one succeeds.
+//!
+//! The relay exists to keep Ninja out of a crash in its own scheduler. Loading
+//! a sidecar appends an edge to the revealed node's out-edge list, and Ninja
+//! does that while iterating that same node's list when the revealed node is
+//! already scheduled — reachable when a user edge is an order-only dependency
+//! of a node a later sidecar reveals (`ninja-build/ninja#2662`). Revealing a
+//! relay means the appended edge belongs to a node created for the purpose,
+//! which no user edge names, so no iteration is ever in progress over it.
 //!
 //! The sidecars are immutable and content-addressed beneath `.netsuke/dyndep`,
 //! and the gates live beneath `.netsuke/serial`. The runner materializes the
@@ -54,22 +62,22 @@
 
 mod bundle;
 mod render;
+mod staging;
 pub use bundle::{GeneratedDyndep, GeneratedNinja};
 use render::render_edges;
 
-#[cfg(test)]
-use crate::ir::BuildEdge;
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NinjaGenError, RecipeShell, graph_requires_dyndep, join, reject_unsupported_path_characters,
-    write_action_rules,
+    NinjaGenError, RecipeShell, graph_requires_dyndep, join, ordered_default_targets,
+    reject_unsupported_path_characters, write_action_rules,
 };
 use crate::recipe_shell::BashExecutable;
 use std::fmt::Write as _;
 
 /// Reserved state namespace for serial gate paths.
 const SERIAL_NAMESPACE: &str = ".netsuke/serial";
+
 /// Reserved state namespace for dyndep sidecar files.
 const DYNDEP_NAMESPACE: &str = ".netsuke/dyndep";
 
@@ -151,10 +159,9 @@ fn generate_bundle_inner(
     let localizer = localization::localizer();
     let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;
 
-    if !graph.default_targets.is_empty() {
-        let mut defs = graph.default_targets.clone();
-        defs.sort();
-        writeln!(out, "default {}", join(&defs))?;
+    let defaults = ordered_default_targets(graph);
+    if !defaults.is_empty() {
+        writeln!(out, "default {}", join(&defaults))?;
     }
 
     Ok(GeneratedNinja {
@@ -198,3 +205,5 @@ pub(crate) fn reject_reserved_paths(graph: &BuildGraph) -> Result<(), NinjaGenEr
 
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/ninja_gen/dyndep/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
+// weave: run 'weave explain src/ninja_gen/dyndep/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

@@ -1,0 +1,11 @@
+--- a/src/ninja_gen/order.rs
++++ b/src/ninja_gen/order.rs
+@@ -25,7 +25,7 @@
+ /// `graph.edges()`.
+ pub(crate) fn ordered_edges<'a>(edges: impl Iterator<Item = &'a BuildEdge>) -> Vec<&'a BuildEdge> {
+     let mut collected: Vec<&BuildEdge> = edges.collect();
+-    collected.sort_by_key(|edge| path_key(&edge.explicit_outputs));
++    collected.sort_by_key(|edge| path_key(&edge.implicit_outputs));
+     collected
+ }
+ 

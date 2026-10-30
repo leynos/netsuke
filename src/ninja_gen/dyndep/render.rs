@@ -4,32 +4,14 @@
 //! bundle generation. Keep the ordering and output policy here; the parent
 //! module owns the bundle API and reserved-path validation.
 
-use super::{DYNDEP_NAMESPACE, GeneratedDyndep, SERIAL_NAMESPACE};
-use crate::hex;
+use super::GeneratedDyndep;
+use super::staging::{SerialStages, render_serial_block};
 use crate::ir::{BuildEdge, BuildGraph};
 use crate::ninja_gen::edge_metadata;
 use crate::ninja_gen::escape::NinjaValue;
-use crate::ninja_gen::{
-    DisplayEdge, NinjaGenError, edge_requires_gates, path_key, validated_ninja_path,
-};
+use crate::ninja_gen::{DisplayEdge, NinjaGenError, edge_requires_gates, ordered_edges};
 use camino::Utf8PathBuf;
-use sha2::{Digest, Sha256};
-use std::collections::HashSet;
 use std::fmt::Write as _;
-
-/// Schema tag incorporated into every parent (gate-set) identity.
-const PARENT_SCHEMA: &str = "netsuke-serial-v1";
-/// Format tag incorporated into every dyndep filename digest.
-const DYNDEP_SCHEMA: &str = "netsuke-dyndep-v1";
-
-/// Mutable staging state shared while lowering one serial edge.
-#[derive(Default)]
-struct SerialStages {
-    /// Dyndep sidecars collected while lowering serial edges.
-    dyndep_files: Vec<GeneratedDyndep>,
-    /// Sidecar paths already staged, deduplicating shared dependencies.
-    staged_sidecars: HashSet<Utf8PathBuf>,
-}
 
 /// Render each distinct graph edge in stable output order.
 ///
@@ -42,16 +24,13 @@ pub(super) fn render_edges(
     out: &mut String,
     localizer: &dyn ortho_config::Localizer,
 ) -> Result<Vec<GeneratedDyndep>, NinjaGenError> {
-    let mut edges: Vec<_> = graph.edges().collect();
-    edges.sort_by_key(|edge| path_key(&edge.explicit_outputs));
-
     let mut renderer = EdgeRenderer {
         graph,
         out,
         stages: SerialStages::default(),
         localizer,
     };
-    for edge in edges {
+    for edge in ordered_edges(graph.edges()) {
         renderer.render_edge(edge)?;
     }
     Ok(renderer.stages.dyndep_files)
@@ -136,88 +115,4 @@ struct RenderedAction<'a> {
     name: &'a str,
     /// Preserve whether Ninja should restat this edge after execution.
     restat: bool,
-}
-
-/// Emit the staged gates and sidecar-producing phony edges for one serial edge,
-/// collecting each sidecar into the bundle and returning the gate paths in
-/// dependency order.
-fn render_serial_block(
-    edge: &BuildEdge,
-    out: &mut String,
-    stages: &mut SerialStages,
-    gate_paths: &mut Vec<Utf8PathBuf>,
-) -> Result<(), NinjaGenError> {
-    let parent = parent_identity(edge);
-    for (index, dep) in edge.implicit_deps.iter().enumerate() {
-        let gate = parent.join(format!("{index:03}"));
-        let content = sidecar_content(&gate, dep)?;
-        let digest = sidecar_digest(&content);
-        let sidecar = Utf8PathBuf::from(format!("{DYNDEP_NAMESPACE}/{digest}.dd"));
-
-        let sidecar_escaped = validated_ninja_path(sidecar.as_str())?;
-        let gate_escaped = validated_ninja_path(gate.as_str())?;
-
-        // The phony edge that produces (but never rebuilds) the sidecar file.
-        // Starting at the second stage it depends on the previous gate, which
-        // prevents Ninja from revealing the next sidecar early.
-        match gate_paths.last() {
-            None => writeln!(out, "build {sidecar_escaped}: phony")?,
-            Some(prev) => {
-                let prev_escaped = validated_ninja_path(prev.as_str())?;
-                writeln!(out, "build {sidecar_escaped}: phony {prev_escaped}")?;
-            }
-        }
-        // The gate edge: order-only depends on the sidecar and declares it as
-        // its dyndep file so Ninja loads the real dependency from the sidecar.
-        writeln!(out, "build {gate_escaped}: phony || {sidecar_escaped}")?;
-        writeln!(out, "  dyndep = {sidecar_escaped}")?;
-        writeln!(out)?;
-
-        if stages.staged_sidecars.insert(sidecar.clone()) {
-            stages.dyndep_files.push(GeneratedDyndep {
-                relative_path: sidecar,
-                content,
-            });
-        }
-        gate_paths.push(gate);
-    }
-    Ok(())
-}
-
-/// Derive the stable parent (gate-set) identity for a serial edge.
-///
-/// The identity is a SHA-256 over the edge canonical output identity and an
-/// explicit schema tag, so renaming the output or changing the staging format
-/// yields a fresh namespace without colliding with other serial edges.
-fn parent_identity(edge: &BuildEdge) -> Utf8PathBuf {
-    let canonical = edge
-        .explicit_outputs
-        .iter()
-        .map(|path| path.as_str())
-        .collect::<Vec<_>>()
-        .join("\u{0}");
-    let mut hasher = Sha256::new();
-    hasher.update(PARENT_SCHEMA.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(canonical.as_bytes());
-    let digest = hex::to_lower_hex(&hasher.finalize());
-    Utf8PathBuf::from(format!("{SERIAL_NAMESPACE}/{digest}"))
-}
-
-/// Render the dyndep document for one gate and its real dependency.
-fn sidecar_content(gate: &Utf8PathBuf, dep: &Utf8PathBuf) -> Result<String, NinjaGenError> {
-    let gate_escaped = validated_ninja_path(gate.as_str())?;
-    let dep_escaped = validated_ninja_path(dep.as_str())?;
-    Ok(format!(
-        "ninja_dyndep_version = 1\nbuild {gate_escaped}: dyndep | {dep_escaped}\n"
-    ))
-}
-
-/// Content-address a sidecar by its complete bytes and a format tag.
-fn sidecar_digest(content: &str) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(DYNDEP_SCHEMA.as_bytes());
-    hasher.update(b"\0");
-    hasher.update(content.as_bytes());
-    hex::to_lower_hex(&hasher.finalize())
 }

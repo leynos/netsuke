@@ -19,6 +19,7 @@ use camino::Utf8PathBuf;
 use std::collections::{HashMap, HashSet};
 
 mod dependency_only;
+
 mod ninja_oracle;
 use ninja_oracle::scalar_graph;
 
@@ -143,10 +144,23 @@ fn aggregate_gates(build_file: &str) -> Option<Vec<&str>> {
     })
 }
 
-fn sidecar_dependency(content: &str) -> Option<&str> {
-    content
+/// Resolve one sidecar to the real dependency its exposure ultimately reaches.
+///
+/// A sidecar reveals a *relay* phony rather than the dependency itself — see
+/// [`super::dyndep`]'s module documentation for the upstream Ninja crash that
+/// forces the indirection — so the dependency is read from the relay's own
+/// build line. Returning `None` when no relay line matches keeps a sidecar that
+/// reveals a path reaching nothing from silently comparing equal to a
+/// dependency name.
+fn resolved_dependency(build_file: &str, sidecar_content: &str) -> Option<String> {
+    let relay = sidecar_content
         .lines()
-        .find_map(|line| line.split_once(" | ").map(|(_, dependency)| dependency))
+        .find_map(|line| line.split_once(" | ").map(|(_, path)| path.trim()))?;
+    let prefix = format!("build {relay}: phony | ");
+    build_file
+        .lines()
+        .find_map(|line| line.strip_prefix(prefix.as_str()))
+        .map(str::to_owned)
 }
 
 fn repeated_dependencies_strategy() -> impl Strategy<Value = Vec<Utf8PathBuf>> {
@@ -307,7 +321,14 @@ proptest! {
             .zip(bundle.dyndep_files())
             .enumerate()
         {
-            prop_assert_eq!(sidecar_dependency(sidecar.content()), Some(dependency.as_str()));
+            let resolved = resolved_dependency(bundle.build_file(), sidecar.content());
+            prop_assert_eq!(
+                resolved.as_deref(),
+                Some(dependency.as_str()),
+                "sidecar {} must reach the dependency declared at stage {}",
+                sidecar.relative_path(),
+                index,
+            );
             let sidecar_line = format!("build {}: phony", sidecar.relative_path());
             let rendered_sidecar = bundle
                 .build_file()
@@ -336,11 +357,11 @@ proptest! {
         let exposed = bundle
             .dyndep_files()
             .iter()
-            .map(|sidecar| sidecar_dependency(sidecar.content()))
+            .map(|sidecar| resolved_dependency(bundle.build_file(), sidecar.content()))
             .collect::<Vec<_>>();
         let expected = dependencies
             .iter()
-            .map(|dependency| Some(dependency.as_str()))
+            .map(|dependency| Some(dependency.as_str().to_owned()))
             .collect::<Vec<_>>();
         prop_assert_eq!(exposed, expected);
 

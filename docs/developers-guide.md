@@ -5258,7 +5258,15 @@ was validated by applying the patch and watching the harness fail under
 `cargo kani --harness <name>`.
 
 `tests/kani_mutation_evidence_tests.rs` keeps that evidence in lockstep with
-the harnesses. Three of its checks run as part of `make test`:
+the harnesses. It is a crate root with four child modules beside it, each of
+which it declares through an explicit `#[path]`. That is the house shape for a
+crate root holding a companion directory: 17 of the `tests/*.rs` crate roots
+reach their own `<stem>/` tree this way, because Cargo would otherwise resolve
+a bare `mod child;` against `tests/` itself. A bare `mod child;` at a crate
+root is reserved for the shared trees that genuinely live at
+`tests/<name>/mod.rs` — `support`, `fixtures`, and `common`.
+
+Three of its checks run as part of `make test`, and live in `contracts.rs`:
 
 - every patch must still apply cleanly to the current tree
   (`git apply --check`), catching silent rot when production code near a
@@ -5269,6 +5277,31 @@ the harnesses. Three of its checks run as part of `make test`:
 - every `#[kani::proof]` harness under `src/` must own a correspondingly
   named patch, or appear in the test's exemption list with a stated reason; and
 - every patch must correspond to a live harness, catching renames.
+
+`discovery.rs` owns the two walks those checks compare, so the naming rules sit
+beside the scan that produces the names they describe: harnesses are discovered
+by scanning `src/` for `#[kani::proof]`, and patches by listing
+`docs/verification/mutations/`.
+
+A patch may instead back a Proptest property, which
+`ir__cmd_interpolate__property_tests__*.patch` do. Those properties exercise
+scanner and command-guard contracts that exceed the bounded Kani resource cap,
+so no harness can carry the evidence and a patch alone does. Such a patch is
+listed in `SUPPLEMENTAL_PROPERTY_PATCHES`, and `supplemental_property_location`
+resolves the source file that declares the named property rather than assuming
+a layout. A stem encodes the module path with `__` standing in for `::`, so
+`ir__cmd_interpolate__property_tests__x` names property `x` under
+`src/ir/cmd_interpolate/property_tests`. The leading segments name directories
+and the final segment is either a directory module's `mod.rs` or a single-file
+module, and both shapes are used under `src/`, so both candidates are tried.
+The root segment comes from the stem rather than a fixed list, which is why a
+patch rooted at `ninja_gen` or `hex` resolves with no change here. When neither
+candidate declares the property the failure names every candidate searched, so
+a module that moves is diagnosable from the message alone instead of arriving
+as an opaque read error.
+`supplemental_property_location_resolves_directory_and_file_modules` pins the
+two module shapes and that diagnostic against a synthetic tree, so the check
+does not depend on this revision happening to contain an absent property.
 
 A fourth check is gated, because it costs one Kani codegen per patch:
 `compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
@@ -6241,6 +6274,36 @@ all valid inputs.
   discovery-diagnostic replays stay identical without re-reading the
   environment.
 
+#### Emission determinism suites
+
+The suites that verify
+[ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) live in
+`src/ninja_gen/determinism/property_tests/`, one module per obligation, behind
+`#[cfg(test)]`. They share the generator in `.../strategy/graph/` rather than
+copying it: a second generator is a second statement of the well-formedness
+argument, and the two drift silently because both keep passing. Each suite
+cites the ADR precondition it relies on (`P-1` … `P-5`) instead of restating
+it, and the `property_tests` module segment is load-bearing — `make proptest`
+selects suites by that segment, so a suite placed elsewhere never runs.
+
+`ninja_oracle` is the only suite whose oracle leaves the process. It writes
+each emitted bundle to a fresh `tempfile::TempDir` and runs the real `ninja`
+binary twice, `-n` and `-t commands`. Both are required: measured,
+`-t commands` exits zero when a dyndep sidecar is missing while `-n` fails. The
+directory is fresh per case because sidecar names are content-addressed, so a
+shared directory would let one case's sidecar satisfy another case's reference.
+The suite skips when `ninja` is absent unless `NETSUKE_REQUIRE_NINJA=1`, which
+makes absence a failure.
+
+Mutation evidence is registered in
+`tests/kani_mutation_evidence_tests/contracts.rs`. A Proptest-only obligation
+lists its patch stem in `SUPPLEMENTAL_PROPERTY_PATCHES`, and each stem must
+name a property a candidate source declares and match a committed patch. The
+contracts do not compare that list against an independent obligation inventory:
+removing a stem and its patch together can therefore go undetected. When one
+fault demonstrates two properties, register a separate stem and patch for each
+property so both associations remain visible.
+
 ### Parametrized unit tests with rstest
 
 Plain `#[rstest]` (not rstest-bdd) is used for exhaustive state-enumeration
@@ -6290,14 +6353,28 @@ Generated bundles need Ninja 1.10 or newer only when a serial direct-dependency
 list has at least two items and therefore needs staged ordering; parallel lists
 and serial lists with zero or one item retain the existing Ninja requirement.
 
-Each gate reveals one real dependency through a pre-materialized Ninja dyndep
-file. The gate edge associated with the next sidecar depends on the preceding
-gate, which keeps later direct dependencies unavailable to the scheduler until
-earlier work succeeds. The runner materializes every sidecar file before Ninja
-starts; no Ninja edge produces sidecar content. This is not an order-only chain
-or a Ninja pool: both leave the real dependencies visible to Ninja too early.
-Preserve one top-level Ninja invocation so shared nodes keep Ninja's normal
-execute-once memoization.
+Each gate reveals one *relay* phony through a pre-materialized Ninja dyndep
+file, and the relay in turn carries the real dependency. The gate edge
+associated with the next sidecar depends on the preceding gate, which keeps
+later direct dependencies unavailable to the scheduler until earlier work
+succeeds. The runner materializes every sidecar file before Ninja starts; no
+Ninja edge produces sidecar content. This is not an order-only chain or a Ninja
+pool: both leave the real dependencies visible to Ninja too early. Preserve one
+top-level Ninja invocation so shared nodes keep Ninja's normal execute-once
+memoization.
+
+The relay is not decoration. Ninja appends to the revealed node's out-edge
+vector while loading a sidecar, and does so inside an iteration over that same
+vector when the node is already scheduled — reachable when a user edge is an
+order-only dependency of a node a later sidecar reveals
+([ninja-build/ninja#2662](https://github.com/ninja-build/ninja/issues/2662)).
+A relay is a node created for the purpose, named by no user edge, so the append
+can never reallocate a vector under a live iterator. Do not "simplify" a
+sidecar to reveal the real dependency: `src/ninja_gen/dyndep/tests` asserts
+structurally that every sidecar names a relay, and
+`src/ninja_gen/determinism/property_tests/ninja_oracle/relay_regression.rs`
+pins the crashing shape end to end. See
+[ADR-0058](adrs/adr-0058-reveal-a-relay-phony-to-avoid-the-ninja-out-edge-reallocation-crash.md).
 
 `GeneratedNinja` is the query-command boundary: generation may construct and
 return it, but it must not publish any filesystem state.

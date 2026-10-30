@@ -681,10 +681,18 @@ same ordered entry point.
 
 Netsuke uses Ninja's `dyndep` support for serial lists with two or more
 dependencies, and generated builds containing staged serial ordering require
-Ninja 1.10 or newer. `netsuke generate`, `build`, and `clean` materialize the
-generated sidecars under `.netsuke/dyndep` in the effective working directory
-before writing or invoking the generated Ninja file. The sidecars are immutable
-and content-addressed. Each sidecar-capable command retains the current bundle,
+Ninja 1.10 or newer. Each staged dependency appears in the generated file as a
+relay phony that carries the real dependency, alongside the gate phony and the
+sidecar-producing phony. The indirection is deliberate: it keeps the generated
+build clear of an upstream Ninja scheduler crash that revealing a real
+dependency directly can trigger, depending on graph shape rather than Ninja
+version. Relay paths are generated state beneath `.netsuke/serial`, like the
+gates; manifest authors need not name them.
+
+`netsuke generate`, `build`, and `clean` materialize the generated sidecars
+under `.netsuke/dyndep` in the effective working directory before writing or
+invoking the generated Ninja file. The sidecars are immutable and
+content-addressed. Each sidecar-capable command retains the current bundle,
 then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
 `.tmp` files are removed while the exclusive sidecar-directory lease is held.
 `build` and `generate` prune after materialization; `clean` prunes only after
@@ -1440,6 +1448,50 @@ otherwise. `--limit` truncates these stored output arrays; the verdict and
 severity totals are computed from all findings before truncation.
 `netsuke --json check --explain` emits the rule catalogue as a result document
 whose `result.command` is `check-explain`.
+
+## Rely on deterministic emission
+
+`netsuke generate` publishes one determinism guarantee. For a fixed tuple of
+rendered graph, environment, platform, recipe-shell selection, and Netsuke
+version, the emitted bundle is byte-identical on every run. The first element
+is the rendered graph rather than the manifest text because rendering runs
+before emission: a recipe using the clock-dependent `now()` helper produces
+different command text on two runs of one manifest, so those runs have two
+different rendered graphs. The bundle is the main build file plus every dyndep
+sidecar it names, so comparing only `build.ninja` is not a complete check.
+
+The guarantee is deliberately narrow:
+
+- **Not across versions.** A Netsuke upgrade may change the emitted bytes for
+  an unchanged manifest. The content-addressed dyndep namespaces carry explicit
+  format tags so that a staging-format change produces new names rather than
+  colliding with sidecars written by an older Netsuke.
+- **Not across platforms or shells.** Windows PowerShell and POSIX recipes are
+  different renderers, and differ in response-file emission and script
+  wrapping. Switching `NETSUKE_WINDOWS_SHELL` selects a different renderer.
+- **Not across locales.** Progress labels are translated, and the locale is
+  part of the environment, so `NETSUKE_LOCALE`, `LANG`, and `LC_ALL` select the
+  wording of each edge's `description` value. Runs that disagree on their
+  locale are two different inputs. Only the wording moves; rule names, paths,
+  command text, and dependency order are unchanged.
+- **Only for a fixed graph.** Anything that changes the rendered graph changes
+  the contract's input, not its outcome. A manifest whose rendering reads host
+  state can render differently on every run, and two graphs whose edges,
+  inputs, or defaults differ in content are different graphs; their output is
+  expected to differ.
+
+Determinism is also not promised for an edge's own path-list order. Netsuke
+renders each path vector in declaration order, so permuting the entries of one
+target's `sources`, `deps`, `order_only_deps`, or `name` list can change the
+bytes while both graphs are correct.
+
+Emission is deterministic, not idempotent under arbitrary text edits: a
+hand-edited generated file is replaced when it is regenerated. Treat
+`build.ninja` and its sidecars as build artefacts.
+
+[ADR-030](adrs/adr-0030-ninja-emission-determinism-contract.md) records the
+full contract, its numbered preconditions, and the statements deliberately
+excluded from it.
 
 ## Configure Netsuke
 
