@@ -108,22 +108,11 @@ def _write_stub(bin_dir: Path, name: str, body: str) -> None:
     path.chmod(0o755)
 
 
-def _isolated_path(bin_dir: Path) -> str:
-    """Return a PATH holding only the stubs plus ``grep``, which the script uses.
-
-    A minimal PATH keeps the dependency probe deterministic: on a host with
-    its own ``dpkg-query`` or ``rpm``, an inherited PATH would silently choose
-    a different branch from the one a case means to exercise.
-
-    Returns
-    -------
-    str
-        The directory holding the stubs, ready to be used as ``PATH``.
-    """
+def _link_grep(bin_dir: Path) -> None:
+    """Link the host ``grep`` into ``bin_dir`` so an isolated PATH can find it."""
     grep = shutil.which("grep")
     assert grep is not None, "the host must provide grep for the verifier to work"
     (bin_dir / "grep").symlink_to(grep)
-    return str(bin_dir)
 
 
 def _run_verifier(
@@ -134,12 +123,16 @@ def _run_verifier(
     bin_dir.mkdir()
     for name, body in stubs.items():
         _write_stub(bin_dir, name, body)
+    _link_grep(bin_dir)
+    # A minimal PATH keeps the dependency probe deterministic: on a host with
+    # its own ``dpkg-query`` or ``rpm``, an inherited PATH would silently choose
+    # a different branch from the one a case means to exercise.
     return subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the script under test is checked in.
         ["/bin/sh", str(VERIFY_SCRIPT), "netsuke"],
         check=False,
         capture_output=True,
         text=True,
-        env={"PATH": _isolated_path(bin_dir)},
+        env={"PATH": str(bin_dir)},
     )
 
 
