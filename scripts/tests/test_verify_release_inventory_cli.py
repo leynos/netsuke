@@ -22,6 +22,11 @@ if typ.TYPE_CHECKING:
     import pathlib
 
 
+def _record(digests: dict[str, str]) -> release_digest_record.DigestRecord:
+    """Build the trusted record an adapter decodes from a written payload."""
+    return release_digest_record.DigestRecord.from_mapping(digests)
+
+
 def test_verify_accepts_the_declared_assets(tmp_path: pathlib.Path) -> None:
     """Accept an archive with a matching sidecar and report each asset's own digest.
 
@@ -70,7 +75,7 @@ def test_verify_reports_a_missing_archive(tmp_path: pathlib.Path) -> None:
         _ = verify(
             staging,
             expected=[ARCHIVE, SIDECAR],
-            trusted={ARCHIVE: "ab" * 32, SIDECAR: "ab" * 32},
+            trusted=_record({ARCHIVE: "ab" * 32, SIDECAR: "ab" * 32}),
         )
 
 
@@ -152,7 +157,7 @@ def test_verify_rejects_a_record_that_omits_a_declared_asset(
     """
     staging = tmp_path / "dist"
     _stage(staging)
-    partial = {ARCHIVE: _trusted(staging)[ARCHIVE]}
+    partial = _record({ARCHIVE: _trusted(staging).as_mapping()[ARCHIVE]})
 
     with pytest.raises(release_digest_record.DigestRecordError):
         _ = verify(staging, expected=[ARCHIVE, SIDECAR], trusted=partial)
