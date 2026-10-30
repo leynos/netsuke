@@ -281,3 +281,28 @@ fn is_device(ft: fs::FileType) -> bool {
 const fn is_device(_ft: fs::FileType) -> bool {
     false
 }
+
+#[cfg(test)]
+mod tests {
+    //! Guard the inventory-to-dispatch mapping this module owns.
+    //!
+    //! `register_file_tests` skips an inventoried name whose predicate is
+    //! missing, logging rather than failing. The skip keeps the build surface
+    //! running, but it would also let the inventory and the dispatch table drift
+    //! apart silently, so the drift is asserted here instead.
+
+    use super::{file_test_predicate, restricted_helpers::file_test_names};
+
+    // A gap names the offending helper rather than a count, because the
+    // registration row that must change is not discoverable from a total.
+    #[test]
+    fn every_inventoried_file_test_has_a_build_predicate() {
+        let unmapped: Vec<&str> = file_test_names()
+            .filter(|name| file_test_predicate(name).is_none())
+            .collect();
+        assert!(
+            unmapped.is_empty(),
+            "these inventoried file tests have no `file_test_predicate` arm: {unmapped:?}"
+        );
+    }
+}

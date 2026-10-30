@@ -196,6 +196,15 @@ pub struct TemplateOverlays {
 }
 ```
 
+**Status.** Both sketches above predate the ExecPlan's 2026-09-27 revision
+note, which supersedes them in three respects: `ManifestLoadOptions` carries
+private fields with constructor and builder methods rather than public ones, the
+`Test` variant holds a `Box<TestSurface>` rather than a bare
+`Box<StdlibConfig>`, and `StdlibRegistration` — including its named
+`AmbientFull` variant — stays crate-private. The authoritative shapes are the
+ExecPlan's *Interfaces and dependencies* section until the documentation
+milestone rewrites this one.
+
 `registration` carries the stdlib boundary rather than a bare `StdlibConfig`
 plus a separate `NetworkPolicy`, because §4.2 already binds those together per
 mode: the network policy for a test load is a property of

@@ -2,7 +2,7 @@
 //!
 //! `from_path_for_manifest_query_with_limits` is the loader behind
 //! `netsuke help targets`, and it is crate-private, so the public suite in
-//! `tests/manifest_load_options/wrapper_equivalence.rs` cannot reach it. It
+//! `tests/manifest_load_options/wrapper_equivalence/` cannot reach it. It
 //! needs its own characterization for the same reason the public entries do:
 //! the refactor that replaces the shared loader core must leave it producing
 //! exactly what it produces now, and the pre-refactor code is the only
@@ -26,13 +26,14 @@
 //! interpolation that separates the query surface from the build surface, and
 //! the budget-exhaustion path.
 //!
-//! # Naming and the move to EP-M1
+//! # Naming
 //!
 //! The snapshot is named `from_path_with_limits` rather than after this
 //! module, and the settings drop insta's module prefix, so the file's name and
-//! its directory depend only on what is being asserted. EP-M1 moves the
-//! entry point's body into `src/manifest/query.rs`; a name carrying this
-//! module's path would change with the move and read as a behaviour change.
+//! its directory depend only on what is being asserted. The entry point's body
+//! lives in `src/manifest/query.rs`, so a name carrying this test module's path
+//! would be tied to a test layout rather than to the assertion, and reorganizing
+//! the suite would read as a behaviour change.
 
 use crate::manifest::{self, ManifestBudgetLimits};
 use crate::snapshot_test_support::stable_snapshot_settings;

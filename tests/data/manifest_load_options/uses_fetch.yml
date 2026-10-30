@@ -2,13 +2,21 @@
 #
 # `NetworkPolicy::default()` is `https_only()`, and `NetworkPolicy::evaluate`
 # checks the scheme allowlist before it does anything else, so this fixture
-# fails with `SchemeNotAllowed` without opening a socket. That is deliberate:
-# the wrapper-equivalence rows load it on every entry that reaches the build
-# surface, and a fixture that actually performed a request would put a network
-# dependency inside a characterization test.
+# fails with `SchemeNotAllowed` without opening a socket. That is deliberate: a
+# fixture that actually performed a request would put a network dependency
+# inside a characterization test.
+#
+# No row in the public corpus loads this fixture yet. `Case::is_loadable`
+# withholds a host-acting fixture from a loader whose capabilities do not refuse
+# host helpers, and every capabilities constructor in
+# `tests/manifest_load_options/fixtures/` takes the real helpers. The surface
+# this fixture is written for is the refusing one, where `fetch` is a typed
+# refusal rather than a request, so the `http://` scheme can never be reached
+# from a load that would honour it.
 #
 # The `http://` scheme is therefore load-bearing, not an oversight. Changing it
-# to `https://` would make this fixture reach the network.
+# to `https://` would make the fixture reach the network under any future
+# surface that permits `fetch`.
 netsuke_version: "1.0.0"
 targets:
   - name: fetched
