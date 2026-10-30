@@ -25,8 +25,12 @@ use std::path::{Path, PathBuf};
 use std::{error::Error, io};
 
 /// Repository-relative paths of the source files that define the localization
-/// keys. `keys.rs` re-exports `check_keys.rs`, so together they are one key set.
-const KEY_SOURCES: [&str; 2] = ["src/localization/keys.rs", "src/localization/check_keys.rs"];
+/// keys. `keys.rs` re-exports the other two, so together they are one key set.
+const KEY_SOURCES: [&str; 3] = [
+    "src/localization/keys.rs",
+    "src/localization/check_keys.rs",
+    "src/localization/clap_error_keys.rs",
+];
 /// Repository-relative path of the manifest whose locale metadata is audited.
 const CARGO_MANIFEST: &str = "Cargo.toml";
 

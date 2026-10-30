@@ -207,6 +207,7 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH");
     println!("cargo:rerun-if-changed=src/localization/keys.rs");
     println!("cargo:rerun-if-changed=src/localization/check_keys.rs");
+    println!("cargo:rerun-if-changed=src/localization/clap_error_keys.rs");
     println!("cargo:rerun-if-changed=src/locale/catalogues.rs");
     println!("cargo:rerun-if-changed=Cargo.toml");
     // The locale registry owns the catalogue list, so the rerun directives are
