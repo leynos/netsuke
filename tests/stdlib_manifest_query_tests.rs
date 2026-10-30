@@ -21,6 +21,9 @@
 #[path = "stdlib_manifest_query_tests/dialect_probes.rs"]
 mod dialect_probes;
 
+#[path = "stdlib_manifest_query_tests/shell_join_budget.rs"]
+mod shell_join_budget;
+
 use anyhow::{Context, Result, ensure};
 use serde_json::Value;
 use test_support::fs as test_fs;
@@ -70,6 +73,15 @@ fn write_description_manifest(template: &str) -> Result<(tempfile::TempDir, std:
 
 /// Run the graph-bearing help query against `template`.
 fn run_query(template: &str) -> Result<QueryRun> {
+    Ok(run_query_retaining_workspace(template)?.1)
+}
+
+/// Run the graph-bearing help query, keeping the workspace it ran in.
+///
+/// A caller that inspects the workspace's side effects must see it before the
+/// temporary directory is dropped, so ownership of that directory travels with
+/// the result. [`run_query`] discards it for callers that only read output.
+fn run_query_retaining_workspace(template: &str) -> Result<(tempfile::TempDir, QueryRun)> {
     let (temp, manifest_path) = write_description_manifest(template)?;
     let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
         .current_dir(temp.path())
@@ -83,11 +95,12 @@ fn run_query(template: &str) -> Result<QueryRun> {
         .arg("--edges")
         .output()
         .context("run netsuke --json help targets --edges")?;
-    Ok(QueryRun {
+    let run = QueryRun {
         success: output.status.success(),
         stdout: String::from_utf8(output.stdout).context("stdout should be valid UTF-8")?,
         stderr: String::from_utf8(output.stderr).context("stderr should be valid UTF-8")?,
-    })
+    };
+    Ok((temp, run))
 }
 
 /// Run `template` as a description and return the diagnostic's cause chain.

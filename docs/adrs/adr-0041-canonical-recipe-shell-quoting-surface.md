@@ -260,6 +260,43 @@ that a future reader who prefers it knows it was weighed rather than missed.
   design documents do not require; a reader who expects exact matching may be
   surprised.
 
+## Addendum: Bounding `shell_join` intermediate allocations (2026-10-30)
+
+`shell_join` accumulated an encoded `String` for every member and then joined
+them, with no intermediate byte budget. A compact manifest that repeats a
+reference to one generated string therefore made the filter allocate a large
+native buffer before any rendered-output budget in
+[ADR-0050](adr-0050-bound-manifest-template-evaluation.md) applied.
+
+The filter now appends into one byte buffer under a fixed
+`SHELL_JOIN_MAX_ENCODED_BYTES` ceiling of 1 MiB. It checks a lower bound on the
+next member's encoded size before encoding it, then checks the produced length
+before accepting it. Both checks name the member index and the ceiling and
+never repeat the member's content. The encoder itself moved from
+`QuoteRefExt::quoted` to `Sh::quote_into_vec`, which appends to an existing
+buffer; output is byte-for-byte unchanged, and the shape table in
+`src/shell_word.rs` continues to pin it.
+
+The ceiling is fixed rather than configurable. A host-supplied budget would
+make rendered output depend on configuration, which the hermetic `help targets`
+surface in [ADR-0044](adr-0044-hermetic-help-targets-graph-json.md) forbids. It
+is also not the per-value quota whose engine-side remedy ADR-0050 defers in
+[#720](https://github.com/leynos/netsuke/issues/720): it bounds one filter's
+intermediate buffer, not every rendered value.
+
+Residual risk: the `Sh` encoder can emit up to three bytes per input byte, so
+after the lower-bound pre-check one member's encoding can transiently grow the
+buffer past the ceiling by at most that factor before the post-check rejects
+it. The retained result is always within the ceiling, and the transient peak is
+bounded by `3 * SHELL_JOIN_MAX_ENCODED_BYTES + 1`.
+
+The dependency records one further allocation: `shell-quote` 0.7.2's
+`quote_into_vec` first copies the member into an internal scratch vector before
+writing the encoded bytes, so encoding costs a second buffer proportional to
+that one member. It is not reachable by the amplification in this finding,
+because the pre-check rejects a member that cannot fit before the encoder sees
+it, and it disappears with the call.
+
 ## References
 
 - [ADR-0014](adr-0014-use-a-typed-ninja-text-escaping-seam.md) defines the

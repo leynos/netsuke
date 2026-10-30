@@ -253,6 +253,11 @@ Feature: Template stdlib filters
     When I render the stdlib template "{{ ['-C', 'target-cpu=native', 'a b'] | shell_join(dialect='sh') }}" without context
     Then the stdlib output equals "-C target-cpu'=native' a' b'"
 
+  Scenario: shell_join stops at its encoded-output ceiling
+    When I render the stdlib template "{% set word = 'a' * 600000 %}{{ [word, word] | shell_join }}" without context
+    Then the stdlib error contains "netsuke::jinja::shell::join_limit"
+    And the stdlib error contains "1048576"
+
   Scenario: shell_quote rejects an unknown dialect and names the accepted set
     When I render the stdlib template "{{ 'x' | shell_quote(dialect='bash') }}" without context
     Then the stdlib error contains "netsuke::jinja::shell::args"

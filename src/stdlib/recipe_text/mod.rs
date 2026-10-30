@@ -62,6 +62,18 @@ fn quote_for_recipe(
     encode_one(dialect, text)
 }
 
+/// The most encoded bytes `shell_join` will build before failing.
+///
+/// A manifest can repeat a reference to one generated string, so the sequence a
+/// filter sees need not correspond to the text an author wrote. This ceiling
+/// bounds the native memory one `shell_join` call can commit. It is separate
+/// from the manifest-wide budgets in ADR-0050: those bound rendered output,
+/// whereas this bounds a filter's intermediate buffer, which rendering has not
+/// reached yet. It is a fixed constant rather than a `StdlibConfig` field
+/// because the query surface must stay hermetic (ADR-0044) and a host-supplied
+/// budget would change rendered text between machines.
+pub(crate) const SHELL_JOIN_MAX_ENCODED_BYTES: usize = 1024 * 1024;
+
 /// Encode every member of a sequence as its own shell word.
 ///
 /// The members are joined with a single space, so the result is one shell word
@@ -75,6 +87,11 @@ fn join_for_recipe(
     reject_positional("shell_join", rest)?;
     let dialect = resolve_dialect(default, kwargs)?;
     kwargs.assert_all_used()?;
+    join_sequence(dialect, value)
+}
+
+/// Encode and space-join `value`, enforcing the intermediate byte ceiling.
+fn join_sequence(dialect: ShellDialect, value: &Value) -> Result<String, Error> {
     let kind = value.kind();
     if !matches!(kind, ValueKind::Seq | ValueKind::Iterable) {
         return Err(args_error(
@@ -83,9 +100,8 @@ fn join_for_recipe(
         ));
     }
 
-    let items = value.try_iter()?;
-    let mut encoded = Vec::new();
-    for (index, item) in items.enumerate() {
+    let mut joined = Vec::new();
+    for (index, item) in value.try_iter()?.enumerate() {
         let Some(text) = item.as_str() else {
             return Err(args_error(
                 localization::message(keys::STDLIB_SHELL_JOIN_ITEM_NOT_STRING)
@@ -93,17 +109,62 @@ fn join_for_recipe(
                     .with_arg("kind", item.kind().to_string()),
             ));
         };
-        encoded.push(encode_one(dialect, text)?);
+        append_encoded(dialect, text, index, &mut joined)?;
     }
-    Ok(encoded.join(" "))
+    Ok(shell_word::encoded_bytes_to_string(joined))
+}
+
+/// Append one encoded member and its separator, or fail without growing past
+/// the ceiling.
+///
+/// The pre-check uses a lower bound so an element that cannot fit is rejected
+/// before it is encoded; without it, one oversized member would be materialised
+/// in full before the budget could object. The post-check then enforces the
+/// ceiling on what the encoder actually produced, which for `Sh` can be up to
+/// three times the pre-check estimate. Truncating to `before` discards both the
+/// separator and the member, so a failed call retains nothing past the last
+/// accepted member.
+fn append_encoded(
+    dialect: ShellDialect,
+    text: &str,
+    index: usize,
+    joined: &mut Vec<u8>,
+) -> Result<(), Error> {
+    ensure_admissible(text)?;
+    let separator = usize::from(!joined.is_empty());
+    let lower_bound = shell_word::encoded_len_lower_bound(dialect, text);
+    let projected = joined
+        .len()
+        .saturating_add(separator)
+        .saturating_add(lower_bound);
+    if projected > SHELL_JOIN_MAX_ENCODED_BYTES {
+        return Err(join_limit_error(index));
+    }
+
+    let before = joined.len();
+    if separator == 1 {
+        joined.push(b' ');
+    }
+    shell_word::encode_into(dialect, text, joined);
+    if joined.len() > SHELL_JOIN_MAX_ENCODED_BYTES {
+        joined.truncate(before);
+        return Err(join_limit_error(index));
+    }
+    Ok(())
 }
 
 /// Encode one admissible string, naming the offending call site on failure.
 fn encode_one(dialect: ShellDialect, text: &str) -> Result<String, Error> {
-    if !shell_word::is_recipe_admissible(text) {
-        return Err(unquotable_error());
-    }
+    ensure_admissible(text)?;
     Ok(shell_word::quote_word(dialect, text))
+}
+
+/// Reject a value that cannot be carried in a single-line recipe.
+fn ensure_admissible(text: &str) -> Result<(), Error> {
+    if shell_word::is_recipe_admissible(text) {
+        return Ok(());
+    }
+    Err(unquotable_error())
 }
 
 /// Resolve the `dialect` keyword argument, falling back to the registration
@@ -234,3 +295,21 @@ fn unquotable_error() -> Error {
             .to_string(),
     )
 }
+
+/// Build the localized ceiling error for the member at `index`.
+///
+/// The message names the ceiling and the index but never the member's text.
+/// Echoing it would reintroduce the allocation the ceiling exists to bound, and
+/// a generated string is exactly the content a diagnostic should not repeat.
+fn join_limit_error(index: usize) -> Error {
+    Error::new(
+        ErrorKind::InvalidOperation,
+        localization::message(keys::STDLIB_SHELL_JOIN_LIMIT)
+            .with_arg("limit", SHELL_JOIN_MAX_ENCODED_BYTES.to_string())
+            .with_arg("index", index.to_string())
+            .to_string(),
+    )
+}
+
+#[cfg(test)]
+mod tests;
