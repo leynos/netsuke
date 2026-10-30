@@ -14,7 +14,7 @@ sections that match the features they use.
 | Required          | Checkout source builds | Use the pinned Rust toolchain before building from a checkout.      |
 | Required          | Linux checkout builds  | Install the pinned `mold` linker before building from a checkout.   |
 | Review if enabled | Manifest scheduling    | Opt in only where immediate console output is useful.               |
-| Required          | Rust `Target` literals | Set the `description` and `console` fields explicitly.              |
+| Required          | `Target`, `BuildEdge`  | Set `description` and `console` on the struct literals you build.   |
 | Review if enabled | Existing pool choices  | Avoid dependency-only entries and conflicting action pools.         |
 | Optional          | Existing manifests     | Omit `console` to retain ordinary scheduling; it defaults to false. |
 
@@ -62,10 +62,13 @@ their input boundary.
 
 Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`) and the `console` field
-(set it to `false` or `true`); deserialized manifests remain compatible because
-`console` defaults to `false`. Callers constructing `NinjaBuildRequest` or
-`NinjaToolRequest` must replace `cli: &cli` with `options: &options`. Callers
-that read `BuildGraph::targets` must use the graph accessors instead; see
+(set it to `false` or `true`). Callers that construct `BuildEdge` with a struct
+literal must add `console` for the same reason: both types expose public fields
+and neither is `#[non_exhaustive]`. Deserialized manifests remain compatible
+because `console` defaults to `false`. Callers constructing `NinjaBuildRequest`
+or `NinjaToolRequest` must replace `cli: &cli` with `options: &options`.
+Callers that read `BuildGraph::targets` must use the graph accessors instead;
+see
 [Resolve build-graph outputs through the accessors](#resolve-build-graph-outputs-through-the-accessors).
 Every other addition is opt-in.
 
@@ -661,7 +664,8 @@ owned sink and completion-ordering contract.
 - [ ] Review the migration sections for manifest or API features in use.
 - [ ] Before opting into `console`, use Ninja 1.5 or later and check that the
   action does not request a conflicting custom pool or contention class.
-- [ ] Add `console: false` or `console: true` to Rust `Target` struct literals.
+- [ ] Add `console: false` or `console: true` to Rust `Target` and `BuildEdge`
+  struct literals.
 
 ## Common errors and fixes
 

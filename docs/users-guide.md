@@ -620,6 +620,11 @@ list of strings.
 
 ### Stream long-running output with the console pool
 
+The `console` field ships in the next pre-release, `v0.1.0-beta5`. The published
+`v0.1.0-beta4` release rejects it during manifest validation, so install a
+beta5-or-later release, or build from a checkout of the `main` branch, before
+relying on it.
+
 Set `console: true` on a long-running or interactive action or target, such as
 `lint` or `test`, when its output should appear as it runs:
 
