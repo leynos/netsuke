@@ -334,6 +334,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0071](adrs/adr-0071-bind-windows-recipe-interpreters-to-trusted-absolute-paths.md):
   Binding Windows recipe interpreters to a trusted absolute path, so Windows
   executable search cannot select a workspace-controlled decoy.
+- [ADR-0071](adrs/adr-0071-typed-records-for-release-policy-boundaries.md):
+  Frozen slotted records at release policy boundaries, with adapters owning
+  external record shapes and domain-shaped mappings retained.
 
 ## Proposals
 
