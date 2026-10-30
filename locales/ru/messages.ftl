@@ -358,6 +358,7 @@ stdlib.path.expanduser.unsupported = Раскрытие ~ для конкрет�
 stdlib.path.expanduser.no_home = Не удаётся раскрыть ~: не задана ни одна переменная окружения домашнего каталога.
 stdlib.path.contents.file_too_large = Файл «{ $path }» превысил ограничение на чтение в { $limit } байт.
 stdlib.path.contents.not_regular_file = Файл «{ $path }» не является обычным файлом.
+stdlib.path.contents.outside_workspace = Файл «{ $path }» находится за пределами рабочего пространства; фильтры чтения файлов читают только внутри настроенного корня рабочего пространства.
 stdlib.path.contents.unsupported_encoding = Неподдерживаемая кодировка «{ $encoding }».
 stdlib.path.hash.unsupported_algorithm = Неподдерживаемый алгоритм хеширования «{ $algorithm }».
 stdlib.path.hash.unsupported_algorithm_legacy = Неподдерживаемый алгоритм хеширования «{ $algorithm }» (включите возможность «{ $feature }»).

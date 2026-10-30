@@ -360,6 +360,7 @@ stdlib.path.expanduser.unsupported = توسيع ~ لمستخدم بعينه غي
 stdlib.path.expanduser.no_home = تعذّر توسيع ~: لم يُضبط أي متغيّر بيئة لدليل المنزل.
 stdlib.path.contents.file_too_large = تجاوز الملف '{ $path }' حدّ القراءة البالغ { $limit } بايت.
 stdlib.path.contents.not_regular_file = الملف '{ $path }' ليس ملفًا عاديًا.
+stdlib.path.contents.outside_workspace = الملف '{ $path }' خارج مساحة العمل؛ تقرأ مرشّحات قراءة الملفات داخل جذر مساحة العمل المُهيّأ فقط.
 stdlib.path.contents.unsupported_encoding = ترميز غير مدعوم: «{ $encoding }».
 stdlib.path.hash.unsupported_algorithm = خوارزمية تلبيد غير مدعومة: «{ $algorithm }».
 stdlib.path.hash.unsupported_algorithm_legacy = خوارزمية تلبيد غير مدعومة: «{ $algorithm }» (فعّل الميزة «{ $feature }»).

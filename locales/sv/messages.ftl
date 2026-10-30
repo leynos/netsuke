@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = Användarspecifik expansion av ~ stöds int
 stdlib.path.expanduser.no_home = ~ kan inte expanderas: inga miljövariabler för hemkatalogen är satta.
 stdlib.path.contents.file_too_large = Filen ”{ $path }” överskred läsgränsen på { $limit } byte.
 stdlib.path.contents.not_regular_file = Filen ”{ $path }” är inte en vanlig fil.
+stdlib.path.contents.outside_workspace = Filen ”{ $path }” ligger utanför arbetsytan; filläsningsfilter läser endast inom den konfigurerade arbetsyteroten.
 stdlib.path.contents.unsupported_encoding = Teckenkodningen ”{ $encoding }” stöds inte.
 stdlib.path.hash.unsupported_algorithm = Hashalgoritmen ”{ $algorithm }” stöds inte.
 stdlib.path.hash.unsupported_algorithm_legacy = Hashalgoritmen ”{ $algorithm }” stöds inte (aktivera funktionen ”{ $feature }”).

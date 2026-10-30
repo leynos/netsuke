@@ -358,6 +358,7 @@ stdlib.path.expanduser.unsupported = Chan eil taic ann do leudachadh ~ airson cl
 stdlib.path.expanduser.no_home = Chan urrainnear ~ a leudachadh: chan eil caochladair àrainneachd sam bith ann airson a' phasgain dhachaigh.
 stdlib.path.contents.file_too_large = Chaidh am faidhle “{ $path }” thairis air crìoch leughaidh { $limit } baidht.
 stdlib.path.contents.not_regular_file = Chan e faidhle àbhaisteach a th' ann an “{ $path }”.
+stdlib.path.contents.outside_workspace = Tha am faidhle “{ $path }” taobh a-muigh an raon-obrach; chan eil na sìoltachain leughaidh fhaidhlichean a' leughadh ach am broinn freumh rèitichte an raoin-obrach.
 stdlib.path.contents.unsupported_encoding = Còdachadh gun taic: “{ $encoding }”.
 stdlib.path.hash.unsupported_algorithm = Algairim hais gun taic: “{ $algorithm }”.
 stdlib.path.hash.unsupported_algorithm_legacy = Algairim hais gun taic: “{ $algorithm }” (cuir an comas am feart “{ $feature }”).

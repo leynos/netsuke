@@ -281,6 +281,44 @@ pub(crate) fn write_stdlib_file(world: &TestWorld, path: &str, contents: &str) -
     )
 }
 
+/// Write a fixture the stdlib must treat as lying outside the workspace.
+///
+/// The file lives in its own temporary directory, not beside the workspace, so
+/// neither a `..` request nor an absolute request can be satisfied by accident.
+/// Its absolute path is recorded for the matching `When` step, which renders a
+/// reading filter against it and expects the workspace refusal.
+#[given("a stdlib file {path:string} outside the workspace contains {contents:string}")]
+pub(crate) fn write_stdlib_outside_file(
+    world: &TestWorld,
+    path: &str,
+    contents: &str,
+) -> Result<()> {
+    let outside = tempfile::tempdir().context("create stdlib outside directory")?;
+    let base = Utf8PathBuf::from_path_buf(outside.path().to_path_buf()).map_err(|invalid| {
+        anyhow!(
+            "outside stdlib path is not valid UTF-8: {}",
+            invalid.display()
+        )
+    })?;
+    let relative = Utf8Path::new(path);
+    let handle = Dir::open_ambient_dir(&base, ambient_authority())
+        .context("open stdlib outside directory")?;
+    if let Some(parent) = relative
+        .parent()
+        .filter(|parent| !parent.as_str().is_empty())
+    {
+        handle
+            .create_dir_all(parent)
+            .context("create stdlib outside directories")?;
+    }
+    handle
+        .write(relative, contents.as_bytes())
+        .context("write stdlib outside file")?;
+    world.stdlib_outside_file.set(base.join(relative));
+    world.stdlib_outside_dir.replace(Some(outside));
+    Ok(())
+}
+
 #[given("the stdlib executable {path:string} exists")]
 pub(crate) fn stdlib_executable_exists(world: &TestWorld, path: &str) -> Result<()> {
     create_executable(world, &TemplatePath::new(path))

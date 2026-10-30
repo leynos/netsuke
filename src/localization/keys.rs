@@ -1,9 +1,8 @@
 //! Fluent message identifiers used by Netsuke.
 //!
-//! This file holds only the key table: the build-time localization audit
-//! parses its `define_keys!` invocation, and the macro itself is defined in
-//! the parent module. The `netsuke check` keys live in `check_keys.rs` and
-//! are re-exported here, so every key is still reached as `keys::NAME`.
+//! Only the key table lives here; the build-time localization audit parses
+//! its `define_keys!` invocation. `check_keys.rs` holds the `netsuke check`
+//! keys, re-exported here, so every key is still reached as `keys::NAME`.
 
 pub use super::check_keys::*;
 
@@ -319,6 +318,7 @@ define_keys! {
     STDLIB_PATH_UNSUPPORTED_ENCODING => "stdlib.path.contents.unsupported_encoding",
     STDLIB_PATH_FILE_TOO_LARGE => "stdlib.path.contents.file_too_large",
     STDLIB_PATH_NOT_REGULAR_FILE => "stdlib.path.contents.not_regular_file",
+    STDLIB_PATH_OUTSIDE_WORKSPACE => "stdlib.path.contents.outside_workspace",
     STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM => "stdlib.path.hash.unsupported_algorithm",
     STDLIB_PATH_HASH_UNSUPPORTED_ALGORITHM_LEGACY => "stdlib.path.hash.unsupported_algorithm_legacy",
     STDLIB_COLLECTIONS_COMPACT_NOT_SEQUENCE => "stdlib.collections.compact.not_sequence",

@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = A ~ jel adott felhasználóra vonatkozó ki
 stdlib.path.expanduser.no_home = A ~ jel nem bontható ki: nincs beállítva a saját könyvtárra vonatkozó környezeti változó.
 stdlib.path.contents.file_too_large = A(z) „{ $path }” fájl meghaladta a(z) { $limit } bájtos olvasási korlátot.
 stdlib.path.contents.not_regular_file = A(z) „{ $path }” nem szabályos fájl.
+stdlib.path.contents.outside_workspace = A(z) „{ $path }” fájl a munkaterületen kívül található; a fájlolvasó szűrők csak a beállított munkaterület-gyökéren belül olvasnak.
 stdlib.path.contents.unsupported_encoding = Nem támogatott kódolás: „{ $encoding }”.
 stdlib.path.hash.unsupported_algorithm = Nem támogatott kivonatoló algoritmus: „{ $algorithm }”.
 stdlib.path.hash.unsupported_algorithm_legacy = Nem támogatott kivonatoló algoritmus: „{ $algorithm }” (kapcsolja be a(z) „{ $feature }” szolgáltatást).

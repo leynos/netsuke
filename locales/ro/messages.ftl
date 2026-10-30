@@ -357,6 +357,7 @@ stdlib.path.expanduser.unsupported = Extinderea lui ~ pentru un anumit utilizato
 stdlib.path.expanduser.no_home = Nu se poate extinde ~: nu este setată nicio variabilă de mediu pentru directorul personal.
 stdlib.path.contents.file_too_large = Fișierul „{ $path }” a depășit limita de citire de { $limit } octeți.
 stdlib.path.contents.not_regular_file = Fișierul „{ $path }” nu este un fișier normal.
+stdlib.path.contents.outside_workspace = Fișierul „{ $path }” este în afara spațiului de lucru; filtrele de citire a fișierelor citesc doar în rădăcina configurată a spațiului de lucru.
 stdlib.path.contents.unsupported_encoding = Codificare neacceptată „{ $encoding }”.
 stdlib.path.hash.unsupported_algorithm = Algoritm de dispersie neacceptat „{ $algorithm }”.
 stdlib.path.hash.unsupported_algorithm_legacy = Algoritm de dispersie neacceptat „{ $algorithm }” (activați funcționalitatea „{ $feature }”).

@@ -357,6 +357,7 @@ stdlib.path.expanduser.unsupported = Η ανάπτυξη του ~ για συγ�
 stdlib.path.expanduser.no_home = Δεν είναι δυνατή η ανάπτυξη του ~: δεν έχει οριστεί καμία μεταβλητή περιβάλλοντος για τον προσωπικό κατάλογο.
 stdlib.path.contents.file_too_large = Το αρχείο «{ $path }» υπερέβη το όριο ανάγνωσης των { $limit } byte.
 stdlib.path.contents.not_regular_file = Το αρχείο «{ $path }» δεν είναι κανονικό αρχείο.
+stdlib.path.contents.outside_workspace = Το αρχείο «{ $path }» βρίσκεται έξω από τον χώρο εργασίας· τα φίλτρα ανάγνωσης αρχείων διαβάζουν μόνο εντός της ρυθμισμένης ρίζας του χώρου εργασίας.
 stdlib.path.contents.unsupported_encoding = Μη υποστηριζόμενη κωδικοποίηση «{ $encoding }».
 stdlib.path.hash.unsupported_algorithm = Μη υποστηριζόμενος αλγόριθμος κατακερματισμού «{ $algorithm }».
 stdlib.path.hash.unsupported_algorithm_legacy = Μη υποστηριζόμενος αλγόριθμος κατακερματισμού «{ $algorithm }» (ενεργοποιήστε τη δυνατότητα «{ $feature }»).

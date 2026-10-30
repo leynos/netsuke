@@ -354,6 +354,7 @@ stdlib.path.expanduser.unsupported = 不支援針對特定使用者展開 ~。
 stdlib.path.expanduser.no_home = 無法展開 ~：未設定任何家目錄環境變數。
 stdlib.path.contents.file_too_large = 檔案「{ $path }」超過 { $limit } 位元組的讀取上限。
 stdlib.path.contents.not_regular_file = 檔案「{ $path }」不是一般檔案。
+stdlib.path.contents.outside_workspace = 檔案「{ $path }」位於工作區之外；檔案讀取篩選器僅在設定的工作區根目錄內讀取。
 stdlib.path.contents.unsupported_encoding = 不支援的編碼「{ $encoding }」。
 stdlib.path.hash.unsupported_algorithm = 不支援的雜湊演算法「{ $algorithm }」。
 stdlib.path.hash.unsupported_algorithm_legacy = 不支援的雜湊演算法「{ $algorithm }」（請啟用特性「{ $feature }」）。

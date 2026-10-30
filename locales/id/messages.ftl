@@ -355,6 +355,7 @@ stdlib.path.expanduser.unsupported = Ekspansi ~ untuk pengguna tertentu tidak di
 stdlib.path.expanduser.no_home = ~ tidak dapat diekspansi: tidak ada variabel lingkungan direktori beranda yang disetel.
 stdlib.path.contents.file_too_large = Berkas "{ $path }" melampaui batas pembacaan { $limit } bita.
 stdlib.path.contents.not_regular_file = Berkas "{ $path }" bukan berkas biasa.
+stdlib.path.contents.outside_workspace = Berkas "{ $path }" berada di luar ruang kerja; filter pembaca berkas hanya membaca di dalam akar ruang kerja yang dikonfigurasi.
 stdlib.path.contents.unsupported_encoding = Pengodean tidak didukung: "{ $encoding }".
 stdlib.path.hash.unsupported_algorithm = Algoritme hash tidak didukung: "{ $algorithm }".
 stdlib.path.hash.unsupported_algorithm_legacy = Algoritme hash tidak didukung: "{ $algorithm }" (aktifkan fitur "{ $feature }").

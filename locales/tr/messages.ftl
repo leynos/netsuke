@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = ~ işaretinin belirli bir kullanıcı için
 stdlib.path.expanduser.no_home = ~ genişletilemiyor: ev dizinine ilişkin hiçbir ortam değişkeni ayarlı değil.
 stdlib.path.contents.file_too_large = "{ $path }" dosyası { $limit } baytlık okuma sınırını aştı.
 stdlib.path.contents.not_regular_file = "{ $path }" normal bir dosya değil.
+stdlib.path.contents.outside_workspace = "{ $path }" dosyası çalışma alanının dışında; dosya okuma filtreleri yalnızca yapılandırılmış çalışma alanı kökü içinde okur.
 stdlib.path.contents.unsupported_encoding = Desteklenmeyen kodlama: "{ $encoding }".
 stdlib.path.hash.unsupported_algorithm = Desteklenmeyen özet algoritması: "{ $algorithm }".
 stdlib.path.hash.unsupported_algorithm_legacy = Desteklenmeyen özet algoritması: "{ $algorithm }" ("{ $feature }" özelliğini etkinleştirin).

@@ -9264,10 +9264,20 @@ diagnostics.
 The four file-reading filters — `contents`, `linecount`, `hash`, and `digest` —
 share one open-and-read policy under `src/stdlib/path/`:
 
+- `reading_root/mod.rs` owns resolution and the capability open. `ReadingRoot`
+  pairs the configured workspace `Arc<Dir>` with that directory's optional
+  absolute spelling. `resolve` normalizes a request to a path relative to the
+  capability — accepting an absolute request only when it lies lexically
+  beneath the recorded root — and refuses a `..` escape with
+  `stdlib.path.contents.outside_workspace`. `open_parent` then opens the
+  resolved parent through the capability, so a link in an intermediate
+  component cannot leave the workspace; `is_capability_escape` recognizes the
+  capability's escape error so that refusal shares the lexical diagnostic.
 - `fs_utils.rs` owns what may be opened: `FileReadLimits` carries the per-call
-  `max_bytes` and `follow_symlinks` values, and `open_file_checked` resolves
-  the parent directory, applies the platform open flags, and rejects anything
-  that is not a regular file.
+  `max_bytes` and `follow_symlinks` values, `ReadScope` pairs those limits with
+  the workspace capability, and `open_file_checked` opens the parent directory
+  through the scope's `ReadingRoot`, applies the platform open flags, and
+  rejects anything that is not a regular file.
 - `bounded_read/mod.rs` owns the read boundary built on that open: `BoundedRead`
   tracks the running byte total, `read_bounded_chunk` reads through the budget,
   `read_utf8` reads `contents` as text, and `linecount` counts newlines in
@@ -9282,8 +9292,17 @@ share one open-and-read policy under `src/stdlib/path/`:
 The ceiling starts at `DEFAULT_FILE_MAX_READ_BYTES` (8 MiB) and is overridden
 with the public `StdlibConfig::with_file_max_read_bytes`, which rejects zero.
 `register_with_config` passes it through `register_read_only_helpers` into
-`path::register_filters`, and each filter closure captures it. The same
-accessor, `StdlibConfig::file_max_read_bytes`, supplies the value carried as
+`path::register_filters`, and each filter closure captures it.
+`register_read_only_helpers` also builds the `ReadingRoot` from the
+crate-internal `workspace_root` capability and, when present,
+`StdlibConfig::workspace_root_path()`; the encoding of an absolute request is
+the only use of the path, and a configuration without one refuses absolute
+requests while still resolving relative ones. Each of the four closures
+captures a clone of that root and pairs it with the configured ceiling in a
+`ReadBudget`; `open_file_checked` then receives the per-call `ReadScope`, which
+holds the resolved limits and the root together, so a filter cannot reach the
+ambient file system by construction. The same accessor,
+`StdlibConfig::file_max_read_bytes`, supplies the value carried as
 `FileConfig::max_read_bytes` (`src/stdlib/config_types.rs`), which
 `StdlibConfig::into_components` splits out alongside the network and command
 configurations; `path::register_filters` itself receives the plain `u64` from
@@ -9319,12 +9338,17 @@ Because the judgement and the read share one handle, there is no
 check-then-open window between them; see
 [ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md).
 
-Two diagnostics come out of the boundary. `bounded_read/mod.rs` raises
-`file_too_large_error`, which quotes the path and the limit that was exceeded;
-`fs_utils.rs` raises `not_regular_file_error`, which quotes only the path and
-is what rejects an opened FIFO or device (and, on Windows, a reparse point that
-`reject_reparse_point` refuses). On Unix a symlink refused by `O_NOFOLLOW`
-instead surfaces through the mapped open error. All of them, like the
+Three diagnostics come out of the boundary. `reading_root/mod.rs` raises
+`outside_workspace_error` for a request that leaves the workspace, quoting the
+request as the template wrote it rather than a resolved path;
+`bounded_read/mod.rs` raises `file_too_large_error`, which quotes the path and
+the limit that was exceeded; `fs_utils.rs` raises `not_regular_file_error`,
+which quotes only the path and is what rejects an opened FIFO or device (and,
+on Windows, a reparse point that `reject_reparse_point` refuses). On Unix a
+symlink refused by `O_NOFOLLOW` instead surfaces through the mapped open error.
+A capability escape reported while opening the parent or the file is translated
+to the same `outside_workspace_error`, so the wording does not reveal whether a
+lexical check or the capability made the decision. All of them, like the
 invalid-UTF-8 diagnostic that `contents` and `linecount` raise for undecodable
 input, are MiniJinja `InvalidOperation` errors. See
 [Digest rendering](#digest-rendering) for the hashing loop that consumes this

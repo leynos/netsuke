@@ -18,7 +18,7 @@ use rstest::rstest;
 use tempfile::TempDir;
 use tracing_subscriber::filter::LevelFilter;
 
-use super::super::filters;
+use super::super::{ReadingRoot, filters};
 use super::{
     FILE_READ_EVENT, FILE_READ_TOTAL, FILTER_CONTENTS, FILTER_DIGEST, FILTER_HASH,
     FILTER_LINECOUNT, OUTCOME_OK, OUTCOME_REJECTED,
@@ -64,7 +64,12 @@ fn call(path: &Utf8Path, limit: u64, template: &str) -> CallRecord {
     let mut rendered = false;
     metrics::with_local_recorder(&recorder, || {
         let mut env = Environment::new();
-        filters::register_filters(&mut env, HomeDirectory::Missing, limit);
+        filters::register_filters(
+            &mut env,
+            HomeDirectory::Missing,
+            limit,
+            ReadingRoot::for_fixture(path).expect("open the fixture directory as a reading root"),
+        );
         rendered = env
             .render_str(template, context!(path => path.as_str()))
             .is_ok();

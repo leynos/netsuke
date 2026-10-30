@@ -355,6 +355,7 @@ stdlib.path.expanduser.unsupported = ไม่รองรับการขย�
 stdlib.path.expanduser.no_home = ขยาย ~ ไม่ได้: ไม่มีการตั้งค่าตัวแปรสภาพแวดล้อมของไดเรกทอรีบ้าน
 stdlib.path.contents.file_too_large = ไฟล์ “{ $path }” เกินขีดจำกัดการอ่าน { $limit } ไบต์
 stdlib.path.contents.not_regular_file = ไฟล์ “{ $path }” ไม่ใช่ไฟล์ปกติ
+stdlib.path.contents.outside_workspace = ไฟล์ “{ $path }” อยู่นอกพื้นที่ทำงาน; ตัวกรองการอ่านไฟล์จะอ่านเฉพาะภายในรากพื้นที่ทำงานที่กำหนดค่าไว้
 stdlib.path.contents.unsupported_encoding = ไม่รองรับการเข้ารหัส “{ $encoding }”
 stdlib.path.hash.unsupported_algorithm = ไม่รองรับขั้นตอนวิธีแฮช “{ $algorithm }”
 stdlib.path.hash.unsupported_algorithm_legacy = ไม่รองรับขั้นตอนวิธีแฮช “{ $algorithm }” (โปรดเปิดใช้คุณลักษณะ “{ $feature }”)

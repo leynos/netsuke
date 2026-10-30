@@ -23,6 +23,12 @@
 
 ### Changed
 
+- **Breaking:** confine the `contents`, `linecount`, `hash`, and `digest`
+  filters to the configured workspace. Relative paths now resolve beneath the
+  workspace root instead of the process working directory, absolute paths are
+  accepted only when they lie inside it, and a `..` escape or a link in an
+  intermediate component that leads outside is refused before the file is opened
+  ([#968](https://github.com/leynos/netsuke/issues/968), [#648](https://github.com/leynos/netsuke/issues/648))
 - Bump `ortho_config` from 0.9.0 to 0.10.0 in the library, build-dependency,
   and build-slice fixture manifests, and `cargo-orthohelp` from 0.9.1 to 0.10.0
   in the release workflow. Release help now emits OrthoConfig documentation IR

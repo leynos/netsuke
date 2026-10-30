@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = La expansión ~ específica de usuario no e
 stdlib.path.expanduser.no_home = No se puede expandir ~: no hay variables de entorno de hogar.
 stdlib.path.contents.file_too_large = El archivo '{ $path }' superó el límite de lectura de { $limit } bytes.
 stdlib.path.contents.not_regular_file = El archivo '{ $path }' no es un archivo regular.
+stdlib.path.contents.outside_workspace = El archivo '{ $path }' está fuera del espacio de trabajo; los filtros de lectura de archivos solo leen dentro de la raíz configurada del espacio de trabajo.
 stdlib.path.contents.unsupported_encoding = Codificación no compatible '{ $encoding }'.
 stdlib.path.hash.unsupported_algorithm = Algoritmo hash no compatible '{ $algorithm }'.
 stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo hash no compatible '{ $algorithm }' (habilite la función '{ $feature }').

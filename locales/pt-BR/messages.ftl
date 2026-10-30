@@ -357,6 +357,7 @@ stdlib.path.expanduser.unsupported = A expansão de ~ para um usuário específi
 stdlib.path.expanduser.no_home = Não é possível expandir ~: nenhuma variável de ambiente do diretório pessoal está definida.
 stdlib.path.contents.file_too_large = O arquivo "{ $path }" excedeu o limite de leitura de { $limit } bytes.
 stdlib.path.contents.not_regular_file = O arquivo "{ $path }" não é um arquivo comum.
+stdlib.path.contents.outside_workspace = O arquivo "{ $path }" está fora do workspace; os filtros de leitura de arquivos leem apenas dentro da raiz configurada do workspace.
 stdlib.path.contents.unsupported_encoding = Codificação sem suporte "{ $encoding }".
 stdlib.path.hash.unsupported_algorithm = Algoritmo de hash sem suporte "{ $algorithm }".
 stdlib.path.hash.unsupported_algorithm_legacy = Algoritmo de hash sem suporte "{ $algorithm }" (habilite o recurso "{ $feature }").

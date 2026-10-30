@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = گسترش ~ برای کاربری معین
 stdlib.path.expanduser.no_home = گسترش ~ ممکن نیست: هیچ متغیر محیطی برای شاخهٔ خانگی تنظیم نشده است.
 stdlib.path.contents.file_too_large = پرونده '{ $path }' از کران خواندن { $limit } بایتی فراتر رفت.
 stdlib.path.contents.not_regular_file = پرونده '{ $path }' یک پرونده معمولی نیست.
+stdlib.path.contents.outside_workspace = پرونده '{ $path }' خارج از فضای کاری است؛ فیلترهای خواندن پرونده فقط درون ریشهٔ فضای کاری پیکربندیشده می‌خوانند.
 stdlib.path.contents.unsupported_encoding = رمزگذاری پشتیبانی‌نشده: «{ $encoding }».
 stdlib.path.hash.unsupported_algorithm = الگوریتم درهم‌سازی پشتیبانی‌نشده: «{ $algorithm }».
 stdlib.path.hash.unsupported_algorithm_legacy = الگوریتم درهم‌سازی پشتیبانی‌نشده: «{ $algorithm }» (ویژگی «{ $feature }» را فعال کنید).

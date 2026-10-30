@@ -358,6 +358,7 @@ stdlib.path.expanduser.unsupported = הרחבת ~ עבור משתמש מסוים
 stdlib.path.expanduser.no_home = לא ניתן להרחיב את ~: לא הוגדר אף משתנה סביבה לספריית הבית.
 stdlib.path.contents.file_too_large = הקובץ '{ $path }' חרג ממגבלת הקריאה של { $limit } בייטים.
 stdlib.path.contents.not_regular_file = הקובץ '{ $path }' אינו קובץ רגיל.
+stdlib.path.contents.outside_workspace = הקובץ '{ $path }' נמצא מחוץ לסביבת העבודה; מסנני קריאת קבצים קוראים רק בתוך שורש סביבת העבודה המוגדר.
 stdlib.path.contents.unsupported_encoding = קידוד שאינו נתמך: „{ $encoding }”.
 stdlib.path.hash.unsupported_algorithm = אלגוריתם גיבוב שאינו נתמך: „{ $algorithm }”.
 stdlib.path.hash.unsupported_algorithm_legacy = אלגוריתם גיבוב שאינו נתמך: „{ $algorithm }” (הפעילו את התכונה „{ $feature }”).

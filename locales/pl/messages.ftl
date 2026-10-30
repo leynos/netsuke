@@ -358,6 +358,7 @@ stdlib.path.expanduser.unsupported = Rozwijanie ~ dla konkretnego użytkownika n
 stdlib.path.expanduser.no_home = Nie można rozwinąć ~: nie ustawiono żadnej zmiennej środowiskowej katalogu domowego.
 stdlib.path.contents.file_too_large = Plik „{ $path }” przekroczył limit odczytu { $limit } bajtów.
 stdlib.path.contents.not_regular_file = Plik „{ $path }” nie jest zwykłym plikiem.
+stdlib.path.contents.outside_workspace = Plik „{ $path }” znajduje się poza obszarem roboczym; filtry odczytu plików czytają wyłącznie w skonfigurowanym katalogu głównym obszaru roboczego.
 stdlib.path.contents.unsupported_encoding = Nieobsługiwane kodowanie „{ $encoding }”.
 stdlib.path.hash.unsupported_algorithm = Nieobsługiwany algorytm skrótu „{ $algorithm }”.
 stdlib.path.hash.unsupported_algorithm_legacy = Nieobsługiwany algorytm skrótu „{ $algorithm }” (włącz funkcję „{ $feature }”).

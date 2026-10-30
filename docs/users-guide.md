@@ -2089,13 +2089,21 @@ through a shared byte budget so a checkout entry cannot exhaust Netsuke's
 memory or CPU. The default budget is 8 MiB per read, matching the `fetch()`
 response limit.
 
+Every request resolves through the workspace capability rather than the process
+working directory. A relative path is read beneath the configured workspace
+root, and an absolute path is accepted only when it lies beneath that root. A
+request that climbs out with `..`, or that reaches outside through a link in an
+intermediate component, is refused with a diagnostic naming the path and the
+workspace boundary. The refusal never reads the file first, so it cannot
+disclose contents.
+
 The reading filters also refuse to follow a symlink as the final path component
 and reject anything that is not a regular file once opened, including FIFOs and
-device nodes. A symlinked directory used *inside* a path is unaffected; only
-the final entry is checked. On Windows the same refusal covers every reparse
-point, not only symlinks: junctions, volume mount points, and other tags such
-as deduplication or cloud placeholders are all rejected, including tags Windows
-may add later.
+device nodes. A symlinked directory used *inside* a path is unaffected while it
+stays within the workspace; one that leads outside is refused like any other
+escape. On Windows the same refusal covers every reparse point, not only
+symlinks: junctions, volume mount points, and other tags such as deduplication
+or cloud placeholders are all rejected, including tags Windows may add later.
 
 `follow_symlinks=true` waives that final-component refusal, and only that. The
 capability that anchors every read in the workspace is unaffected, so a link

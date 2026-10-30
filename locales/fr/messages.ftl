@@ -357,6 +357,7 @@ stdlib.path.expanduser.unsupported = L'expansion de ~ propre à un utilisateur n
 stdlib.path.expanduser.no_home = Impossible d'étendre ~ : aucune variable d'environnement de répertoire personnel n'est définie.
 stdlib.path.contents.file_too_large = Le fichier « { $path } » a dépassé la limite de lecture de { $limit } octets.
 stdlib.path.contents.not_regular_file = Le fichier « { $path } » n'est pas un fichier régulier.
+stdlib.path.contents.outside_workspace = Le fichier « { $path } » est en dehors de l'espace de travail ; les filtres de lecture de fichiers ne lisent qu'à l'intérieur de la racine configurée de l'espace de travail.
 stdlib.path.contents.unsupported_encoding = Encodage non pris en charge « { $encoding } ».
 stdlib.path.hash.unsupported_algorithm = Algorithme de hachage non pris en charge « { $algorithm } ».
 stdlib.path.hash.unsupported_algorithm_legacy = Algorithme de hachage non pris en charge « { $algorithm } » (activez la fonctionnalité « { $feature } »).

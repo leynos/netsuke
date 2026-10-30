@@ -1584,15 +1584,22 @@ place of `camelCase` so naming remains consistent with `snake_case` and
 
 Implementation notes:
 
-- Filters rely on `cap-std` directories opened with ambient authority for
-  file-system work. Callers must ensure that templates granted access to the
-  stdlib are trusted to read from the process' working tree.
+- The four file-reading filters (`contents`, `linecount`, `hash`, and
+  `digest`) open only through the workspace capability configured on
+  `StdlibConfig`; they never fall back to ambient authority or to the process
+  working directory. `ReadingRoot` in `src/stdlib/path/reading_root/mod.rs`
+  resolves each request first: a relative path is read beneath the workspace
+  root, an absolute path is accepted only when it lies lexically beneath that
+  root's recorded spelling, and a request that climbs out with `..` is refused.
+  The subsequent capability open rejects a link in an intermediate component
+  that leaves the workspace. Other filters that touch the file system still use
+  ambient authority, so callers must ensure that templates granted access to
+  the stdlib are trusted.
 - `realpath` canonicalizes the parent directory before joining the resolved
   entry so results are absolute and symlink-free.
 - `contents` and `linecount` currently support UTF-8 input; other encodings are
-  rejected with an explicit error. `contents` streams data from the ambient
-  file-system, so consumers should guard access carefully when evaluating
-  untrusted templates.
+  rejected with an explicit error. `contents` streams through the workspace
+  capability, never the ambient file system.
 - `hash` and `digest` accept `sha256` (default) and `sha512`. Legacy
   algorithms `sha1` and `md5` are cryptographically broken and are disabled by
   default; enabling them requires the `legacy-digests` Cargo feature and should
@@ -1611,8 +1618,10 @@ Implementation notes:
   appending the provided suffix.
 - `contents`, `linecount`, `hash`, and `digest` share one read boundary, so
   this policy is enforced once rather than re-implemented per filter.
-  `FileReadLimits` and `open_file_checked` in `src/stdlib/path/fs_utils.rs`
-  decide what may be opened; `BoundedRead` and `read_bounded_chunk` in
+  `ReadingRoot` in `src/stdlib/path/reading_root/mod.rs` owns path resolution
+  and the parent-directory capability open; `FileReadLimits` and
+  `open_file_checked` in `src/stdlib/path/fs_utils.rs` then decide what may be
+  opened; `BoundedRead` and `read_bounded_chunk` in
   `src/stdlib/path/bounded_read/mod.rs` stream the bytes and charge the budget
   as they arrive, so no buffer grows with the length of a line. See the
   [developer's guide](developers-guide.md#file-reading-filter-boundary).
@@ -1640,6 +1649,12 @@ Implementation notes:
   bit rather than on the tag value. The judgement and the read share one
   handle. See
   [ADR-0032](adrs/adr-0032-validate-the-windows-final-component-through-a-same-handle-reparse-point-open.md).
+- A request outside the workspace fails with
+  `stdlib.path.contents.outside_workspace`, which quotes the requested path and
+  names the boundary. Lexical escapes and capability escapes produce this one
+  diagnostic, so the message never varies with whether a link or a `..`
+  component caused the refusal. The refusal happens before the file is opened,
+  so it cannot disclose contents.
 - An over-budget read fails with `stdlib.path.contents.file_too_large`, which
   quotes the path and the byte limit. An opened object that is not a regular
   file (a FIFO, a device, or a Windows reparse point refused on the opened
