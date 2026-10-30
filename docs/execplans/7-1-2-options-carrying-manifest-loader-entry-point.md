@@ -946,16 +946,28 @@ and YAML fixtures, and were set from the inventory in Table 1.
   file-test names from `SURFACE`, and the Kani scope names the two new source
   files. The eight-gate batch above is its acceptance evidence; the refusal
   text, registration shapes, and file-test names are unchanged.
-- [ ] (2026-10-30) EP-M1's second extraction, in the commit that carries
-  this record: `QueryEvaluation` and `classify_query_evaluation` moved to
+- [x] (2026-10-30) EP-M1's second extraction, committed as `f6efa8513`:
+  `QueryEvaluation` and `classify_query_evaluation` moved to
   `src/manifest/jinja_macros/query_classification.rs`, with the relocated
   adapter's rationale rewritten for its new home. The parent falls from 394 to
   358 lines. `tools/kani/proof-scope.toml` gains the new path, because the
   harness closure still reaches the classifier through
   `evaluate_when_expression`; `kani_proof_scope_test.py` failed on the move
-  before the entry was added and passes with it. Acceptance is the milestone
-  gate batch run against that commit.
-- [ ] EP-M1 — extractions (restricted helpers, query classifier).
+  before the entry was added and passes with it. Its eight-gate batch is green
+  at `f6efa8513`: `check-fmt` 4 s, `typecheck` 4 m 40 s, `lint` 19 m 7 s,
+  `doc-coverage` 98.22%, `test` 4826 passed / 7 skipped plus 164 doctests,
+  `markdownlint` 0 issues, `nixie` every diagram validated, and
+  `test-workflow-contracts` 1520 passed / 3 skipped. Logs:
+  `/tmp/check-fmt-f6efa8513.out`, `/tmp/typecheck-f6efa8513.out`,
+  `/tmp/lint-f6efa8513.out`, `/tmp/doc-coverage-f6efa8513.out`,
+  `/tmp/test-f6efa8513.out`, `/tmp/markdownlint-f6efa8513.out`,
+  `/tmp/nixie-f6efa8513.out`, and `/tmp/test-workflow-contracts-f6efa8513.out`.
+- [x] (2026-10-30) EP-M1 complete. The batch above is bound to `f6efa8513`;
+  the only tracked change after that revision is this Progress record and the
+  two checkbox lines, both prose and Markdown only, so the batch is not re-run.
+  `make check-fmt` and `make markdownlint` are re-run on the prose commit
+  instead.
+- [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
 - [ ] EP-M4 — template overlays.
