@@ -4108,8 +4108,7 @@ adding a value-taking option requires matching declarations in both
 `src/cli/command.rs` and `src/cli/config/mod.rs`; a placeholder that disagrees
 with the parser fails the test rather than reaching a release artefact.
 
-Release automation
-delegates installation to
+Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
 version supplied as `INPUT_VERSION`. The helper probes the cached binary and,
 on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
