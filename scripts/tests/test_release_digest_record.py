@@ -68,7 +68,7 @@ def test_a_non_string_asset_name_is_refused_before_sorting() -> None:
     Sorting a mixed-type key set raises ``TypeError``, which callers do not
     catch. The contract is that a malformed mapping is a rejected record.
     """
-    malformed = typ.cast("dict[str, object]", {1: DIGEST})
+    malformed = typ.cast("dict[str, object]", {"a": DIGEST, 1: DIGEST})
 
     with pytest.raises(release_digest_record.DigestRecordError, match="as strings"):
         _ = _trusted(malformed)
