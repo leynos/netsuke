@@ -8,6 +8,9 @@
 
 pub use super::check_keys::*;
 pub use super::clap_error_keys::*;
+// The union of all three tables lives in the parent module, where the line
+// budget allows it; re-exported here because `keys` is the name callers use.
+pub use super::ALL_KEYS;
 
 define_keys! {
     CLI_ABOUT => "cli.about",

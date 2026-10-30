@@ -13,8 +13,11 @@
 macro_rules! define_keys {
     ($($name:ident => $value:literal,)+) => {
         $(#[doc = "Fluent message key."] pub const $name: &str = $value;)+
-        /// All Fluent message keys referenced by Netsuke.
-        pub const ALL_KEYS: &[&str] = &[$($name),+];
+        /// Every Fluent message key this table declares, in declaration order.
+        ///
+        /// Each table carries its own slice because the key set is split
+        /// across three files; `keys::ALL_KEYS` is the union.
+        pub const TABLE_KEYS: &[&str] = &[$($name),+];
     };
 }
 
@@ -30,7 +33,25 @@ pub use crate::locale_catalogues as locales;
 
 use ortho_config::{LocalizationArgs, Localizer};
 use std::fmt;
-use std::sync::{Arc, OnceLock, RwLock};
+use std::sync::{Arc, LazyLock, OnceLock, RwLock};
+
+/// All Fluent message keys referenced by Netsuke.
+///
+/// Each table publishes its own `TABLE_KEYS` slice, and this is their union.
+/// The split into `check_keys` and `clap_error_keys` exists only to keep every
+/// module inside Whitaker's line cap, so a key moved into either table has to
+/// stay in this set — which is why the union is assembled from the three
+/// slices rather than shadowed by whichever `define_keys!` runs last. It lives
+/// here rather than in `keys` because no single table owns it.
+pub static ALL_KEYS: LazyLock<Vec<&'static str>> = LazyLock::new(|| {
+    let mut all = Vec::with_capacity(
+        keys::TABLE_KEYS.len() + check_keys::TABLE_KEYS.len() + clap_error_keys::TABLE_KEYS.len(),
+    );
+    all.extend_from_slice(keys::TABLE_KEYS);
+    all.extend_from_slice(check_keys::TABLE_KEYS);
+    all.extend_from_slice(clap_error_keys::TABLE_KEYS);
+    all
+});
 
 /// Process-global localizer storage, initialized on first use.
 static LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
@@ -40,8 +61,8 @@ static LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
 fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     // Keep the key registry referenced so dead-code lints do not discard it.
     let _ = keys::ALL_KEYS;
-    let _ = check_keys::ALL_KEYS;
-    let _ = clap_error_keys::ALL_KEYS;
+    let _ = check_keys::TABLE_KEYS;
+    let _ = clap_error_keys::TABLE_KEYS;
     LOCALIZER.get_or_init(|| {
         let default = crate::cli_localization::build_localizer(None);
         RwLock::new(Arc::from(default))
@@ -192,4 +213,40 @@ impl fmt::Display for LocalizedMessage {
 #[must_use]
 pub const fn message(key: &'static str) -> LocalizedMessage {
     LocalizedMessage::new(key)
+}
+
+#[cfg(test)]
+mod tests {
+    //! Guards on the key aggregates this module assembles.
+
+    use super::{ALL_KEYS, check_keys, clap_error_keys, keys};
+
+    // A key moved out of `keys.rs` to keep that module inside the line cap
+    // used to be listed by the aggregate automatically. Comparing against the
+    // three table slices rather than a written out list keeps the assertion
+    // true when any table gains a key.
+    #[test]
+    fn all_keys_is_the_union_of_every_table() {
+        let all = ALL_KEYS.as_slice();
+        assert_eq!(
+            all.len(),
+            keys::TABLE_KEYS.len()
+                + check_keys::TABLE_KEYS.len()
+                + clap_error_keys::TABLE_KEYS.len()
+        );
+        for expected in keys::TABLE_KEYS
+            .iter()
+            .chain(check_keys::TABLE_KEYS)
+            .chain(clap_error_keys::TABLE_KEYS)
+        {
+            assert!(
+                all.contains(expected),
+                "ALL_KEYS should contain `{expected}`"
+            );
+        }
+        assert!(
+            all.contains(&clap_error_keys::CLAP_ERROR_TOO_MANY_VALUES),
+            "the clap error keys must stay in the public aggregate"
+        );
+    }
 }
