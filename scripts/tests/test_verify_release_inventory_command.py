@@ -9,6 +9,7 @@ import typing as typ
 from unittest import mock
 
 import pytest
+import release_digest_record
 import verify_release_inventory_cli as verifier
 from release_staging_support import ARCHIVE, PACKAGE, SIDECAR
 from release_staging_support import stage_archive as _stage
@@ -97,7 +98,11 @@ def test_the_cli_rejects_an_incomplete_release_and_writes_no_record(
     _ = (staging / SIDECAR).write_text("ab  dist/x\n", encoding="utf-8")
     declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
     trusted = _write_record(
-        tmp_path / "trusted.json", {ARCHIVE: "ab" * 32, SIDECAR: "ab" * 32}
+        tmp_path / "trusted.json",
+        release_digest_record.DigestRecord.from_mapping({
+            ARCHIVE: "ab" * 32,
+            SIDECAR: "ab" * 32,
+        }),
     )
     destination = tmp_path / "verified.json"
 

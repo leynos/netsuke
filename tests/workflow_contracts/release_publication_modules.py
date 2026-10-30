@@ -66,7 +66,6 @@ SOURCE_MODULES = (
 #: Sources that decide from already parsed, in-memory values.
 POLICY_MODULES = (
     "scripts/release_candidate.py",
-    "scripts/release_identity_record.py",
     "scripts/release_semver.py",
     "scripts/release_asset_names.py",
     "scripts/release_package_formats.py",
@@ -82,6 +81,7 @@ POLICY_MODULES = (
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
 ADAPTER_MODULES = (
     "scripts/release_candidate_cli.py",
+    "scripts/release_identity_record.py",
     "scripts/package_crate_cli.py",
     "scripts/publish_crates_io_cli.py",
     "scripts/release_crates_io_adapter.py",

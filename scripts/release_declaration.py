@@ -1,9 +1,11 @@
 """Declare the release assets from in-memory names and target facts.
 
 This module owns release naming and package-count policy. The declaration CLI
-reads TOML, asks the hoist adapter for archive names, and scans the staged tree;
-it passes those facts here as mappings and file names. Keeping paths and config
-parsing at that boundary makes the declaration independently testable.
+reads TOML, decodes the staging targets into a :class:`StagingTargets` record,
+asks the hoist adapter for archive names, and scans the staged tree; it passes
+those facts here as a typed record and file names. Keeping paths, config
+parsing, and the TOML field names at that boundary makes the declaration
+independently testable.
 
 Three external shared actions own the names of the operating-system packages,
 so their names are observed from the tree rather than reconstructed. The
@@ -14,6 +16,7 @@ Run via ``scripts/release_declaration_cli.py``; behavioural coverage lives in
 ``scripts/tests/test_release_declaration.py``.
 """
 
+import dataclasses
 import typing as typ
 
 from release_package_formats import (
@@ -22,7 +25,6 @@ from release_package_formats import (
     DeclarationError,
     DuplicatePackageError,
     MalformedTargetError,
-    MalformedTargetKind,
     MissingPackageError,
     MissingTargetsError,
     StagedTreeError,
@@ -44,17 +46,60 @@ __all__ = [
     "MissingPackageError",
     "MissingTargetsError",
     "StagedTreeError",
+    "StagingTarget",
+    "StagingTargets",
     "UnknownPlatformError",
     "archive_asset_names",
     "declared_asset_names",
     "platform_target_counts",
 ]
 
-#: Name of the target mapping in the parsed staging configuration.
-TARGETS_TABLE = "targets"
-
 #: Suffix appended to every published archive name.
 SIDECAR_SUFFIX = ".sha256"
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StagingTarget:
+    """One configured staging target, reduced to the platform it builds for."""
+
+    #: The platform value that selects this target's package formats.
+    platform: str
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StagingTargets:
+    """The configured staging targets, in configuration order."""
+
+    #: One entry per configured target.
+    targets: tuple[StagingTarget, ...]
+
+    @classmethod
+    def from_targets(cls, targets: cabc.Iterable[StagingTarget]) -> StagingTargets:
+        """Build the record, refusing a configuration that names no target.
+
+        Returns
+        -------
+        StagingTargets
+            The decoded staging targets.
+
+        Raises
+        ------
+        MissingTargetsError
+            If ``targets`` is empty.
+
+        Examples
+        --------
+        >>> StagingTargets.from_targets([StagingTarget("linux")]).targets
+        (StagingTarget(platform='linux'),)
+        >>> StagingTargets.from_targets([])  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+            ...
+        release_package_formats.MissingTargetsError: staging configuration defines...
+        """
+        entries = tuple(targets)
+        if not entries:
+            raise MissingTargetsError
+        return cls(entries)
 
 
 def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
@@ -75,48 +120,25 @@ def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
     )
 
 
-def platform_target_counts(target_config: object) -> dict[str, int]:
-    """Count configured targets by platform from an already parsed mapping.
+def platform_target_counts(targets: StagingTargets) -> dict[str, int]:
+    """Count decoded staging targets by the platform each one builds for.
 
     Returns
     -------
     dict[str, int]
-        The number of configured targets for each platform.
-
-    Raises
-    ------
-    MissingTargetsError
-        If the ``targets`` mapping is absent or empty.
+        The number of targets for each platform.
 
     Examples
     --------
-    >>> platform_target_counts({"targets": {"linux": {"platform": "linux"}}})
-    {'linux': 1}
+    >>> platform_target_counts(
+    ...     StagingTargets((StagingTarget("linux"), StagingTarget("linux")))
+    ... )
+    {'linux': 2}
     """
-    config = _mapping(target_config)
-    targets = config.get(TARGETS_TABLE)
-    if not isinstance(targets, dict) or not targets:
-        raise MissingTargetsError
     counts: dict[str, int] = {}
-    for entry in targets.values():
-        platform = _platform_of(entry)
-        counts[platform] = counts.get(platform, 0) + 1
+    for target in targets.targets:
+        counts[target.platform] = counts.get(target.platform, 0) + 1
     return counts
-
-
-def _mapping(value: object) -> cabc.Mapping[str, object]:
-    """Return a string-keyed mapping or refuse the malformed config value."""
-    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
-        raise MalformedTargetError(MalformedTargetKind.INVALID_MAPPING)
-    return value
-
-
-def _platform_of(entry: object) -> str:
-    """Return one target table's string platform value."""
-    platform = entry.get("platform") if isinstance(entry, dict) else None
-    if not isinstance(platform, str):
-        raise MalformedTargetError(MalformedTargetKind.MISSING_PLATFORM)
-    return platform
 
 
 def _packages_for_platform(
@@ -152,7 +174,7 @@ def _declared_packages(
 def declared_asset_names(
     *,
     archive_names: cabc.Iterable[str],
-    target_config: object,
+    targets: StagingTargets,
     staged_package_names: cabc.Iterable[str],
 ) -> tuple[str, ...]:
     """Declare the flat consumer set from archive and package observations.
@@ -162,8 +184,8 @@ def declared_asset_names(
     archive_names
         Archive names resolved by the hoist adapter from the manifest and
         staging configuration.
-    target_config
-        Parsed staging TOML used to count package outputs by platform.
+    targets
+        Decoded staging targets, used to count package outputs by platform.
     staged_package_names
         GitHub-visible basenames observed below the downloaded artifact tree.
 
@@ -176,20 +198,20 @@ def declared_asset_names(
     --------
     >>> declared_asset_names(
     ...     archive_names=["crate.tar.gz"],
-    ...     target_config={"targets": {"linux": {"platform": "linux"}}},
+    ...     targets=StagingTargets((StagingTarget("linux"),)),
     ...     staged_package_names=["crate.deb", "crate.rpm"],
     ... )
     ('crate.deb', 'crate.rpm', 'crate.tar.gz', 'crate.tar.gz.sha256')
     >>> declared_asset_names(
     ...     archive_names=["crate.tar.gz"],
-    ...     target_config={"targets": {"linux": {"platform": "linux"}}},
+    ...     targets=StagingTargets((StagingTarget("linux"),)),
     ...     staged_package_names=[],
     ... )
     Traceback (most recent call last):
         ...
     release_package_formats.MissingPackageError: platform 'linux' ...
     """
-    counts = platform_target_counts(target_config)
+    counts = platform_target_counts(targets)
     staged_names = tuple(staged_package_names)
     packages = _declared_packages(staged_names, counts)
     return tuple(sorted([*archive_asset_names(archive_names), *packages]))
