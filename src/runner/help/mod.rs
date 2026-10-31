@@ -30,6 +30,17 @@ mod telemetry;
 use query::build_catalogue;
 use query::{HelpEntry, HelpTargetsQueryFailure, query_help_targets};
 
+/// Maximum display width that one catalogue name contributes to alignment.
+///
+/// The width is measured in terminal display columns after [`terminal_safe`],
+/// so escaped control characters count as the visible characters they become.
+/// Names wider than this are rendered in full but never widen the column:
+/// padding is bounded at this many columns per row, which keeps the rendered
+/// allocation linear in the manifest's own text instead of multiplying one
+/// long manifest-controlled name across every other row. Names are never
+/// truncated to satisfy the bound.
+pub(super) const MAX_HELP_ALIGNMENT_WIDTH: usize = 40;
+
 /// Render the `help targets` catalogue to stdout without invoking Ninja.
 ///
 /// The manifest is loaded, expanded, rendered, and validated through the same
@@ -145,6 +156,12 @@ fn render_text(entries: &[HelpEntry], prefs: OutputPrefs) -> String {
 }
 
 /// Render one aligned catalogue section, omitting it entirely when empty.
+///
+/// The alignment width is computed only from display names at or below
+/// [`MAX_HELP_ALIGNMENT_WIDTH`], and padding is written only when a
+/// description or marker follows the name. Together those rules stop one long
+/// manifest-controlled name from multiplying padding across every other row,
+/// while names themselves are always rendered in full.
 fn render_section(
     out: &mut String,
     entries: &[&HelpEntry],
@@ -163,29 +180,54 @@ fn render_section(
     let width = display_names
         .iter()
         .map(|name| UnicodeWidthStr::width(name.as_ref()))
+        .filter(|&name_width| name_width <= MAX_HELP_ALIGNMENT_WIDTH)
         .max()
         .unwrap_or(0);
     let default_marker = default_marker(prefs);
     let conditional_marker = conditional_marker(prefs);
-    for (entry, name) in entries.iter().zip(display_names) {
-        let name_width = UnicodeWidthStr::width(name.as_ref());
+    for (entry, name) in entries.iter().zip(&display_names) {
         out.push_str("  ");
-        out.push_str(&name);
-        out.push_str(&" ".repeat(width.saturating_sub(name_width)));
-        if let Some(description) = entry.description.as_deref() {
-            out.push_str("  ");
-            out.push_str(&terminal_safe(description));
-        }
-        if entry.is_default {
-            out.push(' ');
-            out.push_str(&default_marker);
-        }
-        if entry.conditional {
-            out.push(' ');
-            out.push_str(&conditional_marker);
+        out.push_str(name);
+        let sanitized_description = entry.description.as_deref().map(terminal_safe);
+        let description = sanitized_description
+            .as_deref()
+            .filter(|text| !text.is_empty());
+        if has_following_column(entry, description.is_some()) {
+            let padding = width.saturating_sub(UnicodeWidthStr::width(name.as_ref()));
+            push_spaces(out, padding);
+            if let Some(description_text) = description {
+                out.push_str("  ");
+                out.push_str(description_text);
+            }
+            if entry.is_default {
+                out.push(' ');
+                out.push_str(&default_marker);
+            }
+            if entry.conditional {
+                out.push(' ');
+                out.push_str(&conditional_marker);
+            }
         }
         out.push('\n');
     }
+}
+
+/// Whether anything is rendered after the name in this row.
+///
+/// A row ends at its name unless a description or a marker follows, which is
+/// what keeps padding, and therefore trailing whitespace, out of bare rows.
+const fn has_following_column(entry: &HelpEntry, has_description: bool) -> bool {
+    has_description || has_marker(entry)
+}
+
+/// Whether the entry renders a default or conditional marker after its name.
+const fn has_marker(entry: &HelpEntry) -> bool {
+    entry.is_default || entry.conditional
+}
+
+/// Append `count` literal spaces without allocating a temporary padding string.
+fn push_spaces(out: &mut String, count: usize) {
+    out.extend(std::iter::repeat_n(' ', count));
 }
 
 /// The localized default marker, pairing a theme glyph with a translated label

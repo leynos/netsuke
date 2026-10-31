@@ -157,6 +157,30 @@ metadata filters such as `size` and `linecount`, `hash`, `digest`, `contents`,
 rendering still registers the full standard library; this restriction applies
 only to query rendering.
 
+Text layout is bounded by `MAX_HELP_ALIGNMENT_WIDTH` (40 display columns) in
+`src/runner/help/mod.rs`. `render_section` computes each section's alignment
+width only from names whose sanitized display width is at or below that cap; a
+wider name renders in full but contributes no padding, and `saturating_sub`
+keeps its own padding at zero. Padding is written directly into the output
+buffer, and only when a non-empty sanitized description or a marker follows, so
+a row with no following column ends at its name and carries no trailing padding
+spaces. The rendered catalogue is therefore bounded by the manifest's own
+rendered name and description text plus 40 columns per row, and the manifest
+budgets (`rendered_value_bytes`, `rendered_manifest_bytes`, and
+`expanded_entries`) bound that input. Names are never truncated to meet the
+bound. `render_json` is unaffected and continues to emit names and descriptions
+verbatim; the `--edges` graph projection is likewise outside this layout rule.
+
+Width is measured with `unicode-width`, which cannot know how a given terminal
+renders East Asian ambiguous-width characters or emoji, so alignment may differ
+visually between terminals while the padding bound still holds. The complete
+text catalogue is still assembled in memory before it is written to stdout;
+with the cap that allocation is linear in the budgeted manifest rather than
+proportional to the widest name times the row count. Regression coverage pins
+the reported trigger in `src/runner/help/tests/bounds.rs` (one long name among
+many short rows, and a single target's name list) and through the binary in
+`tests/runner_help_targets_tests/bounds.rs`.
+
 The rejection is total: every query-context `env()` call fails, and an
 `env(name, default=value)` call reports the same query-disabled marker as a bare
 `env(name)` rather than an arity error. The stub accepts a keyword-argument
