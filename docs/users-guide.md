@@ -2230,10 +2230,16 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   them unchanged. `{{ ins }}` and `{{ outs }}` are the only Netsuke markers for
   input and output paths. On POSIX and Bash routes, Netsuke encodes a marker
   for its unquoted, single-quoted, or double-quoted shell context, and rejects
-  one in a command substitution or backticks. In PowerShell `command:` and
-  `script:` recipes, markers are valid only at unquoted sites. Netsuke rejects
-  markers in single-quoted strings, double-quoted strings, here-strings, `$()`,
-  and immediately after a backtick. Netsuke rejects markers in the raw
+  one in a command substitution or backticks. A `#` starts a comment only
+  outside quotes, at the beginning of input or after a space, tab, newline, or
+  one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`. A `)` that closes `$(...)` or
+  `$((...))` stays part of the surrounding word, so `#` immediately after it
+  does not start a comment. A non-breaking space or another non-ASCII space
+  before `#` does not start a comment, so a quote after it still opens or
+  closes a quoted region. In PowerShell `command:` and `script:` recipes,
+  markers are valid only at unquoted sites. Netsuke rejects markers in
+  single-quoted strings, double-quoted strings, here-strings, `$()`, and
+  immediately after a backtick. Netsuke rejects markers in the raw
   native-command region after PowerShell's `--%` stop-parsing token. That
   region ends at a newline or pipeline character; a semicolon does not end it,
   and scanning resumes after the boundary. Only ASCII double quotes are

@@ -846,8 +846,10 @@ The lowering stages have deliberately separate responsibilities:
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. Both recipe kinds recognize the same `{{ ins }}` and `{{ outs }}`
   markers; POSIX lexical scanning can preserve their internal tokens in
-  comments and heredoc bodies rather than resolving them. Literal `$in`, `$out`,
-  `$ins`, and `$outs` remain shell variables and are escaped for Ninja
+  comments and heredoc bodies rather than resolving them. Comment and heredoc
+  recognition ends a word only at the shell's own separators, so a non-ASCII
+  character before `#` cannot hide a later quote transition. Literal `$in`,
+  `$out`, `$ins`, and `$outs` remain shell variables and are escaped for Ninja
   pass-through. POSIX lowering tracks unquoted, single-quoted, and
   double-quoted text, and rejects markers within command substitutions because
   it cannot lower them safely. Script recipes therefore retain heredocs and
@@ -6519,8 +6521,26 @@ them are not expanded and can remain in the generated recipe; markers in
 heredoc delimiters are expanded. It queues declarations FIFO, including quoted
 delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
 surrounding quote context. This is a command-interpolation helper, not a
-general shell parser, and is not intended for reuse outside that boundary. The
-`src/ir/cmd_interpolate/substitution/powershell/` module groups focused
+general shell parser, and is not intended for reuse outside that boundary.
+
+The helper ends an unquoted POSIX word only at a space, tab, newline, or one of
+the operator characters `;`, `&`, `|`, `(`, `)`, `<`, and `>`. The
+`is_word_terminator` predicate is the single boundary definition behind both
+comment detection and heredoc delimiter termination. It deliberately avoids
+Rust's Unicode `char::is_whitespace`, because `sh`, `dash`, and Bash treat
+characters such as U+00A0 as ordinary word data rather than as locale-dependent
+multibyte blanks. Using the Unicode rule would let `#` after such a character
+start a false comment, skip a real quote transition, and select the wrong path
+encoding for a later marker. A CRLF script therefore treats a carriage return
+before `#` as word data, matching those shells. The traversals that track `$()`
+also pass the position of the `)` that closed the innermost substitution, so
+the boundary check does not mistake that delimiter for a separator. A `)`
+closing a subshell remains an operator and still permits a comment.
+`src/lint/rules/shellscan/mod.rs` and the property-test oracle in
+`src/ir/cmd_interpolate/property_tests/support.rs` keep separate boundary
+models; neither controls path encoding, so neither is part of this contract.
+
+The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
 tracks raw native-command arguments, and `tokens/mod.rs` recognizes the token

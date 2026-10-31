@@ -105,8 +105,17 @@ impl PosixLexicalState {
     }
 
     /// Report whether an unquoted number sign begins a POSIX comment.
-    pub(super) fn starts_comment(chars: &[char], pos: usize, ch: char) -> bool {
-        ch == '#' && is_shell_word_boundary(chars, pos)
+    ///
+    /// `closed_substitution` names the `)` that closed a command substitution
+    /// when the caller tracks one. That `)` remains part of the surrounding
+    /// word, so a following `#` is word data rather than a comment.
+    pub(super) fn starts_comment(
+        chars: &[char],
+        pos: usize,
+        ch: char,
+        closed_substitution: Option<usize>,
+    ) -> bool {
+        ch == '#' && is_shell_word_boundary(chars, pos, closed_substitution)
     }
 
     /// Preserve one heredoc declaration and queue its body delimiter.
@@ -176,15 +185,25 @@ impl HeredocBody {
 }
 
 /// Report whether `pos` follows a boundary where POSIX permits a comment.
-fn is_shell_word_boundary(chars: &[char], pos: usize) -> bool {
+///
+/// POSIX starts a comment only where a token may start: at the beginning of
+/// input or after an unescaped separator. Every other character is word data,
+/// so Unicode spaces, carriage return, vertical tab, and form feed do not
+/// begin a comment and do not stop quote tracking. A `)` that closes a command
+/// substitution also remains in the surrounding word, so the caller passes its
+/// position as `closed_substitution` to suppress that false boundary.
+fn is_shell_word_boundary(chars: &[char], pos: usize, closed_substitution: Option<usize>) -> bool {
     let Some(previous_pos) = preceding_shell_character(chars, pos) else {
         return true;
     };
+    if closed_substitution == Some(previous_pos) {
+        return false;
+    }
     is_unescaped_character(chars, pos)
         && is_unescaped_character(chars, previous_pos)
-        && chars.get(previous_pos).is_some_and(|previous| {
-            previous.is_whitespace() || matches!(previous, ';' | '|' | '&' | '(' | ')' | '<' | '>')
-        })
+        && chars
+            .get(previous_pos)
+            .is_some_and(|previous| is_word_terminator(*previous))
 }
 
 /// Find the preceding shell character after removing unquoted line continuations.
@@ -347,7 +366,18 @@ impl From<DelimiterQuoteContext> for QuoteContext {
     }
 }
 
-/// Report whether `ch` terminates an unquoted shell word.
+/// Report whether `ch` terminates an unquoted POSIX shell word.
+///
+/// The set is the interpreter's own token boundary: `blank` (space or tab),
+/// newline, and the first character of each operator (`; | & ( ) < >`).
+/// Every other character is word data. In particular, non-ASCII space
+/// characters are not separators: `sh`, `dash`, and Bash do not apply
+/// locale-dependent multibyte blanks, so a no-break space before `#` neither
+/// starts a comment nor ends a heredoc delimiter. The same predicate keeps a
+/// carriage return in a CRLF script as word data, matching those shells.
 const fn is_word_terminator(ch: char) -> bool {
-    ch.is_whitespace() || matches!(ch, ';' | '|' | '&' | '(' | ')' | '<' | '>')
+    matches!(
+        ch,
+        ' ' | '\t' | '\n' | ';' | '|' | '&' | '(' | ')' | '<' | '>'
+    )
 }
