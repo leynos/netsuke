@@ -120,29 +120,42 @@ import sys
 with open(sys.argv[1], encoding="utf-8") as metadata_file:
     metadata = json.load(metadata_file)
 
+def render_flag(field):
+    """Render one documented CLI flag as the generated help spells it."""
+    cli = field["cli"]
+    long = cli["long"]
+    if not long:
+        raise ValueError(f"documented {field['name']} metadata must have a long flag")
+    rendered = f"-{cli['short']}/--{long}" if cli["short"] else f"--{long}"
+    if cli["takes_value"]:
+        rendered += f" {cli['value_name'] or 'VALUE'}"
+        possible_values = cli["possible_values"]
+        if possible_values:
+            rendered += " " + "|".join(possible_values)
+    return rendered
+
+
+documented_fields = [field for field in metadata["fields"] if field["cli"]]
 parser_only_fields = [
     field
-    for field in metadata["fields"]
-    if field["cli"] and field["env"] is None and field["file"] is None
+    for field in documented_fields
+    if field["env"] is None and field["file"] is None
 ]
 if not parser_only_fields:
     raise ValueError("release-help metadata must include parser-only selectors")
 
-parser_only_flags = []
-for field in parser_only_fields:
-    cli = field["cli"]
-    long = cli["long"]
-    if not long:
-        raise ValueError(f"parser-only {field['name']} metadata must have a long flag")
-    short = cli["short"]
-    parser_only_flags.append(f"-{short}/--{long}" if short else f"--{long}")
+configuration_fields = [
+    field for field in documented_fields if field not in parser_only_fields
+]
 
-print(" ".join(parser_only_flags))
+print(" ".join(render_flag(field) for field in parser_only_fields))
+print(" ".join(render_flag(field) for field in configuration_fields))
 print(" ".join(command["app_name"] for command in metadata["subcommands"]))
 PY
 )
 parser_only_flags="${public_cli_surface[0]}"
-subcommands="${public_cli_surface[1]}"
+documented_flags="${public_cli_surface[1]}"
+subcommands="${public_cli_surface[2]}"
 
 "#;
 
@@ -161,6 +174,7 @@ MAN
     cat >>"$out_dir/man/man1/netsuke.1" <<MAN
 .SH OPTIONS
 .B $parser_only_flags
+.B $documented_flags
 .SH COMMANDS
 $subcommands
 MAN
@@ -177,7 +191,7 @@ MAN
       <command:name>$module_name</command:name>
     </command:details>
     <command:description>
-      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$parser_only_flags $subcommands</maml:para>
+      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$parser_only_flags $documented_flags $subcommands</maml:para>
     </command:description>
   </command:command>
 </helpItems>

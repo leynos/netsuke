@@ -4112,13 +4112,29 @@ from `src/localization/keys.rs`, which is why the OrthoConfig v0.10.0
 identifier re-keying described in
 [the imported migration guide](ortho-config-v0-10-0-migration-guide.md) does
 not reach Netsuke's catalogues: no generated identifier survives to be looked
-up. The same reasoning applies to value shapes. `ortho_config` 0.10.0 documents
-every derived boolean as `--flag[=BOOL]`, because its *generated* clap parser
-accepts an optional value; Netsuke declares its flags by hand in
-`src/cli/command.rs` and rejects that spelling, so the adapter reduces boolean
-fields back to presence-only switches. Two tests hold both projections:
-`release_help_identifiers_are_netsuke_declared_not_generated` and
-`release_help_cli_value_shapes_match_the_parser` in
+up. It also replaces every configuration field's CLI metadata with the shape
+`configured_command(None)` actually parses. The derive is not a description of
+the binary: it synthesizes a kebab-cased long flag and a short flag from the
+Rust field name, and it gives fields marked `skip_cli` no CLI metadata at all.
+Netsuke's handwritten command in `src/cli/command.rs` therefore disagreed with
+the manual page in both directions. It rejected the advertised
+`--default-targets` and `-d`, and it accepted `--color`, `--emoji`,
+`--progress`, `--accessibility` and `--no-input` without documenting them.
+Reconciling from the parser fixes the spellings, short flags, value names,
+multiplicities and possible values together, and keeps configuration-owned
+facts such as help keys, environment variables and file keys where they were.
+Value names now come from the parser as well, so placeholders such as `FILE` and
+`N` are the ones the binary prints rather than the derive's `UTF8PATHBUF` and
+`USIZE`.
+
+Three tests under `src/cli/release_help/parity_tests/` hold that contract in
+both directions. In `mod.rs`, `release_help_cli_value_shapes_match_the_parser`
+checks every documented flag against the parser, and
+`release_help_documents_every_parser_argument` checks that no parser flag is
+omitted or documented twice. In `flag_cases.rs`,
+`documented_flags_match_the_parser` pins the policy flags and selected
+configuration flags individually. The identifier projection is held by
+`release_help_identifiers_are_netsuke_declared_not_generated` in
 `src/cli/release_help/metadata_tests.rs`. A new derived field, or a new
 upstream metadata change, is expected to reach one of them.
 

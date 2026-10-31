@@ -9,6 +9,7 @@ netsuke \- dependency-aware build orchestration
 .B netsuke
 [OPTIONS]
 .SH OPTIONS
-.B -C/--directory --config
+.B -C/--directory DIR --config FILE
+.B -f/--file FILE -j/--jobs N -v/--verbose --locale LOCALE --fetch-allow-scheme SCHEME --env-allow-var VAR --env-block-var VAR --fetch-allow-host HOST --fetch-block-host HOST --fetch-default-deny --trust-project-fetch-policy --manifest-evaluation-fuel FUEL --manifest-fuel FUEL --manifest-rendered-value-bytes BYTES --manifest-rendered-manifest-bytes BYTES --manifest-source-bytes BYTES --manifest-foreach-cardinality COUNT --manifest-expanded-entries COUNT --json --no-input --color POLICY auto|always|never --emoji POLICY auto|always|never --progress POLICY auto|always|never --accessibility POLICY auto|on|off --default-target TARGET
 .SH COMMANDS
 build clean graph generate help
