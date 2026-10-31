@@ -33,4 +33,7 @@ resolves to this file and fails with "``polythene`` is not a package".
 from polythene.__main__ import main
 
 if __name__ == "__main__":
-    main()
+    # Forward the CLI's exit status. Polythene raises ``SystemExit`` today, so
+    # this raise is unreachable now; it keeps a future revision that returns a
+    # status instead from turning a failed validation into a green gate.
+    raise SystemExit(main())

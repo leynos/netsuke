@@ -37,6 +37,14 @@ POLYTHENE_PIN = re.compile(
 )
 DIGEST_PIN = re.compile(r"@sha256:[0-9a-f]{64}$")
 SANDBOX_STEP = "Prepare Linux package validation sandbox"
+#: Every line the wrapper must keep: the entry point and metadata ``uv run``
+#: needs, plus the exit-status propagation that keeps a failed validation from
+#: passing the gate as a no-op.
+WRAPPER_REQUIRED = (
+    ("from polythene.__main__ import main", "run the Polythene CLI entry point"),
+    ("requires-python", "carry PEP 723 metadata so uv provides its dependency"),
+    ("raise SystemExit(main())", "propagate the CLI's exit status"),
+)
 
 
 @pytest.mark.parametrize(
@@ -236,14 +244,10 @@ def test_polythene_wrapper_pins_the_local_image_fix() -> None:
     """Pin the Polythene revision that reuses locally built images.
 
     The shared action's own revision predates the local-image probe and would
-    treat the ``localhost/`` reference as a registry host. The wrapper is a
-    PEP 723 script so ``uv run`` resolves this pin at the moment the validator
-    launches it, and the pin must be a full commit SHA so the behaviour cannot
-    drift between runs.
-
-    The wrapper's filename must also avoid shadowing the package it imports:
-    Python puts the script's directory first on ``sys.path``, so a sibling
-    named ``polythene.py`` would be imported as the package and fail.
+    treat the ``localhost/`` reference as a registry host, so the wrapper pins
+    a full commit SHA in PEP 723 metadata that ``uv run`` resolves at launch.
+    Its filename must not be ``polythene.py``: Python puts the script's
+    directory first on ``sys.path``, so that name would shadow the package.
     """
     text = POLYTHENE_WRAPPER.read_text(encoding="utf-8")
     match = POLYTHENE_PIN.search(text)
@@ -251,12 +255,8 @@ def test_polythene_wrapper_pins_the_local_image_fix() -> None:
         "the Polythene wrapper must pin polythene-isolate to a full commit SHA "
         "of https://github.com/leynos/polythene.git"
     )
-    assert "from polythene.__main__ import main" in text, (
-        "the wrapper must run the Polythene CLI entry point"
-    )
-    assert "requires-python" in text, (
-        "the wrapper must carry PEP 723 metadata so uv provides its dependency"
-    )
+    for needle, purpose in WRAPPER_REQUIRED:
+        assert needle in text, f"the wrapper must {purpose}"
     assert POLYTHENE_WRAPPER.name != "polythene.py", (
         "the wrapper must not be named polythene.py, or it shadows the package "
         "it imports"
