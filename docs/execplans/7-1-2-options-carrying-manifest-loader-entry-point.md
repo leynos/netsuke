@@ -968,6 +968,37 @@ and YAML fixtures, and were set from the inventory in Table 1.
   two checkbox lines, both prose and Markdown only, so the batch is not re-run.
   `make check-fmt` and `make markdownlint` are re-run on the prose commit
   instead.
+- [x] (2026-10-30) EP-M1 milestone review via `coderabbit review --agent`
+  against `origin/main` (CLI 0.9.1): exit 0, `review_completed`, 51 files
+  reviewed, seven unique concerns, none major or critical. Six were verified
+  against source and repaired in `427c175d5`; one premise was rejected because
+  it claimed `uses_shell.yml` carried the same false coverage statement as
+  `uses_fetch.yml`, while that file phrases the claim conditionally. The
+  repairs: the `uses_fetch.yml` comment (no public row loads it, and why
+  `http://` is load-bearing), two stale test comments, a `register.rs` test
+  pinning inventory-to-dispatch coverage, the developers' guide's
+  replaced-mechanism name, a design-document status note recording that
+  §§4.2-4.3 are superseded by this plan's revision note, and two prose repairs
+  in this document.
+- [x] (2026-10-31) Eight-gate batch for `427c175d5`: `check-fmt` 4 s,
+  `typecheck` 3 s, `lint` 97 s, `doc-coverage` 5349 s at 98.22%, `test` 3317 s
+  including the new `every_inventoried_file_test_has_a_build_predicate` row,
+  `nixie` 3 s, and `test-workflow-contracts` 167 s at 1520 passed / 3 skipped —
+  all exit 0. `markdownlint` was the one red gate, 34 s, reporting exactly two
+  MD049 issues in the new status-note sentence. Logs:
+  `/tmp/check-fmt-427c175d.out`, `/tmp/typecheck-427c175d.out`,
+  `/tmp/lint-427c175d.out`, `/tmp/doc-coverage-427c175d.out`,
+  `/tmp/test-427c175d.out`, `/tmp/markdownlint-427c175d.out`,
+  `/tmp/nixie-427c175d.out`, `/tmp/test-workflow-contracts-427c175d.out`.
+- [x] (2026-10-31) The MD049 repair, `416c73560`, changes one emphasis
+  character in Markdown, and `4f57ddde0` regenerates `typos.toml` from the
+  shared dictionary (unrelated to this branch's work, committed separately).
+  Both are Markdown/config-only deltas, so only the gates sensitive to that
+  delta were re-run at `4f57ddde0`: `check-fmt` 7 s, `markdownlint` 43 s with 0
+  issues, and `nixie` 3 s, all exit 0. `lint`, `test`, and `doc-coverage` are
+  unaffected by prose, which is the recorded gate sensitivity rather than an
+  assumption. Logs: `/tmp/check-fmt-4f57ddde0.out`,
+  `/tmp/markdownlint-4f57ddde0.out`, `/tmp/nixie-4f57ddde0.out`.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -975,6 +1006,19 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - [ ] EP-M5 — documentation, ADR, and roadmap closure.
 
 ## Surprises & discoveries
+
+- Observation: a gate batch can outlive the tool call that started it, and on
+  this host it did. The first dispatch of the `427c175d5` batch stalled at the
+  runner's 600 s no-progress watchdog while `make lint` waited behind a compile
+  queue several hundred deep; the watchdog terminated the runner and every gate
+  child with it, leaving `check-fmt` green, `typecheck` and `lint` truncated
+  mid-build. Impact: a batch this long cannot be run as one supervised tool
+  call under host saturation. The rerun was launched detached (`setsid nohup`,
+  one gate at a time, per-gate `tee` logs) and polled, which survived the same
+  queue and took 2 h 28 m of wall clock, 1 h 29 m of it in `doc-coverage`
+  alone. Evidence: the stalled `typecheck` log ends mid `Checking` line and the
+  stalled `lint` log mid compile-slot wait; the detached batch's logs each end
+  with `EXIT_CODE`. Date/Author: 2026-10-31, implementation agent.
 
 - Observation: the planned Kani-scope helper command was misidentified. In
   this checkout, `make test-kani-scope-wrapper` exercises the systemd-run
