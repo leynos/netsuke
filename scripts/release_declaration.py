@@ -25,6 +25,7 @@ from release_package_formats import (
     DeclarationError,
     DuplicatePackageError,
     MalformedTargetError,
+    MalformedTargetKind,
     MissingPackageError,
     MissingTargetsError,
     StagedTreeError,
@@ -64,6 +65,32 @@ class StagingTarget:
 
     #: The platform value that selects this target's package formats.
     platform: str
+
+    def __post_init__(self) -> None:
+        """Refuse a target that names no platform string.
+
+        The declaration counts platforms and sorts them, so a non-string
+        platform reaches ``sorted`` as a mixed-type key set and fails with
+        ``TypeError`` rather than a configuration diagnosis. An unknown
+        platform *name* stays a policy refusal, raised by
+        :func:`declared_asset_names`.
+
+        Raises
+        ------
+        MalformedTargetError
+            If the platform is not a non-empty string.
+
+        Examples
+        --------
+        >>> StagingTarget("linux").platform
+        'linux'
+        >>> StagingTarget("")  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+            ...
+        release_package_formats.MalformedTargetError: staging configuration has...
+        """
+        if not isinstance(self.platform, str) or not self.platform:
+            raise MalformedTargetError(MalformedTargetKind.MISSING_PLATFORM)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
