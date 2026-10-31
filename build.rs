@@ -9,9 +9,11 @@
 //!   A build with the `lint` feature writes both into a `lint/` subdirectory
 //!   instead, because its command tree has a `check` subcommand the release
 //!   artefacts must not carry.
-//! - Audit localization keys declared in `src/localization/keys.rs` against the Fluent bundles
-//!   in `locales/*/messages.ftl`, failing the build if any declared key is missing from a
-//!   locale.
+//! - Audit localization keys declared across the three key tables —
+//!   `src/localization/keys.rs`, `src/localization/check_keys.rs`, and
+//!   `src/localization/clap_error_keys.rs` — against the Fluent bundles in
+//!   `locales/*/messages.ftl`, failing the build if any declared key is missing
+//!   from a locale.
 use cap_std::{ambient_authority, fs::Dir};
 use clap::CommandFactory;
 use clap_complete::aot::{Shell, generate_to};

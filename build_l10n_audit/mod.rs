@@ -1,10 +1,13 @@
 //! Localization audit for the build script.
 //!
-//! Compares the keys declared by `define_keys!` in `src/localization/keys.rs`
-//! with every catalogue named by the locale registry in
-//! `src/locale_catalogues.rs`. The audit fails the build when a catalogue is
-//! missing a declared key, carries an orphaned key, or interpolates a different
-//! set of variables from the English source for a shared message.
+//! Compares the keys declared by `define_keys!` in the three key tables —
+//! `src/localization/keys.rs`, `src/localization/check_keys.rs`, and
+//! `src/localization/clap_error_keys.rs` — with every catalogue named by the
+//! locale registry in `src/locale_catalogues.rs`. The three files are one key
+//! set: `keys.rs` re-exports the other two, and a key declared in more than one
+//! table is an error. The audit fails the build when a catalogue is missing a
+//! declared key, carries an orphaned key, or interpolates a different set of
+//! variables from the English source for a shared message.
 //!
 //! The registry is the sole locale list; `Cargo.toml`'s
 //! `package.metadata.ortho_config.locales` array is checked against it rather
