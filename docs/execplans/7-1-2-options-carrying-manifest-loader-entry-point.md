@@ -1059,7 +1059,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   batch above ran `make test` against this plan's current text at `61e6cf102`,
   and the only later plan edit is this prose record.
 - [ ] (2026-10-31) EP-M2 milestone CLI review is **blocked on CodeRabbit's
-  organisation-wide quota**, not on the candidate. Two invocations of
+  organization-wide quota**, not on the candidate. Two invocations of
   `coderabbit review --agent --committed --base origin/main` against
   `68cc2683f` (the second after the stated 51 s wait) both exited 1 with
   `errorType: rate_limit`: "You've used all 10 included reviews currently
