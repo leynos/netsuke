@@ -252,4 +252,7 @@ fn configure_validation_parsers(
 }
 
 #[cfg(test)]
+mod empty_value_tests;
+
+#[cfg(test)]
 mod tests;
