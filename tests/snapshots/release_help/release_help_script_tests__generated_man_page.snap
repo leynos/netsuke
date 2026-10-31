@@ -10,5 +10,41 @@ netsuke \- dependency-aware build orchestration
 [OPTIONS]
 .SH OPTIONS
 .B -C/--directory --config
+.TP
+\fB--file\fR \fIFILE\fP
+.TP
+\fB--jobs\fR \fIN\fP
+.TP
+\fB--locale\fR \fILOCALE\fP
+.TP
+\fB--fetch-allow-scheme\fR \fISCHEME\fP
+.TP
+\fB--env-allow-var\fR \fIVAR\fP
+.TP
+\fB--env-block-var\fR \fIVAR\fP
+.TP
+\fB--fetch-allow-host\fR \fIHOST\fP
+.TP
+\fB--fetch-block-host\fR \fIHOST\fP
+.TP
+\fB--manifest-evaluation-fuel\fR \fIFUEL\fP
+.TP
+\fB--manifest-fuel\fR \fIFUEL\fP
+.TP
+\fB--manifest-rendered-value-bytes\fR \fIBYTES\fP
+.TP
+\fB--manifest-rendered-manifest-bytes\fR \fIBYTES\fP
+.TP
+\fB--manifest-source-bytes\fR \fIBYTES\fP
+.TP
+\fB--manifest-foreach-cardinality\fR \fICOUNT\fP
+.TP
+\fB--manifest-expanded-entries\fR \fICOUNT\fP
+.TP
+\fB--default-targets\fR \fITARGET\fP
+.TP
+\fB--directory\fR \fIDIR\fP
+.TP
+\fB--config\fR \fIFILE\fP
 .SH COMMANDS
 build clean graph generate help

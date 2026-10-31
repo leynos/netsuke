@@ -11,6 +11,8 @@ mod release_help;
 
 use anyhow::{Context, Result, ensure};
 use insta::assert_snapshot;
+use netsuke::cli::ReleaseHelpCli;
+use ortho_config::docs::OrthoConfigDocs;
 use release_help::{
     ReleaseHelpRun, ScriptFixture, logged_args, run_release_help, script_fixture, script_path,
     snapshot_settings,
@@ -20,6 +22,17 @@ use std::{fs, process::Command};
 
 const DOCUMENTED_SUBCOMMANDS: [&str; 5] = ["build", "clean", "graph", "generate", "help"];
 const PARSER_ONLY_SELECTORS: [&str; 2] = ["-C/--directory", "--config"];
+
+/// Distinct value placeholders the release help must render.
+///
+/// Every configuration-derived value-taking option collapses onto one of these
+/// names, and `DIR` comes from the parser-only `--directory` selector. A
+/// declaration that loses its `value_name` removes its placeholder from both
+/// generated formats, so this list fails the test rather than letting a type
+/// fallback reach a release artefact.
+const EXPECTED_VALUE_NAMES: [&str; 11] = [
+    "BYTES", "COUNT", "DIR", "FILE", "FUEL", "HOST", "LOCALE", "N", "SCHEME", "TARGET", "VAR",
+];
 
 /// Generate and verify a manual page for a non-Windows target.
 ///
@@ -183,6 +196,7 @@ fn assert_man_page_structure(man_page: &str) -> Result<()> {
         "man page should include SYNOPSIS for the binary: {man_page}"
     );
     assert_public_cli_surface(man_page, "man page")?;
+    assert_man_value_placeholders(man_page)?;
     Ok(())
 }
 
@@ -214,6 +228,7 @@ fn assert_powershell_help_structure(
         "about help should name the requested module: {about_help}"
     );
     assert_public_cli_surface(maml, "MAML help")?;
+    assert_maml_value_placeholders(maml)?;
     Ok(())
 }
 
@@ -229,6 +244,96 @@ fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
         ensure!(
             document.contains(subcommand),
             "{format_name} should include the {subcommand} subcommand: {document}"
+        );
+    }
+    Ok(())
+}
+
+/// Collect each value-taking option and the placeholder it declares.
+fn declared_value_placeholders() -> Vec<(String, String)> {
+    ReleaseHelpCli::get_doc_metadata()
+        .fields
+        .iter()
+        .filter_map(|field| {
+            let cli = field.cli.as_ref()?;
+            let value_name = cli.value_name.as_ref()?;
+            let long = cli.long.clone()?;
+            Some((long, value_name.clone()))
+        })
+        .collect()
+}
+
+/// Assert that the manual page renders every declared value placeholder.
+///
+/// # Errors
+///
+/// Returns an error when the metadata declares no placeholders, or when the
+/// manual page omits a declared placeholder or an expected distinct value name.
+fn assert_man_value_placeholders(man_page: &str) -> Result<()> {
+    let placeholders = declared_value_placeholders();
+    ensure!(
+        !placeholders.is_empty(),
+        "release-help metadata should declare value placeholders"
+    );
+    for (long, value_name) in &placeholders {
+        let rendered = format!("\\fB--{long}\\fR \\fI{value_name}\\fP");
+        ensure!(
+            man_page.contains(&rendered),
+            "man page should render the {value_name} placeholder for --{long}: {man_page}"
+        );
+    }
+    for value_name in EXPECTED_VALUE_NAMES {
+        ensure!(
+            placeholders
+                .iter()
+                .any(|(_, name)| name.as_str() == value_name),
+            "release-help metadata should declare the {value_name} placeholder"
+        );
+        let rendered = format!("\\fI{value_name}\\fP");
+        ensure!(
+            man_page.contains(&rendered),
+            "man page should render the {value_name} placeholder: {man_page}"
+        );
+    }
+    Ok(())
+}
+
+/// Assert that the PowerShell MAML help renders every declared value placeholder.
+///
+/// # Errors
+///
+/// Returns an error when the metadata declares no placeholders, or when the
+/// MAML help omits a declared placeholder or an expected distinct value name.
+fn assert_maml_value_placeholders(maml: &str) -> Result<()> {
+    let placeholders = declared_value_placeholders();
+    ensure!(
+        !placeholders.is_empty(),
+        "release-help metadata should declare value placeholders"
+    );
+    for (long, value_name) in &placeholders {
+        let rendered = format!(
+            "<maml:name>--{long}</maml:name>\
+             <command:parameterValue required=\"true\">{value_name}\
+             </command:parameterValue>"
+        );
+        ensure!(
+            maml.contains(&rendered),
+            "MAML help should render the {value_name} placeholder for --{long}: {maml}"
+        );
+    }
+    for value_name in EXPECTED_VALUE_NAMES {
+        ensure!(
+            placeholders
+                .iter()
+                .any(|(_, name)| name.as_str() == value_name),
+            "release-help metadata should declare the {value_name} placeholder"
+        );
+        let rendered = format!(
+            "<command:parameterValue required=\"true\">{value_name}</command:parameterValue>"
+        );
+        ensure!(
+            maml.contains(&rendered),
+            "MAML help should render the {value_name} placeholder: {maml}"
         );
     }
     Ok(())

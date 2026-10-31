@@ -4125,7 +4125,11 @@ adding a configuration-derived value-taking option requires matching
 declarations in `src/cli/config/mod.rs` and `src/cli/command.rs`. A parser-only
 selector needs only the parser declaration, because `parser_fields.rs` derives
 its placeholder from that declaration. A placeholder that disagrees with the
-parser fails the test rather than reaching a release artefact.
+parser fails the test rather than reaching a release artefact. The release-help
+script tests render every declared value name through the fake generator and
+assert the placeholder appears in both the manual page and the PowerShell MAML
+output, and the metadata snapshot records each field's `value_name`, so a lost
+declaration fails the suite before it can reach a release.
 
 Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned

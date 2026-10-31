@@ -18,6 +18,7 @@ fields:
       short: f
       multiple: false
       possible_values: []
+      value_name: FILE
     environment: NETSUKE_FILE
     file: file
     merge_strategy: replace
@@ -28,6 +29,7 @@ fields:
       short: j
       multiple: false
       possible_values: []
+      value_name: N
     environment: NETSUKE_JOBS
     file: jobs
     merge_strategy: replace
@@ -38,6 +40,7 @@ fields:
       short: v
       multiple: false
       possible_values: []
+      value_name: ~
     environment: NETSUKE_VERBOSE
     file: verbose
     merge_strategy: replace
@@ -48,6 +51,7 @@ fields:
       short: l
       multiple: false
       possible_values: []
+      value_name: LOCALE
     environment: NETSUKE_LOCALE
     file: locale
     merge_strategy: replace
@@ -58,6 +62,7 @@ fields:
       short: F
       multiple: true
       possible_values: []
+      value_name: SCHEME
     environment: NETSUKE_FETCH_ALLOW_SCHEME
     file: fetch_allow_scheme
     merge_strategy: append
@@ -68,6 +73,7 @@ fields:
       short: e
       multiple: true
       possible_values: []
+      value_name: VAR
     environment: NETSUKE_ENV_ALLOW_VAR
     file: env_allow_var
     merge_strategy: append
@@ -78,6 +84,7 @@ fields:
       short: E
       multiple: true
       possible_values: []
+      value_name: VAR
     environment: NETSUKE_ENV_BLOCK_VAR
     file: env_block_var
     merge_strategy: append
@@ -88,6 +95,7 @@ fields:
       short: t
       multiple: true
       possible_values: []
+      value_name: HOST
     environment: NETSUKE_FETCH_ALLOW_HOST
     file: fetch_allow_host
     merge_strategy: append
@@ -98,6 +106,7 @@ fields:
       short: T
       multiple: true
       possible_values: []
+      value_name: HOST
     environment: NETSUKE_FETCH_BLOCK_HOST
     file: fetch_block_host
     merge_strategy: append
@@ -108,6 +117,7 @@ fields:
       short: c
       multiple: false
       possible_values: []
+      value_name: ~
     environment: NETSUKE_FETCH_DEFAULT_DENY
     file: fetch_default_deny
     merge_strategy: replace
@@ -118,6 +128,7 @@ fields:
       short: r
       multiple: false
       possible_values: []
+      value_name: ~
     environment: NETSUKE_TRUST_PROJECT_FETCH_POLICY
     file: trust_project_fetch_policy
     merge_strategy: replace
@@ -128,6 +139,7 @@ fields:
       short: m
       multiple: false
       possible_values: []
+      value_name: FUEL
     environment: NETSUKE_MANIFEST_EVALUATION_FUEL
     file: manifest_evaluation_fuel
     merge_strategy: replace
@@ -138,6 +150,7 @@ fields:
       short: M
       multiple: false
       possible_values: []
+      value_name: FUEL
     environment: NETSUKE_MANIFEST_FUEL
     file: manifest_fuel
     merge_strategy: replace
@@ -148,6 +161,7 @@ fields:
       short: a
       multiple: false
       possible_values: []
+      value_name: BYTES
     environment: NETSUKE_MANIFEST_RENDERED_VALUE_BYTES
     file: manifest_rendered_value_bytes
     merge_strategy: replace
@@ -158,6 +172,7 @@ fields:
       short: A
       multiple: false
       possible_values: []
+      value_name: BYTES
     environment: NETSUKE_MANIFEST_RENDERED_MANIFEST_BYTES
     file: manifest_rendered_manifest_bytes
     merge_strategy: replace
@@ -168,6 +183,7 @@ fields:
       short: n
       multiple: false
       possible_values: []
+      value_name: BYTES
     environment: NETSUKE_MANIFEST_SOURCE_BYTES
     file: manifest_source_bytes
     merge_strategy: replace
@@ -178,6 +194,7 @@ fields:
       short: N
       multiple: false
       possible_values: []
+      value_name: COUNT
     environment: NETSUKE_MANIFEST_FOREACH_CARDINALITY
     file: manifest_foreach_cardinality
     merge_strategy: replace
@@ -188,6 +205,7 @@ fields:
       short: i
       multiple: false
       possible_values: []
+      value_name: COUNT
     environment: NETSUKE_MANIFEST_EXPANDED_ENTRIES
     file: manifest_expanded_entries
     merge_strategy: replace
@@ -198,6 +216,7 @@ fields:
       short: J
       multiple: false
       possible_values: []
+      value_name: ~
     environment: NETSUKE_JSON
     file: json
     merge_strategy: replace
@@ -238,6 +257,7 @@ fields:
       short: d
       multiple: true
       possible_values: []
+      value_name: TARGET
     environment: NETSUKE_DEFAULT_TARGETS
     file: default_targets
     merge_strategy: append
@@ -248,6 +268,7 @@ fields:
       short: C
       multiple: false
       possible_values: []
+      value_name: DIR
     environment: ~
     file: ~
     merge_strategy: replace
@@ -258,6 +279,7 @@ fields:
       short: ~
       multiple: false
       possible_values: []
+      value_name: FILE
     environment: ~
     file: ~
     merge_strategy: replace

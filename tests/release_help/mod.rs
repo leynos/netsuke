@@ -137,12 +137,25 @@ for field in parser_only_fields:
     short = cli["short"]
     parser_only_flags.append(f"-{short}/--{long}" if short else f"--{long}")
 
+value_placeholders = []
+for field in metadata["fields"]:
+    cli = field.get("cli")
+    if not cli or not cli.get("value_name"):
+        continue
+    if not cli["long"]:
+        raise ValueError(f"value-taking {field['name']} metadata must have a long flag")
+    value_placeholders.append(f"{cli['long']}={cli['value_name']}")
+if not value_placeholders:
+    raise ValueError("release-help metadata must declare value placeholders")
+
 print(" ".join(parser_only_flags))
 print(" ".join(command["app_name"] for command in metadata["subcommands"]))
+print(" ".join(value_placeholders))
 PY
 )
 parser_only_flags="${public_cli_surface[0]}"
 subcommands="${public_cli_surface[1]}"
+value_placeholders="${public_cli_surface[2]}"
 
 "#;
 
@@ -161,6 +174,13 @@ MAN
     cat >>"$out_dir/man/man1/netsuke.1" <<MAN
 .SH OPTIONS
 .B $parser_only_flags
+MAN
+    for pair in $value_placeholders; do
+      long="${pair%%=*}"
+      value="${pair#*=}"
+      printf '.TP\n\\fB--%s\\fR \\fI%s\\fP\n' "$long" "$value" >>"$out_dir/man/man1/netsuke.1"
+    done
+    cat >>"$out_dir/man/man1/netsuke.1" <<MAN
 .SH COMMANDS
 $subcommands
 MAN
@@ -170,18 +190,18 @@ MAN
     mkdir -p "$help_dir"
     printf 'function Invoke-%s { param() }\n' "$module_name" >"$out_dir/powershell/$module_name/$module_name.psm1"
     printf '@{\n  RootModule = "%s.psm1"\n  ModuleVersion = "0.1.0"\n}\n' "$module_name" >"$out_dir/powershell/$module_name/$module_name.psd1"
-    cat >"$help_dir/$module_name-help.xml" <<MAML
-<helpItems schema="maml">
-  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
-    <command:details>
-      <command:name>$module_name</command:name>
-    </command:details>
-    <command:description>
-      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$parser_only_flags $subcommands</maml:para>
-    </command:description>
-  </command:command>
-</helpItems>
-MAML
+    {
+      printf '<helpItems schema="maml">\n'
+      printf '  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">\n'
+      printf '    <command:details>\n      <command:name>%s</command:name>\n    </command:details>\n' "$module_name"
+      printf '    <command:description>\n      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">%s %s</maml:para>\n    </command:description>\n' "$parser_only_flags" "$subcommands"
+      for pair in $value_placeholders; do
+        long="${pair%%=*}"
+        value="${pair#*=}"
+        printf '    <command:parameter required="true"><maml:name>--%s</maml:name><command:parameterValue required="true">%s</command:parameterValue></command:parameter>\n' "$long" "$value"
+      done
+      printf '  </command:command>\n</helpItems>\n'
+    } >"$help_dir/$module_name-help.xml"
     printf 'TOPIC\n    about_%s\n' "$module_name" >"$help_dir/about_$module_name.help.txt"
     ;;
 esac

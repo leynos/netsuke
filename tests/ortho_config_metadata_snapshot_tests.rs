@@ -54,6 +54,7 @@ struct CliSourceSnapshot {
     short: Option<char>,
     multiple: bool,
     possible_values: Vec<String>,
+    value_name: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -116,6 +117,7 @@ fn metadata_snapshot() -> MetadataSnapshot {
                 short: cli.short,
                 multiple: cli.multiple,
                 possible_values: cli.possible_values.clone(),
+                value_name: cli.value_name.clone(),
             }),
             environment: field.env.as_ref().map(|env| env.var_name.clone()),
             file: field.file.as_ref().map(|file| file.key_path.clone()),
