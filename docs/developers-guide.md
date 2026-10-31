@@ -10077,7 +10077,9 @@ success envelope; diagnostic serialization remains in
 generator metadata from the private `src/json_envelope.rs` module. Within
 process execution, `forward_stdout` is the single composition point for
 choosing status-aware or plain child-output draining, and its callers select
-either the terminal or a JSON-mode sink.
+either the terminal or a JSON-mode sink. The copy loop itself, and the
+forwarding-failure vocabulary around it, are owned by
+[`runner::process::streaming`](#module-runnerprocessstreaming).
 
 `ExecutionContext` is the private dispatch context shared by build and clean
 handlers. `run_with_ninja_program` constructs it after resolving output mode
@@ -10315,6 +10317,58 @@ exits, safely records its resource usage through `RUSAGE_CHILDREN` rather than
 measuring the parent test process. It compares progress parsing with
 `--progress never` and permits a fixed 16 MiB overhead, rejecting memory growth
 proportional to the payload.
+
+### Module: `runner::process::streaming`
+
+`src/runner/process/streaming/` owns the only byte-for-byte copy loop between a
+child's standard streams and a forwarding writer, the bounded Ninja
+status-parsing adapter, and the closed forwarding-failure vocabulary in
+`forward_failure.rs`. No other module may add a second copy loop.
+
+#### Streaming reuse boundary
+
+- **Ownership:** the streaming module owns chunk reads, per-chunk writes and
+  flushes, interrupted-read retries, draining after a failure, the
+  `ForwardStats` record, and the failure classification that telemetry
+  publishes.
+- **Permitted call-sites:** exactly two. `output_forwarding::forward_stdout`
+  forwards stdout, choosing `forward_child_output_with_ninja_status` when
+  progress updates are wanted and `forward_child_output` otherwise.
+  `failure_attribution::forward_stderr_with_attribution` forwards stderr
+  through its marker-observing writer. Both pass the stream identity as
+  `ForwardStream`; no caller may invent a stream label.
+- **Composition rules:** flush each chunk before reading the next one, so a
+  flush failure cannot cause already-accepted bytes to be written again. Retry
+  `io::ErrorKind::Interrupted` reads rather than reporting them. Treat a reader
+  that reports more bytes than the buffer holds as a read failure, because the
+  count is only meaningful as a read result. After any failure, drain the
+  remaining child output so the child cannot block on a full pipe.
+
+#### Failure classification and telemetry
+
+A forwarding failure is classified as one of `read`, `write`, `flush`, or
+`drain`, and attributed to `stdout` or `stderr`. A drain failure after an
+earlier failure is counted separately and never replaces the failure that
+stopped forwarding. The counter `netsuke_ninja_forward_failures_total` carries
+exactly the two labels `stream` and `failure_kind`, whose permitted values are
+the closed arrays `FORWARD_STREAM_VALUES` and `FORWARD_FAILURE_KIND_VALUES`.
+`ConfigMetricsRecorder` admits only those exact series, so a widened label
+value is dropped rather than retained. Each failure also emits a warning event
+carrying the same two fields plus the I/O error. Neither label admits output
+content, paths, or reader and writer types. Adding a failure kind means adding
+an enum variant and its array entry together, never passing a raw string.
+
+#### Result policy
+
+Forwarding loss never changes the reported build result. The child's exit
+status remains authoritative, and a truncated output stream is reported through
+the classified counter and warning event instead. This keeps a deliberately
+closed parent pipe, as produced by `netsuke build | head`, from being reported
+as a build failure. `finalize_streaming` therefore joins the stderr forwarding
+thread for its command-list attribution and discards the forwarding statistics
+the helper has already published. The policy tests in
+`src/runner/process/tests/mod.rs` cover a successful child, a failing child,
+and a failed wait, each with forwarding loss.
 
 ### Module: `runner::process::ninja::program`
 

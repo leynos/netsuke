@@ -3,7 +3,7 @@
 use crate::ninja_gen::command_list::COMMAND_LIST_FAILURE_PREFIX;
 use std::io::{self, Write};
 
-use super::streaming::{ForwardStats, forward_child_output};
+use super::streaming::{ForwardStats, ForwardStream, forward_child_output};
 
 /// Forward stderr while retaining only the bounded command-list failure marker.
 pub(super) fn forward_stderr_with_attribution<R, W>(
@@ -15,7 +15,7 @@ where
     W: Write,
 {
     let mut attribution_writer = FailureAttributionWriter::new(output);
-    let stats = forward_child_output(reader, &mut attribution_writer, "stderr");
+    let stats = forward_child_output(reader, &mut attribution_writer, ForwardStream::Stderr);
     (stats, attribution_writer.into_failure())
 }
 

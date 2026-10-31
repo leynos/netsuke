@@ -3,8 +3,11 @@
 use super::child_exit::finalize_streaming;
 #[cfg(unix)]
 use super::list_failure_telemetry::COMMAND_LIST_FAILURE_DURATION;
-use super::streaming::ForwardStats;
 use super::*;
+use super::{
+    failure_attribution::CommandListFailure,
+    streaming::{ForwardFailureKind, ForwardStats},
+};
 use crate::test_tracing_capture::with_test_subscriber;
 use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(unix)]
@@ -66,6 +69,75 @@ fn finalize_streaming_joins_stderr_thread_when_wait_fails() {
         joined.load(Ordering::SeqCst),
         "the stderr forwarding thread must be joined even when wait() fails"
     );
+}
+
+/// Build forwarding statistics for a stream that lost part of its output.
+fn failed_forwarding_stats(kind: ForwardFailureKind) -> ForwardStats {
+    ForwardStats {
+        failure: Some(kind),
+        ..ForwardStats::default()
+    }
+}
+
+/// Report a child exit status without spawning a process.
+#[cfg(unix)]
+fn child_exit_status(code: i32) -> std::process::ExitStatus {
+    use std::os::unix::process::ExitStatusExt;
+
+    std::process::ExitStatus::from_raw(code << 8)
+}
+
+/// Report a child exit status without spawning a process.
+#[cfg(windows)]
+fn child_exit_status(code: u32) -> std::process::ExitStatus {
+    use std::os::windows::process::ExitStatusExt;
+
+    std::process::ExitStatus::from_raw(code)
+}
+
+/// Join a stderr forwarding thread that recorded no command-list failure.
+fn joined_stderr(
+    stats: ForwardStats,
+) -> thread::JoinHandle<(ForwardStats, Option<CommandListFailure>)> {
+    thread::spawn(move || (stats, None))
+}
+
+#[test]
+fn forwarding_loss_preserves_a_successful_child_result() {
+    let status = child_exit_status(0);
+    let result = finalize_streaming(
+        Ok(status),
+        failed_forwarding_stats(ForwardFailureKind::Flush),
+        joined_stderr(failed_forwarding_stats(ForwardFailureKind::Write)),
+    )
+    .expect("forwarding loss must not turn a successful child into an error");
+
+    assert_eq!(result.0, status);
+    assert!(result.1.is_none());
+}
+
+#[test]
+fn forwarding_loss_preserves_a_failed_child_result() {
+    let status = child_exit_status(1);
+    let result = finalize_streaming(
+        Ok(status),
+        failed_forwarding_stats(ForwardFailureKind::Write),
+        joined_stderr(ForwardStats::default()),
+    )
+    .expect("the child's own exit status remains the reported result");
+
+    assert_eq!(result.0, status);
+}
+
+#[test]
+fn forwarding_loss_does_not_mask_a_wait_failure() {
+    let result = finalize_streaming(
+        Err(io::Error::other("simulated wait failure")),
+        failed_forwarding_stats(ForwardFailureKind::Read),
+        joined_stderr(failed_forwarding_stats(ForwardFailureKind::Drain)),
+    );
+
+    assert!(result.is_err(), "a wait() failure must still propagate");
 }
 
 #[cfg(unix)]

@@ -66,9 +66,9 @@ pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
 #[cfg(doctest)]
 pub use process::doc;
 pub use process::{
-    CommandEnv, MAX_RETAINED_DYNDEP_FILES, NINJA_STATUS_OVERSIZED_LINES_TOTAL, NinjaBuildRequest,
-    NinjaJobCount, NinjaProcessOptions, NinjaToolRequest, StderrMode, run_ninja_tool_with,
-    run_ninja_with,
+    CommandEnv, FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL, MAX_RETAINED_DYNDEP_FILES,
+    NINJA_STATUS_OVERSIZED_LINES_TOTAL, NinjaBuildRequest, NinjaJobCount, NinjaProcessOptions,
+    NinjaToolRequest, StderrMode, run_ninja_tool_with, run_ninja_with,
 };
 pub use recipe_shell::telemetry::{
     BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,

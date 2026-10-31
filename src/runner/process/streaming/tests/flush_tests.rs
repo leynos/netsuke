@@ -1,6 +1,6 @@
 //! Verify each forwarded output chunk becomes visible before the next read.
 
-use super::{ChunkedReader, forward_child_output};
+use super::{ChunkedReader, ForwardFailureKind, ForwardStream, forward_child_output};
 use std::{
     cell::RefCell,
     io::{self, Read, Write},
@@ -73,11 +73,11 @@ fn forward_output_flushes_each_complete_chunk_before_reading_more() {
     };
     let mut writer = FlushBufferWriter::new(2, Rc::clone(&events));
 
-    let stats = forward_child_output(reader, &mut writer, "stdout");
+    let stats = forward_child_output(reader, &mut writer, ForwardStream::Stdout);
 
     assert_eq!(stats.bytes_read, input.len());
     assert_eq!(stats.bytes_written, input.len());
-    assert!(!stats.write_failed);
+    assert_eq!(stats.failure, None);
     assert_eq!(
         *events.borrow(),
         vec![
@@ -126,12 +126,12 @@ fn flush_failure_keeps_accepted_bytes_and_drains_the_remaining_input() {
         flush_count: 0,
     };
 
-    let stats = forward_child_output(reader, &mut writer, "stdout");
+    let stats = forward_child_output(reader, &mut writer, ForwardStream::Stdout);
 
     assert_eq!(writer.accepted, b"first");
     assert_eq!(writer.write_count, 1, "accepted bytes must not be retried");
     assert_eq!(writer.flush_count, 1);
     assert_eq!(stats.bytes_read, input.len(), "remaining bytes are drained");
     assert_eq!(stats.bytes_written, b"first".len());
-    assert!(stats.write_failed);
+    assert_eq!(stats.failure, Some(ForwardFailureKind::Flush));
 }

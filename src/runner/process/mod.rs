@@ -34,7 +34,9 @@ pub use file_io::*;
 use logging::{CommandLogContext, command_span, log_command_execution, log_command_spawn_failure};
 pub use ninja::resolve_ninja_program;
 use output_forwarding::{StatusObserver, spawn_and_stream_output};
-pub use streaming::NINJA_STATUS_OVERSIZED_LINES_TOTAL;
+pub use streaming::{
+    FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL, NINJA_STATUS_OVERSIZED_LINES_TOTAL,
+};
 
 mod configure;
 mod environment;

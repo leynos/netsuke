@@ -31,6 +31,9 @@ mod manifest_structure_tests;
 /// Cover the unlabelled oversized Ninja status counter separately.
 mod ninja_status_tests;
 
+/// Cover the bounded child-output forwarding failure counter separately.
+mod forwarding_tests;
+
 /// Cover the bounded manifest environment-lookup counter series separately.
 mod env_lookup_tests;
 
