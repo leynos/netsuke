@@ -5,7 +5,8 @@ use crate::ir::{BuildEdge, DependencyOrder};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 
-/// Keep console scheduling on the user edge, away from synthetic gates and sidecars.
+/// Keep console scheduling on the user edge, away from synthetic relays, gates,
+/// and sidecars.
 #[test]
 fn console_serial_parent_does_not_mark_gates_or_sidecars() -> Result<()> {
     let mut edge = serial_edge("all", &["check-fmt", "lint"]);
@@ -35,12 +36,25 @@ fn console_serial_parent_does_not_mark_gates_or_sidecars() -> Result<()> {
             == 1,
         "synthetic gate edges must not select the console pool:\n{file}"
     );
+    let serial_statements: Vec<&str> = file
+        .lines()
+        .filter(|line| line.starts_with("build .netsuke/serial/"))
+        .collect();
     ensure!(
-        file.lines()
-            .filter(|line| line.starts_with("build .netsuke/serial/"))
+        serial_statements
+            .iter()
+            .filter(|line| line.contains(": phony || "))
             .count()
             == 2,
         "expected two synthetic serial gates:\n{file}"
+    );
+    ensure!(
+        serial_statements
+            .iter()
+            .filter(|line| line.contains("/relay-"))
+            .count()
+            == 2,
+        "expected one relay phony per serial gate:\n{file}"
     );
     ensure!(
         bundle
