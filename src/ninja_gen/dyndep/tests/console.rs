@@ -48,10 +48,13 @@ fn console_serial_parent_does_not_mark_gates_or_sidecars() -> Result<()> {
             == 2,
         "expected two synthetic serial gates:\n{file}"
     );
+    // Match the relay name without its leading separator: staging writes the
+    // literal `.netsuke/serial/` prefix, but joins the generated components
+    // with the platform separator, which is `\` on Windows.
     ensure!(
         serial_statements
             .iter()
-            .filter(|line| line.contains("/relay-"))
+            .filter(|line| line.contains("relay-") && line.contains(": phony | "))
             .count()
             == 2,
         "expected one relay phony per serial gate:\n{file}"
