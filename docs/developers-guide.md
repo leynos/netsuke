@@ -4091,10 +4091,11 @@ every derived boolean as `--flag[=BOOL]`, because its *generated* clap parser
 accepts an optional value; Netsuke declares its flags by hand in
 `src/cli/command.rs` and rejects that spelling, so the adapter reduces boolean
 fields back to presence-only switches. Two tests hold both projections:
-`release_help_identifiers_are_netsuke_declared_not_generated` and
-`release_help_cli_value_shapes_match_the_parser` in
-`src/cli/release_help/metadata_tests.rs`. A new derived field, or a new
-upstream metadata change, is expected to reach one of them.
+identifier provenance in `src/cli/release_help/metadata_tests/mod.rs`
+(`release_help_identifiers_are_netsuke_declared_not_generated`), and
+value-shape parity in `src/cli/release_help/metadata_tests/value_shapes.rs`
+(`release_help_cli_value_shapes_match_the_parser`). A new derived field, or a
+new upstream metadata change, is expected to reach one of them.
 
 Value placeholders follow the same ownership split. A configuration-derived
 option declares its placeholder in `CliConfig` with `cli(value_name = "...")`;
