@@ -999,6 +999,39 @@ and YAML fixtures, and were set from the inventory in Table 1.
   unaffected by prose, which is the recorded gate sensitivity rather than an
   assumption. Logs: `/tmp/check-fmt-4f57ddde0.out`,
   `/tmp/markdownlint-4f57ddde0.out`, `/tmp/nixie-4f57ddde0.out`.
+- [x] (2026-10-31) EP-M2 implemented and committed as `ecfeb6c67`
+  ("Add options-carrying manifest loader entry point"), 22 files changed. New:
+  `src/manifest/loader_options.rs` (`ManifestLoadOptions`, `StdlibRegistration`,
+  `HostHelperDisposition`, `from_str_with_options`, loader-owned
+  `env()`/`glob()` registration, `query_environment()`);
+  `src/manifest/tests/loader_options.rs` (the OBL-2 table); and
+  `tests/manifest_load_options_embedder.rs` (the OBL-12 substitute for the
+  `trybuild` fixture C7 forbids). Every `from_str*` and `from_path*` entry
+  point is now a wrapper, `from_path_with_options` is the crate-private core
+  deriving its registration from the opened workspace, and `evaluate_manifest`
+  splits into `build_template_environment` and `expand_and_render`. The stale
+  `ManifestLoadMode` citation in `docs/developers-guide.md` is corrected; EP-M5
+  still owns the full narrative.
+- [x] (2026-10-31) EP-M2 local verification before the gate batch:
+  `make lint-clippy` exit 0, the focused suites (both wrapper-equivalence
+  binaries, the OBL-2 rows, the stdlib refusal snapshots, the loader-options
+  doctests) 387 passed / 1607 skipped at exit 0, and `make check-fmt` clean at
+  305 Rust files and 207 Markdown files. Logs:
+  `/tmp/epm2-lint-clippy-netsuke-7-1-2.out` and
+  `/tmp/epm2-focused-tests-netsuke-7-1-2.out`.
+- [x] (2026-10-31) OBL-1 non-vacuity discharged as the obligation requires.
+  Baseline: 15 of 15 rows pass (`/tmp/epm2-obl1-baseline-netsuke-7-1-2.out`).
+  Seeded fault A — the legacy Boolean formatter symbol kept live but never
+  installed by `register_with_config` — failed 11 of the 15 rows and passed
+  only the four that never render a Boolean: both budget-exhaustion rows,
+  `path_entry_point_cannot_inject_a_clock`, and the crate-internal
+  `from_path_with_limits_row`. Seeded fault B — `render_manifest_with_budget`
+  routed through `RenderMode::ManifestQuery` — failed the same 11 rows and
+  passed the same four. Both were reverted with `git checkout --`, every
+  `*.snap.new` was deleted, and the baseline then re-ran green. Logs:
+  `/tmp/epm2-obl1-fault-a-netsuke-7-1-2.out` and
+  `/tmp/epm2-obl1-fault-b-netsuke-7-1-2.out`. Each fault's naive form is a
+  compile error under `-D warnings`; see `Surprises & discoveries`.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [ ] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -1409,6 +1442,54 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `.exit` files to a revision-suffixed name immediately on receipt, or quote in
   the plan only figures the surviving logs still show.
 
+- Observation: `ManifestLoadOptions<'a>` is **invariant** in `'a`, because it
+  stores `Option<&'a mut dyn FnMut(ManifestLoadStage)>` and `&mut` is invariant
+  in its referent. Consequence: a constructor cannot return a value whose
+  lifetime outlives its own borrow unless it is generic in that lifetime, so
+  `manifest_query` is
+  `fn manifest_query<'options>() -> ManifestLoadOptions<'options>` rather than
+  returning a `'static`-flavoured value, and `ManifestParse` gained a second
+  lifetime (`<'a, 'name>`) so the manifest-name borrow is not forced to match
+  the options borrow. Evidence: the natural signature failed to compile before
+  the split. Impact: an options struct carrying a borrowed observer is
+  invariant by construction; plan for two lifetimes at the parse boundary
+  rather than reaching for a clone or a boxed closure.
+
+- Observation: an OBL-1 seeded fault that removes the only use of a helper is
+  observed as a **compile error**, not as failing rows. Evidence: deleting the
+  `register_legacy_boolean_formatter(env)` call made `-D dead-code` reject the
+  build with "function `register_legacy_boolean_formatter` is never used" (exit
+  101), and routing every full render through `RenderMode::ManifestQuery` did
+  the same to `RenderMode::Full`. Each fault was then reseeded so the item
+  stayed used — `let _ = register_legacy_boolean_formatter;` and a temporary
+  `let _ = RenderMode::Full;` rider — which produced the intended 11 failing
+  rows. Impact: a seeded fault must keep its subject live, or the run proves
+  only that the compiler notices dead code. A first attempt that exits 101 is
+  not evidence about the rows and must be redesigned, not quoted.
+
+- Observation: the OBL-12 obligation asked for a `tests/ui` fixture compiled by
+  `trybuild`, which C7 forbids as a new dependency. The substitute is an
+  integration test in `tests/` that imports the public entry point from outside
+  the crate and loads a manifest. Evidence:
+  `tests/manifest_load_options_embedder.rs` passes and would fail to compile if
+  the surface were not `pub`. Limitation: it proves the surface is reachable
+  and compiles for an external crate; it cannot prove that some *other* item
+  stayed private. That negative is covered by the conformance check against the
+  plan's item list, not by this test.
+
+- Observation: the OBL-2 table's sixth column, "may carry overlays", has no
+  production consumer until EP-M4, so a non-`cfg` accessor would be dead code
+  under `-D warnings`. It is therefore `#[cfg(test)]` for now. Impact: EP-M4
+  must remove the gate when the overlay decision is consumed; until then the
+  table still asserts a stated answer for every variant, which is the property
+  OBL-2 exists to protect.
+
+- Observation: both public constructors' doctests load a manifest against the
+  ambient workspace, so they run in `make test`'s doctest pass rather than
+  being illustrative only. Impact: a doctest added to this module is a
+  behavioural check with a real working-directory dependency; it must avoid
+  `env()`, `glob()`, and any helper whose result depends on where the test runs.
+
 ## Decision log
 
 - Decision: `StdlibRegistration` stays a crate-private enum, extended to
@@ -1640,6 +1721,59 @@ and YAML fixtures, and were set from the inventory in Table 1.
   2026-10-16, decided by the implementation agent as the disposition of a
   review finding; recorded here for the approver.
 
+- Decision: `ManifestLoadOptions` has **no public `Default`**. The public
+  constructors are `full(config, environment)` and the crate-private `ambient`,
+  `manifest_query`, and `deferred`. Rationale: a default would have to pick an
+  ambient stdlib root, an ambient environment reader, and a registration, so an
+  embedder that wrote `..Default::default()` would silently inherit the process
+  state this milestone exists to make explicit. Omitting the impl makes that
+  mistake a compile error instead of a review note. Date/Author: 2026-10-31,
+  implementation agent in EP-M2.
+
+- Decision: the loader owns `env()` and `glob()` registration, driven by
+  `StdlibRegistration`'s dispositions, while the refusal *shapes* still come
+  from `restricted_helpers`. Rationale: whether a load may read the host is a
+  property of the load, not of the library surface (C5), so leaving these two
+  registrations inside the stdlib entry points would reintroduce a second mode
+  decision; reusing the inventoried stubs keeps every query refusal message
+  byte-identical (C2). Date/Author: 2026-10-31, implementation agent in EP-M2.
+
+- Decision: `ManifestLoadOptions::deferred` exists as a placeholder whose
+  registration is always replaced by `from_path_with_options`'s
+  `registration_for` closure, and its doc comment says so. Rationale: the
+  alternative, an `Option<StdlibRegistration>` field, would push an unreachable
+  `None` arm into the loader core for a value the core never observes. The cost
+  is one builder that must not be used directly, which the doc comment makes
+  explicit. Date/Author: 2026-10-31, implementation agent in EP-M2.
+
+- Decision: query loads share one process-wide `disabled_env_reader` behind a
+  `OnceLock` instead of constructing a reader per load. Rationale: the reader
+  is stateless, the query registration installs refusal stubs so it is never
+  consulted, and a `'static` reader lets `manifest_query` be generic in its
+  options lifetime (see `Surprises & discoveries` on invariance). Date/Author:
+  2026-10-31, implementation agent in EP-M2.
+
+- Decision: `StdlibRegistration::accepts_overlays` is `#[cfg(test)]` until
+  EP-M4 consumes it. Rationale: the decision must be stated per variant now, so
+  that adding a variant without an overlay answer fails the table, but an
+  accessor with no production caller is dead code under the repository's
+  `-D warnings` policy. EP-M4 removes the gate when the overlay machinery needs
+  the value. Date/Author: 2026-10-31, implementation agent in EP-M2.
+
+- Decision: OBL-12 is discharged by an external-crate integration test rather
+  than a `tests/ui` fixture with `trybuild`, because C7 forbids a new
+  dependency. Rationale and limitation are recorded in
+  `Surprises & discoveries`; the compile reachability is proven, the privacy
+  negative is covered by the conformance check. Date/Author: 2026-10-31,
+  implementation agent in EP-M2.
+
+- Decision: the one stale `ManifestLoadMode::ManifestQuery` citation in
+  `docs/developers-guide.md` was corrected inside EP-M2 rather than deferred to
+  EP-M5. Rationale: this milestone deletes the type, so leaving a live guide
+  naming it would make EP-M2's own documentation false on merge. EP-M5 still
+  owns the section's full narrative and the design/ADR reconciliation.
+  Date/Author: 2026-10-31, implementation agent in EP-M2.
+
 ## Outcomes & retrospective
 
 Not started.
@@ -1736,7 +1870,13 @@ through pipeline actions.
   the `register_legacy_boolean_formatter` call in
   `src/stdlib/register.rs::register_with_config`, and separately route
   `render_manifest_with_budget` through `RenderMode::ManifestQuery` in
-  `src/manifest/render/mod.rs`; each must fail a named row. Revert both.
+  `src/manifest/render/mod.rs`; each must fail a named row. Revert both. EP-M2
+  evidence: the baseline is 15 of 15 rows green. Fault A failed 11 named rows
+  and passed only the two budget-exhaustion rows,
+  `path_entry_point_cannot_inject_a_clock`, and `from_path_with_limits_row`;
+  fault B failed the same 11 and passed the same four, which is the expected
+  shape because those four never render a Boolean. Both faults were reverted
+  and the baseline re-ran green; logs are named in `Progress`.
 
 - OBL-2 — mode decision table.
   Statement: for each registration (`AmbientFull`, `Full`, `ManifestQuery`,
@@ -1748,7 +1888,11 @@ through pipeline actions.
   `src/manifest/tests/loader_options.rs`. Evidence: red (compile failure)
   before EP-M2; green after. Non-vacuity: every row asserts all six outputs;
   swapping the `Test` and `Full` arms of
-  `records_expansion_and_budget_telemetry` fails two rows.
+  `records_expansion_and_budget_telemetry` fails two rows. EP-M2 evidence: the
+  table covers the three implemented variants at `ecfeb6c67` and passes; the
+  `Test` row arrives with EP-M3, which is why EP-M2's acceptance evidence names
+  OBL-2 "without `Test` rows". The sixth column is `#[cfg(test)]` until EP-M4
+  consumes it (see `Decision log`).
 
 - OBL-3 — surface inventory completeness.
   Statement: every helper name registered anywhere under `src/stdlib/` appears
