@@ -191,6 +191,7 @@ fn edge_with_explicit_outputs(outputs: &[&str]) -> BuildEdge {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     }
 }
 
