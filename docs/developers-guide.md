@@ -84,10 +84,11 @@ deterministic.
 
 `parse_with_localizer_from` must call `configured_command`. That factory
 localizes `Cli::command()`, calls `configure_validation_parsers`, and returns
-the configured command before `parse_with_localizer_from` calls
-`ortho_config::parse_localized_command`. This ordering preserves localized
-parse errors and keeps possible-value metadata on every rendered command tree.
-The `src/cli/parsing.rs` helpers and the domain policy types remain
+the configured command before `parse_with_localizer_from` parses with
+`try_get_matches_from_mut`, builds `Cli` with `Cli::from_arg_matches`, and
+localizes failures from both stages. This ordering preserves localized parse
+errors and keeps possible-value metadata on every rendered command tree. The
+`src/cli/parsing.rs` helpers and the domain policy types remain
 Clap-independent. Do not move Clap types or `TypedValueParser` implementations
 into domain configuration types. The `src/cli/policy/values.rs` module owns the
 Clap-only conversion from the canonical policy definitions to `PossibleValue`
