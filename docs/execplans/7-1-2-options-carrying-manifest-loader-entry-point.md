@@ -1058,6 +1058,22 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - [x] (2026-10-31) The gate-set correction recorded below is discharged: the
   batch above ran `make test` against this plan's current text at `61e6cf102`,
   and the only later plan edit is this prose record.
+- [ ] (2026-10-31) EP-M2 milestone CLI review is **blocked on CodeRabbit's
+  organisation-wide quota**, not on the candidate. Two invocations of
+  `coderabbit review --agent --committed --base origin/main` against
+  `68cc2683f` (the second after the stated 51 s wait) both exited 1 with
+  `errorType: rate_limit`: "You've used all 10 included reviews currently
+  available", `onDemandReviewAvailable: false`. Zero files were reviewed, so
+  there are no concerns to verify. Logs:
+  `/tmp/epm2-coderabbit-review-68cc2683f.out` and
+  `/tmp/epm2-coderabbit-review-68cc2683f-2.out`. The review will be
+  re-requested once a slot frees; if it runs after EP-M3 lands it covers both
+  milestones and that scope will be recorded with its result. The repository's
+  own gates are green and are not affected by the quota.
+- [x] (2026-10-31) Published `68cc2683f` over SSH as `leynos`; local head, the
+  refreshed `origin/7-1-2-options-carrying-manifest-loader-entry-point`
+  tracking ref, and the remote branch all read the same commit, and the branch
+  upstream is `origin/<branch>`.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [x] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
