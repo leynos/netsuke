@@ -975,7 +975,13 @@ the same key correctly. **Pre-existing and netsuke-fixable** using clap's public
 [leynos/netsuke#961](https://github.com/leynos/netsuke/issues/961).
 **Resolved:** `LocalizedValueParser` now inserts `InvalidArg` and
 `InvalidValue`, so `clap-error-value-validation` renders in every catalogue,
-and the `InvalidUtf8` branch has its own `clap-error-invalid-utf8` key.
+and the `InvalidUtf8` branch has its own `clap-error-invalid-utf8` key. Review
+of that fix found a second-order case: `ortho_config` drops *empty* context
+strings, so `--option=` still could not interpolate `{ $value }` and logged a
+spurious missing-translation warning. `parse_with_localizer_from` now detects
+an empty supplied value at the CLI boundary and keeps the validator's
+already-localized empty-specific diagnostic, with English and Spanish
+regression coverage.
 
 Lessons. First, a sampled assertion is the wrong instrument for proving that a
 generator reaches a class: the first V1 non-vacuity check would have failed

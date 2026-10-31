@@ -1101,6 +1101,10 @@ A rejected option value renders as `Validation failed for <option>: <value>`,
 for example `Validation failed for --color <POLICY>: loud`. The option span is
 the argument's documented display form, including its value name.
 
+An empty value, such as `--locale=`, is reported by the option's own diagnostic
+instead, for example `Locale must not be empty.`, because the generic template
+has no value to show.
+
 System values are normalized first, so `en_GB.UTF-8` is understood as `en-GB`.
 
 Table 1: Locales Netsuke ships

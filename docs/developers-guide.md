@@ -685,6 +685,18 @@ argument-specific UTF-8 message already localized under `cli.file.non_utf8` or
 `cli.directory.non_utf8`, so attaching the generic value-validation context
 would replace that tailored diagnostic.
 
+An empty supplied value needs separate handling. `ortho_config` drops empty
+strings from the clap context before building Fluent arguments, so a
+`ValueValidation` error for `--option=` reaches the localizer without a `value`
+argument: the template cannot interpolate `{ $value }`, the fallback ships, and
+a spurious missing-translation warning is logged. `parse_with_localizer_from` in
+`src/cli/parser/mod.rs` detects that shape and returns the error unchanged,
+keeping the validator's already-localized empty-specific diagnostic (such as
+`cli.validation.locale.empty`) instead of restoring a placeholder value that
+would replace the specific diagnostic with the generic template. A value
+validator must therefore localize its empty-value message; the generic template
+cannot stand in for it.
+
 A *diagnostic* message whose text carries a bracketed code such as
 `[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
 every catalogue. The code is part of the message text rather than a field, so a

@@ -15,9 +15,9 @@
 
 use camino::Utf8PathBuf;
 use clap::builder::{TypedValueParser, ValueParser};
-use clap::error::ErrorKind;
-use clap::{ArgMatches, CommandFactory};
-use ortho_config::{LocalizationArgs, Localizer, parse_localized_command};
+use clap::error::{ContextKind, ContextValue, ErrorKind};
+use clap::{ArgMatches, CommandFactory, FromArgMatches};
+use ortho_config::{LocalizationArgs, Localizer, localize_clap_error_with_command};
 use std::ffi::{OsStr, OsString};
 use std::sync::Arc;
 
@@ -100,8 +100,57 @@ where
     I: IntoIterator<Item = T>,
     T: Into<OsString> + Clone,
 {
-    let command = configured_command(Some(localizer));
-    parse_localized_command(command, iter, localizer.as_ref())
+    let mut command = configured_command(Some(localizer));
+    let active_localizer = localizer.as_ref();
+    let matches = command
+        .try_get_matches_from_mut(iter)
+        .map_err(|error| localize_parse_error(error, active_localizer, &command))?;
+    let cli = Cli::from_arg_matches(&matches).map_err(|error| {
+        localize_parse_error(error.with_cmd(&command), active_localizer, &command)
+    })?;
+    Ok((cli, matches))
+}
+
+/// Localize a `clap` error while preserving empty-value diagnostics.
+///
+/// `ortho_config` forwards `clap` context into Fluent arguments but drops
+/// empty strings, so a `ValueValidation` error from an option written as
+/// `--option=` reaches the localizer without a `value` argument. The
+/// `clap-error-value-validation` template cannot interpolate `{ $value }` in
+/// that state; the lookup returns the fallback and logs a missing-translation
+/// warning even though every catalogue defines the key. Restoring a placeholder
+/// value would render the generic template in place of the validator's
+/// specific message, so the error is returned as produced. Netsuke's validators
+/// already localize the empty case (`cli.validation.locale.empty` and friends);
+/// for clap's own parsers the stock diagnostic is preserved.
+///
+/// Errors carrying a non-empty value still flow through `ortho_config`, which
+/// renders the catalogue template with the argument and value spans.
+fn localize_parse_error(
+    error: clap::Error,
+    localizer: &dyn Localizer,
+    command: &clap::Command,
+) -> clap::Error {
+    if is_empty_value_validation(&error) {
+        return error;
+    }
+    localize_clap_error_with_command(error, localizer, Some(command))
+}
+
+/// Report whether `error` is a value-validation failure for an empty value.
+///
+/// Both context shapes are checked. `ortho_config` joins a multi-value list
+/// with `", "` before testing for emptiness, so such a list is lost only when
+/// every entry is empty; a mixed list still renders the joined value.
+fn is_empty_value_validation(error: &clap::Error) -> bool {
+    if error.kind() != ErrorKind::ValueValidation {
+        return false;
+    }
+    match error.get(ContextKind::InvalidValue) {
+        Some(ContextValue::String(value)) => value.is_empty(),
+        Some(ContextValue::Strings(values)) => values.iter().all(String::is_empty),
+        _ => false,
+    }
 }
 
 /// Construct the command with every typed validation parser installed.

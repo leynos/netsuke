@@ -196,6 +196,49 @@ fn value_validation_errors_do_not_warn_about_missing_translation() -> Result<()>
     Ok(())
 }
 
+/// An empty supplied value never reaches Fluent: `ortho_config` drops empty
+/// clap context before building the argument map, so `{ $value }` cannot
+/// interpolate. The value parser's own empty-specific, already-localized
+/// diagnostic must render instead, and the boundary must not log the
+/// missing-translation warning that the impossible kind-level lookup would
+/// otherwise raise.
+#[rstest]
+#[case::en_locale("en-US", "--locale=", "Locale must not be empty.")]
+#[case::es_locale("es-ES", "--locale=", "La configuración regional no debe estar vacía.")]
+#[case::en_scheme("en-US", "--fetch-allow-scheme=", "Scheme must not be empty.")]
+#[case::es_scheme("es-ES", "--fetch-allow-scheme=", "El esquema no debe estar vacío.")]
+#[case::en_jobs("en-US", "--jobs=", "is not a valid number")]
+#[case::es_jobs("es-ES", "--jobs=", "no es un número válido")]
+fn empty_value_validation_renders_localized_message_without_warning(
+    #[case] locale: &str,
+    #[case] argument: &str,
+    #[case] expected: &str,
+) -> Result<()> {
+    let (rejection, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let rejection = parse_rejection(&["netsuke", argument], locale);
+        (rejection, captured.snapshot())
+    });
+    let err = rejection?;
+
+    ensure!(
+        err.kind() == ErrorKind::ValueValidation,
+        "expected ValueValidation for {argument}, got {:?}",
+        err.kind()
+    );
+    let rendered = normalize_fluent_isolates(&err.to_string());
+    ensure!(
+        rendered.contains(expected),
+        "expected {expected:?} in rendered error, got: {rendered}"
+    );
+    ensure!(
+        events
+            .iter()
+            .all(|event| !event.contains("missing translation")),
+        "an empty supplied value should not warn about a missing translation: {events:?}"
+    );
+    Ok(())
+}
+
 /// Non-UTF-8 values fail before the validation closure runs and must render
 /// the placeholder-free `clap-error-invalid-utf8` catalogue message.
 #[cfg(unix)]

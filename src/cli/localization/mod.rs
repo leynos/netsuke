@@ -74,11 +74,12 @@ impl EmptyClapValueLocalizer {
 
 /// Whether `id` needs the empty `value` restored to format successfully.
 ///
-/// Only `TooManyValues` is repaired: it is the one kind `clap` reports for
-/// `--flag=` that also supplies the `argument` the catalogue names. Other kinds
-/// with an empty value — `ValueValidation` among them — arrive with no
-/// `argument` either, which is a separate gap in the upstream mapping rather
-/// than something a placeholder can paper over.
+/// Only `TooManyValues` is repaired here. A `ValueValidation` error for
+/// `--option=` also loses its empty `value`, but Netsuke's value parsers
+/// already localize that case to an option-specific message, and
+/// `parse_with_localizer_from` deliberately keeps it rather than restoring a
+/// placeholder that would replace the specific diagnostic with the generic
+/// template. Other kinds keep whatever diagnostic their producer supplied.
 fn needs_empty_value(id: &str, args: Option<&LocalizationArgs<'_>>) -> bool {
     id == TOO_MANY_VALUES_ID && args.is_some_and(|supplied| !supplied.contains_key("value"))
 }
