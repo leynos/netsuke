@@ -54,6 +54,8 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     quote_context: QuoteContext,
     /// Retain nested `$()` parsing state where path insertion is refused.
     command_substitutions: Vec<CommandSubstitution>,
+    /// Record the `)` that closed the most recent command substitution.
+    closed_command_substitution: Option<usize>,
     /// Track POSIX comments and heredocs whose text must remain lexically inert.
     posix_lexical: PosixLexicalState,
 }
@@ -75,6 +77,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             power_shell_stop_parsing: PowerShellStopParsingState::new(),
             quote_context: QuoteContext::Unquoted,
             command_substitutions: Vec::new(),
+            closed_command_substitution: None,
             posix_lexical: PosixLexicalState::new(),
         }
     }
@@ -145,7 +148,8 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         if let Some(next) = declaration_end {
             return Some(next);
         }
-        if PosixLexicalState::starts_comment(self.chars, pos, ch) {
+        if PosixLexicalState::starts_comment(self.chars, pos, ch, self.closed_command_substitution)
+        {
             self.posix_lexical.begin_comment();
             self.output.push(ch);
             return Some(pos + 1);
@@ -199,7 +203,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
                 Some(pos + 1)
             }
             CommandSubstitutionDelimiter::Close => {
-                self.decrement_command_substitution_parenthesis_depth();
+                if self.decrement_command_substitution_parenthesis_depth() {
+                    self.closed_command_substitution = Some(pos);
+                }
                 self.output.push(ch);
                 Some(pos + 1)
             }
@@ -298,15 +304,20 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
     }
 
-    /// Close one grouping level and leave the substitution when its delimiter closes.
-    fn decrement_command_substitution_parenthesis_depth(&mut self) {
+    /// Close one grouping level and report whether the substitution ended.
+    ///
+    /// Only the `)` that leaves the substitution belongs to the outer word; a
+    /// `)` closing an inner group is still a separator inside the substitution.
+    fn decrement_command_substitution_parenthesis_depth(&mut self) -> bool {
         let Some(substitution) = self.command_substitutions.last_mut() else {
-            return;
+            return false;
         };
         substitution.parenthesis_depth -= 1;
-        if substitution.parenthesis_depth == 0 {
+        let is_closed = substitution.parenthesis_depth == 0;
+        if is_closed {
             self.command_substitutions.pop();
         }
+        is_closed
     }
 
     /// Lower a marker when its current shell context permits substitution.

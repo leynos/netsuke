@@ -6400,7 +6400,10 @@ characters such as U+00A0 as ordinary word data rather than as locale-dependent
 multibyte blanks. Using the Unicode rule would let `#` after such a character
 start a false comment, skip a real quote transition, and select the wrong path
 encoding for a later marker. A CRLF script therefore treats a carriage return
-before `#` as word data, matching those shells.
+before `#` as word data, matching those shells. The traversals that track `$()`
+also pass the position of the `)` that closed the innermost substitution, so
+the boundary check does not mistake that delimiter for a separator. A `)`
+closing a subshell remains an operator and still permits a comment.
 `src/lint/rules/shellscan/mod.rs` and the property-test oracle in
 `src/ir/cmd_interpolate/property_tests/support.rs` keep separate boundary
 models; neither controls path encoding, so neither is part of this contract.

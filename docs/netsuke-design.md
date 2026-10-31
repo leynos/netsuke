@@ -309,7 +309,9 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   Markers inside command substitutions or backticks are rejected. Comment and
   heredoc recognition ends a POSIX word only at a space, tab, newline, or one of
   `;`, `&`, `|`, `(`, `)`, `<`, and `>`; non-ASCII whitespace before `#` is
-  word data and does not start a comment. PowerShell permits markers only at
+  word data and does not start a comment. A `)` that closes a command or
+  arithmetic expansion also stays in the surrounding word, so `#` immediately
+  after it does not start a comment. PowerShell permits markers only at
   unquoted sites and rejects other shell-sensitive contexts. Longer identifiers
   such as `$input` and `$output`, and non-placeholder text inside backticks,
   remain unchanged. A scalar command is emitted unchanged, but still undergoes

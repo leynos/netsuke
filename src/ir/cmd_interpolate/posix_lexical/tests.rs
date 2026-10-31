@@ -122,6 +122,69 @@ fn posix_separators_before_hash_start_inert_comments(#[case] prefix: &str) {
     );
 }
 
+/// Verify a closing substitution delimiter keeps `#` in the surrounding word.
+///
+/// After `$()` or `$(( ))`, the closing `)` is still part of the word, so `#`
+/// does not begin a comment. A scanner that treated it as a separator would
+/// skip the quote on the same line and encode the marker for the wrong
+/// context, letting a quote-bearing path escape its double-quoted region.
+#[rstest]
+#[case::command_substitution("echo $(printf x)")]
+#[case::arithmetic_expansion("echo $((1 + 2))")]
+fn substitution_close_before_hash_preserves_executable_quote_context(#[case] prefix: &str) {
+    let bindings = hostile_posix_bindings();
+    let template = format!("{prefix}#\"\necho {INS_TOKEN}\"");
+    let expected = format!("{prefix}#\"\necho {HOSTILE_DOUBLE_QUOTED}\"");
+
+    assert_eq!(
+        interpolate_command_with_bindings(&template, &bindings)
+            .expect("a closing substitution delimiter must keep '#' in the word"),
+        expected
+    );
+    assert_eq!(
+        interpolate_script_with_bindings(&template, &bindings)
+            .expect("a closing substitution delimiter must keep '#' in the word"),
+        expected
+    );
+}
+
+/// Verify a subshell closer still delimits the word before `#`.
+///
+/// A `)` that closes a subshell is an operator rather than part of a word, so
+/// `#` after it begins an inert comment. A quote inside that comment must not
+/// change the encoding of a marker on the following line.
+#[test]
+fn subshell_close_before_hash_starts_inert_comment() {
+    let bindings = hostile_posix_bindings();
+    let template = format!("(echo x)# {INS_TOKEN} unmatched '\necho \"{OUTS_TOKEN}\"");
+    let expected = format!("(echo x)# {INS_TOKEN} unmatched '\necho \"{HOSTILE_DOUBLE_QUOTED}\"");
+
+    assert_eq!(
+        interpolate_script_with_bindings(&template, &bindings)
+            .expect("a subshell closer must still begin a comment"),
+        expected
+    );
+}
+
+/// Verify an inner group closer inside `$()` still begins a comment.
+///
+/// The `)` that closes the subshell rather than the substitution is an
+/// operator within the substitution, so `#` after it makes the rest of that
+/// line inert. The substitution's own `)` on the next line then closes it.
+#[test]
+fn inner_group_close_inside_substitution_starts_inert_comment() {
+    let bindings = hostile_posix_bindings();
+    let template = format!("echo $( (echo x)# {INS_TOKEN} unmatched '\n)\necho \"{OUTS_TOKEN}\"");
+    let expected =
+        format!("echo $( (echo x)# {INS_TOKEN} unmatched '\n)\necho \"{HOSTILE_DOUBLE_QUOTED}\"");
+
+    assert_eq!(
+        interpolate_script_with_bindings(&template, &bindings)
+            .expect("a group closer inside a substitution must begin a comment"),
+        expected
+    );
+}
+
 /// Verify a non-ASCII character keeps a heredoc delimiter word intact.
 ///
 /// The delimiter is `EOF` followed by a no-break space and `X`, so the body

@@ -105,8 +105,17 @@ impl PosixLexicalState {
     }
 
     /// Report whether an unquoted number sign begins a POSIX comment.
-    pub(super) fn starts_comment(chars: &[char], pos: usize, ch: char) -> bool {
-        ch == '#' && is_shell_word_boundary(chars, pos)
+    ///
+    /// `closed_substitution` names the `)` that closed a command substitution
+    /// when the caller tracks one. That `)` remains part of the surrounding
+    /// word, so a following `#` is word data rather than a comment.
+    pub(super) fn starts_comment(
+        chars: &[char],
+        pos: usize,
+        ch: char,
+        closed_substitution: Option<usize>,
+    ) -> bool {
+        ch == '#' && is_shell_word_boundary(chars, pos, closed_substitution)
     }
 
     /// Preserve one heredoc declaration and queue its body delimiter.
@@ -180,11 +189,16 @@ impl HeredocBody {
 /// POSIX starts a comment only where a token may start: at the beginning of
 /// input or after an unescaped separator. Every other character is word data,
 /// so Unicode spaces, carriage return, vertical tab, and form feed do not
-/// begin a comment and do not stop quote tracking.
-fn is_shell_word_boundary(chars: &[char], pos: usize) -> bool {
+/// begin a comment and do not stop quote tracking. A `)` that closes a command
+/// substitution also remains in the surrounding word, so the caller passes its
+/// position as `closed_substitution` to suppress that false boundary.
+fn is_shell_word_boundary(chars: &[char], pos: usize, closed_substitution: Option<usize>) -> bool {
     let Some(previous_pos) = preceding_shell_character(chars, pos) else {
         return true;
     };
+    if closed_substitution == Some(previous_pos) {
+        return false;
+    }
     is_unescaped_character(chars, pos)
         && is_unescaped_character(chars, previous_pos)
         && chars
