@@ -110,6 +110,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: false,
             always: false,
+            console: false,
         },
         BuildEdge {
             action_id: "aggregate".into(),
@@ -122,6 +123,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: true,
             always: false,
+            console: false,
         },
         BuildEdge {
             action_id: "aggregate".into(),
@@ -134,6 +136,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: true,
             always: false,
+            console: false,
         },
         BuildEdge {
             action_id: "aggregate".into(),
@@ -146,6 +149,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: true,
             always: false,
+            console: false,
         },
     ] {
         // A duplicate alias would silently change the graph this test exists to

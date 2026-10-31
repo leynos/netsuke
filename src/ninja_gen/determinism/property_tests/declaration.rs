@@ -354,6 +354,7 @@ fn rule_backed_target(name: &str) -> Target {
         vars: Vars::default(),
         phony: false,
         always: false,
+        console: false,
         conditional: false,
         description: None,
     }

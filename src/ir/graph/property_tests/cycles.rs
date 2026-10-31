@@ -287,6 +287,7 @@ fn target(slot: usize, deps: &[usize]) -> Target {
         vars: Vars::default(),
         phony: false,
         always: false,
+        console: false,
         conditional: false,
         description: None,
     }

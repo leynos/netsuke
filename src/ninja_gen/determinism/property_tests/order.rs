@@ -328,6 +328,7 @@ fn the_edge_rule_keys_on_the_output_set() {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let later = edge(["out/a", "out/z"]);
     let earlier = edge(["out/a", "out/m"]);
