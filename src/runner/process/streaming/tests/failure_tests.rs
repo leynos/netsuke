@@ -196,6 +196,8 @@ fn invalid_read_count_is_classified_as_a_read_failure() {
 
     assert_eq!(stats.failure, Some(ForwardFailureKind::Read));
     assert!(!stats.drain_failed);
+    // The impossible count is credited to `bytes_read` before the bounds check
+    // rejects it, so this case asserts the classification, not the accounting.
     assert_eq!(
         failure_series(&snapshotter.snapshot().into_vec()),
         vec![("stdout".to_owned(), "read".to_owned(), 1)]
@@ -215,10 +217,16 @@ fn interrupted_reads_are_retried_without_recording_a_failure() {
         )
     });
 
-    assert_eq!(stats.failure, None);
-    assert!(!stats.drain_failed);
-    assert_eq!(stats.bytes_read, input.len());
-    assert_eq!(stats.bytes_written, input.len());
+    assert_eq!(
+        (
+            stats.failure,
+            stats.drain_failed,
+            stats.bytes_read,
+            stats.bytes_written,
+        ),
+        (None, false, input.len(), input.len()),
+        "interrupted reads must be retried without being recorded"
+    );
     assert!(
         failure_series(&snapshotter.snapshot().into_vec()).is_empty(),
         "retried interruptions must not be recorded as terminal failures"
@@ -243,10 +251,24 @@ fn write_failures_are_counted_for_each_stream_separately() {
         (stdout, stderr)
     });
 
-    assert_eq!(stdout_stats.failure, Some(ForwardFailureKind::Write));
-    assert_eq!(stderr_stats.failure, Some(ForwardFailureKind::Write));
-    assert_eq!(stdout_stats.bytes_read, 4);
-    assert_eq!(stdout_stats.bytes_written, 0);
+    assert_eq!(
+        (
+            stdout_stats.failure,
+            stdout_stats.bytes_read,
+            stdout_stats.bytes_written,
+        ),
+        (Some(ForwardFailureKind::Write), 4, 0),
+        "a closed stdout pipe must be classified as a write failure"
+    );
+    assert_eq!(
+        (
+            stderr_stats.failure,
+            stderr_stats.bytes_read,
+            stderr_stats.bytes_written,
+        ),
+        (Some(ForwardFailureKind::Write), 4, 0),
+        "a closed stderr pipe must be classified as a write failure"
+    );
     assert_eq!(
         failure_series(&snapshotter.snapshot().into_vec()),
         vec![
@@ -270,12 +292,26 @@ fn flush_failure_keeps_accepted_bytes_without_rewriting_them() {
         (stats, writer)
     });
 
-    assert_eq!(stats.failure, Some(ForwardFailureKind::Flush));
-    assert!(!stats.drain_failed);
-    assert_eq!(writer.writes, 1, "accepted bytes must not be rewritten");
-    assert_eq!(writer.accepted, b"first");
-    assert_eq!(stats.bytes_read, "firstlast".len());
-    assert_eq!(stats.bytes_written, "first".len());
+    assert_eq!(
+        (
+            stats.failure,
+            stats.drain_failed,
+            stats.bytes_read,
+            stats.bytes_written,
+        ),
+        (
+            Some(ForwardFailureKind::Flush),
+            false,
+            "firstlast".len(),
+            "first".len(),
+        ),
+        "a failed flush must keep the bytes it already accepted"
+    );
+    assert_eq!(
+        (writer.writes, writer.accepted.as_slice()),
+        (1, b"first".as_slice()),
+        "accepted bytes must not be rewritten"
+    );
     assert_eq!(
         failure_series(&snapshotter.snapshot().into_vec()),
         vec![("stdout".to_owned(), "flush".to_owned(), 1)]
@@ -297,10 +333,16 @@ fn drain_failure_is_recorded_without_replacing_the_initiating_failure() {
         )
     });
 
-    assert_eq!(stats.failure, Some(ForwardFailureKind::Write));
-    assert!(stats.drain_failed);
-    assert_eq!(stats.bytes_read, b"first".len());
-    assert_eq!(stats.bytes_written, 0);
+    assert_eq!(
+        (
+            stats.failure,
+            stats.drain_failed,
+            stats.bytes_read,
+            stats.bytes_written,
+        ),
+        (Some(ForwardFailureKind::Write), true, b"first".len(), 0),
+        "a drain failure must not replace the initiating write failure"
+    );
     assert_eq!(
         failure_series(&snapshotter.snapshot().into_vec()),
         vec![
