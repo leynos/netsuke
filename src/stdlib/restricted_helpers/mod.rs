@@ -49,10 +49,16 @@ struct HelperEntry {
 }
 
 /// Select the unavailable-helper inventory for a restricted load surface.
-#[derive(Clone, Copy)]
-enum RestrictedSurface {
+///
+/// A surface is one capability decision, not a rendering mode: the loader reads
+/// its `env()` and `glob()` dispositions from the same value so the refusal
+/// vocabulary cannot disagree with itself (C5).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum RestrictedSurface {
     /// The side-effect-free surface used by manifest discovery.
     ManifestQuery,
+    /// The deny-by-default surface used by `netsuke test`.
+    Test,
 }
 
 impl RestrictedSurface {
@@ -60,8 +66,17 @@ impl RestrictedSurface {
     fn refuses(self, entry: &HelperEntry) -> bool {
         match self {
             Self::ManifestQuery => entry.query == QueryDisposition::Refused,
+            Self::Test => entry.test == TestDisposition::Refused,
         }
     }
+}
+
+/// Report whether the manifest loader owns this helper's registration.
+///
+/// `env()` and `glob()` are load-wide capabilities, so the loader registers
+/// them; a surface that registered them too would overwrite that decision.
+fn is_loader_owned(entry: &HelperEntry) -> bool {
+    matches!(entry.name, "env" | "glob")
 }
 
 /// Construct one inventory row without repeating the field labels.
@@ -292,13 +307,25 @@ const SURFACE: &[HelperEntry] = &[
 ];
 
 mod query;
-pub(crate) use query::{
-    is_manifest_query_disabled_error, register_env_refusal, register_glob_refusal,
-};
+mod test_mode;
+pub(crate) use query::{is_manifest_query_disabled_error, register_env_refusal};
+pub use test_mode::TestModeRefusal;
+pub(crate) use test_mode::register_for_test;
 
 /// Register the deliberate failures selected for manifest-query loads.
 pub(super) fn register_query_refusals(env: &mut minijinja::Environment<'_>) {
     query::register_refusals(env, RestrictedSurface::ManifestQuery);
+}
+
+/// Register the `glob()` refusal selected by a restricted surface.
+pub(crate) fn register_glob_refusal(
+    env: &mut minijinja::Environment<'_>,
+    surface: RestrictedSurface,
+) {
+    match surface {
+        RestrictedSurface::ManifestQuery => query::register_glob_refusal(env),
+        RestrictedSurface::Test => test_mode::register_glob_refusal(env),
+    }
 }
 
 /// Return the names used by the build surface's real file-test registrations.
@@ -309,5 +336,7 @@ pub(super) fn file_test_names() -> impl Iterator<Item = &'static str> {
         .map(|entry| entry.name)
 }
 
+#[cfg(test)]
+mod test_mode_tests;
 #[cfg(test)]
 mod tests;

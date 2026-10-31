@@ -212,6 +212,7 @@ define_keys! {
     STDLIB_CONFIG_OPEN_WORKSPACE_ROOT => "stdlib.config.open_workspace_root",
     STDLIB_CONFIG_RESOLVE_CWD => "stdlib.config.resolve_cwd",
     STDLIB_CONFIG_CWD_NON_UTF8 => "stdlib.config.cwd_non_utf8",
+    STDLIB_TEST_MODE_HELPER_UNAVAILABLE => "stdlib.test_mode.helper_unavailable",
     STDLIB_FETCH_URL_INVALID => "stdlib.fetch.url_invalid",
     STDLIB_FETCH_DISALLOWED => "stdlib.fetch.disallowed",
     STDLIB_FETCH_FAILED => "stdlib.fetch.failed",

@@ -42,7 +42,7 @@
 //! implementation instead of a stub would render successfully, and the text
 //! assertion alone would report only a missing error.
 
-use super::is_manifest_query_disabled_error;
+use super::{RestrictedSurface, is_manifest_query_disabled_error};
 use crate::stdlib::{register_env_refusal, register_glob_refusal, register_manifest_query};
 use anyhow::Result;
 use minijinja::Environment;
@@ -276,7 +276,7 @@ fn refusal_from(template: &str) -> Result<minijinja::Error> {
     // own disposition, so a query load registers them alongside the surface.
     register_manifest_query(&mut env);
     register_env_refusal(&mut env);
-    register_glob_refusal(&mut env);
+    register_glob_refusal(&mut env, RestrictedSurface::ManifestQuery);
     match env.render_str(template, ()) {
         Ok(rendered) => anyhow::bail!(
             "the query surface rendered {template:?} successfully as {rendered:?}; \

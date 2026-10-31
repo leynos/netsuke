@@ -296,6 +296,10 @@ stdlib.command.output.mode.streaming = 串流
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } 在 `netsuke test` 下無法使用。
+
+
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
 stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }

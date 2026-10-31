@@ -18,19 +18,19 @@ use minijinja::Environment;
 
 use super::{
     EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadStage,
-    ManifestName, ManifestParse, NetsukeManifest,
+    ManifestName, ManifestParse, NetsukeManifest, TestSurface,
     budget::adapter::from_str_named,
     registration::{register_env_function, register_glob_function},
 };
-use crate::stdlib::{StdlibConfig, StdlibState};
+use crate::stdlib::{RestrictedSurface, StdlibConfig, StdlibState};
 
 /// State whether the loader installs a real host-reading helper or a refusal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum HostHelperDisposition {
     /// The loader installs the real helper.
     Real,
-    /// The loader installs the restricted surface's refusal stub.
-    Refused,
+    /// The loader installs the named restricted surface's refusal stub.
+    Refused(RestrictedSurface),
 }
 
 /// Selects the stdlib surface available while rendering a manifest.
@@ -44,14 +44,20 @@ pub(crate) enum StdlibRegistration {
     Full(Box<StdlibConfig>),
     /// The read-only stdlib used to inspect manifest discovery metadata.
     ManifestQuery,
+    /// The deny-by-default surface used by `netsuke test`.
+    Test(Box<TestSurface>),
 }
 
 impl StdlibRegistration {
     /// Decide whether `env()` reads the injected environment or refuses.
+    ///
+    /// A test surface is real here: its reader is an explicit seam, and with
+    /// none supplied it refuses every lookup rather than consulting the
+    /// process.
     pub(crate) const fn env_disposition(&self) -> HostHelperDisposition {
         match self {
-            Self::AmbientFull | Self::Full(_) => HostHelperDisposition::Real,
-            Self::ManifestQuery => HostHelperDisposition::Refused,
+            Self::AmbientFull | Self::Full(_) | Self::Test(_) => HostHelperDisposition::Real,
+            Self::ManifestQuery => HostHelperDisposition::Refused(RestrictedSurface::ManifestQuery),
         }
     }
 
@@ -59,7 +65,20 @@ impl StdlibRegistration {
     pub(crate) const fn glob_disposition(&self) -> HostHelperDisposition {
         match self {
             Self::AmbientFull | Self::Full(_) => HostHelperDisposition::Real,
-            Self::ManifestQuery => HostHelperDisposition::Refused,
+            Self::ManifestQuery => HostHelperDisposition::Refused(RestrictedSurface::ManifestQuery),
+            Self::Test(_) => HostHelperDisposition::Refused(RestrictedSurface::Test),
+        }
+    }
+
+    /// Return the reader behind a surface that supplies its own.
+    ///
+    /// A test surface replaces the options' environment with an explicitly
+    /// injected reader; every other mode uses the environment the options
+    /// carry.
+    pub(crate) fn env_reader<'r>(&'r self, fallback: &'r EnvReader) -> &'r EnvReader {
+        match self {
+            Self::Test(surface) => surface.reader(),
+            _ => fallback,
         }
     }
 
@@ -91,6 +110,7 @@ impl StdlibRegistration {
     #[cfg(test)]
     pub(crate) const fn accepts_overlays(&self) -> bool {
         match self {
+            Self::Test(_) => true,
             Self::AmbientFull | Self::Full(_) | Self::ManifestQuery => false,
         }
     }
@@ -146,6 +166,28 @@ impl<'a> ManifestLoadOptions<'a> {
         Self {
             registration: StdlibRegistration::AmbientFull,
             environment,
+            budget_limits: ManifestBudgetLimits::default(),
+            on_stage: None,
+        }
+    }
+
+    /// Load with the deny-by-default test surface.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::manifest::{ManifestLoadOptions, TestSurface};
+    /// use netsuke::stdlib::StdlibConfig;
+    ///
+    /// let surface = TestSurface::new(StdlibConfig::from_current_dir().expect("open the workspace"));
+    /// let options = ManifestLoadOptions::test(surface);
+    /// # let _ = options;
+    /// ```
+    #[must_use]
+    pub fn test(surface: TestSurface) -> Self {
+        Self {
+            registration: StdlibRegistration::Test(Box::new(surface)),
+            environment: query_environment(),
             budget_limits: ManifestBudgetLimits::default(),
             on_stage: None,
         }
@@ -279,13 +321,16 @@ pub(super) fn register_host_helpers(
 ) {
     match registration.env_disposition() {
         HostHelperDisposition::Real => {
-            register_env_function(env, environment.reader(), environment.access_policy());
+            let reader = registration.env_reader(environment.reader());
+            register_env_function(env, reader, environment.access_policy());
         }
-        HostHelperDisposition::Refused => crate::stdlib::register_env_refusal(env),
+        HostHelperDisposition::Refused(_) => crate::stdlib::register_env_refusal(env),
     }
     match registration.glob_disposition() {
         HostHelperDisposition::Real => register_glob_function(env, manifest_root),
-        HostHelperDisposition::Refused => crate::stdlib::register_glob_refusal(env),
+        HostHelperDisposition::Refused(surface) => {
+            crate::stdlib::register_glob_refusal(env, surface);
+        }
     }
 }
 
@@ -298,6 +343,9 @@ pub(super) fn register_stdlib(
         StdlibRegistration::AmbientFull => crate::stdlib::register(env),
         StdlibRegistration::Full(config) => crate::stdlib::register_with_config(env, *config),
         StdlibRegistration::ManifestQuery => Ok(crate::stdlib::register_manifest_query(env)),
+        StdlibRegistration::Test(surface) => {
+            Ok(crate::stdlib::register_for_test(env, surface.config()))
+        }
     }
 }
 

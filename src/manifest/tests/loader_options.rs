@@ -5,16 +5,19 @@
 //! inferred from rendered output. The table is exhaustive over the variants
 //! that exist, which is why a bounded model checker would add nothing.
 //!
-//! The `Test` row joins this table with its variant in EP-M3.
+//! The `Test` row asserts the deny-by-default surface: `env()` is real over an
+//! injected reader, `glob()` refuses, and the mode neither renders in query
+//! mode, records normal-load telemetry, classifies query refusals, nor grants
+//! overlays today. The overlay grant lands with EP-M4's machinery.
 
 use rstest::rstest;
 
 use crate::manifest::loader_options::HostHelperDisposition;
 use crate::manifest::{
     EnvAccessPolicy, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadOptions, ManifestName,
-    StdlibRegistration, from_str_with_options, process_env_reader,
+    StdlibRegistration, TestSurface, from_str_with_options, process_env_reader,
 };
-use crate::stdlib::StdlibConfig;
+use crate::stdlib::{RestrictedSurface, StdlibConfig};
 
 /// A manifest that reads and acts on nothing, so every mode can load it.
 const PURE_MANIFEST: &str = concat!(
@@ -31,6 +34,7 @@ enum Row {
     AmbientFull,
     Full,
     ManifestQuery,
+    Test,
 }
 
 /// The six outputs `StdlibRegistration` decides for one mode.
@@ -53,6 +57,9 @@ impl Row {
                 StdlibConfig::from_current_dir().expect("open the test workspace"),
             )),
             Self::ManifestQuery => StdlibRegistration::ManifestQuery,
+            Self::Test => StdlibRegistration::Test(Box::new(TestSurface::new(
+                StdlibConfig::from_current_dir().expect("open the test workspace"),
+            ))),
         }
     }
 
@@ -70,13 +77,23 @@ impl Row {
                 ],
             },
             Self::ManifestQuery => Expected {
-                env: HostHelperDisposition::Refused,
-                glob: HostHelperDisposition::Refused,
+                env: HostHelperDisposition::Refused(RestrictedSurface::ManifestQuery),
+                glob: HostHelperDisposition::Refused(RestrictedSurface::ManifestQuery),
                 flags: [
                     ("render mode", true),
                     ("telemetry gate", false),
                     ("refusal classifier gate", true),
                     ("overlay grant", false),
+                ],
+            },
+            Self::Test => Expected {
+                env: HostHelperDisposition::Real,
+                glob: HostHelperDisposition::Refused(RestrictedSurface::Test),
+                flags: [
+                    ("render mode", false),
+                    ("telemetry gate", false),
+                    ("refusal classifier gate", false),
+                    ("overlay grant", true),
                 ],
             },
         }
@@ -87,6 +104,7 @@ impl Row {
 #[case(Row::AmbientFull)]
 #[case(Row::Full)]
 #[case(Row::ManifestQuery)]
+#[case(Row::Test)]
 fn registration_decides_each_capability(#[case] row: Row) {
     let registration = row.registration();
     let expected = row.expected();

@@ -5,7 +5,7 @@ use minijinja::{
     value::{Kwargs, Value},
 };
 
-use super::{HelperEntry, HelperKind, RestrictedSurface, SURFACE};
+use super::{HelperKind, RestrictedSurface, SURFACE, is_loader_owned};
 
 /// Marker retained in query-refusal text so the Jinja boundary can classify it.
 const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
@@ -33,11 +33,6 @@ pub(super) fn register_refusals(env: &mut Environment<'_>, surface: RestrictedSu
     }
 }
 
-/// Report whether the manifest loader owns this helper's registration.
-fn is_loader_owned(entry: &HelperEntry) -> bool {
-    matches!(entry.name, "env" | "glob")
-}
-
 /// Register only the `env()` refusal for a load that may not read the host.
 pub(crate) fn register_env_refusal(env: &mut Environment<'_>) {
     register_query_function_stub(env, "env");
@@ -45,7 +40,7 @@ pub(crate) fn register_env_refusal(env: &mut Environment<'_>) {
 
 /// Register only the `glob()` refusal for a load that may not touch the
 /// filesystem.
-pub(crate) fn register_glob_refusal(env: &mut Environment<'_>) {
+pub(super) fn register_glob_refusal(env: &mut Environment<'_>) {
     register_query_function_stub(env, "glob");
 }
 

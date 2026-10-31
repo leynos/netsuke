@@ -115,7 +115,10 @@ pub fn register_with_config(
 }
 
 /// Preserve lowercase Boolean interpolation for existing manifests.
-fn register_legacy_boolean_formatter(env: &mut Environment<'_>) {
+///
+/// The test surface installs the same formatter, so a manifest that renders a
+/// Boolean produces identical text under both surfaces.
+pub(super) fn register_legacy_boolean_formatter(env: &mut Environment<'_>) {
     env.set_formatter(|out, state, value| {
         if value.kind() == ValueKind::Bool {
             out.write_str(if value.is_true() { "true" } else { "false" })

@@ -38,6 +38,7 @@ mod path_loaders;
 mod query;
 mod registration;
 mod render;
+mod test_surface;
 /// JSON representation of a manifest node after YAML and Jinja evaluation.
 pub type ManifestValue = serde_json::Value;
 /// JSON object mapping string keys to manifest values.
@@ -70,6 +71,7 @@ pub(crate) use query::{LoadedManifest, from_path_for_manifest_query_with_source}
 use registration::RESERVED_VAR_NAMES;
 use registration::{localize_recipe_error, register_manifest_vars};
 pub use render::render_manifest;
+pub use test_surface::TestSurface;
 #[cfg(test)]
 use workspace::open_manifest_workspace;
 

@@ -302,6 +302,10 @@ stdlib.command.output.mode.streaming = ffrydio
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
 
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] Nid yw { $operation } ar gael o dan `netsuke test`.
+
+
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }
 stdlib.shell.unquotable = [netsuke::jinja::shell::unquotable] { $details }
