@@ -1,0 +1,5 @@
+---
+source: src/stdlib/canonical_value/tests/diagnostics.rs
+expression: rendered
+---
+canonical admission exceeded the bytes limit of 40 at ["m11"]["m10"]["m09"] … (6 more) … ["m02"]["m01"]["m00"]

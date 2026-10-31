@@ -131,6 +131,33 @@ fn render_steps(steps: &[PathStep]) -> String {
     steps.iter().map(PathStep::render).collect()
 }
 
+/// The bounded resource a canonical admission can exhaust.
+///
+/// Admission expands a shared host graph into one owned subtree per
+/// occurrence, so the work is bounded by the *expanded* size of the input
+/// rather than by its object count. Each variant names one ceiling that keeps
+/// that expansion finite; a refusal reports which ceiling was reached and the
+/// location that would have exceeded it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CanonicalResource {
+    /// Distance below the snapshot root.
+    Depth,
+    /// Snapshot nodes, counted once per collection occurrence.
+    Nodes,
+    /// Bytes of admitted strings and member names.
+    Bytes,
+}
+
+impl fmt::Display for CanonicalResource {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::Depth => "depth",
+            Self::Nodes => "nodes",
+            Self::Bytes => "bytes",
+        })
+    }
+}
+
 /// Reason a candidate value was refused admission to the canonical domain.
 ///
 /// Each variant covers one refusal family, and each is decided before the
@@ -196,6 +223,23 @@ pub enum CanonicalValueError {
         /// Rendered location of the untraversable value in the snapshot tree.
         path: String,
     },
+    /// The value would exceed a bound on the work admission may perform.
+    ///
+    /// A compact acyclic graph with shared descendants expands to many more
+    /// occurrences than it holds objects, so admission charges each occurrence
+    /// against shared depth, node, and byte ceilings. This variant reports the
+    /// first ceiling a traversal would cross, before the subtree that crosses
+    /// it is allocated. Values inside the supported domain under the default
+    /// ceilings are unaffected.
+    #[error("canonical admission exceeded the {resource} limit of {limit} at {path}")]
+    ResourceLimitExceeded {
+        /// The ceiling that was exceeded.
+        resource: CanonicalResource,
+        /// The configured ceiling, in the resource's own unit.
+        limit: usize,
+        /// Rendered location of the value that would have exceeded it.
+        path: String,
+    },
     /// The canonicalizer refused the snapshot.
     ///
     /// The snapshot tree admits nothing the canonicalizer rejects, and holds
@@ -214,9 +258,12 @@ impl CanonicalValueError {
     /// kind names it.
     ///
     /// Returns `None` for [`Self::NonFiniteNumber`] and [`Self::Serialization`],
-    /// whose refusal is not a kind decision, and for
+    /// whose refusal is not a kind decision, for
     /// [`Self::IncompatibleRepresentation`], where the reported kind is one the
-    /// value failed to traverse as rather than a kind that was refused.
+    /// value failed to traverse as rather than a kind that was refused, and for
+    /// [`Self::ResourceLimitExceeded`], where the value was in the supported
+    /// domain but the traversal needed more of a shared resource than the
+    /// ceiling allows.
     ///
     /// # Examples
     ///
@@ -233,6 +280,7 @@ impl CanonicalValueError {
             Self::UnsupportedKind { kind, .. } | Self::NonStringKey { kind, .. } => Some(*kind),
             Self::NonFiniteNumber { .. }
             | Self::IncompatibleRepresentation { .. }
+            | Self::ResourceLimitExceeded { .. }
             | Self::Serialization { .. } => None,
         }
     }
@@ -263,6 +311,23 @@ impl CanonicalValueError {
     /// Construct an untraversable-host-value refusal at `path`.
     pub(super) fn invalid_traversal(path: &SnapshotPath) -> Self {
         Self::IncompatibleRepresentation {
+            path: path.to_string(),
+        }
+    }
+
+    /// Construct a resource-limit refusal at `path`.
+    ///
+    /// The ceiling is copied from the budget rather than read back from the
+    /// host value, so the message names configured policy and never caller
+    /// data beyond the location.
+    pub(super) fn resource_limit(
+        resource: CanonicalResource,
+        limit: usize,
+        path: &SnapshotPath,
+    ) -> Self {
+        Self::ResourceLimitExceeded {
+            resource,
+            limit,
             path: path.to_string(),
         }
     }
