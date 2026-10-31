@@ -210,3 +210,119 @@ fn deeper_paths_report_every_omitted_edge() -> Result<()> {
     assert_rendered("path_elided_deeply", &refusal);
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Resource-limit refusals
+// ---------------------------------------------------------------------------
+
+/// Build a shared map graph whose member names differ at every level.
+///
+/// Two members of each level hold clones of one child, so the expansion is
+/// exponential in the depth, and naming the pair after its level keeps an
+/// elided path's head and tail distinguishable in the snapshot.
+fn shared_named_maps(depth: usize) -> Value {
+    (0..depth).fold(Value::from(0_i64), |child, level| {
+        let (node, _) = fixture(
+            ObjectRepr::Map,
+            Some(2),
+            Materialized::Pairs(vec![
+                (Value::from(format!("m{level:02}")), child.clone()),
+                (Value::from(format!("m{level:02}b")), child),
+            ]),
+        );
+        node
+    })
+}
+
+/// Pin the depth refusal for a path that renders in full.
+#[rstest]
+fn resource_depth_short_message_is_pinned() -> Result<()> {
+    let refusal = canonical_key_within(
+        &member_path_of_depth(2, Value::from(1_i64)),
+        &mut admission_budget(1, 100, 100),
+    )
+    .expect_err("the leaf sits two edges below a one-edge ceiling");
+    ensure_resource_refusal(&refusal, CanonicalResource::Depth)?;
+    assert_rendered("resource_depth_short", &refusal);
+    Ok(())
+}
+
+/// Pin the depth refusal for a path whose middle is elided.
+///
+/// The depth is one past the production ceiling recorded in the developers'
+/// guide, so this case also shows that the default budget is the one stated
+/// there. The literal is deliberate: reading the constant would let a changed
+/// default pass silently.
+#[rstest]
+fn resource_depth_elided_message_is_pinned() -> Result<()> {
+    let refusal = canonical_key(&member_path_of_depth(129, Value::from(1_i64)))
+        .expect_err("the leaf is one edge past a 128-edge ceiling");
+    ensure_resource_refusal(&refusal, CanonicalResource::Depth)?;
+    let rendered = refusal.to_string();
+    ensure!(
+        rendered.contains("more)"),
+        "a 129-edge path must be abbreviated, got {rendered}",
+    );
+    assert_rendered("resource_depth_elided", &refusal);
+    Ok(())
+}
+
+/// Pin the node refusal for the root of a flat sequence.
+#[rstest]
+fn resource_nodes_short_message_is_pinned() -> Result<()> {
+    let refusal = canonical_key_within(
+        &Value::from([1_i64, 2, 3]),
+        &mut admission_budget(100, 3, 100),
+    )
+    .expect_err("four nodes exceed a three-node ceiling");
+    ensure_resource_refusal(&refusal, CanonicalResource::Nodes)?;
+    assert_rendered("resource_nodes_short", &refusal);
+    Ok(())
+}
+
+/// Pin the node refusal reached through a shared graph.
+///
+/// The graph is the same shape as the reported trigger: far more occurrences
+/// than objects. Its refusal path is deep enough to be elided, which is why
+/// this case, rather than the flat one above, covers the elided node message.
+#[rstest]
+fn resource_nodes_elided_message_is_pinned() -> Result<()> {
+    let refusal = canonical_key(&shared_named_maps(64))
+        .expect_err("the expansion exceeds the production node ceiling");
+    ensure_resource_refusal(&refusal, CanonicalResource::Nodes)?;
+    let rendered = refusal.to_string();
+    ensure!(
+        rendered.contains("more)"),
+        "a refusal reached through sharing must be abbreviated, got {rendered}",
+    );
+    assert_rendered("resource_nodes_elided", &refusal);
+    Ok(())
+}
+
+/// Pin the byte refusal for a scalar at the root.
+#[rstest]
+fn resource_bytes_short_message_is_pinned() -> Result<()> {
+    let refusal = canonical_key_within(&Value::from("abc"), &mut admission_budget(100, 100, 2))
+        .expect_err("three bytes exceed a two-byte ceiling");
+    ensure_resource_refusal(&refusal, CanonicalResource::Bytes)?;
+    assert_rendered("resource_bytes_short", &refusal);
+    Ok(())
+}
+
+/// Pin the byte refusal for a member name chain long enough to be elided.
+#[rstest]
+fn resource_bytes_elided_message_is_pinned() -> Result<()> {
+    let refusal = canonical_key_within(
+        &member_path_of_depth(12, Value::from("abcdefgh")),
+        &mut admission_budget(100, 100, 40),
+    )
+    .expect_err("the member names and leaf exceed a forty-byte ceiling");
+    ensure_resource_refusal(&refusal, CanonicalResource::Bytes)?;
+    let rendered = refusal.to_string();
+    ensure!(
+        rendered.contains("more)"),
+        "a deep byte refusal must be abbreviated, got {rendered}",
+    );
+    assert_rendered("resource_bytes_elided", &refusal);
+    Ok(())
+}

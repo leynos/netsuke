@@ -318,6 +318,9 @@ operator, user, and contributor references are easier to find.
   moving package verification into `make test-package-verify`.
 - [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
   Bounded, localized Ninja progress labels for inline recipe edges.
+- [ADR-0068](adrs/adr-0068-bound-canonical-admission-resources.md):
+  Occurrence-based depth, node, and byte ceilings for canonical admission, so a
+  shared host graph is refused rather than expanded without bound.
 
 ## Proposals
 

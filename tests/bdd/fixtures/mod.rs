@@ -136,6 +136,8 @@ pub struct TestWorld {
     pub canonical_offending: Slot<Value>,
     /// Rendered kind named by the refusal of [`Self::canonical_offending`].
     pub canonical_refusal_kind: Slot<String>,
+    /// Rendered message of the resource-limit refusal under test.
+    pub canonical_refusal_message: Slot<String>,
 
     // Localization state (non-Clone)
     /// Lock guarding process-wide localizer mutations during scenarios.

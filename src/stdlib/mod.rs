@@ -20,7 +20,8 @@ mod time;
 mod which;
 
 pub use canonical_value::{
-    CanonicalKey, CanonicalValueError, canonical_eq, canonical_key, stable_deduplicate,
+    CanonicalKey, CanonicalResource, CanonicalValueError, canonical_eq, canonical_key,
+    stable_deduplicate,
 };
 pub use config::{
     DEFAULT_COMMAND_MAX_OUTPUT_BYTES, DEFAULT_COMMAND_MAX_STREAM_BYTES, DEFAULT_COMMAND_TEMP_DIR,

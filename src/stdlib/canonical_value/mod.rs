@@ -36,24 +36,21 @@
 //! access, and no template registration. It adds no template function or
 //! filter name.
 //!
-//! # Example
+//! # Bounded admission
 //!
-//! ```
-//! use minijinja::{context, value::Value};
-//! use netsuke::stdlib::{canonical_eq, canonical_key};
-//!
-//! let first = Value::from_serialize(context! { a => 1, b => "x" });
-//! let second = Value::from_serialize(context! { b => "x", a => 1 });
-//! assert!(canonical_eq(&first, &second).expect("both maps are admitted"));
-//!
-//! // Member order does not matter; sequence order does.
-//! assert!(!canonical_eq(&Value::from([1, 2]), &Value::from([2, 1])).expect("both arrays are admitted"));
-//! canonical_key(&first).expect("the map is admitted");
-//! ```
+//! A value may be a directed acyclic graph rather than a tree, because cloning
+//! a `MiniJinja` value shares its host object, and admission materializes one
+//! snapshot subtree per occurrence. The root, every enumerated item and member
+//! pair, and every admitted string and member name are therefore charged
+//! against a per-operation depth, node, and byte budget; exceeding one is a
+//! typed [`CanonicalValueError::ResourceLimitExceeded`] rather than an
+//! expansion. One budget serves one public operation, so [`canonical_eq`] can
+//! refuse two operands that each succeed alone.
 //!
 //! [RFC 0006 §6.7]: ../../../docs/rfcs/rfc-0006-ansible-inspired-template-standard-library-expansion.md
 
 mod admission;
+mod budget;
 mod error;
 mod node;
 
@@ -65,7 +62,8 @@ use std::collections::HashSet;
 use minijinja::value::Value;
 
 use self::admission::snapshot;
-pub use self::error::CanonicalValueError;
+use self::budget::AdmissionBudget;
+pub use self::error::{CanonicalResource, CanonicalValueError};
 use self::node::to_canonical_bytes;
 
 /// The canonical JSON key of an admitted value.
@@ -108,16 +106,20 @@ impl CanonicalKey {
 /// The value is traversed once, into a private snapshot that preserves the
 /// source representation of every admitted member, and that snapshot is
 /// serialized. Values outside the supported domain are refused before any
-/// serialization happens.
+/// serialization happens, and the traversal is bounded by a default admission
+/// budget that this call creates, so the allowance serves this call alone.
 ///
 /// # Errors
 ///
 /// Returns [`CanonicalValueError::UnsupportedKind`] for a value with no
 /// canonical JSON form, [`CanonicalValueError::NonStringKey`] for a mapping
 /// key that is not a string, [`CanonicalValueError::NonFiniteNumber`] for a
-/// `NaN` or infinite float, and
+/// `NaN` or infinite float,
 /// [`CanonicalValueError::IncompatibleRepresentation`] for a host value that
-/// cannot be traversed as the kind it reports.
+/// cannot be traversed as the kind it reports,
+/// [`CanonicalValueError::ResourceLimitExceeded`] when admission exhausts the
+/// depth, node, or byte ceiling, and [`CanonicalValueError::Serialization`]
+/// when the admitted snapshot cannot be serialized as canonical JSON.
 ///
 /// # Example
 ///
@@ -132,7 +134,20 @@ impl CanonicalKey {
 /// assert_eq!(refusal.kind(), Some(ValueKind::Undefined));
 /// ```
 pub fn canonical_key(value: &Value) -> Result<CanonicalKey, CanonicalValueError> {
-    let snapshot = snapshot(value)?;
+    canonical_key_within(value, &mut AdmissionBudget::default())
+}
+
+/// Return the canonical key of `value`, charging a caller-supplied budget.
+///
+/// [`canonical_key`] delegates here with a default budget. The entry exists so
+/// an operation that admits several values can spend one allowance across them,
+/// and so the crate's tests can drive small ceilings without a test-only knob on
+/// the public surface.
+pub(in crate::stdlib::canonical_value) fn canonical_key_within(
+    value: &Value,
+    budget: &mut AdmissionBudget,
+) -> Result<CanonicalKey, CanonicalValueError> {
+    let snapshot = snapshot(value, budget)?;
     Ok(CanonicalKey {
         bytes: to_canonical_bytes(&snapshot)?,
     })
@@ -149,7 +164,11 @@ pub fn canonical_key(value: &Value) -> Result<CanonicalKey, CanonicalValueError>
 ///
 /// Returns the refusal of whichever operand is not in the supported domain,
 /// including when the two operands are the same value. A refused value
-/// compared with itself is an error, never `false`.
+/// compared with itself is an error, never `false`. Returns
+/// [`CanonicalValueError::ResourceLimitExceeded`] when one budget, shared by
+/// both operands, is exhausted; because the budget serves the operation rather
+/// than each value, this can refuse operands that each succeed when admitted
+/// alone.
 ///
 /// # Example
 ///
@@ -165,8 +184,21 @@ pub fn canonical_key(value: &Value) -> Result<CanonicalKey, CanonicalValueError>
 /// assert!(matches!(refusal, CanonicalValueError::UnsupportedKind { .. }));
 /// ```
 pub fn canonical_eq(left: &Value, right: &Value) -> Result<bool, CanonicalValueError> {
-    let left_key = canonical_key(left)?;
-    let right_key = canonical_key(right)?;
+    canonical_eq_within(left, right, &mut AdmissionBudget::default())
+}
+
+/// Report whether two values have byte-identical keys under one budget.
+///
+/// [`canonical_eq`] delegates here with a default budget. Left is admitted
+/// first and the right operand is only visited if that admitted, so the
+/// short-circuit that names the left operand is preserved.
+pub(in crate::stdlib::canonical_value) fn canonical_eq_within(
+    left: &Value,
+    right: &Value,
+    budget: &mut AdmissionBudget,
+) -> Result<bool, CanonicalValueError> {
+    let left_key = canonical_key_within(left, budget)?;
+    let right_key = canonical_key_within(right, budget)?;
     Ok(left_key == right_key)
 }
 
@@ -183,7 +215,9 @@ pub fn canonical_eq(left: &Value, right: &Value) -> Result<bool, CanonicalValueE
 /// # Errors
 ///
 /// Returns the refusal of the earliest invalid input value. No partial result
-/// is produced, and values after the refused one are not examined.
+/// is produced, and values after the refused one are not examined. Returns
+/// [`CanonicalValueError::ResourceLimitExceeded`] when one budget, shared by
+/// every input, is exhausted, again with no partial result.
 ///
 /// # Example
 ///
@@ -199,12 +233,24 @@ pub fn canonical_eq(left: &Value, right: &Value) -> Result<bool, CanonicalValueE
 /// assert!(std::ptr::eq(retained[1], &input[1]));
 /// ```
 pub fn stable_deduplicate(values: &[Value]) -> Result<Vec<&Value>, CanonicalValueError> {
+    stable_deduplicate_within(values, &mut AdmissionBudget::default())
+}
+
+/// Deduplicate `values` canonically under a caller-supplied budget.
+///
+/// [`stable_deduplicate`] delegates here with a default budget. One budget
+/// serves the whole slice, and a refusal abandons the accumulators, so a
+/// refusal is never accompanied by a partial result.
+pub(in crate::stdlib::canonical_value) fn stable_deduplicate_within<'a>(
+    values: &'a [Value],
+    budget: &mut AdmissionBudget,
+) -> Result<Vec<&'a Value>, CanonicalValueError> {
     let mut seen: HashSet<CanonicalKey> = HashSet::new();
-    let mut retained: Vec<&Value> = Vec::new();
+    let mut retained: Vec<&'a Value> = Vec::new();
     for value in values {
         // Append-or-skip: the key is inserted first, and the value is retained
         // only when that insertion reports the key as new.
-        let key = canonical_key(value)?;
+        let key = canonical_key_within(value, budget)?;
         if seen.insert(key) {
             retained.push(value);
         }
