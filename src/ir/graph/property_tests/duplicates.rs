@@ -247,6 +247,7 @@ fn target(slot: usize, outputs: Vec<String>) -> Target {
         vars: Vars::default(),
         phony: false,
         always: false,
+        console: false,
         conditional: false,
         description: None,
     }
