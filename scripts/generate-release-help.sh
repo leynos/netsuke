@@ -116,6 +116,46 @@ file_size_bytes() {
   wc -c <"$path" | tr -d '[:space:]'
 }
 
+# Machine type names `cargo-orthohelp` substitutes into a placeholder when the
+# metadata declares no value name. Publishing one is the regression this lane
+# exists to catch, and only the real renderer can prove the metadata reached it.
+machine_value_names=(STRING INT LIST USIZE UTF8PATHBUF)
+
+# Fail when a generated artefact publishes a machine type name as a placeholder.
+#
+# The checks match the markup that marks a placeholder, not the bare word, so
+# ordinary prose mentioning a string or an integer does not trip them.
+reject_machine_value_placeholders() {
+  local path="$1"
+  local format="$2"
+  local name
+  local published=()
+
+  for name in "${machine_value_names[@]}"; do
+    case "$format" in
+      man)
+        if grep -qF "\\fI${name}\\fP" "$path"; then
+          published+=("$name")
+        fi
+        ;;
+      ps)
+        if grep -qF "<command:parameterValue required=\"true\">${name}</command:parameterValue>" "$path"; then
+          published+=("$name")
+        fi
+        ;;
+      *)
+        echo "::error title=Release help placeholder::$(annotation_context "$format") unknown format ${format}" >&2
+        exit 1
+        ;;
+    esac
+  done
+
+  if (( ${#published[@]} > 0 )); then
+    echo "::error title=Release help placeholder::$(annotation_context "$format") machine value names published (${published[*]}) in ${path}" >&2
+    exit 1
+  fi
+}
+
 require_cargo_orthohelp() {
   if ! command -v cargo-orthohelp >/dev/null 2>&1; then
     echo "::error title=cargo-orthohelp missing::$(annotation_context setup) cargo-orthohelp was not found on PATH" >&2
@@ -171,6 +211,7 @@ run_cargo_orthohelp "man" \
   --man-date "$man_date"
 
 require_file "$out_dir/man/man1/${bin_name}.1" "manual page was not generated"
+reject_machine_value_placeholders "$out_dir/man/man1/${bin_name}.1" "man"
 
 if target_is_windows "$target"; then
   run_cargo_orthohelp "ps" \
@@ -189,4 +230,7 @@ if target_is_windows "$target"; then
     "PowerShell MAML help was not generated"
   require_file "$out_dir/powershell/$module_name/en-US/about_$module_name.help.txt" \
     "PowerShell about help was not generated"
+  reject_machine_value_placeholders \
+    "$out_dir/powershell/$module_name/en-US/$module_name-help.xml" \
+    "ps"
 fi

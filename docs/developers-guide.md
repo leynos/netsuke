@@ -4131,6 +4131,13 @@ assert the placeholder appears in both the manual page and the PowerShell MAML
 output, and the metadata snapshot records each field's `value_name`, so a lost
 declaration fails the suite before it can reach a release.
 
+The release lane adds a guard on the artefacts themselves:
+`scripts/generate-release-help.sh` rejects a generated manual page or
+PowerShell help that publishes one of the generator's machine type names
+(`UTF8PATHBUF`, `USIZE`, `LIST`, `INT`, `STRING`) as a placeholder, so the real
+renderer is checked on what ships, not only under the fake generator the tests
+drive.
+
 Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
 version supplied as `INPUT_VERSION`. The helper probes the cached binary and,

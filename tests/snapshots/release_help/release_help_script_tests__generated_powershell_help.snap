@@ -12,12 +12,12 @@ function Invoke-CustomNetsuke { param() }
 
 ---
 <helpItems schema="maml">
-  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:maml="http://schemas.microsoft.com/maml/2004/10">
     <command:details>
       <command:name>CustomNetsuke</command:name>
     </command:details>
     <command:description>
-      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">-C/--directory --config build clean graph generate help</maml:para>
+      <maml:para>-C/--directory --config build clean graph generate help</maml:para>
     </command:description>
     <command:parameter required="true"><maml:name>--file</maml:name><command:parameterValue required="true">FILE</command:parameterValue></command:parameter>
     <command:parameter required="true"><maml:name>--jobs</maml:name><command:parameterValue required="true">N</command:parameterValue></command:parameter>

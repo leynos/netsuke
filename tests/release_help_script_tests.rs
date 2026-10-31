@@ -3,7 +3,9 @@
 //! The script shells out to `cargo-orthohelp`, so these tests place a fake
 //! `cargo-orthohelp` executable first on `PATH`. This validates command
 //! construction and output verification without requiring network access or a
-//! real `cargo-orthohelp` installation.
+//! real `cargo-orthohelp` installation. The generated PowerShell help is parsed
+//! as XML, so a placeholder emitted under an unbound namespace prefix fails
+//! here rather than passing a substring check.
 
 #![cfg(unix)]
 
@@ -17,6 +19,7 @@ use release_help::{
     ReleaseHelpRun, ScriptFixture, logged_args, run_release_help, script_fixture, script_path,
     snapshot_settings,
 };
+use roxmltree::Document;
 use rstest::rstest;
 use std::{fs, process::Command};
 
@@ -204,13 +207,22 @@ fn assert_man_page_structure(man_page: &str) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when a required PowerShell artefact or CLI item is absent.
+/// Returns an error when a required PowerShell artefact or CLI item is absent,
+/// or when the MAML help is not well-formed XML.
 fn assert_powershell_help_structure(
     ps_module: &str,
     ps_manifest: &str,
     maml: &str,
     about_help: &str,
 ) -> Result<()> {
+    // A substring check cannot tell a bound `maml:` prefix from an unbound one,
+    // so parse the document: an undeclared prefix is a hard XML error.
+    let maml_tree = Document::parse(maml)
+        .context("generated MAML help should be well-formed XML with bound prefixes")?;
+    ensure!(
+        maml_tree.root_element().tag_name().name() == "helpItems",
+        "MAML help should be rooted at helpItems: {maml}"
+    );
     ensure!(
         ps_module.contains("function Invoke-CustomNetsuke"),
         "PowerShell module should expose the requested module command: {ps_module}"
@@ -464,6 +476,46 @@ fn fails_when_expected_help_output_is_missing(
     ensure!(
         stderr.contains("build_id=local-0"),
         "missing output annotation should include build id, got {stderr}"
+    );
+    Ok(())
+}
+
+/// Verify that a machine value name in generated help fails the release lane.
+///
+/// The real `cargo-orthohelp` substitutes a machine type name when the metadata
+/// declares no value name. This guard is the only check that reads the
+/// renderer's actual output, so it is the last line between a lost declaration
+/// and a published artefact.
+///
+/// # Errors
+///
+/// Returns an error when the fixture cannot be built, the script unexpectedly
+/// succeeds, or the failure diagnostics cannot be read or validated.
+#[rstest]
+#[case("x86_64-unknown-linux-gnu", "man", "UTF8PATHBUF")]
+#[case("x86_64-pc-windows-msvc", "ps", "USIZE")]
+fn fails_when_generated_help_publishes_a_machine_value_name(
+    script_fixture: Result<ScriptFixture>,
+    #[case] target: &str,
+    #[case] format: &str,
+    #[case] fallback: &str,
+) -> Result<()> {
+    let fixture = script_fixture?;
+    let output = run_release_help(
+        &fixture,
+        ReleaseHelpRun::for_target(target)
+            .source_date_epoch("1")
+            .fallback_value(format, fallback),
+    )?;
+
+    ensure!(
+        !output.status.success(),
+        "script should reject a {fallback} placeholder in {format} output: {output:?}"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("machine value names published") && stderr.contains(fallback),
+        "expected machine value name diagnostic naming {fallback}, got {stderr}"
     );
     Ok(())
 }
