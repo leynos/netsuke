@@ -2268,18 +2268,19 @@ canonicalizer. Two values are **equal** exactly when their canonical keys are
 byte-identical, and deduplication retains the first representative of each key
 in input order.
 
-The public surface is five names, re-exported from `src/stdlib` as Rust library
+The public surface is six names, re-exported from `src/stdlib` as Rust library
 items rather than template names:
 
 | Name                  | Role                                                           |
 | --------------------- | -------------------------------------------------------------- |
 | `CanonicalKey`        | The canonical byte string, as a newtype                        |
 | `CanonicalValueError` | Typed refusal for values outside the supported domain          |
+| `CanonicalResource`   | The depth, node, or byte ceiling a refusal exhausted           |
 | `canonical_key`       | Derive the key for a value, or refuse                          |
 | `canonical_eq`        | Compare two values by canonical key, or refuse                 |
 | `stable_deduplicate`  | Retain first representatives by key, in first-appearance order |
 
-Three properties of this contract matter to readers of the design, because each
+Four properties of this contract matter to readers of the design, because each
 is a deliberate limit rather than an oversight:
 
 - **Equality inherits JCS number semantics, not source-integer identity.**
@@ -2294,8 +2295,19 @@ is a deliberate limit rather than an oversight:
 - **The caller supplies a precondition.** Keying relies on the host object being
   finite, stable, and acyclic. A host object that mutates between traversal
   steps, or that contains a cycle, is outside the contract; the adapter does
-  not defend against it. This is an explicit precondition on the caller, not a
-  runtime check.
+  not detect either condition. This is an explicit precondition on the caller,
+  not a runtime check.
+- **Admission is bounded per occurrence, not per object.** Values are
+  reference-counted, so a compact host graph can share one descendant between
+  many parents and expand to far more occurrences than it holds objects.
+  Admission therefore charges depth, snapshot nodes, and admitted string bytes
+  against one budget per public operation, with defaults of 128 edges, 100,000
+  nodes, and 8 MiB
+  ([ADR-0068](adrs/adr-0068-bound-canonical-admission-resources.md)). An input
+  beyond a ceiling is refused with `ResourceLimitExceeded` before the
+  overflowing subtree is allocated. Because the budget is per operation,
+  `canonical_eq` can refuse two operands that each pass `canonical_key` on
+  their own.
 
 Nothing in this subsection registers a template helper. The existing `uniq` and
 `unique` behaviour is unchanged and no manifest-visible behaviour changes at
