@@ -522,15 +522,16 @@ and YAML fixtures, and were set from the inventory in Table 1.
   frozen: the correction to the layout rationale (below), the Kani scope
   entries, the placement rule, and the forced-edit inventory. EP-M1 itself
   remains unstarted.
-- [ ] **Gate-set correction pending for plan edits.** Running the cheaper
-  documentation gates is **not sufficient** for a diff that touches this plan.
-  *(2026-10-16 update: the batch at `301f2456` did run `make test` against this
-  plan and was green, so the deferral below is discharged for that revision —
-  but the F-1 edit re-opened the obligation, and the review-repair edit above
-  re-opens it again, so the item stays unchecked until the batch covering the
-  latest edit is green.)* `tests/execplan_status_contract_tests.rs` reads every
-  `docs/execplans/*.md` at test time and asserts that the header carries
-  exactly one line-initial `Status:` field whose value is in the closed set
+- [x] **Gate-set correction for plan edits (discharged 2026-10-31).** Running
+  the cheaper documentation gates is **not sufficient** for a diff that touches
+  this plan. *(2026-10-16 update: the batch at `301f2456` did run `make test`
+  against this plan and was green, so the deferral below is discharged for that
+  revision — but the F-1 edit re-opened the obligation, and the review-repair
+  edit above re-opens it again, so the item stays unchecked until the batch
+  covering the latest edit is green.)*
+  `tests/execplan_status_contract_tests.rs` reads every `docs/execplans/*.md`
+  at test time and asserts that the header carries exactly one line-initial
+  `Status:` field whose value is in the closed set
   `DRAFT | APPROVED | IN PROGRESS | BLOCKED | COMPLETE` (and that
   `docs/documentation-style-guide.md` documents the same set). It is the sole
   Rust test that reads `docs/execplans/` from disk:
@@ -544,9 +545,9 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `## Tolerances (exception triggers)` is removed by two independent mechanisms
   — `header_lines()` stops at the first `##` heading, and the filter is
   `line.starts_with("Status:")`, which that bullet fails anyway because it
-  opens with a list marker and the word `Design`, not with `Status:`.
-  `make test` is still deferred by host load, so this is recorded as pending,
-  not passed.
+  opens with a list marker and the word `Design`, not with `Status:`. The
+  obligation is discharged by the `61e6cf102` batch, whose `make test` was
+  green at 4833 passed / 7 skipped plus 166 doctests; see `Progress`.
 - [x] (2026-10-15) The four queued EP-M1 plan corrections applied. The
   placement bullet now prefers `restricted_helpers/tests.rs` and rests on the
   destination the moved file already names (`refusal_snapshots.rs:25-26`), the
@@ -1032,8 +1033,33 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `/tmp/epm2-obl1-fault-a-netsuke-7-1-2.out` and
   `/tmp/epm2-obl1-fault-b-netsuke-7-1-2.out`. Each fault's naive form is a
   compile error under `-D warnings`; see `Surprises & discoveries`.
+- [x] (2026-10-31) Eight-gate batch for `61e6cf102`: **seven green, one red**.
+  `check-fmt` 3 s, `typecheck` 1669 s, `lint` 4751 s, `doc-coverage` 2477 s at
+  98.23% (6382/6497), `test` 1081 s at 4833 passed / 7 skipped plus 166
+  doctests, `markdownlint` 25 s with 0 issues, `nixie` 2 s;
+  `test-workflow-contracts` red at 129 s with 1 failed / 1519 passed / 3
+  skipped. Logs:
+  `/tmp/<gate>-netsuke-7-1-2-options-carrying-manifest-loader-entry-point-61e6cf102.out`.
+  The batch ran detached, one gate at a time, and took 2 h 51 m of wall clock,
+  79 m of it in `lint` behind a compile queue that peaked near 70 requests; the
+  supervisor stayed healthy and no gate hit admission refusal.
+- [x] (2026-10-31) The one red gate was a real contract failure, not host load:
+  `test_scope_covers_the_harness_closure` reported that the Kani harness
+  closure now reaches `src/manifest/loader_options.rs`, which
+  `tools/kani/proof-scope.toml` did not list. Repaired in `8a7a83718` by adding
+  the path in sorted position; the entry mirrors the closure rather than
+  widening the proof inputs, so the pull-request Kani decision keeps firing
+  exactly when a harness input changes. Re-ran `make test-workflow-contracts` at
+  `8a7a83718`: exit 0, 132 s, 1520 passed / 3 skipped. Log:
+  `/tmp/test-workflow-contracts-netsuke-7-1-2-options-carrying-manifest-loader-entry-point-8a7a83718.out`.
+  `make test` needed no re-run: no Rust test reads `proof-scope.toml` (the
+  three consumers are `scripts/kani_proof_scope.py` and the two workflow
+  contract modules).
+- [x] (2026-10-31) The gate-set correction recorded below is discharged: the
+  batch above ran `make test` against this plan's current text at `61e6cf102`,
+  and the only later plan edit is this prose record.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
-- [ ] EP-M2 — options entry point and thin wrappers.
+- [x] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
 - [ ] EP-M4 — template overlays.
 - [ ] EP-M5 — documentation, ADR, and roadmap closure.
@@ -1489,6 +1515,18 @@ and YAML fixtures, and were set from the inventory in Table 1.
   being illustrative only. Impact: a doctest added to this module is a
   behavioural check with a real working-directory dependency; it must avoid
   `env()`, `glob()`, and any helper whose result depends on where the test runs.
+
+- Observation: adding a new module can fail a gate that never mentions the
+  module's subject. Evidence: `src/manifest/loader_options.rs` is loaded by the
+  manifest loader, so the Kani harness closure reached it, and
+  `test_scope_covers_the_harness_closure` — a workflow-contract test, not a
+  Rust test — failed at `61e6cf102` until the path was added to
+  `tools/kani/proof-scope.toml`. The same class was already recorded for
+  EP-M1's relocated classifier. Impact: "which gate covers this file?" is the
+  wrong question for a derived whole-graph property. Ask which whole-repository
+  inventories the new file enters — harness closure, surface inventory, module
+  line-count caps, compiled-source roots — and run those gates even when the
+  file's own subject is unrelated to them.
 
 ## Decision log
 
