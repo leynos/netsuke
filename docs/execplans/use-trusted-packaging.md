@@ -3969,6 +3969,21 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   issue and does not change this PR's accepted boundary. Date/Author:
   2026-10-28, maintainer instruction relayed by implementation agent.
 
+- Decision: **decode external record shapes at the adapter and decide over
+  frozen slotted records** (2026-10-30). Issue
+  [#964](https://github.com/leynos/netsuke/issues/964) evaluates the deferred
+  typed-record proposal and adopts it for the seams where an external shape
+  reaches policy: staging targets become `StagingTargets`, and the trusted
+  digest record becomes `DigestRecord`. Domain-shaped name-to-value mappings
+  remain where no external format defines them. Every existing rejection
+  category and every identity and inventory check is retained. This resolves
+  the 2026-10-28 deferral and does not change the trusted-publishing Stage C or
+  Stage D status: Stage C remains partial and Stage D remains open. See
+  [ADR-0068](../adrs/adr-0068-typed-records-for-release-policy-boundaries.md)
+  and
+  [the issue 964 plan](issue-964-evaluate-typed-records-for-release-policy-boundaries.md).
+  Date/Author: 2026-10-30, implementation agent.
+
 - Decision: keep GitHub's asset-name rewrite in its own boundary adapter.
   Rationale: `release_declaration` is policy and must not normalize a name
   based on one hosting provider. `release_github_assets_adapter` is the single

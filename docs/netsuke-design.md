@@ -4144,9 +4144,12 @@ artefacts and attaches the assets to the draft, prefixing names with their
 staging directories to avoid collisions. Dry-run staging writes its operation
 summary but does not upload diagnostic artefacts; publication telemetry and the
 full observability policy are documented in
-[ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). This
-automated pipeline guarantees parity across Windows, Linux, and macOS through
-the shared actions.
+[ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). Release
+policy decides from frozen slotted records at each boundary where an external
+record shape arrives, while adapters and CLIs own field names and decoding, as
+[ADR-0068](adrs/adr-0068-typed-records-for-release-policy-boundaries.md)
+records. This automated pipeline guarantees parity across Windows, Linux, and
+macOS through the shared actions.
 
 ### 8.7 Release Notes
 
