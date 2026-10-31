@@ -6,15 +6,17 @@
 //! users can invoke.
 
 use anyhow::{Context, Result};
-use clap::CommandFactory;
-use ortho_config::docs::{DocMetadata, FieldMetadata, OrthoConfigDocs, ValueType};
+use clap::{Command, CommandFactory};
+use ortho_config::docs::{CliMetadata, DocMetadata, FieldMetadata, OrthoConfigDocs};
 
-use super::{Cli, CliConfig};
+use super::{Cli, CliConfig, configured_command};
 use crate::{cli::l10n::top_level_flag_help_key, localization::keys};
 
 mod parser_fields;
 
-use parser_fields::documented_clap_parser_fields;
+use parser_fields::{
+    cli_metadata_from_argument, documented_clap_parser_fields, is_documented_root_argument,
+};
 
 /// Documentation root used by release help generators.
 ///
@@ -31,8 +33,17 @@ impl ReleaseHelpCli {
     /// Compose complete release-help metadata from configuration and parser sources.
     fn try_get_doc_metadata() -> Result<DocMetadata> {
         let mut metadata = CliConfig::get_doc_metadata();
+        // The configured command carries the possible values the policy
+        // arguments advertise in `--help`, so it is the authority for every
+        // configuration field's CLI shape.
+        let command = configured_command(None);
         keys::CLI_ABOUT.clone_into(&mut metadata.about_id);
-        metadata.fields = localized_config_help(metadata.fields)?;
+        metadata.fields = localized_config_help(&command, metadata.fields)?;
+        // `configured_command` installs value parsers with `mut_arg`, which
+        // moves each touched argument to the end of Clap's argument map. The
+        // parser-only selectors keep the declared order the manual page has
+        // always used, and their value parsers carry no extra metadata, so
+        // discovery reads the declared command instead.
         let parser_fields = documented_clap_parser_fields(&Cli::command(), &metadata.fields)?;
         metadata.fields.extend(parser_fields);
         metadata.subcommands = documented_clap_subcommands(&metadata);
@@ -55,14 +66,24 @@ impl OrthoConfigDocs for ReleaseHelpCli {
 /// Project existing CLI Fluent keys onto release-help configuration fields.
 ///
 /// `CliConfig` remains the source of the fields and their configuration
-/// sources. The structural `cmds` container is not a public configuration
-/// setting, so release help omits it rather than inventing a separate model.
+/// sources. Its generated CLI metadata is not trustworthy: the derive invents
+/// long and short flags from Rust field names and omits fields marked
+/// `skip_cli`, while Netsuke's binary parses with the handwritten command in
+/// `src/cli/command.rs`. Every field's `cli` member is therefore replaced by
+/// the shape the parser actually accepts, leaving help keys, environment and
+/// file sources, value types and defaults untouched.
+///
+/// The structural `cmds` container is not a public configuration setting, so
+/// release help omits it rather than inventing a separate model.
 ///
 /// # Errors
 ///
 /// Returns an error when a published configuration field has no declared
 /// top-level Fluent help key.
-fn localized_config_help(fields: Vec<FieldMetadata>) -> Result<Vec<FieldMetadata>> {
+fn localized_config_help(
+    command: &Command,
+    fields: Vec<FieldMetadata>,
+) -> Result<Vec<FieldMetadata>> {
     fields
         .into_iter()
         .filter(|field| field.name != "cmds")
@@ -75,33 +96,22 @@ fn localized_config_help(fields: Vec<FieldMetadata>) -> Result<Vec<FieldMetadata
             })?;
             help_key.clone_into(&mut field.help_id);
             field.long_help_id = None;
-            presence_only_cli_metadata(&mut field);
+            field.cli = reconciled_cli_metadata(command, &field.name);
             Ok(field)
         })
         .collect()
 }
 
-/// Describe a boolean configuration flag as the presence-only switch Netsuke
-/// exposes.
+/// Return the parser's CLI metadata for the argument named `field_name`.
 ///
-/// `ortho_config` 0.10.0 documents every boolean field as `--flag[=BOOL]`,
-/// because its *generated* clap parser accepts an optional value. Netsuke does
-/// not use that parser: `src/cli/command.rs` declares the flags by hand, and
-/// they reject `--verbose=false` with clap's `unexpected value` error. Release
-/// help must describe the parser users actually run, so the generated
-/// optional-value surface is reduced to the plain switch that exists. Without
-/// this, the man page would document a spelling the binary refuses.
-fn presence_only_cli_metadata(field: &mut FieldMetadata) {
-    if !matches!(field.value.as_ref(), Some(ValueType::Bool)) {
-        return;
-    }
-    let Some(cli) = field.cli.as_mut() else {
-        return;
-    };
-    cli.takes_value = false;
-    cli.value_name = None;
-    cli.value_optional = false;
-    cli.possible_values.clear();
+/// A configuration field with no matching parser argument keeps no CLI
+/// surface: the field is still settable through configuration files and
+/// environment variables, but release help must not invent a flag for it.
+fn reconciled_cli_metadata(command: &Command, field_name: &str) -> Option<CliMetadata> {
+    command
+        .get_arguments()
+        .find(|argument| is_documented_root_argument(argument) && argument.get_id() == field_name)
+        .map(cli_metadata_from_argument)
 }
 
 /// Return documentation metadata for every Clap subcommand with an about key.
@@ -150,6 +160,9 @@ fn release_help_about_key(name: &str) -> Option<&'static str> {
 
 #[cfg(test)]
 mod metadata_tests;
+
+#[cfg(test)]
+mod parity_tests;
 
 #[cfg(test)]
 mod tests {
@@ -304,6 +317,7 @@ mod tests {
                 .cloned()
                 .collect::<Vec<_>>();
             let projection = localized_config_help(
+                &configured_command(None),
                 field_names
                     .iter()
                     .cloned()
