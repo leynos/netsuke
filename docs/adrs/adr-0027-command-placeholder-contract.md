@@ -132,15 +132,15 @@ path into a recipe.
 ### POSIX comment and heredoc boundaries follow the shell's separators
 
 A `#` begins an inert comment in POSIX and Bash `command:` and `script:`
-recipes only at the beginning of input or after an unescaped space, tab,
-newline, or one of the operator characters `;`, `&`, `|`, `(`, `)`, `<`, and
-`>`. Those are the separators that delimit a POSIX token, so quote tracking
-follows the text the interpreter executes. Every other character is word data:
-a no-break space, another Unicode space, a carriage return, vertical tab, or
-form feed before `#` does not start a comment, and a quote after that `#` still
-opens or closes a quoted region. Heredoc delimiter words end at the same
-separators, so a delimiter containing such a character remains one word and
-only a line matching it terminates the body. The shared predicate therefore
+recipes only outside quotes, at the beginning of input or after an unescaped
+space, tab, newline, or one of the operator characters `;`, `&`, `|`, `(`, `)`,
+`<`, and `>`. Those are the separators that delimit a POSIX token, so quote
+tracking follows the text the interpreter executes. Every other character is
+word data: a no-break space, another Unicode space, a carriage return, vertical
+tab, or form feed before `#` does not start a comment, and a quote after that
+`#` still opens or closes a quoted region. Heredoc delimiter words end at the
+same separators, so a delimiter containing such a character remains one word
+and only a line matching it terminates the body. The shared predicate therefore
 prevents a false comment from skipping a real quote transition, which would
 otherwise select an unquoted path encoding for a marker that the shell reads
 inside quotes.
