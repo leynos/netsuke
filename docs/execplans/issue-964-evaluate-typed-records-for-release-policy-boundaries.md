@@ -2,9 +2,10 @@
 
 Status: COMPLETE
 
-The decision is recorded as ADR-0068, the migration has landed, the full
-deterministic gate set is green on the branch head, and CodeRabbit reported no
-findings on the final review. Draft pull request
+The decision is recorded as ADR-0068, the migration has landed, and the branch
+is rebased onto `origin/main` at `9bfb3e117` with the deterministic gate set
+re-run on the rebased head. CodeRabbit reported no findings on the final review
+before the first rebase. Draft pull request
 [#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
 maintainer review; merging is outside this plan's scope.
 
@@ -254,6 +255,24 @@ records and are unchanged.
       head.
 - [x] Run the final CodeRabbit review on `7a68b38dd`. It reported no findings
       across 24 reviewed files.
+- [x] Rebase onto `origin/main`, first at `08d0a918` ("Add Proptest coverage
+      for deterministic Ninja emission (4.3.1)"), then at `f09b85315`
+      ("Record the Cranelift exception status on the current pin"), and
+      finally at `9bfb3e117` ("Refresh generated typos.toml from the pinned
+      builder (#1062)"), because main advanced while the branch was under
+      review. The first two replays were conflict-free; the third conflicted
+      once, in the `docs/contents.md` ADR index, where main adds ADR-0069 and
+      the branch adds ADR-0068. The resolution keeps both entries in
+      ADR-number order. The branch's own "Refresh the generated typos
+      configuration" commit became empty, because main had already landed the
+      same regeneration: `git diff 9bfb3e117:typos.toml fb36476f0:typos.toml`
+      is empty, so the commit was dropped rather than recreated. `range-diff`
+      reports every other commit unchanged and `git diff --check` is clean.
+      All three replays used Git's built-in text merge with `zdiff3` because
+      Weave was selected only by the host's global attributes file, not by a
+      tracked rule. Beyond the ADR index, the target commits touch CLI help
+      metadata, localization keys, and generated spelling configuration; none
+      reaches a release-policy seam, so no further branch change follows.
 
 ## Outcomes and retrospective
 
