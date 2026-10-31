@@ -105,12 +105,12 @@ Feature: CLI parsing
   Scenario: Invalid emoji value fails validation
     When the CLI is parsed with invalid arguments "--emoji neon"
     Then an error should be returned
-    And the error message should contain "Invalid emoji policy 'neon'"
+    And the error message should contain "Validation failed for --emoji <POLICY>: neon"
 
   Scenario: Invalid emoji value is localised in Spanish
     When the CLI is parsed with invalid arguments "--locale es-ES --emoji neon"
     Then an error should be returned
-    And the error message should contain "Política de emoji no válida 'neon'"
+    And the error message should contain "Validación fallida para --emoji <POLICY>: neon"
 
   Scenario: Blocklist overrides allowlist for network policy flags
     When the CLI is parsed with "--fetch-allow-host example.com --fetch-block-host example.com"

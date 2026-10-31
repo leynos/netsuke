@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Subcomando desconocido: { $subcommand }
 # (ErrorKind::ValueValidation) de las incompatibilidades de tipo
 # (ErrorKind::InvalidValue).
 clap-error-value-validation = La validación falló para { $argument }: { $value }
+clap-error-invalid-utf8 = Se detectó UTF-8 no válido en uno o más argumentos.
 
 # Errores y contextos del ejecutor.
 runner.manifest.not_found = No se encontró el manifiesto '{ $manifest_name }' en { $directory }.

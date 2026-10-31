@@ -87,6 +87,7 @@ clap-error-invalid-subcommand = פקודת משנה לא מוכרת: { $subcomma
 # כשלים של מאמתים מותאמים (ErrorKind::ValueValidation) לבין אי‑התאמת טיפוסים
 # (ErrorKind::InvalidValue).
 clap-error-value-validation = האימות של { $argument } נכשל: { $value }
+clap-error-invalid-utf8 = זוהה UTF-8 לא תקין בארגומנט אחד או יותר.
 
 # שגיאות והקשר בזמן ריצה.
 runner.manifest.not_found = המניפסט „{ $manifest_name }” לא נמצא ב‑{ $directory }.

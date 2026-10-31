@@ -87,6 +87,7 @@ clap-error-invalid-subcommand = 알 수 없는 하위 명령입니다: { $subcom
 # 형식 불일치(ErrorKind::InvalidValue)와 구분하기 위해 invalid-value와 다르게
 # 표현했습니다.
 clap-error-value-validation = { $argument }의 검증에 실패했습니다: { $value }
+clap-error-invalid-utf8 = 하나 이상의 인자에서 잘못된 UTF-8이 감지되었습니다.
 
 # 실행 중 오류와 맥락.
 runner.manifest.not_found = 매니페스트 '{ $manifest_name }'을(를) { $directory }에서 찾을 수 없습니다.

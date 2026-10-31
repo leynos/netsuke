@@ -1094,6 +1094,10 @@ and status output are rendered after the configuration merge, so they consult
 the configuration file's `locale` setting as well, between `NETSUKE_LOCALE` and
 the system default.
 
+A rejected option value renders as `Validation failed for <option>: <value>`,
+for example `Validation failed for --color <POLICY>: loud`. The option span is
+the argument's documented display form, including its value name.
+
 System values are normalized first, so `en_GB.UTF-8` is understood as `en-GB`.
 
 Table 1: Locales Netsuke ships

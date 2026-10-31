@@ -87,6 +87,7 @@ clap-error-invalid-subcommand = คำสั่งย่อยที่ไม่
 # ของตัวตรวจสอบที่กำหนดเอง (ErrorKind::ValueValidation) ออกจากชนิดที่ไม่ตรงกัน
 # (ErrorKind::InvalidValue)
 clap-error-value-validation = การตรวจสอบ { $argument } ล้มเหลว: { $value }
+clap-error-invalid-utf8 = ตรวจพบ UTF-8 ที่ไม่ถูกต้องในอาร์กิวเมนต์หนึ่งรายการหรือมากกว่า
 
 # ข้อผิดพลาดและบริบทขณะทำงาน
 runner.manifest.not_found = ไม่พบไฟล์รายการ “{ $manifest_name }” ใน { $directory }
