@@ -74,10 +74,11 @@ one budget through every admission traversal.
   `kind()` returns `None` for the variant, and no Fluent key is added: roadmap
   6.1.4 owns localized diagnostics.
 - Refusal precedence is: bounded enumeration and its node charge, then the
-  reported-length check, then the non-string-key check, then the duplicate-name
-  check, then member-name bytes and child admission in sorted name order. A
-  mapping therefore refuses a non-string key or a duplicate name before any
-  value-level resource refusal can fire.
+  reported-length check, then the non-string-key check, then, for each member
+  in host order, the member-name byte charge and the duplicate-name check, then
+  child admission in sorted name order. A mapping therefore refuses a
+  non-string key, a repeated name, or an over-budget member name before any
+  member value is admitted.
 
 ## Rationale
 

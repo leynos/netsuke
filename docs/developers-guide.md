@@ -9486,10 +9486,11 @@ and only an operation that exceeds a ceiling is refused.
 
 Refusal precedence within one container is fixed, so a refusal never depends on
 host enumeration order: the bounded enumeration and its node charge, then the
-reported-length check, then the non-string-key check, then the duplicate-name
-check, then member-name bytes and child admission in sorted name order. A
-mapping therefore refuses a non-string key or a duplicate name before any
-value-level resource refusal can fire.
+reported-length check, then the non-string-key check, then, for each member in
+host order, the member-name byte charge and the duplicate-name check, and
+finally the member values in sorted name order. A mapping therefore refuses a
+non-string key, a repeated name, or an over-budget member name before any
+member value is admitted.
 
 Admitted nodes and bytes, together with JSON escaping expansion, transitively
 bound the canonicalizer's output, so no separate output cap is added. Internal
