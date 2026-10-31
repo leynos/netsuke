@@ -148,6 +148,18 @@ fn the_staged_copy_reproduces_a_passing_audit(
     fs::write(&keys, mutated)?;
     Ok(())
 })]
+#[case::a_clap_error_key_is_added("clap-error-unshipped", &|root: &Path| {
+    let keys = root.join("src/localization/clap_error_keys.rs");
+    let text = fs::read_to_string(&keys)?;
+    let mutated = text.replacen(
+        "define_keys! {",
+        "define_keys! {\n    UNSHIPPED_CLAP_KEY => \"clap-error-unshipped\",",
+        1,
+    );
+    ensure!(mutated != text, "expected the define_keys! macro to rewrite");
+    fs::write(&keys, mutated)?;
+    Ok(())
+})]
 #[case::a_key_is_declared_twice("is already declared", &|root: &Path| {
     let keys = root.join("src/localization/check_keys.rs");
     let text = fs::read_to_string(&keys)?;
