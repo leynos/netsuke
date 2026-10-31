@@ -4556,6 +4556,14 @@ The measurement that decides this is the whole suite rather than a probe, and
 it is the one to re-run on a toolchain bump. It is recorded under *The suite
 under Cranelift* below.
 
+Status on the current pin: the repository pins `nightly-2026-10-22`, and no
+measurement was taken on it. The question stays shelved until 2027-03-21,
+tracked by issue #764, so the measurements recorded below describe
+`nightly-2026-08-23` and are stale from the moment the pin moved past it. A
+toolchain bump before the deferral date does not oblige anyone to re-run the
+suite, but it does oblige whoever moves the pin to update this paragraph with
+the new pin, whether a measurement was taken on it, and the deferral date.
+
 Measured on 2026-09-18 on `nightly-2026-08-23`, whose Cranelift is
 `librustc_codegen_cranelift-1.100.0-nightly.so`, in a crate with no
 dependencies at all, with `[profile.dev] codegen-backend = "cranelift"` and the
