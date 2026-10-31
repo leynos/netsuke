@@ -1,0 +1,5 @@
+---
+source: src/stdlib/canonical_value/tests/diagnostics.rs
+expression: rendered
+---
+canonical admission exceeded the nodes limit of 100000 at ["m63"]["m62"]["m61"] … (55 more) … ["m05"]["m04b"]["m03b"]
