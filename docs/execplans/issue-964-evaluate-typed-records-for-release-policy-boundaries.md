@@ -2,9 +2,10 @@
 
 Status: COMPLETE
 
-The decision is recorded as ADR-0068, the migration has landed, the full
-deterministic gate set is green on the branch head, and CodeRabbit reported no
-findings on the final review. Draft pull request
+The decision is recorded as ADR-0068, the migration has landed, and the branch
+is rebased onto `origin/main` at `08d0a918` with the full deterministic gate
+set re-run on the rebased head. CodeRabbit reported no findings on the final
+review before the rebase. Draft pull request
 [#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
 maintainer review; merging is outside this plan's scope.
 
@@ -254,6 +255,14 @@ records and are unchanged.
       head.
 - [x] Run the final CodeRabbit review on `7a68b38dd`. It reported no findings
       across 24 reviewed files.
+- [x] Rebase onto `origin/main` at `08d0a918` ("Add Proptest coverage for
+      deterministic Ninja emission (4.3.1)"). All 14 branch commits replayed
+      with no conflicts, and `range-diff` reports each unchanged. The replay
+      used Git's built-in text merge with `zdiff3` because Weave was selected
+      only by the host's global attributes file, not by a tracked rule. Main's
+      commit changes Ninja emission, its Proptest suites, and the hashmap
+      boundary; its four documentation edits are disjoint from this issue's
+      release-policy seams, so no branch change follows from it.
 
 ## Outcomes and retrospective
 
