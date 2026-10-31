@@ -1,11 +1,11 @@
 # Issue 964: Evaluate typed records for release policy boundaries
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-Implementation is complete and verified: the decision is recorded as ADR-0068,
-the migration has landed, and the full deterministic gate set is green on the
-migration commit `716f9b914`. Review and the draft pull request are
-outstanding, so the plan is not yet complete.
+The decision is recorded as ADR-0068, the migration has landed, the full
+deterministic gate set is green on the branch head, and CodeRabbit reported no
+findings on the final review. The branch is ready for its draft pull request;
+merging is outside this plan's scope.
 
 ## Purpose
 
@@ -251,6 +251,8 @@ records and are unchanged.
       parametrized, the variance note is corrected, and the sorting guard now
       uses a mixed-type key set. The full gate set is re-run on the branch
       head.
+- [x] Run the final CodeRabbit review on `7a68b38dd`. It reported no findings
+      across 24 reviewed files.
 
 ## Outcomes and retrospective
 
@@ -317,16 +319,16 @@ before the migration and still pass after it, now asserted through the new
 decoders; the policy suites construct records directly, so they test the
 decision rather than the decoding.
 
-Gate evidence, bound to the migration commit `716f9b914`: `make check-fmt` (366
-Python files, 209 Markdown files unchanged), `make typecheck`, `make lint`
-(Clippy, Whitaker, Ruff, Pylint, df12 lints, ambrleaks, Interrogate at 100%),
-`make doc-coverage` (98.21% against the 80% threshold), `make markdownlint`
-(209 files, no issues), `make test` (4804 tests passed, 7 skipped, doctests
-clean), and `make test-workflow-contracts` (1665 passed, 3 skipped). The
-documentation commit that carries this update is re-gated on the branch head.
-Roadmap item 9.1.1 stays open, because its success criterion covers thresholds,
-freshness rules, waivers, and retention as well; its policy-boundary sub-item
-is checked against ADR-0068.
+Gate evidence, first bound to the migration commit `716f9b914`:
+`make check-fmt` (366 Python files, 209 Markdown files unchanged),
+`make typecheck`, `make lint` (Clippy, Whitaker, Ruff, Pylint, df12 lints,
+ambrleaks, Interrogate at 100%), `make doc-coverage` (98.21% against the 80%
+threshold), `make markdownlint` (209 files, no issues), `make test` (4804 tests
+passed, 7 skipped, doctests clean), and `make test-workflow-contracts` (1665
+passed, 3 skipped). The full set is re-run on the branch head that carries the
+review fixes and this update. Roadmap item 9.1.1 stays open, because its
+success criterion covers thresholds, freshness rules, waivers, and retention as
+well; its policy-boundary sub-item is checked against ADR-0068.
 
 ## References
 
