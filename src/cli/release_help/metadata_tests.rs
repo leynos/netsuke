@@ -1,4 +1,8 @@
-//! Unit tests for parser-only release-help metadata composition.
+//! Unit tests for the complete release-help metadata contract.
+//!
+//! The tests cover the configuration-help projection, the parser-only field
+//! and value-shape derivation, and the identifiers carried by the composed
+//! root and immediate subcommand documentation metadata.
 
 use super::*;
 use anyhow::{Context, Result, ensure};
