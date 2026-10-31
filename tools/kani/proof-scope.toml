@@ -109,6 +109,7 @@ sources = [
   "src/manifest/jinja_macros/query_classification.rs",
   "src/manifest/jinja_macros/telemetry.rs",
   "src/manifest/load_stage.rs",
+  "src/manifest/loader_options.rs",
   "src/manifest/loading.rs",
   "src/manifest/mod.rs",
   "src/manifest/parse_with_config.rs",
