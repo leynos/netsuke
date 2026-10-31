@@ -254,11 +254,12 @@ fn the_real_invocation_is_selected(#[case] source: &str) -> Result<()> {
 
 /// The real macro bodies are the contract this parser exists to read.
 ///
-/// The key table is split across two files, and the audit reads both, so each
-/// must parse on its own.
+/// The key table is split across three files, and the audit reads all three,
+/// so each must parse on its own.
 #[rstest]
 #[case::core(include_str!("../src/localization/keys.rs"), "cli.about", 300)]
 #[case::check(include_str!("../src/localization/check_keys.rs"), "check.summary.truncated", 10)]
+#[case::shell(include_str!("../src/localization/shell_keys.rs"), "stdlib.shell.join.limit", 5)]
 fn the_repository_macro_parses(
     #[case] source: &str,
     #[case] expected_key: &str,

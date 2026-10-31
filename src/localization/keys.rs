@@ -3,9 +3,10 @@
 //! This file holds only the key table: the build-time localization audit
 //! parses its `define_keys!` invocation, and the macro itself is defined in
 //! the parent module. The `netsuke check` keys live in `check_keys.rs` and
-//! are re-exported here, so every key is still reached as `keys::NAME`.
+//! the recipe-shell filter keys in `shell_keys.rs`; both are re-exported
+//! here, so every key is still reached as `keys::NAME`.
 
-pub use super::check_keys::*;
+pub use super::{check_keys::*, shell_keys::*};
 
 define_keys! {
     CLI_ABOUT => "cli.about",
@@ -261,16 +262,6 @@ define_keys! {
     COMMAND_OUTPUT_MODE_STREAMING => "stdlib.command.output.mode.streaming",
     COMMAND_OUTPUT_STREAM_STDOUT => "stdlib.command.output.stream.stdout",
     COMMAND_OUTPUT_STREAM_STDERR => "stdlib.command.output.stream.stderr",
-    STDLIB_SHELL_ARGS_ERROR => "stdlib.shell.args_error",
-    STDLIB_SHELL_UNQUOTABLE => "stdlib.shell.unquotable",
-    STDLIB_SHELL_QUOTE_NOT_STRING => "stdlib.shell.quote.not_string",
-    STDLIB_SHELL_QUOTE_CONTROL_CHARACTER => "stdlib.shell.quote.control_character",
-    STDLIB_SHELL_DIALECT_INVALID => "stdlib.shell.dialect_invalid",
-    STDLIB_SHELL_DIALECT_NOT_STRING => "stdlib.shell.dialect_not_string",
-    STDLIB_SHELL_JOIN_NOT_SEQUENCE => "stdlib.shell.join.not_sequence",
-    STDLIB_SHELL_JOIN_ITEM_NOT_STRING => "stdlib.shell.join.item_not_string",
-    STDLIB_SHELL_JOIN_LIMIT => "stdlib.shell.join.limit",
-    STDLIB_SHELL_POSITIONAL_OPTION => "stdlib.shell.positional_option",
     STDLIB_PATH_IO_FAILED => "stdlib.path.io.failed",
     STDLIB_PATH_IO_FAILED_WITH_DETAIL => "stdlib.path.io.failed_with_detail",
     STDLIB_PATH_IO_FAILED_WITH_LABEL_AND_DETAIL => "stdlib.path.io.failed_with_label_and_detail",

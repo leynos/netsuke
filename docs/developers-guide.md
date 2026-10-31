@@ -668,9 +668,13 @@ Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
-that differs from `en-US`. The `netsuke check` keys live in
-`src/localization/check_keys.rs`, which `keys.rs` re-exports; the audit reads
-both files as one key set and rejects a key declared in both.
+that differs from `en-US`. The table is split by feature across
+`src/localization/keys.rs`, `src/localization/check_keys.rs` (the
+`netsuke check` keys), and `src/localization/shell_keys.rs` (the recipe-shell
+filters), all re-exported by `keys.rs`, so a key is always reached as
+`keys::NAME`. The split keeps each module under Whitaker's 400-line cap. The
+audit reads all three as one key set and rejects a key declared in more than
+one.
 
 A *diagnostic* message whose text carries a bracketed code such as
 `[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
@@ -1196,11 +1200,12 @@ observability recorder — provide two definitions: one under
 `#[cfg(feature = "lint")]` and a `#[cfg(not(feature = "lint"))]` no-op twin.
 
 **Fluent keys stay ungated.** The Fluent message keys in
-`src/localization/keys.rs` and `src/localization/check_keys.rs`, their
-catalogue entries, and the subcommand-to-key routing in `src/cli/l10n/mod.rs`
-are deliberately not gated. The build-time localization audit is bidirectional
-across all 35 catalogues, and gating the constants would make every locale look
-orphaned; the routing only maps command names and carries no linting logic.
+`src/localization/keys.rs`, `src/localization/check_keys.rs`, and
+`src/localization/shell_keys.rs`, their catalogue entries, and the
+subcommand-to-key routing in `src/cli/l10n/mod.rs` are deliberately not gated.
+The build-time localization audit is bidirectional across all 35 catalogues,
+and gating the constants would make every locale look orphaned; the routing
+only maps command names and carries no linting logic.
 
 **Test gating.** Check-only integration tests gate the whole test binary with
 an inner `#![cfg(feature = "lint")]` (`tests/check_command_tests.rs`,
@@ -4238,8 +4243,8 @@ When release-validation requirements or documentation paths change, update
 ## The build script's module slice
 
 `build.rs` recompiles part of the library as its own crate: it needs
-`cli::Cli::command()` for man-page generation and the key registry in
-`src/localization/keys.rs` for the Fluent audit. Rather than declaring
+`cli::Cli::command()` for man-page generation and the key registry under
+`src/localization/` for the Fluent audit. Rather than declaring
 `src/cli/mod.rs` and inheriting the whole subtree, it declares an inline `cli`
 module naming exactly four files — `src/cli/command.rs`,
 `src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`.
