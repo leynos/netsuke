@@ -114,9 +114,16 @@ impl NamedAction<'_> {
         if self.shell == RecipeShell::PowerShell {
             return ShellText::new(script.to_owned());
         }
-        // Ninja commands must be single-line. Encode newlines and reconstruct the
-        // original script with `printf %b` piped into a fresh shell to preserve
-        // expected expansions.
+        // Ninja commands must be single-line. The wrapper reconstructs the
+        // original script with `printf %b` piped into a fresh shell so expected
+        // expansions still happen at execution time.
+        //
+        // Three parsers stand between the encoded text and the final
+        // interpreter: the outer shell's double-quoted word, the inner shell's
+        // single-quoted `%b` operand, and `printf %b` itself. `escape_posix_script`
+        // encodes one layer per parser, composing from the innermost outwards.
+        // It relies on this exact quoting structure; changing either the
+        // wrapper or the layer order invalidates the contract.
         let escaped = escape_posix_script(script);
         let cmd = format!("/bin/sh -e -c \"printf %b '{escaped}' | /bin/sh -e\"");
         // Scripts are allowed to contain shell constructs such as heredocs and
