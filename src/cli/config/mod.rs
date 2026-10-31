@@ -198,10 +198,11 @@ pub struct CommandConfigs {
 #[ortho_config(prefix = "NETSUKE", post_merge_hook)]
 pub struct CliConfig {
     /// Path to the Netsuke manifest file to use.
-    #[ortho_config(default = default_manifest_path())]
+    #[ortho_config(default = default_manifest_path(), cli(value_name = "FILE"))]
     pub file: Utf8PathBuf,
 
     /// Set the number of parallel build jobs.
+    #[ortho_config(cli(value_name = "N"))]
     pub jobs: Option<usize>,
 
     /// Enable verbose diagnostic logging and completion timing summaries.
@@ -209,30 +210,31 @@ pub struct CliConfig {
     pub verbose: bool,
 
     /// Locale tag for CLI copy (for example: en-US, es-ES).
+    #[ortho_config(cli(value_name = "LOCALE"))]
     pub locale: Option<String>,
 
     /// Additional URL schemes allowed for the `fetch` helper.
-    #[ortho_config(merge_strategy = "append")]
+    #[ortho_config(merge_strategy = "append", cli(value_name = "SCHEME"))]
     #[serde(default)]
     pub fetch_allow_scheme: Vec<String>,
 
     /// Environment variables permitted for the manifest `env()` helper.
-    #[ortho_config(merge_strategy = "append")]
+    #[ortho_config(merge_strategy = "append", cli(value_name = "VAR"))]
     #[serde(default)]
     pub env_allow_var: Vec<String>,
 
     /// Environment variables always blocked for the manifest `env()` helper.
-    #[ortho_config(merge_strategy = "append")]
+    #[ortho_config(merge_strategy = "append", cli(value_name = "VAR"))]
     #[serde(default)]
     pub env_block_var: Vec<String>,
 
     /// Hostnames permitted when default deny is enabled.
-    #[ortho_config(merge_strategy = "append")]
+    #[ortho_config(merge_strategy = "append", cli(value_name = "HOST"))]
     #[serde(default)]
     pub fetch_allow_host: Vec<HostPattern>,
 
     /// Hostnames that are always blocked.
-    #[ortho_config(merge_strategy = "append")]
+    #[ortho_config(merge_strategy = "append", cli(value_name = "HOST"))]
     #[serde(default)]
     pub fetch_block_host: Vec<HostPattern>,
 
@@ -245,31 +247,49 @@ pub struct CliConfig {
     pub trust_project_fetch_policy: bool,
 
     /// Maximum `MiniJinja` instructions allocated to one manifest evaluation.
-    #[ortho_config(default = DEFAULT_MANIFEST_EVALUATION_FUEL)]
+    #[ortho_config(
+        default = DEFAULT_MANIFEST_EVALUATION_FUEL,
+        cli(value_name = "FUEL")
+    )]
     pub manifest_evaluation_fuel: u64,
 
     /// Maximum `MiniJinja` instructions allocated across one manifest.
-    #[ortho_config(default = DEFAULT_MANIFEST_FUEL)]
+    #[ortho_config(default = DEFAULT_MANIFEST_FUEL, cli(value_name = "FUEL"))]
     pub manifest_fuel: u64,
 
     /// Maximum bytes emitted by one rendered manifest value.
-    #[ortho_config(default = DEFAULT_MANIFEST_RENDERED_VALUE_BYTES)]
+    #[ortho_config(
+        default = DEFAULT_MANIFEST_RENDERED_VALUE_BYTES,
+        cli(value_name = "BYTES")
+    )]
     pub manifest_rendered_value_bytes: usize,
 
     /// Maximum aggregate bytes emitted across all rendered manifest values.
-    #[ortho_config(default = DEFAULT_MANIFEST_RENDERED_BYTES)]
+    #[ortho_config(
+        default = DEFAULT_MANIFEST_RENDERED_BYTES,
+        cli(value_name = "BYTES")
+    )]
     pub manifest_rendered_manifest_bytes: usize,
 
     /// Maximum template and macro-import source bytes consumed per manifest.
-    #[ortho_config(default = DEFAULT_MANIFEST_SOURCE_BYTES)]
+    #[ortho_config(
+        default = DEFAULT_MANIFEST_SOURCE_BYTES,
+        cli(value_name = "BYTES")
+    )]
     pub manifest_source_bytes: usize,
 
     /// Maximum values consumed from each manifest `foreach` iterator.
-    #[ortho_config(default = DEFAULT_MANIFEST_FOREACH_CARDINALITY)]
+    #[ortho_config(
+        default = DEFAULT_MANIFEST_FOREACH_CARDINALITY,
+        cli(value_name = "COUNT")
+    )]
     pub manifest_foreach_cardinality: usize,
 
     /// Maximum expanded target and action entries per manifest.
-    #[ortho_config(default = DEFAULT_MANIFEST_EXPANDED_ENTRIES)]
+    #[ortho_config(
+        default = DEFAULT_MANIFEST_EXPANDED_ENTRIES,
+        cli(value_name = "COUNT")
+    )]
     pub manifest_expanded_entries: usize,
 
     /// Emit machine-readable JSON output.
@@ -297,7 +317,7 @@ pub struct CliConfig {
     pub accessibility: AccessibilityPolicy,
 
     /// Compatibility alias for default build targets at the config root.
-    #[ortho_config(merge_strategy = "append")]
+    #[ortho_config(merge_strategy = "append", cli(value_name = "TARGET"))]
     #[serde(default)]
     pub default_targets: Vec<String>,
 
