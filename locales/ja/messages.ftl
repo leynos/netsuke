@@ -355,6 +355,7 @@ stdlib.path.expanduser.unsupported = 特定ユーザーに対する ~ の展開�
 stdlib.path.expanduser.no_home = ~ を展開できません。ホームディレクトリーの環境変数が設定されていません。
 stdlib.path.contents.file_too_large = ファイル「{ $path }」が { $limit } バイトの読み取り上限を超えました。
 stdlib.path.contents.not_regular_file = ファイル「{ $path }」は通常ファイルではありません。
+stdlib.path.contents.outside_workspace = ファイル「{ $path }」はワークスペースの外にあります。ファイル読み取りフィルターは、設定されたワークスペースルート内でのみ読み取ります。
 stdlib.path.contents.unsupported_encoding = 対応していない文字符号化「{ $encoding }」です。
 stdlib.path.hash.unsupported_algorithm = 対応していないハッシュアルゴリズム「{ $algorithm }」です。
 stdlib.path.hash.unsupported_algorithm_legacy = 対応していないハッシュアルゴリズム「{ $algorithm }」です（機能「{ $feature }」を有効にしてください）。

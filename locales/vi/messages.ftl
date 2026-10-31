@@ -355,6 +355,7 @@ stdlib.path.expanduser.unsupported = Không hỗ trợ mở rộng ~ cho một n
 stdlib.path.expanduser.no_home = Không mở rộng được ~: chưa đặt biến môi trường nào cho thư mục cá nhân.
 stdlib.path.contents.file_too_large = Tệp “{ $path }” vượt quá giới hạn đọc { $limit } byte.
 stdlib.path.contents.not_regular_file = Tệp “{ $path }” không phải là tệp thông thường.
+stdlib.path.contents.outside_workspace = Tệp “{ $path }” nằm ngoài không gian làm việc; các bộ lọc đọc tệp chỉ đọc trong thư mục gốc không gian làm việc đã cấu hình.
 stdlib.path.contents.unsupported_encoding = Bảng mã không được hỗ trợ: “{ $encoding }”.
 stdlib.path.hash.unsupported_algorithm = Thuật toán băm không được hỗ trợ: “{ $algorithm }”.
 stdlib.path.hash.unsupported_algorithm_legacy = Thuật toán băm không được hỗ trợ: “{ $algorithm }” (hãy bật tính năng “{ $feature }”).

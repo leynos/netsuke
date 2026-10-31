@@ -355,6 +355,7 @@ stdlib.path.expanduser.unsupported = 특정 사용자에 대한 ~ 확장은 지�
 stdlib.path.expanduser.no_home = ~을(를) 확장할 수 없습니다. 홈 디렉터리 환경 변수가 설정되지 않았습니다.
 stdlib.path.contents.file_too_large = 파일 '{ $path }'이(가) { $limit }바이트 읽기 한도를 넘었습니다.
 stdlib.path.contents.not_regular_file = 파일 '{ $path }'은(는) 일반 파일이 아닙니다.
+stdlib.path.contents.outside_workspace = 파일 '{ $path }'은(는) 작업 공간 밖에 있습니다. 파일 읽기 필터는 구성된 작업 공간 루트 안에서만 읽습니다.
 stdlib.path.contents.unsupported_encoding = 지원하지 않는 인코딩 '{ $encoding }'입니다.
 stdlib.path.hash.unsupported_algorithm = 지원하지 않는 해시 알고리즘 '{ $algorithm }'입니다.
 stdlib.path.hash.unsupported_algorithm_legacy = 지원하지 않는 해시 알고리즘 '{ $algorithm }'입니다('{ $feature }' 기능을 켜세요).

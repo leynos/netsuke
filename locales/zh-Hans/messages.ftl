@@ -354,6 +354,7 @@ stdlib.path.expanduser.unsupported = 不支持针对特定用户展开 ~。
 stdlib.path.expanduser.no_home = 无法展开 ~：未设置任何主目录环境变量。
 stdlib.path.contents.file_too_large = 文件“{ $path }”超过 { $limit } 字节的读取上限。
 stdlib.path.contents.not_regular_file = 文件“{ $path }”不是普通文件。
+stdlib.path.contents.outside_workspace = 文件“{ $path }”位于工作区之外；文件读取过滤器仅在配置的工作区根目录内读取。
 stdlib.path.contents.unsupported_encoding = 不支持的编码“{ $encoding }”。
 stdlib.path.hash.unsupported_algorithm = 不支持的散列算法“{ $algorithm }”。
 stdlib.path.hash.unsupported_algorithm_legacy = 不支持的散列算法“{ $algorithm }”（请启用特性“{ $feature }”）。

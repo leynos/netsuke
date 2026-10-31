@@ -114,6 +114,11 @@ pub struct TestWorld {
     pub stdlib_command_stream_max_bytes: Slot<u64>,
     /// Text payload injected into stdlib templates for streaming scenarios.
     pub stdlib_text: Slot<String>,
+    /// Directory holding a fixture the stdlib must treat as outside the
+    /// workspace.
+    pub stdlib_outside_dir: RefCell<Option<tempfile::TempDir>>,
+    /// Absolute path of the outside fixture the next render reads.
+    pub stdlib_outside_file: Slot<Utf8PathBuf>,
 
     // Canonical value state (Clone)
     /// First of two string-keyed maps with the same members in another order.

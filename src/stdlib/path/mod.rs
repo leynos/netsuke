@@ -8,6 +8,7 @@ mod fs_utils;
 mod hash_utils;
 mod path_utils;
 mod read_telemetry;
+mod reading_root;
 #[cfg(windows)]
 mod windows_reparse;
 
@@ -17,3 +18,4 @@ mod home;
 pub(crate) use filters::{register_filters, register_query_filters};
 pub(crate) use fs_utils::file_type_matches;
 pub use read_telemetry::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL};
+pub(crate) use reading_root::ReadingRoot;

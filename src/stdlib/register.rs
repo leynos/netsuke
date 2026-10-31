@@ -163,10 +163,15 @@ pub(crate) fn register_manifest_query(env: &mut Environment<'_>) -> StdlibState 
 /// Register helpers that do not execute a command or make a network request.
 fn register_read_only_helpers(env: &mut Environment<'_>, config: &StdlibConfig) {
     register_file_tests(env);
+    let reading_root = path::ReadingRoot::new(
+        Arc::clone(&config.workspace_root),
+        config.workspace_root_path().map(Utf8Path::to_path_buf),
+    );
     path::register_filters(
         env,
         config.home_directory().clone(),
         config.file_max_read_bytes(),
+        reading_root,
     );
     collections::register_filters(env);
     recipe_text::register_filters(env, config.dialect());

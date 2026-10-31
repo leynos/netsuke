@@ -360,6 +360,7 @@ stdlib.path.expanduser.unsupported = Ni chefnogir ehangu ~ ar gyfer defnyddiwr p
 stdlib.path.expanduser.no_home = Ni ellir ehangu ~: nid oes newidyn amgylchedd cyfeiriadur cartref wedi'i osod.
 stdlib.path.contents.file_too_large = Aeth y ffeil ‘{ $path }’ dros y terfyn darllen o { $limit } beit.
 stdlib.path.contents.not_regular_file = Nid yw'r ffeil ‘{ $path }’ yn ffeil reolaidd.
+stdlib.path.contents.outside_workspace = Mae'r ffeil ‘{ $path }’ y tu allan i'r gweithle; dim ond o fewn gwraidd y gweithle wedi'i ffurfweddu y mae hidlwyr darllen ffeiliau yn darllen.
 stdlib.path.contents.unsupported_encoding = Amgodiad nas cefnogir: ‘{ $encoding }’.
 stdlib.path.hash.unsupported_algorithm = Algorithm stwnsio nas cefnogir: ‘{ $algorithm }’.
 stdlib.path.hash.unsupported_algorithm_legacy = Algorithm stwnsio nas cefnogir: ‘{ $algorithm }’ (galluogwch y nodwedd ‘{ $feature }’).

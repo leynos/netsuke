@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = Käyttäjäkohtaista ~-laajennusta ei tueta
 stdlib.path.expanduser.no_home = Merkkiä ~ ei voi laajentaa: kotihakemiston ympäristömuuttujia ei ole asetettu.
 stdlib.path.contents.file_too_large = Tiedosto ”{ $path }” ylitti { $limit } tavun lukurajan.
 stdlib.path.contents.not_regular_file = Tiedosto ”{ $path }” ei ole tavallinen tiedosto.
+stdlib.path.contents.outside_workspace = Tiedosto ”{ $path }” on työtilan ulkopuolella; tiedostonlukusuodattimet lukevat vain määritetyn työtilan juuren sisällä.
 stdlib.path.contents.unsupported_encoding = Merkistökoodausta ”{ $encoding }” ei tueta.
 stdlib.path.hash.unsupported_algorithm = Tiivistealgoritmia ”{ $algorithm }” ei tueta.
 stdlib.path.hash.unsupported_algorithm_legacy = Tiivistealgoritmia ”{ $algorithm }” ei tueta (ota käyttöön ominaisuus ”{ $feature }”).

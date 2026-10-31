@@ -358,6 +358,7 @@ stdlib.path.expanduser.no_home = Cannot expand ~: no home directory environment 
 stdlib.path.contents.unsupported_encoding = Unsupported encoding '{ $encoding }'.
 stdlib.path.contents.file_too_large = File '{ $path }' exceeded the read limit of { $limit } bytes.
 stdlib.path.contents.not_regular_file = File '{ $path }' is not a regular file.
+stdlib.path.contents.outside_workspace = File '{ $path }' is outside the workspace; file-reading filters read only within the configured workspace root.
 stdlib.path.hash.unsupported_algorithm = Unsupported hash algorithm '{ $algorithm }'.
 stdlib.path.hash.unsupported_algorithm_legacy = Unsupported hash algorithm '{ $algorithm }' (enable feature '{ $feature }').
 

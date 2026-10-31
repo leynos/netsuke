@@ -19,7 +19,7 @@ mod path_filters;
 
 #[path = "std_filter_tests/read_policy_filters/mod.rs"]
 mod read_policy_filters;
-#[path = "std_filter_tests/support.rs"]
+#[path = "std_filter_tests/support/mod.rs"]
 mod support;
 #[path = "std_filter_tests/time_functions.rs"]
 mod time_functions;

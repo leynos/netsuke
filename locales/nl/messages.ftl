@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = Gebruikerspecifieke uitbreiding van ~ wordt
 stdlib.path.expanduser.no_home = ~ kan niet worden uitgebreid: er zijn geen omgevingsvariabelen voor de thuismap ingesteld.
 stdlib.path.contents.file_too_large = Het bestand ‘{ $path }’ overschreed de leeslimiet van { $limit } bytes.
 stdlib.path.contents.not_regular_file = Het bestand ‘{ $path }’ is geen gewoon bestand.
+stdlib.path.contents.outside_workspace = Het bestand ‘{ $path }’ ligt buiten de werkruimte; bestandsleesfilters lezen alleen binnen de geconfigureerde werkruimteroot.
 stdlib.path.contents.unsupported_encoding = De tekencodering ‘{ $encoding }’ wordt niet ondersteund.
 stdlib.path.hash.unsupported_algorithm = Het hash-algoritme ‘{ $algorithm }’ wordt niet ondersteund.
 stdlib.path.hash.unsupported_algorithm_legacy = Het hash-algoritme ‘{ $algorithm }’ wordt niet ondersteund (schakel functie ‘{ $feature }’ in).

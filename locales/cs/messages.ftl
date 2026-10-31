@@ -358,6 +358,7 @@ stdlib.path.expanduser.unsupported = Rozvoj znaku ~ pro konkrétního uživatele
 stdlib.path.expanduser.no_home = Znak ~ nelze rozvinout: není nastavena žádná proměnná prostředí domovského adresáře.
 stdlib.path.contents.file_too_large = Soubor „{ $path }“ překročil limit čtení { $limit } bajtů.
 stdlib.path.contents.not_regular_file = Soubor „{ $path }“ není běžný soubor.
+stdlib.path.contents.outside_workspace = Soubor „{ $path }“ je mimo pracovní prostor; filtry pro čtení souborů čtou pouze v rámci nakonfigurovaného kořene pracovního prostoru.
 stdlib.path.contents.unsupported_encoding = Nepodporované kódování „{ $encoding }“.
 stdlib.path.hash.unsupported_algorithm = Nepodporovaný hashovací algoritmus „{ $algorithm }“.
 stdlib.path.hash.unsupported_algorithm_legacy = Nepodporovaný hashovací algoritmus „{ $algorithm }“ (zapněte funkci „{ $feature }“).

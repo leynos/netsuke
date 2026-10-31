@@ -356,6 +356,7 @@ stdlib.path.expanduser.unsupported = किसी विशेष उपयो�
 stdlib.path.expanduser.no_home = ~ का विस्तार नहीं हो सकता: गृह निर्देशिका का कोई परिवेश चर निर्धारित नहीं है।
 stdlib.path.contents.file_too_large = फ़ाइल “{ $path }” { $limit } बाइट की पठन सीमा से अधिक थी।
 stdlib.path.contents.not_regular_file = फ़ाइल “{ $path }” नियमित फ़ाइल नहीं है।
+stdlib.path.contents.outside_workspace = फ़ाइल “{ $path }” कार्यक्षेत्र से बाहर है; फ़ाइल-पढ़ने वाले फ़िल्टर केवल कॉन्फ़िगर किए गए कार्यक्षेत्र रूट के भीतर पढ़ते हैं।
 stdlib.path.contents.unsupported_encoding = असमर्थित कूटलेखन: “{ $encoding }”।
 stdlib.path.hash.unsupported_algorithm = असमर्थित हैश कलनविधि: “{ $algorithm }”।
 stdlib.path.hash.unsupported_algorithm_legacy = असमर्थित हैश कलनविधि: “{ $algorithm }” (“{ $feature }” सुविधा सक्षम करें)।

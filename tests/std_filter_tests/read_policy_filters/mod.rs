@@ -6,7 +6,8 @@
 //! enforced on only some entry points then fails on the entry point that
 //! ignores it instead of passing because a sibling filter was tested. This
 //! module owns the table and the render helpers; `budget_tests` pins the byte
-//! budget, `file_type_tests` pins the symlink and file-type policy, and
+//! budget, `file_type_tests` pins the symlink and file-type policy,
+//! `confinement_tests` pins resolution within the workspace capability, and
 //! `unknown_kwargs_tests` pins the per-call keyword contract.
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
@@ -49,6 +50,8 @@ pub(super) struct FilterCase {
     /// Expected render for the `exact.bin` fixture (`12345`) read at exactly
     /// its own length.
     pub(super) exact: &'static str,
+    /// Expected render for the `sub/inner.txt` fixture (contents `inner`).
+    pub(super) inner: &'static str,
 }
 
 impl FilterCase {
@@ -88,6 +91,7 @@ pub(super) const CONTENTS: FilterCase = FilterCase {
     positional: "",
     followed: "data",
     exact: "12345",
+    inner: "inner",
 };
 
 /// The `linecount` filter, which counts lines in UTF-8 text.
@@ -96,6 +100,7 @@ pub(super) const LINECOUNT: FilterCase = FilterCase {
     positional: "",
     followed: "1",
     exact: "1",
+    inner: "1",
 };
 
 /// The `hash` filter, which hashes raw bytes with the default algorithm.
@@ -104,6 +109,7 @@ pub(super) const HASH: FilterCase = FilterCase {
     positional: "'sha256'",
     followed: "3a6eb0790f39ac87c94f3856b2dd2c5d110e6811602261a9a923d3bb23adc8b7",
     exact: "5994471abb01112afcc18159f6cc74b4f511b99806da59b3caf5a9c173cacfc5",
+    inner: "33bf6fbd7cd8379785a21e233d8e09f824e7bab459168a96312c1c882c1d7e1f",
 };
 
 /// The `digest` filter, which renders the requested prefix of a hash.
@@ -112,6 +118,7 @@ pub(super) const DIGEST: FilterCase = FilterCase {
     positional: "8, 'sha256'",
     followed: "3a6eb079",
     exact: "5994471a",
+    inner: "33bf6fbd",
 };
 
 /// Assert that `link` really is a symlink, failing setup when it is not.
@@ -268,6 +275,8 @@ pub(super) fn rejection(
 }
 
 mod budget_tests;
+
+mod confinement_tests;
 
 mod file_type_tests;
 

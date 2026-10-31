@@ -20,6 +20,7 @@ use rustix::fs::OFlags;
 use crate::localization::{self, keys};
 
 use super::path_utils::normalise_parent;
+use super::reading_root::{self, ReadingRoot};
 #[cfg(windows)]
 use super::windows_reparse;
 use crate::stdlib::io_helpers::io_to_error;
@@ -43,6 +44,27 @@ pub(crate) struct FileReadLimits {
     pub follow_symlinks: bool,
 }
 
+/// One read's resolved policy and the workspace it resolves through.
+///
+/// The two belong together: a budget without the capability would let the
+/// request escape the workspace, and the capability without the budget would
+/// read the file out. Grouping them keeps every reading entry point to the
+/// same two decisions rather than a growing parameter list.
+#[derive(Clone, Copy)]
+pub(crate) struct ReadScope<'a> {
+    /// Resolved byte budget and symlink policy for this call.
+    pub(crate) limits: &'a FileReadLimits,
+    /// Workspace capability the requested path resolves through.
+    pub(crate) root: &'a ReadingRoot,
+}
+
+impl<'a> ReadScope<'a> {
+    /// Pair one call's resolved limits with the workspace it reads within.
+    pub(crate) const fn new(limits: &'a FileReadLimits, root: &'a ReadingRoot) -> Self {
+        Self { limits, root }
+    }
+}
+
 /// Build the localized non-regular-file diagnostic for `path`.
 pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
     Error::new(
@@ -54,6 +76,14 @@ pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
 }
 
 /// Open `path` for reading under the file-reading safety policy.
+///
+/// `path` is resolved through `scope.root`, so a relative request names an entry in
+/// the configured workspace and an absolute request is accepted only when it
+/// lies beneath the workspace's recorded path. The parent directory is opened
+/// through the same capability, which is what keeps an intermediate link from
+/// carrying the open out of the workspace; the capability reports such an
+/// escape, and this function turns it into the ordinary confinement
+/// diagnostic.
 ///
 /// The default policy opens the final path component without following a link
 /// on either platform, and the decision is taken from the handle the caller
@@ -70,12 +100,20 @@ pub(crate) fn not_regular_file_error(path: &Utf8Path) -> Error {
 ///
 /// # Errors
 ///
-/// Returns a template error when the parent directory cannot be opened, the
-/// target cannot be opened, the final component is a link while following is
-/// disabled, the opened object is not a regular file, or blocking mode cannot
-/// be restored.
-pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Result<File, Error> {
-    let parent = open_parent_dir(path)?;
+/// Returns a template error when the request lies outside the workspace, the
+/// parent directory cannot be opened, the target cannot be opened, the final
+/// component is a link while following is disabled, the opened object is not
+/// a regular file, or blocking mode cannot be restored.
+pub(crate) fn open_file_checked(path: &Utf8Path, scope: ReadScope<'_>) -> Result<File, Error> {
+    let limits = scope.limits;
+    let relative = scope.root.resolve(path)?;
+    let parent = scope
+        .root
+        .open_parent(&relative)
+        .map_err(|err| open_parent_error(path, err))?;
+    let entry = relative
+        .file_name()
+        .map_or_else(|| ".".to_owned(), str::to_owned);
     let mut options = OpenOptions::new();
     options.read(true);
     // `O_NONBLOCK` is applied unconditionally so a FIFO or device cannot block
@@ -89,15 +127,8 @@ pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Res
     #[cfg(windows)]
     windows_reparse::apply_open_flags(&mut options, limits.follow_symlinks);
     let file = parent
-        .handle
-        .open_with(Utf8Path::new(&parent.entry), &options)
-        .map_err(|err| {
-            io_to_error(
-                path,
-                &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
-                err,
-            )
-        })?;
+        .open_with(Utf8Path::new(&entry), &options)
+        .map_err(|err| open_file_error(path, err))?;
     let metadata = file.metadata().map_err(|err| {
         io_to_error(
             path,
@@ -117,6 +148,40 @@ pub(crate) fn open_file_checked(path: &Utf8Path, limits: &FileReadLimits) -> Res
     #[cfg(unix)]
     restore_blocking(&file, path)?;
     Ok(file)
+}
+
+/// Translate a parent-directory open failure into its template diagnostic.
+///
+/// A capability escape and an ordinary I/O failure are different events, and
+/// the caller must be able to tell them apart: the escape means the request
+/// left the workspace, while a permission or missing-directory failure means
+/// the workspace itself refused the open.
+fn open_parent_error(path: &Utf8Path, err: io::Error) -> Error {
+    if reading_root::is_capability_escape(&err) {
+        return reading_root::outside_workspace_error(path);
+    }
+    io_to_error(
+        path,
+        &localization::message(keys::STDLIB_PATH_ACTION_OPEN_DIRECTORY),
+        err,
+    )
+}
+
+/// Translate a final-component open failure into its template diagnostic.
+///
+/// With `follow_symlinks` enabled, an escaping link target is reported as a
+/// workspace escape rather than as the platform's cross-device or symlink
+/// wording. With the default policy the same link is refused by `O_NOFOLLOW`
+/// and keeps that diagnostic, because the caller asked not to follow it.
+fn open_file_error(path: &Utf8Path, err: io::Error) -> Error {
+    if reading_root::is_capability_escape(&err) {
+        return reading_root::outside_workspace_error(path);
+    }
+    io_to_error(
+        path,
+        &localization::message(keys::STDLIB_PATH_ACTION_OPEN_FILE),
+        err,
+    )
 }
 
 /// Set `O_NONBLOCK`, and `O_NOFOLLOW` unless the policy follows symlinks.
