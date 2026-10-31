@@ -6,7 +6,6 @@
 //! the exact PowerShell length, and the post-encode check that `Sh` needs
 //! because its output can be three times its input.
 
-use anyhow::Result;
 use minijinja::value::Value;
 use rstest::rstest;
 use test_support::{EnLocalizer, en_localizer};
@@ -18,6 +17,13 @@ use crate::shell_word::ShellDialect;
 fn join(values: &[String], dialect: ShellDialect) -> Result<String, minijinja::Error> {
     join_sequence(dialect, &Value::from_serialize(values))
 }
+
+/// Half the ceiling, written as a shift.
+///
+/// The workspace denies `clippy::integer_division` and
+/// `clippy::integer_division_remainder_used`, so a literal `/` here would fail
+/// the build. The ceiling is a power of two, so the shift is exact.
+const HALF_CEILING: usize = SHELL_JOIN_MAX_ENCODED_BYTES >> 1;
 
 /// One inert word of `length` bytes.
 ///
@@ -59,20 +65,19 @@ fn the_ceiling_is_one_mebibyte() {
 /// larger. For `sh`, an inert word encodes to itself, so input length and
 /// encoded length coincide.
 #[test]
-fn a_word_of_exactly_the_ceiling_is_accepted() -> Result<()> {
+fn a_word_of_exactly_the_ceiling_is_accepted() {
     let word = inert_word(SHELL_JOIN_MAX_ENCODED_BYTES);
-    let joined = join(&[word], ShellDialect::Sh)?;
+    let joined = join(&[word], ShellDialect::Sh).expect("a word at the ceiling should encode");
     assert_eq!(
         joined.len(),
         SHELL_JOIN_MAX_ENCODED_BYTES,
         "the accepted boundary value should fill the ceiling exactly"
     );
-    Ok(())
 }
 
 /// One byte past the ceiling is rejected before the word is encoded.
 #[rstest]
-fn a_word_past_the_ceiling_is_rejected(en_localizer: EnLocalizer) -> Result<()> {
+fn a_word_past_the_ceiling_is_rejected(en_localizer: EnLocalizer) {
     let _localizer = en_localizer;
     let word = inert_word(SHELL_JOIN_MAX_ENCODED_BYTES + 1);
     let error =
@@ -94,7 +99,6 @@ fn a_word_past_the_ceiling_is_rejected(en_localizer: EnLocalizer) -> Result<()> 
         !message.contains("aaaa"),
         "the rejection must not echo the content it refused: {message}"
     );
-    Ok(())
 }
 
 /// The separator counts against the ceiling, so the sum of members is not the
@@ -104,10 +108,9 @@ fn a_word_past_the_ceiling_is_rejected(en_localizer: EnLocalizer) -> Result<()> 
 /// between them pushes the total past the ceiling. The reported index is the
 /// member that did not fit, not the member that crossed on its own.
 #[rstest]
-fn the_separator_counts_towards_the_ceiling(en_localizer: EnLocalizer) -> Result<()> {
+fn the_separator_counts_towards_the_ceiling(en_localizer: EnLocalizer) {
     let _localizer = en_localizer;
-    let half = SHELL_JOIN_MAX_ENCODED_BYTES / 2;
-    let values = vec![inert_word(half), inert_word(half)];
+    let values = vec![inert_word(HALF_CEILING), inert_word(HALF_CEILING)];
     let error = join(&values, ShellDialect::Sh)
         .expect_err("the joining space must count against the limit");
     let message = error.to_string();
@@ -115,7 +118,6 @@ fn the_separator_counts_towards_the_ceiling(en_localizer: EnLocalizer) -> Result
         message.contains(&format!("item {}", isolated(1))),
         "the member that could not fit is the second one: {message}"
     );
-    Ok(())
 }
 
 /// The reported trigger: three references to one generated string.
@@ -125,7 +127,7 @@ fn the_separator_counts_towards_the_ceiling(en_localizer: EnLocalizer) -> Result
 /// issue #970 reported; it must fail at the third member rather than allocating
 /// the joined text first.
 #[rstest]
-fn repeated_references_stop_at_the_member_that_cannot_fit(en_localizer: EnLocalizer) -> Result<()> {
+fn repeated_references_stop_at_the_member_that_cannot_fit(en_localizer: EnLocalizer) {
     let _localizer = en_localizer;
     let word = inert_word(400_000);
     let values = vec![word.clone(), word.clone(), word];
@@ -136,7 +138,6 @@ fn repeated_references_stop_at_the_member_that_cannot_fit(en_localizer: EnLocali
         message.contains(&format!("item {}", isolated(2))),
         "the third member is the first that cannot fit: {message}"
     );
-    Ok(())
 }
 
 /// The PowerShell length is exact, so an escalation is rejected by the
@@ -146,16 +147,15 @@ fn repeated_references_stop_at_the_member_that_cannot_fit(en_localizer: EnLocali
 /// check that used the input length would let this through and only discover
 /// the overshoot after encoding.
 #[rstest]
-fn the_power_shell_length_is_exact(en_localizer: EnLocalizer) -> Result<()> {
+fn the_power_shell_length_is_exact(en_localizer: EnLocalizer) {
     let _localizer = en_localizer;
-    let quotes = "'".repeat(SHELL_JOIN_MAX_ENCODED_BYTES / 2 + 1);
+    let quotes = "'".repeat(HALF_CEILING + 1);
     let error = join(&[quotes], ShellDialect::PowerShell)
         .expect_err("doubled quotes push the encoded form past the ceiling");
     assert!(
         error.to_string().contains(&format!("item {}", isolated(0))),
         "the single member should be named: {error}"
     );
-    Ok(())
 }
 
 /// The `sh` output can double its input, so the pre-check alone is not a
@@ -164,16 +164,15 @@ fn the_power_shell_length_is_exact(en_localizer: EnLocalizer) -> Result<()> {
 /// Each quote encodes to `\'`, two bytes for one, and the input length passes
 /// the lower-bound pre-check. Rejecting here proves the second check exists.
 #[rstest]
-fn the_sh_post_encode_check_rejects_a_doubled_word(en_localizer: EnLocalizer) -> Result<()> {
+fn the_sh_post_encode_check_rejects_a_doubled_word(en_localizer: EnLocalizer) {
     let _localizer = en_localizer;
-    let quotes = "'".repeat(SHELL_JOIN_MAX_ENCODED_BYTES / 2 + 1);
+    let quotes = "'".repeat(HALF_CEILING + 1);
     let error = join(&[quotes], ShellDialect::Sh)
         .expect_err("a word that doubles when encoded must not pass the ceiling");
     assert!(
         error.to_string().contains(&format!("item {}", isolated(0))),
         "the single member should be named: {error}"
     );
-    Ok(())
 }
 
 /// A doubled word that lands exactly on the ceiling is accepted.
@@ -182,27 +181,26 @@ fn the_sh_post_encode_check_rejects_a_doubled_word(en_localizer: EnLocalizer) ->
 /// same input shape one byte shorter is within the ceiling, so the rejection
 /// above is about the ceiling and not about quotes being refused.
 #[test]
-fn the_sh_post_encode_check_accepts_the_exact_doubled_word() -> Result<()> {
-    let quotes = "'".repeat(SHELL_JOIN_MAX_ENCODED_BYTES / 2);
-    let joined = join(&[quotes], ShellDialect::Sh)?;
+fn the_sh_post_encode_check_accepts_the_exact_doubled_word() {
+    let quotes = "'".repeat(HALF_CEILING);
+    let joined =
+        join(&[quotes], ShellDialect::Sh).expect("a doubled word of half the ceiling fits");
     assert_eq!(
         joined.len(),
         SHELL_JOIN_MAX_ENCODED_BYTES,
         "a doubled word of half the ceiling should fill it exactly"
     );
-    Ok(())
 }
 
 /// PowerShell's boundary is exact on both sides.
 #[test]
-fn the_power_shell_boundary_is_inclusive() -> Result<()> {
-    let length = (SHELL_JOIN_MAX_ENCODED_BYTES - 2) / 2;
-    let quotes = "'".repeat(length);
-    let joined = join(&[quotes], ShellDialect::PowerShell)?;
+fn the_power_shell_boundary_is_inclusive() {
+    let quotes = "'".repeat(HALF_CEILING - 1);
+    let joined =
+        join(&[quotes], ShellDialect::PowerShell).expect("a word that just fits should encode");
     assert_eq!(
         joined.len(),
         SHELL_JOIN_MAX_ENCODED_BYTES,
         "the exact-length pre-check should admit a word that just fits"
     );
-    Ok(())
 }
