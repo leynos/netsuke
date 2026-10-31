@@ -140,34 +140,26 @@ fn repeated_references_stop_at_the_member_that_cannot_fit(en_localizer: EnLocali
     );
 }
 
-/// The PowerShell length is exact, so an escalation is rejected by the
-/// pre-check even though the input is half the ceiling.
+/// A word that doubles when encoded is rejected by both dialects, each through
+/// a different check.
 ///
-/// Doubling every quote means the encoded form is roughly twice the input; a
-/// check that used the input length would let this through and only discover
-/// the overshoot after encoding.
+/// Every quote becomes `\'` in `Sh` and a doubled quote in PowerShell, so the
+/// input is half a ceiling of quotes in both cases. PowerShell's length is
+/// computed exactly, so the pre-check rejects the word before it is encoded; a
+/// check that used the input length would let it through and only discover the
+/// overshoot afterwards. `Sh`'s pre-check is a lower bound that this input
+/// passes, so only the post-encode check can reject it — which is what proves
+/// that second check exists.
 #[rstest]
-fn the_power_shell_length_is_exact(en_localizer: EnLocalizer) {
+#[case::power_shell_pre_check(ShellDialect::PowerShell)]
+#[case::sh_post_encode_check(ShellDialect::Sh)]
+fn a_word_that_doubles_past_the_ceiling_is_rejected(
+    #[case] dialect: ShellDialect,
+    en_localizer: EnLocalizer,
+) {
     let _localizer = en_localizer;
     let quotes = "'".repeat(HALF_CEILING + 1);
-    let error = join(&[quotes], ShellDialect::PowerShell)
-        .expect_err("doubled quotes push the encoded form past the ceiling");
-    assert!(
-        error.to_string().contains(&format!("item {}", isolated(0))),
-        "the single member should be named: {error}"
-    );
-}
-
-/// The `sh` output can double its input, so the pre-check alone is not a
-/// ceiling; the post-encode check is what enforces it.
-///
-/// Each quote encodes to `\'`, two bytes for one, and the input length passes
-/// the lower-bound pre-check. Rejecting here proves the second check exists.
-#[rstest]
-fn the_sh_post_encode_check_rejects_a_doubled_word(en_localizer: EnLocalizer) {
-    let _localizer = en_localizer;
-    let quotes = "'".repeat(HALF_CEILING + 1);
-    let error = join(&[quotes], ShellDialect::Sh)
+    let error = join(&[quotes], dialect)
         .expect_err("a word that doubles when encoded must not pass the ceiling");
     assert!(
         error.to_string().contains(&format!("item {}", isolated(0))),
@@ -175,32 +167,25 @@ fn the_sh_post_encode_check_rejects_a_doubled_word(en_localizer: EnLocalizer) {
     );
 }
 
-/// A doubled word that lands exactly on the ceiling is accepted.
+/// A doubled word that lands exactly on the ceiling is accepted, in both
+/// dialects.
 ///
-/// The control for [`the_sh_post_encode_check_rejects_a_doubled_word`]: the
-/// same input shape one byte shorter is within the ceiling, so the rejection
-/// above is about the ceiling and not about quotes being refused.
-#[test]
-fn the_sh_post_encode_check_accepts_the_exact_doubled_word() {
-    let quotes = "'".repeat(HALF_CEILING);
-    let joined =
-        join(&[quotes], ShellDialect::Sh).expect("a doubled word of half the ceiling fits");
+/// The controls for [`a_word_that_doubles_past_the_ceiling_is_rejected`]: the
+/// same input shapes one quote shorter fit exactly, so the rejections above are
+/// about the ceiling and not about quotes being refused. `Sh` fills the ceiling
+/// from half a ceiling of quotes. PowerShell spends two bytes on its
+/// delimiters, so it needs one quote fewer.
+#[rstest]
+#[case::sh_post_encode_check(ShellDialect::Sh, HALF_CEILING)]
+#[case::power_shell_inclusive(ShellDialect::PowerShell, HALF_CEILING - 1)]
+fn a_word_that_fills_the_ceiling_exactly_is_accepted(
+    #[case] dialect: ShellDialect,
+    #[case] quotes: usize,
+) {
+    let joined = join(&["'".repeat(quotes)], dialect).expect("a word that just fits should encode");
     assert_eq!(
         joined.len(),
         SHELL_JOIN_MAX_ENCODED_BYTES,
-        "a doubled word of half the ceiling should fill it exactly"
-    );
-}
-
-/// PowerShell's boundary is exact on both sides.
-#[test]
-fn the_power_shell_boundary_is_inclusive() {
-    let quotes = "'".repeat(HALF_CEILING - 1);
-    let joined =
-        join(&[quotes], ShellDialect::PowerShell).expect("a word that just fits should encode");
-    assert_eq!(
-        joined.len(),
-        SHELL_JOIN_MAX_ENCODED_BYTES,
-        "the exact-length pre-check should admit a word that just fits"
+        "{dialect:?} should fill the ceiling exactly"
     );
 }
