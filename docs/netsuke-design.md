@@ -1479,8 +1479,11 @@ for transforming data within templates.
   accumulates into one buffer rather than materializing an encoded copy of
   every member and then the joined string, and it rejects a member that cannot
   fit before encoding it. A host-supplied budget does not participate: the
-  ceiling is a fixed property of the filter, so `help targets` and build
-  rendering produce the same result on every machine.
+  ceiling is a fixed property of the filter, so the bound holds identically in
+  `help targets` and in build rendering. The rendered *text* is a separate
+  question: the query surface fixes the dialect to `Sh` so its values do not
+  depend on the host, while build rendering follows the selected recipe shell.
+  A manifest that needs the same text from both must pass `dialect` explicitly.
 
 - `| compact`: A collection filter that removes `none`, undefined, and empty
   strings while preserving order. It drops nothing else: `0`, `false`, `[]`,
