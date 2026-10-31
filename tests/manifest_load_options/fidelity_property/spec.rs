@@ -1,65 +1,19 @@
-//! Differential property: a pure manifest means the same thing in both modes.
+//! The generated-manifest model and the strategy that produces it.
 //!
-//! The claim is narrow on purpose. It covers manifests built only from
-//! constructs the test surface already admits — variables, macros, `foreach`
-//! over literal lists, `when` comparisons, Boolean interpolation, the lexical
-//! path filters, the collection filters, `timedelta`, and `now()` under an
-//! injected clock — and says that the build surface and the test surface
-//! produce the same manifest, the same graph, and the same Ninja text for
-//! them. A manifest that reaches the host is covered by the corpus run, which
-//! expectation is "equal *or* a typed refusal"; here every generated manifest
-//! must load in both modes.
+//! Split from `fidelity_property/mod.rs`, which holds the property itself, to
+//! keep both files under Whitaker's raw-line module cap. A generated manifest is
+//! held as data — [`Spec`] over [`Target`] over [`Construct`] — so its YAML, its
+//! coverage, and the strategy's combinations are all derived from one value
+//! rather than maintained as parallel descriptions.
 //!
-//! Three comparison layers are recorded rather than one because each can drift
-//! independently. The manifest catches a rendering difference; the [`GraphView`]
-//! projection catches a difference in how the rendered manifest was interpreted;
-//! and the Ninja text catches a difference in the final emitted build file.
-//! Comparing only the manifest would call two loads equal whose recipes were
-//! lowered differently.
-//!
-//! The generator is valid by construction rather than filtered after the fact:
-//! a rejected case would silently shrink the domain and the property would
-//! weaken without saying so. Two counters keep the coverage honest — every
-//! construct must be generated at least ten times in a run, so a strategy that
-//! stops producing, say, `timedelta` fails loudly instead of passing over a
-//! smaller grammar.
+//! The model is crate-private: `fidelity_property` re-exports the pieces its
+//! run needs through `pub(super)`, and nothing outside that module tree names
+//! these types.
 
-use std::{cell::Cell, fmt::Write as _};
+use std::cell::Cell;
+use std::fmt::Write as _;
 
-use anyhow::{Context as _, Result};
-use netsuke::{
-    ast::NetsukeManifest,
-    graph_view::GraphView,
-    ir::BuildGraph,
-    manifest::{
-        EnvAccessPolicy, ManifestEnvironment, ManifestLoadOptions, ManifestName, TestSurface,
-        from_str_with_options,
-    },
-    ninja_gen::generate_with_shell,
-    recipe_shell::RecipeShell,
-};
-use proptest::{
-    prelude::*,
-    sample::select,
-    test_runner::{Config as ProptestConfig, TestCaseError, TestRunner},
-};
-use rstest::rstest;
-use time::OffsetDateTime;
-use time::macros::datetime;
-
-use super::fixtures::{fixed_clock_config, one_var_reader};
-
-/// The instant both surfaces are configured with, so `now()` agrees.
-const FIXED_INSTANT: OffsetDateTime = datetime!(2026-06-08 12:00:00 UTC);
-
-/// How many generated manifests a run must contain.
-const CASES: u32 = 128;
-
-/// How many times each construct must be generated in a run.
-///
-/// Ten is low enough that a 128-case run clears it comfortably and high enough
-/// that a construct which has dropped out of the strategy cannot pass by luck.
-const MIN_CONSTRUCT_COVERAGE: usize = 10;
+use proptest::{prelude::*, sample::select};
 
 /// One template construct the property varies.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -144,7 +98,7 @@ struct Target {
 /// A generated manifest, held as data so its YAML and its coverage are both
 /// derived from the same value.
 #[derive(Clone, Debug)]
-struct Spec {
+pub(super) struct Spec {
     /// Targets, in manifest order.
     targets: Vec<Target>,
     /// Whether a top-level Boolean variable is declared.
@@ -155,25 +109,25 @@ struct Spec {
 
 /// The number of times each construct appears in one spec.
 #[derive(Clone, Copy, Debug, Default)]
-struct Coverage {
+pub(super) struct Coverage {
     /// `Boolean` occurrences.
-    boolean: usize,
+    pub(super) boolean: usize,
     /// Lexical path filter occurrences.
-    path_filters: usize,
+    pub(super) path_filters: usize,
     /// Collection filter occurrences.
-    collection_filters: usize,
+    pub(super) collection_filters: usize,
     /// `timedelta` occurrences.
-    timedelta: usize,
+    pub(super) timedelta: usize,
     /// `now()` occurrences.
-    now: usize,
+    pub(super) now: usize,
     /// Macro-call occurrences.
-    macro_calls: usize,
+    pub(super) macro_calls: usize,
     /// `foreach` target occurrences.
-    foreach_targets: usize,
+    pub(super) foreach_targets: usize,
     /// `when` clause occurrences.
-    whens: usize,
+    pub(super) whens: usize,
     /// Target occurrences.
-    targets: usize,
+    pub(super) targets: usize,
 }
 
 impl Coverage {
@@ -193,28 +147,28 @@ impl Coverage {
 
 /// The running tally for one property run.
 #[derive(Debug, Default)]
-struct Tally {
+pub(super) struct Tally {
     /// Construct counts accumulated so far.
     coverage: Cell<Coverage>,
 }
 
 impl Tally {
     /// Record one generated spec.
-    fn record(&self, coverage: Coverage) {
+    pub(super) fn record(&self, coverage: Coverage) {
         let mut total = self.coverage.get();
         total.absorb(coverage);
         self.coverage.set(total);
     }
 
     /// Return the tally recorded so far.
-    fn get(&self) -> Coverage {
+    pub(super) fn get(&self) -> Coverage {
         self.coverage.get()
     }
 }
 
 impl Spec {
     /// Render the manifest as YAML.
-    fn yaml(&self) -> String {
+    pub(super) fn yaml(&self) -> String {
         let mut yaml = String::from("netsuke_version: \"1.0.0\"\n");
         if self.has_vars {
             yaml.push_str("vars:\n  flag: true\n");
@@ -262,7 +216,7 @@ impl Spec {
     }
 
     /// Count what this spec exercises.
-    fn coverage(&self) -> Coverage {
+    pub(super) fn coverage(&self) -> Coverage {
         let mut coverage = Coverage {
             targets: self.targets.len(),
             ..Coverage::default()
@@ -345,7 +299,7 @@ fn build_spec(extras: Vec<Vec<Construct>>, has_vars: bool, has_macro: bool, mask
 }
 
 /// The strategy the property runs over.
-fn spec_strategy() -> impl Strategy<Value = Spec> {
+pub(super) fn spec_strategy() -> impl Strategy<Value = Spec> {
     (
         prop::collection::vec(prop::collection::vec(select(CONSTRUCTS), 0..=2), 1..=4),
         any::<bool>(),
@@ -355,122 +309,4 @@ fn spec_strategy() -> impl Strategy<Value = Spec> {
         .prop_map(|(extras, has_vars, has_macro, mask)| {
             build_spec(extras, has_vars, has_macro, mask)
         })
-}
-
-/// Load `yaml` through the build registration with a fixed clock.
-fn load_full(yaml: &str, config: &netsuke::stdlib::StdlibConfig) -> Result<NetsukeManifest> {
-    let reader = one_var_reader();
-    let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
-    from_str_with_options(
-        yaml,
-        &ManifestName::new("Netsukefile"),
-        ManifestLoadOptions::full(config.clone(), environment),
-    )
-}
-
-/// Load `yaml` through the test registration with the same fixed clock.
-fn load_test(yaml: &str, config: &netsuke::stdlib::StdlibConfig) -> Result<NetsukeManifest> {
-    let surface = TestSurface::new(config.clone()).with_env_reader(one_var_reader());
-    from_str_with_options(
-        yaml,
-        &ManifestName::new("Netsukefile"),
-        ManifestLoadOptions::test(surface),
-    )
-}
-
-/// Fail a property case with a message naming the spec that produced it.
-fn fail(spec: &Spec, message: impl std::fmt::Display) -> TestCaseError {
-    TestCaseError::fail(format!("{message}\n--- manifest ---\n{}", spec.yaml()))
-}
-
-/// Compare the manifest, graph projection, and Ninja text of one spec.
-fn compare_modes(
-    spec: &Spec,
-    config: &netsuke::stdlib::StdlibConfig,
-) -> std::result::Result<(), TestCaseError> {
-    let yaml = spec.yaml();
-    let full = load_full(&yaml, config)
-        .map_err(|error| fail(spec, format_args!("Full load failed: {error:#}")))?;
-    let test = load_test(&yaml, config)
-        .map_err(|error| fail(spec, format_args!("Test load failed: {error:#}")))?;
-
-    let full_json = serde_json_canonicalizer::to_string(&full).map_err(|error| {
-        fail(
-            spec,
-            format_args!("Full manifest did not serialize: {error}"),
-        )
-    })?;
-    let test_json = serde_json_canonicalizer::to_string(&test).map_err(|error| {
-        fail(
-            spec,
-            format_args!("Test manifest did not serialize: {error}"),
-        )
-    })?;
-    if full_json != test_json {
-        return Err(fail(
-            spec,
-            format_args!("manifests differ:\nFull: {full_json}\nTest: {test_json}"),
-        ));
-    }
-
-    let full_graph = BuildGraph::from_manifest_for_shell(&full, RecipeShell::Posix)
-        .map_err(|error| fail(spec, format_args!("Full graph failed: {error}")))?;
-    let test_graph = BuildGraph::from_manifest_for_shell(&test, RecipeShell::Posix)
-        .map_err(|error| fail(spec, format_args!("Test graph failed: {error}")))?;
-    if GraphView::from_build_graph(&full_graph) != GraphView::from_build_graph(&test_graph) {
-        return Err(fail(spec, "graph projections differ"));
-    }
-
-    let full_ninja = generate_with_shell(&full_graph, RecipeShell::Posix)
-        .map_err(|error| fail(spec, format_args!("Full Ninja generation failed: {error}")))?;
-    let test_ninja = generate_with_shell(&test_graph, RecipeShell::Posix)
-        .map_err(|error| fail(spec, format_args!("Test Ninja generation failed: {error}")))?;
-    if full_ninja != test_ninja {
-        return Err(fail(
-            spec,
-            format_args!("Ninja text differs:\nFull:\n{full_ninja}\nTest:\n{test_ninja}"),
-        ));
-    }
-    Ok(())
-}
-
-/// Every construct clears the per-run coverage floor.
-fn assert_coverage(coverage: Coverage) {
-    let required = [
-        ("targets", coverage.targets),
-        ("foreach targets", coverage.foreach_targets),
-        ("when clauses", coverage.whens),
-        ("Boolean interpolation", coverage.boolean),
-        ("lexical path filters", coverage.path_filters),
-        ("collection filters", coverage.collection_filters),
-        ("timedelta", coverage.timedelta),
-        ("now()", coverage.now),
-        ("macro calls", coverage.macro_calls),
-    ];
-    for (name, count) in required {
-        assert!(
-            count >= MIN_CONSTRUCT_COVERAGE,
-            "the strategy generated `{name}` {count} times, fewer than {MIN_CONSTRUCT_COVERAGE}; \
-             the grammar is narrower than the property claims"
-        );
-    }
-}
-
-/// The build and test surfaces agree on every generated pure manifest.
-#[rstest]
-fn full_and_test_agree_on_generated_manifests() -> Result<()> {
-    let config = fixed_clock_config()?.with_clock(netsuke::stdlib::fixed_clock(FIXED_INSTANT));
-    let tally = Tally::default();
-    let mut runner = TestRunner::new(ProptestConfig {
-        cases: CASES,
-        ..ProptestConfig::default()
-    });
-    runner
-        .run(&spec_strategy(), |spec| {
-            tally.record(spec.coverage());
-            compare_modes(&spec, &config)
-        })
-        .context("the Full/Test differential property failed")?;
-    assert_coverage(tally.get());
-    Ok(())
 }

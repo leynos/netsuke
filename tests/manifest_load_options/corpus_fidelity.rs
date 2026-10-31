@@ -243,36 +243,57 @@ fn compare(text: &str, config: &StdlibConfig) -> Result<Option<String>> {
     let test_outcome = load_test(text, config);
     match (&build_outcome, &test_outcome) {
         (Ok(build_manifest), Ok(test_manifest)) => {
-            let build_json = canonical(build_manifest)?;
-            let test_json = canonical(test_manifest)?;
-            ensure!(
-                build_json == test_json,
-                "both surfaces loaded, but produced different manifests"
-            );
+            ensure_same_manifest(build_manifest, test_manifest)?;
             Ok(None)
         }
-        (Ok(_), Err(error)) => {
-            let operation = refusal_operation(error).with_context(|| {
-                format!("the test load failed without a typed refusal: {error:#}")
-            })?;
-            Ok(Some(operation.to_owned()))
-        }
+        (Ok(_), Err(error)) => Ok(Some(refused_operation(error)?)),
         (Err(error), Ok(_)) => {
             bail!("the test load succeeded where the build load failed: {error:#}")
         }
-        (Err(build_error), Err(test_error)) => {
-            if let Some(operation) = refusal_operation(test_error) {
-                return Ok(Some(operation.to_owned()));
-            }
-            let build_text = format!("{build_error:#}");
-            let test_text = format!("{test_error:#}");
-            ensure!(
-                build_text == test_text,
-                "both surfaces failed, but differently:\nBuild: {build_text}\nTest: {test_text}"
-            );
-            Ok(None)
-        }
+        (Err(build_error), Err(test_error)) => compare_failures(build_error, test_error),
     }
+}
+
+/// Require two successful loads to produce the same manifest.
+fn ensure_same_manifest(build: &NetsukeManifest, test: &NetsukeManifest) -> Result<()> {
+    ensure!(
+        canonical(build)? == canonical(test)?,
+        "both surfaces loaded, but produced different manifests"
+    );
+    Ok(())
+}
+
+/// Return the operation named by a test-load refusal.
+///
+/// A test load that failed without a refusal is an error here: the difference
+/// between the surfaces is then unexplained, not a withheld capability.
+fn refused_operation(error: &anyhow::Error) -> Result<String> {
+    refusal_operation(error)
+        .map(ToOwned::to_owned)
+        .with_context(|| format!("the test load failed without a typed refusal: {error:#}"))
+}
+
+/// Compare two failing loads, accepting a refusal on the test side.
+fn compare_failures(
+    build_error: &anyhow::Error,
+    test_error: &anyhow::Error,
+) -> Result<Option<String>> {
+    if let Some(operation) = refusal_operation(test_error) {
+        return Ok(Some(operation.to_owned()));
+    }
+    ensure_same_failure_text(build_error, test_error)?;
+    Ok(None)
+}
+
+/// Require two non-refusal failures to report identical text.
+fn ensure_same_failure_text(build_error: &anyhow::Error, test_error: &anyhow::Error) -> Result<()> {
+    let build_text = format!("{build_error:#}");
+    let test_text = format!("{test_error:#}");
+    ensure!(
+        build_text == test_text,
+        "both surfaces failed, but differently:\nBuild: {build_text}\nTest: {test_text}"
+    );
+    Ok(())
 }
 
 /// Observe the clock refusal the fixed-clock corpus run cannot produce.
