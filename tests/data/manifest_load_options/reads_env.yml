@@ -1,0 +1,9 @@
+# Reads one variable through whichever reader the loader injects. Every row
+# that loads it supplies a reader that answers precisely this name and refuses
+# the rest, so the rendered value is a constant and the fixture pins the
+# plumbing rather than the host's environment.
+netsuke_version: "1.0.0"
+targets:
+  - name: env
+    description: "profile {{ env('NETSUKE_TEST_ENV') }}"
+    command: "echo env"

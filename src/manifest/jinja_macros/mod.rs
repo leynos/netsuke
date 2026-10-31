@@ -17,7 +17,10 @@ use serde::Serialize;
 mod call;
 mod expression;
 mod invocation;
+mod query_classification;
 pub(crate) use expression::{ExpressionEvaluation, evaluate_with_state};
+pub(crate) use query_classification::QueryEvaluation;
+use query_classification::classify_query_evaluation;
 pub(crate) mod telemetry;
 
 // Only the manifest test suite reaches the helper through the parent path;
@@ -28,18 +31,6 @@ use invocation::{make_macro_fn, validate_macro};
 
 /// Global name holding accumulated import statements for manifest macros.
 const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
-
-/// Represents a Jinja evaluation that may be disabled in manifest-query mode.
-///
-/// This preserves the distinction between a false condition and a condition
-/// that discovery cannot safely inspect, without leaking `MiniJinja` errors
-/// into manifest expansion.
-pub(crate) enum QueryEvaluation<T> {
-    /// Holds a successfully evaluated value.
-    Value(T),
-    /// Marks an expression that invoked a query-disabled helper.
-    QueryDisabled,
-}
 
 /// Evaluate a `when` expression when it has expression syntax.
 ///
@@ -114,33 +105,6 @@ pub(crate) fn render_when_template(
 /// Return whether a `MiniJinja` failure originated at the budget boundary.
 fn is_budget_error(error: &Error) -> bool {
     matches!(error.kind(), ErrorKind::OutOfFuel | ErrorKind::WriteFailure)
-}
-
-/// Convert a `MiniJinja` result into the query-safe evaluation boundary.
-///
-/// The stdlib marks intentionally disabled helpers with a stable `MiniJinja`
-/// error. Keeping the adapter here confines that implementation detail to the
-/// Jinja boundary; manifest expansion consumes only [`QueryEvaluation`].
-fn classify_query_evaluation<T>(
-    evaluation: std::result::Result<T, Error>,
-) -> Result<QueryEvaluation<T>> {
-    match evaluation {
-        Ok(value) => Ok(QueryEvaluation::Value(value)),
-        Err(error) if crate::stdlib::is_manifest_query_disabled_error(&error) => {
-            Ok(QueryEvaluation::QueryDisabled)
-        }
-        Err(error) => Err(error.into()),
-    }
-}
-
-impl<T> QueryEvaluation<T> {
-    /// Transform a successful value while preserving query-disabled state.
-    fn map<U>(self, transform: impl FnOnce(T) -> U) -> QueryEvaluation<U> {
-        match self {
-            Self::Value(value) => QueryEvaluation::Value(transform(value)),
-            Self::QueryDisabled => QueryEvaluation::QueryDisabled,
-        }
-    }
 }
 
 /// Extract the macro identifier from a signature string.

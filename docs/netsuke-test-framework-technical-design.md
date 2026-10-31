@@ -196,6 +196,15 @@ pub struct TemplateOverlays {
 }
 ```
 
+**Status.** Both sketches above predate the ExecPlan's 2026-09-27 revision
+note, which supersedes them in three respects: `ManifestLoadOptions` carries
+private fields with constructor and builder methods rather than public ones, the
+`Test` variant holds a `Box<TestSurface>` rather than a bare
+`Box<StdlibConfig>`, and `StdlibRegistration` — including its named
+`AmbientFull` variant — stays crate-private. The authoritative shapes are the
+ExecPlan's _Interfaces and dependencies_ section until the documentation
+milestone rewrites this one.
+
 `registration` carries the stdlib boundary rather than a bare `StdlibConfig`
 plus a separate `NetworkPolicy`, because §4.2 already binds those together per
 mode: the network policy for a test load is a property of
@@ -228,6 +237,42 @@ inside environment construction becomes:
 The overlay hook is compiled unconditionally: it is an ordinary parameter, not
 a test-only `cfg`, because the test runner is a production code path of the
 shipped binary.
+
+For screen readers: The following flowchart follows one manifest load through
+`from_str_with_options`, branching at the `StdlibRegistration` mode. The
+`AmbientFull` and `Full` modes register the whole stdlib; `ManifestQuery`
+registers the query helpers and their refusals, which are then classified;
+`Test` registers the pure helpers and typed refusals, and applies the overlays.
+Every branch converges on foreach/`when` expansion, then on rendering and
+validation. The environment reader is not part of the branch: `Full` and `Test`
+each take one from their caller's options, `AmbientFull` reads the process
+environment, and `ManifestQuery` refuses `env()` outright.
+
+```mermaid
+flowchart TD
+    Start[from_str_with_options] --> Mode{StdlibRegistration mode}
+    Mode -->|AmbientFull| AmbientFull[Register full helpers]
+    Mode -->|Full| FullMode[Register full helpers]
+    Mode -->|ManifestQuery| RestrictedQuery[Register query helpers and refusals]
+    Mode -->|Test| RestrictedTest[Register pure helpers and typed refusals]
+    AmbientFull --> AmbientEnv["Read env from the process environment"]
+    FullMode --> FullEnv["Use the caller's env reader and clock"]
+    RestrictedTest --> TestEnv["Use the caller's env reader and clock"]
+    TestEnv --> Overlay[Register overlays]
+    RestrictedQuery --> QueryClassify[Classify query refusals]
+    AmbientEnv --> Expand[Expand foreach and when]
+    FullEnv --> Expand
+    Overlay --> Expand
+    QueryClassify --> Expand
+    Expand --> Render[Render and validate manifest]
+```
+
+_Figure 2: Manifest loading paths by `StdlibRegistration` mode. Only the `Test`
+mode applies overlays; the injected environment reader and clock come from the
+caller's options in `Full` and `Test` alike, since `ManifestLoadOptions::full`
+takes a `ManifestEnvironment` and a `StdlibConfig` whose clock
+`StdlibConfig::with_clock` may have pinned. The expansion, rendering, and
+validation stages after the branch are shared by every mode._
 
 ### 4.4. Result views
 
@@ -349,7 +394,7 @@ at the double syntax. The test mode supplies its own message keys through the
 existing `manifest_query_operation_error` shape.
 
 `workspace_root` alone does not achieve that scoping, and the design must not
-pretend otherwise. Two filesystem helpers bypass it today:
+pretend otherwise. Three groups of filesystem helpers bypass it today:
 
 - `glob()` is registered in `src/manifest/mod.rs` over
   `glob::expand_glob(&pattern)`, which takes no workspace root. Its matcher
@@ -361,19 +406,33 @@ pretend otherwise. Two filesystem helpers bypass it today:
   `path::file_type_matches`, whose `parent_dir` helper calls
   `Dir::open_ambient_dir(.., ambient_authority())`. `register_file_tests` never
   receives `StdlibConfig` at all.
+- The file-reading filters `contents`, `size`, `linecount`, `hash`, `digest`,
+  and `realpath` (`src/stdlib/path/filters.rs`) resolve their argument against
+  the process working directory rather than the configured workspace root.
 
 Left unaddressed, a fixture-built project would be globbed from the runner's
 working directory instead of its own sandbox, which is both host-dependent and
 the exact non-determinism this framework exists to remove. The test
-registration therefore supplies sandbox-rooted adapters for both helpers:
+registration will therefore supply sandbox-rooted adapters for all three groups:
 `glob()` resolves relative patterns against the case sandbox `Dir`, and the
-file tests resolve their paths through the same handle, rejecting escapes
-rather than falling back to ambient authority. These adapters are test-mode
+file tests and file-reading filters resolve their paths through the same
+handle, rejecting escapes rather than falling back to ambient authority. The
+filters matter as much as the other two because filters cannot be replaced by
+doubles in the first version (UX design §8.6): without an adapter, a manifest
+that hashes or reads a file could never be tested. These adapters are test-mode
 components, not changes to the build path's behaviour, so ADR-0010's accepted
 limitation stands for builds while tests get the stronger guarantee they
 require.
 
-With those adapters in place the visibility consequence is worth stating
+The adapters land in stages, and until they do the test registration refuses
+all three groups rather than falling back to ambient authority (roadmap 7.1.2).
+Refusal is the interim behaviour, so a manifest under test that globs, tests a
+file, or reads one gets a located diagnostic naming the withheld capability —
+not a host-dependent answer. Roadmap 7.4.1 replaces the refusals with the
+sandbox-rooted adapters for all three groups. The visibility consequence below
+holds in both states, because a refusal reaches no file at all.
+
+Once those adapters are in place the visibility consequence is worth stating
 plainly: the project tree is _not_ visible to a manifest under test. A
 default-subject test sees only the files its fixtures and `given.fs` created.
 Invariant I4 (§12) is scoped accordingly, and invariant I5's
