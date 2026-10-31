@@ -102,28 +102,26 @@ pub(super) fn ninja_exit_error(
 }
 
 /// Join stderr forwarding and surface the child's wait result.
+///
+/// Forwarding loss never changes the reported build result: the child's exit
+/// status remains authoritative, and a truncated output stream is reported
+/// through the classified forwarding-failure counter and a warning event
+/// instead. This policy keeps a closed parent pipe, as produced by
+/// `netsuke build | head`, from being reported as a build failure. Both
+/// statistics are therefore intentionally discarded here; the forwarding
+/// helper has already emitted their telemetry.
 pub(super) fn finalize_streaming(
     wait_result: io::Result<ExitStatus>,
     stdout_stats: ForwardStats,
     err_handle: thread::JoinHandle<(ForwardStats, Option<CommandListFailure>)>,
 ) -> io::Result<(ExitStatus, Option<CommandListFailure>)> {
-    handle_forwarding_stats(stdout_stats, "stdout");
+    let _ = stdout_stats;
     let command_list_failure = match err_handle.join() {
-        Ok((stats, context)) => {
-            handle_forwarding_stats(stats, "stderr");
-            context
-        }
+        Ok((_stderr_stats, context)) => context,
         Err(error) => {
             tracing::warn!("stderr forwarding thread panicked: {error:?}");
             None
         }
     };
     wait_result.map(|status| (status, command_list_failure))
-}
-
-/// Log a truncation debug event when a forwarding stream hit a closed pipe.
-fn handle_forwarding_stats(stats: ForwardStats, stream_name: &str) {
-    if stats.write_failed {
-        tracing::debug!("{stream_name} forwarding encountered closed pipe; output truncated");
-    }
 }
