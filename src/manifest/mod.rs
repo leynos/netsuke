@@ -10,16 +10,16 @@
 use crate::{
     ast::NetsukeManifest,
     localization::{self, keys},
-    stdlib::StdlibConfig,
 };
 use anyhow::Result;
+use camino::Utf8PathBuf;
 use minijinja::{Environment, UndefinedBehavior};
 use serde::de::Error as _;
 
 mod access_policy;
 mod budget;
+use budget::adapter::BudgetErrorExt;
 pub(crate) use budget::adapter::budget_exhaustion_message;
-use budget::adapter::{BudgetErrorExt, from_str_named};
 mod diagnostics;
 mod expand;
 // `glob_paths` is the module's only boundary: every other item, including the
@@ -31,6 +31,7 @@ mod glob;
 mod hints;
 mod jinja_macros;
 mod load_stage;
+mod loader_options;
 mod loading;
 mod parse_with_config;
 mod path_loaders;
@@ -51,7 +52,9 @@ pub use env::{EnvReadError, EnvReader, ManifestEnvironment, process_env_reader};
 pub(crate) use expand::expand_foreach_with_budget;
 pub use glob::glob_paths;
 pub use load_stage::ManifestLoadStage;
-use loading::{ExpansionReportObserver, notify_stage, trace_expansion_report};
+pub(crate) use loader_options::StdlibRegistration;
+pub use loader_options::{ManifestLoadOptions, from_str_with_options};
+use loading::{notify_stage, trace_expansion_report};
 pub use parse_with_config::{from_str_with_env_and_config, from_str_with_env_and_policy};
 pub use path_loaders::{
     from_path, from_path_with_policy, from_path_with_policy_and_env,
@@ -65,89 +68,168 @@ pub(crate) use query::from_path_for_manifest_query_with_limits;
 pub(crate) use query::{LoadedManifest, from_path_for_manifest_query_with_source};
 #[cfg(test)]
 use registration::RESERVED_VAR_NAMES;
-use registration::{
-    localize_recipe_error, register_env_function, register_glob_function, register_manifest_vars,
-};
+use registration::{localize_recipe_error, register_manifest_vars};
 pub use render::render_manifest;
 #[cfg(test)]
 use workspace::open_manifest_workspace;
 
 /// Inputs to a manifest parse, bundled to keep the parameter list bounded.
-struct ManifestParse<'a> {
+struct ManifestParse<'a, 'name> {
     /// Name reported in diagnostics.
-    name: &'a ManifestName,
-    /// Optional stdlib registration configuration.
-    stdlib_registration: Option<StdlibRegistration>,
-    /// Environment reader backing the `env()` helper.
-    env_reader: &'a EnvReader,
-    /// Access policy evaluated before the `env()` reader runs.
-    env_access_policy: &'a EnvAccessPolicy,
+    name: &'name ManifestName,
     /// Manifest workspace root, anchoring relative `glob()` patterns; `None`
     /// falls back to the process current directory at the composition root.
-    manifest_root: Option<camino::Utf8PathBuf>,
-    /// Optional observer for reports produced by normal manifest loading.
-    expansion_report_observer: Option<ExpansionReportObserver>,
+    manifest_root: Option<Utf8PathBuf>,
+    /// Capabilities decided for this load.
+    registration: StdlibRegistration,
+    /// Environment inputs backing the `env()` helper.
+    environment: ManifestEnvironment<'a>,
     /// Resource ceilings resolved from trusted configuration before loading.
+    budget_limits: ManifestBudgetLimits,
+    /// Observes load phases without changing parsing behaviour.
+    on_stage: Option<&'a mut dyn FnMut(ManifestLoadStage)>,
+}
+
+/// Decisions the render and expansion halves need from the registration.
+#[derive(Clone, Copy, Debug)]
+struct RenderDecisions {
+    /// Render with the manifest-query render mode.
+    uses_query_rendering: bool,
+    /// Treat a refused helper as a conditional `when`, not a failure.
+    classifies_query_refusals: bool,
+    /// Record expansion and budget telemetry.
+    records_expansion_and_budget_telemetry: bool,
+}
+
+impl RenderDecisions {
+    /// Read every decision from the load's registration.
+    const fn from_registration(registration: &StdlibRegistration) -> Self {
+        Self {
+            uses_query_rendering: registration.uses_query_rendering(),
+            classifies_query_refusals: registration.classifies_query_refusals(),
+            records_expansion_and_budget_telemetry: registration
+                .records_expansion_and_budget_telemetry(),
+        }
+    }
+}
+
+/// Inputs that shape the template environment for one load.
+struct TemplateRequest<'name, 'a> {
+    /// Name reported in diagnostics.
+    name: &'name ManifestName,
+    /// Root anchoring relative `glob()` patterns.
+    manifest_root: Option<Utf8PathBuf>,
+    /// Capabilities decided for this load.
+    registration: StdlibRegistration,
+    /// Environment inputs backing the `env()` helper.
+    environment: &'a ManifestEnvironment<'a>,
+    /// Resource ceilings resolved before loading.
     budget_limits: ManifestBudgetLimits,
 }
 
-/// Selects the stdlib surface available while rendering a manifest.
-enum StdlibRegistration {
-    /// The complete stdlib used for a normal build manifest.
-    Full(Box<StdlibConfig>),
-    /// The read-only stdlib used to inspect manifest discovery metadata.
-    ManifestQuery,
+/// Everything needed to expand and render an evaluated manifest.
+struct ExpansionRequest<'name, 'a, 'stage> {
+    /// YAML tree produced by the template-environment stage.
+    doc: ManifestValue,
+    /// Template environment built for this load.
+    jinja: Environment<'static>,
+    /// Shared resource accounting for this evaluation.
+    budget: &'a budget::ManifestBudget,
+    /// Decisions the registration supplies to this half of the load.
+    decisions: RenderDecisions,
+    /// Name reported in diagnostics.
+    name: &'name ManifestName,
+    /// Observes load phases without changing parsing behaviour.
+    on_stage: &'a mut Option<&'stage mut dyn FnMut(ManifestLoadStage)>,
 }
 
 /// Parse, render, and validate a manifest with injected loading boundaries.
 ///
 /// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
-/// notify the optional expansion observer, and validate rendered recipes.
-fn evaluate_manifest(
-    yaml: &str,
-    parse: ManifestParse<'_>,
-    on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
-) -> Result<NetsukeManifest> {
+/// record telemetry for full loads, and validate rendered recipes.
+fn evaluate_manifest(yaml: &str, parse: ManifestParse<'_, '_>) -> Result<NetsukeManifest> {
     let ManifestParse {
         name,
-        stdlib_registration,
-        env_reader,
-        env_access_policy,
         manifest_root,
-        expansion_report_observer,
+        registration,
+        environment,
         budget_limits,
+        mut on_stage,
     } = parse;
-    let is_manifest_query = matches!(stdlib_registration, Some(StdlibRegistration::ManifestQuery));
+    let decisions = RenderDecisions::from_registration(&registration);
+    let request = TemplateRequest {
+        name,
+        manifest_root,
+        registration,
+        environment: &environment,
+        budget_limits,
+    };
+    let (doc, jinja, budget) = build_template_environment(yaml, request, &mut on_stage)?;
+    expand_and_render(ExpansionRequest {
+        doc,
+        jinja,
+        budget: &budget,
+        decisions,
+        name,
+        on_stage: &mut on_stage,
+    })
+}
+
+/// Build the template environment and evaluate the manifest's YAML tree.
+///
+/// This covers the loader's parse, registration, and macro steps; expansion and
+/// rendering are left to [`expand_and_render`] so each half stays small enough
+/// to review on its own.
+fn build_template_environment(
+    yaml: &str,
+    request: TemplateRequest<'_, '_>,
+    on_stage: &mut Option<&mut dyn FnMut(ManifestLoadStage)>,
+) -> Result<(ManifestValue, Environment<'static>, budget::ManifestBudget)> {
+    let TemplateRequest {
+        name,
+        manifest_root,
+        registration,
+        environment,
+        budget_limits,
+    } = request;
     notify_stage(on_stage, ManifestLoadStage::InitialYamlParsing);
     let budget = budget::ManifestBudget::new(budget_limits)?;
     budget
         .charge_source(yaml.len(), budget::ManifestBudgetStage::Source)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
-    let mut doc: ManifestValue =
-        serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
-            source: map_yaml_error(&e, &ManifestSource::from(yaml), name),
-            message: localization::message(keys::MANIFEST_PARSE),
-        })?;
+    let doc: ManifestValue = serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
+        source: map_yaml_error(&e, &ManifestSource::from(yaml), name),
+        message: localization::message(keys::MANIFEST_PARSE),
+    })?;
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
-    register_env_function(&mut jinja, env_reader, env_access_policy);
-    register_glob_function(&mut jinja, manifest_root);
-    let _stdlib_state = match stdlib_registration {
-        Some(StdlibRegistration::Full(config)) => {
-            crate::stdlib::register_with_config(&mut jinja, *config)
-        }
-        Some(StdlibRegistration::ManifestQuery) => {
-            Ok(crate::stdlib::register_manifest_query(&mut jinja))
-        }
-        None => crate::stdlib::register(&mut jinja),
-    }?;
+    loader_options::register_host_helpers(&mut jinja, &registration, environment, manifest_root);
+    let _stdlib_state = loader_options::register_stdlib(&mut jinja, registration)?;
     register_manifest_vars(&doc, &mut jinja, name)?;
     notify_stage(on_stage, ManifestLoadStage::TemplateExpansion);
     register_manifest_macros_with_budget(&doc, &mut jinja, &budget)?;
-    let expansion_report = expand_foreach_with_budget(&mut doc, &jinja, &budget)?;
-    if let Some(observe_expansion_report) = expansion_report_observer {
-        observe_expansion_report(&expansion_report);
+    Ok((doc, jinja, budget))
+}
+
+/// Expand `foreach` and `when`, then deserialize and render the manifest.
+fn expand_and_render(request: ExpansionRequest<'_, '_, '_>) -> Result<NetsukeManifest> {
+    let ExpansionRequest {
+        mut doc,
+        jinja,
+        budget,
+        decisions,
+        name,
+        on_stage,
+    } = request;
+    let expansion_report = expand_foreach_with_budget(
+        &mut doc,
+        &jinja,
+        budget,
+        decisions.classifies_query_refusals,
+    )?;
+    if decisions.records_expansion_and_budget_telemetry {
+        trace_expansion_report(&expansion_report);
     }
     notify_stage(on_stage, ManifestLoadStage::FinalRendering);
     let manifest: NetsukeManifest =
@@ -155,10 +237,10 @@ fn evaluate_manifest(
             source: map_data_error(localize_recipe_error(error), name),
             message: localization::message(keys::MANIFEST_PARSE),
         })?;
-    let rendered_manifest = if is_manifest_query {
-        render::render_manifest_for_manifest_query_with_budget(manifest, &jinja, &budget)?
+    let rendered_manifest = if decisions.uses_query_rendering {
+        render::render_manifest_for_manifest_query_with_budget(manifest, &jinja, budget)?
     } else {
-        render::render_manifest_with_budget(manifest, &jinja, &budget)?
+        render::render_manifest_with_budget(manifest, &jinja, budget)?
     };
     rendered_manifest
         .validate_recipes()
@@ -228,18 +310,12 @@ pub(crate) fn from_str_with_limits(
     yaml: &str,
     budget_limits: ManifestBudgetLimits,
 ) -> Result<NetsukeManifest> {
-    from_str_named(
+    let reader = process_env_reader();
+    let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
+    from_str_with_options(
         yaml,
-        ManifestParse {
-            name: &ManifestName::new("Netsukefile"),
-            stdlib_registration: None,
-            env_reader: &process_env_reader(),
-            env_access_policy: &EnvAccessPolicy::default(),
-            manifest_root: None,
-            expansion_report_observer: Some(trace_expansion_report),
-            budget_limits,
-        },
-        &mut None,
+        &ManifestName::new("Netsukefile"),
+        ManifestLoadOptions::ambient(environment).with_budget_limits(budget_limits),
     )
 }
 mod env;

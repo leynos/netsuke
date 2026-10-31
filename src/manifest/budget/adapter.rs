@@ -6,17 +6,17 @@ use crate::localization::{self, LocalizedMessage, keys};
 use minijinja::{Error, ErrorKind};
 
 /// Evaluate a manifest and record budget failures only for full loading.
+///
+/// Discovery queries and test-surface loads do not contribute to the usage
+/// telemetry these counters describe, so the registration decides whether a
+/// failure is recorded at all (ADR-0050 Addendum E).
 pub(in crate::manifest) fn from_str_named(
     yaml: &str,
-    parse: super::super::ManifestParse<'_>,
-    on_stage: &mut Option<&mut dyn FnMut(super::super::ManifestLoadStage)>,
+    parse: super::super::ManifestParse<'_, '_>,
 ) -> anyhow::Result<crate::ast::NetsukeManifest> {
-    let is_query = matches!(
-        parse.stdlib_registration,
-        Some(super::super::StdlibRegistration::ManifestQuery)
-    );
-    let result = super::super::evaluate_manifest(yaml, parse, on_stage);
-    if !is_query && let Err(error) = &result {
+    let records_telemetry = parse.registration.records_expansion_and_budget_telemetry();
+    let result = super::super::evaluate_manifest(yaml, parse);
+    if records_telemetry && let Err(error) = &result {
         record_exhaustion(error);
     }
     result

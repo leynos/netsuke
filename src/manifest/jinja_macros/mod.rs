@@ -32,6 +32,20 @@ use invocation::{make_macro_fn, validate_macro};
 /// Global name holding accumulated import statements for manifest macros.
 const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
 
+/// Borrow the budget and refusal policy one `when` evaluation runs under.
+///
+/// Bundling the pair keeps `evaluate_when_expression` and
+/// `render_when_template` within the repository's four-argument limit while
+/// still letting the caller decide whether a refused helper is a conditional
+/// entry or a genuine failure (C5).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EvaluationBoundary<'a> {
+    /// Shared resource accounting for this complete manifest evaluation.
+    pub(crate) budget: &'a ManifestBudget,
+    /// Whether a refused helper marks the condition conditional.
+    pub(crate) classifies_query_refusals: bool,
+}
+
 /// Evaluate a `when` expression when it has expression syntax.
 ///
 /// Returns `None` when `MiniJinja` cannot compile expression syntax, allowing
@@ -45,9 +59,10 @@ pub(crate) fn evaluate_when_expression(
     env: &Environment,
     expression: &str,
     context: &Value,
-    budget: &ManifestBudget,
+    boundary: EvaluationBoundary<'_>,
 ) -> Result<Option<QueryEvaluation<bool>>> {
-    budget
+    boundary
+        .budget
         .charge_source(expression.len(), ManifestBudgetStage::Source)
         .map_err(|exhaustion| exhaustion.into_error(ErrorKind::InvalidOperation))?;
     if env.compile_expression(expression).is_err() {
@@ -55,7 +70,7 @@ pub(crate) fn evaluate_when_expression(
     }
     let evaluation = evaluate_with_state(
         env,
-        budget,
+        boundary.budget,
         &ExpressionEvaluation {
             expression,
             context,
@@ -64,7 +79,7 @@ pub(crate) fn evaluate_when_expression(
     );
     match evaluation {
         Err(error) if is_budget_error(&error) => Err(error.into()),
-        result => classify_query_evaluation(result)
+        result => classify_query_evaluation(result, boundary.classifies_query_refusals)
             .map(|query_evaluation| query_evaluation.map(|value| value.is_true()))
             .with_context(|| {
                 localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expression)
@@ -83,11 +98,11 @@ pub(crate) fn render_when_template(
     env: &Environment,
     template: &str,
     context: &Value,
-    budget: &ManifestBudget,
+    boundary: EvaluationBoundary<'_>,
 ) -> Result<QueryEvaluation<String>> {
     let evaluation = render_template_at(
         env,
-        budget,
+        boundary.budget,
         &TemplateRenderRequest {
             template,
             context,
@@ -96,9 +111,10 @@ pub(crate) fn render_when_template(
     );
     match evaluation {
         Err(error) if is_budget_error(&error) => Err(error.into()),
-        result => classify_query_evaluation(result).with_context(|| {
-            localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", template)
-        }),
+        result => classify_query_evaluation(result, boundary.classifies_query_refusals)
+            .with_context(|| {
+                localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", template)
+            }),
     }
 }
 

@@ -9824,10 +9824,10 @@ Budget-aware entry points include the `*_with_limits` manifest loaders,
 `expand_foreach_with_budget`, `render_manifest_with_budget`, and
 `render_manifest_for_manifest_query_with_budget`. The ordinary public wrappers
 construct the safe default limits. Build and manifest-query loading use the
-same accounting path. Query loading selects `ManifestLoadMode::ManifestQuery`;
-that mode suppresses budget-exhaustion telemetry at the loading boundary and
-omits the expansion-report observer, while other instrumentation remains owned
-by the boundaries that invoke it.
+same accounting path. Query loading selects the `ManifestQuery` stdlib
+registration, which suppresses budget-exhaustion telemetry at the loading
+boundary and omits the expansion-report observer, while other instrumentation
+remains owned by the boundaries that invoke it.
 
 The runner boundary promotes a budget exhaustion to the typed
 `RunnerError::ManifestBudgetExceeded` variant. Its localized terminal

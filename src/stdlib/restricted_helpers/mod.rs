@@ -292,7 +292,9 @@ const SURFACE: &[HelperEntry] = &[
 ];
 
 mod query;
-pub(crate) use query::is_manifest_query_disabled_error;
+pub(crate) use query::{
+    is_manifest_query_disabled_error, register_env_refusal, register_glob_refusal,
+};
 
 /// Register the deliberate failures selected for manifest-query loads.
 pub(super) fn register_query_refusals(env: &mut minijinja::Environment<'_>) {

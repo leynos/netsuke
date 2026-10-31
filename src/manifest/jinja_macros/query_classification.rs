@@ -37,16 +37,26 @@ pub(crate) enum QueryEvaluation<T> {
 /// call it; keeping it beside [`QueryEvaluation`] keeps the boundary's two
 /// halves together.
 ///
+/// The marker is only meaningful for a surface that installs refusal stubs, so
+/// `classifies_query_refusals` decides whether it is recognised at all. A load
+/// that owns a complete stdlib treats the marker as an ordinary failure, which
+/// is what keeps a full build from silently tolerating a refusal.
+///
 /// # Errors
 ///
-/// Returns an error when the failure is not the query-refusal marker, so a
-/// genuine render failure still surfaces with its own context.
+/// Returns an error when classification is disabled or the failure is not the
+/// query-refusal marker, so a genuine render failure still surfaces with its
+/// own context.
 pub(super) fn classify_query_evaluation<T>(
     evaluation: std::result::Result<T, Error>,
+    classifies_query_refusals: bool,
 ) -> Result<QueryEvaluation<T>> {
     match evaluation {
         Ok(value) => Ok(QueryEvaluation::Value(value)),
-        Err(error) if crate::stdlib::is_manifest_query_disabled_error(&error) => {
+        Err(error)
+            if classifies_query_refusals
+                && crate::stdlib::is_manifest_query_disabled_error(&error) =>
+        {
             Ok(QueryEvaluation::QueryDisabled)
         }
         Err(error) => Err(error.into()),

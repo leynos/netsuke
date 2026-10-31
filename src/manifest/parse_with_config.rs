@@ -7,8 +7,8 @@
 //! environment.
 
 use super::{
-    EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestName, ManifestParse,
-    StdlibRegistration, from_str_named, trace_expansion_report,
+    EnvAccessPolicy, EnvReader, ManifestEnvironment, ManifestLoadOptions, ManifestName,
+    from_str_with_options,
 };
 use crate::{ast::NetsukeManifest, stdlib::StdlibConfig};
 use anyhow::Result;
@@ -64,19 +64,11 @@ pub fn from_str_with_env_and_config(
     env_reader: &EnvReader,
     stdlib_config: StdlibConfig,
 ) -> Result<NetsukeManifest> {
-    let env_access_policy = EnvAccessPolicy::default();
-    from_str_named(
+    let environment = ManifestEnvironment::new(env_reader, EnvAccessPolicy::default());
+    from_str_with_options(
         yaml,
-        ManifestParse {
-            name: &ManifestName::new("Netsukefile"),
-            stdlib_registration: Some(StdlibRegistration::Full(Box::new(stdlib_config))),
-            env_reader,
-            env_access_policy: &env_access_policy,
-            manifest_root: None,
-            expansion_report_observer: Some(trace_expansion_report),
-            budget_limits: ManifestBudgetLimits::default(),
-        },
-        &mut None,
+        &ManifestName::new("Netsukefile"),
+        ManifestLoadOptions::full(stdlib_config, environment),
     )
 }
 
@@ -94,17 +86,10 @@ pub fn from_str_with_env_and_policy(
     env_reader: &EnvReader,
     env_access_policy: &EnvAccessPolicy,
 ) -> Result<NetsukeManifest> {
-    from_str_named(
+    let environment = ManifestEnvironment::new(env_reader, env_access_policy.clone());
+    from_str_with_options(
         yaml,
-        ManifestParse {
-            name: &ManifestName::new("Netsukefile"),
-            stdlib_registration: None,
-            env_reader,
-            env_access_policy,
-            manifest_root: None,
-            expansion_report_observer: Some(trace_expansion_report),
-            budget_limits: ManifestBudgetLimits::default(),
-        },
-        &mut None,
+        &ManifestName::new("Netsukefile"),
+        ManifestLoadOptions::ambient(environment),
     )
 }

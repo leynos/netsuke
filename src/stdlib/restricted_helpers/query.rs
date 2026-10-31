@@ -5,7 +5,7 @@ use minijinja::{
     value::{Kwargs, Value},
 };
 
-use super::{HelperKind, RestrictedSurface, SURFACE};
+use super::{HelperEntry, HelperKind, RestrictedSurface, SURFACE};
 
 /// Marker retained in query-refusal text so the Jinja boundary can classify it.
 const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
@@ -14,14 +14,39 @@ const MANIFEST_QUERY_DISABLED_HELPER_MARKER: &str = concat!(
 );
 
 /// Register the deliberate failures selected by the query disposition table.
+///
+/// Host-reading helpers are skipped: whether a load may reach the host is a
+/// property of the load, so the loader registers those two from its own
+/// disposition. Registering them here too would overwrite the loader's
+/// decision, and a test load would lose a real surface reader to a refusal.
 pub(super) fn register_refusals(env: &mut Environment<'_>, surface: RestrictedSurface) {
-    for entry in SURFACE.iter().filter(|entry| surface.refuses(entry)) {
+    for entry in SURFACE
+        .iter()
+        .filter(|entry| surface.refuses(entry))
+        .filter(|entry| !is_loader_owned(entry))
+    {
         match entry.kind {
             HelperKind::Function => register_query_function_stub(env, entry.name),
             HelperKind::Filter => register_query_filter_stub(env, entry.name),
             HelperKind::Test => register_query_test_stub(env, entry.name),
         }
     }
+}
+
+/// Report whether the manifest loader owns this helper's registration.
+fn is_loader_owned(entry: &HelperEntry) -> bool {
+    matches!(entry.name, "env" | "glob")
+}
+
+/// Register only the `env()` refusal for a load that may not read the host.
+pub(crate) fn register_env_refusal(env: &mut Environment<'_>) {
+    register_query_function_stub(env, "env");
+}
+
+/// Register only the `glob()` refusal for a load that may not touch the
+/// filesystem.
+pub(crate) fn register_glob_refusal(env: &mut Environment<'_>) {
+    register_query_function_stub(env, "glob");
 }
 
 /// Register a query-refusing function with its established argument shape.

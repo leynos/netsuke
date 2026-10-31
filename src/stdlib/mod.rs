@@ -37,7 +37,9 @@ pub use path::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTA
 pub use recipe_text::{DIALECT_SOURCE_VALUES, DIALECT_VALUES, SHELL_QUOTE_DIALECT_TOTAL};
 pub(crate) use register::register_manifest_query;
 pub use register::{register, register_with_config, value_from_bytes};
-pub(crate) use restricted_helpers::is_manifest_query_disabled_error;
+pub(crate) use restricted_helpers::{
+    is_manifest_query_disabled_error, register_env_refusal, register_glob_refusal,
+};
 pub use time::{ClockInstant, ClockProvider, fixed_clock, system_clock};
 pub use which::{
     RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CACHE_TOTAL,

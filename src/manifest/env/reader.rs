@@ -62,7 +62,9 @@ pub type EnvReader = Arc<dyn Fn(&str) -> Result<String, EnvReadError> + Send + S
 ///
 /// On-disk manifest loaders consume this bundle at their Jinja boundary. It
 /// keeps the reader and the policy together, so callers cannot accidentally
-/// inject a reader without also making the applicable access decision.
+/// inject a reader without also making the applicable access decision. It is
+/// cheap to clone: the reader is shared and the policy is small.
+#[derive(Clone)]
 pub struct ManifestEnvironment<'a> {
     /// Supplies values to the Jinja `env()` helper after policy evaluation.
     reader: &'a EnvReader,

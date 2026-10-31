@@ -7,10 +7,14 @@
 //! parent module.
 
 use super::{
-    EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadStage,
-    process_env_reader, query,
+    EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadOptions,
+    ManifestLoadStage, StdlibRegistration, process_env_reader, query,
 };
-use crate::{ast::NetsukeManifest, recipe_shell::RecipeShell, stdlib::NetworkPolicy};
+use crate::{
+    ast::NetsukeManifest,
+    recipe_shell::RecipeShell,
+    stdlib::{NetworkPolicy, StdlibConfig},
+};
 use anyhow::Result;
 use std::path::Path;
 
@@ -214,12 +218,21 @@ pub fn from_path_with_policy_and_environment_and_limits(
     recipe_shell: RecipeShell,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<NetsukeManifest> {
-    query::from_path_with_policy_and_environment_and_limits(
+    let mut options =
+        ManifestLoadOptions::deferred(environment.clone()).with_budget_limits(budget_limits);
+    if let Some(observer) = on_stage {
+        options = options.with_stage_observer(observer);
+    }
+    query::from_path_with_options(
         path,
-        policy,
-        environment,
-        budget_limits,
-        recipe_shell,
-        on_stage,
+        |workspace| {
+            let config = StdlibConfig::new(workspace.dir)?
+                .with_workspace_root_path(&workspace.root)?
+                .with_network_policy(policy)
+                .with_recipe_shell(recipe_shell);
+            Ok(StdlibRegistration::Full(Box::new(config)))
+        },
+        options,
     )
+    .map(|loaded| loaded.manifest)
 }

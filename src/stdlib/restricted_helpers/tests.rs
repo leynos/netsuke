@@ -43,7 +43,7 @@
 //! assertion alone would report only a missing error.
 
 use super::is_manifest_query_disabled_error;
-use crate::stdlib::register_manifest_query;
+use crate::stdlib::{register_env_refusal, register_glob_refusal, register_manifest_query};
 use anyhow::Result;
 use minijinja::Environment;
 use rstest::rstest;
@@ -272,7 +272,11 @@ fn check_refusal(refusal: &Refusal) -> Result<String> {
 /// rather than of the assertion it makes.
 fn refusal_from(template: &str) -> Result<minijinja::Error> {
     let mut env = Environment::new();
+    // `env()` and `glob()` are installed by the manifest loader from the load's
+    // own disposition, so a query load registers them alongside the surface.
     register_manifest_query(&mut env);
+    register_env_refusal(&mut env);
+    register_glob_refusal(&mut env);
     match env.render_str(template, ()) {
         Ok(rendered) => anyhow::bail!(
             "the query surface rendered {template:?} successfully as {rendered:?}; \
