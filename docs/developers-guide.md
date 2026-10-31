@@ -2684,15 +2684,17 @@ those operations at the file or transport boundary:
 External record shapes cross the boundary exactly once. A module that already
 owns a file, stream, or provider response decodes its field names and shape
 into a frozen slotted dataclass, and policy functions accept that record. The
-record's constructor owns the value invariant, including any normalization such
-as lowercasing a digest, and the adapter owns the wire names, including
-`targets`, `platform`, and `assets`. `StagingTargets`, `DigestRecord`,
-`ReleaseIdentity`, and `PublishedAsset` follow this rule. A mapping remains
-acceptable when the policy decides over a domain-shaped name-to-value relation
-that no external format defines, such as the name-to-digest plans in
-`release_reconcile_github` and the computed side of a download comparison;
-adding a decoder for one of those would invent a format boundary that does not
-exist. See
+record's constructor owns the value invariant, a decoding factory owns any
+normalization, and the adapter owns the wire names, including `targets`,
+`platform`, and `assets`. `DigestRecord` shows the split: `from_mapping`
+lowercases a digest, while `__post_init__` refuses one that is not already
+lowercase, so a directly constructed record carries the same invariant as a
+decoded one. `StagingTargets`, `ReleaseIdentity`, and `PublishedAsset` follow
+the same rule. A mapping remains acceptable when the policy decides over a
+domain-shaped name-to-value relation that no external format defines, such as
+the name-to-digest plans in `release_reconcile_github` and the computed side of
+a download comparison; adding a decoder for one of those would invent a format
+boundary that does not exist. See
 [ADR-0068](adrs/adr-0068-typed-records-for-release-policy-boundaries.md).
 
 Each adapter has a narrow scope and named callers. File adapters do not own

@@ -299,9 +299,17 @@ staging suite exercises both construction paths, and the digest suite rebuilds
 each refusal without the factory. The digest record also refuses a repeated
 asset name on that path, because a mapping cannot repeat a key and every
 accessor collapses the repetition, so the earlier digest would otherwise never
-be compared. One `_validated_entry` helper holds the digest record's type and
-hexadecimal checks, so the factory's case normalization and the record's
+be compared. `StagingTarget` likewise refuses a platform that is not a
+non-empty string, since counting and sorting the configured platforms would
+otherwise compare a mixed-type key set; an unknown platform *name* remains a
+policy refusal. One `_validated_entry` helper holds the digest record's type
+and hexadecimal checks, so the factory's case normalization and the record's
 canonical-form rule cannot drift apart.
+
+Every configuration error exits with the same code, so the malformed
+configuration suite now asserts the category-specific diagnosis on standard
+error as well. Without it, treating a malformed target entry as a missing
+targets table would satisfy the exit-code assertion for both cases.
 
 The regression evidence is pinned rather than incidental. The nine
 previously-rejected digest shapes and eight staging shapes were committed
