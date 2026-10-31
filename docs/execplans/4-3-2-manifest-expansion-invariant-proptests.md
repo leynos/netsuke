@@ -8,8 +8,9 @@ proceeds.
 
 Status: DRAFT
 
-The plan awaits explicit approval. No implementation step may begin until the
-user approves it; silence is not approval.
+The plan has been through one expert design review and awaits explicit user
+approval. No implementation step may begin until the user approves it; silence
+is not approval.
 
 ## Purpose / big picture
 
@@ -17,41 +18,44 @@ Netsuke turns a YAML manifest (a `Netsukefile`) into a Ninja build file. Before
 the manifest becomes typed Rust data, a loader pass called *expansion* rewrites
 the parsed YAML value: every entry carrying a `foreach` key is copied once per
 iteration value, and every entry carrying a `when` key is kept or dropped
-according to a Jinja condition. The four roadmap claims for this item are that
-expansion
+according to a Jinja condition. Roadmap item 4.3.2 asks for generated tests
+proving that expansion
 
 1. copies every field that is not a control key (`foreach`, `when`) unchanged
    into each generated entry,
 2. removes `when` once it has been evaluated,
 3. gives each generated entry its own `item` (the iteration value) and `index`
    (its zero-based position) in `vars`, and
-4. still honours `when` on *static* entries, meaning entries without
-   `foreach`.
+4. still honours `when` on *static* entries, meaning entries without `foreach`.
 
-Today those claims are pinned mainly by hand-picked examples and by a handful
-of narrow generated tests. After this change, a dedicated Proptest suite
-generates whole manifests (mixtures of static and `foreach` entries, in both the
+Today those claims are pinned mainly by hand-picked examples and by a few
+narrow generated tests. After this change, a Proptest suite under
+`src/manifest/expand/property_tests/` generates manifest entries in both the
 `targets` and `actions` sections, with arbitrary JSON-shaped field values,
-control keys at arbitrary positions, and conditions drawn from a small
-expression grammar with an independent Rust evaluator) and checks each claim
-against an oracle that does not reuse the production code.
+control keys at arbitrary positions, and conditions drawn from a closed set of
+shapes with an independent Rust oracle, and checks each claim against an
+expected result built without the production code.
 
 Planning surfaced one real defect, which this plan also fixes. The design
-document promises that "downstream consumers see keys in a stable sequence
-after foreach expansion" (`docs/netsuke-design.md`, the `ManifestMap`
-paragraph). The code breaks that promise: `serde_json::Map::remove`, under the
-`preserve_order` feature Netsuke enables, is a `swap_remove`, so removing
-`when` or `foreach` from the middle of an entry moves the entry's *last* key
-into the vacated slot. The existing key-order property never notices, because
-its generator always writes `foreach` last. The fix is two calls to
-`shift_remove`, driven by a red regression test.
+document promises that the ordered map backing a manifest "retains the
+insertion order observed in the YAML manifest" so that downstream consumers
+"see keys in a stable sequence after foreach expansion, matching the authoring
+intent" (`docs/netsuke-design.md`, the `ManifestMap` paragraph). The code
+breaks the *authoring intent* half of that promise: `serde_json::Map::remove`,
+under the `preserve_order` feature Netsuke enables, is a `swap_remove`, so
+removing `when` or `foreach` from an entry moves the entry's *last* key into
+the vacated slot whenever two or more keys follow the control key. The one
+user-visible consequence is the deserializer's unknown-field diagnostic, which
+reports the first unknown key in map order and can therefore name a different
+field from the one the author wrote first. The fix is two calls to
+`shift_remove`, driven by red tests.
 
-Success is observable as follows. Running `make proptest` lists the new suite
-under `manifest::expand::property_tests` and every property passes. Applying
-any committed mutation patch under `docs/verification/mutations/` whose stem
-begins `manifest__expand__property_tests__` makes exactly the named property
-fail with a shrunk counter-example. The roadmap entry 4.3.2 and its four
-sub-items are marked done.
+Success is observable as follows. `make proptest` selects the suite under
+`manifest::expand::property_tests` and every test passes. For each committed
+mutation patch whose stem begins `manifest__expand__property_tests__`, applying
+it makes the named property fail with a shrunk counter-example. Three new
+behavioural scenarios in `tests/features/manifest.feature` pass. Roadmap item
+4.3.2 and its four sub-items are marked done.
 
 ## Signposts: documentation and skills
 
@@ -64,60 +68,66 @@ Read these before starting, in this order:
   `docs/formal-verification-methods-in-netsuke.md`, section *Proptest for
   determinism and manifest semantics*: the upstream statement of the work.
 - `docs/netsuke-design.md`, sections 1.2 (*The Six Stages of a Netsuke
-  Build*, stage 3), 2.5 (*foreach and when*), 3.3 (template expansion stages),
-  and the `ManifestMap` key-order paragraph.
+  Build*, stage 3), 2.5 (`foreach` and `when`), 3.3 (the template expansion
+  stages), and the `ManifestMap` key-order paragraph.
 - `docs/developers-guide.md`, sections *Property-based testing with proptest*
   (including *Emission determinism suites*, which this suite mirrors), *Manifest
   `foreach` expansion*, and the `expand_foreach` interface reference.
-- `docs/users-guide.md`, section *Generate targets with `foreach` and
-  `when`*.
+- `docs/users-guide.md`, section *Generate targets with `foreach` and `when`*.
 - `docs/adrs/adr-0003-keep-foreach-and-when-scoped-to-manifest-targets.md`,
-  `docs/adrs/adr-0050-bound-manifest-template-evaluation.md`, and
-  `docs/adrs/adr-0030-ninja-emission-determinism-contract.md` (the model for
-  the contract record this plan writes).
+  `docs/adrs/adr-0050-bound-manifest-template-evaluation.md`,
+  `docs/adrs/adr-0047-bound-kani-intermediate-representation-ir-harnesses-to-small-n.md`,
+  and `docs/adrs/adr-0030-ninja-emission-determinism-contract.md`.
 - `docs/execplans/4-3-1-proptests-for-deterministic-ninja-emission.md`: the
   sibling plan. Copy its discipline (obligation ledger, mutation patches,
   coverage classification), not its length.
-- `docs/rust-testing-with-rstest-fixtures.md`, `docs/rstest-bdd-users-guide.md`,
+- `docs/rust-testing-with-rstest-fixtures.md`,
+  `docs/rstest-bdd-users-guide.md`,
   `docs/reliable-testing-in-rust-via-dependency-injection.md`,
   `docs/rust-doctest-dry-guide.md`, and
   `docs/snapshot-testing-in-netsuke-using-insta.md`.
 - `docs/ortho-config-users-guide.md`: read for orientation only. This change
   adds no configuration surface, so OrthoConfig is not touched (see
   `Decision log`).
-- `docs/documentation-style-guide.md`: ADR format, ExecPlan `Status:` rules,
-  and en-GB-oxendict spelling.
+- `docs/documentation-style-guide.md`: ExecPlan `Status:` rules and
+  en-GB-oxendict spelling.
 
 Load these skills when implementing: `rust-router` first, then `proptest`
-(strategy design, filtering trap, regression files), `rust-unit-testing`
-(rstest tables, googletest and `pretty_assertions` assertions, insta),
+(strategy design, the filtering trap, regression files), `rust-unit-testing`
+(rstest tables, googletest and `pretty_assertions` assertions),
 `rust-verification` (only if the method selection below is challenged),
 `hexagonal-architecture` (to keep test support out of production modules),
-`arch-decision-records` (for ADR-0068), `codegraph-mcp` (callers and impact of
-`when_allows` and `expand_foreach_item`), `en-gb-oxendict-style`, and
-`commit-message`. Use `firecrawl-mcp` for any question about MiniJinja,
-`serde_json`, or Proptest behaviour that the local registry sources do not
-answer.
+`codegraph-mcp` (callers and impact of `when_allows` and `expand_foreach_item`),
+`en-gb-oxendict-style`, and `commit-message`. Use `firecrawl-mcp` for any
+question about MiniJinja, `serde_json`, or Proptest behaviour that the local
+registry sources under `~/.cargo/registry/src/` do not answer.
 
 ## Context and orientation
 
 ### The pipeline
 
-`src/manifest/mod.rs::evaluate_manifest` (around lines 106–170) runs the
-manifest pipeline:
+`src/manifest/mod.rs::evaluate_manifest` (lines 106–169) runs the manifest
+pipeline:
 
 1. `serde_saphyr::from_str` parses the YAML text into a `ManifestValue`, which
-   is `serde_json::Value` (`src/manifest/mod.rs`, lines 41–43). A `ManifestMap`
+   is `serde_json::Value` (`src/manifest/mod.rs`, lines 40–43). A `ManifestMap`
    is `serde_json::Map<String, ManifestValue>`.
 2. A MiniJinja `Environment` is built with `UndefinedBehavior::Strict`, the
    standard library, manifest-level `vars` as globals, and macros.
-3. `expand_foreach_with_budget(&mut doc, &jinja, &budget)` performs
-   expansion. This is the subject of this plan.
+3. `expand_foreach_with_budget(&mut doc, &jinja, &budget)` performs expansion.
+   This is the subject of this plan.
 4. `serde_json::from_value::<NetsukeManifest>(doc)` deserializes into the
-   typed abstract syntax tree (AST). The target struct (`src/ast/target.rs`,
-   line 13) uses `#[serde(deny_unknown_fields)]`, so a leftover `when` or
-   `foreach` key would fail here.
+   typed abstract syntax tree (AST). `Target` (`src/ast/target.rs`, line 13)
+   uses `#[serde(deny_unknown_fields)]` with a flattened recipe, and actions
+   pass through `deserialize_actions` into the same `Target` type
+   (`src/ast/mod.rs`, lines 60–68). A leftover `when` or `foreach` key would
+   fail here, and an unknown key is reported in map order.
 5. `render::render_manifest_with_budget` renders the string fields.
+
+The expanded document has exactly one consumer, the `from_value` call in step
+four. Lint rules, graph output, and the IR work from the typed manifest, and
+`Vars` is a `HashMap`, so map order inside the expanded value matters only to
+the deserializer's diagnostics.
 
 ### The expansion code
 
@@ -132,9 +142,13 @@ All of it lives in two files.
 Non-object entries pass through unchanged. An entry is a *foreach entry* if its
 map contains the key `foreach`, and a *static entry* otherwise.
 
-`expand_foreach_item` clones the source map, calls `entry.remove("foreach")`
-(line 242), evaluates `when` through `when_allows`, and on inclusion calls
-`inject_iteration_vars`.
+`expand_foreach_target` enumerates the iterator lazily and builds a
+`ForeachItem { source, item, index }` per value. `expand_foreach_item` checks
+the cardinality budget with that `index`, clones the source map, calls
+`entry.remove("foreach")` (line 242), evaluates `when` through `when_allows`
+with `(item, index)`, and on inclusion calls `inject_iteration_vars`.
+`expand_static_target` charges the budget, calls `when_allows` with no
+iteration, and drops or keeps the map. Static entries never receive `vars`.
 
 `src/manifest/expand/evaluation.rs` (239 lines) holds:
 
@@ -142,21 +156,28 @@ map contains the key `foreach`, and a *static entry* otherwise.
   `minijinja::Value::from_serialize`; any other value must be a string, which
   is compiled and evaluated as a Jinja expression with an empty local context.
 - `when_allows`: removes `when` with `map.remove("when")` (line 44), rejects a
-  non-string value, builds the condition context, and evaluates it. The result
-  is `Include`, `Exclude`, or `Conditional`. `Conditional` arises only in
-  manifest-query mode, when a helper is disabled; it inserts a synthetic
-  `conditional: true` key.
-- `when_context`: the condition sees the entry's own `vars` object as its
-  local context, plus `item` and `index` during iteration (overriding colliding
-  `vars` keys). Manifest-level `vars`, `env`, `glob`, and the standard library
-  are environment globals.
-- `eval_when`: rejects an empty or whitespace-only condition, tries the
-  expression path (`jinja_macros::evaluate_when_expression`, which takes
-  MiniJinja truthiness via `Value::is_true`), and falls back to rendering the
-  text as a template, accepting only a trimmed, lower-cased `true` or `1`.
+  non-string value with the localized message `Field 'when' must be a string.`
+  (key `manifest.field_not_string`), builds the condition context, and
+  evaluates it. The result is `Include`, `Exclude`, or `Conditional`.
+  `Conditional` arises only in manifest-query mode, when a helper is disabled.
+- `when_context`: the condition sees the entry's own `vars` object as its local
+  context; during iteration `item` and `index` are added, overriding colliding
+  `vars` keys. A static entry whose `vars` is not an object is silently given
+  an empty context (`unwrap_or_default`). Manifest-level `vars`, `env`, `glob`,
+  and the standard library are environment globals.
+- `eval_when`: rejects an empty or whitespace-only condition, then calls
+  `jinja_macros::evaluate_when_expression`. That function falls back to
+  template rendering only when `compile_expression` fails
+  (`src/manifest/jinja_macros/mod.rs`, lines 62–64); a runtime error
+  propagates. The expression path takes MiniJinja truthiness through
+  `Value::is_true`. The template path accepts only a trimmed, lower-cased
+  `true` or `1`. A condition written `{{ … }}` always takes the template path,
+  because MiniJinja's parser reads `{ … }` as a map literal and then demands a
+  `:` (`minijinja-2.24.0/src/compiler/parser.rs`, lines 774–789).
 - `inject_iteration_vars`: creates `vars` if absent (an error if present but
   not an object), then inserts `item` as `serde_json::to_value(item)` and
-  `index` as a `u64` JSON number. Insertion overwrites colliding user keys.
+  `index` as a `u64` JSON number. Insertion overwrites colliding user keys in
+  place.
 
 ### The key-order defect
 
@@ -176,11 +197,22 @@ targets:
 ```
 
 therefore leaves expansion with keys `name, after, command`, not
-`name, command, after`. The typed AST does not care about map order, but the
-deserializer visits keys in map order, so any diagnostic that names the first
-offending field (for example, `deny_unknown_fields` naming an unknown key) can
-name a different field from the one the author wrote first. Stage EP-M0
-measures whether that diagnostic difference is reachable from the command line.
+`name, command, after`. With exactly one key after the control key,
+`swap_remove` moves that key into the same slot and order survives, which is
+why two existing tests pass by coincidence (see `Surprises & discoveries`).
+
+Two facts make this defect easy to miss in tests:
+
+- `serde_json::Map` equality delegates to `IndexMap` equality, which ignores
+  order (`serde_json-1.0.151/src/map.rs`, lines 409–413). `prop_assert_eq!` on
+  two `ManifestValue`s cannot see a reordering. Order must be asserted on key
+  sequences, `map.keys().collect::<Vec<_>>()`.
+- MiniJinja is built without its `preserve_order` feature (`Cargo.toml`, line
+  113, enables only `fuel` and `loader`), so its maps are `BTreeMap`s
+  (`minijinja-2.24.0/src/value/mod.rs`, lines 246–247). An object-valued `item`
+  therefore arrives in `vars.item` with its keys sorted. That is the documented
+  behaviour of the evaluator, not a defect in expansion, and is outside the
+  key-order contract.
 
 ### Existing tests
 
@@ -188,51 +220,82 @@ Expansion already has extensive example coverage under
 `src/manifest/expand/tests/` (`condition_cases.rs` is at the 400-line cap),
 integration tests in `tests/manifest_jinja_tests.rs`, and rstest-bdd scenarios
 in `tests/features/manifest.feature` ("Generating targets with foreach",
-"Generating actions with foreach and when"). Two modules already hold generated
-tests:
+"Generating actions with foreach and when", "Parsing fails when a foreach
+expression is not iterable"). Steps live in `tests/bdd/steps/manifest/`, and
+include `the manifest has {n} targets`, `the manifest has {n} actions`,
+`the target {i} name is {s}`, `the action {i} name is {s}`,
+`parsing the manifest fails`, and `the error message contains {text}`
+(`tests/bdd/steps/manifest/mod.rs`, line 223, which reads the whole error
+chain).
+
+Two modules already hold generated tests:
 
 - `src/manifest/expand/tests/property_cases.rs`: entry counts, sequential
-  indexes, `foreach` and `when` key removal for foreach entries, determinism of
-  filtering, the filtering report, and rejection of whitespace-only conditions.
+  indexes, `description` preservation, `foreach` and `when` key removal for
+  foreach entries, determinism of filtering, the filtering report, and
+  rejection of whitespace-only conditions.
 - `src/manifest/expand/tests/foreach/property_cases.rs`: cardinality-budget
-  termination, integer and short-string `item`/`index` injection, collision
-  override, threshold filtering, and a key-order property over six fixed
-  permutations with `foreach` always last.
+  termination, integer `item`/`index` injection, collision override, threshold
+  filtering, and `foreach_preserves_generated_source_key_order`, which permutes
+  three keys but always writes `foreach` last.
 
-Neither module path ends in `property_tests`, so `make proptest` (`Makefile`,
-`PROPTEST_FILTER`) does not select them; `make test` runs them. Their gaps
-against the roadmap are: no generated non-control fields beyond `name`,
-`after`, and `description`; no non-scalar items; no static-entry inclusion
-property; no `actions`-section property; no control key at a middle position.
+Neither module path contains a segment ending in `property_tests`, so
+`make proptest` (`Makefile`, `PROPTEST_FILTER`) does not select them;
+`make test` runs them.
+
+Unhappy paths already covered elsewhere: a non-iterable `foreach`
+(`tests/features/manifest.feature`, "Parsing fails when a foreach expression is
+not iterable"; `tests/manifest_jinja_tests.rs::foreach_non_iterable_errors`); a
+non-object `vars` on a foreach entry
+(`tests/manifest_jinja_tests.rs::foreach_vars_must_be_mapping`); and empty,
+whitespace-only, and malformed conditions
+(`src/manifest/expand/tests/condition_cases.rs`). Not covered anywhere: a
+non-string `when`, and an undefined name in a condition under the production
+strict-undefined environment.
+
+### Reusable test support
+
+`src/shell_selection/selection/property_tests.rs` (line 12) already defines
+`json_values()`, a `prop_recursive` strategy over all six JSON kinds with
+bounded containers, and `json_kind()`, a classifier. Its string leaf comes from
+`crate::shell_selection::name::property_tests::arbitrary_names()`. The helpers
+`targets`, `actions`, `section_entries`, and `indexes` in
+`src/manifest/expand/tests/mod.rs` are `pub(super)`, so any descendant of
+`manifest::expand` can use them.
 
 ### The mutation-evidence contract
 
 `docs/verification/mutations/` holds unified-diff patches, each seeding one
 fault. `tests/kani_mutation_evidence_tests/contracts.rs` keeps
-`SUPPLEMENTAL_PROPERTY_PATCHES`, the registry of Proptest-only patch stems. A
-stem is the property's module path with `::` written as `__`, followed by the
-property's function name. `supplemental_property_location` resolves
+`SUPPLEMENTAL_PROPERTY_PATCHES`, the registry of Proptest-only patch stems; it
+is grouped by module family, not sorted, and its doc comment explains each
+family. A stem is the property's module path with `::` written as `__`,
+followed by the property's function name. `supplemental_property_location`
+resolves
 `manifest__expand__property_tests__order__when_removal_keeps_authoring_key_order`
 to `src/manifest/expand/property_tests/order.rs` (or `order/mod.rs`) and
-requires that file to declare the named function.
+requires that file to declare `fn when_removal_keeps_authoring_key_order(` on a
+line of its own, which a `#[test]` function inside `proptest! { … }` satisfies.
 `every_patch_matches_a_harness` rejects orphan patches and
 `every_patch_applies_cleanly` runs `git apply --check` on each; both run under
-`make test`. `make test-kani-mutations` compiles every patched tree under
-denied warnings.
+`make test`. `make test-kani-mutations` builds every patched tree with `--lib`
+under `-D warnings`, so a patch that leaves a variable unused fails.
 
 ### Terms used in this plan
 
-- *Control key*: `foreach` or `when`. The synthetic `conditional` key is a
-  third, query-mode-only control key and is outside this plan's domain.
+- *Control key*: `foreach` or `when`.
 - *Non-control field*: any entry key other than a control key and other than
-  `vars`, which expansion edits.
-- *Oracle*: a test-side function that computes the expected result by a
-  method structurally different from production.
+  `vars`, which expansion edits. `conditional` is an ordinary `Target` field
+  (`pub conditional: bool`) and counts as non-control; expansion only adds it
+  in query mode, which is outside this plan's domain.
+- *Oracle*: a test-side function that computes the expected result by a method
+  structurally different from production.
 - *Mutation patch*: a committed diff that seeds a plausible fault so that a
   named property can be shown to detect it.
-- *Coverage classification*: counts, gathered over a fixed-seed run, of how
-  often each material input class was generated; used to prove a generator is
-  not vacuous.
+- *Failure set*: every test that fails when one mutation patch is applied.
+- *Coverage classification*: per-strategy counts, gathered over a fixed-seed
+  run, of how often each material input class is generated; used to show that a
+  generator is not vacuous.
 
 ## Conformance basis
 
@@ -249,42 +312,45 @@ Upstream artefacts, at `origin/main` commit `08d0a918d`:
 - `docs/netsuke-design.md`: `DES-STAGE3` (stage 3, variable precedence
   `globals < entry.vars < per-iteration locals`), `DES-FOREACH` (section 2.5:
   `item`, zero-based `index`, filtered entries absent, no `foreach` or `when`
-  downstream), and `DES-ORDER` (the `ManifestMap` paragraph promising stable
-  key order after foreach expansion).
+  downstream), and `DES-ORDER` (the `ManifestMap` paragraph promising authoring
+  order after foreach expansion).
 - `docs/developers-guide.md`, `expand_foreach` interface reference:
   `DG-EXPAND`.
 - `docs/users-guide.md`, *Generate targets with `foreach` and `when`*:
   `UG-FOREACH` ("iteration values take precedence over both"; "Top-level
   actions support the same `foreach` and `when` keys").
 - ADR-0003 (scope of `foreach` and `when`), ADR-0050 (manifest budget),
-  ADR-0030 (contract-record model).
-- New: ADR-0068, *Manifest expansion invariant contract* (`ADR-0068`). The
-  number is provisional; see `Decision log`.
+  ADR-0047 (bounds of Kani for heap-heavy structures), ADR-0030 (the
+  contract-record model for 4.3.1).
 
 No Terms of Reference document exists for this phase; the roadmap and the
-formal-verification survey stand in for it.
+formal-verification survey stand in for it. This plan writes no new ADR; the
+expansion contract is recorded as numbered clauses `C-1` to `C-5` in a new
+subsection of `docs/netsuke-design.md` section 2.5 (see `Decision log`).
 
 Trace links:
 
 ```plaintext
-RM-4.3.2.a -> FV-EXP -> DES-FOREACH -> EP-M3
-  -> manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field
-FV-EXP -> DES-ORDER -> EP-M1
+FV-EXP -> DES-ORDER -> C-2 -> EP-M1
   -> manifest::expand::tests::key_order_cases (rstest regression)
-FV-EXP -> DES-ORDER -> EP-M3
-  -> manifest::expand::property_tests::order::{foreach,when}_removal_keeps_authoring_key_order
-RM-4.3.2.b -> DES-FOREACH -> DG-EXPAND -> EP-M5
+  -> manifest.feature "Parsing names the first unknown field in authoring order"
+FV-EXP -> DES-ORDER -> C-2 -> EP-M3
+  -> manifest::expand::property_tests::order::foreach_removal_keeps_authoring_key_order
+  -> manifest::expand::property_tests::order::when_removal_keeps_authoring_key_order
+RM-4.3.2.a -> DES-FOREACH -> C-1 -> EP-M3
+  -> manifest::expand::property_tests::preserve::expansion_copies_every_non_control_field
+RM-4.3.2.b -> DES-FOREACH -> DG-EXPAND -> C-4 -> EP-M3
   -> manifest::expand::property_tests::when_removed::no_expanded_entry_carries_a_control_key
-RM-4.3.2.c -> DES-STAGE3 -> UG-FOREACH -> EP-M4
+  -> manifest::expand::tests::when_type_cases (rstest, unhappy paths)
+RM-4.3.2.c -> DES-STAGE3 -> UG-FOREACH -> C-3 -> EP-M3
   -> manifest::expand::property_tests::inject::each_expansion_carries_its_own_item_and_index
-RM-4.3.2.c -> DES-FOREACH -> EP-M4
-  -> manifest::expand::property_tests::inject::expression_foreach_matches_inline_foreach
-RM-4.3.2.d -> DES-FOREACH -> ADR-0003 -> EP-M5
+RM-4.3.2.d -> DES-FOREACH -> ADR-0003 -> C-4 -> EP-M3
   -> manifest::expand::property_tests::static_when::static_entries_survive_exactly_when_their_condition_holds
-RM-4.3.2.d -> DES-FOREACH -> EP-M5
-  -> manifest::expand::property_tests::pipeline::typed_manifest_holds_exactly_the_selected_static_targets
-FV-EXP -> ADR-0068 -> EP-M2
-  -> manifest::expand::property_tests::strategy::generator_reaches_every_material_class
+RM-4.3.2.d -> DES-FOREACH -> C-4 -> EP-M4
+  -> manifest.feature "Static targets and actions honour when"
+  -> manifest.feature "Parsing fails when a when condition is not a string"
+FV-EXP -> EP-M3
+  -> manifest::expand::property_tests::coverage::generators_reach_every_material_class
 ```
 
 ## Constraints
@@ -293,31 +359,47 @@ FV-EXP -> ADR-0068 -> EP-M2
   `src/manifest/expand/mod.rs` (`entry.remove("foreach")`) and
   `src/manifest/expand/evaluation.rs` (`map.remove("when")`). Both become
   `shift_remove`. Any other production change is a tolerance breach.
-- No item may widen visibility. The suite sits inside
-  `src/manifest/expand/` as a `#[cfg(test)]` child module, so it reaches
-  private items through `super::` without new `pub(crate)` surface.
-- No new dependency. `proptest` 1.11.0, `googletest` 0.14.3,
-  `pretty_assertions` 1.4.1, `insta` 1.x, `rstest` 0.26.1, and `rstest-bdd`
-  0.6.0 are already dev-dependencies.
-- No in-process environment mutation. Pipeline-level properties use
-  `manifest::from_str_with_env` with an injected `EnvReader` closure; nothing
-  calls `std::env::set_var` or `remove_var`.
+- No item may widen visibility beyond its current level, except the lifted
+  JSON strategy (a `#[cfg(test)]`, `pub(crate)` test-support item). Inside the
+  suite, nested modules use `pub(in crate::manifest::expand::property_tests)`
+  for items that sibling modules need; plain `pub(super)` in a nested file
+  would hide the item from its cousins.
+- No new dependency or feature. `proptest` 1.11.0, `googletest` 0.14.3,
+  `pretty_assertions` 1.4.1, `rstest` 0.26.1, and `rstest-bdd` 0.6.0 are
+  already dev-dependencies.
+- No in-process environment mutation. Nothing calls `std::env::set_var` or
+  `remove_var`. Behavioural scenarios run through the existing manifest steps.
 - Generated conditions must not call `env()`, `glob()`, `command_available()`,
-  `which`, or any helper that touches the filesystem or process state, and must
-  never produce `Conditional`.
-- The new suite's module path must contain a segment ending in
-  `property_tests`, or `make proptest` will not select it.
+  `which`, or any other helper that touches the filesystem or process state,
+  and must never produce `Conditional`. In hexagonal terms, expansion is a pure
+  transform of a value; the Jinja environment is its evaluation port, and those
+  helpers are adapters that this suite deliberately keeps out of its domain.
+- Key order is asserted only by comparing key sequences
+  (`keys().collect::<Vec<_>>()`) at the entry level and the `vars` level. Value
+  equality (`==`) is used only where order is irrelevant by contract.
+- The suite's module path must contain a segment ending in `property_tests`, or
+  `make proptest` will not select it.
 - Every file stays under 400 lines; every module starts with `//!`; every
   helper function carries a `///` summary; test functions carry none.
 - Property bodies use `prop_assert*` and return `TestCaseError`, never
   `panic!`, `unwrap`, or `expect` on a generated value. No `prop_filter` or
   `prop_assume!` on a structural condition; generators construct valid values.
-- Each obligation gets a structurally independent oracle. An oracle that
-  calls `when_allows`, `inject_iteration_vars`, `Map::remove`, or
+- Each obligation gets a structurally independent oracle. An oracle that calls
+  `when_allows`, `when_context`, `inject_iteration_vars`, `Map::remove`, or
   `Map::shift_remove` is a re-implementation and is forbidden.
-- Do not delete or weaken the existing `property_cases.rs` modules or any
-  example test. Readable examples remain the specification beside the
-  properties.
+- Red-Green-Refactor applies to every behaviour change (EP-M1 and the new
+  behavioural scenarios). Property-only work runs against production code that
+  is already correct, so it cannot go red against production; its red stage is
+  the mutation substitute defined in `Decision log`: write the patch, apply it,
+  write the property and watch it fail for the intended reason, revert, watch
+  it pass.
+- Do not delete readable specification. The existing generated tests move into
+  the suite unchanged except for imports; the one exception, the vacuous
+  key-order property, is retired only because `OBL-ORDER` strictly contains its
+  domain (see `Decision log`).
+- Each case count is pinned explicitly in `ProptestConfig`, so the workload
+  does not depend on an ambient `PROPTEST_CASES`, following
+  `src/stdlib/canonical_value/tests/properties.rs`.
 - Do not add a `-Z` flag, a `-Znext-solver` directive, or a defensive
   `.clone()` to satisfy the borrow checker without first compiling the natural
   form.
@@ -325,385 +407,485 @@ FV-EXP -> ADR-0068 -> EP-M2
 
 ## Tolerances (exception triggers)
 
-- Scope: stop and escalate if implementation needs more than 30 non-ExecPlan
-  files or more than 3,000 net lines of code and other documentation. This
-  ExecPlan file is excluded from both counts.
+- Scope: stop and escalate if implementation needs more than 50 non-ExecPlan
+  files or more than 3,500 net lines of code and other documentation. This
+  ExecPlan file is excluded from both counts. The planned set is about 42 files
+  (see *Files to create* and *Files to edit*); file moves count once.
 - Production change: stop if any production edit beyond the two
   `shift_remove` calls is needed, including any change prompted by a property
   failure other than key order. Record the counter-example first.
-- Interface: stop if any item's visibility must widen.
+- Interface: stop if any production item's visibility must widen.
 - Dependencies: stop if any new crate or feature is needed.
-- Fidelity: stop if EP-M0 shows that `item` does not round-trip, meaning
-  `serde_json::to_value(Value::from_serialize(x)) != x` for some JSON value the
-  YAML loader can produce. That is a defect candidate, not a generator
-  restriction to quietly apply.
-- Runtime: the whole new suite should add no more than 5 s of test CPU
-  under `make test`; stop at 15 s.
+- Fidelity: stop if EP-M0 shows that an `item` is not deep-equal, by
+  order-insensitive `serde_json` equality and, for floats, by `to_bits()`, to
+  the source value after expansion, for any value the YAML loader can produce.
+  That would be a defect candidate, not a generator restriction to apply
+  quietly. Sorted keys inside an object `item` are expected and are not a
+  breach.
+- Runtime: the new suite should add no more than 5 s of wall time to the
+  `make proptest` run (advisory, given the shared host); stop at 15 s.
+- Shrinking: stop if any property's shrink exceeds 30 s on a seeded failure.
 - Rejection: stop if a strategy needs filtering to reach valid inputs.
 - Assertion shape: stop if a property can only be stated as a disjunction of
   observed behaviours.
 - Iterations: stop if a gate still fails after three focused fix attempts.
 - Contract test: stop if `tests/kani_mutation_evidence_tests` rejects a stem
   or patch for a reason other than a typo.
-- ADR number: re-run the remote-branch sweep before the first push; if 0068
-  is taken, renumber above the highest allocation as its own commit.
-- Ambiguity: stop if the contract record would have to choose between two
-  readings of the design or users' guide that change what a user sees.
+- Ambiguity: stop if a contract clause would have to choose between two
+  readings of the design document or users' guide that change what a user sees.
 
 ## Risks
 
-- Risk: the expression grammar's oracle disagrees with MiniJinja on an edge
-  (integer comparison with booleans, `not` precedence). Severity: medium.
-  Likelihood: medium. Mitigation: render every sub-expression fully
-  parenthesized; restrict comparisons to integers; restrict boolean leaves to
-  literal booleans and boolean-typed `vars`; EP-M0 classifies each grammar form
-  against MiniJinja before any property is written.
-- Risk: the template fallback path (`"{{ e }}"`) behaves differently from the
-  expression path for some forms (for example, an integer that renders as `2`
-  is false under the fallback but true under `is_true`). Severity: medium.
-  Likelihood: high if unrestricted. Mitigation: the template form wraps only
-  boolean-typed expressions, whose renderings are `true` or `false`; EP-M0
-  confirms that `{{ … }}` fails `compile_expression` and so reaches the
-  fallback.
-- Risk: `item` fidelity fails for large integers, negative zero, or floats.
-  Severity: high (a real defect). Likelihood: low. Mitigation: EP-M0 probes the
-  boundaries `i64::MIN`, `i64::MAX`, `u64::MAX`, `-0.0`, and sub-normal floats;
-  a failure triggers the fidelity tolerance.
-- Risk: fixing key order changes a diagnostic another test pins.
-  Severity: low. Likelihood: low. Mitigation: EP-M1 runs the whole suite after
-  the fix; any changed expectation is reviewed, not silently updated.
-- Risk: the existing key-order property
-  (`foreach_preserves_generated_source_key_order`) gives a false sense of
-  coverage. Severity: low. Likelihood: certain. Mitigation: record the vacuity
-  in `Surprises & discoveries`; the new `order` properties place control keys
-  at every position.
-- Risk: the `Makefile` comment above `PROPTEST_FILTER` quotes a test census
-  ("90 of the 3848 tests") that this suite changes. Severity: low. Likelihood:
-  certain. Mitigation: EP-M6 re-measures with the recipe's own flags and
-  updates the sentence, or rewrites it to name the command rather than the
-  number.
-- Risk: ADR-0068 is taken by another branch before merge. Severity: medium.
-  Likelihood: medium. Mitigation: the ADR-number tolerance above.
-- Risk: ADR-0003 says `foreach` and `when` are "target level only", while the
-  design document, developers' guide, and users' guide all state that top-level
-  `actions` support them too. Severity: low. Likelihood: certain. Mitigation:
-  the code expands both sections; this plan covers both and records the reading
-  ("target level" means entry level, as opposed to keys nested inside a field)
-  in ADR-0068 without amending ADR-0003.
+- Risk: a condition oracle disagrees with MiniJinja on an edge case.
+  Severity: medium. Likelihood: low after simplification. Mitigation:
+  conditions come from a closed set of shapes (see *Shared generators and
+  oracles*); EP-M0 runs every shape against MiniJinja on 1,000 generated
+  bindings before any property is written; comparison literals stay small so
+  that comparisons against `index` are not constant.
+- Risk: the template form (`{{ … }}`) renders a non-boolean and the fallback
+  reads it as false while the oracle says true. Severity: medium. Likelihood:
+  eliminated by design: only boolean-valued shapes get a template form, and the
+  integer-truthiness shape never does.
+- Risk: `item` fidelity fails for an extreme value (`u64` above `i64::MAX`,
+  `-0.0`, sub-normal floats) on the inline-array path or the expression path.
+  Severity: high (a real defect). Likelihood: low; the property-testing
+  reviewer read the MiniJinja 2.24.0 source and predicts bit-exact survival.
+  Mitigation: EP-M0 question 4; the fidelity tolerance.
+- Risk: fixing key order changes an expectation in another test. Severity:
+  low. Likelihood: low; no snapshot records an expanded document. Mitigation:
+  EP-M1 runs the whole suite after the fix; any changed expectation is
+  reviewed, not silently updated.
+- Risk: a mutation patch compiles under the focused run but fails
+  `make test-kani-mutations` because it leaves a binding unused. Severity:
+  medium. Likelihood: low now that the patch text is fixed in this plan.
+  Mitigation: run `make test-kani-mutations` at EP-M3, not only at closure.
+- Risk: lifting `json_values()` changes the shell-selection suite's behaviour.
+  Severity: low. Likelihood: low. Mitigation: the lift keeps the strategy
+  byte-for-byte, parameterizes only its string leaf, and runs that suite before
+  and after in its own refactor commit.
+- Risk: moving the existing `property_cases` modules trips the HashMap
+  boundary scan (`tests/hashmap_boundary/`), which looks for
+  `#[cfg(test)] mod property_tests;` declarations. Severity: low. Likelihood:
+  low. Mitigation: declare the suite exactly that way in
+  `src/manifest/expand/mod.rs`; EP-M2 runs `make test`.
+- Risk: gate time on the shared host (lint can approach the two-hour detached
+  cap). Severity: medium. Likelihood: high. Mitigation: four implementation
+  plateaus rather than seven; focused `nextest -E` runs inside a milestone; the
+  full gate set once per plateau.
+- Risk: other `serde_json::Map::remove` call sites outside the manifest
+  pipeline share the swap behaviour (for example
+  `src/cli/discovery/project_policy.rs`, lines 188, 253, and 273–276).
+  Severity: low. Likelihood: certain. Mitigation: EP-M1 inventories every
+  `remove` on a `serde_json::Map` in `src/`, records whether each site is
+  order-sensitive, and leaves order-insensitive sites alone. A follow-up issue
+  can propose a Clippy `disallowed-methods` guard; this plan does not add one.
+- Risk: ADR-0003 says `foreach` and `when` are scoped to "manifest targets",
+  while the design document, developers' guide, and users' guide all state that
+  top-level `actions` support them too. Severity: low. Likelihood: certain.
+  Mitigation: the code expands both sections; this plan covers both and records
+  the reading ("targets" means top-level entries, as opposed to keys nested
+  inside a field) in the new design-document subsection without amending
+  ADR-0003.
 
 ## Verification plan
 
 ### Method selection
 
 The obligations range over an open-ended input space (arbitrary field maps,
-arbitrary JSON values, control-key positions, condition expressions), so
-Proptest is the primary method. Named rstest cases pin the key-order regression
-and each EP-M0 discovery. An insta snapshot pins one representative expanded
-document, because key order is exactly a format-consistency concern. One
-rstest-bdd scenario covers the user-observable consequence of key order if
-EP-M0 shows one exists.
+arbitrary JSON values, control-key positions, condition values), so Proptest is
+the primary method. Named rstest cases pin the key-order regression, the
+condition-shape witnesses, and the unhappy paths. Three rstest-bdd scenarios
+cover the behaviour a user can observe through the loader. No insta snapshot is
+added: the only format at stake is key order, which the rstest and properties
+assert directly on key sequences, and a snapshot would restate them.
 
 Kani is rejected: expansion runs MiniJinja's parser and evaluator and allocates
-`serde_json` maps, which ADR-0047 already found beyond the bounded model
-checker's practical reach even for the smaller IR structures. Verus is
-rejected: the plan introduces no lemma or contractual algorithm. The fix is a
-call to a library function whose contract is an axiom below, and the remaining
-claims are about a composition of library calls rather than a pure kernel.
-Writing a Verus model would prove a model, not Netsuke.
+`serde_json` maps, and ADR-0047 already found the bounded model checker
+impractical for far smaller heap structures. Verus is rejected: the plan
+introduces no lemma or contractual algorithm. The fix is a call to a library
+function whose contract is an axiom below, and the remaining claims concern a
+composition of library calls rather than a pure kernel. A Verus model would
+prove the model, not Netsuke.
 
 ### Axioms
 
-- `AXIOM-PROPTEST`: Proptest 1.11.0 generates and shrinks as documented.
+- `AXIOM-PROPTEST`: Proptest 1.11.0 generates and shrinks as documented, and
+  `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1` disables seed persistence.
 - `AXIOM-SHIFT`: under `preserve_order`, `serde_json::Map::shift_remove`
-  removes a key and preserves the relative order of the rest, and `Map::insert`
-  of a new key appends it while insertion of an existing key keeps its position
-  (`serde_json` 1.0.151 `src/map.rs`).
+  removes a key and preserves the relative order of the rest; `Map::insert` of
+  a new key appends it, and insertion of an existing key keeps its position
+  (`serde_json` 1.0.151, `src/map.rs`).
+- `AXIOM-MAP-EQ`: `serde_json::Map` equality ignores key order (`src/map.rs`,
+  lines 409–413). EP-M1 includes an rstest case demonstrating this, so the
+  constraint on key-sequence assertions is grounded in evidence.
 - `AXIOM-MJ-TRUTH`: MiniJinja 2.24.0 `Value::is_true` treats `false`, zero,
-  `none`, undefined, and empty containers as false and everything else as true.
-  Integer comparison operators behave as in Rust for `i64` operands.
-- `AXIOM-MJ-SERDE`: MiniJinja `Value::from_serialize` preserves map key
-  order and sequence order. EP-M0 measures, rather than assumes, whether it
-  round-trips every JSON value back through `serde_json::to_value`.
-- `AXIOM-SAPHYR`: the expansion-level properties build `ManifestValue`
-  directly instead of through YAML text. The pipeline-level property is the one
-  place YAML text is parsed, so the YAML-to-JSON mapping is exercised end to
-  end there, not assumed.
+  `none`, undefined, and empty containers as false and everything else as true;
+  integer comparisons behave as in Rust for small operands.
+- `AXIOM-MJ-SERDE`: MiniJinja `Value::from_serialize` preserves sequence
+  order and stores maps as `BTreeMap`, so object keys come back sorted. Whether
+  every JSON value round-trips to a deep-equal value through
+  `serde_json::to_value` is measured in EP-M0, not assumed.
+- `AXIOM-SAPHYR`: expansion-level properties build `ManifestValue` directly.
+  The behavioural scenarios parse real YAML, so the YAML-to-JSON mapping is
+  exercised end to end there.
 
-### Shared generator and oracle
+### Shared generators and oracles
 
 Generators live in `src/manifest/expand/property_tests/strategy/`. They produce
-an `EntrySpec` model, which renders to a `ManifestValue`, so the oracle reads
-the model, not the rendered map:
+an `EntrySpec` model, which renders to a `ManifestValue`, so oracles read the
+model rather than the rendered map.
 
-- `section`: `targets` or `actions`.
-- `fields`: an ordered list of up to six non-control fields. Keys mix the
-  real manifest field names (`name`, `command`, `description`, `sources`,
-  `deps`, `order_only_deps`, `after`, `phony`, `always`, `rule`, `script`) with
-  generated `[a-z][a-z0-9_]{0,7}` names. A generated name that collides with
-  `foreach`, `when`, `vars`, or `conditional` is transformed by a `field_`
-  prefix, and duplicates keep their first occurrence; both are transforms, not
-  filters. Values are arbitrary JSON up to depth three and collections up to
-  four elements: `null`, booleans, `i64` including the extremes, finite `f64`,
-  strings (including text that looks like Jinja, such as `{{ item }}`, which
-  expansion must not render), arrays, and objects.
-- `vars`: absent, or an object of up to four entries, sometimes containing
-  user keys named `item` or `index` to exercise override.
-- `foreach`: absent (a static entry), or an inline array of up to eight
-  arbitrary JSON items, or (for the metamorphic property) a Jinja list literal
-  string.
-- `when`: absent, or a `WhenExpr` rendered in expression form or, for
-  boolean-typed expressions only, template form `{{ … }}`.
-- `positions`: the insertion index of each control key among the fields,
-  drawn uniformly from `0..=fields.len()`, so first, middle, and last positions
-  are all reachable.
+- `EntrySpec.section`: `targets` or `actions`.
+- `EntrySpec.fields`: an ordered list of up to six non-control fields. Keys mix
+  real `Target` field names (`name`, `command`, `description`, `sources`,
+  `deps`, `order_only_deps`, `after`, `phony`, `always`, `rule`, `script`,
+  `conditional`) with generated `[a-z][a-z0-9_]{0,7}` names. A generated name
+  equal to `foreach`, `when`, or `vars` gains a `field_` prefix, and duplicates
+  keep their first occurrence; both are transforms, not filters. Values come
+  from the lifted `json_values()` strategy plus extra leaves (`i64::MIN`,
+  `i64::MAX`, `u64` values above `i64::MAX`, and strings that look like Jinja,
+  such as `{{ item }}`, which expansion must not render).
+- `EntrySpec.vars`: absent, or an ordered object of up to four entries. Keys
+  are drawn from the condition pool `w0`–`w3` (so conditions can reference
+  them) plus, for foreach entries only, user keys named `item` and `index` to
+  exercise override.
+- `EntrySpec.foreach`: absent (a static entry); an inline array of up to eight
+  items; or, for the same items, a string holding a Jinja list literal printed
+  by a test-side printer that writes JSON with `null` spelled `none`. Items are
+  either arbitrary JSON (with conditions over `index` only) or integers in
+  `-2..10` (with conditions over `item` and `index`).
+- `EntrySpec.when`: absent, or a `Condition` (below) in expression or template
+  form.
+- `EntrySpec.layout`: the insertion position of each control key and of `vars`
+  among the fields, drawn with `prop::sample::Index` so that the position
+  shrinks well and survives deduplication changing the field count. First,
+  middle, and last positions are all reachable.
 
-`WhenExpr` (`strategy/when_expr.rs`) is a recursive grammar of depth at most
-three: boolean literals; references to boolean or integer `vars` keys that the
-generator guarantees exist; integer comparisons (`<`, `<=`, `==`, `!=`, `>`,
-`>=`) over integer literals, integer `vars`, `index`, and, when items are
-integers, `item`; `not`; `and`; `or`. The renderer parenthesizes every
-sub-expression. The oracle `WhenExpr::holds(&Bindings) -> bool` evaluates the
-tree in Rust with MiniJinja's truthiness for integer leaves (zero is false). It
-shares no code with MiniJinja.
+A `DocumentSpec` holds up to six entries per section. The bindings a condition
+sees (`Bindings`) are modelled explicitly: the entry's `vars` values, then, for
+a foreach entry, `item` and `index` overriding them. Static entries never
+reference `item` or `index`.
+
+`Condition` (`strategy/condition.rs`) is a closed set of shapes, not a
+recursive grammar:
+
+- `Literal(b)` renders `true` or `false`;
+- `Flag(w)` renders `w0` for a boolean `vars` key;
+- `NotFlag(w)` renders `not w0`;
+- `Count(w)` renders `w1` for an integer `vars` key, testing integer
+  truthiness (zero is false);
+- `VarCmp(w, op, k)` renders, for example, `w1 < 3`;
+- `IndexCmp(op, k)` renders, for example, `index >= 2` (foreach only);
+- `ItemCmp(op, k)` renders, for example, `item != 4` (integer items only).
+
+`op` ranges over `<`, `<=`, `==`, `!=`, `>`, and `>=`, and `k` over `-2..10`.
+Every shape except `Count` also has a template form `{{ … }}`, whose rendering
+is always `true` or `false`. Variable names come from the pool `w0`–`w3`, which
+cannot collide with a MiniJinja keyword (`and`, `or`, `not`, `in`, `is`, `if`,
+`none`, `true`, `loop`, `self`). The generator only emits a reference to a name
+that the entry's bindings contain, and the coverage test checks that
+structurally, because MiniJinja's short-circuiting would otherwise hide an
+undefined name. The oracle `Condition::holds(&Bindings) -> bool` evaluates the
+shape in Rust and shares no code with MiniJinja.
 
 The expansion oracle (`property_tests/model.rs`) computes, for an `EntrySpec`,
-the expected output list by iterating the model: for each item index `i` (or
-once, for a static entry) it decides inclusion from `WhenExpr::holds`, then
-builds the expected map by walking the source keys in order, skipping control
-keys, copying fields verbatim, and building the expected `vars` as the source
-`vars` with `item` and `index` overwritten in place or appended. If the source
-has no `vars`, the expected map ends with `vars` holding only `item` then
-`index`. The oracle never calls a `Map` removal method.
+the expected output list. For each item index `i` (or once, for a static entry)
+it decides inclusion with `Condition::holds`, then builds the expected map by
+walking the source keys in order, skipping control keys, copying fields
+verbatim, and building the expected `vars` as the source `vars` with `item` and
+`index` overwritten in place or appended, for foreach entries only. If a
+foreach entry has no `vars`, the expected map ends with `vars` holding `item`
+then `index`. The oracle never calls a `Map` removal method.
 
 ### Obligations
 
-**OBL-PRESERVE** (`RM-4.3.2.a`). *Expansion copies every non-control field
-verbatim.*
+**OBL-PRESERVE** (`RM-4.3.2.a`, `C-1`). *Expansion copies every non-control
+field verbatim.*
 
-- Statement: for every generated document and every output entry derived
-  from source entry `E`, each non-control field of `E` is present with a
-  deep-equal value, no other non-control field is present, and every `vars` key
-  of `E` other than `item` and `index` keeps its value. Static entries
-  additionally keep `vars` unchanged (no `item` or `index` is injected).
+- Statement: for every generated document and every output entry derived from
+  source entry `E`, each non-control field of `E` is present with a deep-equal
+  value, no other non-control field is present, and every `vars` key of `E`
+  other than `item` and `index` keeps its value. Static entries keep `vars`
+  unchanged; no `item` or `index` is injected.
 - Method: Proptest, 128 cases.
 - Artefact:
   `src/manifest/expand/property_tests/preserve.rs::expansion_copies_every_non_control_field`.
-- Oracle: the model's expected map, compared with `pretty_assertions` output
-  on failure.
-- Evidence: passes on the fixed tree; fails under `MUT-PRESERVE`.
-- Non-vacuity: coverage classification requires static and foreach entries
-  in both sections, fields of every JSON kind including nested depth two or
-  more, Jinja-looking strings, and `vars` present and absent. Mutation
-  `MUT-PRESERVE` replaces `entry.remove("foreach")` in `expand_foreach_item`
-  with a whitelist `retain` that keeps only `name`, `command`, `vars`, and
-  `when`, which is the realistic fault of rebuilding an entry from known
-  fields; the property must fail with a shrunk entry naming a dropped field.
+- Oracle: the model's expected map, with field values compared by `==`
+  (nested order inside a field value is copied verbatim by `clone`, and no code
+  path rewrites it).
+- Non-vacuity: classification requires static and foreach entries in both
+  sections, field values of every JSON kind including nesting depth two,
+  Jinja-looking strings, `vars` present and absent, and user `vars` other than
+  `item` and `index`.
+- Mutation `MUT-PRESERVE` (realistic fault: rebuilding the entry from known
+  fields). In `expand_foreach_item`, replace
 
-**OBL-ORDER** (`FV-EXP`, `DES-ORDER`). *Expansion keeps authoring key order.*
+  ```rust
+  entry.shift_remove("foreach");
+  ```
 
-- Statement: for every output entry, its key sequence equals the source key
-  sequence with control keys deleted, followed by `vars` if the source had none.
-- Method: rstest regression cases first (EP-M1), then two Proptest
-  properties, 128 cases each, one per removal site.
+  with
+
+  ```rust
+  entry.retain(|key, _| matches!(key.as_str(), "name" | "command" | "vars" | "when"));
+  ```
+
+  Expected failure set: this property and
+  `order::foreach_removal_keeps_authoring_key_order`.
+
+**OBL-ORDER** (`FV-EXP`, `DES-ORDER`, `C-2`). *Expansion keeps authoring key
+order.*
+
+- Statement: for every output entry, its entry-level key sequence equals the
+  source key sequence with control keys deleted; for a foreach entry whose
+  source has no `vars`, `vars` follows; for a foreach entry, the `vars` key
+  sequence equals the source `vars` sequence with `item` and `index` kept in
+  place if present and otherwise appended in that order. Static entries gain no
+  keys.
+- Method: rstest regression cases first (EP-M1), then two Proptest properties,
+  128 cases each, one per removal site.
 - Artefacts: `src/manifest/expand/tests/key_order_cases.rs` (rstest, every
-  position of `when` and `foreach` in a four-field entry, both sections);
+  position of `when` in a static entry and of `foreach` in a foreach entry,
+  with four non-control fields, in both sections);
   `src/manifest/expand/property_tests/order.rs::foreach_removal_keeps_authoring_key_order`
-  (foreach entries, `when` absent) and
+  (foreach entries without `when`) and
   `…::when_removal_keeps_authoring_key_order` (static entries with `when`).
-- Evidence: the rstest cases fail on `origin/main` for every middle and first
-  position (red), pass after `shift_remove` (green). Each property fails when
-  its site is reverted to `remove`.
-- Non-vacuity: classification requires the control key at position zero, a
-  middle position, and the last position, each at least 10 times in the
-  fixed-seed run, with at least two fields after a middle position (the shape
-  `swap_remove` corrupts). Mutations `MUT-ORDER-FOREACH` and `MUT-ORDER-WHEN`
-  each restore `remove` at one site.
+- Evidence: the rstest cases with two or more fields after the control key
+  fail on `origin/main` (red) and pass after `shift_remove` (green); cases with
+  zero or one following field pass before and after, and are kept as boundary
+  witnesses.
+- Non-vacuity: classification requires, at a frequency of at least 5% of
+  generated entries per strategy, the disjoint classes "control key followed by
+  two or more keys" (the shape `swap_remove` corrupts), "followed by exactly
+  one key", and "followed by none".
+- Mutation `MUT-ORDER-FOREACH` restores `entry.remove("foreach")`; expected
+  failure set: `order::foreach_removal_keeps_authoring_key_order` and the
+  `key_order_cases` foreach cases. Mutation `MUT-ORDER-WHEN` restores
+  `map.remove("when")`; expected failure set:
+  `order::when_removal_keeps_authoring_key_order` and the `key_order_cases`
+  static cases.
 
-**OBL-WHEN-REMOVED** (`RM-4.3.2.b`). *No output entry carries a control key,
-and only included entries survive.*
+**OBL-WHEN-REMOVED** (`RM-4.3.2.b`, `C-4`). *No output entry carries a control
+key, and only included entries survive.*
 
-- Statement: for every generated document with mixed static and foreach
-  entries in both sections, every output object lacks `when` and `foreach`, and
-  the number of outputs per section equals the oracle's count.
+- Statement: for every generated document mixing static and foreach entries in
+  both sections, every output object lacks `when` and `foreach`, and the number
+  of outputs per section equals the oracle's count.
 - Method: Proptest, 128 cases.
 - Artefact:
   `src/manifest/expand/property_tests/when_removed.rs::no_expanded_entry_carries_a_control_key`.
-- Evidence: fails under `MUT-WHEN-KEEP`.
-- Non-vacuity: classification requires, per section, entries whose `when`
-  held, entries whose `when` failed, and entries with no `when`. Mutation
-  `MUT-WHEN-KEEP` reads the condition with `map.get("when").cloned()` in
-  `when_allows` instead of removing it.
+- Non-vacuity: classification requires, per section, entries whose condition
+  held, entries whose condition failed, and entries with no condition.
+- Mutation `MUT-WHEN-KEEP` changes the first line of `when_allows` from
+  `let Some(when_val) = map.shift_remove("when") else {` to
+  `let Some(when_val) = map.get("when").cloned() else {`. Expected failure set:
+  this property, `preserve::expansion_copies_every_non_control_field`,
+  `order::when_removal_keeps_authoring_key_order`, and the existing removal
+  checks in the relocated generated tests.
 
-**OBL-INJECT** (`RM-4.3.2.c`). *Each generated entry carries its own `item` and
-`index`.*
+**OBL-INJECT** (`RM-4.3.2.c`, `C-3`). *Each generated entry carries its own
+`item` and `index`.*
 
 - Statement: for a foreach entry over items `x₀ … xₙ₋₁` and condition `P`,
-  the outputs are exactly the entries for `i` in ascending order such that
-  `P(xᵢ, i)` holds, and output `k` has `vars.item` deep-equal to `xᵢ` and
-  `vars.index` equal to `i` as a `u64`, overriding any user `item` or `index`
-  while keeping other user `vars`.
-- Method: Proptest, 128 cases, over two item domains: arbitrary JSON with
-  conditions over `index`, and integers with conditions over `item` and `index`.
+  written as an inline array or as the equivalent list-literal string, the
+  outputs are exactly the entries for `i` in ascending order such that
+  `P(xᵢ, i)` holds; output `k` has `vars.item` deep-equal to `xᵢ` (floats also
+  equal by `to_bits()`) and `vars.index` equal to `i` as a `u64`, overriding
+  any user `item` or `index` while keeping other user `vars`.
+- Method: Proptest, 128 cases, over the two item domains and both `foreach`
+  forms.
 - Artefact:
   `src/manifest/expand/property_tests/inject.rs::each_expansion_carries_its_own_item_and_index`.
-- Evidence: fails under `MUT-INDEX`.
-- Non-vacuity: classification requires empty foreach, all-excluded,
-  all-included, and mixed outcomes; every JSON item kind; and user `vars`
-  colliding on `item` and on `index`. Mutation `MUT-INDEX` passes
-  `expanded.len()` (the count of kept entries) instead of the enumeration
-  index, which is the realistic renumbering fault; it is caught only on mixed
-  outcomes, which classification guarantees.
+- Non-vacuity: classification requires empty `foreach`, all-excluded,
+  all-included, and the class "some excluded item precedes an included one"
+  (the only shape on which renumbering is visible, because a prefix-shaped
+  selection such as `index < k` keeps renumbered and true indexes equal); every
+  JSON item kind, including top-level `null` items in the string form; and user
+  `vars` colliding on `item` and on `index`.
+- Mutation `MUT-INDEX` (realistic fault: numbering kept entries rather than
+  iteration positions). In `expand_foreach_target`, change
 
-**OBL-INJECT-EXPR** (`RM-4.3.2.c`). *A Jinja list-literal `foreach` expands
-exactly as the equivalent inline array.*
+  ```rust
+  for (index, item) in iter.enumerate() {
+      let foreach_item = ForeachItem {
+          source: map,
+          item: &item,
+          index,
+      };
+  ```
 
-- Statement: for items drawn from the subset with a Jinja literal spelling
-  (`none`, booleans, integers, strings without quotes or backslashes, and
-  nested lists of these), expanding `foreach: "[…]"` yields a document equal to
-  expanding `foreach: […]`.
-- Method: Proptest, 128 cases. This is a metamorphic relation: neither side
-  is trusted, but they take different production paths (`Value::from_serialize`
-  versus `compile_expression` and evaluation).
-- Artefact:
-  `src/manifest/expand/property_tests/inject.rs::expression_foreach_matches_inline_foreach`.
-- Evidence: fails under `MUT-INLINE-NULL`.
-- Non-vacuity: classification requires `none` items, nested lists, and empty
-  lists. Mutation `MUT-INLINE-NULL` drops `null` elements on the inline-array
-  path only.
+  to
 
-**OBL-STATIC-WHEN** (`RM-4.3.2.d`). *A static entry survives exactly when its
-condition holds, and the report counts every exclusion.*
+  ```rust
+  for item in iter {
+      let foreach_item = ForeachItem {
+          source: map,
+          item: &item,
+          index: expanded.len(),
+      };
+  ```
+
+  The renumbered index reaches the cardinality check, the condition, and the
+  injected `vars`. Expected failure set: this property, the relocated
+  threshold-filtering and budget properties, and any example test that filters
+  before an included item.
+
+**OBL-STATIC-WHEN** (`RM-4.3.2.d`, `C-4`). *A static entry survives exactly
+when its condition holds, and the report counts every exclusion.*
 
 - Statement: for every document of static entries in both sections, an entry
-  is in the output if and only if it has no `when` or its `WhenExpr` holds over
-  its own `vars`; `report.stats.filtered_targets` and `filtered_actions` equal
-  the oracle's exclusion counts; and every retained `FilteredEntry` for a
+  is in the output if and only if it has no condition or its `Condition` holds
+  over its own `vars`; `report.stats.filtered_targets` and `filtered_actions`
+  equal the oracle's exclusion counts; and every retained `FilteredEntry` for a
   static entry has `iteration_index == None`.
-- Method: Proptest, 128 cases, with both expression and template forms.
+- Method: Proptest, 128 cases, with both condition forms.
 - Artefact:
   `src/manifest/expand/property_tests/static_when.rs::static_entries_survive_exactly_when_their_condition_holds`.
-- Evidence: fails under `MUT-STATIC-LEAK`.
-- Non-vacuity: classification requires held and failed conditions in both
-  forms and both sections, and conditions reading `vars`. Mutation
-  `MUT-STATIC-LEAK` makes the `Exclude` arm of `expand_static_target` return
-  the entry instead of dropping it.
+- Non-vacuity: classification requires held and failed conditions in each form
+  and each section, and conditions reading `vars`.
+- Mutation `MUT-STATIC-LEAK` (realistic fault: an excluded entry leaking
+  through). In `expand_static_target`, change the `Exclude` arm's
+  `Ok(Vec::new())` to `Ok(vec![ManifestValue::Object(map)])`, keeping the
+  `record_filtered_entry` call so that `event` stays used. Expected failure
+  set: this property and
+  `when_removed::no_expanded_entry_carries_a_control_key` (the counts).
 
-**OBL-STATIC-WHEN-E2E** (`RM-4.3.2.d`, `DES-FOREACH`). *The typed manifest
-holds exactly the selected static targets.*
+**OBL-GEN**. *Each generator reaches every class its properties depend on.*
 
-- Statement: for generated YAML manifests of static targets with `name`,
-  `command`, optional `vars`, and optional `when`, loaded through
-  `manifest::from_str_with_env` with an injected `EnvReader` that reports every
-  variable absent, the loaded `NetsukeManifest` target names equal the oracle's
-  selection, in order.
-- Method: Proptest, 32 cases (each case runs the whole loader).
+- Statement: for each strategy that a property uses, a fixed-seed run of 512
+  draws classifies every draw, and each class listed in the non-vacuity entries
+  above reaches at least 5% of draws. At that frequency, the chance that a
+  128-case random-seed run of the property never meets a class is below 0.2%.
+  Every condition's free names are contained in its bindings.
+- Method: a `TestRunner` built with
+  `ProptestConfig { rng_seed: RngSeed::Fixed(COVERAGE_SEED), .. }`, following
+  the `coverage_runner` in `src/stdlib/canonical_value/tests/properties.rs`.
+  `TestRunner::new` alone seeds from the operating system and would not be
+  reproducible.
 - Artefact:
-  `src/manifest/expand/property_tests/pipeline.rs::typed_manifest_holds_exactly_the_selected_static_targets`.
-- Evidence: fails under `MUT-STATIC-LEAK` applied by hand; no separate patch
-  is committed, because the contract registry allows one patch per stem and
-  this property's purpose is the YAML-to-typed-AST connection, not a distinct
-  fault.
-- Non-vacuity: classification requires selected and unselected targets and
-  at least one manifest whose selection is empty.
-
-**OBL-GEN**. *The generators reach every class the obligations name.*
-
-- Statement: over a fixed-seed run of 512 generated documents, each class
-  listed in the non-vacuity entries above appears at least 10 times, and no
-  generated condition references an undefined name.
-- Method: a `TestRunner` with `RngSeed::Fixed`, following
-  `src/stdlib/canonical_value/tests/properties.rs` (`coverage_runner`).
-- Artefact:
-  `src/manifest/expand/property_tests/strategy/coverage.rs::generator_reaches_every_material_class`.
-- Evidence: the test prints per-class counts with `--nocapture`; it fails if
+  `src/manifest/expand/property_tests/coverage.rs::generators_reach_every_material_class`.
+- Evidence: the test prints per-class counts under `--no-capture` and fails if
   any class falls below threshold.
-- Non-vacuity: a negative control in the same module forces the position
-  strategy to `Just(fields.len())` and asserts that the middle-position class
-  is then unreached, proving the classifier can report a miss.
+- Non-vacuity: a negative control in the same module,
+  `the_threshold_check_reports_an_unreached_class`, feeds the same threshold
+  check a strategy whose layout is forced to the last position and asserts that
+  the check returns an error naming the "two or more following keys" class.
 
 ### Residual gaps
 
-- Query mode (`Conditional` and the synthetic `conditional` key) is outside
-  the domain; existing tests in `action_condition_cases.rs` cover it.
-- Error paths are not generated beyond what existing tests cover. In
-  particular `expand_section` takes the section array with `std::mem::take`, so
-  a failed expansion leaves that section empty in the caller's document. The
-  loader discards the document on error, so this is not user-visible; ADR-0068
-  records it as outside the contract.
+- Query mode (`Conditional` and the synthetic `conditional: true`) is outside
+  the domain; `src/manifest/expand/tests/action_condition_cases.rs` covers it.
+- Error-path document state is outside the contract: `expand_section` takes
+  the section array with `std::mem::take`, so a failed expansion leaves that
+  section empty in the caller's document. The loader discards the document on
+  error, so this is not user-visible.
+- A static entry whose `vars` is not an object gets an empty condition context
+  rather than an error. This plan records the behaviour in clause `C-4` and
+  does not change it; changing it would be a production change.
 - `foreach` expressions over globals, `glob()`, and stdlib calls are not
   generated.
+- Sorted keys inside an object `item` are evaluator behaviour, recorded in
+  `C-3`, not tested as an order property.
 - MiniJinja and `serde_json` internals are trusted through the axioms.
 
 ## Plan of work
 
 Stage A (EP-M0) answers the open questions with throwaway probes. Stage B
-(EP-M1) writes the contract record, proves the key-order defect red, and fixes
-it. Stage C (EP-M2 to EP-M5) builds the shared generator and oracle, then one
-obligation group per milestone, each with its mutation patch. Stage D (EP-M6)
-adds the snapshot, the behavioural scenario if warranted, the documentation,
-and the roadmap update, then runs the full gate set.
+(EP-M1) proves the key-order defect red at unit and behavioural level and fixes
+it. Stage C (EP-M2 and EP-M3) lifts the shared JSON strategy, relocates the
+existing generated tests into the new suite, and adds the generators, oracles,
+coverage test, properties, and mutation patches. Stage D (EP-M4) adds the
+unhappy-path rstest table, the remaining behavioural scenarios, the
+documentation, and the roadmap update, then runs the closure gates.
 
 ### Files to create
 
 ```plaintext
-docs/adrs/adr-0068-manifest-expansion-invariant-contract.md
+src/json_value_strategy_test_support.rs
 src/manifest/expand/tests/key_order_cases.rs
-src/manifest/expand/tests/snapshots/… (insta, one file)
+src/manifest/expand/tests/when_type_cases.rs
 src/manifest/expand/property_tests/mod.rs
 src/manifest/expand/property_tests/support.rs
 src/manifest/expand/property_tests/model.rs
 src/manifest/expand/property_tests/strategy/mod.rs
-src/manifest/expand/property_tests/strategy/json.rs
-src/manifest/expand/property_tests/strategy/when_expr.rs
-src/manifest/expand/property_tests/strategy/coverage.rs
+src/manifest/expand/property_tests/strategy/condition.rs
+src/manifest/expand/property_tests/coverage.rs
 src/manifest/expand/property_tests/preserve.rs
 src/manifest/expand/property_tests/order.rs
 src/manifest/expand/property_tests/when_removed.rs
 src/manifest/expand/property_tests/inject.rs
 src/manifest/expand/property_tests/static_when.rs
-src/manifest/expand/property_tests/pipeline.rs
+tests/data/when_middle_unknown_field.yml
+tests/data/static_when.yml
+tests/data/when_not_string.yml
 docs/verification/mutations/
   manifest__expand__property_tests__preserve__expansion_copies_every_non_control_field.patch
   manifest__expand__property_tests__order__foreach_removal_keeps_authoring_key_order.patch
   manifest__expand__property_tests__order__when_removal_keeps_authoring_key_order.patch
   manifest__expand__property_tests__when_removed__no_expanded_entry_carries_a_control_key.patch
   manifest__expand__property_tests__inject__each_expansion_carries_its_own_item_and_index.patch
-  manifest__expand__property_tests__inject__expression_foreach_matches_inline_foreach.patch
   manifest__expand__property_tests__static_when__static_entries_survive_exactly_when_their_condition_holds.patch
 ```
 
-If EP-M0 confirms a user-visible diagnostic difference, also create
-`tests/data/when_middle_unknown_field.yml` and one scenario in
-`tests/features/manifest.feature`.
+### Files to move
+
+```plaintext
+src/manifest/expand/tests/property_cases.rs
+  -> src/manifest/expand/property_tests/expansion_report.rs
+src/manifest/expand/tests/foreach/property_cases.rs
+  -> src/manifest/expand/property_tests/foreach_sequences.rs
+```
 
 ### Files to edit
 
 - `src/manifest/expand/mod.rs`: `shift_remove` for `foreach`; declare
   `#[cfg(test)] mod property_tests;` beside `mod tests;`.
 - `src/manifest/expand/evaluation.rs`: `shift_remove` for `when`.
-- `src/manifest/expand/tests/mod.rs`: declare `mod key_order_cases;`.
-- `tests/kani_mutation_evidence_tests/contracts.rs`: add seven stems to
-  `SUPPLEMENTAL_PROPERTY_PATCHES`, keeping the list sorted.
-- `docs/netsuke-design.md`: cite ADR-0068 from the `ManifestMap` key-order
-  paragraph and from section 2.5.
+- `src/manifest/expand/tests/mod.rs` and
+  `src/manifest/expand/tests/foreach/mod.rs`: declare the new rstest modules;
+  drop the moved `property_cases` declarations.
+- `src/lib.rs`: declare `#[cfg(test)] mod json_value_strategy_test_support;`
+  beside `snapshot_test_support`.
+- `src/shell_selection/selection/property_tests.rs`: import the lifted
+  strategy instead of its local copy.
+- `tests/kani_mutation_evidence_tests/contracts.rs`: append the six stems as a
+  `manifest__expand` group and add one sentence to the doc comment above
+  `SUPPLEMENTAL_PROPERTY_PATCHES` explaining why that family has no Kani
+  harness.
+- `tests/features/manifest.feature`: three scenarios (below).
+- `docs/netsuke-design.md`: a subsection *Expansion invariants* in section
+  2.5 stating clauses `C-1` to `C-5`, the ADR-0003 reading, and the
+  test-artefact locations; amend the `ManifestMap` paragraph to cite clause
+  `C-2`.
 - `docs/developers-guide.md`: a *Manifest expansion suites* subsection under
   *Property-based testing with proptest*, mirroring *Emission determinism
-  suites*; correct the `expand_foreach` bullet "entries without `foreach` are
-  passed through unchanged" to say that static entries lose `when` and keep
-  every other key in order.
+  suites*, including the scope and reuse policy of the lifted JSON strategy;
+  correct the `expand_foreach` bullet "entries without `foreach` are passed
+  through unchanged" to say that static entries lose `when` and keep every
+  other key in order.
 - `docs/formal-verification-methods-in-netsuke.md`: state that the four
   expansion invariants and key order now exist, and where.
-- `docs/repository-layout.md`: one entry for
-  `src/manifest/expand/property_tests/` and its test-only support scope.
-- `docs/contents.md`: index ADR-0068 and this ExecPlan.
-- `docs/users-guide.md`: one sentence, only if EP-M0 confirms a
-  user-visible diagnostic effect, stating that expansion keeps fields in
-  authoring order.
-- `CHANGELOG.md`: a `### Fixed` entry under `## Unreleased` for the key
-  order.
-- `Makefile`: refresh the census sentence above `PROPTEST_FILTER`.
+- `docs/repository-layout.md`: entries for
+  `src/manifest/expand/property_tests/` and
+  `src/json_value_strategy_test_support.rs` with their test-only scope.
+- `docs/contents.md`: index this ExecPlan.
+- `docs/users-guide.md`: one prose sentence (no new fenced example, so no
+  `tested-example` marker is needed) stating that expansion keeps fields in
+  authoring order, so an unknown-field error names the first unknown field as
+  written.
+- `CHANGELOG.md`: a `### Fixed` entry under `## Unreleased`, worded narrowly:
+  when an entry carrying `when` or `foreach` also has two or more unknown
+  fields after it, the manifest error now names the first unknown field as
+  written rather than a later one.
+- `Makefile`: rewrite the census sentence above `PROPTEST_FILTER` to name the
+  measuring command rather than a count.
 - `docs/roadmap.md`: mark 4.3.2 and its sub-items done with a completion
   note, following the 4.3.1 entry's shape.
+
+The regenerated `typos.toml` that `make spelling` produced on this branch is
+unrelated to this item. It is committed alone as the branch's first commit, so
+it can be offered as a separate base pull request with this work stacked on it,
+as `AGENTS.md` requires.
 
 ## Milestones and plateaus
 
@@ -715,22 +897,23 @@ Outcome: answers to these questions, recorded in `Surprises & discoveries` and
 1. Does a scratch rstest show `name, when, command, after` expanding to
    `name, after, command` on the current tree? (Expected yes.)
 2. Through `manifest::from_str_with_env`, does a target written
-   `name, when: "true", zz_first: 1, command, zz_last: 2` report an
-   unknown-field error naming `zz_last` before the fix and `zz_first` after?
-   Repeat for an action. A yes means the defect is user-visible and EP-M6 adds
-   the behavioural scenario and the users' guide sentence.
-3. For each `WhenExpr` form, does MiniJinja take the expression path or the
-   template fallback, and does its verdict match the Rust oracle on 1,000
-   generated cases? Confirm that `{{ … }}` fails `compile_expression`.
-4. Does `serde_json::to_value(Value::from_serialize(x)) == x` hold for
-   1,000 generated JSON values and for the boundary values `i64::MIN`,
-   `i64::MAX`, `u64::MAX`, `-0.0`, `f64::MIN_POSITIVE`, and `5e-324`? Which of
-   those can `serde_saphyr` actually produce from YAML text?
-5. What is the per-case cost of expansion-level and pipeline-level
-   properties? Choose case counts that keep the suite under the runtime
-   tolerance.
-6. What is the smallest YAML that `from_str_with_env` accepts for a static
-   target (including the `netsuke_version` field)?
+   `name, when: "true", zz_first: 1, command, zz_last: 2` fail with a message
+   containing `zz_last` before the fix? Repeat for an action. (Expected yes, by
+   the codebase review's reading of serde's flatten path.)
+3. For each `Condition` shape and form, does MiniJinja's verdict match
+   `Condition::holds` on 1,000 generated bindings, and does every template form
+   take the fallback path?
+4. Is `vars.item` deep-equal to the source item, with floats also compared by
+   `to_bits()`, for 1,000 generated JSON values and for `i64::MIN`, `i64::MAX`,
+   `u64::MAX`, `-0.0`, `f64::MIN_POSITIVE`, and `5e-324`, on both the
+   inline-array path and the list-literal string path? Which of those can
+   `serde_saphyr` produce from YAML text?
+5. What is the per-case wall time of an expansion-level property? Confirm 128
+   cases keeps the suite within the runtime tolerance.
+6. Is there a reachable production constructor for the expansion
+   environment? If not, `support::strict_environment()` builds
+   `Environment::new()` with `UndefinedBehavior::Strict`, and the behavioural
+   scenarios are the check on the production environment.
 
 Requirements and gaps: none discharged; de-risks every obligation. Acceptance:
 each answer recorded with the command and output that produced it. Conformance
@@ -743,138 +926,159 @@ check:
 Recovery: probes live in a scratch module that `git checkout --` removes.
 Remaining gaps: everything else. Compatibility decision: none.
 
-### EP-M1 — contract record and key-order fix
+### EP-M1 — key-order fix
 
-Outcome: ADR-0068 written with status *Proposed*; the rstest regression module
-`key_order_cases.rs` committed red-then-green; both removal sites use
-`shift_remove`; the design document cites the ADR; `CHANGELOG.md` records the
-fix.
-
-ADR-0068 states the contract in numbered clauses so properties can cite them:
-`C-1` non-control fields are copied verbatim; `C-2` key order is the source
-order minus control keys, with injected `vars` appended; `C-3` `item` and
-`index` precedence and types; `C-4` `when` is evaluated over the entry's `vars`
-plus iteration values and then removed, for static and foreach entries in both
-sections; `C-5` query mode and error-path document state are outside the
-contract. It records the ADR-0003 reading and the rejection of Kani and Verus
-with reasons.
+Outcome: `key_order_cases.rs` and the key-order behavioural scenario committed
+red-then-green; both removal sites use `shift_remove`; the inventory of other
+`serde_json::Map::remove` sites recorded in `Decision log`; the `CHANGELOG.md`
+entry and the users' guide sentence written; the design document's clause `C-2`
+drafted.
 
 Red-Green-Refactor:
 
-- Red: add `key_order_cases.rs` with an rstest table over every position of
-  `when` (static entry) and `foreach` (foreach entry) in a four-field entry, in
-  both sections, asserting the key sequence with googletest
-  `assert_that!(keys, elements_are![…])`. Run it and see the first and middle
-  positions fail with the swapped order.
-- Green: change the two `remove` calls to `shift_remove`. Run the module and
-  see every case pass.
+- Red: add `key_order_cases.rs`, an rstest table over every position of
+  `when` (static entry) and `foreach` (foreach entry) among four non-control
+  fields in both sections, asserting the key sequence with googletest
+  `assert_that!(keys, elements_are![…])` and, for the `vars` sequence,
+  `pretty_assertions::assert_eq!` on `Vec<&str>`. Add an rstest case that shows
+  two maps with swapped keys compare equal (`AXIOM-MAP-EQ`). Add
+  `tests/data/when_middle_unknown_field.yml` and this scenario:
+
+  ```gherkin
+  Scenario: Parsing names the first unknown field in authoring order
+    Given the manifest file "tests/data/when_middle_unknown_field.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "unknown field `zz_first`"
+  ```
+
+  Run both; see the cases with two or more following fields fail with the
+  swapped order, and the scenario fail because the message names `zz_last`.
+- Green: change the two `remove` calls to `shift_remove`. Run both again and
+  see every case and the scenario pass.
 - Refactor: none expected; run the whole expansion test tree.
 
-Acceptance: the focused command in `Concrete steps` shows the red failure, then
-the pass; `make check-fmt`, `make typecheck`, `make lint`, and `make test`
-pass. Conformance check:
+Acceptance: the focused commands in `Concrete steps` show the red failures,
+then the passes; the full gate set passes (see `Validation and acceptance`).
+Conformance check:
 
-- `DES-ORDER` now holds on the tested shapes.
+- `DES-ORDER` and clause `C-2` hold on the tested shapes.
 - Only the two permitted production lines changed.
 - No interface, dependency, or persisted-format change.
-- Trace link `FV-EXP -> DES-ORDER -> EP-M1` current.
+- Trace link `FV-EXP -> DES-ORDER -> C-2 -> EP-M1` current.
 
 Recovery: revert the milestone's commits; nothing else depends on them yet.
 Remaining gaps: generated coverage of every obligation. Compatibility decision:
-none. Key order inside the in-memory manifest value is not a persisted or wire
-format.
+none. Key order inside the in-memory manifest value is neither a persisted nor
+a wire format, and the only user-visible effect is a diagnostic's choice of
+field.
 
-### EP-M2 — shared generator, oracle, and coverage
+### EP-M2 — shared test support and relocation (refactor)
 
-Outcome: `property_tests/{mod,support,model}.rs` and `strategy/` exist; the
-`WhenExpr` oracle has rstest witness cases (one per operator and form,
-including integer truthiness of zero); `OBL-GEN` passes with its negative
-control.
+Outcome, in two atomic refactor commits:
 
-Acceptance: `make proptest` lists
-`manifest::expand::property_tests::strategy::coverage::generator_reaches_every_material_class`
-and it passes; the four gates pass. Conformance check: no production change;
-generator classes match the obligation list; abstraction scope recorded in the
-developers' guide draft. Recovery: the module is additive; delete the directory
-and its declaration. Remaining gaps: the properties themselves. Compatibility
-decision: none.
+1. `json_values()` and `json_kind()` move from
+   `src/shell_selection/selection/property_tests.rs` to
+   `src/json_value_strategy_test_support.rs`, unchanged except that the string
+   leaf becomes a parameter. The shell-selection suite passes before and after.
+2. The two `property_cases` modules move into
+   `src/manifest/expand/property_tests/` as `expansion_report.rs` and
+   `foreach_sequences.rs` with `git mv`, changing only their imports, so
+   `make proptest` now selects them.
+   `foreach_preserves_generated_source_key_order` stays until EP-M3 lands
+   `OBL-ORDER`, then is retired in that milestone.
 
-### EP-M3 — preservation and order properties
+Acceptance: `make proptest` lists the relocated tests under
+`manifest::expand::property_tests`; the full gate set passes. Conformance
+check: no production change; no test body changed; the lifted strategy's scope
+recorded in the developers' guide draft. Recovery: each commit reverts
+independently. Remaining gaps: the new properties. Compatibility decision: none
+(test-only surfaces).
 
-Outcome: `preserve.rs` and `order.rs` with their three properties; the three
-mutation patches committed and registered.
+### EP-M3 — generators, oracles, coverage, and properties
 
-Acceptance: each property passes; applying each of `MUT-PRESERVE`,
-`MUT-ORDER-FOREACH`, and `MUT-ORDER-WHEN` makes exactly its named property fail
-with a shrunk counter-example (record the shrunk input); the four gates pass,
-including the mutation-registry contract under `make test`. Conformance check:
-trace links for `RM-4.3.2.a` and `DES-ORDER` current; no production change.
-Recovery: revert the milestone commit. Remaining gaps: `RM-4.3.2.b` to
-`RM-4.3.2.d`. Compatibility decision: none.
+Outcome: `property_tests/{mod,support,model,coverage}.rs`, `strategy/`, and the
+five property modules; condition-shape witness cases (one rstest case per
+shape, operator, and form, including integer truthiness of zero); the six
+mutation patches committed and registered; the vacuous key-order property
+retired.
 
-### EP-M4 — injection properties
+Order of work, for each obligation: write the mutation patch; write the
+property; apply the patch and watch the property fail for the intended reason,
+recording the shrunk input and the failure set; revert and watch it pass. Run
+mutation runs with `PROPTEST_DISABLE_FAILURE_PERSISTENCE=1`. If a property
+fails on unmutated code, stop: that is a production defect (see Tolerances);
+commit its regression seed under `proptest-regressions/` and promote the shrunk
+case to a named rstest before escalating.
 
-Outcome: `inject.rs` with `OBL-INJECT` and `OBL-INJECT-EXPR`; patches
-`MUT-INDEX` and `MUT-INLINE-NULL` committed and registered.
+Acceptance: `make proptest` passes; `make test-kani-mutations` passes; each
+patch's failure set matches the expected set in `Verification plan`, or the
+difference is recorded and explained; the full gate set passes. Conformance
+check: trace links for `RM-4.3.2.a` to `RM-4.3.2.d` and `DES-ORDER` current; no
+production change; no visibility widened. Recovery: revert the milestone
+commits; EP-M2 stands on its own. Remaining gaps: unhappy paths, behavioural
+scenarios, documentation. Compatibility decision: none.
 
-Acceptance and conformance as EP-M3, for `RM-4.3.2.c`. Recovery: revert the
-milestone commit. Remaining gaps: `RM-4.3.2.b` and `RM-4.3.2.d`. Compatibility
-decision: none.
+### EP-M4 — unhappy paths, scenarios, documentation, and closure
 
-### EP-M5 — condition properties
+Outcome:
 
-Outcome: `when_removed.rs`, `static_when.rs`, and `pipeline.rs`; patches
-`MUT-WHEN-KEEP` and `MUT-STATIC-LEAK` committed and registered;
-`MUT-STATIC-LEAK` also shown, by hand, to fail the pipeline property.
+- `when_type_cases.rs`: an rstest table over non-string `when` values (YAML
+  boolean, integer, null, and list) in both sections and both entry kinds,
+  asserting the error contains `Field 'when' must be a string.`; plus cases for
+  an undefined name in a condition under the strict environment, asserting an
+  error rather than exclusion.
+- `tests/data/static_when.yml`, `tests/data/when_not_string.yml`, and two
+  scenarios:
 
-Acceptance and conformance as EP-M3, for `RM-4.3.2.b` and `RM-4.3.2.d`.
-Recovery: revert the milestone commit. Remaining gaps: documentation and the
-snapshot. Compatibility decision: none.
+  ```gherkin
+  Scenario: Static targets and actions honour when
+    Given the manifest file "tests/data/static_when.yml" is parsed
+    When the manifest is checked
+    Then the manifest has 2 targets
+    And the target 1 name is "kept-literal"
+    And the target 2 name is "kept-by-vars"
+    And the manifest has 1 actions
+    And the action 1 name is "kept-action"
 
-### EP-M6 — snapshot, scenario, documentation, and closure
+  Scenario: Parsing fails when a when condition is not a string
+    Given the manifest file "tests/data/when_not_string.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "Field 'when' must be a string."
+  ```
 
-Outcome: one insta snapshot test in `key_order_cases.rs`
-(`expanded_document_snapshot`) over a fixture mixing static and foreach
-entries, both sections, and control keys at middle positions, serialized as
-YAML; the behavioural scenario and users' guide sentence if EP-M0 question 2
-was answered yes; every documentation edit listed above; ADR-0068 set to
-*Accepted*; the roadmap entry marked done; this plan's `Status:` set to
-`COMPLETE` with `Outcomes & retrospective` written.
+  `static_when.yml` holds four static targets (one with `when: "true"`, one with
+  `when: "false"`, one whose `when` reads a true `vars` flag, one whose `when`
+  reads a false flag) and two static actions (one kept, one dropped). These
+  describe existing behaviour, so their red stage is a deliberate misstatement:
+  run each scenario first with the expected count off by one, see it fail on
+  the count, then correct it.
+- Every documentation edit listed above; the roadmap entry marked done; this
+  plan's `Status:` set to `COMPLETE` with `Outcomes & retrospective` written.
 
-If the scenario is warranted, it reads:
-
-```gherkin
-Scenario: Parsing names the first unknown field in authoring order after when
-  Given the manifest file "tests/data/when_middle_unknown_field.yml" is parsed
-  When the parsing result is checked
-  Then parsing the manifest fails
-  And the error message contains "zz_first"
-```
-
-Acceptance: the full gate set in `Validation and acceptance` passes.
-Conformance check: every trace link resolves to a passing test; ADR-0068 is
-indexed in `docs/contents.md` (check by set comparison, not by count); no
+Acceptance: the closure gate set in `Validation and acceptance` passes.
+Conformance check: every trace link resolves to a passing test; this ExecPlan
+is indexed in `docs/contents.md` (check by set comparison, not by count); no
 upstream assumption was falsified without an upstream edit. Recovery:
 documentation commits are independent and individually revertible. Remaining
 gaps: those listed under *Residual gaps*. Compatibility decision: none.
 
 ## Concrete steps
 
-Run every command from the repository root,
-`/home/leynos/.lody/repos/github---leynos---netsuke/worktrees/4a869f11-3ef8-4855-a172-afbc5e70fca2`
-in the authoring session, or the root of whichever checkout holds branch
-`4-3-2-manifest-expansion-invariant-proptests`. Capture long output with `tee`:
+Run every command from the root of the checkout that holds branch
+`4-3-2-manifest-expansion-invariant-proptests`. Capture long output with `tee`,
+and run gates sequentially, never in parallel:
 
 ```sh
 BRANCH="$(git branch --show-current)"
-make check-fmt 2>&1 | tee "/tmp/check-fmt-netsuke-${BRANCH}.out"
-make typecheck 2>&1 | tee "/tmp/typecheck-netsuke-${BRANCH}.out"
-make lint 2>&1 | tee "/tmp/lint-netsuke-${BRANCH}.out"
-make test 2>&1 | tee "/tmp/test-netsuke-${BRANCH}.out"
+for gate in check-fmt typecheck lint doc-coverage markdownlint nixie test; do
+  make "$gate" 2>&1 | tee "/tmp/${gate}-netsuke-${BRANCH}.out" || break
+done
 ```
 
-Run the gates sequentially, never in parallel. A build that prints
-`[build-limits] … waiting for a compile slot` is queued, not hung.
+A build that prints `[build-limits] … waiting for a compile slot` is queued,
+not hung; do not kill or restart it.
 
 Focused EP-M1 red and green runs:
 
@@ -887,116 +1091,120 @@ cargo nextest run --all-features --lib \
 Expected red transcript shape (before `shift_remove`):
 
 ```plaintext
-FAIL [ … ] netsuke manifest::expand::tests::key_order_cases::when_removal_keeps_order::case_2_middle
-  Expected: has elements: "name", "command", "after"
-  Actual: ["name", "after", "command"]
+FAIL [ … ] netsuke manifest::expand::tests::key_order_cases::static_when_removal_keeps_order::case_2
+  Value of: keys
+  Expected: has elements: "name", "command", "after", "phony"
+  Actual: ["name", "phony", "after", "command"]
 ```
 
-Focused suite and mutation runs:
+Focused property and mutation runs:
 
 ```sh
 make proptest 2>&1 | tee "/tmp/proptest-netsuke-${BRANCH}.out"
 PATCH=docs/verification/mutations/manifest__expand__property_tests__order__when_removal_keeps_authoring_key_order.patch
 git apply "$PATCH"
-cargo nextest run --all-features --lib \
-  -E 'test(/property_tests::order::when_removal_keeps_authoring_key_order$/)' \
+PROPTEST_DISABLE_FAILURE_PERSISTENCE=1 cargo nextest run --all-features --lib \
+  -E 'test(/manifest::expand::/)' --no-fail-fast \
   2>&1 | tee "/tmp/mutation-netsuke-${BRANCH}.out"
 git apply -R "$PATCH"
+git status --short proptest-regressions/ src/
 ```
 
-Expected: the property fails with `minimal failing input` naming an entry whose
-control key sits before at least two fields; after `git apply -R` it passes.
-Persisting the mutation run's seed is not wanted: delete any
-`proptest-regressions/` file the mutation run creates before committing.
-
-ADR-number re-check before the first push (needs a fetched remote):
-
-```sh
-for ref in $(git for-each-ref --format='%(refname)' refs/remotes/origin); do
-  git ls-tree -r --name-only "$ref" -- docs/ | grep -oE 'adr-[0-9]{3,4}-' | sort -u \
-    | sed "s|\$| ${ref#refs/remotes/origin/}|"
-done | sort -u | awk '$1 >= "adr-0060-"'
-```
+Expected: the failure set includes
+`order::when_removal_keeps_authoring_key_order`, whose `minimal failing input`
+shows a static entry with `when` followed by two fields; after `git apply -R`,
+`git status` shows no residue.
 
 ## Validation and acceptance
 
 Acceptance is behavioural:
 
-1. `make proptest` selects nine new tests under
-   `manifest::expand::property_tests` (eight properties and the coverage test)
-   and all pass.
-2. For each of the seven committed patches, applying it makes exactly the
-   named property fail with a shrunk counter-example, and reverting it makes
-   the property pass. Record each shrunk input in `Artefacts and notes`.
-3. The EP-M1 rstest module fails before the fix and passes after, as
-   transcribed.
-4. The coverage test reports every class at or above threshold, and its
-   negative control reports the forced miss.
-5. If warranted, the behavioural scenario fails before the fix (the error
-   names `zz_last`) and passes after.
+1. `make proptest` selects the tests under `manifest::expand::property_tests`
+   (the six properties, the coverage test and its negative control, the
+   condition-shape witnesses, and the relocated generated tests) and all pass.
+2. For each of the six committed patches, applying it makes the named
+   property fail with a shrunk counter-example, and reverting it makes the
+   property pass. Record each failure set and shrunk input in
+   `Artefacts and notes`.
+3. The EP-M1 rstest cases with two or more following fields and the key-order
+   scenario fail before the fix and pass after, as transcribed.
+4. The coverage test reports every class at or above 5%, and its negative
+   control reports the forced miss.
+5. The two EP-M4 scenarios pass, after a recorded deliberate-misstatement red
+   run.
 
 Quality criteria:
 
-- Tests: `make test` passes, including
-  `tests/kani_mutation_evidence_tests` and
-  `tests/execplan_status_contract_tests.rs`.
-- Verification: every obligation above discharged with its evidence and
-  non-vacuity record; residual gaps stated.
-- Lint and typecheck: `make check-fmt`, `make typecheck`, `make lint`, and
-  `make doc-coverage` pass.
+- Tests: `make test` passes, including `tests/kani_mutation_evidence_tests`,
+  `tests/hashmap_boundary`, and `tests/execplan_status_contract_tests.rs`
+  (which reads this file).
+- Verification: every obligation discharged with its evidence and non-vacuity
+  record; residual gaps stated.
+- Formatting, lint, and types: `make check-fmt`, `make typecheck`,
+  `make lint`, and `make doc-coverage` pass.
 - Documentation: `make markdownlint` (which runs `make spelling`) and
   `make nixie` pass.
-- Mutation compile check: `make test-kani-mutations` passes once, at EP-M6.
-- Performance: the new suite's test time, read from the nextest log, stays
-  within the runtime tolerance.
+- Mutation compile check: `make test-kani-mutations` passes at EP-M3 and at
+  closure.
+- Makefile: `mbake validate Makefile` and `make test-workflow-contracts` pass
+  at EP-M4, because the Python contract suites parse the `Makefile` comment
+  block this plan edits.
+- Performance: the suite's wall time, read from the `make proptest` log,
+  stays within the runtime tolerance.
 
-Quality method: run `make check-fmt`, `make typecheck`, `make lint`, and
-`make test` at the end of every milestone, sequentially, through the
-`scrutineer` agent where available. Add `make markdownlint`, `make nixie`, and
-`make doc-coverage` whenever documentation or Rust doc comments change, and
-`make proptest` at EP-M2 onwards. `make test-workflow-contracts` is not
-required, because no workflow or workflow-contract suite changes; an edit to
-this ExecPlan is still exercised by `make test`.
+Quality method: at the end of every milestone, run `make check-fmt`,
+`make typecheck`, `make lint`, `make doc-coverage`, `make markdownlint`,
+`make nixie`, and `make test`, sequentially, through the `scrutineer` agent
+where available. Every milestone edits this ExecPlan, and `make test` reads it,
+so no milestone qualifies for a documentation-only gate set. Within a
+milestone, use focused `cargo nextest run -E` invocations and `make proptest`
+to iterate.
 
 ## Idempotence and recovery
 
 Every step is re-runnable. Mutation patches are applied and reverted with
 `git apply` and `git apply -R`; if a run is interrupted mid-mutation,
 `git diff --stat src/` shows the residue and `git checkout -- src/` clears it
-(commit first so nothing else is lost). Proptest regression files created by
-mutation runs must be deleted, not committed. EP-M0 probes are never committed.
-If the ADR number collides, rename the file with `git mv` and update its
-heading and every citation as a separate commit.
+(commit first so nothing else is lost). Mutation runs disable seed persistence,
+so `git status --short proptest-regressions/` must be clean after each;
+existing tracked regression files are never deleted. EP-M0 probes are never
+committed.
 
 ## Artefacts and notes
 
 Record here, as work proceeds: the EP-M0 answers with transcripts; the EP-M1
-red and green transcripts; each mutation's shrunk counter-example; the
-coverage-class counts; the suite's measured runtime.
+red and green transcripts; each mutation's failure set and shrunk
+counter-example; the coverage-class counts; the suite's measured wall time.
 
 ## Interfaces and dependencies
 
 No production interface changes. The test-only interfaces are:
 
 ```rust
-// src/manifest/expand/property_tests/strategy/mod.rs
-pub(super) struct EntrySpec { /* section, fields, vars, foreach, when, positions */ }
-pub(super) fn entry_spec() -> impl Strategy<Value = EntrySpec>;
-pub(super) fn document_spec() -> impl Strategy<Value = DocumentSpec>;
-impl EntrySpec { pub(super) fn to_value(&self) -> ManifestValue; }
+// src/json_value_strategy_test_support.rs (crate-level, #[cfg(test)])
+pub(crate) fn json_values(strings: BoxedStrategy<String>) -> impl Strategy<Value = Value>;
+pub(crate) fn json_kind(value: &Value) -> &'static str;
 
-// src/manifest/expand/property_tests/strategy/when_expr.rs
-pub(super) enum WhenExpr {
-    Bool(bool),
-    Var(String),
-    Cmp(Operand, CmpOp, Operand),
-    Not(Box<Self>),
-    And(Box<Self>, Box<Self>),
-    Or(Box<Self>, Box<Self>),
+// src/manifest/expand/property_tests/strategy/mod.rs
+// `pub(in crate::manifest::expand::property_tests)` is written `pub(suite)` below for brevity.
+pub(suite) struct EntrySpec { /* section, fields, vars, foreach, when, layout */ }
+pub(suite) struct DocumentSpec { /* targets, actions */ }
+pub(suite) fn entry_spec(kind: EntryKind) -> impl Strategy<Value = EntrySpec>;
+pub(suite) fn document_spec() -> impl Strategy<Value = DocumentSpec>;
+
+// src/manifest/expand/property_tests/strategy/condition.rs
+pub(suite) enum Condition {
+    Literal(bool),
+    Flag(VarName),
+    NotFlag(VarName),
+    Count(VarName),
+    VarCmp(VarName, CmpOp, i64),
+    IndexCmp(CmpOp, i64),
+    ItemCmp(CmpOp, i64),
 }
-impl WhenExpr {
-    pub(super) fn render(&self, form: WhenForm) -> String;
-    pub(super) fn holds(&self, bindings: &Bindings) -> bool;
+impl Condition {
+    pub(suite) fn render(&self, form: ConditionForm) -> String;
+    pub(suite) fn holds(&self, bindings: &Bindings) -> bool;
 }
 
 // src/manifest/expand/property_tests/model.rs
@@ -1005,74 +1213,151 @@ pub(super) fn expected_outputs(spec: &EntrySpec) -> Vec<ManifestValue>;
 // src/manifest/expand/property_tests/support.rs
 pub(super) fn strict_environment() -> minijinja::Environment<'static>;
 pub(super) fn expand_document(doc: &mut ManifestValue) -> Result<ExpansionReport, TestCaseError>;
+pub(super) fn key_sequence(map: &ManifestMap) -> Vec<&str>;
 ```
 
-The exact signatures may change during EP-M2; the visibility may not exceed
-`pub(super)` within `property_tests`. The suite is test-only support owned by
-`src/manifest/expand/`; no other module may import it. A repository sweep found
-no existing JSON-value or condition-expression strategy to reuse:
-`src/ninja_gen/determinism/strategy/` generates IR graphs and
-`src/stdlib/canonical_value/tests/properties.rs` generates MiniJinja values for
-canonical keys, neither of which models manifest entries.
+The exact signatures may change during EP-M3; the visibility may not exceed the
+bounds shown. The suite is test-only support owned by `src/manifest/expand/`;
+no other module may import it. The lifted JSON strategy is the one shared item:
+any `#[cfg(test)]` code in the crate may use it, it must stay free of manifest
+knowledge, and new leaf kinds belong at the call site, not in the shared
+function. The repository sweep found `json_values()` in
+`src/shell_selection/selection/property_tests.rs`, `var_value()` in
+`src/manifest/tests/vars/reserved/property.rs`, and `member()` in
+`tests/std_filter_tests/collection_filters/compact_property.rs`; only the first
+models every JSON kind, and the third lives in an integration test crate that
+the library cannot import.
 
 Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
-`RngSeed::Fixed`), `googletest` (`assert_that!`, `elements_are!`),
-`pretty_assertions` (`assert_eq!` for map diffs in rstest cases), `insta`
-(`assert_yaml_snapshot!`), `rstest`, `rstest-bdd`, `serde_json`,
-`serde_saphyr`, and `minijinja`.
+`RngSeed::Fixed`, `prop::sample::Index`), `googletest` (`assert_that!`,
+`elements_are!`), `pretty_assertions` (`assert_eq!` for sequence diffs),
+`rstest`, `rstest-bdd`, `serde_json`, `serde_saphyr`, and `minijinja`.
 
 ## Progress
 
-- [x] (2026-10-31) Renamed the branch to
+- [x] (2026-10-31 00:40Z) Renamed the branch to
   `4-3-2-manifest-expansion-invariant-proptests`.
-- [x] (2026-10-31) Reconnaissance of expansion code, existing tests,
-  proptest infrastructure, mutation contract, and documentation.
-- [x] (2026-10-31) Identified the `swap_remove` key-order defect from the
-  locked `serde_json` source.
-- [x] (2026-10-31) Drafted this ExecPlan.
-- [ ] Expert design review and revision.
+- [x] (2026-10-31 00:55Z) Reconnaissance of expansion code, existing tests,
+  proptest infrastructure, mutation contract, and documentation, by three
+  Wyvern agents.
+- [x] (2026-10-31 01:05Z) Identified the `swap_remove` key-order defect from
+  the locked `serde_json` source.
+- [x] (2026-10-31 01:15Z) Drafted this ExecPlan.
+- [x] (2026-10-31 01:20Z) Committed the regenerated `typos.toml` alone, then
+  the draft plan.
+- [x] (2026-10-31 02:10Z) Expert design review by four reviewers (property
+  testing, codebase accuracy, process, pre-mortem); revised the plan (see the
+  revision note).
 - [ ] User approval.
-- [ ] EP-M0 to EP-M6.
+- [ ] EP-M0 feasibility probes.
+- [ ] EP-M1 key-order fix.
+- [ ] EP-M2 shared test support and relocation.
+- [ ] EP-M3 generators, oracles, coverage, and properties.
+- [ ] EP-M4 unhappy paths, scenarios, documentation, and closure.
 
 ## Surprises & discoveries
 
 - Observation: `serde_json::Map::remove` is `swap_remove` under
-  `preserve_order`, so expansion reorders keys whenever a control key is not
-  last. Evidence: `serde_json-1.0.151/src/map.rs`, lines 156–165;
+  `preserve_order`, so expansion reorders keys whenever two or more keys follow
+  a control key. Evidence: `serde_json-1.0.151/src/map.rs`, lines 156–165;
   `src/manifest/expand/mod.rs` line 242 and `src/manifest/expand/evaluation.rs`
-  line 44 call `remove`. Impact: a real violation of `DES-ORDER`; EP-M1 fixes
-  it.
-- Observation: the existing property
-  `foreach_preserves_generated_source_key_order` permutes three keys but always
-  appends `foreach` last, the one position where `swap_remove` is harmless.
-  Evidence: `src/manifest/expand/tests/foreach/property_cases.rs`. Impact: its
-  generator cannot reach the defect; `OBL-ORDER` replaces it as evidence
-  without deleting it.
-- Observation: the existing generated modules are named `property_cases`,
-  so `make proptest` does not select them. Impact: the new suite uses a
-  `property_tests` segment; relocating the old modules is out of scope.
+  line 44 call `remove`. Impact: violates `DES-ORDER`; EP-M1 fixes it.
+- Observation: `serde_json::Map` equality ignores order, so no existing
+  value-equality assertion could have caught the defect. Evidence:
+  `serde_json-1.0.151/src/map.rs`, lines 409–413, delegating to `IndexMap::eq`.
+  Impact: the key-sequence constraint.
+- Observation: MiniJinja is built without `preserve_order`, so object items
+  reach `vars.item` with sorted keys. Evidence: `Cargo.toml`, line 113;
+  `minijinja-2.24.0/src/value/mod.rs`, lines 246–247. Impact: `C-3` excludes
+  nested item order; the fidelity check uses order-insensitive equality.
+- Observation: two existing tests pass by coincidence under `swap_remove`.
+  `foreach_preserves_generated_source_key_order` always writes `foreach` last,
+  and `structure_cases.rs::expand_foreach_preserves_object_key_order` (keys
+  `name, vars, foreach, when, after`) leaves at most one key after each
+  removal. Impact: neither reaches the defect; `OBL-ORDER` supersedes the
+  first, and the second stays as a boundary example.
+- Observation: the existing generated modules are named `property_cases`, so
+  `make proptest` does not select them. Impact: EP-M2 relocates them.
 - Observation: the developers' guide says entries without `foreach` are
-  "passed through unchanged", but static entries lose `when`. Impact: EP-M6
+  "passed through unchanged", but static entries lose `when`. Impact: EP-M4
   corrects the sentence.
+- Observation: `conditional` is a real `Target` field, not only a synthetic
+  query-mode key. Evidence: `src/ast/target.rs`. Impact: it is generated as an
+  ordinary non-control field.
 
 ## Decision log
 
 - Decision: place the suite at `src/manifest/expand/property_tests/`, a
-  sibling of `tests/`. Rationale: the `property_tests` segment is required for
-  `make proptest`; a child of `expand` reaches private helpers without widening
-  visibility; the mutation registry resolves stems against
-  `src/manifest/expand/property_tests/<leaf>.rs`. Date/Author: 2026-10-31,
+  sibling of `tests/`, declared `#[cfg(test)] mod property_tests;`. Rationale:
+  the `property_tests` segment is required for `make proptest`; a child of
+  `expand` reaches private helpers and the `pub(super)` helpers in
+  `expand/tests/mod.rs` without widening visibility; the mutation registry
+  resolves stems against `src/manifest/expand/property_tests/<leaf>.rs`.
+  Date/Author: 2026-10-31, planning agent.
+- Decision: fix the key-order defect in this item, as its own atomic commit,
+  rather than defer it. Rationale: `FV-EXP` names key order as an expansion
+  invariant and the design document promises authoring order; deferring would
+  mean writing a property that encodes the defect. The pre-mortem reviewer
+  proposed a separate pull request; the fix is two lines with its own red
+  tests, so an atomic commit at the head of the stack keeps it reviewable
+  without a second pull request. Date/Author: 2026-10-31, planning agent.
+- Decision: record the expansion contract as clauses `C-1` to `C-5` in
+  `docs/netsuke-design.md` section 2.5, not in a new ADR. Rationale: the
+  clauses restate intended behaviour that the design document already claims
+  and restore one broken promise; no architecture, dependency, or public
+  interface changes. The ADR numbers above 0060 are also in flux on other
+  branches. Date/Author: 2026-10-31, planning agent, on review advice. The
+  clauses are: `C-1` non-control fields are copied verbatim; `C-2` entry-level
+  and `vars` key order is the source order minus control keys, with injected
+  keys appended, for foreach entries only; `C-3` `item` is the iteration value
+  as the evaluator returns it (sequence order preserved, object keys sorted) and
+  `index` is its zero-based `u64` position, both overriding user `vars`; `C-4`
+  `when` must be a non-empty string, is evaluated over the entry's own `vars`
+  (plus `item` and `index` for foreach entries) and is then removed, for static
+  and foreach entries in both sections, and a static entry with non-object
+  `vars` sees an empty context; `C-5` query mode and the document state after
+  an error are outside the contract.
+- Decision: use a closed set of condition shapes rather than a recursive
+  expression grammar. Rationale: the roadmap asks about expansion, not about
+  MiniJinja's evaluator; the closed set covers `vars`, iteration values,
+  integer truthiness, both forms, and mixed outcomes, with a trivial oracle and
+  no operand-returning `and`/`or` hazard. Date/Author: 2026-10-31, planning
+  agent, on review advice.
+- Decision: fold the list-literal `foreach` form into `OBL-INJECT` rather than
+  keep a separate metamorphic property. Rationale: the same oracle checks both
+  production paths, and the separate property's only mutation was contrived.
+  Date/Author: 2026-10-31, planning agent, on review advice.
+- Decision: drop the planned pipeline-level property and the insta snapshot.
+  Rationale: the property had no distinct fault and depended on ambient
+  current-directory state through standard-library registration; the
+  behavioural scenarios cover the YAML-to-typed-manifest path. The snapshot
+  would restate the key-sequence assertions, and no rendered output format is
+  at stake. Date/Author: 2026-10-31, planning agent, on review advice.
+- Decision: the red stage for property work is the mutation substitute (write
+  the patch, apply it, watch the property fail for the intended reason,
+  revert). Rationale: the properties specify behaviour that production already
+  has, apart from key order, so they cannot fail against production; a property
+  that has never been seen to fail proves nothing. Date/Author: 2026-10-31,
   planning agent.
-- Decision: fix the key-order defect in this item rather than defer it.
-  Rationale: `FV-EXP` names key order as an expansion invariant, the design
-  document promises it, and the fix is two calls with a red test; deferring
-  would mean writing a property that encodes the defect. Date/Author:
-  2026-10-31, planning agent.
-- Decision: build `ManifestValue` directly in expansion-level properties and
-  parse YAML only in the pipeline property. Rationale: YAML quoting of
-  arbitrary strings would force the generator to filter or escape, and the
-  expansion contract is stated over the parsed value. Date/Author: 2026-10-31,
-  planning agent.
+- Decision: acceptance for a mutation patch is "the named property is in the
+  failure set", with the full set recorded. Rationale: realistic faults break
+  several tests; "exactly one fails" is unachievable and would push towards
+  contrived patches. Date/Author: 2026-10-31, planning agent, on review advice.
+- Decision: lift `json_values()` into crate-level test support instead of
+  writing a second JSON strategy. Rationale: `AGENTS.md` requires reuse of an
+  existing equivalent; the function already covers every JSON kind with bounded
+  recursion. Date/Author: 2026-10-31, planning agent, on review advice.
+- Decision: relocate the existing `property_cases` modules into the suite,
+  and retire `foreach_preserves_generated_source_key_order` once `OBL-ORDER`
+  lands. Rationale: relocation makes `make proptest` select them without
+  changing a test body; the retired property's domain (six permutations of
+  three keys with `foreach` last) is a strict subset of `OBL-ORDER`'s, and its
+  generator cannot reach the defect. Date/Author: 2026-10-31, planning agent.
+- Decision: build `ManifestValue` directly in expansion-level properties.
+  Rationale: YAML quoting of arbitrary strings (including `{{ … }}`, which YAML
+  reads as a flow mapping) would force the generator to escape or filter; the
+  contract is stated over the parsed value. Date/Author: 2026-10-31, planning
+  agent.
 - Decision: use a strict-undefined MiniJinja environment in properties.
   Rationale: production uses `UndefinedBehavior::Strict`; a generator bug that
   references an undefined name then fails loudly instead of evaluating to
@@ -1081,16 +1366,38 @@ Dependencies used, all existing: `proptest` (strategies, `TestRunner`,
   selection*. Date/Author: 2026-10-31, planning agent.
 - Decision: no OrthoConfig change. Rationale: the item adds no configuration,
   flag, or help text. Date/Author: 2026-10-31, planning agent.
-- Decision: provisionally take ADR-0068. Rationale: a sweep of every remote
-  branch on 2026-10-31 found 0059 on `main`, 0060 on many branches, and
-  0061–0067 on `20-1-1-ratify-progressive-enhancement-contracts`; 0061 is also
-  on `issue-946-…`. No prose reservation of 0068 exists. Date/Author:
-  2026-10-31, planning agent.
-- Decision: keep the existing `property_cases.rs` modules unchanged.
-  Rationale: they pin budget and filtering-report behaviour that this suite
-  does not restate; deleting readable specification is forbidden by the
-  constraints. Date/Author: 2026-10-31, planning agent.
+- Decision: commit the regenerated `typos.toml` alone as the branch's first
+  commit. Rationale: `make spelling` regenerated it from the pinned builder;
+  the change is unrelated to this item, and `AGENTS.md` asks for it to be
+  offered as a separate base pull request. Date/Author: 2026-10-31, planning
+  agent.
 
 ## Outcomes & retrospective
 
 Not yet started.
+
+## Revision note
+
+2026-10-31, after expert design review. Four reviewers (property testing,
+codebase accuracy, process compliance, and pre-mortem) found two blockers and a
+dozen major issues. Changes:
+
+- Restated `AXIOM-MJ-SERDE` (MiniJinja sorts map keys) and added
+  `AXIOM-MAP-EQ` (map equality ignores order), with a constraint that order is
+  asserted on key sequences.
+- Replaced the recursive condition grammar with a closed set of shapes, with
+  a keyword-free variable pool and structural free-name checks.
+- Fixed the mutation patches so that they compile under denied warnings,
+  re-targeted `MUT-INDEX` at the renumbering fault with its true detection
+  class, and changed acceptance to failure sets.
+- Corrected the order oracle for static entries and added `vars` to the
+  generated layout.
+- Dropped ADR-0068, `OBL-INJECT-EXPR` as a separate property, the pipeline
+  property, and the snapshot; added three behavioural scenarios and an
+  unhappy-path rstest table.
+- Added reuse of `json_values()` and relocation of the existing generated
+  tests.
+- Consolidated seven milestones into five, with the full gate set at each
+  plateau, and raised the scope tolerance to match the planned file list.
+
+The remaining work is unchanged in purpose: approval, then EP-M0 to EP-M4.
