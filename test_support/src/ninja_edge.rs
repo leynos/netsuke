@@ -26,6 +26,46 @@ use anyhow::{Context, Result};
 ///
 /// Returns an error when the named build edge is absent.
 pub fn edge_has_console_pool(ninja: &str, output: &str) -> Result<bool> {
+    Ok(edge_bindings(ninja, output)?
+        .into_iter()
+        .any(|line| line.trim() == "pool = console"))
+}
+
+/// Return every edge-local `pool` binding attached to the named build edge.
+///
+/// A console edge carries `pool = console`, an edge that inherits a console
+/// action pool but does not opt in carries the empty `pool =` clearing
+/// binding, and an edge with no console inheritance carries none. Returning
+/// the bindings lets a test distinguish those three states instead of
+/// reducing them to a Boolean.
+///
+/// # Examples
+///
+/// ```
+/// use test_support::ninja_edge::edge_pool_bindings;
+///
+/// let ninja = "build ordinary: command\n  pool =\n";
+/// assert_eq!(edge_pool_bindings(ninja, "ordinary")?, vec!["pool =".to_owned()]);
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+///
+/// # Errors
+///
+/// Returns an error when the named build edge is absent.
+pub fn edge_pool_bindings(ninja: &str, output: &str) -> Result<Vec<String>> {
+    Ok(edge_bindings(ninja, output)?
+        .into_iter()
+        .filter(|line| line.trim_start().starts_with("pool ="))
+        .map(|line| line.trim().to_owned())
+        .collect())
+}
+
+/// Return the indented binding lines that follow the named build statement.
+///
+/// Ninja ends an edge at the first line that is not indented, so taking the
+/// contiguous indented run scopes every lookup to one build statement and
+/// keeps a neighbouring edge's binding from satisfying an assertion.
+fn edge_bindings<'a>(ninja: &'a str, output: &str) -> Result<Vec<&'a str>> {
     let lines: Vec<_> = ninja.lines().collect();
     let edge_index = lines
         .iter()
@@ -36,7 +76,8 @@ pub fn edge_has_console_pool(ninja: &str, output: &str) -> Result<bool> {
         .iter()
         .skip(edge_index + 1)
         .take_while(|line| line.starts_with("  "))
-        .any(|line| *line == "  pool = console"))
+        .copied()
+        .collect())
 }
 
 /// Return whether a generated build statement names `output` in its output list.
@@ -86,7 +127,7 @@ fn ninja_output_tokens(outputs: &str) -> Vec<String> {
 mod tests {
     //! Cover output-list matching for generated Ninja build statements.
 
-    use super::edge_has_console_pool;
+    use super::{edge_has_console_pool, edge_pool_bindings};
     use anyhow::{Result, ensure};
 
     #[test]
@@ -111,5 +152,33 @@ mod tests {
         let ninja = "build target-extra: command\n  pool = console\n";
 
         assert!(edge_has_console_pool(ninja, "target").is_err());
+    }
+
+    #[test]
+    fn pool_bindings_distinguish_selected_cleared_and_absent_states() -> Result<()> {
+        let ninja = concat!(
+            "build selected: command\n  pool = console\n\n",
+            "build cleared: command\n  pool =\n\n",
+            "build absent: command\n  command = touch absent\n",
+        );
+
+        ensure!(edge_pool_bindings(ninja, "selected")? == vec!["pool = console".to_owned()]);
+        ensure!(edge_pool_bindings(ninja, "cleared")? == vec!["pool =".to_owned()]);
+        ensure!(edge_pool_bindings(ninja, "absent")?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn pool_bindings_are_scoped_to_the_named_edge() -> Result<()> {
+        let ninja = "build first: command\n  pool = console\n\nbuild second: command\n";
+
+        ensure!(edge_pool_bindings(ninja, "first")? == vec!["pool = console".to_owned()]);
+        ensure!(edge_pool_bindings(ninja, "second")?.is_empty());
+        Ok(())
+    }
+
+    #[test]
+    fn pool_bindings_report_a_missing_edge() {
+        assert!(edge_pool_bindings("build present: command\n", "absent").is_err());
     }
 }
