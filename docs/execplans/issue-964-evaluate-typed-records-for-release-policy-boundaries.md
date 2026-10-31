@@ -4,8 +4,9 @@ Status: COMPLETE
 
 The decision is recorded as ADR-0068, the migration has landed, the full
 deterministic gate set is green on the branch head, and CodeRabbit reported no
-findings on the final review. The branch is ready for its draft pull request;
-merging is outside this plan's scope.
+findings on the final review. Draft pull request
+[#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
+maintainer review; merging is outside this plan's scope.
 
 ## Purpose
 
@@ -333,6 +334,7 @@ well; its policy-boundary sub-item is checked against ADR-0068.
 ## References
 
 - [Issue #964](https://github.com/leynos/netsuke/issues/964)
+- [Pull request #1052](https://github.com/leynos/netsuke/pull/1052)
 - [Pull request #903](https://github.com/leynos/netsuke/pull/903)
 - [CodeRabbit review comment 6448190491](https://github.com/leynos/netsuke/pull/903#discussion_r6448190491)
 - [Trusted packaging ExecPlan](use-trusted-packaging.md)
