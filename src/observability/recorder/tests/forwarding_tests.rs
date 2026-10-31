@@ -37,43 +37,59 @@ fn retained_count(snapshot: &[SnapshotEntry], stream: &str, failure_kind: &str) 
         .unwrap_or(0)
 }
 
+/// Enumerate every series the closed vocabularies declare.
+fn declared_series() -> impl Iterator<Item = (&'static str, &'static str)> {
+    let [streams, failure_kinds] = FORWARD_FAILURE_LABELS.map(|(_, values)| values);
+    streams
+        .iter()
+        .flat_map(move |stream| failure_kinds.iter().map(move |kind| (*stream, *kind)))
+}
+
+/// Count the series the closed vocabularies declare.
+fn declared_series_count() -> usize {
+    let [streams, failure_kinds] = FORWARD_FAILURE_LABELS.map(|(_, values)| values);
+    streams.len() * failure_kinds.len()
+}
+
+/// Record one increment for every series the forwarding helper can emit.
+fn record_declared_series(recorder: &ConfigMetricsRecorder) {
+    let [stream_label, failure_kind_label] = FORWARD_FAILURE_LABELS.map(|(label, _)| label);
+    metrics::with_local_recorder(recorder, || {
+        for (stream, failure_kind) in declared_series() {
+            counter!(
+                FORWARD_FAILURES_TOTAL,
+                stream_label => stream,
+                failure_kind_label => failure_kind,
+            )
+            .increment(1);
+        }
+    });
+}
+
+/// Assert every declared series was retained exactly once.
+fn assert_every_declared_series_retained(snapshot: &[SnapshotEntry]) {
+    for (stream, failure_kind) in declared_series() {
+        assert_eq!(
+            retained_count(snapshot, stream, failure_kind),
+            1,
+            "missing bounded series ({stream}, {failure_kind}): {snapshot:?}"
+        );
+    }
+}
+
 /// Retain every combination the forwarding helper can emit.
 #[test]
 fn recorder_retains_every_bounded_forwarding_failure_series() {
-    let [stream_label, failure_kind_label] = FORWARD_FAILURE_LABELS.map(|(label, _)| label);
-    let [streams, failure_kinds] = FORWARD_FAILURE_LABELS.map(|(_, values)| values);
-
     let recorder = ConfigMetricsRecorder::new();
-    let snapshotter = recorder.snapshotter();
+    record_declared_series(&recorder);
 
-    metrics::with_local_recorder(&recorder, || {
-        for stream in streams {
-            for failure_kind in failure_kinds {
-                counter!(
-                    FORWARD_FAILURES_TOTAL,
-                    stream_label => *stream,
-                    failure_kind_label => *failure_kind,
-                )
-                .increment(1);
-            }
-        }
-    });
-
-    let snapshot = snapshotter.snapshot().into_vec();
+    let snapshot = recorder.snapshotter().snapshot().into_vec();
     assert_eq!(
         snapshot.len(),
-        streams.len() * failure_kinds.len(),
+        declared_series_count(),
         "every closed stream and failure-kind pair should be retained: {snapshot:?}"
     );
-    for stream in streams {
-        for failure_kind in failure_kinds {
-            assert_eq!(
-                retained_count(&snapshot, stream, failure_kind),
-                1,
-                "missing bounded series ({stream}, {failure_kind}): {snapshot:?}"
-            );
-        }
-    }
+    assert_every_declared_series_retained(&snapshot);
 }
 
 /// Reject series that widen either label vocabulary or add a label.
