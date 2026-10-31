@@ -162,13 +162,13 @@ fn encode_power_shell_literal_into(value: &str, out: &mut Vec<u8>) {
 /// value is larger than any ceiling, so the caller rejects it either way.
 fn power_shell_encoded_len(value: &str) -> usize {
     value.chars().fold(2_usize, |total, character| {
-        let width = character.len_utf8();
-        let width = if is_power_shell_single_quote(character) {
-            width * 2
+        let base = character.len_utf8();
+        let doubled = if is_power_shell_single_quote(character) {
+            base * 2
         } else {
-            width
+            base
         };
-        total.saturating_add(width)
+        total.saturating_add(doubled)
     })
 }
 

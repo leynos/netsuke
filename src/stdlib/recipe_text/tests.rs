@@ -28,6 +28,18 @@ fn inert_word(length: usize) -> String {
     "a".repeat(length)
 }
 
+/// Return `value` as Fluent renders an interpolated argument.
+///
+/// The formatter wraps every placeable in U+2068 (first-strong isolate) and
+/// U+2069 (pop directional isolate) so a translated sentence keeps the
+/// argument's direction. The wrappers are invisible in a terminal, so an
+/// assertion written as plain text would never match even though the reader
+/// sees `item 0`. Composing them here states that contract rather than
+/// stripping the wrappers away.
+fn isolated(value: impl std::fmt::Display) -> String {
+    format!("\u{2068}{value}\u{2069}")
+}
+
 /// The ceiling is one mebibyte, not a round decimal megabyte.
 ///
 /// Pinned because the localized diagnostic prints it: a change here is a
@@ -75,7 +87,7 @@ fn a_word_past_the_ceiling_is_rejected(en_localizer: EnLocalizer) -> Result<()> 
         "the rejection should name the ceiling: {message}"
     );
     assert!(
-        message.contains("item 0"),
+        message.contains(&format!("item {}", isolated(0))),
         "the rejection should name the offending index: {message}"
     );
     assert!(
@@ -100,7 +112,7 @@ fn the_separator_counts_towards_the_ceiling(en_localizer: EnLocalizer) -> Result
         .expect_err("the joining space must count against the limit");
     let message = error.to_string();
     assert!(
-        message.contains("item 1"),
+        message.contains(&format!("item {}", isolated(1))),
         "the member that could not fit is the second one: {message}"
     );
     Ok(())
@@ -121,7 +133,7 @@ fn repeated_references_stop_at_the_member_that_cannot_fit(en_localizer: EnLocali
         join(&values, ShellDialect::Sh).expect_err("three 400 kB members exceed the ceiling");
     let message = error.to_string();
     assert!(
-        message.contains("item 2"),
+        message.contains(&format!("item {}", isolated(2))),
         "the third member is the first that cannot fit: {message}"
     );
     Ok(())
@@ -140,7 +152,7 @@ fn the_power_shell_length_is_exact(en_localizer: EnLocalizer) -> Result<()> {
     let error = join(&[quotes], ShellDialect::PowerShell)
         .expect_err("doubled quotes push the encoded form past the ceiling");
     assert!(
-        error.to_string().contains("item 0"),
+        error.to_string().contains(&format!("item {}", isolated(0))),
         "the single member should be named: {error}"
     );
     Ok(())
@@ -158,7 +170,7 @@ fn the_sh_post_encode_check_rejects_a_doubled_word(en_localizer: EnLocalizer) ->
     let error = join(&[quotes], ShellDialect::Sh)
         .expect_err("a word that doubles when encoded must not pass the ceiling");
     assert!(
-        error.to_string().contains("item 0"),
+        error.to_string().contains(&format!("item {}", isolated(0))),
         "the single member should be named: {error}"
     );
     Ok(())
