@@ -16,13 +16,17 @@ macro_rules! define_keys {
         /// Every Fluent message key this table declares, in declaration order.
         ///
         /// Each table carries its own slice because the key set is split
-        /// across three files; `keys::ALL_KEYS` is the union.
+        /// across four files; `ALL_KEYS` is the union.
         pub const TABLE_KEYS: &[&str] = &[$($name),+];
     };
 }
 
 mod check_keys;
+
 mod clap_error_keys;
+
+mod manifest_keys;
+
 pub mod keys;
 
 /// The locale registry, which lives at the crate root so that it depends on
@@ -38,11 +42,11 @@ use std::sync::{Arc, OnceLock, RwLock};
 /// All Fluent message keys referenced by Netsuke.
 ///
 /// Each table publishes its own `TABLE_KEYS` slice, and this is their union.
-/// The split into `check_keys` and `clap_error_keys` exists only to keep every
-/// module inside Whitaker's line cap, so a key moved into either table has to
-/// stay in this set — which is why the union is assembled from the three
-/// slices rather than shadowed by whichever `define_keys!` runs last. It lives
-/// here rather than in `keys` because no single table owns it.
+/// The split into `check_keys`, `clap_error_keys`, and `manifest_keys` exists
+/// only to keep every module inside Whitaker's line cap, so a key moved into
+/// any table has to stay in this set — which is why the union is assembled
+/// from the table slices rather than shadowed by whichever `define_keys!` runs
+/// last. It lives here rather than in `keys` because no single table owns it.
 ///
 /// The union is assembled at compile time, so the type stays the plain slice
 /// the single table used to publish: callers can still take `ALL_KEYS` as a
@@ -50,14 +54,16 @@ use std::sync::{Arc, OnceLock, RwLock};
 /// `Vec`.
 pub const ALL_KEYS: &[&str] = &ALL_KEYS_ARRAY;
 
-/// Number of keys in [`ALL_KEYS`], summed from the three tables.
-const ALL_KEYS_LEN: usize =
-    keys::TABLE_KEYS.len() + check_keys::TABLE_KEYS.len() + clap_error_keys::TABLE_KEYS.len();
+/// Number of keys in [`ALL_KEYS`], summed from every table.
+const ALL_KEYS_LEN: usize = keys::TABLE_KEYS.len()
+    + check_keys::TABLE_KEYS.len()
+    + clap_error_keys::TABLE_KEYS.len()
+    + manifest_keys::TABLE_KEYS.len();
 
 /// Every declared key, concatenated in table order.
 const ALL_KEYS_ARRAY: [&str; ALL_KEYS_LEN] = assemble_all_keys();
 
-/// Concatenate the three key tables into one array at compile time.
+/// Concatenate the key tables into one array at compile time.
 ///
 /// Slices cannot be joined in a constant, so the tables are copied element by
 /// element. A `const fn` is what keeps the published type unchanged; deferring
@@ -66,13 +72,14 @@ const fn assemble_all_keys() -> [&'static str; ALL_KEYS_LEN] {
     let mut all = [""; ALL_KEYS_LEN];
     let after_general = append_keys(&mut all, 0, keys::TABLE_KEYS);
     let after_check = append_keys(&mut all, after_general, check_keys::TABLE_KEYS);
-    let _ = append_keys(&mut all, after_check, clap_error_keys::TABLE_KEYS);
+    let after_clap = append_keys(&mut all, after_check, clap_error_keys::TABLE_KEYS);
+    let _ = append_keys(&mut all, after_clap, manifest_keys::TABLE_KEYS);
     all
 }
 
 /// Copy `table` into `all` from `start`, returning the next free index.
 ///
-/// The destination is sized as the sum of the three tables, so every index
+/// The destination is sized as the sum of the tables, so every index
 /// this writes is in bounds. Indexing is nonetheless the only form that works
 /// here: `slice::get` and `slice::get_mut` are not yet `const`, and a
 /// `LazyLock` alternative would change the published type of [`ALL_KEYS`],
@@ -106,8 +113,9 @@ static LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
 fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     // Keep the key registry referenced so dead-code lints do not discard it.
     let _ = keys::ALL_KEYS;
-    let _ = check_keys::TABLE_KEYS;
     let _ = clap_error_keys::TABLE_KEYS;
+    let _ = check_keys::TABLE_KEYS;
+    let _ = manifest_keys::TABLE_KEYS;
     LOCALIZER.get_or_init(|| {
         let default = crate::cli_localization::build_localizer(None);
         RwLock::new(Arc::from(default))
@@ -154,10 +162,14 @@ pub fn set_localizer_for_tests(new_localizer: Arc<dyn Localizer>) -> LocalizerGu
 }
 
 // Compile-time assertions that the public setters keep their signatures.
+
+// Compile-time assertions that the public setters keep their signatures.
 /// Compile-time assertion that `set_localizer` keeps its signature.
 const _: fn(Arc<dyn Localizer>) = set_localizer;
+
 /// Compile-time assertion that `set_localizer_for_tests` keeps its signature.
 const _: fn(Arc<dyn Localizer>) -> LocalizerGuard = set_localizer_for_tests;
+
 
 /// Render a Fluent message key with optional arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -264,12 +276,12 @@ pub const fn message(key: &'static str) -> LocalizedMessage {
 mod tests {
     //! Guards on the key aggregates this module assembles.
 
-    use super::{ALL_KEYS, check_keys, clap_error_keys, keys};
+    use super::{ALL_KEYS, check_keys, clap_error_keys, keys, manifest_keys};
 
     // A key moved out of `keys.rs` to keep that module inside the line cap
     // used to be listed by the aggregate automatically. Comparing against the
-    // three table slices rather than a written out list keeps the assertion
-    // true when any table gains a key.
+    // table slices rather than a written out list keeps the assertion true
+    // when any table gains a key.
     #[test]
     fn all_keys_is_the_union_of_every_table() {
         let all = ALL_KEYS;
@@ -278,11 +290,13 @@ mod tests {
             keys::TABLE_KEYS.len()
                 + check_keys::TABLE_KEYS.len()
                 + clap_error_keys::TABLE_KEYS.len()
+                + manifest_keys::TABLE_KEYS.len()
         );
         for expected in keys::TABLE_KEYS
             .iter()
             .chain(check_keys::TABLE_KEYS)
             .chain(clap_error_keys::TABLE_KEYS)
+            .chain(manifest_keys::TABLE_KEYS)
         {
             assert!(
                 all.contains(expected),
