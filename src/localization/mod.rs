@@ -16,7 +16,7 @@ macro_rules! define_keys {
         /// Every Fluent message key this table declares, in declaration order.
         ///
         /// Each table carries its own slice because the key set is split
-        /// across four files; `ALL_KEYS` is the union.
+        /// across five files; `ALL_KEYS` is the union.
         pub const TABLE_KEYS: &[&str] = &[$($name),+];
     };
 }
@@ -28,6 +28,7 @@ mod clap_error_keys;
 mod manifest_keys;
 
 pub mod keys;
+mod shell_keys;
 
 /// The locale registry, which lives at the crate root so that it depends on
 /// nothing: this module reaches `cli_localization` to build the default
@@ -42,11 +43,12 @@ use std::sync::{Arc, OnceLock, RwLock};
 /// All Fluent message keys referenced by Netsuke.
 ///
 /// Each table publishes its own `TABLE_KEYS` slice, and this is their union.
-/// The split into `check_keys`, `clap_error_keys`, and `manifest_keys` exists
-/// only to keep every module inside Whitaker's line cap, so a key moved into
-/// any table has to stay in this set — which is why the union is assembled
-/// from the table slices rather than shadowed by whichever `define_keys!` runs
-/// last. It lives here rather than in `keys` because no single table owns it.
+/// The split into `check_keys`, `clap_error_keys`, `manifest_keys`, and
+/// `shell_keys` exists only to keep every module inside Whitaker's line cap,
+/// so a key moved into any table has to stay in this set — which is why the
+/// union is assembled from the table slices rather than shadowed by whichever
+/// `define_keys!` runs last. It lives here rather than in `keys` because no
+/// single table owns it.
 ///
 /// The union is assembled at compile time, so the type stays the plain slice
 /// the single table used to publish: callers can still take `ALL_KEYS` as a
@@ -58,7 +60,8 @@ pub const ALL_KEYS: &[&str] = &ALL_KEYS_ARRAY;
 const ALL_KEYS_LEN: usize = keys::TABLE_KEYS.len()
     + check_keys::TABLE_KEYS.len()
     + clap_error_keys::TABLE_KEYS.len()
-    + manifest_keys::TABLE_KEYS.len();
+    + manifest_keys::TABLE_KEYS.len()
+    + shell_keys::TABLE_KEYS.len();
 
 /// Every declared key, concatenated in table order.
 const ALL_KEYS_ARRAY: [&str; ALL_KEYS_LEN] = assemble_all_keys();
@@ -73,7 +76,8 @@ const fn assemble_all_keys() -> [&'static str; ALL_KEYS_LEN] {
     let after_general = append_keys(&mut all, 0, keys::TABLE_KEYS);
     let after_check = append_keys(&mut all, after_general, check_keys::TABLE_KEYS);
     let after_clap = append_keys(&mut all, after_check, clap_error_keys::TABLE_KEYS);
-    let _ = append_keys(&mut all, after_clap, manifest_keys::TABLE_KEYS);
+    let after_manifest = append_keys(&mut all, after_clap, manifest_keys::TABLE_KEYS);
+    let _ = append_keys(&mut all, after_manifest, shell_keys::TABLE_KEYS);
     all
 }
 
@@ -116,6 +120,7 @@ fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     let _ = clap_error_keys::TABLE_KEYS;
     let _ = check_keys::TABLE_KEYS;
     let _ = manifest_keys::TABLE_KEYS;
+    let _ = shell_keys::TABLE_KEYS;
     LOCALIZER.get_or_init(|| {
         let default = crate::cli_localization::build_localizer(None);
         RwLock::new(Arc::from(default))
@@ -273,7 +278,7 @@ pub const fn message(key: &'static str) -> LocalizedMessage {
 mod tests {
     //! Guards on the key aggregates this module assembles.
 
-    use super::{ALL_KEYS, check_keys, clap_error_keys, keys, manifest_keys};
+    use super::{ALL_KEYS, check_keys, clap_error_keys, keys, manifest_keys, shell_keys};
 
     // A key moved out of `keys.rs` to keep that module inside the line cap
     // used to be listed by the aggregate automatically. Comparing against the
@@ -288,12 +293,14 @@ mod tests {
                 + check_keys::TABLE_KEYS.len()
                 + clap_error_keys::TABLE_KEYS.len()
                 + manifest_keys::TABLE_KEYS.len()
+                + shell_keys::TABLE_KEYS.len()
         );
         for expected in keys::TABLE_KEYS
             .iter()
             .chain(check_keys::TABLE_KEYS)
             .chain(clap_error_keys::TABLE_KEYS)
             .chain(manifest_keys::TABLE_KEYS)
+            .chain(shell_keys::TABLE_KEYS)
         {
             assert!(
                 all.contains(expected),

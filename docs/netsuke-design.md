@@ -3962,7 +3962,7 @@ flowchart TD
     B_Metadata{"Cargo.toml locales<br/>match the registry?"} -->|No| N_Drift
     N_Drift["Report the metadata drift"] --> M_Fail
     B_Metadata -->|Yes| C_ReadKeys
-    C_ReadKeys["extract_key_constants<br/>from keys.rs, check_keys.rs,<br/>and clap_error_keys.rs"] --> D_ReadSource
+    C_ReadKeys["extract_key_constants<br/>from every localization key module"] --> D_ReadSource
     D_ReadSource["parse_catalogue<br/>from locales/en-US/messages.ftl"] --> E_Loop
 
     E_Loop["For each locale in<br/>SUPPORTED_LOCALES"] --> F_Parse

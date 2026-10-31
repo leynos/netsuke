@@ -1,7 +1,7 @@
 //! Extraction of Fluent message identifiers declared in Rust source.
 //!
-//! Parses the `define_keys!` macro in `src/localization/keys.rs` so the build
-//! audit can compare the keys the code references against the keys each
+//! Parses the `define_keys!` macro in each localization key module so the
+//! build audit can compare the keys the code references against the keys each
 //! catalogue provides.
 
 #[path = "scanner.rs"]

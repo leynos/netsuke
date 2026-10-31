@@ -1,11 +1,12 @@
 //! Localization audit for the build script.
 //!
-//! Compares the keys declared by `define_keys!` in the four key tables —
+//! Compares the keys declared by `define_keys!` in the five key tables —
 //! `src/localization/keys.rs`, `src/localization/check_keys.rs`,
-//! `src/localization/clap_error_keys.rs`, and
-//! `src/localization/manifest_keys.rs` — with every catalogue named by the
-//! locale registry in `src/locale_catalogues.rs`. The four files are one key
-//! set: `keys.rs` re-exports the other three, and a key declared in more than
+//! `src/localization/clap_error_keys.rs`,
+//! `src/localization/manifest_keys.rs`, and
+//! `src/localization/shell_keys.rs` — with every catalogue named by the
+//! locale registry in `src/locale_catalogues.rs`. The five files are one key
+//! set: `keys.rs` re-exports the other four, and a key declared in more than
 //! one table is an error. The audit fails the build when a catalogue is missing a
 //! declared key, carries an orphaned key, or interpolates a different set of
 //! variables from the English source for a shared message.
@@ -32,13 +33,14 @@ use std::path::{Path, PathBuf};
 use std::{error::Error, io};
 
 /// Repository-relative paths of the source files that define the localization
-/// keys. `keys.rs` re-exports `check_keys.rs`, `clap_error_keys.rs`, and
-/// `manifest_keys.rs`, so together they are one key set.
-const KEY_SOURCES: [&str; 4] = [
+/// keys. `keys.rs` re-exports `check_keys.rs`, `clap_error_keys.rs`,
+/// `manifest_keys.rs`, and `shell_keys.rs`, so together they are one key set.
+const KEY_SOURCES: [&str; 5] = [
     "src/localization/keys.rs",
     "src/localization/check_keys.rs",
     "src/localization/clap_error_keys.rs",
     "src/localization/manifest_keys.rs",
+    "src/localization/shell_keys.rs",
 ];
 
 /// Repository-relative path of the manifest whose locale metadata is audited.
