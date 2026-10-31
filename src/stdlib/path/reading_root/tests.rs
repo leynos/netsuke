@@ -169,6 +169,19 @@ fn the_refusal_is_a_localized_workspace_diagnostic() -> Result<()> {
     Ok(())
 }
 
+/// The platform's access-denied code, which `std::io` maps to
+/// `PermissionDenied`.
+///
+/// Raw code 13 is an access denial only on Unix; Windows assigns it to
+/// `ERROR_INVALID_DATA`, so a shared constant would leave the negative case
+/// below asserting nothing on that platform.
+#[cfg(windows)]
+const ACCESS_DENIED: i32 = 5;
+/// The platform's access-denied code, which `std::io` maps to
+/// `PermissionDenied`.
+#[cfg(not(windows))]
+const ACCESS_DENIED: i32 = 13;
+
 /// A capability escape is recognized, while an ordinary permission denial is
 /// not.
 ///
@@ -186,7 +199,12 @@ fn capability_escapes_are_distinguished_from_permission_denials() {
         "an escape error should be recognized"
     );
 
-    let denied = std::io::Error::from_raw_os_error(13);
+    let denied = std::io::Error::from_raw_os_error(ACCESS_DENIED);
+    assert_eq!(
+        denied.kind(),
+        std::io::ErrorKind::PermissionDenied,
+        "the fixture must model an OS-coded permission denial"
+    );
     assert!(
         !is_capability_escape(&denied),
         "an OS-coded permission denial is not a capability escape"
