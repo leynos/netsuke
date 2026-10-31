@@ -1,11 +1,16 @@
 //! Fluent message identifiers used by Netsuke.
 //!
-//! This file holds only the key table: the build-time localization audit
+//! This file holds the general key table: the build-time localization audit
 //! parses its `define_keys!` invocation, and the macro itself is defined in
 //! the parent module. The `netsuke check` keys live in `check_keys.rs` and
-//! are re-exported here, so every key is still reached as `keys::NAME`.
+//! the clap error keys in `clap_error_keys.rs`; both are re-exported here, so
+//! every key is still reached as `keys::NAME`.
 
 pub use super::check_keys::*;
+pub use super::clap_error_keys::*;
+// The union of all three tables lives in the parent module, where the line
+// budget allows it; re-exported here because `keys` is the name callers use.
+pub use super::ALL_KEYS;
 
 define_keys! {
     CLI_ABOUT => "cli.about",
@@ -59,12 +64,6 @@ define_keys! {
     CLI_SUBCOMMAND_GRAPH_FLAG_HTML_HELP => "cli.subcommand.graph.flag.html.help",
     CLI_SUBCOMMAND_GRAPH_FLAG_OUTPUT_HELP => "cli.subcommand.graph.flag.output.help",
     CLI_SUBCOMMAND_GENERATE_FLAG_OUTPUT_HELP => "cli.subcommand.generate.flag.output.help",
-    CLAP_ERROR_MISSING_ARGUMENT => "clap-error-missing-argument",
-    CLAP_ERROR_MISSING_SUBCOMMAND => "clap-error-missing-subcommand",
-    CLAP_ERROR_UNKNOWN_ARGUMENT => "clap-error-unknown-argument",
-    CLAP_ERROR_INVALID_VALUE => "clap-error-invalid-value",
-    CLAP_ERROR_INVALID_SUBCOMMAND => "clap-error-invalid-subcommand",
-    CLAP_ERROR_VALUE_VALIDATION => "clap-error-value-validation",
     CLI_JOBS_INVALID_NUMBER => "cli.validation.jobs.invalid_number",
     CLI_JOBS_OUT_OF_RANGE => "cli.validation.jobs.out_of_range",
     CLI_SCHEME_EMPTY => "cli.validation.scheme.empty",

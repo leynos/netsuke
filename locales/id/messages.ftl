@@ -82,6 +82,7 @@ clap-error-missing-argument = Argumen wajib tidak ada: { $argument }
 clap-error-missing-subcommand = Subperintah tidak ada. Pilihan yang tersedia: { $valid_subcommands }
 clap-error-unknown-argument = Argumen tidak dikenal: { $argument }
 clap-error-invalid-value = Nilai tidak sah untuk { $argument }: { $value }
+clap-error-too-many-values = Nilai tak terduga untuk { $argument }: { $value }
 clap-error-invalid-subcommand = Subperintah tidak dikenal: { $subcommand }
 # Catatan: value-validation dirumuskan berbeda dari invalid-value agar galat
 # validator khusus (ErrorKind::ValueValidation) terbedakan dari ketidakcocokan

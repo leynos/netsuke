@@ -82,6 +82,7 @@ clap-error-missing-argument = آرگومان الزامی ارائه نشده ا
 clap-error-missing-subcommand = زیرفرمان وجود ندارد. گزینه‌های در دسترس: { $valid_subcommands }
 clap-error-unknown-argument = آرگومان ناشناخته: { $argument }
 clap-error-invalid-value = مقدار نامعتبر برای { $argument }: { $value }
+clap-error-too-many-values = مقدار غیرمنتظره برای { $argument }: { $value }
 clap-error-invalid-subcommand = زیرفرمان ناشناخته: { $subcommand }
 # یادداشت: عبارت value-validation از invalid-value متمایز است تا خطای
 # اعتبارسنج‌های سفارشی (ErrorKind::ValueValidation) از ناسازگاری نوع

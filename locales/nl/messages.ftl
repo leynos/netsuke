@@ -82,6 +82,7 @@ clap-error-missing-argument = Verplicht argument ontbreekt: { $argument }
 clap-error-missing-subcommand = Subopdracht ontbreekt. Beschikbare opties: { $valid_subcommands }
 clap-error-unknown-argument = Onbekend argument: { $argument }
 clap-error-invalid-value = Ongeldige waarde voor { $argument }: { $value }
+clap-error-too-many-values = Onverwachte waarde voor { $argument }: { $value }
 clap-error-invalid-subcommand = Onbekende subopdracht: { $subcommand }
 # Let op: value-validation is anders geformuleerd dan invalid-value om fouten
 # van eigen validators (ErrorKind::ValueValidation) te onderscheiden van

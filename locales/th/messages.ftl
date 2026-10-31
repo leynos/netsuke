@@ -82,6 +82,7 @@ clap-error-missing-argument = ขาดอาร์กิวเมนต์ท�
 clap-error-missing-subcommand = ขาดคำสั่งย่อย ตัวเลือกที่ใช้ได้: { $valid_subcommands }
 clap-error-unknown-argument = อาร์กิวเมนต์ที่ไม่รู้จัก: { $argument }
 clap-error-invalid-value = ค่าของ { $argument } ไม่ถูกต้อง: { $value }
+clap-error-too-many-values = ค่าที่ไม่คาดคิดสำหรับ { $argument }: { $value }
 clap-error-invalid-subcommand = คำสั่งย่อยที่ไม่รู้จัก: { $subcommand }
 # หมายเหตุ: value-validation ใช้ถ้อยคำต่างจาก invalid-value เพื่อแยกความล้มเหลว
 # ของตัวตรวจสอบที่กำหนดเอง (ErrorKind::ValueValidation) ออกจากชนิดที่ไม่ตรงกัน

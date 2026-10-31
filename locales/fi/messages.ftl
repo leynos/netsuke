@@ -82,6 +82,7 @@ clap-error-missing-argument = Pakollinen argumentti puuttuu: { $argument }
 clap-error-missing-subcommand = Alikomento puuttuu. Käytettävissä olevat vaihtoehdot: { $valid_subcommands }
 clap-error-unknown-argument = Tuntematon argumentti: { $argument }
 clap-error-invalid-value = Virheellinen arvo argumentille { $argument }: { $value }
+clap-error-too-many-values = Odottamaton arvo argumentille { $argument }: { $value }
 clap-error-invalid-subcommand = Tuntematon alikomento: { $subcommand }
 # Huomio: value-validation on muotoiltu eri tavalla kuin invalid-value, jotta
 # omien tarkistimien virheet (ErrorKind::ValueValidation) erottuvat

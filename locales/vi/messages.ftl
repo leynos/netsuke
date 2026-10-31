@@ -82,6 +82,7 @@ clap-error-missing-argument = Thiếu đối số bắt buộc: { $argument }
 clap-error-missing-subcommand = Thiếu lệnh con. Các lựa chọn sẵn có: { $valid_subcommands }
 clap-error-unknown-argument = Đối số không xác định: { $argument }
 clap-error-invalid-value = Giá trị không hợp lệ cho { $argument }: { $value }
+clap-error-too-many-values = Giá trị không mong đợi cho { $argument }: { $value }
 clap-error-invalid-subcommand = Lệnh con không xác định: { $subcommand }
 # Lưu ý: value-validation được diễn đạt khác invalid-value để phân biệt lỗi của
 # bộ kiểm tra riêng (ErrorKind::ValueValidation) với lỗi sai kiểu

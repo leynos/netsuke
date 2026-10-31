@@ -82,6 +82,7 @@ clap-error-missing-argument = 缺少必需的参数：{ $argument }
 clap-error-missing-subcommand = 缺少子命令。可用选项：{ $valid_subcommands }
 clap-error-unknown-argument = 未知参数：{ $argument }
 clap-error-invalid-value = { $argument } 的取值无效：{ $value }
+clap-error-too-many-values = { $argument } 的值出乎意料：{ $value }
 clap-error-invalid-subcommand = 未知子命令：{ $subcommand }
 # 注意：value-validation 的措辞与 invalid-value 不同，以便区分自定义校验器的
 # 失败（ErrorKind::ValueValidation）与类型不匹配（ErrorKind::InvalidValue）。

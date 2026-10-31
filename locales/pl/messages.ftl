@@ -82,6 +82,7 @@ clap-error-missing-argument = Brak wymaganego argumentu: { $argument }
 clap-error-missing-subcommand = Brak podpolecenia. Dostępne opcje: { $valid_subcommands }
 clap-error-unknown-argument = Nieznany argument: { $argument }
 clap-error-invalid-value = Nieprawidłowa wartość argumentu { $argument }: { $value }
+clap-error-too-many-values = Nieoczekiwana wartość argumentu { $argument }: { $value }
 clap-error-invalid-subcommand = Nieznane podpolecenie: { $subcommand }
 # Uwaga: value-validation sformułowano inaczej niż invalid-value, aby odróżnić
 # błędy własnych walidatorów (ErrorKind::ValueValidation) od niezgodności typów

@@ -82,6 +82,7 @@ clap-error-missing-argument = 必須の引数がありません: { $argument }
 clap-error-missing-subcommand = サブコマンドがありません。利用できる選択肢: { $valid_subcommands }
 clap-error-unknown-argument = 不明な引数です: { $argument }
 clap-error-invalid-value = { $argument } の値が無効です: { $value }
+clap-error-too-many-values = { $argument } に予期しない値があります: { $value }
 clap-error-invalid-subcommand = 不明なサブコマンドです: { $subcommand }
 # 注記: value-validation は invalid-value とは異なる表現にして、独自バリデーター
 # の失敗（ErrorKind::ValueValidation）と型の不一致（ErrorKind::InvalidValue）を

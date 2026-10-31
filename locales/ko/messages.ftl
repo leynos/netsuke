@@ -82,6 +82,7 @@ clap-error-missing-argument = 필수 인자가 없습니다: { $argument }
 clap-error-missing-subcommand = 하위 명령이 없습니다. 사용할 수 있는 값: { $valid_subcommands }
 clap-error-unknown-argument = 알 수 없는 인자입니다: { $argument }
 clap-error-invalid-value = { $argument }의 값이 잘못되었습니다: { $value }
+clap-error-too-many-values = { $argument }에 예상하지 못한 값이 있습니다: { $value }
 clap-error-invalid-subcommand = 알 수 없는 하위 명령입니다: { $subcommand }
 # 참고: value-validation은 사용자 정의 검증기의 실패(ErrorKind::ValueValidation)를
 # 형식 불일치(ErrorKind::InvalidValue)와 구분하기 위해 invalid-value와 다르게

@@ -82,6 +82,7 @@ clap-error-missing-argument = Ymresymiad gofynnol ar goll: { $argument }
 clap-error-missing-subcommand = Is-orchymyn ar goll. Dewisiadau sydd ar gael: { $valid_subcommands }
 clap-error-unknown-argument = Ymresymiad anhysbys: { $argument }
 clap-error-invalid-value = Gwerth annilys ar gyfer { $argument }: { $value }
+clap-error-too-many-values = Gwerth annisgwyl ar gyfer { $argument }: { $value }
 clap-error-invalid-subcommand = Is-orchymyn anhysbys: { $subcommand }
 # Sylwer: mae geiriad value-validation yn wahanol i invalid-value er mwyn
 # gwahaniaethu rhwng methiannau dilyswyr pwrpasol (ErrorKind::ValueValidation)

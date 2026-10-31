@@ -53,7 +53,11 @@ fn stage_audit_inputs(destination: &Path) -> Result<()> {
     let root = repository_root();
     fs::create_dir_all(destination.join("src/localization"))?;
     fs::copy(root.join("Cargo.toml"), destination.join("Cargo.toml"))?;
-    for keys in ["src/localization/keys.rs", "src/localization/check_keys.rs"] {
+    for keys in [
+        "src/localization/keys.rs",
+        "src/localization/check_keys.rs",
+        "src/localization/clap_error_keys.rs",
+    ] {
         fs::copy(root.join(keys), destination.join(keys))?;
     }
     for entry in SUPPORTED_LOCALES {
@@ -138,6 +142,18 @@ fn the_staged_copy_reproduces_a_passing_audit(
     let mutated = text.replacen(
         "define_keys! {",
         "define_keys! {\n    UNSHIPPED_KEY => \"netsuke.unshipped.key\",",
+        1,
+    );
+    ensure!(mutated != text, "expected the define_keys! macro to rewrite");
+    fs::write(&keys, mutated)?;
+    Ok(())
+})]
+#[case::a_clap_error_key_is_added("clap-error-unshipped", &|root: &Path| {
+    let keys = root.join("src/localization/clap_error_keys.rs");
+    let text = fs::read_to_string(&keys)?;
+    let mutated = text.replacen(
+        "define_keys! {",
+        "define_keys! {\n    UNSHIPPED_CLAP_KEY => \"clap-error-unshipped\",",
         1,
     );
     ensure!(mutated != text, "expected the define_keys! macro to rewrite");

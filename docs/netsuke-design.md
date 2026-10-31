@@ -3699,7 +3699,7 @@ flowchart TD
     B_Metadata{"Cargo.toml locales<br/>match the registry?"} -->|No| N_Drift
     N_Drift["Report the metadata drift"] --> M_Fail
     B_Metadata -->|Yes| C_ReadKeys
-    C_ReadKeys["extract_key_constants<br/>from src/localization/keys.rs"] --> D_ReadSource
+    C_ReadKeys["extract_key_constants<br/>from keys.rs, check_keys.rs,<br/>and clap_error_keys.rs"] --> D_ReadSource
     D_ReadSource["parse_catalogue<br/>from locales/en-US/messages.ftl"] --> E_Loop
 
     E_Loop["For each locale in<br/>SUPPORTED_LOCALES"] --> F_Parse
@@ -3718,6 +3718,17 @@ flowchart TD
 ```
 
 Figure: Build script localization audit flow across every registered locale.
+
+The key set the audit reads is declared across three tables — a general table
+for CLI and diagnostic messages, a table for `netsuke check` rule prose, and a
+table for clap's own error rendering — because Whitaker caps a module at 400
+raw lines. The audit parses all three as one set, so a key that is missing from
+a catalogue, orphaned in one, or declared twice fails the build identically
+whichever table declares it. Callers are unaffected: `keys::ALL_KEYS` is
+assembled at compile time from the three per-table slices and keeps its
+`&'static [&'static str]` type. See
+[ADR-0069](adrs/adr-0069-split-the-localization-key-tables.md) for the
+alternatives considered and the consequences for future key families.
 
 The Ninja executable may be overridden via the `NETSUKE_NINJA` environment
 variable. For example, `NETSUKE_NINJA=/opt/ninja/bin/ninja netsuke build`
