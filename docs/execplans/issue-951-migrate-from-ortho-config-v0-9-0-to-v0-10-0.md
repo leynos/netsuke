@@ -475,10 +475,10 @@ option-listing fallback.
   of engaging the option-listing fallback that `None` selected.
   `ReleaseHelpCli` sets `synopsis_id: None` only in `documented_subcommand`;
   the root metadata comes from `CliConfig::get_doc_metadata()` and inherits the
-  derived id. Out of this migration's scope; repaired by its follow-up
-  [leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959), which
-  clears the root `synopsis_id` to restore the fallback, with the upstream
-  cause filed as
+  derived id. Introduced by the migration, not pre-existing, and repaired in
+  the separate [#959](https://github.com/leynos/netsuke/issues/959) corrective
+  PR, which clears the root `synopsis_id` to restore the fallback; the upstream
+  cause is filed as
   [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
 - Observation: the repository's CLI layer does not use OrthoConfig's generated
   CLI guard. `src/cli/merge/mod.rs` builds the CLI layer itself from
@@ -1614,3 +1614,9 @@ adopted only because the field's type changed, and the value is
   `cli.synopsis` key in all 35 catalogues) stays a follow-up after #958, and a
   parameterized synopsis stays blocked on
   [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
+- 2026-10-31: tenth revision, separating delivery scope from regression
+  ownership. The `Surprises & discoveries` entry still read "Out of this
+  migration's scope", which left the retracted pre-existing framing partly
+  intact: the migration *delivered* the regression, even though its *repair*
+  belongs to the separate #959 corrective PR. The entry now states both facts
+  in those terms. No other content changed.
