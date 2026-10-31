@@ -121,19 +121,67 @@ def _asset_mapping(record: object) -> dict[str, object]:
     >>> _asset_mapping({"assets": {"a": "ab"}})
     {'a': 'ab'}
     """
-    if not isinstance(record, dict):
-        msg = f"the digest record must be a mapping, got {type(record).__name__}"
-        raise release_digest_record.DigestRecordError(msg)
-    declared = record.get(ASSETS_MEMBER)
-    if not isinstance(declared, dict):
-        msg = (
-            f"the digest record must carry an '{ASSETS_MEMBER}' mapping, got "
-            f"{type(declared).__name__}"
-        )
-        raise release_digest_record.DigestRecordError(msg)
+    container = _require_mapping(record, "the digest record must be a mapping")
+    declared = _require_mapping(
+        container.get(ASSETS_MEMBER),
+        f"the digest record must carry an '{ASSETS_MEMBER}' mapping",
+    )
     if not declared:
         msg = "the digest record declares no assets, so there is nothing to verify"
         raise release_digest_record.DigestRecordError(msg)
+    return _string_keyed(declared)
+
+
+def _require_mapping(value: object, description: str) -> dict[object, object]:
+    """Return ``value`` as a mapping, or refuse the record shape.
+
+    The description names which part of the record is malformed, so each
+    refusal keeps the diagnosis it carried before the shape checks were
+    split apart.
+
+    Returns
+    -------
+    dict[object, object]
+        The value, once it is known to be a mapping.
+
+    Raises
+    ------
+    release_digest_record.DigestRecordError
+        If the value is not a mapping.
+
+    Examples
+    --------
+    >>> _require_mapping({"a": "ab"}, "the record must be a mapping")
+    {'a': 'ab'}
+    """
+    if not isinstance(value, dict):
+        msg = f"{description}, got {type(value).__name__}"
+        raise release_digest_record.DigestRecordError(msg)
+    return value
+
+
+def _string_keyed(declared: dict[object, object]) -> dict[str, object]:
+    """Return the asset mapping after refusing a non-string asset name.
+
+    JSON object keys are always strings, so a non-string key can only arrive
+    as an already decoded value; the check belongs to this adapter because a
+    mixed-type key set would later break ``sorted``.
+
+    Returns
+    -------
+    dict[str, object]
+        The same entries, narrowed to string keys.
+
+    Raises
+    ------
+    release_digest_record.DigestRecordError
+        If any key is not a string.
+
+    Examples
+    --------
+    >>> _string_keyed({"a": "ab"})
+    {'a': 'ab'}
+    """
     if not all(isinstance(name, str) for name in declared):
         msg = "the digest record must map asset names to digests as strings"
         raise release_digest_record.DigestRecordError(msg)
