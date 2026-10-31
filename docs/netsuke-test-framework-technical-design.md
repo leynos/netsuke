@@ -202,7 +202,7 @@ private fields with constructor and builder methods rather than public ones, the
 `Test` variant holds a `Box<TestSurface>` rather than a bare
 `Box<StdlibConfig>`, and `StdlibRegistration` — including its named
 `AmbientFull` variant — stays crate-private. The authoritative shapes are the
-ExecPlan's *Interfaces and dependencies* section until the documentation
+ExecPlan's _Interfaces and dependencies_ section until the documentation
 milestone rewrites this one.
 
 `registration` carries the stdlib boundary rather than a bare `StdlibConfig`
