@@ -21,6 +21,21 @@ use std::{fs, process::Command};
 const DOCUMENTED_SUBCOMMANDS: [&str; 5] = ["build", "clean", "graph", "generate", "help"];
 const PARSER_ONLY_SELECTORS: [&str; 2] = ["-C/--directory", "--config"];
 
+/// Reconciled flags whose rendered shape issue #960 corrected.
+///
+/// Rendering the metadata through the release-help boundary must keep the
+/// singular `--default-target` spelling, the five policy and input flags that
+/// derivation's `skip_cli` omitted, and the value names and accepted values
+/// the parser advertises.
+const RECONCILED_FLAGS: [&str; 6] = [
+    "--default-target TARGET",
+    "--color POLICY auto|always|never",
+    "--emoji POLICY auto|always|never",
+    "--progress POLICY auto|always|never",
+    "--accessibility POLICY auto|on|off",
+    "--no-input",
+];
+
 /// Generate and verify a manual page for a non-Windows target.
 ///
 /// # Errors
@@ -218,6 +233,10 @@ fn assert_powershell_help_structure(
 }
 
 /// Assert that generated help exposes the complete public CLI surface.
+///
+/// This is the renderer-boundary check for issue #960: every assertion reads
+/// the generated artefact, not the in-process metadata structure, so a
+/// projection that never reaches the help output fails here.
 fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
     for selector in PARSER_ONLY_SELECTORS {
         ensure!(
@@ -225,6 +244,22 @@ fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
             "{format_name} should include the parser-only {selector} selector: {document}"
         );
     }
+    for flag in RECONCILED_FLAGS {
+        ensure!(
+            document.contains(flag),
+            "{format_name} should include the reconciled {flag} flag: {document}"
+        );
+    }
+    ensure!(
+        !document.contains("--default-targets"),
+        "{format_name} should not advertise the rejected --default-targets \
+         spelling: {document}"
+    );
+    ensure!(
+        !document.contains("-d/--default-target"),
+        "{format_name} should not advertise a short alias for \
+         --default-target: {document}"
+    );
     for subcommand in DOCUMENTED_SUBCOMMANDS {
         ensure!(
             document.contains(subcommand),
