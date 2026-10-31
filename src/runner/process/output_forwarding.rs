@@ -6,7 +6,9 @@ use super::{
     failure_attribution::{
         CommandListFailure, NinjaFailureOutputTail, forward_stderr_with_attribution,
     },
-    streaming::{ForwardStats, forward_child_output, forward_child_output_with_ninja_status},
+    streaming::{
+        ForwardStats, ForwardStream, forward_child_output, forward_child_output_with_ninja_status,
+    },
 };
 use std::{
     io::{self, BufReader},
@@ -42,9 +44,13 @@ where
                 BufReader::new(stdout),
                 &mut tail_writer,
                 observer,
-                "stdout",
+                ForwardStream::Stdout,
             ),
-            None => forward_child_output(BufReader::new(stdout), &mut tail_writer, "stdout"),
+            None => forward_child_output(
+                BufReader::new(stdout),
+                &mut tail_writer,
+                ForwardStream::Stdout,
+            ),
         };
         return (stats, tail_writer.into_failure());
     }
@@ -54,9 +60,9 @@ where
             BufReader::new(stdout),
             output,
             observer,
-            "stdout",
+            ForwardStream::Stdout,
         ),
-        None => forward_child_output(BufReader::new(stdout), output, "stdout"),
+        None => forward_child_output(BufReader::new(stdout), output, ForwardStream::Stdout),
     };
     (stats, None)
 }

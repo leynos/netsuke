@@ -1,6 +1,8 @@
 //! Tests for bounded oversized Ninja status-line telemetry.
 
-use super::{NINJA_STATUS_OVERSIZED_LINES_TOTAL, forward_child_output_with_ninja_status};
+use super::{
+    ForwardStream, NINJA_STATUS_OVERSIZED_LINES_TOTAL, forward_child_output_with_ninja_status,
+};
 use metrics_util::{
     MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
@@ -22,7 +24,7 @@ fn records_oversized_status_lines_once_per_line() {
             Cursor::new(input),
             std::io::sink(),
             |_current, _total, _description| {},
-            "stdout",
+            ForwardStream::Stdout,
         );
     });
 
