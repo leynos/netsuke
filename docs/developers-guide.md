@@ -4121,9 +4121,11 @@ without that declaration the generator falls back to a machine type such as
 only for parser-only selectors, which have no configuration source from which
 to derive a placeholder. The parity test compares every value-taking option's
 `cli.value_name` against the first value name `Cli::command()` declares, so
-adding a value-taking option requires matching declarations in both
-`src/cli/command.rs` and `src/cli/config/mod.rs`; a placeholder that disagrees
-with the parser fails the test rather than reaching a release artefact.
+adding a configuration-derived value-taking option requires matching
+declarations in `src/cli/config/mod.rs` and `src/cli/command.rs`. A parser-only
+selector needs only the parser declaration, because `parser_fields.rs` derives
+its placeholder from that declaration. A placeholder that disagrees with the
+parser fails the test rather than reaching a release artefact.
 
 Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
