@@ -89,6 +89,56 @@ fn hostile_posix_bindings() -> CommandBindings {
     )
 }
 
+/// Assert that command and script interpolation both yield the expected text.
+///
+/// The two traversals share the POSIX comment scanner, so a boundary case that
+/// holds for one should hold for the other.
+fn assert_both_outputs(template: &str, expected: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    for interpolate in [
+        interpolate_command_with_bindings,
+        interpolate_script_with_bindings,
+    ] {
+        assert_eq!(
+            interpolate(template, &bindings).expect(context),
+            expected,
+            "{context}"
+        );
+    }
+}
+
+/// Assert that script interpolation yields the expected text.
+fn assert_script_output(template: &str, expected: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    assert_eq!(
+        interpolate_script_with_bindings(template, &bindings).expect(context),
+        expected,
+        "{context}"
+    );
+}
+
+/// Build a pair whose comment carries a marker and an unmatched quote.
+///
+/// A scanner that ends the comment early treats either as executable syntax and
+/// mis-encodes the double-quoted marker on the following line. `closer` is an
+/// extra line between the comment and that marker line, used when a
+/// substitution must be closed before interpolation continues.
+fn inert_comment_case(prefix: &str, closer: Option<&str>) -> (String, String) {
+    let continuation = closer.map_or_else(String::new, |line| format!("\n{line}"));
+    let comment = format!("{prefix}# {INS_TOKEN} unmatched '{continuation}");
+    (
+        format!("{comment}\necho \"{OUTS_TOKEN}\""),
+        format!("{comment}\necho \"{HOSTILE_DOUBLE_QUOTED}\""),
+    )
+}
+
+/// Build a pair where `#` must stay in the word so its quote stays executable.
+fn executable_quote_case(prefix: &str) -> (String, String) {
+    (
+        format!("{prefix}#\"\necho {INS_TOKEN}\""),
+        format!("{prefix}#\"\necho {HOSTILE_DOUBLE_QUOTED}\""),
+    )
+}
 
 /// Verify escaped quotes do not change the marker context in a heredoc delimiter.
 #[test]
@@ -144,19 +194,11 @@ fn multiple_heredoc_bodies_preserve_marker_literals() {
 #[case::form_feed('\u{000c}')]
 #[case::non_ascii_word_letter('\u{00e9}')]
 fn non_ascii_whitespace_before_hash_preserves_executable_quote_context(#[case] character: char) {
-    let bindings = hostile_posix_bindings();
-    let template = format!("echo x{character}#\"\necho {INS_TOKEN}\"");
-    let expected = format!("echo x{character}#\"\necho {HOSTILE_DOUBLE_QUOTED}\"");
-
-    assert_eq!(
-        interpolate_command_with_bindings(&template, &bindings)
-            .expect("a non-separator before '#' must keep the later quote executable"),
-        expected
-    );
-    assert_eq!(
-        interpolate_script_with_bindings(&template, &bindings)
-            .expect("a non-separator before '#' must keep the later quote executable"),
-        expected
+    let (template, expected) = executable_quote_case(&format!("echo x{character}"));
+    assert_both_outputs(
+        &template,
+        &expected,
+        "a non-separator before '#' must keep the later quote executable",
     );
 }
 
@@ -178,14 +220,11 @@ fn non_ascii_whitespace_before_hash_preserves_executable_quote_context(#[case] c
 #[case::input_redirect("echo x<")]
 #[case::output_redirect("echo x>")]
 fn posix_separators_before_hash_start_inert_comments(#[case] prefix: &str) {
-    let bindings = hostile_posix_bindings();
-    let template = format!("{prefix}# {INS_TOKEN} unmatched '\necho \"{OUTS_TOKEN}\"");
-    let expected = format!("{prefix}# {INS_TOKEN} unmatched '\necho \"{HOSTILE_DOUBLE_QUOTED}\"");
-
-    assert_eq!(
-        interpolate_script_with_bindings(&template, &bindings)
-            .expect("a comment after a separator must stay inert"),
-        expected
+    let (template, expected) = inert_comment_case(prefix, None);
+    assert_script_output(
+        &template,
+        &expected,
+        "a comment after a separator must stay inert",
     );
 }
 
@@ -199,19 +238,11 @@ fn posix_separators_before_hash_start_inert_comments(#[case] prefix: &str) {
 #[case::command_substitution("echo $(printf x)")]
 #[case::arithmetic_expansion("echo $((1 + 2))")]
 fn substitution_close_before_hash_preserves_executable_quote_context(#[case] prefix: &str) {
-    let bindings = hostile_posix_bindings();
-    let template = format!("{prefix}#\"\necho {INS_TOKEN}\"");
-    let expected = format!("{prefix}#\"\necho {HOSTILE_DOUBLE_QUOTED}\"");
-
-    assert_eq!(
-        interpolate_command_with_bindings(&template, &bindings)
-            .expect("a closing substitution delimiter must keep '#' in the word"),
-        expected
-    );
-    assert_eq!(
-        interpolate_script_with_bindings(&template, &bindings)
-            .expect("a closing substitution delimiter must keep '#' in the word"),
-        expected
+    let (template, expected) = executable_quote_case(prefix);
+    assert_both_outputs(
+        &template,
+        &expected,
+        "a closing substitution delimiter must keep '#' in the word",
     );
 }
 
@@ -222,14 +253,11 @@ fn substitution_close_before_hash_preserves_executable_quote_context(#[case] pre
 /// change the encoding of a marker on the following line.
 #[test]
 fn subshell_close_before_hash_starts_inert_comment() {
-    let bindings = hostile_posix_bindings();
-    let template = format!("(echo x)# {INS_TOKEN} unmatched '\necho \"{OUTS_TOKEN}\"");
-    let expected = format!("(echo x)# {INS_TOKEN} unmatched '\necho \"{HOSTILE_DOUBLE_QUOTED}\"");
-
-    assert_eq!(
-        interpolate_script_with_bindings(&template, &bindings)
-            .expect("a subshell closer must still begin a comment"),
-        expected
+    let (template, expected) = inert_comment_case("(echo x)", None);
+    assert_script_output(
+        &template,
+        &expected,
+        "a subshell closer must still begin a comment",
     );
 }
 
@@ -240,15 +268,11 @@ fn subshell_close_before_hash_starts_inert_comment() {
 /// line inert. The substitution's own `)` on the next line then closes it.
 #[test]
 fn inner_group_close_inside_substitution_starts_inert_comment() {
-    let bindings = hostile_posix_bindings();
-    let template = format!("echo $( (echo x)# {INS_TOKEN} unmatched '\n)\necho \"{OUTS_TOKEN}\"");
-    let expected =
-        format!("echo $( (echo x)# {INS_TOKEN} unmatched '\n)\necho \"{HOSTILE_DOUBLE_QUOTED}\"");
-
-    assert_eq!(
-        interpolate_script_with_bindings(&template, &bindings)
-            .expect("a group closer inside a substitution must begin a comment"),
-        expected
+    let (template, expected) = inert_comment_case("echo $( (echo x)", Some(")"));
+    assert_script_output(
+        &template,
+        &expected,
+        "a group closer inside a substitution must begin a comment",
     );
 }
 
