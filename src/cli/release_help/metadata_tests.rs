@@ -1,4 +1,8 @@
-//! Unit tests for parser-only release-help metadata composition.
+//! Unit tests for the complete release-help metadata contract.
+//!
+//! The tests cover the configuration-help projection, the parser-only field
+//! and value-shape derivation, and the identifiers carried by the composed
+//! root and immediate subcommand documentation metadata.
 
 use super::*;
 use anyhow::{Context, Result, ensure};
@@ -296,17 +300,23 @@ fn config_metadata_localization_rejects_unknown_fields() -> Result<()> {
     Ok(())
 }
 
-/// Verify that release help never emits an OrthoConfig-generated identifier.
+/// Verify that the release-help identifiers this test reads are Netsuke-declared.
 ///
 /// The v0.10.0 migration guide describes re-keying catalogues from
 /// `{app}.fields.{field}.help` to `{mounted-path}-args-{field}-help`. Netsuke
 /// needs none of that because `localized_config_help` replaces every generated
 /// `help_id` with its own `define_keys!` identifier before release help sees it.
-/// This test pins the consequence: every published identifier is a key
-/// `build_l10n_audit` can attribute to `src/localization`, and none carries the
-/// upstream shapes. Were the projection to stop applying, the audit would not
-/// catch it — the generated keys are absent from the catalogues, so a stray one
-/// becomes a runtime miss rather than a build failure.
+/// This test pins the consequence for the identifier kinds it collects:
+/// configuration-field `help_id`, the root `about_id` and `synopsis_id`, and
+/// each immediate subcommand's `about_id` and `synopsis_id`. Every collected
+/// identifier must be a key `build_l10n_audit` can attribute to
+/// `src/localization`, and none may carry the upstream shapes. Were the
+/// projection to stop applying, the audit would not catch it — the generated
+/// keys are absent from the catalogues, so a stray one becomes a runtime miss
+/// rather than a build failure.
+///
+/// Section heading ids and `long_help_id` are not collected here, so this is
+/// not a complete census of every identifier the IR can carry.
 #[test]
 fn release_help_identifiers_are_netsuke_declared_not_generated() -> Result<()> {
     let metadata = ReleaseHelpCli::try_get_doc_metadata()?;
@@ -315,13 +325,11 @@ fn release_help_identifiers_are_netsuke_declared_not_generated() -> Result<()> {
         .iter()
         .map(|field| field.help_id.as_str())
         .chain(std::iter::once(metadata.about_id.as_str()))
+        .chain(metadata.synopsis_id.as_deref())
         .collect::<Vec<_>>();
-    identifiers.extend(
-        metadata
-            .subcommands
-            .iter()
-            .map(|command| command.about_id.as_str()),
-    );
+    identifiers.extend(metadata.subcommands.iter().flat_map(|command| {
+        std::iter::once(command.about_id.as_str()).chain(command.synopsis_id.as_deref())
+    }));
 
     let generated_shapes = [".fields.", "-args-"];
     for identifier in &identifiers {

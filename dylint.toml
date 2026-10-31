@@ -89,6 +89,7 @@ excluded_crates = [
     "novice_flow_smoke_tests",
     "prover_tools_make_tests",
     "release_help_script_tests",
+    "release_help_synopsis_tests",
     "release_staging_tests",
     "runner_graph_tests",
     "runner_help_targets_tests",

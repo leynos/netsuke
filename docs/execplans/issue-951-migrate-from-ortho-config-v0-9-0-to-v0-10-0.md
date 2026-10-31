@@ -40,7 +40,9 @@ spelling exits with the same status as before the migration; and
 byte-identical man page (SHA-256 `cc81d1ed...af661a`), with the boolean flags
 still documented as bare switches rather than as `--flag[=BOOL]`. That reader
 A/B holds the tree constant; it is not a claim that the page matches its
-pre-migration form, which it does not in the SYNOPSIS section (#959).
+pre-migration form. The one known cross-migration difference, the SYNOPSIS
+section, was repaired separately under #959 by restoring the 0.9.0
+option-listing fallback.
 
 ## Constraints
 
@@ -382,6 +384,35 @@ pre-migration form, which it does not in the SYNOPSIS section (#959).
   than merely textually clean. `git diff --check` is clean. Main's new
   `scripts/ci` convention was assessed and recorded as not pertinent; the
   evidence is in the Decision log.
+- [x] (2026-10-30) Applied the #959 corrective and closed the guard gap.
+  `ReleaseHelpCli::try_get_doc_metadata` now sets the root `synopsis_id` to
+  `None` immediately after replacing `about_id`, selecting `cargo-orthohelp`'s
+  option-listing fallback and restoring the 0.9.0 rendering. The accompanying
+  comment records why `cli-usage` cannot be substituted: `cargo-orthohelp`
+  never supplies `LocalizationArgs`, so a parameterized key cannot format. The
+  `release_help_identifiers_are_netsuke_declared_not_generated` guard now also
+  collects the root and immediate-subcommand `synopsis_id` values, and the
+  metadata snapshot projects the same field. Verified red then green: with the
+  assignment commented out the guard fails with
+  `release help should name a netsuke-declared key, got netsuke-usage`;
+  restoring it makes all 27 `release_help` tests pass, and the snapshot
+  contains only `synopsis_id: ~` entries. Regenerating the man page with
+  `cargo-orthohelp` 0.10.0 now renders:
+
+  ```plaintext
+  .SH SYNOPSIS
+  .B netsuke
+  [\fB\-\-file\fR \fIUTF8PATHBUF\fR, \fB\-f\fR \fIUTF8PATHBUF\fR]
+  [\fB\-\-jobs\fR \fIUSIZE\fR, \fB\-j\fR \fIUSIZE\fR]
+  [\fB\-\-verbose\fR, \fB\-v\fR]
+  ```
+
+  with no `[missing:` marker anywhere in the file. The `USIZE`, `LIST` and
+  `UTF8PATHBUF` value placeholders from #958 remain, which is the fallback's
+  pre-existing behaviour rather than new breakage. #959 is therefore no longer
+  a residual gap: Option A is landed, Option B stays a follow-up after #958,
+  and a parameterized synopsis stays blocked on
+  [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
 
 ## Surprises & discoveries
 
@@ -444,11 +475,11 @@ pre-migration form, which it does not in the SYNOPSIS section (#959).
   of engaging the option-listing fallback that `None` selected.
   `ReleaseHelpCli` sets `synopsis_id: None` only in `documented_subcommand`;
   the root metadata comes from `CliConfig::get_doc_metadata()` and inherits the
-  derived id. Out of migration scope, and tracked as
-  [leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959) with the
-  upstream cause filed as
-  [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630);
-  recorded, not fixed.
+  derived id. Introduced by the migration, not pre-existing, and repaired in
+  the separate [#959](https://github.com/leynos/netsuke/issues/959) corrective
+  PR, which clears the root `synopsis_id` to restore the fallback; the upstream
+  cause is filed as
+  [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
 - Observation: the repository's CLI layer does not use OrthoConfig's generated
   CLI guard. `src/cli/merge/mod.rs` builds the CLI layer itself from
   `clap::ArgMatches::value_source(...) == ValueSource::CommandLine`, via
@@ -782,14 +813,24 @@ pre-migration form, which it does not in the SYNOPSIS section (#959).
   tests, not because the byte-comparison forbids them: that comparison renders
   one fixed tree under two reader versions, so it pins reader compatibility and
   says nothing about the page's pre-migration form. Each is a self-contained
-  change with its own tests, and netsuke #957/#958/#959/#960 carry them. Of the
-  two upstream gaps, #630 (the synopsis default and the missing
-  `LocalizationArgs`) has no covering issue in `leynos/ortho-config`, so an
-  issue was required; #631 (flag synthesis with no opt-out) has roadmap §12.3.1
-  behind it but no issue, and netsuke #960 needs a concrete blocker, so an
-  issue was raised there too. Netsuke #957's dependency is roadmap §11.2.1
-  alone and has no upstream issue to link; the issue says so explicitly rather
-  than inventing a link. Date/Author: 2026-10-26, agent.
+  change with its own tests, and netsuke #957/#958/#959/#960 carry them. #959
+  takes Option A, clearing the root `synopsis_id` in
+  `ReleaseHelpCli::try_get_doc_metadata`, which restores the 0.9.0
+  option-listing fallback with no catalogue cost. Option B — a variable-free
+  `cli.synopsis` key declared in `src/localization/keys.rs` and present in all
+  35 catalogues — remains a follow-up after #958, because the fallback reuses
+  `value_type_placeholder` and would otherwise render the `USIZE`, `LIST` and
+  `UTF8PATHBUF` placeholders. A parameterized synopsis drawn from upstream's
+  `cli-usage` stays blocked on #630, because `cargo-orthohelp` never supplies
+  `LocalizationArgs`. Of the two upstream gaps, #630 (the synopsis default and
+  the missing `LocalizationArgs`) has no covering issue in
+  `leynos/ortho-config`, so an issue was required; #631 (flag synthesis with no
+  opt-out) has roadmap §12.3.1 behind it but no issue, and netsuke #960 needs a
+  concrete blocker, so an issue was raised there too. Netsuke #957's dependency
+  is roadmap §11.2.1 alone and has no upstream issue to link; the issue says so
+  explicitly rather than inventing a link. Amended 2026-10-30: #959 landed
+  Option A and extended the identifier guard, as the Progress log records.
+  Date/Author: 2026-10-26, agent.
 - Decision: give every one of the five netsuke issues an explicit
   cross-reference section rather than leaving the dependency to prose.
   Rationale: the brief asked for "the relevant blocking notice with a link to
@@ -940,16 +981,23 @@ and the parity test deliberately does not compare value names so the gap cannot
 be mistaken for a migration regression. It is tracked as
 [leynos/netsuke#958](https://github.com/leynos/netsuke/issues/958), which needs
 no upstream change: `cli(value_name = "…")` already exists in both 0.9.0 and
-0.10.0. Finally, the generated man page's SYNOPSIS section reads
-`[missing: netsuke-usage]`. Unlike the two above, this one is *not*
-pre-existing: `ortho_config_macros` 0.10.0 changed `synopsis_id`'s default from
-`None` to a generated `<app>-usage` identifier, and `cargo-orthohelp` prints
-that identifier's resolution (or `[missing: …]`) instead of the option-listing
-fallback that `None` selected. Netsuke sets `synopsis_id: None` only for
-subcommands, so the root inherits the unresolvable id. Tracked as
-[leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959); the
-upstream cause — including the fact that no `LocalizationArgs` are ever passed
-for a synopsis, so even upstream's own `cli-usage` key cannot resolve — is
+0.10.0. Finally, the migration initially left the generated man page's SYNOPSIS
+section reading `[missing: netsuke-usage]`. Unlike the two above, this one is
+*not* pre-existing: `ortho_config_macros` 0.10.0 changed `synopsis_id`'s
+default from `None` to a generated `<app>-usage` identifier, and
+`cargo-orthohelp` prints that identifier's resolution (or `[missing: …]`)
+instead of the option-listing fallback that `None` selected. Netsuke set
+`synopsis_id: None` only for subcommands, so the root inherited the
+unresolvable id.
+[leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959) repaired
+this by clearing the root `synopsis_id` in
+`ReleaseHelpCli::try_get_doc_metadata` (Option A), which restores the 0.9.0
+fallback without adding a catalogue key; Option B, a curated variable-free
+`cli.synopsis` key, remains a follow-up after #958. The identifier guard now
+collects `synopsis_id` and the metadata snapshot pins it, so a future derive
+default cannot reintroduce the placeholder silently. The upstream cause —
+including the fact that no `LocalizationArgs` are ever passed for a synopsis,
+so even upstream's own `cli-usage` key cannot resolve — is
 [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
 
 The man page's flag surface is a fourth item discovered by the same exercise
@@ -1222,8 +1270,8 @@ tree:
   `presence_only_cli_metadata` exists to produce, and it is the contrast that
   makes the absent `=BOOL` suffix meaningful. The PowerShell MAML contains no
   `BOOL` either.
-- Residual gap introduced by 0.10.0: the SYNOPSIS section renders
-  `[missing: netsuke-usage]` because the derive now defaults `synopsis_id` to
+- Residual gap introduced by 0.10.0: the SYNOPSIS section rendered
+  `[missing: netsuke-usage]` because the derive defaults `synopsis_id` to
   `Some(message_id_for(command_path, "usage"))` and no catalogue defines that
   key, while `cargo-orthohelp` prints the unresolved id in place of the
   option-listing fallback that 0.9.0's `None` selected. The root metadata
@@ -1233,6 +1281,8 @@ tree:
   Recorded in `Outcomes & retrospective`; tracked as
   [leynos/netsuke#959](https://github.com/leynos/netsuke/issues/959) and
   [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
+  #959 has since cleared the root `synopsis_id`, so the generator takes the
+  fallback branch; see the final Progress entry for the regenerated SYNOPSIS.
 
 The axiom is the tool's documented interface, not its internal correctness:
 that 0.10.0 emits a *correct* man page is not claimed, only that it accepts the
@@ -1551,3 +1601,22 @@ adopted only because the field's type changed, and the value is
   a clean auto-merge; it exits 0. Main's new `scripts/ci` convention was
   assessed and recorded as not pertinent, with the evidence stated so a later
   reader need not repeat the survey. The replayed head is `277974048`.
+- 2026-10-30: ninth revision, recording the #959 repair. The plan's own
+  retraction had left the SYNOPSIS regression as a residual item; the follow-up
+  now clears the root `synopsis_id` in `ReleaseHelpCli::try_get_doc_metadata`,
+  which restores the 0.9.0 option-listing fallback without adding a catalogue
+  key (Option A). The identifier guard collects `synopsis_id` and the metadata
+  snapshot pins it at `null`, so a future derive default cannot reintroduce
+  `[missing: netsuke-usage]` silently. Regenerating the page with
+  `cargo-orthohelp` 0.10.0 confirms the SYNOPSIS no longer carries a
+  `[missing: …]` marker; the `USIZE`/`LIST`/`UTF8PATHBUF` value placeholders
+  from #958 remain, as expected of the fallback. Option B (a variable-free
+  `cli.synopsis` key in all 35 catalogues) stays a follow-up after #958, and a
+  parameterized synopsis stays blocked on
+  [leynos/ortho-config#630](https://github.com/leynos/ortho-config/issues/630).
+- 2026-10-31: tenth revision, separating delivery scope from regression
+  ownership. The `Surprises & discoveries` entry still read "Out of this
+  migration's scope", which left the retracted pre-existing framing partly
+  intact: the migration *delivered* the regression, even though its *repair*
+  belongs to the separate #959 corrective PR. The entry now states both facts
+  in those terms. No other content changed.

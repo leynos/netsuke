@@ -4095,8 +4095,23 @@ fields back to presence-only switches. Two tests hold both projections:
 `release_help_identifiers_are_netsuke_declared_not_generated` and
 `release_help_cli_value_shapes_match_the_parser` in
 `src/cli/release_help/metadata_tests.rs`. A new derived field, or a new
-upstream metadata change, is expected to reach one of them. Release automation
-delegates installation to
+upstream metadata change, is expected to reach one of them.
+
+The root synopsis is cleared for the same reason. `ortho_config` 0.10.0's
+derive defaults `synopsis_id` to a generated `<app>-usage` identifier that no
+catalogue declares, so `cargo-orthohelp` rendered `[missing: netsuke-usage]`
+into the manual page. `ReleaseHelpCli::try_get_doc_metadata` sets the root
+`synopsis_id` to `None`, which selects the generator's option-listing fallback
+and restores the 0.9.0 rendering (#959). Do not point it at `cli-usage`:
+`cargo-orthohelp` resolves a synopsis without ever supplying
+`LocalizationArgs`, so that parameterized upstream key cannot format and renders
+`[missing: cli-usage]` instead. A curated synopsis would have to be a
+variable-free key declared in `src/localization/keys.rs` and present in every
+catalogue. The identifier guard collects `synopsis_id` alongside `help_id` and
+`about_id`, and the release-help metadata snapshot pins the published value, so
+a future derive default cannot reintroduce the placeholder silently.
+
+Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned
 version supplied as `INPUT_VERSION`. The helper probes the cached binary and,
 on a miss, runs `cargo binstall` with `--disable-strategies compile`; the
