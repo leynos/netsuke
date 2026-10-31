@@ -9268,7 +9268,7 @@ share one open-and-read policy under `src/stdlib/path/`:
   pairs the configured workspace `Arc<Dir>` with that directory's optional
   absolute spelling. `resolve` normalizes a request to a path relative to the
   capability — accepting an absolute request only when it lies lexically
-  beneath the recorded root — and refuses a `..` escape with
+  beneath the recorded root — and refuses a `..` path escape with
   `stdlib.path.contents.outside_workspace`. `open_parent` then opens the
   resolved parent through the capability, so a link in an intermediate
   component cannot leave the workspace; `is_capability_escape` recognizes the
