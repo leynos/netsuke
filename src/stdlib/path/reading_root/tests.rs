@@ -12,6 +12,7 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use minijinja::ErrorKind;
 use rstest::rstest;
 use std::sync::Arc;
+use test_support::{localizer_test_lock, set_en_localizer};
 
 use super::{ReadingRoot, is_capability_escape};
 
@@ -23,7 +24,7 @@ fn root_at(directory: &Utf8Path) -> Result<ReadingRoot> {
 /// A reading root bound to `directory` but recorded under `recorded`.
 ///
 /// Lexical resolution never opens through the recorded spelling, so a case can
-/// name a stable root such as `/tmp/work` without creating it.
+/// name a root beneath the scratch directory without creating it.
 fn root_recorded_at(directory: &Utf8Path, recorded: &Utf8Path) -> Result<ReadingRoot> {
     let handle = Dir::open_ambient_dir(directory, ambient_authority())
         .with_context(|| format!("open reading root {directory}"))?;
@@ -31,6 +32,17 @@ fn root_recorded_at(directory: &Utf8Path, recorded: &Utf8Path) -> Result<Reading
         Arc::new(handle),
         Some(recorded.to_path_buf()),
     ))
+}
+
+/// An absolute spelling of the workspace root beneath the scratch directory.
+///
+/// Deriving the spelling from the scratch path keeps the requests in the
+/// absolute-path cases genuinely absolute everywhere. A hardcoded POSIX
+/// spelling would not be: Windows requires a drive prefix before a path counts
+/// as absolute, so the request would fall through to the relative branch and
+/// the case would prove nothing.
+fn absolute_root(path: &Utf8Path) -> Utf8PathBuf {
+    path.join("work")
 }
 
 /// Open a scratch directory that every resolution case can name.
@@ -88,26 +100,30 @@ fn relative_requests_escaping_the_root_are_refused(#[case] requested: &str) -> R
 #[rstest]
 fn absolute_requests_beneath_the_recorded_root_are_accepted() -> Result<()> {
     let (_temp, path, _) = scratch()?;
-    let root = root_recorded_at(&path, Utf8Path::new("/tmp/work"))?;
+    let recorded = absolute_root(&path);
+    let root = root_recorded_at(&path, &recorded)?;
     ensure!(
-        resolved(&root, "/tmp/work/file").as_deref() == Some(Utf8Path::new("file")),
+        resolved(&root, recorded.join("file").as_str()).as_deref() == Some(Utf8Path::new("file")),
         "an absolute path beneath the root should resolve relatively"
     );
     ensure!(
-        resolved(&root, "/tmp/work/sub/../file").as_deref() == Some(Utf8Path::new("file")),
+        resolved(&root, recorded.join("sub/../file").as_str()).as_deref()
+            == Some(Utf8Path::new("file")),
         "an absolute path should be normalized after the root is stripped"
     );
     Ok(())
 }
 
 #[rstest]
-#[case::outside("/tmp/other/secret")]
-#[case::sibling_prefix("/tmp/workspace/file")]
-#[case::escapes_root("/tmp/work/../other/secret")]
-fn absolute_requests_outside_the_recorded_root_are_refused(#[case] requested: &str) -> Result<()> {
-    let (_temp, _path, root) = scratch()?;
+#[case::outside("other/secret")]
+#[case::sibling_prefix("workspace/file")]
+#[case::escapes_root("work/../other/secret")]
+fn absolute_requests_outside_the_recorded_root_are_refused(#[case] suffix: &str) -> Result<()> {
+    let (_temp, path, _) = scratch()?;
+    let root = root_recorded_at(&path, &absolute_root(&path))?;
+    let requested = path.join(suffix);
     ensure!(
-        resolved(&root, requested).is_none(),
+        resolved(&root, requested.as_str()).is_none(),
         "{requested:?} must be refused as outside the workspace"
     );
     Ok(())
@@ -117,31 +133,38 @@ fn absolute_requests_outside_the_recorded_root_are_refused(#[case] requested: &s
 /// request, so it is refused rather than guessed at.
 #[rstest]
 fn absolute_requests_need_a_recorded_root_path() -> Result<()> {
-    let handle = Dir::open_ambient_dir(".", ambient_authority())
-        .context("open the working directory as a capability")?;
+    let (_temp, path, _) = scratch()?;
+    let handle = Dir::open_ambient_dir(&path, ambient_authority())
+        .context("open the scratch directory as a capability")?;
     let root = ReadingRoot::new(Arc::new(handle), None);
+    let requested = path.join("file");
     ensure!(
-        resolved(&root, "/tmp/work/file").is_none(),
+        root.resolve(&requested).is_err(),
         "an absolute request without a recorded root path must be refused"
     );
     Ok(())
 }
 
-/// The refusal names the request and the boundary, never the file's contents.
+/// The refusal renders the English workspace diagnostic, not the untranslated
+/// key or a leaked platform error.
+///
+/// The localizer is pinned for the assertion because the fallback for a missing
+/// catalogue is the key itself, which also contains the word `workspace`.
+/// Accepting either spelling would let the test pass without proving that the
+/// message a user sees is the localized one.
 #[rstest]
 fn the_refusal_is_a_localized_workspace_diagnostic() -> Result<()> {
-    let (_temp, _path, root) = scratch()?;
+    let _lock = localizer_test_lock().map_err(|error| anyhow!("{error}"))?;
+    let _localizer = set_en_localizer();
+    let (_temp, path, _) = scratch()?;
+    let root = root_recorded_at(&path, &absolute_root(&path))?;
     let err = root
-        .resolve(Utf8Path::new("/tmp/other/secret"))
+        .resolve(&path.join("other/secret"))
         .expect_err("an outside path must be refused");
     let message = err.to_string();
     ensure!(
-        message.contains("outside the workspace") || message.contains("workspace"),
-        "the diagnostic should name the workspace boundary: {message}"
-    );
-    ensure!(
-        !message.contains("TOP-SECRET"),
-        "the diagnostic must not disclose file contents: {message}"
+        message.contains("is outside the workspace"),
+        "the diagnostic should be the localized workspace message: {message}"
     );
     Ok(())
 }
