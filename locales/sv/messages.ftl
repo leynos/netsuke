@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Okänd shelldialekt { $dialect }; väntade en av 
 stdlib.shell.dialect_not_string = dialect-alternativet i shell måste vara en sträng, tog emot { $kind }.
 stdlib.shell.join.not_sequence = shell_join väntade en sekvens men fick { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } i shell_join är { $kind }, inte en sträng.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join skulle överskrida gränsen på { $limit } byte kodad utdata vid element { $index }. Förkorta den sammanfogade sekvensen.
 stdlib.shell.positional_option = { $filter } tar sina alternativ som nyckelord; skriv { $example }.
 
 # Diagnostik för sökvägshjälparen.

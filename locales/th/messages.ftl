@@ -304,6 +304,7 @@ stdlib.shell.dialect_invalid = ไม่รู้จักไดอาเล็�
 stdlib.shell.dialect_not_string = ออปชัน dialect ของ shell ต้องเป็นสายอักขระ แต่ได้รับ { $kind }
 stdlib.shell.join.not_sequence = shell_join คาดหวังลำดับ แต่ได้รับ { $kind }
 stdlib.shell.join.item_not_string = รายการ { $index } ของ shell_join เป็น { $kind } ไม่ใช่สตริง
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join จะเกินขีดจำกัดเอาต์พุตที่เข้ารหัส { $limit } ไบต์ที่รายการ { $index } กรุณาย่อลำดับที่เชื่อมเข้าด้วยกัน
 stdlib.shell.positional_option = { $filter } รับตัวเลือกเป็นคีย์เวิร์ด เขียน { $example }
 
 # การวินิจฉัยของตัวช่วยด้านเส้นทาง

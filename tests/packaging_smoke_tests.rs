@@ -22,7 +22,7 @@ use std::ffi::OsStr;
 use std::process::Command;
 use std::time::Instant;
 
-const REQUIRED_PACKAGED_FILES: [&str; 9] = [
+const REQUIRED_PACKAGED_FILES: [&str; 11] = [
     "build_l10n_audit/mod.rs",
     "build_l10n_audit/compare.rs",
     "build_l10n_audit/ftl.rs",
@@ -31,7 +31,12 @@ const REQUIRED_PACKAGED_FILES: [&str; 9] = [
     "build_l10n_audit/byte_index.rs",
     "build_l10n_audit/metadata.rs",
     "build.rs",
+    // Every key module the audit reads: a missing one fails the build of an
+    // unpacked crate rather than this repository's build, so all three are
+    // listed rather than only the one that happens to hold most keys.
     "src/localization/keys.rs",
+    "src/localization/check_keys.rs",
+    "src/localization/shell_keys.rs",
 ];
 const FORBIDDEN_PACKAGED_ROOTS: [&str; 2] = [".uv-cache", "test_support"];
 /// Every catalogue named by the locale registry must ship in the package;

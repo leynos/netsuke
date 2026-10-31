@@ -306,6 +306,7 @@ stdlib.shell.dialect_invalid = Unknown shell dialect { $dialect }; expected one 
 stdlib.shell.dialect_not_string = The shell dialect option must be a string, received { $kind }.
 stdlib.shell.join.not_sequence = shell_join expects a sequence, received { $kind }.
 stdlib.shell.join.item_not_string = shell_join item { $index } is { $kind }, not a string.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join would exceed its { $limit }-byte encoded-output ceiling at item { $index }. Shorten the joined sequence.
 stdlib.shell.positional_option = { $filter } takes its options by keyword; write { $example }.
 
 # Path helper diagnostics.

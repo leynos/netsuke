@@ -306,6 +306,7 @@ stdlib.shell.dialect_invalid = Άγνωστη διάλεκτος κελύφου�
 stdlib.shell.dialect_not_string = Η επιλογή dialect του shell πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
 stdlib.shell.join.not_sequence = Το shell_join περίμενε ακολουθία, αλλά έλαβε { $kind }.
 stdlib.shell.join.item_not_string = Το στοιχείο { $index } του shell_join είναι { $kind }, όχι συμβολοσειρά.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] Το shell_join θα υπερέβαινε το όριο { $limit } byte κωδικοποιημένης εξόδου στο στοιχείο { $index }. Συντομεύστε την ακολουθία που ενώνεται.
 stdlib.shell.positional_option = Το { $filter } δέχεται τις επιλογές του ως λέξεις-κλειδιά· γράψτε { $example }.
 
 # Διαγνωστικά του βοηθήματος διαδρομών.

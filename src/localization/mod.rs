@@ -20,6 +20,7 @@ macro_rules! define_keys {
 
 mod check_keys;
 pub mod keys;
+mod shell_keys;
 
 /// The locale registry, which lives at the crate root so that it depends on
 /// nothing: this module reaches `cli_localization` to build the default
@@ -40,6 +41,7 @@ fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     // Keep the key registry referenced so dead-code lints do not discard it.
     let _ = keys::ALL_KEYS;
     let _ = check_keys::ALL_KEYS;
+    let _ = shell_keys::ALL_KEYS;
     LOCALIZER.get_or_init(|| {
         let default = crate::cli_localization::build_localizer(None);
         RwLock::new(Arc::from(default))

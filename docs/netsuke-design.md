@@ -1475,6 +1475,15 @@ for transforming data within templates.
   empty word, which is why `compact` is a separate filter rather than a flag
   here. It does not flatten nested lists. This is for deliberate shell recipes;
   structured `exec` recipes remain preferred when no shell syntax is needed.
+  The joined fragment is bounded at 1 MiB of encoded output. The filter
+  accumulates into one buffer rather than materializing an encoded copy of
+  every member and then the joined string, and it rejects a member that cannot
+  fit before encoding it. A host-supplied budget does not participate: the
+  ceiling is a fixed property of the filter, so the bound holds identically in
+  `help targets` and in build rendering. The rendered *text* is a separate
+  question: the query surface fixes the dialect to `Sh` so its values do not
+  depend on the host, while build rendering follows the selected recipe shell.
+  A manifest that needs the same text from both must pass `dialect` explicitly.
 
 - `| compact`: A collection filter that removes `none`, undefined, and empty
   strings while preserving order. It drops nothing else: `0`, `false`, `[]`,
@@ -3699,7 +3708,7 @@ flowchart TD
     B_Metadata{"Cargo.toml locales<br/>match the registry?"} -->|No| N_Drift
     N_Drift["Report the metadata drift"] --> M_Fail
     B_Metadata -->|Yes| C_ReadKeys
-    C_ReadKeys["extract_key_constants<br/>from src/localization/keys.rs"] --> D_ReadSource
+    C_ReadKeys["extract_key_constants<br/>from the localization key modules"] --> D_ReadSource
     D_ReadSource["parse_catalogue<br/>from locales/en-US/messages.ftl"] --> E_Loop
 
     E_Loop["For each locale in<br/>SUPPORTED_LOCALES"] --> F_Parse

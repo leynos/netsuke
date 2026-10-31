@@ -306,6 +306,7 @@ stdlib.shell.dialect_invalid = Dialect de shell necunoscut { $dialect }; se așt
 stdlib.shell.dialect_not_string = Opțiunea dialect din shell trebuie să fie un șir de caractere, s-a primit { $kind }.
 stdlib.shell.join.not_sequence = shell_join aștepta o secvență, dar a primit { $kind }.
 stdlib.shell.join.item_not_string = Elementul { $index } din shell_join este { $kind }, nu un șir.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join ar depăși limita de { $limit } octeți de ieșire codificată la elementul { $index }. Scurtați secvența unită.
 stdlib.shell.positional_option = { $filter } își preia opțiunile ca cuvinte-cheie; scrieți { $example }.
 
 # Diagnostice ale ajutorului pentru căi.

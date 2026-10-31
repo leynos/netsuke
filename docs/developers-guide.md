@@ -668,9 +668,13 @@ Every user-facing string is a Fluent message keyed from
 `src/localization/keys.rs`. Adding one means adding the constant, adding the
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
-that differs from `en-US`. The `netsuke check` keys live in
-`src/localization/check_keys.rs`, which `keys.rs` re-exports; the audit reads
-both files as one key set and rejects a key declared in both.
+that differs from `en-US`. The table is split by feature across
+`src/localization/keys.rs`, `src/localization/check_keys.rs` (the
+`netsuke check` keys), and `src/localization/shell_keys.rs` (the recipe-shell
+filters), all re-exported by `keys.rs`, so a key is always reached as
+`keys::NAME`. The split keeps each module under Whitaker's 400-line cap. The
+audit reads all three as one key set and rejects a key declared in more than
+one.
 
 A *diagnostic* message whose text carries a bracketed code such as
 `[netsuke::jinja::shell::args]` must have that code copied **verbatim** into
@@ -918,21 +922,35 @@ Ordinary child stdout streams forward directly and must not use this tail.
 
 The lowest-layer shell-word quoting used for input/output paths during IR
 lowering, and for the `shell_quote` and `shell_join` template filters, is
-[`src/shell_word.rs`](../src/shell_word.rs). `quote_word` is its one entry
-point, and `is_recipe_admissible` is a separate predicate: encoding is total,
-while which inputs a recipe may carry is a question the caller owns and asks
-separately, a split `quote_path` depends on to keep its existing total
-behaviour. It is the single encoding of a recipe shell word, and a constraint
-test holds the delegation to one call site per layer rather than to convention.
-It performs minimal, fragmented shell quoting — `shell-quote`'s `Sh` encoder
-leaves the longest safe prefix bare and quotes only the remainder, so `a b`
-encodes as `a' b'` and not `'a b'` — which is appropriate for a literal shell
-word but not for the command-list `eval` payload. That renderer requires a
-canonical single-quoted payload so existing generated Ninja list text remains
-byte-for-byte stable, and the delimiter/boundary tests continue to hold. Keep
-that quoting in the deliberately local `shell_single_quote` function; it is not
-a general-purpose helper, and it is the one remaining quoter outside
-`src/shell_word.rs`.
+[`src/shell_word.rs`](../src/shell_word.rs). `encode_into` appends one encoded
+word to a byte buffer and is its one entry point; `quote_word` is the
+allocating convenience wrapper, and `is_recipe_admissible` is a separate
+predicate: encoding is total, while which inputs a recipe may carry is a
+question the caller owns and asks separately, a split `quote_path` depends on
+to keep its existing total behaviour. It is the single encoding of a recipe
+shell word, and a constraint test holds the delegation to one call site per
+layer rather than to convention. It performs minimal, fragmented shell quoting —
+`shell-quote`'s `Sh` encoder leaves the longest safe prefix bare and quotes
+only the remainder, so `a b` encodes as `a' b'` and not `'a b'` — which is
+appropriate for a literal shell word but not for the command-list `eval`
+payload. That renderer requires a canonical single-quoted payload so existing
+generated Ninja list text remains byte-for-byte stable, and the
+delimiter/boundary tests continue to hold. Keep that quoting in the
+deliberately local `shell_single_quote` function; it is not a general-purpose
+helper, and it is the one remaining quoter outside `src/shell_word.rs`.
+
+`encoded_len_lower_bound` reports the bytes `encode_into` will append: exactly
+for PowerShell, and as a lower bound for `Sh`, whose escaping only adds bytes
+and whose output is at most `3n + 1` bytes for a non-empty `n`-byte input.
+`shell_join` uses it to keep its intermediate buffer under
+`SHELL_JOIN_MAX_ENCODED_BYTES` (1 MiB): it checks the lower bound before
+encoding a member, then checks the produced length before accepting it. The
+first check stops one oversized member from being materialized; the second is
+what makes the ceiling true for `Sh`, whose suffix quoting can emit up to three
+bytes per input byte. The ceiling is a fixed constant in
+`src/stdlib/recipe_text/mod.rs`, not a `StdlibConfig` field, because the query
+surface must stay hermetic (ADR-0044) and a host-supplied budget would change
+rendered output between machines. ADR-0041 records the decision.
 
 The third path is the platform-specific `src/stdlib/command/child_argument.rs`
 implementation behind the `command.quote` template wrapper. That file was named
@@ -1182,11 +1200,12 @@ observability recorder — provide two definitions: one under
 `#[cfg(feature = "lint")]` and a `#[cfg(not(feature = "lint"))]` no-op twin.
 
 **Fluent keys stay ungated.** The Fluent message keys in
-`src/localization/keys.rs` and `src/localization/check_keys.rs`, their
-catalogue entries, and the subcommand-to-key routing in `src/cli/l10n/mod.rs`
-are deliberately not gated. The build-time localization audit is bidirectional
-across all 35 catalogues, and gating the constants would make every locale look
-orphaned; the routing only maps command names and carries no linting logic.
+`src/localization/keys.rs`, `src/localization/check_keys.rs`, and
+`src/localization/shell_keys.rs`, their catalogue entries, and the
+subcommand-to-key routing in `src/cli/l10n/mod.rs` are deliberately not gated.
+The build-time localization audit is bidirectional across all 35 catalogues,
+and gating the constants would make every locale look orphaned; the routing
+only maps command names and carries no linting logic.
 
 **Test gating.** Check-only integration tests gate the whole test binary with
 an inner `#![cfg(feature = "lint")]` (`tests/check_command_tests.rs`,
@@ -4224,8 +4243,8 @@ When release-validation requirements or documentation paths change, update
 ## The build script's module slice
 
 `build.rs` recompiles part of the library as its own crate: it needs
-`cli::Cli::command()` for man-page generation and the key registry in
-`src/localization/keys.rs` for the Fluent audit. Rather than declaring
+`cli::Cli::command()` for man-page generation and the key registry under
+`src/localization/` for the Fluent audit. Rather than declaring
 `src/cli/mod.rs` and inheriting the whole subtree, it declares an inline `cli`
 module naming exactly four files — `src/cli/command.rs`,
 `src/cli/config/mod.rs`, `src/cli/help.rs`, and `src/cli/validation.rs`.

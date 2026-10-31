@@ -160,7 +160,8 @@ Table 3: Message key domains and their purposes
 **Naming pattern:** `domain.subdomain.specific_message`
 
 The corresponding Rust constants are defined in `src/localization/keys.rs`,
-with the `netsuke check` keys in `src/localization/check_keys.rs`, using
+with the `netsuke check` keys in `src/localization/check_keys.rs` and the
+recipe-shell filter keys in `src/localization/shell_keys.rs`, using
 UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to `cli.flag.file.help`).
 
 ## 5. Variable usage
@@ -445,10 +446,10 @@ Netsuke validates every registered locale at compile time via
 `build_l10n_audit/`:
 
 - **Metadata drift**: `Cargo.toml`'s locale list disagrees with the registry
-- **Missing keys**: Keys in `keys.rs` or `check_keys.rs` but not in the FTL
-  file
-- **Orphaned keys**: Keys in the FTL file but in neither `keys.rs` nor
-  `check_keys.rs`
+- **Missing keys**: Keys in `keys.rs`, `check_keys.rs`, or `shell_keys.rs` but
+  not in the FTL file
+- **Orphaned keys**: Keys in the FTL file but in none of `keys.rs`,
+  `check_keys.rs`, or `shell_keys.rs`
 - **Variable mismatches**: A message interpolating different variables from the
   English source — a dropped `{ $path }` or a stray `{ $name }`
 

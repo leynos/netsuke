@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Dialecto de shell desconocido { $dialect }; se es
 stdlib.shell.dialect_not_string = La opción dialect de shell debe ser una cadena, se recibió { $kind }.
 stdlib.shell.join.not_sequence = shell_join esperaba una secuencia pero recibió { $kind }.
 stdlib.shell.join.item_not_string = El elemento { $index } de shell_join es { $kind }, no una cadena.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join superaría su límite de { $limit } bytes de salida codificada en el elemento { $index }. Acorte la secuencia unida.
 stdlib.shell.positional_option = { $filter } toma sus opciones por palabra clave; escriba { $example }.
 
 # Diagnósticos de rutas.

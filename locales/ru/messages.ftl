@@ -307,6 +307,7 @@ stdlib.shell.dialect_invalid = Неизвестный диалект оболо�
 stdlib.shell.dialect_not_string = Опция dialect в shell должна быть строкой, получено { $kind }.
 stdlib.shell.join.not_sequence = shell_join ожидал последовательность, но получил { $kind }.
 stdlib.shell.join.item_not_string = Элемент { $index } в shell_join имеет тип { $kind }, а не строку.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join превысит предел { $limit } байт закодированного вывода на элементе { $index }. Сократите объединяемую последовательность.
 stdlib.shell.positional_option = { $filter } принимает параметры по ключевым словам; напишите { $example }.
 
 # Диагностика помощника для путей.

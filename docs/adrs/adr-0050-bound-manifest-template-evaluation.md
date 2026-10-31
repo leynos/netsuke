@@ -237,6 +237,16 @@ macro output or internal macro and capture buffering. Addendum B's deferred
 remediation and its MiniJinja 3.0.0-final release condition therefore remain
 unchanged.
 
+## Addendum E: `shell_join` helper-local ceiling (2026-10-30)
+
+`shell_join` now enforces a fixed 1 MiB ceiling on the encoded command line it
+builds, recorded in
+[ADR-0041](adr-0041-canonical-recipe-shell-quoting-surface.md). It is a
+helper-local intermediate-buffer bound, not the per-value quota or the
+budget-aware internal buffer deferred in
+[#720](https://github.com/leynos/netsuke/issues/720); it neither discharges nor
+narrows that deferred work.
+
 ## References
 
 - [#651](https://github.com/leynos/netsuke/issues/651) and

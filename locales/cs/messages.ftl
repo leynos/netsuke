@@ -307,6 +307,7 @@ stdlib.shell.dialect_invalid = Neznámý dialekt shellu { $dialect }; očekává
 stdlib.shell.dialect_not_string = Volba dialect v shell musí být řetězec; typ obdržené hodnoty: { $kind }.
 stdlib.shell.join.not_sequence = shell_join očekával posloupnost, ale obdržel { $kind }.
 stdlib.shell.join.item_not_string = Prvek { $index } v shell_join má typ { $kind }, nikoli řetězec.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join by překročil strop { $limit } bajtů zakódovaného výstupu u prvku { $index }. Zkraťte spojovanou posloupnost.
 stdlib.shell.positional_option = { $filter } přijímá své volby jako klíčová slova; zapište { $example }.
 
 # Diagnostika pomocníka pro cesty.

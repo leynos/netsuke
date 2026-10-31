@@ -624,6 +624,13 @@ text must be byte-stable. Both are correct only in unquoted argv position. See
 for the full contract, and "Write recipes that work on Windows" below for why
 the default differs.
 
+`shell_join` stops at a fixed 1 MiB ceiling on the encoded command line it
+builds. A join that would exceed the ceiling fails with the
+`netsuke::jinja::shell::join_limit` diagnostic, which names the ceiling and the
+member that could not fit without repeating that member's content. The ceiling
+is part of the filter rather than of the configurable manifest budgets, so it
+applies equally to `help targets` and to build rendering.
+
 Cycle detection follows `sources` and `deps`. Order-only dependencies enforce
 ordering but do not participate in cycle detection.
 
@@ -1554,6 +1561,12 @@ and 50,000 expanded entries. Each evaluation reserves at most the
 per-evaluation fuel limit. Successful expressions, macro calls, and renders
 refund unused fuel to the aggregate manifest allowance; exhausted evaluations
 do not.
+
+`shell_join` additionally enforces a fixed 1 MiB ceiling on the encoded command
+line it builds. Unlike the budgets here, that ceiling is not configurable: it
+bounds a filter's intermediate buffer, which exists before any rendered value
+does, and it applies before `manifest_rendered_value_bytes` or
+`manifest_rendered_manifest_bytes` can see the result.
 
 These budgets reduce, rather than eliminate, resource-exhaustion exposure. Byte
 limits are enforced before the buffer Netsuke controls accepts output, but

@@ -307,6 +307,7 @@ stdlib.shell.dialect_invalid = Dual-chainnt sligean neo-aithnichte { $dialect };
 stdlib.shell.dialect_not_string = Feumaidh roghainn dialect shell a bhith na shreang; fhuaras { $kind }.
 stdlib.shell.join.not_sequence = Bha dùil aig shell_join ri sreath ach fhuair e { $kind }.
 stdlib.shell.join.item_not_string = Tha nì { $index } aig shell_join na { $kind }, chan e sreang.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] Dh'fhaodadh shell_join a dhol thairis air a' chrìoch { $limit } baidht de thoradh còdaichte aig nì { $index }. Giorraich an t-sreath aonaichte.
 stdlib.shell.positional_option = Bidh { $filter } a' gabhail a roghainnean mar fhacal-luirg; sgrìobh { $example }.
 
 # Breithneachadh cuidiche nan slighean.

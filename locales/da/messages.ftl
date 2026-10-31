@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Ukendt shell-dialekt { $dialect }; forventede en 
 stdlib.shell.dialect_not_string = dialect-indstillingen i shell skal være en streng, modtog { $kind }.
 stdlib.shell.join.not_sequence = shell_join forventede en følge, men fik { $kind }.
 stdlib.shell.join.item_not_string = Element { $index } i shell_join er { $kind }, ikke en streng.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join ville overskride grænsen på { $limit } byte kodet output ved element { $index }. Forkort den sammenføjede følge.
 stdlib.shell.positional_option = { $filter } tager sine valgmuligheder som nøgleord; skriv { $example }.
 
 # Diagnostik for stihjælperen.

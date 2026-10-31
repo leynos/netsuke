@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = Tuntematon komentotulkin murre { $dialect }; odot
 stdlib.shell.dialect_not_string = dialect-valinnan shell-funktiossa on oltava merkkijono, vastaanotettiin { $kind }.
 stdlib.shell.join.not_sequence = shell_join odotti jonoa, mutta sai { $kind }.
 stdlib.shell.join.item_not_string = Kohteen { $index } tyyppi shell_join-kutsussa on { $kind }, ei merkkijono.
+stdlib.shell.join.limit = [netsuke::jinja::shell::join_limit] shell_join ylittäisi { $limit } tavun koodatun tulosteen ylärajan kohdassa { $index }. Lyhennä yhdistettyä jonoa.
 stdlib.shell.positional_option = { $filter } ottaa valitsimensa avainsanoina; kirjoita { $example }.
 
 # Polkuapurin diagnostiikka.

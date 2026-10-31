@@ -305,6 +305,7 @@ stdlib.shell.dialect_invalid = لهجهٔ پوستهٔ ناشناخته { $diale
 stdlib.shell.dialect_not_string = گزینه dialect در shell باید رشته باشد، اما { $kind } دریافت شد.
 stdlib.shell.join.not_sequence = ‏shell_join یک دنباله انتظار داشت اما { $kind } دریافت کرد.
 stdlib.shell.join.item_not_string = آیتم { $index } در shell_join از نوع { $kind } است، نه رشته.
+stdlib.shell.join.limit = ‏[netsuke::jinja::shell::join_limit] shell_join از سقف { $limit } بایتی خروجی کدگذاری‌شده در آیتم { $index } فراتر می‌رود. دنبالهٔ به‌هم‌پیوسته را کوتاه کنید.
 stdlib.shell.positional_option = ‏{ $filter } گزینه‌های خود را به‌صورت کلیدواژه می‌گیرد؛ { $example } بنویسید.
 
 # تشخیص‌های یاور مسیرها.
