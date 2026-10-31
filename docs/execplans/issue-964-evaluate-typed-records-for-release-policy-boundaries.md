@@ -246,6 +246,11 @@ records and are unchanged.
 - [x] Run the release-publication, workflow-contract, typecheck, lint, format,
       Markdown, and spelling gates. All seven pass on `716f9b914`.
 - [x] Update this plan's Outcomes and Status, and the roadmap 9.1.1 checkbox.
+- [x] Address review findings and re-gate. Invariants are bound at
+      construction, a repeated asset name is refused, the refusal cases are
+      parametrized, the variance note is corrected, and the sorting guard now
+      uses a mixed-type key set. The full gate set is re-run on the branch
+      head.
 
 ## Outcomes and retrospective
 
