@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = خطای ورودی/خروجی ناشناخته
 manifest.command_list_empty = فیلد «command» نباید خالی باشد: یک رشتهٔ فرمان یا فهرستی ناتهی ارائه دهید.
 manifest.command_isolation_recipe = فیلد «command_isolation» به دستوری با فهرست فرمان‌ها نیاز دارد.
 manifest.command_isolation_scalar = ‏«command_isolation: isolated» به فهرست فرمان‌ها نیاز دارد.
+manifest.console_dependency_only = ورودی‌هایی که فقط وابستگی‌ها را اعلام می‌کنند نمی‌توانند مخزن کنسول را انتخاب کنند.
 
 # خطاهای بازنمایی میانی.
 ir.rule_not_found = قاعدهٔ «{ $rule }» که هدف «{ $target }» به آن ارجاع می‌دهد یافت نشد.
@@ -195,6 +196,8 @@ ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
 
 # خطاهای تولید پرونده‌های Ninja.
 ninja_gen.missing_action = کنش «{ $id }» که یک یال ساخت به آن ارجاع می‌دهد وجود ندارد.
+ninja_gen.console_dependency_only = ‏یال ساخت «{ $output }» نمی‌تواند مخزن کنسول را انتخاب کند، زیرا کنش آن فقط شامل وابستگی‌هاست.
+ninja_gen.console_pool_conflict = ‏یال ساخت «{ $output }» مخزن کنسول را انتخاب می‌کند، اما کنش آن مخزن سفارشی «{ $pool }» را درخواست می‌کند.
 ninja_gen.format = قالب‌بندی خروجی مانیفست Ninja ممکن نشد.
 ninja_gen.dyndep_files_required = ‏ این ساخت به بستهٔ تولیدشدهٔ Ninja نیاز دارد؛ از `netsuke build`، `netsuke clean` یا `netsuke generate` استفاده کنید تا فایل‌های dyndep ایجاد شوند.
 ninja_gen.reserved_output_path = ‏ مسیر '{ $path }' برای وضعیت وابستگی‌های ترتیبی Netsuke رزرو شده است.

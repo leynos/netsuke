@@ -5,9 +5,9 @@
 
 use super::helpers::{
     assert_macro_count, assert_macro_signature_eq, assert_target_always, assert_target_command_eq,
-    assert_target_count, assert_target_has_dep, assert_target_has_order_only_dep,
-    assert_target_has_source, assert_target_name_eq, assert_target_phony, assert_target_rule_eq,
-    assert_target_script_eq, with_target,
+    assert_target_console, assert_target_count, assert_target_has_dep,
+    assert_target_has_order_only_dep, assert_target_has_source, assert_target_name_eq,
+    assert_target_phony, assert_target_rule_eq, assert_target_script_eq, with_target,
 };
 use super::{get_string_from_string_or_list, with_manifest_error_context};
 use crate::bdd::fixtures::{RefCellOptionExt, TestWorld};
@@ -58,6 +58,26 @@ fn target_not_phony(world: &TestWorld, index: usize) -> Result<()> {
 #[then("the target {index:usize} is not always rebuilt")]
 fn target_not_always(world: &TestWorld, index: usize) -> Result<()> {
     assert_target_always(world, index, false)
+}
+
+/// Assert that a target requests Ninja's console pool.
+///
+/// # Errors
+///
+/// Returns an error when the target is missing or does not request the pool.
+#[then("the target {index:usize} requests console scheduling")]
+fn target_requests_console_scheduling(world: &TestWorld, index: usize) -> Result<()> {
+    assert_target_console(world, index, true)
+}
+
+/// Assert that a target keeps ordinary Ninja scheduling.
+///
+/// # Errors
+///
+/// Returns an error when the target is missing or requests the pool.
+#[then("the target {index:usize} does not request console scheduling")]
+fn target_does_not_request_console_scheduling(world: &TestWorld, index: usize) -> Result<()> {
+    assert_target_console(world, index, false)
 }
 
 #[expect(

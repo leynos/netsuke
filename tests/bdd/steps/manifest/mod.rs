@@ -5,6 +5,7 @@
 //! - `helpers.rs` - Typed assertion utilities and target accessor functions
 //! - `targets.rs` - Target-specific assertion steps
 
+mod actions;
 pub(super) mod environment;
 mod helpers;
 mod targets;
@@ -296,6 +297,21 @@ where
         f(action)
     });
     with_manifest_error_context(world, result.context("manifest has not been parsed"))?
+}
+
+/// Validate the console-scheduling flag on an action.
+///
+/// # Errors
+///
+/// Returns an error when the action is missing or its flag differs.
+fn assert_action_console(world: &TestWorld, index: usize, expected: bool) -> Result<()> {
+    with_action(world, index, |action| {
+        ensure!(
+            action.console == expected,
+            "action {index} console scheduling should be {expected}"
+        );
+        Ok(())
+    })
 }
 
 #[then("the manifest has {count:usize} actions")]

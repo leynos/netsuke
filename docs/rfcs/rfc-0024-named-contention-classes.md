@@ -81,7 +81,11 @@ only, with an explicit unsupported-field diagnostic on rules.
 Dependency-only aggregates cannot hold a slot because they execute no command.
 Reject aggregate annotations with a remedy naming the executable children; do
 not infer recursive inheritance across their dependency closure. An annotation
-on a consumer neither constrains its prerequisites nor changes their order.
+on a consumer neither constrains its prerequisites nor changes their order. The
+independent `console: true` action or target option selects Ninja's special
+console pool for that edge. It remains valid on its own, but a console edge
+cannot also request a contention class. Reject only that combination; do not
+reject console selection generally.
 
 ## 5. Scheduling and lowering
 
@@ -103,8 +107,11 @@ Unrelated classes cannot express overlapping exclusion sets in this version;
 combining their names into a new class would not enforce the original limits.
 
 Ninja's special `console` pool cannot simultaneously be combined with a custom
-pool on the same edge. Reject a request that requires both guarantees. Do not
-silently discard either console behaviour or contention limits.
+pool on the same edge. When a manifest edge opts into `console`, generation
+rejects an existing custom `Action.pool` value other than `console`; an existing
+`Action.pool` setting to `console` is redundant and accepted. A console edge
+with a resolved contention class is rejected as well. Console selection remains
+available without contention, and neither behaviour is silently discarded.
 
 Serialize resolved class definitions and references in generated plans and
 include scheduling metadata in the existing graph/plan identity. Reject unknown
@@ -156,8 +163,9 @@ actions, but may not infer such a requirement from a command containing the word
 
 Compare unannotated graph and Ninja output against existing fixtures. Add a
 small legacy-command example before any larger structured-runner canary. Test
-unknown classes, capacity bounds, conflicting definitions, console conflicts,
-aggregates, namespace privacy, and persisted-plan compatibility.
+unknown classes, capacity bounds, conflicting definitions, the combination of
+console selection and a contention class, custom-pool conflicts, aggregates,
+namespace privacy, and persisted-plan compatibility.
 
 Use controlled child processes and a shared test journal to measure live
 concurrency. Under global `-j` greater than one, assert that a capacity-one
@@ -178,10 +186,12 @@ scheduling. A generalized multi-resource scheduler would duplicate Ninja and
 create a much larger correctness burden. Mandatory resource budgets would
 undermine the shallow end without necessarily controlling subprocesses.
 
-Ratify the operator ceiling field, class-name lowering, console interaction,
-and any rule-default semantics before implementing the public grammar. Reserve
-multi-resource allocation and cross-host scheduling for separate evidence-led
-proposals. Ordinary native compilation limits must not depend on those features.
+Ratify the operator ceiling field, class-name lowering, and any rule-default
+semantics before implementing the public grammar. Console selection is an
+independent edge option; only its combination with a contention class is
+prohibited. Reserve multi-resource allocation and cross-host scheduling for
+separate evidence-led proposals. Ordinary native compilation limits must not
+depend on those features.
 
 ## 10. Recommendation
 

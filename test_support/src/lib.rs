@@ -31,6 +31,7 @@ pub mod localizer;
 pub mod manifest;
 pub mod netsuke;
 pub mod ninja;
+pub mod ninja_edge;
 pub mod ninja_gen;
 pub mod ninja_semantics;
 pub mod stdlib_assert;

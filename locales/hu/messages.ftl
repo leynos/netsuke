@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = ismeretlen be- és kiviteli hiba.
 manifest.command_list_empty = A „command” mező nem lehet üres: adjon meg egy parancs-karakterláncot vagy egy nem üres listát.
 manifest.command_isolation_recipe = Az „command_isolation” mezőhöz parancslistás recept szükséges.
 manifest.command_isolation_scalar = Az „command_isolation: isolated” értékhez parancslista szükséges.
+manifest.console_dependency_only = A csak függőségeket megadó bejegyzések nem választhatják ki a konzolkészletet.
 
 # A köztes ábrázolás hibái.
 ir.rule_not_found = A(z) „{ $target }” cél által hivatkozott „{ $rule }” szabály nem található.
@@ -195,6 +196,8 @@ ir.invalid_command = Érvénytelen behelyettesítés a parancsban: { $snippet }.
 
 # A Ninja-fájlok előállításának hibái.
 ninja_gen.missing_action = Hiányzik a(z) „{ $id }” művelet, amelyre egy építési él hivatkozik.
+ninja_gen.console_dependency_only = A(z) „{ $output }” build él nem választhatja a konzolkészletet, mert a művelete csak függőségeket tartalmaz.
+ninja_gen.console_pool_conflict = A(z) „{ $output }” build él a konzolkészletet választja, de a művelete a(z) „{ $pool }” egyéni készletet kéri.
 ninja_gen.format = A Ninja-jegyzék kimenetét nem sikerült formázni.
 ninja_gen.dyndep_files_required = Ehhez a művelethez generált Ninja-csomag szükséges; a dyndep fájlok létrehozásához használja a `netsuke build`, `netsuke clean` vagy `netsuke generate` parancsot.
 ninja_gen.reserved_output_path = A(z) '{ $path }' útvonal a Netsuke soros függőségi állapota számára van fenntartva.

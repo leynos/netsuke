@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = galat masukan/keluaran yang tidak dikenal.
 manifest.command_list_empty = Bidang "command" tidak boleh kosong: berikan string perintah atau daftar yang tidak kosong.
 manifest.command_isolation_recipe = Bidang ‘command_isolation’ memerlukan resep dengan daftar perintah.
 manifest.command_isolation_scalar = ‘command_isolation: isolated’ memerlukan daftar perintah.
+manifest.console_dependency_only = Entri yang hanya menyatakan dependensi tidak dapat memilih pool konsol.
 
 # Galat representasi antara.
 ir.rule_not_found = Aturan "{ $rule }" yang dirujuk target "{ $target }" tidak ditemukan.
@@ -195,6 +196,8 @@ ir.invalid_command = Penyisipan tidak sah pada perintah: { $snippet }.
 
 # Galat pembuatan berkas Ninja.
 ninja_gen.missing_action = Tindakan "{ $id }" yang dirujuk sebuah sisi build tidak ada.
+ninja_gen.console_dependency_only = Sisi build ‘{ $output }’ tidak dapat memilih pool konsol karena aksinya hanya berisi dependensi.
+ninja_gen.console_pool_conflict = Sisi build ‘{ $output }’ memilih pool konsol, tetapi aksinya meminta pool khusus ‘{ $pool }’.
 ninja_gen.format = Keluaran manifes Ninja tidak dapat diformat.
 ninja_gen.dyndep_files_required = Build ini memerlukan bundel Ninja yang dibuat; gunakan `netsuke build`, `netsuke clean`, atau `netsuke generate` agar berkas dyndep diwujudkan.
 ninja_gen.reserved_output_path = Jalur '{ $path }' dicadangkan untuk status dependensi serial Netsuke.

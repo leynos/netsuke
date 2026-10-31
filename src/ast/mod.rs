@@ -186,6 +186,10 @@ pub enum Recipe {
 /// Preserve the established diagnostic for entries without a recipe or deps.
 pub(crate) const MISSING_RECIPE_ERROR: &str = "missing one of command, script, or rule";
 
+/// Explain why dependency-only entries cannot request the console pool.
+pub(crate) const CONSOLE_DEPENDENCY_ONLY_ERROR: &str =
+    "console cannot be enabled for dependency-only entries";
+
 /// Neutral schema error for modes that do not accompany a command list.
 pub(crate) const COMMAND_ISOLATION_RECIPE_ERROR: &str =
     "command_isolation requires a command-list recipe";
@@ -306,6 +310,14 @@ impl NetsukeManifest {
             .any(|target| target.recipe.is_dependency_only() && target.deps.is_blank_content())
         {
             return Err(MISSING_RECIPE_ERROR);
+        }
+        if self
+            .actions
+            .iter()
+            .chain(&self.targets)
+            .any(|target| target.console && target.recipe.is_dependency_only())
+        {
+            return Err(CONSOLE_DEPENDENCY_ONLY_ERROR);
         }
         Ok(())
     }

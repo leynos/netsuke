@@ -318,6 +318,9 @@ operator, user, and contributor references are easier to find.
   moving package verification into `make test-package-verify`.
 - [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
   Bounded, localized Ninja progress labels for inline recipe edges.
+- [ADR-0061](adrs/adr-0061-select-ninja-console-pool-per-build-edge.md):
+  Select Ninja's console pool on individual build edges while preserving action
+  identity and rejecting incompatible scheduling annotations.
 
 ## Proposals
 

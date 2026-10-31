@@ -22,6 +22,7 @@ fn build_edge(inputs: &[&str], implicit_deps: &[&str], output: &str) -> BuildEdg
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     }
 }
 struct MissingDepsCase<'a> {

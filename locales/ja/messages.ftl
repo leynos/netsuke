@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = 不明な入出力エラー。
 manifest.command_list_empty = 「command」フィールドは空にできません: コマンド文字列または空でないリストを指定してください。
 manifest.command_isolation_recipe = 「command_isolation」フィールドにはコマンドリストのレシピが必要です。
 manifest.command_isolation_scalar = 「command_isolation: isolated」にはコマンドリストが必要です。
+manifest.console_dependency_only = 依存関係のみを宣言する項目は、コンソールプールを選択できません。
 
 # 中間表現のエラー。
 ir.rule_not_found = ターゲット「{ $target }」が参照する規則「{ $rule }」が見つかりません。
@@ -195,6 +196,8 @@ ir.invalid_command = コマンドの補間が無効です: { $snippet }。
 
 # Ninja 生成のエラー。
 ninja_gen.missing_action = ビルド辺が参照するアクション「{ $id }」がありません。
+ninja_gen.console_dependency_only = ビルドエッジ「{ $output }」はコンソールプールを選択できません。アクションが依存関係のみだからです。
+ninja_gen.console_pool_conflict = ビルドエッジ「{ $output }」はコンソールプールを選択していますが、アクションはカスタムプール「{ $pool }」を要求しています。
 ninja_gen.format = Ninja マニフェストの出力を整形できませんでした。
 ninja_gen.dyndep_files_required = この操作には生成済み Ninja バンドルが必要です。dyndep ファイルを具体化するには `netsuke build`、`netsuke clean`、または `netsuke generate` を使用してください。
 ninja_gen.reserved_output_path = パス '{ $path }' は Netsuke の直列依存関係の状態用に予約されています。

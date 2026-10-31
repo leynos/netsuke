@@ -313,6 +313,7 @@ fn catalogue_target(
         vars: crate::ast::Vars::default(),
         phony,
         always: false,
+        console: false,
         conditional,
         description,
     }

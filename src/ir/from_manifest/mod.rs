@@ -10,7 +10,7 @@ use std::sync::Arc;
 
 use camino::Utf8PathBuf;
 
-use crate::ast::{MISSING_RECIPE_ERROR, NetsukeManifest, Recipe, Rule};
+use crate::ast::{NetsukeManifest, Recipe, Rule};
 use crate::localization::{self, keys};
 use crate::recipe_shell::RecipeShell;
 
@@ -66,9 +66,7 @@ impl BuildGraph {
     ) -> Result<Self, IrGenError> {
         manifest
             .validate_recipes()
-            .map_err(|_| IrGenError::InvalidManifest {
-                message: MISSING_RECIPE_ERROR,
-            })?;
+            .map_err(|message| IrGenError::InvalidManifest { message })?;
         let mut graph = Self::default();
         let mut rule_map = IrHashMap::<String, Arc<Rule>>::default();
 
@@ -174,6 +172,7 @@ impl BuildGraph {
                 order_only_deps: to_paths(&target.order_only_deps),
                 phony: target.phony,
                 always: target.always,
+                console: target.console,
             };
 
             #[cfg(not(kani))]

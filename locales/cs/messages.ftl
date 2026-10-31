@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = neznámá vstupně-výstupní chyba.
 manifest.command_list_empty = Pole „command“ nesmí být prázdné: zadejte řetězec s příkazem nebo neprázdný seznam.
 manifest.command_isolation_recipe = Pole „command_isolation“ vyžaduje recept se seznamem příkazů.
 manifest.command_isolation_scalar = „command_isolation: isolated“ vyžaduje seznam příkazů.
+manifest.console_dependency_only = Položky obsahující pouze závislosti nemohou vybrat fond konzole.
 
 # Chyby mezikódu.
 ir.rule_not_found = Pravidlo „{ $rule }“, na které odkazuje cíl „{ $target }“, nebylo nalezeno.
@@ -195,6 +196,8 @@ ir.invalid_command = Neplatné vložení v příkazu: { $snippet }.
 
 # Chyby při generování souborů Ninja.
 ninja_gen.missing_action = Chybí akce „{ $id }“, na kterou odkazuje hrana sestavení.
+ninja_gen.console_dependency_only = Sestavovací hrana „{ $output }“ nemůže vybrat fond konzole, protože její akce slouží pouze jako závislost.
+ninja_gen.console_pool_conflict = Sestavovací hrana „{ $output }“ vybírá fond konzole, ale její akce požaduje vlastní fond „{ $pool }“.
 ninja_gen.format = Výstup manifestu Ninja se nepodařilo naformátovat.
 ninja_gen.dyndep_files_required = Toto sestavení vyžaduje vygenerovaný balíček Ninja; použijte `netsuke build`, `netsuke clean` nebo `netsuke generate`, aby se soubory dyndep materializovaly.
 ninja_gen.reserved_output_path = Cesta '{ $path }' je vyhrazena pro stav sériových závislostí Netsuke.

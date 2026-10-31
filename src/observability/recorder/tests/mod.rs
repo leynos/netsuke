@@ -17,6 +17,8 @@ type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugVal
 /// Fixed three-label layout used by recipe-shell counters.
 type MetricLabels = [(&'static str, &'static str); 3];
 
+/// Cover retained console-scheduling generation and build metrics separately.
+mod console_tests;
 /// Cover bounded legacy-recipe operation metric registrations separately.
 mod legacy_recipe_tests;
 

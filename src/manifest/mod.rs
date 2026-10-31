@@ -160,12 +160,14 @@ fn evaluate_manifest(
     } else {
         render::render_manifest_with_budget(manifest, &jinja, &budget)?
     };
-    rendered_manifest
-        .validate_recipes()
-        .map_err(|detail| ManifestError::Parse {
-            source: map_data_error(serde_json::Error::custom(detail), name),
+    rendered_manifest.validate_recipes().map_err(|detail| {
+        let diagnostic_details = crate::ir::manifest_recipe_validation_message(detail)
+            .map_or_else(|| detail.to_owned(), |message| message.to_string());
+        ManifestError::Parse {
+            source: map_data_error(serde_json::Error::custom(diagnostic_details), name),
             message: localization::message(keys::MANIFEST_PARSE),
-        })?;
+        }
+    })?;
     Ok(rendered_manifest)
 }
 /// Parse a manifest string using Jinja for value templating.

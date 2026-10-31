@@ -7,12 +7,59 @@ use anyhow::{Context, Result, anyhow, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use mockable::{DefaultEnv, Env};
+use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
+use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
 use netsuke::ninja_gen::{self, RecipeShell};
-use rstest_bdd_macros::{then, when};
+use rstest_bdd_macros::{given, then, when};
 use std::process::Command;
 use test_support::ninja::ninja_integration_workspace;
 
 const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
+
+// ---------------------------------------------------------------------------
+// Given steps
+// ---------------------------------------------------------------------------
+
+/// Set up a dependency-only graph whose edge requests console scheduling.
+///
+/// # Errors
+///
+/// Returns an error when the graph edge cannot be inserted.
+#[given("a dependency-only action graph with console scheduling")]
+fn dependency_only_console_graph(world: &TestWorld) -> Result<()> {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "aggregate".into(),
+        Action {
+            recipe: Recipe::Command {
+                command: StringOrList::Empty,
+                isolation: CommandIsolation::Shared,
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: None,
+            restat: false,
+        },
+    );
+    graph
+        .insert_edge(BuildEdge {
+            action_id: "aggregate".into(),
+            inputs: Vec::new(),
+            implicit_deps: vec!["lint".into(), "test".into()],
+            dependency_order: DependencyOrder::Parallel,
+            explicit_outputs: vec!["all".into()],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            progress_label: None,
+            phony: true,
+            always: false,
+            console: true,
+        })
+        .context("insert dependency-only console edge")?;
+    world.build_graph.set_value(graph);
+    Ok(())
+}
 
 // ---------------------------------------------------------------------------
 // Typed helper functions
@@ -155,6 +202,18 @@ fn ninja_contains(world: &TestWorld, fragment: &str) -> Result<()> {
         &NinjaFragment::new(fragment),
         ContentName::NinjaContent,
     )
+}
+
+/// Verify that one named edge has its own console-pool binding.
+#[then("the Ninja edge {output:string} has a console pool binding")]
+fn ninja_edge_has_console_pool_binding(world: &TestWorld, output: &str) -> Result<()> {
+    let ninja = get_ninja_content(world)?;
+    let has_console_pool = test_support::ninja_edge::edge_has_console_pool(&ninja, output)?;
+    ensure!(
+        has_console_pool,
+        "Ninja edge {output} has no console pool binding:\n{ninja}"
+    );
+    Ok(())
 }
 
 #[then("shlex splitting command {index:usize} yields {tokens:string}")]

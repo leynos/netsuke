@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = mearachd ion-chuir/às-chuir neo-aithnichte.
 manifest.command_list_empty = Chan fhaod an raon “command” a bhith falamh: thoir seachad sreang àithne no liosta nach eil falamh.
 manifest.command_isolation_recipe = Feumaidh an raon ‘command_isolation’ reasabaidh le liosta àitheantan.
 manifest.command_isolation_scalar = Feumaidh ‘command_isolation: isolated’ liosta àitheantan.
+manifest.console_dependency_only = Chan urrainn do dh’inntrigidhean a tha ag ainmeachadh eisimeileachdan a-mhàin amar a’ chonsail a thaghadh.
 
 # Mearachdan an riochdachaidh mheadhanaich.
 ir.rule_not_found = Cha deach an riaghailt “{ $rule }” air a bheil an targaid “{ $target }” a' toirt iomradh a lorg.
@@ -195,6 +196,8 @@ ir.invalid_command = Cur a-steach mì-dhligheach san àithne: { $snippet }.
 
 # Mearachdan dèanamh Ninja.
 ninja_gen.missing_action = Tha an gnìomh “{ $id }” air a bheil oir togail a' toirt iomradh a dhìth.
+ninja_gen.console_dependency_only = Chan urrainn do dh’iomall togail ‘{ $output }’ amar a’ chonsail a thaghadh oir chan eil san ghnìomh aige ach eisimeileachdan.
+ninja_gen.console_pool_conflict = Tha iomall togail ‘{ $output }’ a’ taghadh amar a’ chonsail, ach tha an gnìomh aige ag iarraidh an amar ghnàthaichte ‘{ $pool }’.
 ninja_gen.format = Cha b' urrainnear às-chur an fhoirm-liosta Ninja fhòrmatadh.
 ninja_gen.dyndep_files_required = Feumaidh an togail seo pasgan Ninja a chaidh a chruthachadh; cleachd `netsuke build`, `netsuke clean` no `netsuke generate` gus na faidhlichean dyndep a chruthachadh.
 ninja_gen.reserved_output_path = Tha an t-slighe '{ $path }' glèidhte airson staid eisimeileachdan shreathach Netsuke.

@@ -7,6 +7,7 @@
 mod callsite_interest_reproduction;
 #[cfg(feature = "lint")]
 mod check;
+mod console_telemetry;
 mod dispatch;
 mod dyndep;
 mod error;
@@ -26,6 +27,12 @@ pub use camino::{Utf8Path, Utf8PathBuf};
 pub use check::diagnostics as check_diagnostics;
 #[cfg(feature = "lint")]
 pub use check::diagnostics::FindingDiagnostic;
+pub use console_telemetry::{
+    NINJA_BUILD_CONSOLE_EDGES_TOTAL, NINJA_BUILD_EXECUTION_DURATION, NINJA_BUILD_EXECUTIONS_TOTAL,
+};
+pub use dyndep::generation_telemetry::{
+    BUNDLE_CONSOLE_EDGES_TOTAL, BUNDLE_GENERATION_DURATION, BUNDLE_GENERATIONS_TOTAL,
+};
 pub use error::RunnerError;
 use monotony::StdMonotonicClock;
 use std::io::IsTerminal;
@@ -177,13 +184,6 @@ fn run_with_ninja_program_resolver(
     dispatch::execute(cli, command, &context)
 }
 
-/// Adapt the reporter's task-progress method into a mutable callback.
-fn on_task_progress_callback(reporter: &dyn StatusReporter) -> impl FnMut(u32, u32, &str) + '_ {
-    move |current: u32, total: u32, description: &str| {
-        reporter.report_task_progress(current, total, description);
-    }
-}
-
 /// Resolve the manifest, generate the Ninja file and invoke the build.
 ///
 /// # Errors
@@ -223,6 +223,7 @@ fn execute_build(
         graph_generation,
     )?;
     let (bundle, command_list_targets) = generated.into_build_parts();
+    let console_edge_count = bundle.console_edge_count();
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);
@@ -234,13 +235,9 @@ fn execute_build(
 
     let build_file = process::create_temp_ninja_file(&ninja)?;
     let build_path = build_file.as_path();
-    let ctx = || {
-        format!(
-            "running {} with build file {}",
-            context.ninja_program, build_path
-        )
-    };
-    let options = ninja::ninja_process_options(cli)?;
+    let ninja_program = context.ninja_program;
+    let ctx = || format!("running {ninja_program} with build file {build_path}");
+    let options = ninja::ninja_process_options(cli).with_context(ctx)?;
     let env = CommandEnv::inherit();
     let build_request = process::NinjaBuildRequest {
         program: context.ninja_program,
@@ -250,16 +247,19 @@ fn execute_build(
         env: &env,
         stderr_mode: StderrMode::from_json_enabled(cli.json),
     };
-    let ninja_result = if context.progress_enabled {
-        let mut on_task_progress = on_task_progress_callback(context.reporter);
-        process::run_ninja_with_command_list_targets(
-            build_request,
-            Some(&mut on_task_progress),
-            &command_list_targets,
-        )
-    } else {
-        ninja::run_ninja_with_command_list_targets(build_request, &command_list_targets)
-    };
+    let clock = graph_generation.clock;
+    let ninja_result = console_telemetry::instrument_ninja_build(clock, console_edge_count, || {
+        if context.progress_enabled {
+            let mut on_task_progress = reporter::on_task_progress_callback(context.reporter);
+            process::run_ninja_with_command_list_targets(
+                build_request,
+                Some(&mut on_task_progress),
+                &command_list_targets,
+            )
+        } else {
+            ninja::run_ninja_with_command_list_targets(build_request, &command_list_targets)
+        }
+    });
     ninja_result.map_err(|error| {
         // Keep marker text in the CLI's outer context.
         let error_context = if error.to_string().contains(COMMAND_LIST_FAILURE_PREFIX) {
@@ -346,7 +346,7 @@ fn execute_ninja_tool(
     };
     if context.progress_enabled {
         let options = ninja::ninja_process_options(cli)?;
-        let mut on_task_progress = on_task_progress_callback(context.reporter);
+        let mut on_task_progress = reporter::on_task_progress_callback(context.reporter);
         process::run_ninja_tool_with_status(
             process::NinjaToolRequest {
                 program: context.ninja_program,

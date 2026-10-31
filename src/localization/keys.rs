@@ -1,10 +1,8 @@
 //! Fluent message identifiers used by Netsuke.
-//!
 //! This file holds only the key table: the build-time localization audit
 //! parses its `define_keys!` invocation, and the macro itself is defined in
 //! the parent module. The `netsuke check` keys live in `check_keys.rs` and
 //! are re-exported here, so every key is still reached as `keys::NAME`.
-
 pub use super::check_keys::*;
 
 define_keys! {
@@ -24,7 +22,6 @@ define_keys! {
     CLI_FLAG_FETCH_BLOCK_HOST_HELP => "cli.flag.fetch_block_host.help",
     CLI_FLAG_FETCH_DEFAULT_DENY_HELP => "cli.flag.fetch_default_deny.help",
     CLI_FLAG_TRUST_PROJECT_FETCH_POLICY_HELP => "cli.flag.trust_project_fetch_policy.help",
-
     CLI_FLAG_MANIFEST_EVALUATION_FUEL_HELP => "cli.flag.manifest_evaluation_fuel.help",
     CLI_FLAG_MANIFEST_FUEL_HELP => "cli.flag.manifest_fuel.help",
     CLI_FLAG_MANIFEST_RENDERED_VALUE_BYTES_HELP => "cli.flag.manifest_rendered_value_bytes.help",
@@ -166,6 +163,7 @@ define_keys! {
     MANIFEST_COMMAND_LIST_EMPTY => "manifest.command_list_empty",
     MANIFEST_COMMAND_ISOLATION_RECIPE => "manifest.command_isolation_recipe",
     MANIFEST_COMMAND_ISOLATION_SCALAR => "manifest.command_isolation_scalar",
+    MANIFEST_CONSOLE_DEPENDENCY_ONLY => "manifest.console_dependency_only",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
     IR_EMPTY_RULE => "ir.empty_rule",
@@ -174,6 +172,8 @@ define_keys! {
     IR_ACTION_SERIALISATION => "ir.action_serialisation",
     IR_INVALID_COMMAND => "ir.invalid_command",
     NINJA_GEN_MISSING_ACTION => "ninja_gen.missing_action",
+    NINJA_GEN_CONSOLE_DEPENDENCY_ONLY => "ninja_gen.console_dependency_only",
+    NINJA_GEN_CONSOLE_POOL_CONFLICT => "ninja_gen.console_pool_conflict",
     NINJA_GEN_FORMAT => "ninja_gen.format",
     NINJA_GEN_DYNDEP_FILES_REQUIRED => "ninja_gen.dyndep_files_required",
     NINJA_GEN_RESERVED_OUTPUT_PATH => "ninja_gen.reserved_output_path",

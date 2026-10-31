@@ -6340,6 +6340,30 @@ variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
+The manifest `console` Boolean lowers to `BuildEdge.console`. It is scheduling
+metadata owned by the edge because two targets can share one action and rule
+while only one target needs streamed output. `Action.pool` remains unchanged,
+so console selection does not alter action identity or action deduplication.
+`src/ninja_gen/display_edge.rs` emits `pool = console` on that edge. If a
+shared action rule already declares `pool = console`, ordinary edges get an
+empty edge-level `pool =` binding to clear that inherited selection. Shared
+console-scheduling validation runs before both direct Ninja generation and
+dyndep-bundle generation. That validation rejects dependency-only edges and
+custom action pools that conflict with `console`; it accepts an existing
+`Action.pool` value of `console`. Synthetic serial gates and dyndep sidecars
+never inherit either binding.
+
+The emitted `pool = console` binding requires Ninja 1.5 or newer. This minimum
+is separate from the conditional Ninja 1.10 requirement for staged serial
+dependency bundles described below.
+
+AST validation keeps stable diagnostic details separate from localized display
+text. `src/ir/graph/error.rs::manifest_recipe_validation_message` maps a
+recognized manifest detail to the same user-facing message for parsing and
+direct IR lowering. Ninja generator errors use a separate message when an
+output edge is available; the build-script localization slice does not depend
+on this library-only mapping.
+
 `src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
 `implicit_deps` when detecting cycles. It intentionally does not traverse
 `order_only_deps`, because order-only dependencies express scheduling order
@@ -6439,11 +6463,12 @@ or add manifest-controlled values to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
-optional preflighted `BashExecutable`, and injected monotonic clock solely for
-this graph-generation composition path. Build and Ninja-tool operations attach
-the runtime binding after preflight; query-only generation leaves it absent. It
-is not a general runner context, shared state container, or reusable public
-API; keep unrelated runner inputs and concerns outside it.
+optional preflighted `BashExecutable`, and injected monotonic clock for the
+graph-generation composition path. The build runner also uses that clock to
+measure its Ninja invocation. Build and Ninja-tool operations attach the
+runtime binding after preflight; query-only generation leaves it absent. It is
+not a general runner context, shared state container, or reusable public API;
+keep unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -7114,6 +7139,21 @@ never echo the payload.
 The production generator has its own `netsuke::ninja_gen::GeneratedNinja`
 output type; `test_support::ninja_semantics::GeneratedNinja` is the test-side
 borrowed view of generated text.
+
+### `test_support::ninja_edge`
+
+`test_support::ninja_edge::edge_has_console_pool`
+(`test_support/src/ninja_edge.rs`) checks edge-local pool metadata on a named
+generated `build` statement. Snapshot, BDD, and documentation-example tests use
+this shared helper, so their assertions agree about which edge owns an indented
+`pool = console` binding. Its scope is deliberately narrow: it inspects the
+generated text used by these tests and does not parse general Ninja syntax.
+Permitted call sites are test-support and test code only; production code must
+not depend on `test_support`.
+
+The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
+parallel, single-output edges for console generator tests. Keep it within that
+module; other graph shapes use their own fixtures.
 
 ### Temporary Ninja build files
 
@@ -10053,6 +10093,38 @@ no fixture sentinel text. The governing decision record is
 `docs/adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md`,
 which forbids unbounded or caller-controlled values in metric labels and trace
 fields.
+
+### Module: `runner::console_telemetry`
+
+`src/runner/console_telemetry/mod.rs` instruments only the actual Ninja build
+invocation in `execute_build`. It supplements the complete legacy-recipe
+operation timing with subprocess duration and outcome grouped by
+`console_scheduling=enabled|disabled`. Its `runner.ninja.build` span and
+completion event include the aggregate `console_edge_count`, scheduling state,
+`outcome=success|error`, and `error_category=none|io`. Paths, action
+identities, recipe contents, and process error text never enter this boundary.
+The runner's injected monotonic clock supplies the duration measurement.
+
+The generator stores the count of selected user edges privately in
+`GeneratedNinja`; the runner reads that aggregate before consuming the bundle.
+Synthetic serial gates and dyndep sidecars do not contribute to it. The count
+describes configured edges in each attempted build graph, rather than edges
+that Ninja actually executed or time spent in its pool. The subprocess boundary
+emits `netsuke_runner_ninja_build_executions_total`,
+`netsuke_runner_ninja_build_execution_duration_seconds`, and
+`netsuke_runner_ninja_build_console_edges_total`. The first two use scheduling,
+outcome, and error-category labels; the edge counter uses only outcome.
+
+Bundle-generation telemetry records the same scheduling state and aggregate
+count. `netsuke_ninja_dyndep_bundle_generations_total` and
+`netsuke_ninja_dyndep_bundle_generation_duration_seconds` carry scheduling,
+outcome, and the generator's fixed error category, including
+`console_dependency_only` and `console_pool_conflict`.
+`netsuke_ninja_dyndep_bundle_console_edges_total` counts configured console
+edges by generation outcome. `src/observability/recorder/console.rs` owns the
+production retention policy for these six series: it admits their exact kinds
+and finite label sets, rejecting unknown values, extra labels, and missing
+labels. Both emission and retention tests use local recorders.
 
 ### Module: `runner::recipe_shell::telemetry`
 

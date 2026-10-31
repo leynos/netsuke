@@ -183,6 +183,7 @@ manifest.glob.unknown_io_error = שגיאת קלט/פלט לא ידועה.
 manifest.command_list_empty = השדה „command” אינו יכול להיות ריק: יש לספק מחרוזת פקודה או רשימה שאינה ריקה.
 manifest.command_isolation_recipe = השדה ‘command_isolation’ מחייב מתכון עם רשימת פקודות.
 manifest.command_isolation_scalar = ‏‘command_isolation: isolated’ מחייב רשימת פקודות.
+manifest.console_dependency_only = רשומות שמציינות תלויות בלבד אינן יכולות לבחור במאגר המסוף.
 
 # שגיאות הייצוג הביניימי.
 ir.rule_not_found = הכלל „{ $rule }” שאליו מפנה היעד „{ $target }” לא נמצא.
@@ -195,6 +196,8 @@ ir.invalid_command = שיבוץ לא תקין בפקודה: { $snippet }.
 
 # שגיאות ביצירת קובצי Ninja.
 ninja_gen.missing_action = הפעולה „{ $id }” שאליה מפנה קשת בנייה חסרה.
+ninja_gen.console_dependency_only = ‏קשת הבנייה „{ $output }” אינה יכולה לבחור במאגר המסוף, כי הפעולה שלה כוללת תלויות בלבד.
+ninja_gen.console_pool_conflict = ‏קשת הבנייה „{ $output }” בוחרת במאגר המסוף, אך הפעולה שלה מבקשת את המאגר המותאם אישית „{ $pool }”.
 ninja_gen.format = לא ניתן היה לעצב את פלט מניפסט Ninja.
 ninja_gen.dyndep_files_required = ‏בנייה זו דורשת חבילת Ninja שנוצרה; השתמשו ב־`netsuke build`, ב־`netsuke clean` או ב־`netsuke generate` כדי ליצור את קובצי dyndep.
 ninja_gen.reserved_output_path = ‏הנתיב '{ $path }' שמור למצב התלויות הסדרתיות של Netsuke.
