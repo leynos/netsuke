@@ -1209,8 +1209,15 @@ represent files and are not removed.
 
 `help targets` prints the target and action catalogue for the selected manifest
 — actions first, then targets — with a localized default marker such as
-`[★ default]` (or `[* default]` in accessible output) on manifest defaults and
-an empty description column for entries without a `description`:
+`[★ default]` (or `[* default]` in accessible output) on manifest defaults, and
+entries without a `description` are listed without a description column.
+Descriptions align to the widest name in each section, measured in display
+columns after control characters are escaped. A name wider than 40 display
+columns still renders in full but does not widen the column: it is followed
+directly by the two-space description separator, and shorter rows keep their
+alignment against the widest name at or below the cap. A row with no
+description and no marker ends immediately after its name, so catalogue rows
+never carry trailing padding spaces:
 
 <!-- tested-example: guide-help-targets -->
 
@@ -1253,11 +1260,13 @@ emoji output is allowed, or `[? conditional]` in the ASCII theme. JSON output
 always includes a boolean `conditional` field: `true` means that discovery
 could not resolve the entry's `when` expression, while `false` means no such
 uncertainty was recorded. Integrations should therefore preserve conditional
-entries rather than treating them as confirmed selections. The command honours
-the usual manifest-selection options (`--file`, `-C/--directory`) and the
-normal colour, accessibility, locale, and JSON-output conventions; with
-`--json` the catalogue is emitted as a versioned JSON document whose
-`result.command` is `help-targets`.
+entries rather than treating them as confirmed selections. The alignment and
+padding rules above apply only to the human-readable text forms; `--json` emits
+names and descriptions verbatim and unchanged. The command honours the usual
+manifest-selection options (`--file`, `-C/--directory`) and the normal colour,
+accessibility, locale, and JSON-output conventions; with `--json` the catalogue
+is emitted as a versioned JSON document whose `result.command` is
+`help-targets`.
 
 The standard-library reference describes the full helper set available while
 rendering a normal build manifest. The query allowlist above is the deliberate
