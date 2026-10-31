@@ -1074,6 +1074,50 @@ and YAML fixtures, and were set from the inventory in Table 1.
   refreshed `origin/7-1-2-options-carrying-manifest-loader-entry-point`
   tracking ref, and the remote branch all read the same commit, and the branch
   upstream is `origin/<branch>`.
+- [x] (2026-10-31) EP-M3 implemented and committed as `b5691e198` ("Add the
+  test-mode stdlib registration"), 59 files changed. New:
+  `src/manifest/test_surface.rs` (`TestSurface`), the
+  `StdlibRegistration::Test(Box<TestSurface>)` variant and
+  `ManifestLoadOptions::test`, `src/stdlib/restricted_helpers/test_mode.rs`
+  (`TestModeRefusal`, `register_for_test`, the test `glob()` refusal), the
+  `stdlib.test_mode.helper_unavailable` key in all 35 catalogues, and the first
+  two behavioural scenarios with their steps. `register_for_test` installs only
+  the inventory's available rows, refuses the rest with a typed source, and
+  refuses `now()` unless `config.clock()` is injected. The loader keeps
+  `env()`/`glob()` ownership: a test load answers `env()` from the surface's
+  reader and refuses `glob()` through `register_glob_refusal`.
+- [x] (2026-10-31) EP-M3 local verification. The focused baseline was 35
+  passed / 2627 skipped at exit 0 (`/tmp/epm3-baseline-netsuke-7-1-2.out`):
+  eleven `test_mode` rows, eight `restricted_helpers` rows, fourteen
+  wrapper-equivalence rows, the corpus test, the fidelity property, and both
+  scenarios. `cargo clippy --all-targets --all-features -- -D warnings`
+  finished with zero warnings (`/tmp/epm3-clippy-all-netsuke-7-1-2.out`), and
+  `make check-fmt` was clean at 305 Rust files and 207 Markdown files.
+- [x] (2026-10-31) EP-M3 non-vacuity. Each seeded fault failed the row it
+  targets and was reverted before the baseline re-ran green. OBL-3a: registering
+  `scratch` in `src/stdlib/collections.rs` without an inventory row failed
+  `every_scanned_registration_is_inventoried`, naming `scratch` in
+  `src/stdlib/collections.rs` (`/tmp/epm3-obl3-fault-a-netsuke-7-1-2.out`).
+  OBL-3b: deleting the `digest` row failed
+  `refused_helpers_report_their_own_name` with
+  `unknown filter: filter digest is unknown`
+  (`/tmp/epm3-obl3-fault-b-netsuke-7-1-2.out`). OBL-4a: classifying test
+  refusals as query refusals failed both `when` rows, each load succeeding with
+  `conditional: true` (`/tmp/epm3-obl4-fault-a-netsuke-7-1-2.out`). OBL-4b:
+  dropping the typed source failed `refusals_carry_a_typed_source` with
+  `20 refusing rows lacked a typed source`
+  (`/tmp/epm3-obl4-fault-b-netsuke-7-1-2.out`). OBL-5: removing the legacy
+  Boolean formatter from the test registration failed the property with `true`
+  against `True` (`/tmp/epm3-obl5-fault-netsuke-7-1-2.out`). OBL-6: defaulting
+  the reader to the process environment failed
+  `test_load_without_a_reader_reads_no_process_environment`, which printed the
+  ambient `PATH` (`/tmp/epm3-obl6-fault-netsuke-7-1-2.out`). OBL-7: removing the
+  `is_system()` branch failed the default-clock row, whose manifest had
+  rendered an ambient timestamp (`/tmp/epm3-obl7-fault-netsuke-7-1-2.out`).
+  OBL-11: registering the real `shell` filter under test failed the corpus
+  aggregate, which reported no refusal from the `process` family (the plan's
+  `hash` seed is inapplicable; see `Surprises & discoveries`)
+  (`/tmp/epm3-obl11-fault-netsuke-7-1-2.out`).
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [x] EP-M2 — options entry point and thin wrappers.
 - [ ] EP-M3 — `StdlibRegistration::Test`.
@@ -1544,7 +1588,86 @@ and YAML fixtures, and were set from the inventory in Table 1.
   line-count caps, compiled-source roots — and run those gates even when the
   file's own subject is unrelated to them.
 
+- Observation: the plan's item list and OBL-11 disagree about
+  `TestModeRefusal`'s visibility. The `Interfaces and dependencies` section
+  lists it among the crate-internal additions, but OBL-11's artefact
+  `tests/manifest_load_options/corpus_fidelity.rs` is an external integration
+  test that must downcast the error source and call `operation()`. Evidence:
+  the type is re-exported as `netsuke::stdlib::TestModeRefusal`, and the corpus
+  test compiles and passes against it. Impact: a public error type is now part
+  of the surface, and EP-M5 must reconcile it in the design. The alternative —
+  classifying refusals by marker text alone — would have made the test unable
+  to distinguish a refusal from any other error carrying the same text, which
+  is exactly what OBL-4 exists to prevent.
+
+- Observation: the OBL-3 and OBL-4 rows could not share the planned
+  `src/stdlib/restricted_helpers/tests.rs` artefact. Evidence: that file was
+  already close to the 400-line cap, and the inventory scan, reachable-probe,
+  typed-source, and locale rows add roughly 380 lines. They live in
+  `src/stdlib/restricted_helpers/test_mode_tests.rs`, declared beside
+  `mod tests;`. Impact: the plan's artefact path names are corrected by this
+  entry; the coverage is unchanged.
+
+- Observation: there is no "clock absent" state to observe through the public
+  loader, so OBL-7's default-clock row measures the injected-clock branch
+  instead. Evidence: `StdlibConfig::from_current_dir()` always supplies a
+  clock, so a test load built from it carries the system clock;
+  `test_load_refuses_now_with_the_default_clock` therefore loads through the
+  default configuration and requires `now()` to be refused. The seeded fault
+  that drops the `is_system()` branch renders an ambient timestamp into the
+  manifest, which is the evidence the row measures the branch rather than the
+  helper's absence. Impact: the row proves "the ambient clock is refused", not
+  "a clockless load is refused"; the latter is not constructible.
+
+- Observation: OBL-11's stated non-vacuity seed is inapplicable to this
+  corpus. The plan asks for `register_for_test` to register the real `hash`
+  filter and for the corpus run to fail on the file using it, but no corpus
+  manifest evaluates `hash`. Evidence: grepping `tests/data/` for `hash` finds
+  no manifest use, and a probe run under the fault reported no new failure.
+  Substitute: register the real `shell` filter, which is the Process family's
+  only refusal in this corpus, so the aggregate fails with
+  `no corpus manifest refused from these families: ["process"]`. Impact: the
+  family aggregates are only as strong as the corpus's coverage of each family;
+  the substitution is decisive here, but a future family with no corpus user
+  needs its own fixture rather than the documented seed.
+
+- Observation: as with EP-M2, an OBL-3/4/6/7 seeded fault written naively is a
+  **compile error** under `-D warnings`, not a failing row. Evidence: removing
+  `disabled_env_reader`'s only import failed the build, and deleting the
+  refusal loop's only callers produced `dead_code` errors for
+  `register_filter_refusal` and `register_test_refusal`. Each fault was
+  reshaped to keep its subject live — the refusal loop stayed and the query
+  registration was appended after it, and the reader fault called
+  `super::process_env_reader()` instead of importing the default. Impact: a
+  first attempt that exits 101 says nothing about the rows and must be
+  redesigned, matching the EP-M2 finding.
+
 ## Decision log
+
+- Decision: `TestModeRefusal` and its `operation()` accessor are public,
+  re-exported as `netsuke::stdlib::TestModeRefusal`. Rationale: OBL-11 is an
+  external integration test and must name the type; the plan's crate-internal
+  listing was written before that artefact was fixed. EP-M5 records the type in
+  the design's surface. Date/Author: 2026-10-31, implementation agent in EP-M3.
+
+- Decision: the EP-M3 inventory and refusal rows live in
+  `src/stdlib/restricted_helpers/test_mode_tests.rs`, not in the planned
+  `tests.rs`. Rationale: the existing `tests.rs` is near the 400-line cap, and
+  the new rows are a coherent unit about the test surface rather than more
+  query-refusal cases. Date/Author: 2026-10-31, implementation agent in EP-M3.
+
+- Decision: OBL-11's non-vacuity seed is the real `shell` filter rather than
+  the documented `hash` filter. Rationale: no corpus manifest uses `hash`, so
+  the documented seed cannot make the aggregate fail; `shell` is the Process
+  family's only refusal and does. Date/Author: 2026-10-31, implementation agent
+  in EP-M3.
+
+- Decision: `register_for_test` decides `now()` from
+  `config.clock().is_system()` rather than from a separate flag on
+  `TestSurface`. Rationale: "was a clock injected" is already expressible in
+  the configuration's clock provider, and a second source of truth could
+  disagree with the one the template actually reads. Date/Author: 2026-10-31,
+  implementation agent in EP-M3.
 
 - Decision: `StdlibRegistration` stays a crate-private enum, extended to
   `AmbientFull`, `Full(Box<StdlibConfig>)`, `ManifestQuery`, and
@@ -2796,12 +2919,18 @@ pub enum TemplateOverlayError {
 pub enum OverlayNameKind { EnvironmentSeam, Internal, ManifestVariable, ManifestMacro }
 ```
 
+One further public item is re-exported from `netsuke::stdlib` rather than
+`netsuke::manifest`: `TestModeRefusal`, the error source a test load attaches
+to every refusal, with `operation()` naming the refused helper. OBL-11's
+external integration test downcasts to it, so it is public by requirement; see
+`Surprises & discoveries`.
+
 Crate-internal additions: the `StdlibRegistration` variants `AmbientFull` and
 `Test(Box<TestSurface>)` and its methods
 `records_expansion_and_budget_telemetry` and `classifies_query_refusals`;
 `ManifestLoadOptions::{ambient, manifest_query}`;
 `query::from_path_with_options`; `loader_options::register_host_helpers`;
-`restricted_helpers::{SURFACE, RestrictedSurface, register_for_test, TestModeRefusal}`;
+`restricted_helpers::{SURFACE, RestrictedSurface, register_for_test}`;
 `jinja_macros::query_classification`; and the Fluent keys
 `stdlib.test_mode.helper_unavailable` and `manifest.overlay.name_collision`.
 
