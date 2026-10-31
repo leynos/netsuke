@@ -208,15 +208,20 @@ impl HeredocBody {
 }
 
 /// Report whether `pos` follows a boundary where POSIX permits a comment.
+///
+/// POSIX starts a comment only where a token may start: at the beginning of
+/// input or after an unescaped separator. Every other character is word data,
+/// so Unicode spaces, carriage return, vertical tab, and form feed do not
+/// begin a comment and do not stop quote tracking.
 fn is_shell_word_boundary(chars: &[char], pos: usize) -> bool {
     let Some(previous_pos) = preceding_shell_character(chars, pos) else {
         return true;
     };
     is_unescaped_character(chars, pos)
         && is_unescaped_character(chars, previous_pos)
-        && chars.get(previous_pos).is_some_and(|previous| {
-            previous.is_whitespace() || matches!(previous, ';' | '|' | '&' | '(' | ')' | '<' | '>')
-        })
+        && chars
+            .get(previous_pos)
+            .is_some_and(|previous| is_word_terminator(*previous))
 }
 
 /// Find the preceding shell character after removing unquoted line continuations.
@@ -242,4 +247,20 @@ fn is_unescaped_character(chars: &[char], pos: usize) -> bool {
         .count()
         .rem_euclid(2)
         == 0
+}
+
+/// Report whether `ch` terminates an unquoted POSIX shell word.
+///
+/// The set is the interpreter's own token boundary: `blank` (space or tab),
+/// newline, and the first character of each operator (`; | & ( ) < >`).
+/// Every other character is word data. In particular, non-ASCII space
+/// characters are not separators: `sh`, `dash`, and Bash do not apply
+/// locale-dependent multibyte blanks, so a no-break space before `#` neither
+/// starts a comment nor ends a heredoc delimiter. The same predicate keeps a
+/// carriage return in a CRLF script as word data, matching those shells.
+const fn is_word_terminator(ch: char) -> bool {
+    matches!(
+        ch,
+        ' ' | '\t' | '\n' | ';' | '|' | '&' | '(' | ')' | '<' | '>'
+    )
 }
