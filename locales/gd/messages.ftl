@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Fo-àithne neo-aithnichte: { $subcommand }
 # fàiligidhean dhearbhairean gnàthaichte (ErrorKind::ValueValidation) a
 # sgaradh o mhì-fhreagarrachd sheòrsan (ErrorKind::InvalidValue).
 clap-error-value-validation = Dh'fhàillig an dearbhadh airson { $argument }: { $value }
+clap-error-invalid-utf8 = Chaidh UTF-8 mì-dhligheach a lorg ann an aon argamaid no barrachd.
 
 # Mearachdan agus co-theacsa aig àm ruith.
 runner.manifest.not_found = Cha deach am foirm-liosta “{ $manifest_name }” a lorg ann an { $directory }.

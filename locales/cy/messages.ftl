@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Is-orchymyn anhysbys: { $subcommand }
 # gwahaniaethu rhwng methiannau dilyswyr pwrpasol (ErrorKind::ValueValidation)
 # a gwrthdaro mathau (ErrorKind::InvalidValue).
 clap-error-value-validation = Methodd y dilysu ar gyfer { $argument }: { $value }
+clap-error-invalid-utf8 = Canfuwyd UTF-8 annilys mewn un neu fwy o ymresymiadau.
 
 # Gwallau a chyd-destun wrth redeg.
 runner.manifest.not_found = Ni chafwyd hyd i'r maniffest ‘{ $manifest_name }’ yn { $directory }.

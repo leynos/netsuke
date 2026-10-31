@@ -1,7 +1,11 @@
 //! Locale and JSON hint CLI tests.
 
 use anyhow::{Context, Result, ensure};
+use clap::error::ErrorKind;
 use rstest::rstest;
+use test_support::fluent::normalize_fluent_isolates;
+use test_support::tracing_capture::with_test_subscriber;
+use tracing_subscriber::filter::LevelFilter;
 
 use crate::cli_tests::helpers::os_args;
 use netsuke::cli::{json_hint_from_args, locale_hint_from_args};
@@ -110,6 +114,168 @@ fn cli_localises_invalid_subcommand_in_spanish() -> Result<()> {
     ensure!(
         err.to_string().contains("Subcomando desconocido"),
         "expected Spanish localization, got: {err}",
+    );
+    Ok(())
+}
+
+/// Parse `argv` with a localizer for `locale` and return the rejection.
+fn parse_rejection(argv: &[&str], locale: &str) -> Result<clap::Error> {
+    let localizer = Arc::from(cli_localization::build_localizer(Some(locale)));
+    netsuke::cli::parse_with_localizer_from(argv.iter().copied(), &localizer)
+        .err()
+        .with_context(|| format!("parser should reject {argv:?}"))
+}
+
+/// A `ValueValidation` error from a custom parser must carry enough clap
+/// context for `clap-error-value-validation` to format. Without `InvalidArg`
+/// and `InvalidValue` the localizer falls back and ships clap's raw text.
+#[rstest]
+#[case::color("--color", "loud", "--color <POLICY>")]
+#[case::emoji("--emoji", "sometimes", "--emoji <POLICY>")]
+#[case::progress("--progress", "paused", "--progress <POLICY>")]
+#[case::accessibility("--accessibility", "yes", "--accessibility <POLICY>")]
+#[case::jobs("--jobs", "notanumber", "--jobs <N>")]
+#[case::locale("--locale", "nope", "--locale <LOCALE>")]
+#[case::allow_scheme("--fetch-allow-scheme", "1bad", "--fetch-allow-scheme <SCHEME>")]
+#[case::allow_host("--fetch-allow-host", "bad host", "--fetch-allow-host <HOST>")]
+#[case::block_host("--fetch-block-host", "bad host", "--fetch-block-host <HOST>")]
+fn value_validation_errors_render_localized_message(
+    #[case] flag: &str,
+    #[case] value: &str,
+    #[case] expected_argument: &str,
+) -> Result<()> {
+    let err = parse_rejection(&["netsuke", flag, value], "en-US")?;
+
+    ensure!(
+        err.kind() == ErrorKind::ValueValidation,
+        "expected ValueValidation for {flag}, got {:?}",
+        err.kind()
+    );
+    let rendered = normalize_fluent_isolates(&err.to_string());
+    let expected = format!("Validation failed for {expected_argument}: {value}");
+    ensure!(
+        rendered.contains(&expected),
+        "expected {expected:?} in rendered error, got: {rendered}"
+    );
+    Ok(())
+}
+
+/// The same key must resolve through a non-English catalogue, proving the
+/// context reaches the localizer rather than falling back to English.
+#[rstest]
+fn value_validation_errors_render_spanish_template() -> Result<()> {
+    let err = parse_rejection(&["netsuke", "--color", "loud"], "es-ES")?;
+    let rendered = normalize_fluent_isolates(&err.to_string());
+
+    ensure!(
+        rendered.contains("Validación fallida para --color <POLICY>: loud"),
+        "expected Spanish value-validation template, got: {rendered}"
+    );
+    Ok(())
+}
+
+/// A resolvable catalogue message must not also emit the missing-translation
+/// warning that the context-free path produced.
+#[rstest]
+fn value_validation_errors_do_not_warn_about_missing_translation() -> Result<()> {
+    let (rejection, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let rejection = parse_rejection(&["netsuke", "--color", "loud"], "en-US");
+        (rejection, captured.snapshot())
+    });
+    let err = rejection?;
+    ensure!(
+        normalize_fluent_isolates(&err.to_string()).contains("Validation failed for"),
+        "expected the localized template, got: {err}"
+    );
+    ensure!(
+        events
+            .iter()
+            .all(|event| !event.contains("missing translation")),
+        "resolvable key should not warn about a missing translation: {events:?}"
+    );
+    Ok(())
+}
+
+/// An empty supplied value never reaches Fluent: `ortho_config` drops empty
+/// clap context before building the argument map, so `{ $value }` cannot
+/// interpolate. The value parser's own empty-specific, already-localized
+/// diagnostic must render instead, and the boundary must not log the
+/// missing-translation warning that the impossible kind-level lookup would
+/// otherwise raise.
+#[rstest]
+#[case::en_locale("en-US", "--locale=", "Locale must not be empty.")]
+#[case::es_locale("es-ES", "--locale=", "La configuración regional no debe estar vacía.")]
+#[case::en_scheme("en-US", "--fetch-allow-scheme=", "Scheme must not be empty.")]
+#[case::es_scheme("es-ES", "--fetch-allow-scheme=", "El esquema no debe estar vacío.")]
+#[case::en_jobs("en-US", "--jobs=", "is not a valid number")]
+#[case::es_jobs("es-ES", "--jobs=", "no es un número válido")]
+fn empty_value_validation_renders_localized_message_without_warning(
+    #[case] locale: &str,
+    #[case] argument: &str,
+    #[case] expected: &str,
+) -> Result<()> {
+    let (rejection, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let rejection = parse_rejection(&["netsuke", argument], locale);
+        (rejection, captured.snapshot())
+    });
+    let err = rejection?;
+
+    ensure!(
+        err.kind() == ErrorKind::ValueValidation,
+        "expected ValueValidation for {argument}, got {:?}",
+        err.kind()
+    );
+    let rendered = normalize_fluent_isolates(&err.to_string());
+    ensure!(
+        rendered.contains(expected),
+        "expected {expected:?} in rendered error, got: {rendered}"
+    );
+    ensure!(
+        events
+            .iter()
+            .all(|event| !event.contains("missing translation")),
+        "an empty supplied value should not warn about a missing translation: {events:?}"
+    );
+    Ok(())
+}
+
+/// Non-UTF-8 values fail before the validation closure runs and must render
+/// the placeholder-free `clap-error-invalid-utf8` catalogue message.
+#[cfg(unix)]
+#[rstest]
+fn non_utf8_value_validation_renders_localized_utf8_message() -> Result<()> {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let (result, events) = with_test_subscriber(LevelFilter::WARN, |captured| {
+        let localizer = Arc::from(cli_localization::build_localizer(Some("en-US")));
+        let outcome = netsuke::cli::parse_with_localizer_from(
+            [
+                OsString::from("netsuke"),
+                OsString::from("--locale"),
+                OsString::from_vec(b"\xff".to_vec()),
+            ],
+            &localizer,
+        );
+        (outcome, captured.snapshot())
+    });
+    let err = result.expect_err("non-UTF-8 value should fail during CLI parsing");
+
+    ensure!(
+        err.kind() == ErrorKind::InvalidUtf8,
+        "expected InvalidUtf8, got {:?}",
+        err.kind()
+    );
+    ensure!(
+        normalize_fluent_isolates(&err.to_string())
+            .contains("Invalid UTF-8 was detected in one or more arguments"),
+        "expected the localized UTF-8 diagnostic, got: {err}"
+    );
+    ensure!(
+        events
+            .iter()
+            .all(|event| !event.contains("missing translation")),
+        "the invalid-UTF-8 key should resolve without a warning: {events:?}"
     );
     Ok(())
 }

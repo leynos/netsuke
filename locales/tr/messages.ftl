@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Bilinmeyen alt komut: { $subcommand }
 # (ErrorKind::ValueValidation) tür uyuşmazlıklarından
 # (ErrorKind::InvalidValue) ayırmak için invalid-value'dan farklı yazılmıştır.
 clap-error-value-validation = { $argument } için doğrulama başarısız: { $value }
+clap-error-invalid-utf8 = Bir veya daha fazla bağımsız değişkende geçersiz UTF-8 algılandı.
 
 # Çalıştırma hataları ve bağlamı.
 runner.manifest.not_found = "{ $manifest_name }" bildirimi { $directory } içinde bulunamadı.

@@ -89,6 +89,7 @@ clap-error-invalid-subcommand = Άγνωστη υποεντολή: { $subcommand
 # (ErrorKind::ValueValidation) από τις ασυμφωνίες τύπων
 # (ErrorKind::InvalidValue).
 clap-error-value-validation = Ο έλεγχος απέτυχε για το { $argument }: { $value }
+clap-error-invalid-utf8 = Εντοπίστηκε μη έγκυρο UTF-8 σε ένα ή περισσότερα ορίσματα.
 
 # Σφάλματα και συμφραζόμενα της εκτέλεσης.
 runner.manifest.not_found = Το δηλωτικό «{ $manifest_name }» δεν βρέθηκε στον κατάλογο { $directory }.

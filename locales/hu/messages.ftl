@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Ismeretlen alparancs: { $subcommand }
 # invalid-value szövegétől, hogy elkülönüljenek a saját ellenőrzők hibái
 # (ErrorKind::ValueValidation) a típuseltérésektől (ErrorKind::InvalidValue).
 clap-error-value-validation = Az ellenőrzés sikertelen ehhez: { $argument }: { $value }
+clap-error-invalid-utf8 = Érvénytelen UTF-8 található egy vagy több argumentumban.
 
 # A futtatás hibái és környezete.
 runner.manifest.not_found = A(z) „{ $manifest_name }” jegyzék nem található itt: { $directory }.

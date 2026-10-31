@@ -87,6 +87,7 @@ clap-error-invalid-subcommand = 未知子命令：{ $subcommand }
 # 注意：value-validation 的措辞与 invalid-value 不同，以便区分自定义校验器的
 # 失败（ErrorKind::ValueValidation）与类型不匹配（ErrorKind::InvalidValue）。
 clap-error-value-validation = { $argument } 校验失败：{ $value }
+clap-error-invalid-utf8 = 在一个或多个参数中检测到无效的 UTF-8。
 
 # 运行时的错误与上下文。
 runner.manifest.not_found = 在 { $directory } 中找不到清单“{ $manifest_name }”。

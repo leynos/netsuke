@@ -84,10 +84,11 @@ deterministic.
 
 `parse_with_localizer_from` must call `configured_command`. That factory
 localizes `Cli::command()`, calls `configure_validation_parsers`, and returns
-the configured command before `parse_with_localizer_from` calls
-`ortho_config::parse_localized_command`. This ordering preserves localized
-parse errors and keeps possible-value metadata on every rendered command tree.
-The `src/cli/parsing.rs` helpers and the domain policy types remain
+the configured command before `parse_with_localizer_from` parses with
+`try_get_matches_from_mut`, builds `Cli` with `Cli::from_arg_matches`, and
+localizes failures from both stages. This ordering preserves localized parse
+errors and keeps possible-value metadata on every rendered command tree. The
+`src/cli/parsing.rs` helpers and the domain policy types remain
 Clap-independent. Do not move Clap types or `TypedValueParser` implementations
 into domain configuration types. The `src/cli/policy/values.rs` module owns the
 Clap-only conversion from the canonical policy definitions to `PossibleValue`
@@ -672,6 +673,30 @@ that differs from `en-US`. The `netsuke check` keys live in
 `src/localization/check_keys.rs` and the clap error keys in
 `src/localization/clap_error_keys.rs`, both re-exported by `keys.rs`; the audit
 reads all three files as one key set and rejects a key declared twice.
+
+A custom `TypedValueParser` that reports `ErrorKind::ValueValidation` must
+attach clap's `InvalidArg` context when clap supplies the argument and must
+always attach `InvalidValue`. `Command::error` attaches neither, so a catalogue
+message such as `clap-error-value-validation` cannot interpolate
+`{ $argument }` or `{ $value }`; the localizer then emits a missing-translation
+warning and returns the raw fallback text. `LocalizedValueParser` in
+`src/cli/value_parser.rs` shows the pattern. `LocalizedUtf8PathParser` in
+`src/cli/parser/mod.rs` is a deliberate exception: it reports an
+argument-specific UTF-8 message already localized under `cli.file.non_utf8` or
+`cli.directory.non_utf8`, so attaching the generic value-validation context
+would replace that tailored diagnostic.
+
+An empty supplied value needs separate handling. `ortho_config` drops empty
+strings from the clap context before building Fluent arguments, so a
+`ValueValidation` error for `--option=` reaches the localizer without a `value`
+argument: the template cannot interpolate `{ $value }`, the fallback ships, and
+a spurious missing-translation warning is logged. `parse_with_localizer_from` in
+`src/cli/parser/mod.rs` detects that shape and returns the error unchanged,
+keeping the validator's already-localized empty-specific diagnostic (such as
+`cli.validation.locale.empty`) instead of restoring a placeholder value that
+would replace the specific diagnostic with the generic template. A value
+validator must therefore localize its empty-value message; the generic template
+cannot stand in for it.
 
 A *diagnostic* message whose text carries a bracketed code such as
 `[netsuke::jinja::shell::args]` must have that code copied **verbatim** into

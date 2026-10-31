@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = 不明なサブコマンドです: { $subcommand
 # の失敗（ErrorKind::ValueValidation）と型の不一致（ErrorKind::InvalidValue）を
 # 区別しています。
 clap-error-value-validation = { $argument } の検証に失敗しました: { $value }
+clap-error-invalid-utf8 = 1 つ以上の引数で無効な UTF-8 が検出されました。
 
 # 実行時のエラーと文脈。
 runner.manifest.not_found = マニフェスト「{ $manifest_name }」が { $directory } に見つかりません。

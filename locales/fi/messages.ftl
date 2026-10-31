@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Tuntematon alikomento: { $subcommand }
 # omien tarkistimien virheet (ErrorKind::ValueValidation) erottuvat
 # tyyppiristiriidoista (ErrorKind::InvalidValue).
 clap-error-value-validation = Kelpoisuustarkistus epäonnistui argumentille { $argument }: { $value }
+clap-error-invalid-utf8 = Virheellinen UTF-8 havaittiin yhdessä tai useammassa argumentissa.
 
 # Suorittajan virheet ja konteksti.
 runner.manifest.not_found = Manifestia ”{ $manifest_name }” ei löytynyt hakemistosta { $directory }.

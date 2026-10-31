@@ -88,6 +88,7 @@ clap-error-invalid-subcommand = Nieznane podpolecenie: { $subcommand }
 # błędy własnych walidatorów (ErrorKind::ValueValidation) od niezgodności typów
 # (ErrorKind::InvalidValue).
 clap-error-value-validation = Walidacja nie powiodła się dla { $argument }: { $value }
+clap-error-invalid-utf8 = Wykryto nieprawidłowy UTF-8 w co najmniej jednym argumencie.
 
 # Błędy i kontekst wykonania.
 runner.manifest.not_found = Nie znaleziono manifestu „{ $manifest_name }” w katalogu { $directory }.
