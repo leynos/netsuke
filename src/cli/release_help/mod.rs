@@ -29,9 +29,24 @@ pub struct ReleaseHelpCli;
 
 impl ReleaseHelpCli {
     /// Compose complete release-help metadata from configuration and parser sources.
+    ///
+    /// The root `about_id` is replaced with Netsuke's own key and the root
+    /// `synopsis_id` is cleared, so `cargo-orthohelp` renders its option-listing
+    /// fallback rather than an unresolved derived identifier (#959).
     fn try_get_doc_metadata() -> Result<DocMetadata> {
         let mut metadata = CliConfig::get_doc_metadata();
         keys::CLI_ABOUT.clone_into(&mut metadata.about_id);
+        // `ortho_config` 0.10.0's derive defaults the root `synopsis_id` to the
+        // generated `<app>-usage` identifier, which no catalogue declares, so
+        // `cargo-orthohelp` printed `[missing: netsuke-usage]` into the man
+        // page. `None` selects the generator's option-listing fallback, which
+        // is what the 0.9.0 derive produced. Do not substitute upstream's
+        // `cli-usage`: `cargo-orthohelp` never supplies `LocalizationArgs`, so
+        // that parameterized key cannot format and renders `[missing:
+        // cli-usage]` instead. A curated synopsis must be a variable-free key
+        // declared in `src/localization/keys.rs` and present in every
+        // catalogue; see #959 and leynos/ortho-config#630.
+        metadata.synopsis_id = None;
         metadata.fields = localized_config_help(metadata.fields)?;
         let parser_fields = documented_clap_parser_fields(&Cli::command(), &metadata.fields)?;
         metadata.fields.extend(parser_fields);

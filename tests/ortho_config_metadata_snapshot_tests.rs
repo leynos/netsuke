@@ -24,6 +24,7 @@ struct MetadataSnapshot {
     ir_version: String,
     precedence: Vec<String>,
     discovery: Option<DiscoverySnapshot>,
+    synopsis_id: Option<String>,
     fields: Vec<FieldSnapshot>,
     subcommands: Vec<SubcommandSnapshot>,
 }
@@ -59,6 +60,7 @@ struct CliSourceSnapshot {
 struct SubcommandSnapshot {
     name: String,
     about_id: String,
+    synopsis_id: Option<String>,
 }
 
 /// Select the snapshot merge strategy for a configuration field.
@@ -126,6 +128,7 @@ fn metadata_snapshot() -> MetadataSnapshot {
         .map(|subcommand| SubcommandSnapshot {
             name: subcommand.app_name.clone(),
             about_id: subcommand.about_id.clone(),
+            synopsis_id: subcommand.synopsis_id.clone(),
         })
         .collect();
 
@@ -133,6 +136,7 @@ fn metadata_snapshot() -> MetadataSnapshot {
         ir_version: metadata.ir_version,
         precedence,
         discovery,
+        synopsis_id: metadata.synopsis_id.clone(),
         fields,
         subcommands,
     }
