@@ -82,6 +82,7 @@ clap-error-missing-argument = חסר ארגומנט נדרש: { $argument }
 clap-error-missing-subcommand = חסרה פקודת משנה. האפשרויות הזמינות: { $valid_subcommands }
 clap-error-unknown-argument = ארגומנט לא מוכר: { $argument }
 clap-error-invalid-value = ערך לא תקין עבור { $argument }: { $value }
+clap-error-too-many-values = ערך לא צפוי עבור { $argument }: { $value }
 clap-error-invalid-subcommand = פקודת משנה לא מוכרת: { $subcommand }
 # הערה: הניסוח של value-validation שונה מזה של invalid-value כדי להבחין בין
 # כשלים של מאמתים מותאמים (ErrorKind::ValueValidation) לבין אי‑התאמת טיפוסים

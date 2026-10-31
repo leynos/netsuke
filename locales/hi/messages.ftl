@@ -82,6 +82,7 @@ clap-error-missing-argument = आवश्यक तर्क अनुपस्
 clap-error-missing-subcommand = उपआदेश अनुपस्थित है। उपलब्ध विकल्प: { $valid_subcommands }
 clap-error-unknown-argument = अज्ञात तर्क: { $argument }
 clap-error-invalid-value = { $argument } के लिए अमान्य मान: { $value }
+clap-error-too-many-values = { $argument } के लिए अप्रत्याशित मान: { $value }
 clap-error-invalid-subcommand = अज्ञात उपआदेश: { $subcommand }
 # ध्यान दें: value-validation का शब्दन invalid-value से भिन्न रखा गया है ताकि
 # अपने सत्यापकों की विफलता (ErrorKind::ValueValidation) और प्रकार की असंगति

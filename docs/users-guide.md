@@ -1094,6 +1094,9 @@ and status output are rendered after the configuration merge, so they consult
 the configuration file's `locale` setting as well, between `NETSUKE_LOCALE` and
 the system default.
 
+An unexpected value attached to a switch is reported in the selected language,
+with the switch and value identified in the diagnostic.
+
 System values are normalized first, so `en_GB.UTF-8` is understood as `en-GB`.
 
 Table 1: Locales Netsuke ships

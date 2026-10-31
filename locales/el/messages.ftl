@@ -82,6 +82,7 @@ clap-error-missing-argument = Λείπει υποχρεωτικό όρισμα: 
 clap-error-missing-subcommand = Λείπει υποεντολή. Διαθέσιμες επιλογές: { $valid_subcommands }
 clap-error-unknown-argument = Άγνωστο όρισμα: { $argument }
 clap-error-invalid-value = Μη έγκυρη τιμή για το { $argument }: { $value }
+clap-error-too-many-values = Μη αναμενόμενη τιμή για το { $argument }: { $value }
 clap-error-invalid-subcommand = Άγνωστη υποεντολή: { $subcommand }
 # Σημείωση: το value-validation διατυπώνεται διαφορετικά από το invalid-value
 # ώστε να ξεχωρίζουν τα σφάλματα ιδιαίτερων ελεγκτών

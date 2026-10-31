@@ -12,7 +12,8 @@
 //! Exit status and stream routing are process-level facts, so every case runs
 //! the real binary through `assert_cmd`. The child's environment is cleared and
 //! pointed at a sandbox `HOME` so host configuration cannot change the parsed
-//! values.
+//! values, and the locale is pinned to `en-US` so the wording these cases
+//! assert is the wording the host's preferred language cannot replace.
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::cargo::cargo_bin_cmd;
@@ -35,7 +36,27 @@ fn sandbox() -> Result<(TempDir, TempDir)> {
 }
 
 /// Run `netsuke` in the sandbox with the supplied arguments.
+///
+/// The locale is pinned to `en-US` ahead of the case's arguments: clearing the
+/// environment removes the `LC_*` and `LANG` variables the locale detector
+/// reads, but that leaves the choice to the host's fallback rather than making
+/// it explicit. Every assertion in this file names English wording, so the
+/// locale it was rendered in has to be part of the fixture.
 fn run_netsuke(workspace: &Path, home: &Path, arguments: &[&str]) -> Result<Output> {
+    run_netsuke_in_locale(workspace, home, "en-US", arguments)
+}
+
+/// Run `netsuke` in the sandbox with an explicit locale.
+///
+/// The locale is passed as a flag rather than through the environment so it
+/// cannot be overridden by anything the child inherits, and so a case can name
+/// the catalogue its assertions are written against.
+fn run_netsuke_in_locale(
+    workspace: &Path,
+    home: &Path,
+    locale: &str,
+    arguments: &[&str],
+) -> Result<Output> {
     let mut command = cargo_bin_cmd!("netsuke");
     command
         .current_dir(workspace)
@@ -43,6 +64,7 @@ fn run_netsuke(workspace: &Path, home: &Path, arguments: &[&str]) -> Result<Outp
         .env("HOME", home)
         .env("XDG_CONFIG_HOME", home.join(".config"))
         .env("XDG_CONFIG_DIRS", home.join("empty-system-config"))
+        .args(["--locale", locale])
         .args(arguments);
     command
         .output()
@@ -129,9 +151,8 @@ fn a_bare_subcommand_switch_is_accepted_and_applied() -> Result<()> {
 
 /// The `--flag=false` spelling is rejected as an unexpected value.
 ///
-/// Clap reports this as an invalid-value error, so the process exits 2 and
-/// prints `unexpected value 'false'` on standard error. The message names the
-/// flag, which distinguishes this case from a generally broken invocation.
+/// Clap reports too many values, so the process exits 2 and prints a localized
+/// message naming the flag and its unexpected value on standard error.
 #[rstest]
 #[case::verbose(&["--verbose=false", "graph"])]
 #[case::json(&["--json=false", "graph"])]
@@ -143,10 +164,88 @@ fn an_equals_attached_value_is_rejected_as_an_unexpected_value(
     #[case] arguments: &[&str],
 ) -> Result<()> {
     let stderr = rejected_stderr(arguments, 2)?;
+    let flag = arguments
+        .iter()
+        .find_map(|arg| arg.strip_suffix("=false"))
+        .context("case should contain a flag with an attached value")?;
     ensure!(
-        stderr.contains("unexpected value 'false'"),
+        stderr.contains("Unexpected value for")
+            && stderr.contains(flag)
+            && stderr.contains("false"),
         "{} should report an unexpected value, got: {stderr}",
         arguments.join(" "),
+    );
+    ensure!(
+        !stderr.contains("missing translation"),
+        "{} should not log a missing translation warning: {stderr}",
+        arguments.join(" "),
+    );
+    Ok(())
+}
+
+/// An empty attached value is localized like any other unexpected value.
+///
+/// `--flag=` carries no value at all, so `ortho_config` 0.10.0 drops the empty
+/// `InvalidValue` from the Fluent arguments and the message cannot resolve
+/// `$value`. Without the restoration in `src/cli/localization/mod.rs` this case
+/// logs a missing-translation warning and prints clap's untranslated text, so
+/// the assertions here are the regression guard for that restoration.
+#[rstest]
+#[case::verbose(&["--verbose=", "graph"])]
+#[case::html(&["graph", "--html="])]
+fn an_empty_attached_value_is_localized(#[case] arguments: &[&str]) -> Result<()> {
+    let stderr = rejected_stderr(arguments, 2)?;
+    let flag = arguments
+        .iter()
+        .find_map(|arg| arg.strip_suffix('='))
+        .context("case should contain a flag with an empty attached value")?;
+    ensure!(
+        stderr.contains("Unexpected value for") && stderr.contains(flag) && stderr.contains("''"),
+        "{} should report an empty unexpected value for {flag}, got: {stderr}",
+        arguments.join(" "),
+    );
+    ensure!(
+        !stderr.contains("missing translation"),
+        "{} should not log a missing translation warning: {stderr}",
+        arguments.join(" "),
+    );
+    Ok(())
+}
+
+/// The unexpected-value diagnostic is rendered from the requested catalogue.
+///
+/// The English cases above would still pass if the message were never drawn
+/// from a translation — an English fallback reads the same as an English
+/// catalogue. Rendering the same rejection in German proves the catalogue is
+/// consulted and that both `$argument` and `$value` are interpolated, for a
+/// supplied value and for the empty value the adapter restores.
+#[rstest]
+#[case::value(&["--verbose=false", "graph"], "--verbose", "false")]
+#[case::empty(&["--verbose=", "graph"], "--verbose", "''")]
+fn an_unexpected_value_is_rendered_in_the_requested_locale(
+    #[case] arguments: &[&str],
+    #[case] flag: &str,
+    #[case] value: &str,
+) -> Result<()> {
+    let (workspace, home) = sandbox()?;
+    let output = run_netsuke_in_locale(workspace.path(), home.path(), "de", arguments)?;
+    let case = arguments.join(" ");
+    ensure!(
+        output.status.code() == Some(2),
+        "{case} should exit 2, got {:?}",
+        output.status.code(),
+    );
+    let stderr = normalize_fluent_isolates(&String::from_utf8_lossy(&output.stderr));
+    ensure!(
+        stderr.contains("Unerwarteter Wert")
+            && stderr.contains("für")
+            && stderr.contains(flag)
+            && stderr.contains(value),
+        "{case} should render the German diagnostic naming {flag} and {value}, got: {stderr}",
+    );
+    ensure!(
+        !stderr.contains("missing translation"),
+        "{case} should not log a missing translation warning: {stderr}",
     );
     Ok(())
 }

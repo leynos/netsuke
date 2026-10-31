@@ -82,6 +82,7 @@ clap-error-missing-argument = Chybí povinný argument: { $argument }
 clap-error-missing-subcommand = Chybí podpříkaz. Dostupné možnosti: { $valid_subcommands }
 clap-error-unknown-argument = Neznámý argument: { $argument }
 clap-error-invalid-value = Neplatná hodnota argumentu { $argument }: { $value }
+clap-error-too-many-values = Neočekávaná hodnota argumentu { $argument }: { $value }
 clap-error-invalid-subcommand = Neznámý podpříkaz: { $subcommand }
 # Poznámka: value-validation je formulováno jinak než invalid-value, aby se
 # odlišily chyby vlastních ověřovačů (ErrorKind::ValueValidation) od neshody

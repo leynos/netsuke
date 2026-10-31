@@ -82,6 +82,7 @@ clap-error-missing-argument = Zorunlu bağımsız değişken eksik: { $argument 
 clap-error-missing-subcommand = Alt komut eksik. Kullanılabilir seçenekler: { $valid_subcommands }
 clap-error-unknown-argument = Bilinmeyen bağımsız değişken: { $argument }
 clap-error-invalid-value = { $argument } için geçersiz değer: { $value }
+clap-error-too-many-values = { $argument } için beklenmeyen değer: { $value }
 clap-error-invalid-subcommand = Bilinmeyen alt komut: { $subcommand }
 # Not: value-validation, özel doğrulayıcı hatalarını
 # (ErrorKind::ValueValidation) tür uyuşmazlıklarından

@@ -8,7 +8,9 @@
 
 use crate::locale_catalogues::{self as locales, LocaleCatalogue};
 use ortho_config::LanguageIdentifier;
-use ortho_config::{FluentLocalizer, FluentLocalizerBuilder, Localizer, NoOpLocalizer};
+use ortho_config::{
+    FluentLocalizer, FluentLocalizerBuilder, LocalizationArgs, Localizer, NoOpLocalizer,
+};
 use std::str::FromStr;
 
 /// Localizer that consults a primary catalogue before falling back to a
@@ -36,6 +38,63 @@ impl Localizer for LayeredLocalizer {
         self.primary
             .lookup(id, args)
             .or_else(|| self.fallback.lookup(id, args))
+    }
+}
+
+/// The message `clap` reports for `--flag=`.
+const TOO_MANY_VALUES_ID: &str = "clap-error-too-many-values";
+
+/// The `$value` text restored for `--flag=`.
+///
+/// `clap` renders the empty value it reports the same way, so a diagnostic for
+/// `--verbose=` keeps the shape of the one for `--verbose=false` instead of
+/// ending in a separator with nothing after it.
+const EMPTY_VALUE_TEXT: &str = "''";
+
+/// Restores the empty value that `ortho_config` drops from clap's context.
+///
+/// `ortho_config` 0.10.0 omits every empty context value when it builds the
+/// localization arguments, and `clap` reports `--flag=` as `TooManyValues` with
+/// an empty `InvalidValue`. Formatting `clap-error-too-many-values` therefore
+/// cannot resolve `$value`: the adapter logs a missing-translation warning and
+/// falls back to clap's untranslated text. `TooManyValues` always carries an
+/// `InvalidValue`, so an absent `value` here means an empty one, and restoring
+/// it is what keeps the localized message reachable.
+struct EmptyClapValueLocalizer {
+    /// Localizer consulted once the arguments are complete.
+    inner: Box<dyn Localizer>,
+}
+
+impl EmptyClapValueLocalizer {
+    /// Wrap `inner` so `--flag=` keeps a resolvable `$value`.
+    fn new(inner: Box<dyn Localizer>) -> Self {
+        Self { inner }
+    }
+}
+
+/// Whether `id` needs the empty `value` restored to format successfully.
+///
+/// Only `TooManyValues` is repaired: it is the one kind `clap` reports for
+/// `--flag=` that also supplies the `argument` the catalogue names. Other kinds
+/// with an empty value — `ValueValidation` among them — arrive with no
+/// `argument` either, which is a separate gap in the upstream mapping rather
+/// than something a placeholder can paper over.
+fn needs_empty_value(id: &str, args: Option<&LocalizationArgs<'_>>) -> bool {
+    id == TOO_MANY_VALUES_ID && args.is_some_and(|supplied| !supplied.contains_key("value"))
+}
+
+impl Localizer for EmptyClapValueLocalizer {
+    fn lookup(&self, id: &str, args: Option<&LocalizationArgs<'_>>) -> Option<String> {
+        if !needs_empty_value(id, args) {
+            return self.inner.lookup(id, args);
+        }
+        let mut restored = args.cloned().unwrap_or_default();
+        restored.insert("value", EMPTY_VALUE_TEXT.into());
+        self.inner.lookup(id, Some(&restored))
+    }
+
+    fn locale(&self) -> Option<&LanguageIdentifier> {
+        self.inner.locale()
     }
 }
 
@@ -166,6 +225,13 @@ fn fell_back_from_another_language(
 /// ```
 #[must_use]
 pub fn build_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
+    Box::new(EmptyClapValueLocalizer::new(build_catalogue_localizer(
+        preferred_locale,
+    )))
+}
+
+/// Select the catalogue localizer that [`build_localizer`] wraps.
+fn build_catalogue_localizer(preferred_locale: Option<&str>) -> Box<dyn Localizer> {
     let fallback = build_en_localizer();
     let Some(preferred) = preferred_locale else {
         return fallback;

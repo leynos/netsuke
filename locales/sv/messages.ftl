@@ -82,6 +82,7 @@ clap-error-missing-argument = Obligatoriskt argument saknas: { $argument }
 clap-error-missing-subcommand = Underkommando saknas. Tillgängliga val: { $valid_subcommands }
 clap-error-unknown-argument = Okänt argument: { $argument }
 clap-error-invalid-value = Ogiltigt värde för { $argument }: { $value }
+clap-error-too-many-values = Oväntat värde för { $argument }: { $value }
 clap-error-invalid-subcommand = Okänt underkommando: { $subcommand }
 # Obs: value-validation är formulerat annorlunda än invalid-value för att
 # skilja fel från egna validerare (ErrorKind::ValueValidation) från
