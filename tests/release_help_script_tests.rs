@@ -263,23 +263,31 @@ fn declared_value_placeholders() -> Vec<(String, String)> {
         .collect()
 }
 
-/// Assert that the manual page renders every declared value placeholder.
+/// Assert that a generated document renders every declared value placeholder.
+///
+/// The man-page and MAML surfaces differ only in markup, so the shared checks
+/// live here and each format supplies its own rendering templates.
 ///
 /// # Errors
 ///
 /// Returns an error when the metadata declares no placeholders, or when the
-/// manual page omits a declared placeholder or an expected distinct value name.
-fn assert_man_value_placeholders(man_page: &str) -> Result<()> {
+/// document omits a declared placeholder or an expected distinct value name.
+fn assert_value_placeholders(
+    document: &str,
+    format_name: &str,
+    render_option: impl Fn(&str, &str) -> String,
+    render_value: impl Fn(&str) -> String,
+) -> Result<()> {
     let placeholders = declared_value_placeholders();
     ensure!(
         !placeholders.is_empty(),
         "release-help metadata should declare value placeholders"
     );
     for (long, value_name) in &placeholders {
-        let rendered = format!("\\fB--{long}\\fR \\fI{value_name}\\fP");
+        let rendered = render_option(long, value_name);
         ensure!(
-            man_page.contains(&rendered),
-            "man page should render the {value_name} placeholder for --{long}: {man_page}"
+            document.contains(&rendered),
+            "{format_name} should render the {value_name} placeholder for --{long}: {document}"
         );
     }
     for value_name in EXPECTED_VALUE_NAMES {
@@ -289,13 +297,28 @@ fn assert_man_value_placeholders(man_page: &str) -> Result<()> {
                 .any(|(_, name)| name.as_str() == value_name),
             "release-help metadata should declare the {value_name} placeholder"
         );
-        let rendered = format!("\\fI{value_name}\\fP");
+        let rendered = render_value(value_name);
         ensure!(
-            man_page.contains(&rendered),
-            "man page should render the {value_name} placeholder: {man_page}"
+            document.contains(&rendered),
+            "{format_name} should render the {value_name} placeholder: {document}"
         );
     }
     Ok(())
+}
+
+/// Assert that the manual page renders every declared value placeholder.
+///
+/// # Errors
+///
+/// Returns an error when the metadata declares no placeholders, or when the
+/// manual page omits a declared placeholder or an expected distinct value name.
+fn assert_man_value_placeholders(man_page: &str) -> Result<()> {
+    assert_value_placeholders(
+        man_page,
+        "man page",
+        |long, value_name| format!("\\fB--{long}\\fR \\fI{value_name}\\fP"),
+        |value_name| format!("\\fI{value_name}\\fP"),
+    )
 }
 
 /// Assert that the PowerShell MAML help renders every declared value placeholder.
@@ -305,38 +328,23 @@ fn assert_man_value_placeholders(man_page: &str) -> Result<()> {
 /// Returns an error when the metadata declares no placeholders, or when the
 /// MAML help omits a declared placeholder or an expected distinct value name.
 fn assert_maml_value_placeholders(maml: &str) -> Result<()> {
-    let placeholders = declared_value_placeholders();
-    ensure!(
-        !placeholders.is_empty(),
-        "release-help metadata should declare value placeholders"
-    );
-    for (long, value_name) in &placeholders {
-        let rendered = format!(
-            "<maml:name>--{long}</maml:name>\
-             <command:parameterValue required=\"true\">{value_name}\
-             </command:parameterValue>"
-        );
-        ensure!(
-            maml.contains(&rendered),
-            "MAML help should render the {value_name} placeholder for --{long}: {maml}"
-        );
-    }
-    for value_name in EXPECTED_VALUE_NAMES {
-        ensure!(
-            placeholders
-                .iter()
-                .any(|(_, name)| name.as_str() == value_name),
-            "release-help metadata should declare the {value_name} placeholder"
-        );
-        let rendered = format!(
-            "<command:parameterValue required=\"true\">{value_name}</command:parameterValue>"
-        );
-        ensure!(
-            maml.contains(&rendered),
-            "MAML help should render the {value_name} placeholder: {maml}"
-        );
-    }
-    Ok(())
+    assert_value_placeholders(
+        maml,
+        "MAML help",
+        |long, value_name| {
+            format!(
+                "<maml:name>--{long}</maml:name>\
+                 <command:parameterValue required=\"true\">{value_name}\
+                 </command:parameterValue>"
+            )
+        },
+        |value_name| {
+            format!(
+                "<command:parameterValue required=\"true\">{value_name}\
+                 </command:parameterValue>"
+            )
+        },
+    )
 }
 
 /// Verify the manual date selected from `SOURCE_DATE_EPOCH`.
