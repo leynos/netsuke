@@ -1,6 +1,10 @@
 //! Script recipe integration cases for Ninja dollar escaping.
 
 use super::*;
+#[cfg(unix)]
+use netsuke::manifest::{EnvAccessPolicy, EnvReadError, EnvReader};
+#[cfg(unix)]
+use std::sync::Arc;
 
 /// Verify script `$in` and `$out` become literal shell variables in Ninja.
 #[rstest]
@@ -203,6 +207,190 @@ fn dollar_free_commands_remain_byte_identical() -> Result<()> {
     ensure!(
         ninja.contains("  command = echo hi\n"),
         "dollar-free command output must not change:\n{ninja}"
+    );
+    Ok(())
+}
+
+/// The literal byte sequence the reported trigger carries.
+///
+/// It begins with a backslash so `printf %b` reads `\047` as an octal
+/// apostrophe; the remainder turns the reconstructed byte into a command
+/// boundary and a redirect to `injected`. Only the Unix execution cases below
+/// consume it, so it is gated with them rather than left dead on Windows.
+#[cfg(unix)]
+const BACKSLASH_PAYLOAD: &str = r"\047;>injected;#";
+
+/// Run one generated script and return its byte-exact output and workspace.
+#[cfg(unix)]
+fn ninja_output_bytes(
+    ninja: &str,
+    input: Option<(&str, &str)>,
+) -> Result<(Vec<u8>, NinjaWorkspace)> {
+    let workspace = run_ninja_workspace(ninja, &[], input)?;
+    let bytes = test_support::fs::read(workspace.path.join("out"))
+        .context("read byte-exact script output")?;
+    Ok((bytes, workspace))
+}
+
+/// Assert the transported script kept `expected` and executed no redirect.
+#[cfg(unix)]
+fn assert_payload_is_inert(
+    actual: &[u8],
+    workspace: &NinjaWorkspace,
+    expected: &[u8],
+) -> Result<()> {
+    ensure!(
+        actual == expected,
+        "script bytes changed in transport: expected {:?}, got {:?}",
+        String::from_utf8_lossy(expected),
+        String::from_utf8_lossy(actual)
+    );
+    ensure!(
+        !test_support::fs::exists(workspace.path.join("injected")),
+        "transported script bytes executed the injected redirect"
+    );
+    Ok(())
+}
+
+/// Verify a script literal survives `printf %b` without becoming shell syntax.
+#[cfg(unix)]
+#[rstest]
+fn script_source_backslash_payload_is_not_reinterpreted() -> Result<()> {
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      printf '%s' '{BACKSLASH_PAYLOAD}' > {{{{ outs }}}}\n"
+    );
+    let manifest = manifest::from_str(&source)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
+    assert_payload_is_inert(&actual, &workspace, BACKSLASH_PAYLOAD.as_bytes())
+}
+
+/// Verify an input path survives each marker quoting context.
+#[cfg(unix)]
+#[rstest]
+#[case::single_quoted("printf '%s' '{{ ins }}' > {{ outs }}")]
+#[case::unquoted("printf '%s' {{ ins }} > {{ outs }}")]
+#[case::double_quoted("printf '%s' \"{{ ins }}\" > {{ outs }}")]
+fn input_path_backslash_payload_is_not_reinterpreted(#[case] script_line: &str) -> Result<()> {
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: '{BACKSLASH_PAYLOAD}'\n    script: |\n      {script_line}\n"
+    );
+    let manifest = manifest::from_str(&source)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let (actual, workspace) =
+        ninja_output_bytes(&ninja, Some((BACKSLASH_PAYLOAD, "input-contents")))?;
+    assert_payload_is_inert(&actual, &workspace, BACKSLASH_PAYLOAD.as_bytes())
+}
+
+/// Verify a `shell_quote`d `env()` fallback reaches the final interpreter intact.
+#[cfg(unix)]
+#[rstest]
+fn env_fallback_through_shell_quote_is_not_reinterpreted() -> Result<()> {
+    // The fallback is a Jinja string literal, so it needs one extra layer of
+    // backslash escaping before `shell_quote` sees the reported payload. This
+    // is template-language escaping, not part of the script transport.
+    let jinja_payload = BACKSLASH_PAYLOAD.replace('\\', "\\\\");
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      printf '%s\\n' {{{{ env('NETSUKE_ISSUE_967_UNSET', default='{jinja_payload}') | shell_quote }}}} > {{{{ outs }}}}\n"
+    );
+    let reader: EnvReader = Arc::new(|_| Err(EnvReadError::NotPresent));
+    let manifest =
+        manifest::from_str_with_env_and_policy(&source, &reader, &EnvAccessPolicy::default())?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
+    let expected = format!("{BACKSLASH_PAYLOAD}\n");
+    assert_payload_is_inert(&actual, &workspace, expected.as_bytes())
+}
+
+/// Return printable ASCII with every Jinja delimiter pair removed.
+#[cfg(unix)]
+fn printable_ascii_without_jinja_delimiters() -> String {
+    let mut text = (0x20u8..=0x7e).map(char::from).collect::<String>();
+    for delimiter in ["{{", "}}", "{%", "%}", "{#", "#}"] {
+        while let Some(index) = text.find(delimiter) {
+            text.replace_range(index..index + delimiter.len(), "");
+        }
+    }
+    text
+}
+
+/// Verify a quoted heredoc carries every backslash sequence byte for byte.
+#[cfg(unix)]
+#[rstest]
+#[case::double_backslash(r"\\")]
+#[case::literal_backslash_n(r"\n")]
+#[case::literal_backslash_t(r"\t")]
+#[case::literal_backslash_c(r"\c")]
+#[case::literal_backslash_zero(r"\0")]
+#[case::octal(r"\0101")]
+#[case::hexadecimal(r"\x41")]
+#[case::octal_apostrophe(r"\047")]
+#[case::unicode(concat!(r"\", "u0041"))]
+#[case::trailing_backslash("trailing\\")]
+#[case::before_apostrophe(r"\'")]
+#[case::before_double_quote(r#"\""#)]
+#[case::before_backtick(r"\`")]
+#[case::before_dollar(r"\$")]
+fn quoted_heredoc_preserves_backslash_sequences(#[case] body: &str) -> Result<()> {
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      cat > {{{{ outs }}}} <<'EOF'\n      {body}\n      EOF\n"
+    );
+    let manifest = manifest::from_str(&source)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
+    let expected = format!("{body}\n");
+    ensure!(
+        actual == expected.as_bytes(),
+        "heredoc bytes changed in transport: expected {body:?}, got {:?}",
+        String::from_utf8_lossy(&actual)
+    );
+    ensure!(
+        !test_support::fs::exists(workspace.path.join("injected")),
+        "heredoc bytes executed the injected redirect"
+    );
+    Ok(())
+}
+
+/// Verify the printable ASCII range survives the quoted-heredoc transport.
+#[cfg(unix)]
+#[rstest]
+fn quoted_heredoc_preserves_printable_ascii() -> Result<()> {
+    let body = printable_ascii_without_jinja_delimiters();
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      cat > {{{{ outs }}}} <<'EOF'\n      {body}\n      EOF\n"
+    );
+    let manifest = manifest::from_str(&source)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        &manifest,
+        RecipeShell::Posix,
+    )?)?;
+
+    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
+    let expected = format!("{body}\n");
+    ensure!(
+        actual == expected.as_bytes(),
+        "printable ASCII changed in transport: expected {body:?}, got {:?}",
+        String::from_utf8_lossy(&actual)
+    );
+    ensure!(
+        !test_support::fs::exists(workspace.path.join("injected")),
+        "printable ASCII bytes executed the injected redirect"
     );
     Ok(())
 }

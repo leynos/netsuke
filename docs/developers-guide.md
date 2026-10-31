@@ -829,7 +829,7 @@ The lowering stages have deliberately separate responsibilities:
   contains lowered command text and no Ninja rule variables; an inert region
   may still retain an internal Netsuke marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
-  `src/ninja_gen/recipe_shell.rs`. On Unix, and for the explicit Windows Bash
+  `src/ninja_gen/recipe_shell/`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
   entry in a brace group and joins the groups with `&&`; `eval` receives a
   shell-quoted payload, which keeps inline comments and trailing control
@@ -997,6 +997,42 @@ and are converted only at their Ninja emission boundary, where literal dollars
 are doubled and newline, carriage-return, and NUL characters are rejected. Add
 a separate, explicitly documented conversion for any new Ninja grammar position
 rather than reusing command escaping.
+
+### POSIX script transport
+
+`src/ninja_gen/recipe_shell/transport.rs` owns the encoder that turns a
+multi-line `script` into the one-line POSIX wrapper; the sibling `mod.rs` owns
+the renderers that select it. `escape_posix_script` applies one layer per
+parser — the `printf %b` operand, the inner single-quoted word, and the outer
+double-quoted string — from the innermost outwards, for the reasons recorded
+under *POSIX script transport encoding* in the
+[design](netsuke-design.md#posix-script-transport-encoding). The layer
+functions are a matched set: changing the wrapper's quoting structure requires
+changing the corresponding layer in the same commit, and a reordered or merged
+replacement chain is a defect rather than a simplification.
+
+Two test layers guard the contract:
+
+- `src/ninja_gen/shell_tests.rs` pins the exact encoding of each byte class in
+  `posix_script_escaping_applies_one_layer_per_parser`. Update that table, and
+  the snapshot under `tests/snapshots/ninja/`, whenever the encoded shape
+  changes intentionally.
+- `tests/ninja_dollar_escaping_tests/scripts.rs` asserts the stronger
+  property: a generated Ninja target, run by real Ninja, writes byte-exact
+  output and creates no file named by an injected redirect. Those execution
+  cases are Unix-only, because they run the generated wrapper under a POSIX
+  shell, and they skip when `ninja` is unavailable. Set
+  `NETSUKE_REQUIRE_NINJA=1` to turn that skip into a failure; CI sets it for
+  the jobs that exercise Ninja. Real-Ninja coverage cannot reach a Windows host
+  from this suite, so it does not execute `bash.exe`.
+
+The Bash route has no separate transport encoder: it wraps the same encoded
+POSIX script as `bash.exe -e -c "<windows argument>"`. Coverage for it comes
+from the shared encoder's unit table and from
+`tests/shell_filter_composition_tests/backslash_transport.rs`, which decodes
+the Bash transport and runs the inner script under the host's own `sh`. That is
+the closest executable check a Unix host can make: it verifies the payload this
+route would hand to `bash.exe`, not `bash.exe` itself.
 
 ### Inline recipe progress labels
 

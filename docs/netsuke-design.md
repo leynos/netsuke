@@ -2706,7 +2706,9 @@ structures to the Ninja file syntax.
    When an action's `recipe` is a script, the generated rule wraps the script
    in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
    while Windows defaults to `powershell -Command`; an explicit manifest
-   `interpreter` overrides the platform default.
+   `interpreter` overrides the platform default. On the POSIX and Bash routes
+   the script reaches that interpreter through the layered transport described
+   under *POSIX script transport encoding* below.
 
    Command and script text must be converted from IR text to backend text at
    this stage. After Netsuke placeholders have been resolved, remaining literal
@@ -2753,6 +2755,50 @@ structures to the Ninja file syntax.
    build bar.o: cc bar.c
    build my_app: link foo.o bar.o | lib_dependency.a
    ```
+
+#### POSIX script transport encoding
+
+A `script` recipe may span many lines, while a Ninja `command` binding must
+remain on one. The POSIX and Bash renderers therefore carry the script through
+a transport that reconstructs it when Ninja runs the rule:
+
+```ninja
+command = /bin/sh -e -c "printf %b '<encoded>' | /bin/sh -e"
+```
+
+Three parsers sit between the original script and the final interpreter: the
+outer shell's double-quoted word, the inner shell's single-quoted `%b` operand,
+and `printf %b`, which decodes backslash escapes back into script text. The
+encoder gives each parser exactly one layer and composes the layers from the
+innermost outwards, in this fixed order:
+
+| Layer | Parser it satisfies  | Transformation                              |
+| ----- | -------------------- | ------------------------------------------- |
+| 1     | `printf %b` operand  | `\` becomes `\\`; a line feed becomes `\n`  |
+| 2     | Single-quoted word   | `'` becomes `'\''`                          |
+| 3     | Double-quoted string | prefix `\`, `$`, `"`, and backtick with `\` |
+
+The order is load-bearing rather than stylistic. A backslash added by an outer
+layer is itself script data to every layer inside it. Encoding the outer
+double-quoted layer first, or flattening the layers into one replacement chain,
+lets the outer shell consume a backslash that layer 1 still needs; `printf %b`
+then reinterprets the surviving characters, and argument data such as `\047`
+reaches the interpreter as a quote. Composing from the innermost layer outwards
+keeps each layer's protection visible to exactly the parser it targets, so a
+source script reaches `/bin/sh -e` byte for byte.
+
+Ninja's own `$$` doubling for literal dollars is applied once, after the whole
+transport has been encoded, by `escape_ninja_value`. It belongs to no layer:
+the three parsers above are shell parsers, while `$$` belongs to Ninja's lexer.
+The transport refuses carriage-return and NUL script bytes, which no layer can
+represent within one binding.
+
+Writing the script to a file beside the build would avoid the transport, but
+the generator cannot publish that file. Generation is an effect-free query
+whose output a caller may save, copy, or run much later, so a path embedded in
+the binding would have no owner guaranteeing the file exists at execution time.
+The transport keeps generated Ninja self-contained at the cost of one linear
+encoding pass per script.
 
 #### Serial dependency ordering and generated bundles
 

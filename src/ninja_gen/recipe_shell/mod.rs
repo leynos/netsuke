@@ -6,6 +6,10 @@ use super::NinjaGenError;
 use super::escape::{NinjaValue, ShellText, escape_ninja_value};
 use crate::recipe_shell::{BashExecutable, RecipeShell};
 
+mod transport;
+
+pub(super) use transport::escape_posix_script;
+
 /// Leave space for Windows' terminating command-line NUL character.
 const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
 
@@ -370,17 +374,6 @@ fn windows_argument(argument: &str) -> String {
     quoted
 }
 
-/// Escape a POSIX script for the wrapper's single-quoted `printf %b` argument.
-pub(super) fn escape_posix_script(script: &str) -> String {
-    script
-        .replace('\\', "\\\\")
-        .replace('$', "\\$")
-        .replace('"', "\\\"")
-        .replace('`', "\\`")
-        .replace('\'', r"'\''")
-        .replace('\n', "\\n")
-}
-
 #[cfg(test)]
-#[path = "shell_tests.rs"]
+#[path = "../shell_tests.rs"]
 mod tests;

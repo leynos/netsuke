@@ -141,13 +141,16 @@ fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
     String::from_utf8(output.stdout).context("Ninja command output was not UTF-8")
 }
 
-/// Run a generated Ninja target with child shell variables and read its output.
+/// Run the generated Ninja target `out` inside an isolated workspace.
+///
+/// The workspace is returned so a caller can inspect byte-exact output and
+/// confirm that the transport created no files it should not have.
 #[cfg(unix)]
-fn ninja_output(
+fn run_ninja_workspace(
     ninja_file: &str,
     environment: &[(&str, &str)],
     input: Option<(&str, &str)>,
-) -> Result<String> {
+) -> Result<NinjaWorkspace> {
     let workspace = NinjaWorkspace::create(ninja_file)?;
     if let Some((path, contents)) = input {
         workspace
@@ -172,6 +175,17 @@ fn ninja_output(
             String::from_utf8_lossy(&output.stderr)
         );
     }
+    Ok(workspace)
+}
+
+/// Run a generated Ninja target with child shell variables and read its output.
+#[cfg(unix)]
+fn ninja_output(
+    ninja_file: &str,
+    environment: &[(&str, &str)],
+    input: Option<(&str, &str)>,
+) -> Result<String> {
+    let workspace = run_ninja_workspace(ninja_file, environment, input)?;
     workspace
         .directory
         .read_to_string("out")
