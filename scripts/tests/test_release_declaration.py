@@ -133,6 +133,26 @@ def test_a_configuration_without_targets_is_refused(
         _ = build(())
 
 
+@pytest.mark.parametrize(
+    "platform",
+    [
+        pytest.param(None, id="absent"),
+        pytest.param(1, id="integer"),
+        pytest.param("", id="empty"),
+    ],
+)
+def test_a_target_without_a_platform_string_is_refused(platform: object) -> None:
+    """Refuse a target whose platform cannot key a package-format table.
+
+    Counting and sorting the configured platforms would compare a mixed-type
+    key set and raise ``TypeError``, so the target refuses the value itself.
+    """
+    malformed = typ.cast("str", platform)
+
+    with pytest.raises(release_declaration.MalformedTargetError):
+        _ = release_declaration.StagingTarget(malformed)
+
+
 def test_package_names_are_observed_from_the_supplied_tree_facts() -> None:
     """Carry an action-provided package name without predicting its spelling."""
     renamed = (*PACKAGES[:-1], "renamed-by-the-action.msi")
