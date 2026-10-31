@@ -457,6 +457,163 @@ jobs:
             --package-name "$PACKAGE_NAME" \
             --license-file LICENSE
 
+      - name: Prepare Linux package validation sandbox
+        id: validation_sandbox
+        if: inputs.platform == 'linux'
+        shell: bash
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          case "$TARGET" in
+            x86_64-unknown-linux-gnu) target_arch=amd64 ;;
+            aarch64-unknown-linux-gnu) target_arch=arm64 ;;
+            *)
+              printf '::error title=Unsupported Linux package target::%s\n' "$TARGET"
+              exit 1
+              ;;
+          esac
+          case "$(uname -m)" in
+            x86_64|amd64) runner_arch=amd64 ;;
+            aarch64|arm64) runner_arch=arm64 ;;
+            *)
+              printf '::error title=Unsupported runner architecture::%s\n' "$(uname -m)"
+              exit 1
+              ;;
+          esac
+          packages=()
+          if ! command -v podman >/dev/null 2>&1; then
+            packages+=(podman)
+          fi
+          if [[ "$target_arch" != "$runner_arch" ]]; then
+            # Building an image for the other architecture runs its package
+            # manager under emulation, which needs the static QEMU handlers.
+            packages+=(qemu-user-static)
+          fi
+          if (( ${#packages[@]} > 0 )); then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends --yes "${packages[@]}"
+          fi
+          if [[ "$target_arch" != "$runner_arch" ]]; then
+            sudo systemctl restart systemd-binfmt
+          fi
+          echo "arch=$target_arch" >> "$GITHUB_OUTPUT"
+          echo "runner-arch=$runner_arch" >> "$GITHUB_OUTPUT"
+          if [[ "$target_arch" != "$runner_arch" ]]; then
+            echo "cross-arch=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "cross-arch=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build Debian validation image
+        id: validation_deb_image
+        if: inputs.platform == 'linux'
+        shell: bash
+        env:
+          PACKAGE_ARCH: ${{ steps.validation_sandbox.outputs.arch }}
+        run: |
+          set -euo pipefail
+          image="localhost/netsuke-package-validation-deb:${PACKAGE_ARCH}"
+          podman build \
+            --arch "$PACKAGE_ARCH" \
+            --file .github/package-validation/deb.Containerfile \
+            --tag "$image" \
+            .github/package-validation
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Build RPM validation image
+        id: validation_rpm_image
+        if: inputs.platform == 'linux'
+        shell: bash
+        env:
+          PACKAGE_ARCH: ${{ steps.validation_sandbox.outputs.arch }}
+        run: |
+          set -euo pipefail
+          image="localhost/netsuke-package-validation-rpm:${PACKAGE_ARCH}"
+          podman build \
+            --arch "$PACKAGE_ARCH" \
+            --file .github/package-validation/rpm.Containerfile \
+            --tag "$image" \
+            .github/package-validation
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Normalise Linux package validation version
+        id: validation_version
+        if: inputs.platform == 'linux'
+        shell: bash
+        env:
+          PACKAGE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          # nfpm parses the Cargo version as SemVer, so a prerelease loses its
+          # hyphen separator: `0.1.0-beta4` is recorded and named
+          # `0.1.0~beta4` in both package formats. The validator compares that
+          # spelling against the metadata and also uses it to glob the package
+          # filename, so the Cargo spelling would find nothing.
+          version="${PACKAGE_VERSION#v}"
+          if [[ "$version" == *-* ]]; then
+            version="${version%%-*}~${version#*-}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate Linux packages
+        if: inputs.platform == 'linux'
+        uses: leynos/shared-actions/.github/actions/validate-linux-packages@7d751eded578e48dacf43ab173d5820e6437c474
+        with:
+          project-dir: .
+          package-name: ${{ inputs['bin-name'] }}
+          bin-name: ${{ inputs['bin-name'] }}
+          target: ${{ inputs.target }}
+          version: ${{ steps.validation_version.outputs.version }}
+          formats: deb,rpm
+          packages-dir: dist
+          expected-paths: /usr/share/man/man1/netsuke.1.gz
+          verify-command: /usr/local/bin/verify-installed-package ${{ inputs['bin-name'] }}
+          deb-base-image: ${{ steps.validation_deb_image.outputs.image }}
+          rpm-base-image: ${{ steps.validation_rpm_image.outputs.image }}
+          # The shared action's own Polythene revision predates its local-image
+          # probe, so it would treat `localhost/...` as a registry host and fail.
+          # This repository-owned PEP 723 wrapper pins the revision that probes
+          # the local Podman store first.
+          polythene-path: ${{ github.workspace }}/.github/package-validation/polythene_cli.py
+
+      - name: Install packages under emulation
+        if: inputs.platform == 'linux' && steps.validation_sandbox.outputs.cross-arch == 'true'
+        shell: bash
+        env:
+          PACKAGE_ARCH: ${{ steps.validation_sandbox.outputs.arch }}
+          DEB_IMAGE: ${{ steps.validation_deb_image.outputs.image }}
+          RPM_IMAGE: ${{ steps.validation_rpm_image.outputs.image }}
+          BIN_NAME: ${{ inputs['bin-name'] }}
+        run: |
+          set -euo pipefail
+          # The shared action skips its sandbox whenever the package
+          # architecture differs from the runner's, and skips the architecture
+          # check with it. That is exactly the arm64 lane on an x64 runner, so
+          # without this step arm64 packages would be published having never
+          # run. The sandbox step registered the QEMU binfmt handlers the
+          # emulated container needs, so install there and verify as usual.
+          shopt -s nullglob
+          debs=(dist/*.deb)
+          rpms=(dist/*.rpm)
+          # Both formats are published from this lane and, on a cross-arch
+          # lane, this step is the only install they get. A packaging failure
+          # that produced one format must stop the lane rather than publish
+          # the other having never run.
+          if (( ${#debs[@]} == 0 || ${#rpms[@]} == 0 )); then
+            printf '::error title=Missing package format::dist must hold both a .deb and an .rpm\n'
+            exit 1
+          fi
+          packages=("${debs[@]}" "${rpms[@]}")
+          for package in "${packages[@]}"; do
+            case "$package" in
+              *.deb) image=$DEB_IMAGE ;;
+              *.rpm) image=$RPM_IMAGE ;;
+            esac
+            sh .github/package-validation/install-emulated-package.sh \
+              "$image" "$PACKAGE_ARCH" "$package" "$BIN_NAME"
+          done
+
       - name: Build Windows installer package
         if: inputs.platform == 'windows'
         id: package_windows
