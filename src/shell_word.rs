@@ -148,8 +148,7 @@ fn encode_power_shell_literal_into(value: &str, out: &mut Vec<u8>) {
     for character in value.chars() {
         let mut buffer = [0_u8; 4];
         let encoded = character.encode_utf8(&mut buffer).as_bytes();
-        out.extend_from_slice(encoded);
-        if is_power_shell_single_quote(character) {
+        for _ in 0..power_shell_repetitions(character) {
             out.extend_from_slice(encoded);
         }
     }
@@ -162,14 +161,25 @@ fn encode_power_shell_literal_into(value: &str, out: &mut Vec<u8>) {
 /// value is larger than any ceiling, so the caller rejects it either way.
 fn power_shell_encoded_len(value: &str) -> usize {
     value.chars().fold(2_usize, |total, character| {
-        let base = character.len_utf8();
-        let doubled = if is_power_shell_single_quote(character) {
-            base * 2
-        } else {
-            base
-        };
-        total.saturating_add(doubled)
+        let encoded = character
+            .len_utf8()
+            .saturating_mul(power_shell_repetitions(character));
+        total.saturating_add(encoded)
     })
+}
+
+/// Return how many times a character is written inside a PowerShell literal.
+///
+/// A delimiter is written twice so it survives as itself; every other character
+/// is written once. Both the encoder and the length computation ask here, so
+/// the doubling rule has one definition rather than one per consumer — which is
+/// what keeps the pre-check exactly as long as what the encoder writes.
+const fn power_shell_repetitions(character: char) -> usize {
+    if is_power_shell_single_quote(character) {
+        2
+    } else {
+        1
+    }
 }
 
 /// Report whether `character` is one of PowerShell's single-quote delimiters.
