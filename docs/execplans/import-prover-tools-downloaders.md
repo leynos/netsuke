@@ -160,7 +160,10 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       all passed. Logs share the
       `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm2-assert-fix-final.out`
       suffix.
-- [ ] Commit EP-M2 and review the committed milestone with CodeRabbit.
+- [x] (2026-11-01) Commit EP-M2 as
+      `fc989b9d631a245e08bb59eb646d346316b1e1cb` and review the exact range
+      from `0e0dcbb047b03960127319d919674d604a08a0a4`. CodeRabbit completed
+      against all five EP-M2 paths with zero findings.
 - [ ] EP-M3: Complete real-tool acceptance and documentation reconciliation.
 
 ## Surprises & discoveries
@@ -265,8 +268,10 @@ through fake Verus processes, including failure position, status propagation,
 missing inputs, and CLI/environment precedence. All 11 Make boundary cases and
 seven upstream integration cases pass. The full 12-gate EP-M2 sequence passes,
 including 4,947 Rust tests, 1,666 workflow contracts, 90 CI script tests and
-98.23% documentation coverage. Its evidence is in the EP-M2 log set above; the
-milestone commit and CodeRabbit review remain pending.
+98.23% documentation coverage. EP-M2 is committed as
+`fc989b9d631a245e08bb59eb646d346316b1e1cb`; CodeRabbit reviewed its five-file
+delta from the M1 head and reported zero findings. Real-tool acceptance and
+documentation reconciliation remain for EP-M3.
 
 ## Context and orientation
 
