@@ -16,6 +16,7 @@ mod network;
 pub(crate) mod path;
 mod recipe_text;
 mod register;
+mod resource_bounds;
 mod restricted_helpers;
 mod time;
 mod which;
@@ -37,6 +38,10 @@ pub use path::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTA
 pub use recipe_text::{DIALECT_SOURCE_VALUES, DIALECT_VALUES, SHELL_QUOTE_DIALECT_TOTAL};
 pub(crate) use register::register_manifest_query;
 pub use register::{register, register_with_config, value_from_bytes};
+pub use resource_bounds::{
+    AdmittedCount, CardinalityError, CardinalityRequest, OUTPUT_TUPLE_CEILING,
+    PERMUTATION_TUPLE_CEILING,
+};
 pub use restricted_helpers::TestModeRefusal;
 pub(crate) use restricted_helpers::{
     RestrictedSurface, is_manifest_query_disabled_error, register_env_refusal, register_for_test,
@@ -79,3 +84,4 @@ impl StdlibState {
         Arc::clone(&self.impure)
     }
 }
+// weave: run 'weave explain src/stdlib/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

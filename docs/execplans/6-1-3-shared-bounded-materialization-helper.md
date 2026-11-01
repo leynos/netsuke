@@ -262,7 +262,57 @@ conflict in `Decision log`, and escalate.
   2026-10-21), cargo 1.101.0-nightly (`3960fa69b` 2026-10-12), cargo-nextest
   0.9.133, and Verus 0.2026.10.04.426d8b0 installed under
   `.verus/0.2026.10.04.426d8b0/verus/`. No production file changed.
-- [ ] EP-M2: checked cardinality kernels and admission.
+- [x] EP-M2: checked cardinality kernels and admission.
+  - Red observation (2026-11-01). Every kernel body was temporarily replaced
+    with a wrong answer (`None` from the four checked functions, `Ok(0)` from
+    `classify`) so the skeleton compiled and failed for the expected reason.
+    `cargo nextest run --lib resource_bounds --no-fail-fast` ran 40 selected
+    tests: 8 passed, 32 failed. The eight passes are exactly the witnesses whose
+    expected answer *is* overflow, which the uniformly-`None` body happens to
+    satisfy, so the red set covers every non-overflow class:
+    `cardinality.rs:73` reports `left: None, right: Some(5)`
+    (`combination_witnesses::case_4_one_from_five`), `cardinality.rs:44`
+    reports `left: None, right: Some(1)`
+    (`product_witnesses::case_7_no_operands_and_no_repetition`),
+    `cardinality.rs:97` reports `left: None, right: Some(100000)`
+    (`near_complete_selection_uses_the_symmetric_reduction`), and the eight
+    `admission_reports_the_exact_verdict` cases fail at `admission.rs:71`
+    because the verdict is `Overflow` rather than `Exceeded` or an admitted
+    count. The production file was then restored from a byte-exact backup
+    (sha256 `6d25ef0a…ce500e`) and never committed in its red form.
+  - First green attempt (2026-11-01). Kernel correct, 38/40 pass. The two
+    failures were the class-coverage tripwires, not the kernels: both reported
+    `must reach the Zero class; counts: … zero: Cell { value: 0 }`. The defect
+    was in the strategy — C(n, r) and the falling factorial are zero only when
+    `r > n`, and both generators confined `r <= n`, so `Zero` was unreachable
+    by construction. The generators now ask for more items than exist in one
+    case out of eight, and the oracles already answered `Some(0)` for that
+    branch, so no expectation changed.
+  - Green (2026-11-01). `cargo nextest run --lib resource_bounds` 40/40 passed;
+    `cargo nextest run --test bdd_tests resource_bounds` 3/3 passed;
+    `cargo test --doc --all-features resource_bounds` 5 passed. Each filter
+    selected a nonzero number of tests.
+  - Proof scope (2026-11-01). The first `make test-workflow-contracts` run
+    failed one contract of 1,669: `kani_proof_scope_test.py::test_scope_covers_the_harness_closure`,
+    with `the harnesses reach these paths, which tools/kani/proof-scope.toml
+    sources does not cover: ['src/stdlib/resource_bounds/cardinality.rs',
+    'src/stdlib/resource_bounds/kernel.rs', 'src/stdlib/resource_bounds/mod.rs']`.
+    The three files were added individually — not as a directory entry, which
+    would also claim the `tests/` subtree that no harness reaches — and the
+    contract file then passed 7/7.
+  - Gates (2026-11-01). Green on the committed candidate: `make check-fmt`,
+    `make markdownlint` (212 files, 0 issues), `make doc-coverage` (98.24%,
+    6425/6540), `make test` (4981 nextest tests passed, 7 skipped; every
+    doctest suite `ok`), and `make test-workflow-contracts` (1666 passed, 3
+    skipped). `make lint` needed three repairs before it passed, each found by
+    the gate rather than by inspection: rustfmt re-wrapped four files;
+    `clippy::missing-const-for-fn` required `classify` to be a `const fn`;
+    `clippy::redundant-closure-for-method-calls` replaced a closure with
+    `AdmittedCount::get`; and `clippy::map-or-identity` replaced
+    `map_or(u64::MAX, |value| value)` with `unwrap_or(u64::MAX)`. Clippy
+    short-circuits the make target, so the Whitaker, Python and
+    GitHub-Actions stages were run individually afterwards and each passed,
+    which is why their status here is observed rather than assumed.
 - [ ] EP-M3: input length, nesting depth, running totals, and refusal
   rendering.
 - [ ] EP-M4: Verus proof and Kani harnesses.
