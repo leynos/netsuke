@@ -1,6 +1,6 @@
 # Import shared prover installers and variadic proof execution
 
-Status: APPROVED
+Status: IN PROGRESS
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
@@ -81,16 +81,39 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
   `592558f7183b554fc749696246984c5d7300d029` and draft this plan.
 - [x] (2026-11-01) User approved implementation and set the ExecPlan status to
       APPROVED before implementation began.
-- [ ] EP-M1: Adopt the pinned shared installer in CI and remove Kani-only code.
+- [x] (2026-11-01) Add EP-M1 expected-red contracts. The Rust targets reported
+      2 expected failures (11 passed), workflow contracts reported 1 expected
+      failure (1,665 passed, 3 skipped), and CI script tests reported 1 expected
+      failure (98 passed). Logs are recorded in the implementation handoff.
+- [x] (2026-11-01) Implement EP-M1's shared Kani install path, CI cache
+      generation
+      bump, obsolete downloader removal and maintainer-guide updates.
+- [x] (2026-11-01) Run the full EP-M1 gate sequence. Formatting, typecheck,
+      doc coverage (98.23%), Mermaid, nextest (4,942 passed, 7 skipped), doctests,
+      workflow contracts (1,666 passed, 3 skipped, plus 28 supplementary tests),
+      CI script tests (90 passed), Makefile validation and diff checks passed.
+- [x] (2026-11-01) Replace R9109 substring assertions with one exact command
+      snapshot and stage the intentional removals for spelling's tracked-file
+      scan.
+- [x] (2026-11-01) Rerun all 11 EP-M1 gates after the workflow line-wrap fix.
+      All passed: format, lint, typecheck, doc coverage (98.23%), Markdown,
+      Mermaid, Rust tests (4,942 passed, 7 skipped plus doctests), workflow
+      contracts (1,666 passed, 3 skipped plus 28 helper tests), CI scripts
+      (90 passed), Makefile validation and diff check. Logs share the
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-r9109b.out`
+      suffix.
+- [ ] Commit the fully green EP-M1 milestone before starting EP-M2.
 - [ ] EP-M2: Wire explicit Verus proof selection and batch integration tests.
 - [ ] EP-M3: Complete real-tool acceptance and documentation reconciliation.
 
 ## Surprises & discoveries
 
-The Makefile already pins `rust-prover-tools`, at
-`2ba17da6b7e24160c4041e8d41ba1ba6cca87b35`, for installation and Verus
-execution. The remaining CI Kani path runs `scripts/ci/install_kani.py`. Its
-two digests match upstream's `rust_prover_tools/binary_assets.py` exactly.
+At the start of this work the Makefile pinned `rust-prover-tools` to
+`2ba17da6b7e24160c4041e8d41ba1ba6cca87b35` for installation and Verus
+execution. The Kani workflow separately ran `scripts/ci/install_kani.py`; its
+two digests matched upstream's `rust_prover_tools/binary_assets.py` exactly.
+EP-M1 now pins the inspected current upstream commit so the same package owns
+both acquisition paths and Verus batch support.
 
 Upstream installs front ends to `$CARGO_HOME/bin` by default and stores
 archives under `.cache/kani`. Netsuke currently uses a version-qualified
@@ -142,10 +165,21 @@ the actionlint downloader and its shared support modules.
 
 ## Outcomes & retrospective
 
-The planning outcome is a bounded integration proposal with an immutable
-upstream evidence basis. No installer, workflow, test, or proof implementation
-has changed. All implementation milestones and their acceptance evidence remain
-outstanding. The key lesson from inspection is that package reuse still leaves
+The approval checkpoint is recorded in commit `9a7bcb86f`. EP-M1's expected-red
+contracts established the old pin, workflow command and CI script inventory
+failures. The Makefile now uses the inspected upstream SHA, the Kani workflow
+delegates through `make install-kani`, publishes its cached front-end, and
+checks it through `make kani-check`; the old downloader and its test are
+removed. The first full gate sweep passed all functional and structural checks
+except R9109's substring assertion policy and spelling's inability to scan a
+deleted file that remains in the Git index. The workflow command now has one
+exact reviewed snapshot, and the removals are staged. A second sweep cleared
+those findings and found one workflow line longer than 120 columns. The command
+is now split into short shell assignments. The final EP-M1 sweep passed every
+gate, including formatting, lint, typecheck, documentation coverage, Markdown,
+Mermaid, all Rust tests and doctests, workflow contracts, CI script tests,
+Makefile validation and diff checks. The exact candidate must retain those
+results through the milestone review and commit. Package reuse still leaves
 repository-owned PATH, cache, and proof-selection contracts to verify.
 
 ## Context and orientation
@@ -349,9 +383,10 @@ this migration adds no repository-owned iteration algorithm.
 ## Concrete steps and validation
 
 Run commands from the repository root. Before each milestone, record branch,
-status and upstream commit, then confirm the plan remains approved. Use a
-separate clean checkout of upstream for inspection; do not build under `/tmp`.
-The source reference to inspect is the full SHA in Conformance basis.
+status and upstream commit, then confirm the work remains within the approved
+scope. Use a separate clean checkout of upstream for inspection; do not build
+under `/tmp`. The source reference to inspect is the full SHA in Conformance
+basis.
 
 For each milestone, run its new focused tests before and after the edit and
 save the expected red assertion and subsequent green result. `make test`
@@ -430,3 +465,22 @@ was claimed.
 
 Revision 2 (2026-11-01): Mark the plan approved at the user’s explicit request
 before starting implementation.
+
+Revision 3 (2026-11-01): Begin EP-M1 after committing the approval checkpoint;
+replace obsolete installer contracts with tests for the shared-tool workflow.
+
+Revision 4 (2026-11-01): Observe the expected-red contracts and implement the
+shared Kani install path, cache-generation bump, old-script removal, and guide
+updates. Focused green validation remains pending.
+
+Revision 5 (2026-11-01): Record the first full EP-M1 gate results. All
+functional gates passed; replace the flagged substring assertions with a
+reviewed command snapshot and stage the deletions before the next spelling scan.
+
+Revision 6 (2026-11-01): Record the second full gate sequence: all gates passed
+except the workflow line-length limit. Split the Kani install flags into short
+assignments and update the exact command snapshot before the final EP-M1 sweep.
+
+Revision 7 (2026-11-01): Record the final EP-M1 gate sequence. All 11 gates
+passed on the workflow-wrap candidate; detailed results and log suffix are in
+Progress. CodeRabbit review and commit remain outstanding.

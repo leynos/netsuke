@@ -494,23 +494,24 @@ jobs:
           # `NETSUKE_RUST_TOOLCHAIN` for what an empty value here costs.
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           cache-provider: external
-          # Kani's payloads come from pinned release archives, so this job
-          # needs no binary-install helper.
+          # The shared Kani installer runs after setup-rust, so disable this
+          # action's separate binary-install path.
           install-binstall: 'false'
           use-sccache: 'false'
       - name: Install prebuilt Kani
         if: steps.scope.outputs.run-proofs == 'true'
-        # Two payloads from pinned checksummed archives under
-        # version-qualified directories, so a bump cannot reuse a stale one.
-        # The version must equal tools/kani/VERSION, which the cache key reads.
-        env:
-          INPUT_KANI_VERSION: '0.67.0'
-          INPUT_FRONTEND_SHA256: ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974
-          INPUT_BUNDLE_SHA256: 3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0
-        run: uv run --script scripts/ci/install_kani.py
+        # The shared tool reads the version file and owns the archive digests.
+        # Keep its front-end and archive cache inside the restored job-local
+        # homes, then publish the executable directory for following steps.
+        run: |
+          KANI_INSTALL_FLAGS="--version-file tools/kani/VERSION"
+          KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS --install-dir '$CARGO_HOME/bin'"
+          KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS --cache-dir '$KANI_HOME/archives'"
+          make install-kani KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS"
+          printf '%s\n' "$CARGO_HOME/bin" >> "$GITHUB_PATH"
       - name: Kani version check
         if: steps.scope.outputs.run-proofs == 'true'
-        run: cargo kani --version | grep --fixed-strings "0.67.0"
+        run: make kani-check
       - name: Start the user manager
         if: steps.scope.outputs.run-proofs == 'true'
         # A hosted runner's job does not run inside a login session, so the

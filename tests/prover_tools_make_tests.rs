@@ -14,6 +14,8 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
+const PROVER_TOOLS_SOURCE_ASSIGNMENT: &str = "PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@592558f7183b554fc749696246984c5d7300d029";
+
 struct FakeProverTools {
     _temp: TempDir,
     executable: PathBuf,
@@ -203,6 +205,27 @@ fn delegated_prover_target_reports_failure_exit_status() -> Result<()> {
     ensure!(
         !stderr.contains("verus-install-secret"),
         "failure diagnostics should not leak secret flags, got `{stderr}`"
+    );
+    Ok(())
+}
+
+#[test]
+fn makefile_pins_prover_tools_to_the_reviewed_upstream_revision() -> Result<()> {
+    let makefile = fs::read_to_string("Makefile").context("read Makefile")?;
+    ensure!(
+        makefile
+            .lines()
+            .any(|line| line == PROVER_TOOLS_SOURCE_ASSIGNMENT),
+        "Makefile should pin rust-prover-tools to the reviewed upstream main commit"
+    );
+    ensure!(
+        makefile.contains("PROVER_TOOLS ?= $(PUBLIC_GIT_SOURCE_ENV)"),
+        "Makefile should run the Git-backed tool with the public-Git environment"
+    );
+    ensure!(
+        makefile
+            .contains("--python $(PYTHON_BASELINE) --from \"$(PROVER_TOOLS_SOURCE)\" prover-tools"),
+        "Makefile should run the pinned tool with the repository Python baseline"
     );
     Ok(())
 }

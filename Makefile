@@ -209,8 +209,9 @@ TYPOS_CONFIG_BUILDER = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
 	--python $(PYTHON_BASELINE) \
 	--from "git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
-PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@2ba17da6b7e24160c4041e8d41ba1ba6cca87b35
-PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
+PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@592558f7183b554fc749696246984c5d7300d029
+PROVER_TOOLS ?= $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) --from "$(PROVER_TOOLS_SOURCE)" prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 unexport RUSTDOC_FLAGS
 export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)
@@ -385,7 +386,6 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 		scripts/tests/test_ci_discard_instrumented_tree.py \
 		scripts/tests/test_ci_install_actionlint.py \
 		scripts/tests/test_ci_install_actionlint_cache.py \
-		scripts/tests/test_ci_install_kani.py \
 		scripts/tests/test_ci_report_sccache_stats.py \
 		scripts/tests/test_ci_scripts_metadata.py \
 		scripts/tests/test_ci_stage_test_shell.py \

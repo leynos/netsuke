@@ -1,10 +1,10 @@
-"""Hold the Kani smoke job's binary-only, cache-aware installation contract.
+"""Hold the Kani smoke job's shared-installer and cache contract.
 
-Kani ships as two payloads: a Cargo front-end and a verifier bundle. The job
-installs both from pinned archives with published checksums, keeps them under
-version-qualified directories inside the three cached workspace homes, and
-never compiles the verifier from source. These checks pin that arrangement so
-a workflow edit cannot quietly reintroduce a source build or a stale binary.
+The pinned ``rust-prover-tools`` revision owns Kani's verified prebuilt
+archives. The job keeps its Cargo front-end, Kani files and supporting Rust
+toolchain inside three cached workspace homes, publishes the front-end to
+following steps, and uses a new cache generation for the changed layout. These
+checks keep CI on that shared path and prevent stale binaries or a source build.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -104,30 +104,15 @@ def test_kani_payloads_share_one_versioned_cache_entry() -> None:
     assert len(paths) == 1, f"restore and save must claim the same paths: {paths!r}"
 
 
-KANI_INSTALL_SCRIPT = "scripts/ci/install_kani.py"
-KANI_VERSION_FILE = REPO_ROOT / "tools" / "kani" / "VERSION"
-
-#: The pins the install step must pass to the script, one row per concern so
-#: a regression names the property it broke. The checksum prefixes are the
-#: same ones the earlier inline script carried; the script verifies each
-#: archive before it is unpacked, which
-#: `scripts/tests/test_ci_install_kani.py` proves for both payloads.
-REQUIRED_INSTALL_PINS = (
-    (
-        "quickinstall front-end archive checksum",
-        "INPUT_FRONTEND_SHA256",
-        "ed2bafc239b834e14c6b66fc4838e342",
-    ),
-    (
-        "upstream verifier bundle checksum",
-        "INPUT_BUNDLE_SHA256",
-        "3b5f7afd3b51603ee720db7bc1bc4fe4",
-    ),
+PROVER_TOOLS_SOURCE_PIN = "592558f7183b554fc749696246984c5d7300d029"
+PROVER_TOOLS_SOURCE = (
+    "git+https://github.com/leynos/rust-prover-tools@" + PROVER_TOOLS_SOURCE_PIN
 )
+MAKEFILE = REPO_ROOT / "Makefile"
 
 
-def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
-    """Require Kani's separate front-end and verifier payloads to be cacheable."""
+def test_kani_uses_pinned_shared_installer_and_cached_paths() -> None:
+    """Require CI to install Kani through the pinned shared tool."""
     workflow = load_workflow()
     _assert_kani_homes_are_cached(workflow)
 
@@ -144,28 +129,43 @@ def test_kani_uses_cached_prebuilt_frontend_and_release_bundle() -> None:
         install_step
     ), "the Kani cache must be restored before Kani is installed"
     assert steps.index(named_step(steps, "Setup uv")) < steps.index(install_step), (
-        "uv must be set up before the installer script runs through it"
+        "uv must be set up before the shared installer runs through it"
     )
-    assert str(install_step.get("run", "")).strip() == (
-        f"uv run --script {KANI_INSTALL_SCRIPT}"
-    ), "the Kani step must run the checked-in installer script and nothing else"
-    assert (REPO_ROOT / KANI_INSTALL_SCRIPT).is_file(), (
-        f"{KANI_INSTALL_SCRIPT} must exist"
+    install_command = str(install_step.get("run", ""))
+    expected_install_command = (
+        REPO_ROOT
+        / "tests"
+        / "workflow_contracts"
+        / "snapshots"
+        / "kani_install_command.sh"
+    ).read_text(encoding="utf-8")
+    assert install_command == expected_install_command, (
+        "the Kani install step must match the reviewed shared-tool invocation"
     )
-
-    env = require_mapping(install_step.get("env"), "Kani install step env")
-    pinned = KANI_VERSION_FILE.read_text(encoding="utf-8").strip()
-    assert str(env.get("INPUT_KANI_VERSION")) == pinned, (
-        f"the Kani step must pass tools/kani/VERSION ({pinned!r}) as "
-        f"INPUT_KANI_VERSION, got {env.get('INPUT_KANI_VERSION')!r}"
+    install_env = require_mapping(install_step.get("env", {}), "Kani install step env")
+    assert not {
+        "INPUT_KANI_VERSION",
+        "INPUT_FRONTEND_SHA256",
+        "INPUT_BUNDLE_SHA256",
+    }.intersection(install_env), "the old script bindings must be removed"
+    assert not (REPO_ROOT / "scripts" / "ci" / "install_kani.py").exists(), (
+        "the bespoke Kani CI downloader should be removed"
     )
-    missing = [
-        f"{concern} ({key} starting {prefix!r})"
-        for concern, key, prefix in REQUIRED_INSTALL_PINS
-        if not str(env.get(key, "")).startswith(prefix)
-    ]
-    assert not missing, (
-        "Kani's binary-only cached installation is missing: " + ", ".join(missing)
+    assert PROVER_TOOLS_SOURCE in MAKEFILE.read_text(encoding="utf-8"), (
+        "Makefile must pin rust-prover-tools to the inspected upstream main head"
+    )
+    assert "2ba17da6b7e24160c4041e8d41ba1ba6cca87b35" not in MAKEFILE.read_text(
+        encoding="utf-8"
+    ), "Makefile must not retain the old rust-prover-tools revision"
+    assert str(named_step(steps, "Kani version check").get("run", "")).strip() == (
+        "make kani-check"
+    ), "the Kani smoke lane must use the shared version check"
+    cache_action = KANI_CACHE_ACTION.read_text(encoding="utf-8")
+    assert "netsuke-kani-v2-" in cache_action, (
+        "the Kani cache key must use the new installation generation"
+    )
+    assert "netsuke-kani-v1-" not in cache_action, (
+        "the Kani cache key must not reuse the old installation generation"
     )
 
 
