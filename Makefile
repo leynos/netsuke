@@ -42,7 +42,9 @@ NEXTEST_TEST_JOBS ?=
 CLIPPY_FLAGS ?= --workspace --all-targets --all-features -- -D warnings
 KANI ?= cargo kani
 KANI_FLAGS ?=
-KANI_INSTALL_FLAGS ?=
+# Use the verified archive on its supported host; retain Cargo installation
+# for developers on other platforms. CI sets explicit cached install flags.
+KANI_INSTALL_FLAGS ?= $(if $(filter Linux-x86_64,$(KANI_HOST_TRIPLE)),,--compile)
 KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
 # The development build standard: the `mold` linker and the parallel `rustc`
@@ -73,6 +75,8 @@ STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
 # `mold` ships for Linux only. macOS and Windows keep their platform linker,
 # matching the `cfg(target_os = "linux")` gate in `.cargo/config.toml`.
 BUILD_HOST_OS := $(shell uname -s)
+BUILD_HOST_ARCH := $(shell uname -m)
+KANI_HOST_TRIPLE := $(BUILD_HOST_OS)-$(BUILD_HOST_ARCH)
 STANDARD_RUSTFLAGS = $(STANDARD_THREADS_FLAG)$(if $(filter Linux,$(BUILD_HOST_OS)), $(STANDARD_MOLD_FLAG))
 # Warnings-as-errors plus the standard, appended to whatever the caller set.
 GATE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(STANDARD_RUSTFLAGS)"

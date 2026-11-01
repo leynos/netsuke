@@ -229,3 +229,35 @@ fn makefile_pins_prover_tools_to_the_reviewed_upstream_revision() -> Result<()> 
     );
     Ok(())
 }
+
+#[rstest]
+#[case::linux_x86_64("Linux", "x86_64", "kani install")]
+#[case::macos_arm64("Darwin", "arm64", "kani install --compile")]
+#[case::linux_aarch64("Linux", "aarch64", "kani install --compile")]
+fn kani_install_uses_compile_fallback_outside_prebuilt_hosts(
+    fake_prover_tools: Result<FakeProverTools>,
+    #[case] host_os: &str,
+    #[case] host_arch: &str,
+    #[case] expected_invocation: &str,
+) -> Result<()> {
+    let fake = fake_prover_tools?;
+    let output = make_command(&fake)
+        .arg("install-kani")
+        .arg(format!("BUILD_HOST_OS={host_os}"))
+        .arg(format!("BUILD_HOST_ARCH={host_arch}"))
+        .output()
+        .context("run make install-kani for a simulated host")?;
+
+    ensure!(
+        output.status.success(),
+        "make install-kani should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        fake.invocations()?
+            .lines()
+            .any(|line| line == expected_invocation),
+        "fake prover-tools should receive `{expected_invocation}`"
+    );
+    Ok(())
+}

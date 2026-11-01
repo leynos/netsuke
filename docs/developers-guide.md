@@ -5167,12 +5167,16 @@ installed command against the version file. Kani manages its own supporting
 Rust nightly toolchain during setup; CI gives that toolchain a separate cached
 `RUSTUP_HOME`. It must not replace the repository's pinned nightly workflow (see
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)).
-Kani 0.67.0's supporting nightly is `nightly-2025-11-21`, which predates the
-Polonius default, so Kani borrow-checks under NLL. That is currently harmless —
-the tree has no `POLONIUS(...)`-tagged sites — but a future tagged site could
-fail to verify under Kani while compiling everywhere else. If that happens,
-move Kani to a build whose nightly is 2026-08-04 or later rather than
-reinstating a `-Zpolonius` directive.
+Upstream publishes prebuilt Kani only for Linux x86_64, so Make uses the
+verified archive there and defaults to `--compile` on other local hosts to
+preserve Cargo-based installation. The CI job supplies explicit install flags
+and stays on the prebuilt route. Kani 0.67.0's supporting nightly is
+`nightly-2025-11-21`, which predates the Polonius default, so Kani
+borrow-checks under NLL. That is currently harmless — the tree has no
+`POLONIUS(...)`-tagged sites — but a future tagged site could fail to verify
+under Kani while compiling everywhere else. If that happens, move Kani to a
+build whose nightly is 2026-08-04 or later rather than reinstating a
+`-Zpolonius` directive.
 
 Delegated prover targets print maintainer diagnostics to standard error before
 invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
