@@ -12,7 +12,9 @@
 //! - `base` canonicalizes an injected base into a glob-compatible path.
 //! - `normalize` maps separators onto the platform's and, on Unix, rewrites
 //!   backslash escapes into the bracket classes the `glob` crate understands.
-//!   [`GlobPattern`] pairs the caller's text with that normalized form.
+//!   It also rebases a matched path into the caller's spelling with the same
+//!   platform rule. [`GlobPattern`] pairs the caller's text with that
+//!   normalized form.
 //! - `walk` owns the filesystem side: it computes the pattern's literal
 //!   directory prefix, opens a capability-scoped `cap_std` handle there, and
 //!   runs the metadata check that filters each match.
@@ -46,7 +48,7 @@ use base::PreparedGlob;
 use camino::{Utf8Path, Utf8PathBuf};
 pub(super) use diagnostics::expand_manifest_template_glob;
 use errors::{GlobErrorContext, GlobErrorType, GlobExpansionFailure, create_glob_error};
-use normalize::normalize_separators;
+use normalize::{normalize_separators, strip_base};
 use validate::validate_brace_matching;
 use walk::{open_root_dir, process_glob_entry};
 
@@ -369,36 +371,6 @@ fn expand_prepared_glob(
     })
 }
 
-/// Remove an injected base directory from a matched path, restoring the
-/// pattern-relative spelling the caller supplied.
-///
-/// Only relative patterns with an injected base are affected: `strip` is
-/// `Some` exactly when the matcher ran against `base.join(pattern)`, so every
-/// match starts with `base` and the lexical strip cannot fail in a way that
-/// would drop real matches. The fallback returns the path unchanged.
-///
-/// Separator normalisation is platform-aware, matching `normalize.rs`. On
-/// Windows a backslash is a directory separator, so it is rendered as `/` for
-/// the portable spelling callers expect. On Unix a backslash is an ordinary
-/// filename character: rewriting it would report a different file from the one
-/// the capability metadata check selected, and a name such as
-/// `part\..\other.txt` would become the traversal `part/../other.txt`. The
-/// Unix branch therefore returns the checked spelling unchanged.
-fn strip_base(base: Option<&Utf8Path>, path: &Utf8Path) -> String {
-    let relative = base
-        .and_then(|dir| path.strip_prefix(dir).ok())
-        .unwrap_or(path);
-    // Format once, after any lexical base stripping, so a matched path does
-    // not first allocate a normalized String only to allocate again to rebase.
-    #[cfg(unix)]
-    {
-        relative.as_str().to_owned()
-    }
-    #[cfg(not(unix))]
-    {
-        relative.as_str().replace('\\', "/")
-    }
-}
 #[cfg(test)]
 mod tests;
 
