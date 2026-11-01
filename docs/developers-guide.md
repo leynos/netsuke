@@ -1539,6 +1539,46 @@ registered. The script installs with `dpkg -i` or
 `rpm -i --nodeps --nosignature` and then runs the same verifier, so the arm64
 lane cannot pass without executing the package.
 
+For screen readers: the following sequence shows how the workflow builds a
+validation image, hands the package to the shared action, installs it in the
+sandbox, runs the verifier's three checks against the installed package, and
+publishes only when validation passes.
+
+```mermaid
+sequenceDiagram
+    participant Workflow
+    participant Podman
+    participant Sandbox
+    participant Package
+    participant Verifier
+    participant Upload
+
+    Workflow->>Podman: podman build --arch
+    Podman-->>Workflow: Local validation images
+    Workflow->>Sandbox: validate-linux-packages
+    Sandbox->>Package: Install .deb or .rpm
+    Sandbox->>Verifier: verify-installed-package netsuke
+    Verifier->>Package: netsuke --version
+    Package-->>Verifier: Startup result
+    Verifier->>Package: man -w netsuke
+    Package-->>Verifier: Manual page path
+    Verifier->>Package: dpkg-query -W or rpm -q --requires
+    Package-->>Verifier: Declared dependencies
+    alt Validation passes
+        Verifier-->>Workflow: Success
+        Workflow->>Upload: Publish packages
+    else Validation fails
+        Verifier-->>Workflow: Failure
+        Workflow-->>Upload: Do not publish
+    end
+```
+
+**Figure**: Linux package installation validation sequence from image build
+through sandboxed install and verification to publication. The verifier asks
+the installed package for its startup result, its manual page path, and its
+declared dependencies; only a passing validation lets the workflow reach the
+upload step.
+
 To reproduce locally from the repository root:
 
 ```sh
