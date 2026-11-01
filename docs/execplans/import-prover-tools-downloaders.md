@@ -176,8 +176,9 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       cap while compiling cold dependencies, then passed all 15 harnesses on a
       warm compile; all invocations used the documented systemd scope.
 - [x] (2026-11-01) Exercise Kani installation with disposable install, archive,
-      and `KANI_HOME` paths while leaving shared `CARGO_HOME` untouched. Cold
-      install succeeded; a warm install preserved both verified archive hashes;
+      and `KANI_HOME` paths while leaving shared `CARGO_HOME` untouched. A cold
+      installation succeeded; a warm installation preserved both verified
+      archive hashes;
       deleting the disposable `cargo-kani` executable was repaired; corrupting
       the disposable verifier archive caused it to be replaced with its pinned
       SHA-256. Logs are under `/tmp/kani-disposable-*-netsuke-import-prover-tools.out`.
@@ -203,6 +204,12 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       validation, and diff checks all passed. Logs share the
       `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm3-spelling-fix-final.out`
       suffix.
+- [x] (2026-11-01) Complete the local CodeRabbit CLI 0.9.2 review of the
+      committed EP-M3 documentation delta from
+      `1239b3bc2cb1b4bc70ba3318871858b8ed594e89` to
+      `26409c772cc24d2b48a0265392bc52999bcc1fdd`. It returned four minor
+      grammar findings in the three changed guides; all four are corrected in
+      this revision. Reassessment and gates for the corrections remain pending.
 - [ ] EP-M3: Complete the hosted Kani cache run, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
       the hosted warm run requires a trusted `main` push.
@@ -661,9 +668,13 @@ milestone review remain outstanding.
 Revision 13 (2026-11-01): Record Kani and Verus real-tool acceptance,
 disposable Kani cache reuse and repair checks, correct the current
 formal-verification state and cache write policy, and note the hosted
-warm-cache dependency on a trusted `main` run. The first documentation gate
-attempt found one spelling error.
+warm-cache dependency on a trusted `main` run. The first attempt at the
+documentation gate found one spelling error.
 
 Revision 14 (2026-11-01): Correct the spelling, record the successful final
 EP-M3 local gate sequence, and leave hosted cache acceptance and
 review/delivery work pending.
+
+Revision 15 (2026-11-01): Record the completed local CodeRabbit review and fix
+its four grammar findings. Run the final gates and focused reassessment before
+publishing the rebased candidate.

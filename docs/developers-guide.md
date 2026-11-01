@@ -5173,8 +5173,8 @@ lane and Kani version. It saves only a cache miss on a push to `main`; pull
 requests and manual dispatches cannot seed a cache generation. Upstream
 publishes prebuilt Kani only for Linux x86_64, so Make uses the verified
 archive there and defaults to `--compile` on other local hosts to preserve
-Cargo-based installation. The CI job supplies explicit install flags and stays
-on the prebuilt route. Kani 0.67.0's supporting nightly is
+Cargo-based installation. The CI job supplies explicit installation flags and
+stays on the prebuilt route. Kani 0.67.0's supporting nightly is
 `nightly-2025-11-21`, which predates the Polonius default, so Kani
 borrow-checks under NLL. That is currently harmless — the tree has no
 `POLONIUS(...)`-tagged sites — but a future tagged site could fail to verify
