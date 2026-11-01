@@ -1,0 +1,5 @@
+KANI_INSTALL_FLAGS="--version-file tools/kani/VERSION"
+KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS --install-dir '$CARGO_HOME/bin'"
+KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS --cache-dir '$KANI_HOME/archives'"
+make install-kani KANI_INSTALL_FLAGS="$KANI_INSTALL_FLAGS"
+printf '%s\n' "$CARGO_HOME/bin" >> "$GITHUB_PATH"
