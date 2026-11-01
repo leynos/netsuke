@@ -162,14 +162,11 @@ pub fn set_localizer_for_tests(new_localizer: Arc<dyn Localizer>) -> LocalizerGu
 }
 
 // Compile-time assertions that the public setters keep their signatures.
-
-// Compile-time assertions that the public setters keep their signatures.
 /// Compile-time assertion that `set_localizer` keeps its signature.
 const _: fn(Arc<dyn Localizer>) = set_localizer;
 
 /// Compile-time assertion that `set_localizer_for_tests` keeps its signature.
 const _: fn(Arc<dyn Localizer>) -> LocalizerGuard = set_localizer_for_tests;
-
 
 /// Render a Fluent message key with optional arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
