@@ -1326,6 +1326,35 @@ and YAML fixtures, and were set from the inventory in Table 1.
   reader, `cargo nextest run --test execplan_status_contract_tests` —
   `typecheck`, `lint`, `doc-coverage`, `test`, and `test-package-verify` were
   not, because none of them reads `docs/execplans/`.
+- [x] (2026-11-01) CodeScene repairs. The hosted Code Health review was failing
+  on four files introduced or changed by this branch, and each finding was
+  reproduced locally with `cs delta` before being believed, because Code
+  Duplication and String Heavy Function Arguments are measured only by the
+  hosted service. Every file now scores 10.00 under `cs check`, from a
+  reproduced baseline of 9.68, 9.09, 9.38, and 9.38:
+  - `src/manifest/mod.rs` (String Heavy Function Arguments, 41.7% of arguments
+    to its 7 functions). The three string entry points moved to the sibling
+    `src/manifest/str_loaders.rs`, mirroring the `path_loaders.rs` and
+    `parse_with_config.rs` convention; `mod.rs` re-exports them, so the public
+    path `netsuke::manifest::from_str` and its doctest are unchanged.
+  - `tests/manifest_load_options/fixtures/fixture.rs` (Code Duplication between
+    `injected_environment` and `process_environment`; Complex Method on
+    `Case::is_loadable`, cc 9). The capability constructors became builder
+    chains over `Capabilities::NONE`, and `is_loadable` now composes four
+    single-check const predicates with `&&`.
+  - `tests/manifest_load_options/wrapper_equivalence/path_rows.rs` (Code
+    Duplication across six rows). The seven observer-taking adapters became one
+    `ObservedEntryPoint` table with one case each, so the argument shape is
+    written once; the snapshot names are still written out, and the per-row
+    rationale now documents the table's variants.
+  - `src/manifest/tests/overlays/namespaces.rs` (Code Duplication between the
+    two accepted-overlay tests). They are one parameterized `rstest` with
+    `#[case::loader_helper]` and `#[case::fresh_name]`.
+
+  The behaviour is unchanged: the `path_rows` snapshots keep their names and
+  contents, and no entry point's signature or forwarding changed. The nine-gate
+  set is re-run against the commit carrying this repair, so the earlier batch
+  is a historical record and not this candidate's evidence.
 
 ## Surprises & discoveries
 

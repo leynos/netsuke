@@ -7,6 +7,7 @@
 
 use anyhow::{Context as _, Result, ensure};
 use minijinja::value::Value;
+use rstest::rstest;
 
 use super::{constant_overlay, load_with, target_names};
 use crate::manifest::{OverlayNameKind, TemplateOverlayError};
@@ -95,30 +96,19 @@ fn overlay_named_after_a_manifest_macro_is_rejected() -> Result<()> {
     assert_collision("shout", OverlayNameKind::ManifestMacro)
 }
 
-/// An overlay may replace a helper the loader registered.
+/// An overlay may take a name the loader does not reserve.
 ///
 /// `glob()` is loader-owned but not reserved: standing in for it is the reason
-/// the overlay mechanism exists.
-#[test]
-fn overlay_may_replace_a_loader_helper() -> Result<()> {
+/// the overlay mechanism exists. A name nothing claims collides with nothing.
+/// Both must load, or the rejection rows above would be indistinguishable from
+/// a blanket refusal.
+#[rstest]
+#[case::loader_helper("glob")]
+#[case::fresh_name("brand_new_helper")]
+fn overlay_may_take_an_unreserved_name(#[case] name: &str) -> Result<()> {
     let manifest = load_with(
         NAMESPACED_MANIFEST,
-        constant_overlay("glob", Value::from(true)),
-    )?;
-    ensure!(
-        target_names(&manifest) == ["probe"],
-        "the load did not complete: {:?}",
-        target_names(&manifest)
-    );
-    Ok(())
-}
-
-/// An overlay may take a name nothing else claims.
-#[test]
-fn overlay_may_take_a_fresh_name() -> Result<()> {
-    let manifest = load_with(
-        NAMESPACED_MANIFEST,
-        constant_overlay("brand_new_helper", Value::from(true)),
+        constant_overlay(name, Value::from(true)),
     )?;
     ensure!(
         target_names(&manifest) == ["probe"],

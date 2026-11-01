@@ -1,6 +1,6 @@
 //! Manifest string parsing with explicit stdlib configuration.
 //!
-//! The `from_str`-family entrypoints in the parent module parse with the
+//! The `from_str`-family entrypoints in [`super::str_loaders`] parse with the
 //! default stdlib registration. This module hosts the variant that also
 //! injects a caller-owned [`StdlibConfig`], so tests can pin behaviour such
 //! as `command_available` resolution without mutating the process

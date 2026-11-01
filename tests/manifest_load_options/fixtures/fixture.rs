@@ -150,19 +150,30 @@ impl Case {
     /// Each rule pairs something the fixture needs with something the loader
     /// offers, and they are stated once here rather than restated by every row.
     pub const fn is_loadable(self, capabilities: Capabilities) -> bool {
-        if !capabilities.from_workspace && self.requires_workspace() {
-            return false;
-        }
-        if self.hazards.reads_environment && !capabilities.resolves_environment_hazard() {
-            return false;
-        }
-        if self.hazards.consults_clock && !capabilities.resolves_clock_hazard() {
-            return false;
-        }
-        if self.hazards.acts_on_host && !capabilities.refusing_helpers {
-            return false;
-        }
-        true
+        self.workspace_is_available(capabilities)
+            && self.environment_is_answerable(capabilities)
+            && self.clock_is_answerable(capabilities)
+            && self.host_is_left_alone(capabilities)
+    }
+
+    /// Report whether a fixture with siblings can find them.
+    const fn workspace_is_available(self, capabilities: Capabilities) -> bool {
+        !self.requires_workspace() || capabilities.from_workspace
+    }
+
+    /// Report whether an environment-reading fixture has a repeatable answer.
+    const fn environment_is_answerable(self, capabilities: Capabilities) -> bool {
+        !self.hazards.reads_environment || capabilities.resolves_environment_hazard()
+    }
+
+    /// Report whether a clock-consulting fixture has a repeatable answer.
+    const fn clock_is_answerable(self, capabilities: Capabilities) -> bool {
+        !self.hazards.consults_clock || capabilities.resolves_clock_hazard()
+    }
+
+    /// Report whether a host-acting fixture is held back by a refusal.
+    const fn host_is_left_alone(self, capabilities: Capabilities) -> bool {
+        !self.hazards.acts_on_host || capabilities.refusing_helpers
     }
 }
 
@@ -219,6 +230,46 @@ pub struct Seams {
 }
 
 impl Capabilities {
+    /// Offer no seam at all, leaving every host read ambient.
+    pub const NONE: Self = Self {
+        seams: Seams {
+            environment: false,
+            clock: false,
+        },
+        from_workspace: false,
+        refusing_helpers: false,
+    };
+
+    /// Return these capabilities, loading from a workspace path instead.
+    pub const fn in_a_workspace(self) -> Self {
+        Self {
+            from_workspace: true,
+            ..self
+        }
+    }
+
+    /// Return these capabilities, taking an injected environment reader.
+    pub const fn with_environment_reader(self) -> Self {
+        Self {
+            seams: Seams {
+                environment: true,
+                ..self.seams
+            },
+            ..self
+        }
+    }
+
+    /// Return these capabilities, taking an injected clock.
+    pub const fn with_clock(self) -> Self {
+        Self {
+            seams: Seams {
+                clock: true,
+                ..self.seams
+            },
+            ..self
+        }
+    }
+
     /// Report whether the loader can answer a manifest that reads the
     /// environment.
     ///
@@ -246,22 +297,12 @@ impl Capabilities {
 /// The string entry points that take no seam, and the path adapters that build
 /// their own configuration from the workspace they open, all behave this way.
 pub const fn process_environment() -> Capabilities {
-    Capabilities {
-        seams: Seams {
-            environment: false,
-            clock: false,
-        },
-        from_workspace: false,
-        refusing_helpers: false,
-    }
+    Capabilities::NONE
 }
 
 /// Return a loader that opens a workspace but takes no other seam.
 pub const fn path_entry_point() -> Capabilities {
-    Capabilities {
-        from_workspace: true,
-        ..process_environment()
-    }
+    process_environment().in_a_workspace()
 }
 
 /// Return a loader that takes an injected environment reader only.
@@ -269,13 +310,7 @@ pub const fn path_entry_point() -> Capabilities {
 /// Rows that pass a reader but no [`StdlibConfig`] — including the policy-taking
 /// and budget-taking string adapters — all have these capabilities.
 pub const fn injected_environment() -> Capabilities {
-    Capabilities {
-        seams: Seams {
-            environment: true,
-            clock: false,
-        },
-        ..process_environment()
-    }
+    process_environment().with_environment_reader()
 }
 
 /// Return a loader that takes both injected seams.
@@ -284,24 +319,12 @@ pub const fn injected_environment() -> Capabilities {
 /// distinct from [`injected_environment`]: a clock-carrying fixture is loadable
 /// here and not there.
 pub const fn injected_environment_and_clock() -> Capabilities {
-    Capabilities {
-        seams: Seams {
-            environment: true,
-            clock: true,
-        },
-        ..process_environment()
-    }
+    injected_environment().with_clock()
 }
 
 /// Return a workspace-opening loader that also takes an injected reader.
 pub const fn path_entry_point_with_environment() -> Capabilities {
-    Capabilities {
-        seams: Seams {
-            environment: true,
-            clock: false,
-        },
-        ..path_entry_point()
-    }
+    path_entry_point().with_environment_reader()
 }
 
 /// Return a reader that answers one manifest variable and refuses the rest.
