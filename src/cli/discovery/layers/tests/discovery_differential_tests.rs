@@ -1,6 +1,6 @@
 //! Differential tests for the restricted automatic discovery walk.
 //!
-//! OrthoConfig's `compose_layers()` remains the reference implementation for
+//! `OrthoConfig`'s `compose_layers()` remains the reference implementation for
 //! ordinary configuration: the restricted walk exists only so each candidate
 //! root can be classified before its chain is loaded. For a configuration with
 //! no authority claim in it, both traversals must therefore observe the same
@@ -17,6 +17,12 @@ use std::path::Path;
 use std::sync::Arc;
 use tempfile::tempdir;
 
+/// Comparable shape of a discovered layer chain.
+///
+/// Both traversals collapse to the same path and value pairs, so the alias keeps
+/// the comparison helpers readable and their return types within the lint limit.
+type FlatLayers = Vec<(Option<Utf8PathBuf>, Value)>;
+
 /// Environment that isolates discovery from the host's configuration.
 ///
 /// Selector, home, and XDG variables all point at paths inside `root` that the
@@ -30,23 +36,21 @@ fn isolated_env_with_xdg(root: &Path, xdg_home: &Path) -> SharedEnvSource {
     let mut env = MapEnv::new();
     let absent = root.join("absent");
     env.insert("HOME", absent.clone().into_os_string());
-    env.insert("XDG_CONFIG_HOME", xdg_home.as_os_str().to_owned());
+    env.insert("XDG_CONFIG_HOME", xdg_home.as_os_str());
     env.insert("XDG_CONFIG_DIRS", absent.join("dirs").into_os_string());
     Arc::new(env)
 }
 
 /// Collapse layers into the path and value pair a comparison can observe.
-fn flatten(layers: Vec<MergeLayer<'static>>) -> Vec<(Option<Utf8PathBuf>, Value)> {
+fn flatten(layers: Vec<MergeLayer<'static>>) -> FlatLayers {
     layers
         .into_iter()
         .map(|layer| (layer.path().map(Utf8Path::to_owned), layer.into_value()))
         .collect()
 }
 
-/// Reproduce the pre-M1 outcome using OrthoConfig's own composition.
-fn legacy_outcome(
-    discovery: &ConfigDiscovery,
-) -> Result<Vec<(Option<Utf8PathBuf>, Value)>, String> {
+/// Reproduce the pre-M1 outcome using `OrthoConfig`'s own composition.
+fn legacy_outcome(discovery: &ConfigDiscovery) -> Result<FlatLayers, String> {
     let DiscoveryLayersOutcome {
         value,
         mut required_errors,
@@ -55,17 +59,17 @@ fn legacy_outcome(
     if value.is_empty() {
         required_errors.append(&mut optional_errors);
     }
-    match required_errors.into_iter().next() {
-        Some(error) => Err(error.to_string()),
-        None => Ok(flatten(value)),
-    }
+    required_errors
+        .into_iter()
+        .next()
+        .map_or_else(|| Ok(flatten(value)), |error| Err(error.to_string()))
 }
 
 /// Produce the restricted walk's outcome in the same comparable shape.
 fn restricted_outcome(
     discovery: &ConfigDiscovery,
     project_key: Option<&ProjectKey>,
-) -> Result<Vec<(Option<Utf8PathBuf>, Value)>, String> {
+) -> Result<FlatLayers, String> {
     first_automatic_chain(discovery, project_key)
         .map(|(layers, _)| flatten(layers))
         .map_err(|error| error.to_string())
@@ -77,13 +81,7 @@ fn scanner(project_dir: &Path, root: &Path) -> ConfigDiscovery {
 }
 
 /// Compare the two traversals for the project file at `project_dir`.
-fn compare_outcomes(
-    project_dir: &Path,
-    root: &Path,
-) -> Result<(
-    Vec<(Option<Utf8PathBuf>, Value)>,
-    Vec<(Option<Utf8PathBuf>, Value)>,
-)> {
+fn compare_outcomes(project_dir: &Path, root: &Path) -> Result<(FlatLayers, FlatLayers)> {
     let discovery = scanner(project_dir, root);
     let project_key = ProjectKey::classify(&FsPathNormalizer, &project_dir.join(".netsuke.toml"));
     let legacy = legacy_outcome(&discovery);

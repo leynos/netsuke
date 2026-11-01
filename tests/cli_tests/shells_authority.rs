@@ -57,9 +57,9 @@ fn project_shells_key_is_rejected() -> Result<()> {
 fn explicit_shells_file_is_rejected() -> Result<()> {
     let project = tempdir().context("create temporary project directory")?;
     let home = tempdir().context("create temporary home directory")?;
-    let explicit = project.path().join("operator-lookalike.toml");
-    fs::write(&explicit, SHELLS_TOML).context("write explicit configuration file")?;
-    let explicit = explicit.to_string_lossy().into_owned();
+    let explicit_path = project.path().join("operator-lookalike.toml");
+    fs::write(&explicit_path, SHELLS_TOML).context("write explicit configuration file")?;
+    let explicit = explicit_path.to_string_lossy().into_owned();
 
     let message = rejected_in_child(
         &["netsuke", "--config", &explicit],
