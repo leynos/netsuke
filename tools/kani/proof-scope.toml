@@ -29,6 +29,7 @@ sources = [
   "src/cli/discovery/environment.rs",
   "src/cli/discovery/json.rs",
   "src/cli/discovery/layers/mod.rs",
+  "src/cli/discovery/layers/project_key.rs",
   "src/cli/discovery/merge_layers.rs",
   "src/cli/discovery/mod.rs",
   "src/cli/discovery/paths.rs",
