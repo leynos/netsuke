@@ -1400,34 +1400,41 @@ providing a secure bridge to the underlying system.
   `require_literal_separator = true` internally, so wildcards do not cross path
   separators unless `**` is used. Callers may use `/` or `\\` in patterns;
   these are normalized to the host platform before matching. Results contain
-  only files (directories are ignored) and path separators are normalized to
-  `/`. Leading-dot entries are matched by wildcards. Empty results are
-  represented as `[]`. The manifest parse boundary supplies the manifest
-  directory or workspace root to `glob_paths(pattern, base)` and internal
-  `expand_glob(pattern, base)`: relative patterns, including parent-relative
-  ones, resolve from that root and retain their pattern-relative spelling after
-  base stripping, while absolute patterns remain absolute. With an injected
-  manifest root, this expansion does not read or mutate process-global
-  working-directory state. `from_str_with_env` passes `manifest_root: None`, so
-  unbased relative patterns resolve from the process working directory. Invalid
-  patterns surface as `SyntaxError`; filesystem iteration errors surface as
-  `InvalidOperation`, matching minijinja error semantics. On Unix, backslash
-  escapes for glob metacharacters (`[`, `]`, `{`, `}`, `*`, `?`) are preserved
-  during separator normalization. A backslash before `*` or `?` is kept only
-  when the wildcard is trailing or followed by an alphanumeric, `_`, or `-`;
-  otherwise it becomes a path separator so `config\*.yml` maps to
-  `config/*.yml`. On Windows, backslash escapes are not supported. This
-  provides globbing support not available in Ninja itself, which does not
-  support globbing.[^3]
+  only files (directories are ignored). On Windows and other platforms where a
+  backslash is a separator, result separators are normalized to `/`; on Unix,
+  where a backslash is an ordinary filename character, a literal backslash in a
+  matched filename is preserved. Each returned path therefore names exactly the
+  file that passed the capability metadata check. Leading-dot entries are
+  matched by wildcards. Empty results are represented as `[]`. The manifest
+  parse boundary supplies the manifest directory or workspace root to
+  `glob_paths(pattern, base)` and internal `expand_glob(pattern, base)`:
+  relative patterns, including parent-relative ones, resolve from that root and
+  retain their pattern-relative spelling after base stripping, while absolute
+  patterns remain absolute. With an injected manifest root, this expansion does
+  not read or mutate process-global working-directory state.
+  `from_str_with_env` passes `manifest_root: None`, so unbased relative
+  patterns resolve from the process working directory. Invalid patterns surface
+  as `SyntaxError`; filesystem iteration errors surface as `InvalidOperation`,
+  matching minijinja error semantics. On Unix, backslash escapes for glob
+  metacharacters (`[`, `]`, `{`, `}`, `*`, `?`) are preserved during separator
+  normalization. A backslash before `*` or `?` is kept only when the wildcard
+  is trailing or followed by an alphanumeric, `_`, or `-`; otherwise it becomes
+  a path separator so `config\*.yml` maps to `config/*.yml`. On Windows,
+  backslash escapes are not supported. This provides globbing support not
+  available in Ninja itself, which does not support globbing.[^3]
 
   The Rust query returns those UTF-8 paths unchanged. The Jinja `glob()`
   adapter adds the narrower command-safety boundary: it exposes a result only
   when every path is a portable unquoted shell word made from ASCII letters,
   digits, `/`, `:`, comma, full stop, underscore, or hyphen. Other matches fail
   manifest loading rather than entering `foreach` variables and potentially
-  reaching command or script recipes as executable shell syntax. This private
-  adapter predicate is owned by manifest templating; graph-path escaping and
-  direct Rust callers must retain their existing, context-specific policies.
+  reaching command or script recipes as executable shell syntax. A Unix
+  filename containing a literal backslash reaches this adapter unchanged and is
+  rejected, rather than being rewritten into a directory separator that would
+  name a different file. Direct Rust callers receive the exact matched filename
+  and remain responsible for quoting it. This private adapter predicate is
+  owned by manifest templating; graph-path escaping and direct Rust callers
+  must retain their existing, context-specific policies.
 
   The metadata check that filters directories out of the results runs through a
   capability opened at the pattern's literal directory prefix (`src/` for

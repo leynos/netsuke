@@ -7,7 +7,9 @@
 //! the fixture files spelled relative to the pattern, two distinct bases
 //! never cross-contaminate, an absolute pattern ignores the base, a
 //! parent-relative pattern keeps its `..` spelling, `None` retains the
-//! unbased behaviour, and produced paths always use forward slashes.
+//! unbased behaviour, and produced directory separators always use forward
+//! slashes. A literal Unix backslash is a filename character rather than a
+//! separator, so `identity` pins its preservation separately.
 //!
 //! Each case builds a disposable temporary fixture tree and invokes the
 //! production `glob_paths` function; the environment and working directory of
@@ -235,7 +237,10 @@ fn none_base_keeps_absolute_results() -> Result<()> {
     Ok(())
 }
 
-/// Every produced path uses forward slashes on every platform.
+/// Produced directory separators use forward slashes on every platform.
+///
+/// This covers real directory components only; a literal Unix backslash inside
+/// a filename is not a separator and is preserved unchanged.
 #[test]
 fn results_use_forward_slashes() -> Result<()> {
     let temp = tempdir()?;

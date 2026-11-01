@@ -62,7 +62,10 @@ fn glob_paths_does_not_introduce_parent_traversal() -> Result<()> {
     test_fs::write(temp.path().join(r"part\..\other.txt"), "attacker")?;
     let base = Utf8Path::from_path(temp.path()).context("temporary paths must be UTF-8")?;
 
-    let results = glob_paths("*.txt", Some(base))?;
+    // Match only the literal-backslash name: the decoy that a rewritten
+    // separator would reach is `other.txt`, and it must not be a legitimate
+    // match of the pattern.
+    let results = glob_paths("part*", Some(base))?;
 
     ensure!(
         results == vec![r"part\..\other.txt".to_owned()],
