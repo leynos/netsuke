@@ -9,6 +9,13 @@ checks keep CI on that shared path and prevent stale binaries or a source build.
 Run via ``make test-workflow-contracts``.
 """
 
+import os
+import shutil
+
+# ruff: ignore[suspicious-subprocess-import] - the checked-in workflow shell is the boundary under test.
+import subprocess
+import typing as typ
+
 import yaml
 from workflow_loading import (
     REPO_ROOT,
@@ -20,8 +27,20 @@ from workflow_loading import (
     workflow_job,
 )
 
+if typ.TYPE_CHECKING:
+    from pathlib import Path
+
 KANI_CACHE_ACTION = REPO_ROOT / ".github" / "actions" / "kani-cache" / "action.yml"
 WORKFLOW_DIR = REPO_ROOT / ".github" / "workflows"
+FAKE_KANI_INSTALL_MAKE = """#!/bin/sh
+set -eu
+mkdir -p "$CARGO_HOME/bin"
+cat > "$CARGO_HOME/bin/cargo-kani" <<'KANI'
+#!/bin/sh
+printf '%s\\n' 'installed Kani binary'
+KANI
+chmod +x "$CARGO_HOME/bin/cargo-kani"
+"""
 
 
 def _action_steps() -> list[dict[str, object]]:
@@ -166,6 +185,120 @@ def test_kani_uses_pinned_shared_installer_and_cached_paths() -> None:
     )
     assert "netsuke-kani-v1-" not in cache_action, (
         "the Kani cache key must not reuse the old installation generation"
+    )
+
+
+def _run_kani_install_step(
+    sandbox: Path, install_command: str
+) -> tuple[Path, Path, str]:
+    """Run the checked-in install step and expose its later-step PATH handoff.
+
+    Keep this harness local to the Kani workflow contract. It models the
+    specific ``GITHUB_PATH`` publication boundary without introducing a
+    general subprocess fixture.
+
+    Returns
+    -------
+    tuple[Path, Path, str]
+        The installed binary directory, conflicting binary directory, and
+        inherited PATH value.
+    """
+    cargo_home = sandbox / "cargo-home"
+    installed_bin = cargo_home / "bin"
+    conflicting_bin = sandbox / "conflicting-bin"
+    fake_make_bin = sandbox / "fake-make-bin"
+    github_path = sandbox / "github-path"
+    inherited_path = os.environ.get("PATH", "")
+    conflicting_bin.mkdir()
+    fake_make_bin.mkdir()
+
+    (conflicting_bin / "cargo-kani").write_text(
+        "#!/bin/sh\nprintf '%s\\n' 'conflicting Kani binary'\n",
+        encoding="utf-8",
+    )
+    (conflicting_bin / "cargo-kani").chmod(0o755)
+    (fake_make_bin / "make").write_text(FAKE_KANI_INSTALL_MAKE, encoding="utf-8")
+    (fake_make_bin / "make").chmod(0o755)
+
+    environment = os.environ.copy()
+    environment.update({
+        "CARGO_HOME": str(cargo_home),
+        "KANI_HOME": str(sandbox / "kani-home"),
+        "GITHUB_PATH": str(github_path),
+        "PATH": os.pathsep.join([
+            str(fake_make_bin),
+            str(conflicting_bin),
+            inherited_path,
+        ]),
+    })
+    # ruff: ignore[subprocess-without-shell-equals-true] - fixed checked-in workflow command.
+    install = subprocess.run(
+        ["/bin/bash", "-e", "-o", "pipefail", "-c", install_command],
+        check=False,
+        capture_output=True,
+        env=environment,
+        shell=False,
+        text=True,
+    )
+    assert install.returncode == 0, (
+        "the Kani install step should publish its path successfully; "
+        f"stderr was {install.stderr!r}"
+    )
+    assert github_path.read_text(encoding="utf-8").splitlines() == [
+        str(installed_bin)
+    ], "the install step must publish exactly CARGO_HOME/bin"
+    return installed_bin, conflicting_bin, inherited_path
+
+
+def test_kani_install_path_wins_in_a_later_process_with_a_conflict(
+    tmp_path: Path,
+) -> None:
+    """Run the workflow install step and use its Kani binary in a later process.
+
+    GitHub Actions prepends paths written to ``GITHUB_PATH`` for subsequent
+    steps. A conflicting binary later in that inherited path must therefore
+    lose to the executable installed under ``CARGO_HOME/bin``.
+    """
+    cargo = shutil.which("cargo")
+    assert cargo is not None, "the workflow contract test requires Cargo"
+
+    workflow = load_workflow()
+    install_command = str(
+        named_step(job_steps(workflow, "kani-smoke"), "Install prebuilt Kani").get(
+            "run", ""
+        )
+    )
+    assert install_command, "the Kani install step must have a shell command"
+
+    installed_bin, conflicting_bin, inherited_path = _run_kani_install_step(
+        tmp_path, install_command
+    )
+    # ruff: ignore[subprocess-without-shell-equals-true] - fixed Cargo argv.
+    next_step = subprocess.run(
+        [cargo, "kani", "--version"],
+        check=False,
+        capture_output=True,
+        env={
+            **os.environ,
+            "CARGO_HOME": str(installed_bin.parent),
+            "PATH": os.pathsep.join([
+                str(installed_bin),
+                str(conflicting_bin),
+                inherited_path,
+            ]),
+        },
+        shell=False,
+        text=True,
+    )
+    assert next_step.returncode == 0, (
+        "a later Cargo process should run the published Kani binary; "
+        f"stderr was {next_step.stderr!r}"
+    )
+    assert "installed Kani binary" in next_step.stdout, (
+        "the later process should select the binary published by the install step"
+    )
+    assert "conflicting Kani binary" not in next_step.stdout, (
+        "a conflicting binary later on PATH must not override the installed Kani"
     )
 
 
