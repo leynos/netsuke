@@ -4005,17 +4005,24 @@ completion files are staged as portable shell-completion sidecars under
 localization key audit against Fluent bundles.
 
 `ReleaseHelpCli` is the sole release-help metadata composition site.
-`CliConfig` supplies layered configuration-field metadata, while
-`Cli::command()` supplies parser-only metadata: the `-C/--directory` and
-`--config` selectors and documented subcommands. `ReleaseHelpCli` projects
-existing CLI Fluent keys onto published configuration fields, omits the
-structural `cmds` container, and adds both selectors as help-only metadata with
-no environment or file source. It must not add selector precedence,
-configuration loading, or discovery policy to OrthoConfig. Those
-responsibilities remain in `src/cli/discovery/mod.rs`: [ADR 0048] governs
-`--config` precedence and fail-closed selected-file loading, while [ADR 0049]
-governs `-C/--directory` project-discovery rooting and manifest lookup. This
-boundary avoids a duplicate CLI model and is recorded in [ADR-0016].
+`CliConfig` supplies the configuration fields, their layered configuration
+sources, help keys, value types and defaults. The CLI shape of each of those
+fields comes from `configured_command(None)`, the command users actually run,
+because the derive synthesizes flag spellings from Rust field names and omits
+fields marked `skip_cli`. `Cli::command()` remains the source for parser-only
+metadata: the `-C/--directory` and `--config` selectors and documented
+subcommands. Reading the declared command there preserves the selector order
+`configured_command` would otherwise change. `ReleaseHelpCli` projects existing
+CLI Fluent keys onto published configuration fields, omits the structural
+`cmds` container, and adds both selectors as help-only metadata with no
+environment or file source. It must not add selector precedence, configuration
+loading, or discovery policy to OrthoConfig. Bidirectional parity tests under
+`src/cli/release_help/parity_tests/` hold the documented flags and the parser
+in agreement. Selector precedence, configuration loading and discovery policy
+remain in `src/cli/discovery/mod.rs`: [ADR 0048] governs `--config` precedence
+and fail-closed selected-file loading, while [ADR 0049] governs
+`-C/--directory` project-discovery rooting and manifest lookup. This boundary
+avoids a duplicate CLI model and is recorded in [ADR-0016].
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
@@ -4026,6 +4033,18 @@ release helper honours `SOURCE_DATE_EPOCH` to produce reproducible manual
 dates, emitting a warning and falling back to `1970-01-01` when the environment
 value is invalid. Release artefacts include these generated help files; the
 published crate remains code-only.
+
+Release-help coverage has two layers. `tests/release_help_script_tests.rs` puts
+a fake `cargo-orthohelp` first on `PATH`, so it exercises the release helper's
+command construction, failure propagation, and its assertions on whatever the
+generator writes; it does not exercise the real renderer, because the fake
+emits the flags straight from the metadata. The real renderer is checked by the
+helper itself: after generating, `scripts/generate-release-help.sh` flattens
+the roff or MAML markup and requires the reconciled flag spellings, the policy
+value sets, and the absence of the rejected `--default-targets` spelling.
+Release automation runs that verification against the pinned `cargo-orthohelp`
+0.10.0 output for every target, so a renderer that drops an option fails the
+release build rather than passing a fake-renderer suite.
 
 [ADR 0048]: adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md
 [ADR 0049]: adrs/adr-0049-base-directory-seam-and-c-anchoring.md
@@ -4038,9 +4057,9 @@ Release engineering is delegated to GitHub Actions workflows built on the
 SHAs so release automation remains reproducible. The tagging workflow first
 verifies that the Git ref matches `Cargo.toml` and records the crate's binary
 name once so all subsequent jobs operate on consistent metadata. Each build job
-installs `cargo-orthohelp = 0.9.1`, invokes the `rust-build-release` composite
+installs `cargo-orthohelp = 0.10.0`, invokes the `rust-build-release` composite
 action, and then runs `scripts/generate-release-help.sh` before staging or
-packaging. The pinned v0.9.1 executable is invoked by the helper as
+packaging. The pinned v0.10.0 executable is invoked by the helper as
 `cargo-orthohelp orthohelp`.
 
 Linux builds cross-compile for `x86_64` and `aarch64`, stage the binary and

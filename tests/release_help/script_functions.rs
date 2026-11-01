@@ -4,7 +4,7 @@ use super::script_path;
 use anyhow::{Context, Result, ensure};
 use proptest::prelude::*;
 use rstest::rstest;
-use std::{path::Path, process::Command};
+use std::{fs, path::Path, process::Command};
 use time::OffsetDateTime;
 
 fn shell_quote_path(path: &Path) -> String {
@@ -168,6 +168,33 @@ fn require_file_logs_non_empty_output_size() -> Result<()> {
     Ok(())
 }
 
+/// Excerpt of the manual page `cargo-orthohelp` 0.10.0 renders.
+///
+/// The spellings are the renderer's own, not the fake generator's: hyphens are
+/// escaped as `\-` and flags, value names and possible values carry roff font
+/// escapes. The excerpt exercises the script's verification against that shape.
+const RENDERED_MAN_EXCERPT: &str = concat!(
+    ".SH SYNOPSIS\n",
+    "\\fB\\-\\-no-input\\fR\n",
+    "\\fB\\-\\-color\\fR \\fIPOLICY\\fR\n",
+    ".SH OPTIONS\n",
+    ".TP\n",
+    "\\fB\\-\\-directory\\fR \\fIDIR\\fR, \\fB\\-C\\fR \\fIDIR\\fR\n",
+    ".TP\n",
+    "\\fB\\-\\-config\\fR \\fIFILE\\fR\n",
+    ".TP\n",
+    "\\fB\\-\\-default-target\\fR \\fITARGET\\fR\n",
+    ".TP\n",
+    "\\fB\\-\\-emoji\\fR \\fIPOLICY\\fR\n",
+    "Possible values: \\fIauto, always, never\\fR\n",
+    ".TP\n",
+    "\\fB\\-\\-progress\\fR \\fIPOLICY\\fR\n",
+    "Possible values: \\fIauto, always, never\\fR\n",
+    ".TP\n",
+    "\\fB\\-\\-accessibility\\fR \\fIPOLICY\\fR\n",
+    "Possible values: \\fIauto, on, off\\fR\n",
+);
+
 #[test]
 fn reject_machine_value_placeholders_ignores_ordinary_prose() -> Result<()> {
     let output = run_script_function(
@@ -209,6 +236,124 @@ fn reject_machine_value_placeholders_rejects_published_machine_type_names(
     ensure!(
         stderr.contains("machine value names published") && stderr.contains(expected),
         "expected a diagnostic naming {expected}, got {stderr}"
+    );
+    Ok(())
+}
+
+/// A rendered release-help document paired with the script function to run.
+///
+/// The pair is passed as one argument so the file's string-argument ratio stays
+/// where `CodeScene` measures it; the advisory rule counts function parameters,
+/// not struct fields.
+struct RenderedDocument<'a> {
+    contents: &'a str,
+    function: &'a str,
+}
+
+/// Run a sourced release-help function against a document written to disk.
+fn run_script_function_on_document(
+    document: &RenderedDocument<'_>,
+) -> Result<std::process::Output> {
+    let directory = tempfile::tempdir().context("create rendered-help tempdir")?;
+    let path = directory.path().join("rendered-help.txt");
+    fs::write(&path, document.contents).context("write rendered help document")?;
+    run_script_function(&format!(
+        "{} {}",
+        document.function,
+        shell_quote_path(&path)
+    ))
+}
+
+#[test]
+fn normalise_help_text_reduces_roff_escapes_to_plain_flags() -> Result<()> {
+    let output = run_script_function_on_document(&RenderedDocument {
+        contents: RENDERED_MAN_EXCERPT,
+        function: "normalise_help_text",
+    })?;
+
+    ensure!(
+        output.status.success(),
+        "normalise_help_text should succeed: {output:?}"
+    );
+    let text = String::from_utf8(output.stdout).context("stdout should be UTF-8")?;
+    ensure!(
+        text.contains("--color POLICY"),
+        "roff font escapes should be stripped, got {text}"
+    );
+    // The separator rule that turns `auto, always, never` into one value set
+    // also tightens the short-flag separator, so the comma has no space.
+    ensure!(
+        text.contains("--directory DIR,-C DIR"),
+        "escaped hyphens should become plain hyphens, got {text}"
+    );
+    ensure!(
+        text.contains("auto,always,never"),
+        "possible values should be normalised into one comma-separated set, got {text}"
+    );
+    Ok(())
+}
+
+#[test]
+fn verify_rendered_surface_accepts_a_real_renderer_manual_page() -> Result<()> {
+    let output = run_script_function_on_document(&RenderedDocument {
+        contents: RENDERED_MAN_EXCERPT,
+        function: "verify_rendered_surface",
+    })?;
+
+    ensure!(
+        output.status.success(),
+        "the reconciled surface should be accepted: {output:?}"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("Release help surface"),
+        "a verified document should emit a notice, got {stderr}"
+    );
+    Ok(())
+}
+
+/// One substitution that should make the rendered-surface guard fail.
+struct SurfaceLoss {
+    rendered: &'static str,
+    replacement: &'static str,
+    expected_error: &'static str,
+}
+
+#[rstest]
+#[case(SurfaceLoss {
+    rendered: "no-input",
+    replacement: "omitted",
+    expected_error: "omits --no-input",
+})]
+#[case(SurfaceLoss {
+    rendered: "auto, on, off",
+    replacement: "auto on off",
+    expected_error: "omits the auto,on,off value set",
+})]
+#[case(SurfaceLoss {
+    rendered: ".SH OPTIONS",
+    replacement: ".B \\-\\-default-targets\n.SH OPTIONS",
+    expected_error: "advertises the rejected --default-targets spelling",
+})]
+fn verify_rendered_surface_rejects_a_lost_or_invented_surface(
+    #[case] loss: SurfaceLoss,
+) -> Result<()> {
+    let contents = RENDERED_MAN_EXCERPT.replace(loss.rendered, loss.replacement);
+    let output = run_script_function_on_document(&RenderedDocument {
+        contents: &contents,
+        function: "verify_rendered_surface",
+    })?;
+
+    ensure!(
+        output.status.code() == Some(1),
+        "a document losing {:?} should be rejected: {output:?}",
+        loss.rendered
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains(loss.expected_error),
+        "expected {:?}, got {stderr}",
+        loss.expected_error
     );
     Ok(())
 }

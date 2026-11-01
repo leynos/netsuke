@@ -24,6 +24,7 @@ use rstest::rstest;
 use std::{fs, process::Command};
 
 const DOCUMENTED_SUBCOMMANDS: [&str; 5] = ["build", "clean", "graph", "generate", "help"];
+
 const PARSER_ONLY_SELECTORS: [&str; 2] = ["-C/--directory", "--config"];
 
 /// Distinct value placeholders the release help must render.
@@ -35,6 +36,21 @@ const PARSER_ONLY_SELECTORS: [&str; 2] = ["-C/--directory", "--config"];
 /// fallback reach a release artefact.
 const EXPECTED_VALUE_NAMES: [&str; 11] = [
     "BYTES", "COUNT", "DIR", "FILE", "FUEL", "HOST", "LOCALE", "N", "SCHEME", "TARGET", "VAR",
+];
+
+/// Reconciled flags whose rendered shape issue #960 corrected.
+///
+/// Rendering the metadata through the release-help boundary must keep the
+/// singular `--default-target` spelling, the five policy and input flags that
+/// derivation's `skip_cli` omitted, and the value names and accepted values
+/// the parser advertises.
+const RECONCILED_FLAGS: [&str; 6] = [
+    "--default-target TARGET",
+    "--color POLICY auto|always|never",
+    "--emoji POLICY auto|always|never",
+    "--progress POLICY auto|always|never",
+    "--accessibility POLICY auto|on|off",
+    "--no-input",
 ];
 
 /// Generate and verify a manual page for a non-Windows target.
@@ -245,6 +261,10 @@ fn assert_powershell_help_structure(
 }
 
 /// Assert that generated help exposes the complete public CLI surface.
+///
+/// This is the renderer-boundary check for issue #960: every assertion reads
+/// the generated artefact, not the in-process metadata structure, so a
+/// projection that never reaches the help output fails here.
 fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
     for selector in PARSER_ONLY_SELECTORS {
         ensure!(
@@ -252,6 +272,22 @@ fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
             "{format_name} should include the parser-only {selector} selector: {document}"
         );
     }
+    for flag in RECONCILED_FLAGS {
+        ensure!(
+            document.contains(flag),
+            "{format_name} should include the reconciled {flag} flag: {document}"
+        );
+    }
+    ensure!(
+        !document.contains("--default-targets"),
+        "{format_name} should not advertise the rejected --default-targets \
+         spelling: {document}"
+    );
+    ensure!(
+        !document.contains("-d/--default-target"),
+        "{format_name} should not advertise a short alias for \
+         --default-target: {document}"
+    );
     for subcommand in DOCUMENTED_SUBCOMMANDS {
         ensure!(
             document.contains(subcommand),
@@ -516,6 +552,43 @@ fn fails_when_generated_help_publishes_a_machine_value_name(
     ensure!(
         stderr.contains("machine value names published") && stderr.contains(fallback),
         "expected machine value name diagnostic naming {fallback}, got {stderr}"
+    );
+    Ok(())
+}
+
+/// Verify that a rendered manual page missing a reconciled flag is rejected.
+///
+/// The script checks the surface of the artefact `cargo-orthohelp` writes, so a
+/// renderer or projection that drops an option fails generation instead of
+/// shipping a manual page that under-describes the parser.
+///
+/// # Errors
+///
+/// Returns an error when the fixture or failure diagnostics cannot be read.
+#[rstest]
+fn fails_when_rendered_help_omits_a_reconciled_flag(
+    script_fixture: Result<ScriptFixture>,
+) -> Result<()> {
+    let fixture = script_fixture?;
+    let output = run_release_help(
+        &fixture,
+        ReleaseHelpRun::for_target("x86_64-unknown-linux-gnu")
+            .source_date_epoch("1")
+            .omit_flag("color"),
+    )?;
+
+    ensure!(
+        !output.status.success(),
+        "script should fail when the manual page omits --color"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("Release help surface"),
+        "expected the rendered-surface annotation, got {stderr}"
+    );
+    ensure!(
+        stderr.contains("omits --color"),
+        "expected the omitted flag to be named, got {stderr}"
     );
     Ok(())
 }

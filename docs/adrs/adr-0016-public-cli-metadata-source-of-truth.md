@@ -80,6 +80,27 @@ configuration setting.
 - **Infer help keys from flag names.** Rejected because explicit Fluent keys
   are auditable and `cargo-orthohelp` resolves field help from metadata.
 
+## Addendum — 2026-10-31
+
+The original decision above remains unchanged: `ReleaseHelpCli` is the sole
+composition site, and `CliConfig` remains the source of truth for layered
+configuration fields and their sources. What changed is where the CLI shape of
+those fields comes from. It now comes from `configured_command(None)`, the
+command users actually run, rather than from the fields alone. The derive
+synthesizes flag spellings from Rust field names and omits fields marked
+`skip_cli`, so the previously published shape invented `--default-targets` and
+its `-d` alias, and omitted `--color`, `--emoji`, `--progress`,
+`--accessibility` and `--no-input`.
+
+`Cli::command()` remains the source for parser-only selectors and documented
+subcommands. Reading the declared command there preserves the selector order
+that `configured_command` would otherwise change through argument reordering.
+
+Bidirectional parity tests in `src/cli/release_help/parity_tests/` hold the
+documented fields and the parser in agreement, and
+`tests/release_help_script_tests.rs` asserts the reconciled flag surface in the
+generated manual and PowerShell help.
+
 ## Implementation references
 
 - Release-help composition:

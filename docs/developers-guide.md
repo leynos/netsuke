@@ -4180,16 +4180,34 @@ from `src/localization/keys.rs`, which is why the OrthoConfig v0.10.0
 identifier re-keying described in
 [the imported migration guide](ortho-config-v0-10-0-migration-guide.md) does
 not reach Netsuke's catalogues: no generated identifier survives to be looked
-up. The same reasoning applies to value shapes. `ortho_config` 0.10.0 documents
-every derived boolean as `--flag[=BOOL]`, because its *generated* clap parser
-accepts an optional value; Netsuke declares its flags by hand in
-`src/cli/command.rs` and rejects that spelling, so the adapter reduces boolean
-fields back to presence-only switches. Two tests hold both projections:
-identifier provenance in `src/cli/release_help/metadata_tests/mod.rs`
-(`release_help_identifiers_are_netsuke_declared_not_generated`), and
-value-shape parity in `src/cli/release_help/metadata_tests/value_shapes.rs`
-(`release_help_cli_value_shapes_match_the_parser`). A new derived field, or a
-new upstream metadata change, is expected to reach one of them.
+up.
+
+The same reasoning applies to value shapes, and the adapter goes further. It
+replaces every configuration field's CLI metadata with the shape
+`configured_command(None)` actually parses. The derive is not a description of
+the binary: it synthesizes a kebab-cased long flag and a short flag from the
+Rust field name, gives fields marked `skip_cli` no CLI metadata at all, and
+documents every derived boolean as `--flag[=BOOL]`. Netsuke's handwritten
+command in `src/cli/command.rs` therefore disagreed with the manual page in
+both directions. It rejected the advertised `--default-targets` and `-d`, it
+rejected the optional-value spelling of every switch, and it accepted `--color`,
+`--emoji`, `--progress`, `--accessibility` and `--no-input` without
+documenting them. Reconciling from the parser fixes the spellings, short flags,
+value names, multiplicities and possible values together, and keeps
+configuration-owned facts such as help keys, environment variables and file
+keys where they were. Placeholders such as `FILE` and `N` are now the ones the
+binary prints rather than the derive's `UTF8PATHBUF` and `USIZE`.
+
+Three tests under `src/cli/release_help/parity_tests/` hold that contract in
+both directions. In `mod.rs`, `release_help_cli_value_shapes_match_the_parser`
+checks every documented flag against `configured_command(None)`, and
+`release_help_documents_every_parser_argument` checks that no parser flag is
+omitted or documented twice. In `flag_cases.rs`,
+`documented_flags_match_the_parser` pins the policy flags and selected
+configuration flags individually. The identifier projection is held separately
+by `release_help_identifiers_are_netsuke_declared_not_generated` in
+`src/cli/release_help/metadata_tests/mod.rs`. A new derived field, or a new
+upstream metadata change, is expected to reach one of them.
 
 The root synopsis is cleared for the same reason. `ortho_config` 0.10.0's
 derive defaults `synopsis_id` to a generated `<app>-usage` identifier that no
