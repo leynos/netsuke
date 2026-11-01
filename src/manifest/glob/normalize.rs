@@ -1,4 +1,6 @@
-//! Separator and escape normalisation for glob patterns.
+//! Separator and escape normalisation for glob patterns and matched paths.
+
+use camino::Utf8Path;
 
 /// Normalise forward slashes in a glob `pattern` to the platform separator.
 ///
@@ -156,4 +158,35 @@ fn handle_escaped_char(it: &mut std::iter::Peekable<std::str::Chars<'_>>, out: &
 /// Report whether a character continues a wildcard token.
 fn is_wildcard_continuation_char(ch: char) -> bool {
     ch.is_alphanumeric() || ch == '-' || ch == '_'
+}
+
+/// Remove an injected base directory from a matched path, restoring the
+/// pattern-relative spelling the caller supplied.
+///
+/// Only relative patterns with an injected base are affected: the base is
+/// present exactly when the matcher ran against `base.join(pattern)`, so every
+/// match starts with it and the lexical strip cannot drop real matches. The
+/// fallback returns the path unchanged.
+///
+/// Separator normalisation is platform-aware, like the pattern side above. On
+/// Windows a backslash is a directory separator, so it is rendered as `/` for
+/// the portable spelling callers expect. On Unix a backslash is an ordinary
+/// filename character: rewriting it would report a different file from the one
+/// the capability metadata check selected, and a name such as
+/// `part\..\other.txt` would become the traversal `part/../other.txt`. The
+/// Unix branch therefore returns the checked spelling unchanged.
+pub(super) fn strip_base(base: Option<&Utf8Path>, path: &Utf8Path) -> String {
+    let relative = base
+        .and_then(|dir| path.strip_prefix(dir).ok())
+        .unwrap_or(path);
+    // Format once, after any lexical base stripping, so a matched path does
+    // not first allocate a normalized String only to allocate again to rebase.
+    #[cfg(unix)]
+    {
+        relative.as_str().to_owned()
+    }
+    #[cfg(not(unix))]
+    {
+        relative.as_str().replace('\\', "/")
+    }
 }
