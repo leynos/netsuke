@@ -3,7 +3,9 @@
 use super::*;
 
 use netsuke::ir::IrGenError;
-use test_support::{manifest::manifest_yaml, ninja::ninja_integration_workspace};
+use test_support::manifest::manifest_yaml;
+#[cfg(unix)]
+use test_support::ninja::ninja_integration_workspace;
 
 /// The quote-leading path used by both the source list and the output name.
 const INJECTING_PATH: &str = "\"; touch injected; #";
