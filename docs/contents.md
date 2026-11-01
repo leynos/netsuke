@@ -142,6 +142,9 @@ operator, user, and contributor references are easier to find.
 - [RFC 0029: First-class host facts][rfc-0029]: Ansible-informed, typed
   platform observations, explicit collection, privacy-preserving discovery, and
   reproducible planning without ambient environment probes.
+- [RFC 0036: Shell parsing and verified transformations][rfc-0036]: Proposed
+  parser qualification, shared validation contracts, Kani checks, Verus proofs,
+  and mandatory harmonization of immediate fixes through a post-merge programme.
 
 [rfc-0009]: rfcs/rfc-0009-structured-command-working-directories.md
 [rfc-0012]: rfcs/rfc-0012-property-based-testing-of-generated-build-scripts.md
@@ -155,6 +158,7 @@ operator, user, and contributor references are easier to find.
 [rfc-0024]: rfcs/rfc-0024-named-contention-classes.md
 [rfc-0025]: rfcs/rfc-0025-progressive-enhancement-and-maturity-policies.md
 [rfc-0029]: rfcs/rfc-0029-first-class-host-facts.md
+[rfc-0036]: rfcs/rfc-0036-shell-parsing-and-verified-transformations.md
 
 ## Decision records
 
