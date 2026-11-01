@@ -68,26 +68,25 @@ fn script_single_quoted_markers_quote_shell_punctuation() -> Result<()> {
     )
 }
 
-/// Verify an escaped script marker still lowers to the declared Ninja output.
-#[cfg(unix)]
+/// Verify a script marker after an active escape fails closed.
+///
+/// A single backslash before the marker cannot be preserved: the first
+/// character of the substituted path decides what the backslash escapes. The
+/// generator must reject the script rather than execute an altered command.
 #[rstest]
-fn escaped_script_marker_reaches_the_declared_output() -> Result<()> {
+fn escaped_script_marker_is_rejected() -> Result<()> {
     let manifest = manifest::from_str(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: 'printf %s escaped > \\{{ outs }}'\n",
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: '\"; touch injected; #'\n    script: 'printf %s escaped > \\{{ outs }}'\n",
     )?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-    let commands = ninja_commands(&ninja, "out")?;
+    let error = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::Posix)
+        .expect_err("a marker after an active escape must fail closed");
     ensure!(
-        commands.contains("\\out"),
-        "the escaped marker must lower to the declared output path:\n{commands}"
-    );
-    let actual = ninja_output(&ninja, &[], None)?;
-    ensure!(
-        actual == "escaped",
-        "expected escaped marker output, got {actual:?}"
+        matches!(
+            error,
+            netsuke::ir::IrGenError::InvalidCommand { ref command, .. }
+                if command.trim_end() == "printf %s escaped > \\__NETSUKE_OUTS_PLACEHOLDER__"
+        ),
+        "unexpected error: {error:?}"
     );
     Ok(())
 }
