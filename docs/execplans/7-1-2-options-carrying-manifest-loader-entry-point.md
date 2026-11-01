@@ -1302,6 +1302,30 @@ and YAML fixtures, and were set from the inventory in Table 1.
   carrying conflict resolutions, and `git diff --check origin/main HEAD` is
   clean. The nine-gate batch recorded above binds to `85d71d9b1` only; it does
   **not** cover the rebased tree.
+- [x] (2026-11-01) Nine-gate batch green on the rebased candidate. The set was
+  run sequentially, one gate at a time, against `f31ee3907` (tree
+  `e1ac0892b08872bc25d4dd90ae808aecae95723d`) with a clean working tree, and
+  **all nine exited 0**: `check-fmt` 4 s, `typecheck` 1 639 s, `lint` 187 s,
+  `doc-coverage` 277 s, `test` 3 594 s, `markdownlint` 48 s, `nixie` 3 s,
+  `test-workflow-contracts` 317 s, `test-package-verify` 1 447 s. `make test`
+  ran 5 008 nextest cases (5 008 passed, one reported leaky, 7 skipped) and
+  then every doctest target; `make test-workflow-contracts` ran 1 666 passed /
+  3 skipped and a further 28 passed; `make markdownlint` linted 213 files with
+  0 issues and did not rewrite `typos.toml` (`current: typos.toml`). Every log
+  carries the same `HEAD` and `TREE` breadcrumbs, so no gate read a tree
+  another gate had moved. Logs:
+  `/tmp/gate{1..9}-netsuke-7-1-2-options-carrying-manifest-loader-entry-point-f31ee3907.out`.
+- [x] (2026-11-01) Prose-delta re-gate for this record. Writing a gate result
+  into a tracked file moves `HEAD` past the revision the run verified, so the
+  loop is closed by stating the delta rather than by re-running the heavy
+  gates: the only tracked change between `f31ee3907` and the commit carrying
+  this bullet is prose in this one file, and its Rust, YAML, Python, and
+  catalogue content is byte-identical to what the batch passed. The gates that
+  can observe a Markdown delta were re-run against that commit — `check-fmt`,
+  `markdownlint`, `nixie`, `test-workflow-contracts`, and the plan's sole Rust
+  reader, `cargo nextest run --test execplan_status_contract_tests` —
+  `typecheck`, `lint`, `doc-coverage`, `test`, and `test-package-verify` were
+  not, because none of them reads `docs/execplans/`.
 
 ## Surprises & discoveries
 
