@@ -4,7 +4,7 @@ import dataclasses
 import typing as typ
 
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
-from release_publish_path_scenarios import REQUIRED_NEEDS
+from release_publish_path_scenarios import CRATES_IO_NEEDS, REQUIRED_NEEDS
 from workflow_loading import (
     job_steps,
     named_step,
@@ -147,7 +147,11 @@ def _check_publication_job(
     all_dependencies_succeeded = all(
         scenario.needs_results[name] == "success" for name in REQUIRED_NEEDS
     )
-    expected_job = scenario.mode == "publish" and all_dependencies_succeeded
+    expected_job = (
+        scenario.mode == "publish"
+        and not scenario.cancelled
+        and all_dependencies_succeeded
+    )
     publication_runs = actual_job is not MISSING and bool(actual_job)
     if publication_runs != expected_job:
         check.violations.append(
@@ -224,3 +228,45 @@ def check_publication_path(check: PublicationCheck) -> None:
     _check_draft_guard(steps, check, contexts)
     if publication_runs:
         _check_publication_steps(steps, check, contexts)
+
+
+def check_crates_io_publication(
+    job: dict[str, object],
+    check: PublicationCheck,
+    contexts: dict[str, object],
+) -> None:
+    """Require the OIDC publisher's seven dependencies and gated reachability."""
+    declared = job.get("needs", [])
+    names = [declared] if isinstance(declared, str) else declared
+    if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
+        check.violations.append(
+            "publish-crates-io.needs: dependencies must be job names"
+        )
+        return
+    if set(names) != CRATES_IO_NEEDS or len(names) != len(CRATES_IO_NEEDS):
+        check.violations.append(
+            "publish-crates-io.needs: expected exactly the seven release prerequisites"
+        )
+
+    scenario = check.scenario
+    actual = evaluate_field(
+        job.get("if", True),
+        FieldEvaluation(
+            contexts=contexts,
+            violations=check.violations,
+            label=f"{scenario.name}.crates-io-job.guard",
+            job_level=True,
+        ),
+    )
+    expected = (
+        scenario.mode == "publish"
+        and not scenario.cancelled
+        and check.outputs.get("should_publish") == "true"
+        and all(scenario.needs_results[name] == "success" for name in CRATES_IO_NEEDS)
+    )
+    runs = actual is not MISSING and bool(actual)
+    if runs != expected:
+        check.violations.append(
+            f"{scenario.name}.crates-io-job: resolved to {runs!r}, "
+            f"expected {expected!r}"
+        )

@@ -8,6 +8,9 @@ explicit decision about which side owns its effects.
 
 #: Test suites collected by ``make test-release-publication``.
 SECTION_MODULES = (
+    "scripts/tests/test_crates_io_candidate_cli.py",
+    "scripts/tests/test_crates_io_transport_cli.py",
+    "scripts/tests/test_crates_io_publish_sequence.py",
     "scripts/tests/test_release_candidate.py",
     "scripts/tests/test_release_candidate_cli.py",
     "scripts/tests/test_package_crate_cli.py",
@@ -37,6 +40,10 @@ SECTION_MODULES = (
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
 SOURCE_MODULES = (
+    "scripts/crates_io_candidate_cli.py",
+    "scripts/crates_io_transport_cli.py",
+    "scripts/crates_io_transport_http.py",
+    "scripts/crates_io_upload_metadata.py",
     "scripts/release_candidate.py",
     "scripts/release_candidate_cli.py",
     "scripts/release_identity_record.py",
@@ -81,6 +88,10 @@ POLICY_MODULES = (
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
 ADAPTER_MODULES = (
+    "scripts/crates_io_candidate_cli.py",
+    "scripts/crates_io_transport_cli.py",
+    "scripts/crates_io_transport_http.py",
+    "scripts/crates_io_upload_metadata.py",
     "scripts/release_candidate_cli.py",
     "scripts/package_crate_cli.py",
     "scripts/publish_crates_io_cli.py",
@@ -95,9 +106,22 @@ ADAPTER_MODULES = (
     "scripts/release_staged_digests.py",
 )
 
+#: Sources whose imports must remain free of network clients. The transport
+#: CLI and HTTP adapter own the network boundary; the CLI uses a fake opener.
+NETWORK_FREE_MODULES = tuple(
+    module
+    for module in SOURCE_MODULES
+    if module
+    not in {
+        "scripts/crates_io_transport_cli.py",
+        "scripts/crates_io_transport_http.py",
+    }
+)
+
 
 __all__ = [
     "ADAPTER_MODULES",
+    "NETWORK_FREE_MODULES",
     "POLICY_MODULES",
     "SECTION_MODULES",
     "SOURCE_MODULES",

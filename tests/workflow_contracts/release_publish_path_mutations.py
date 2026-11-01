@@ -6,10 +6,13 @@ import enum
 import re
 import typing as typ
 
+from action_run_sources import action_steps
+from release_publish_crates_io_contracts import ACTION_PATH
 from release_publish_path_artifacts import BUILD_JOBS
 from workflow_loading import (
     job_steps,
     named_step,
+    require_list,
     require_mapping,
     step_index_by_key,
     workflow_job,
@@ -41,6 +44,14 @@ EXPECTED_VIOLATIONS = {
             ("opened", f"platform-upload.{job}.{platform}"),
         )
     ),
+    "remove-crates-io-oidc-permission": (("static", "publish-crates-io.permissions"),),
+    "grant-crates-io-contents-write": (("static", "publish-crates-io.permissions"),),
+    "remove-crates-io-environment": (("static", "publish-crates-io.environment"),),
+    "drop-crate-package-prerequisite": (("static", "publish-crates-io.needs"),),
+    "select-unrelated-crate-artifact": (("static", "publish-crates-io.artifact"),),
+    "authenticate-before-classify": (("static", "publish-crates-io.action-order"),),
+    "authenticate-without-publish-guard": (("static", "publish-crates-io.auth-guard"),),
+    "rebuild-crate-before-upload": (("static", "publish-crates-io.action.rebuild"),),
 }
 MUTATION_LABELS = tuple(EXPECTED_VIOLATIONS)
 
@@ -53,7 +64,18 @@ class MutationCase:
     release: dict[str, object]
     caller: dict[str, object]
     build: dict[str, object]
+    action: dict[str, object]
     expected_violations: tuple[tuple[str, str], ...]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class WorkflowInputs:
+    """Group the parsed documents needed to build a mutation case."""
+
+    release: dict[str, object]
+    caller: dict[str, object]
+    build: dict[str, object]
+    action: dict[str, object]
 
 
 class MutationIssue(enum.StrEnum):
@@ -169,25 +191,153 @@ def _mutate_package_upload_source(release: dict[str, object]) -> None:
 
 def mutate_workflows(
     label: str,
-    release: dict[str, object],
-    caller: dict[str, object],
-    build: dict[str, object],
+    workflows: WorkflowInputs,
 ) -> MutationCase:
-    """Deep-copy parsed workflows and apply one named reachability mutation."""
-    mutant_release = copy.deepcopy(release)
-    mutant_caller = copy.deepcopy(caller)
-    mutant_build = copy.deepcopy(build)
+    """Deep-copy parsed workflows and apply one named reachability mutation.
+
+    Parameters
+    ----------
+    label : str
+        Name of the registered mutation to apply.
+    workflows : WorkflowInputs
+        Parsed workflows to copy before applying the mutation.
+
+    Returns
+    -------
+    MutationCase
+        Mutated workflow documents and the violations expected from them.
+
+    Raises
+    ------
+    MutationError
+        If ``label`` does not name a registered reachability mutation.
+    """
+    mutant_release = copy.deepcopy(workflows.release)
+    mutant_caller = copy.deepcopy(workflows.caller)
+    mutant_build = copy.deepcopy(workflows.build)
+    mutant_action = copy.deepcopy(workflows.action)
     applier = _MUTATION_APPLIERS.get(label)
-    if applier is None:
+    if applier is not None:
+        applier(mutant_release, mutant_caller)
+    elif label in _CRATES_IO_MUTATIONS:
+        _CRATES_IO_MUTATIONS[label](mutant_release, mutant_action)
+    else:
         raise MutationError(MutationIssue.UNKNOWN_LABEL, label)
-    applier(mutant_release, mutant_caller)
     return MutationCase(
         label,
         mutant_release,
         mutant_caller,
         mutant_build,
+        mutant_action,
         EXPECTED_VIOLATIONS[label],
     )
+
+
+def _remove_crates_io_oidc(
+    release: dict[str, object], _action: dict[str, object]
+) -> None:
+    """Remove the registry job's OIDC token permission."""
+    permissions = require_mapping(
+        workflow_job(release, "publish-crates-io").get("permissions"),
+        "publish-crates-io.permissions",
+    )
+    permissions.pop("id-token", None)
+
+
+def _grant_crates_io_contents_write(
+    release: dict[str, object], _action: dict[str, object]
+) -> None:
+    """Broaden the registry job's GitHub repository permission."""
+    permissions = require_mapping(
+        workflow_job(release, "publish-crates-io").get("permissions"),
+        "publish-crates-io.permissions",
+    )
+    permissions["contents"] = "write"
+
+
+def _remove_crates_io_environment(
+    release: dict[str, object], _action: dict[str, object]
+) -> None:
+    """Remove the protected crates.io environment binding."""
+    workflow_job(release, "publish-crates-io").pop("environment", None)
+
+
+def _drop_crate_package_need(
+    release: dict[str, object], _action: dict[str, object]
+) -> None:
+    """Remove the package artifact producer from publisher dependencies."""
+    needs = workflow_job(release, "publish-crates-io").get("needs")
+    if isinstance(needs, list) and "package-crate" in needs:
+        needs.remove("package-crate")
+
+
+def _select_unrelated_crate_artifact(
+    release: dict[str, object], _action: dict[str, object]
+) -> None:
+    """Point registry publication at a different artifact name."""
+    steps = job_steps(release, "publish-crates-io")
+    download = next(
+        step for step in steps if "download-artifact@" in str(step.get("uses"))
+    )
+    require_mapping(download.get("with"), "artifact download.with")["name"] = (
+        "release-assets"
+    )
+
+
+def _authenticate_before_classify(
+    _release: dict[str, object], action: dict[str, object]
+) -> None:
+    """Move OIDC exchange before the registry policy has classified state."""
+    runs = require_mapping(action.get("runs"), "publisher action runs")
+    steps = require_list(runs.get("steps"), "publisher action steps")
+    auth_index = next(
+        index
+        for index, step in enumerate(steps)
+        if require_mapping(step, "publisher action step").get("id") == "auth"
+    )
+    decision_index = next(
+        index
+        for index, step in enumerate(steps)
+        if require_mapping(step, "publisher action step").get("id") == "decision"
+    )
+    auth = steps.pop(auth_index)
+    steps.insert(decision_index, auth)
+
+
+def _authenticate_without_publish_guard(
+    _release: dict[str, object], action: dict[str, object]
+) -> None:
+    """Remove the publish-only condition from token exchange."""
+    auth = next(
+        step for step in action_steps(ACTION_PATH, action) if step.get("id") == "auth"
+    )
+    auth.pop("if", None)
+
+
+def _rebuild_crate_before_upload(
+    _release: dict[str, object], action: dict[str, object]
+) -> None:
+    """Add a Cargo publish invocation to the composite action."""
+    runs = require_mapping(action.get("runs"), "publisher action runs")
+    steps = require_list(runs.get("steps"), "publisher action steps")
+    steps.append({
+        "name": "Rebuild crate",
+        "run": "cargo publish",
+    })
+
+
+_CRATES_IO_MUTATIONS: dict[
+    str, cabc.Callable[[dict[str, object], dict[str, object]], None]
+] = {
+    "remove-crates-io-oidc-permission": _remove_crates_io_oidc,
+    "grant-crates-io-contents-write": _grant_crates_io_contents_write,
+    "remove-crates-io-environment": _remove_crates_io_environment,
+    "drop-crate-package-prerequisite": _drop_crate_package_need,
+    "select-unrelated-crate-artifact": _select_unrelated_crate_artifact,
+    "authenticate-before-classify": _authenticate_before_classify,
+    "authenticate-without-publish-guard": _authenticate_without_publish_guard,
+    "rebuild-crate-before-upload": _rebuild_crate_before_upload,
+}
 
 
 def _mutate_caller_event(caller: dict[str, object]) -> None:
