@@ -344,7 +344,8 @@ The dispatch trigger can measure a warm restore only after a trusted push to
 because saving is gated on a push to `main`; after a cache-key change, the
 first trusted `main` run is cold. The compile gate is the reason the ceiling
 moved from 20 minutes, since it builds the whole dependency graph through the
-Kani frontend into a `CARGO_TARGET_DIR` no cache restores.
+Kani frontend into a target directory selected by `CARGO_TARGET_DIR`, which
+cache restores do not provide.
 
 Any later Verus job should be added only after a stable proof kernel exists.
 

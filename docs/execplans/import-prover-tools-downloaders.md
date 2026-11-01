@@ -210,6 +210,10 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       `26409c772cc24d2b48a0265392bc52999bcc1fdd`. It returned four minor
       grammar findings in the three changed guides; all four are corrected in
       this revision. Reassessment and gates for the corrections remain pending.
+- [x] (2026-11-01) Complete CodeRabbit CLI 0.9.2 reassessment of commit
+      `dba20f45ab5a8534e5bed53140a9a4b3a028f1a1`. It returned one minor
+      grammar finding in the formal-verification guide about the
+      `CARGO_TARGET_DIR` sentence; correct it and rerun gates and reassessment.
 - [ ] EP-M3: Complete the hosted Kani cache run, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
       the hosted warm run requires a trusted `main` push.
@@ -678,3 +682,7 @@ review/delivery work pending.
 Revision 15 (2026-11-01): Record the completed local CodeRabbit review and fix
 its four grammar findings. Run the final gates and focused reassessment before
 publishing the rebased candidate.
+
+Revision 16 (2026-11-01): Record the focused reassessment finding about the
+`CARGO_TARGET_DIR` sentence and correct its wording. Final gates and
+reassessment remain pending.
