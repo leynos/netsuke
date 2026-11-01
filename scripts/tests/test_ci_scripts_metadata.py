@@ -34,7 +34,6 @@ def test_there_are_scripts_to_hold() -> None:
     assert [path.name for path in SCRIPTS] == [
         "discard_instrumented_tree.py",
         "install_actionlint.py",
-        "install_kani.py",
         "report_sccache_stats.py",
         "stage_test_shell.py",
     ], "expected: [path.name for path in SCRIPTS] == [ 'discard_instrumente..."
