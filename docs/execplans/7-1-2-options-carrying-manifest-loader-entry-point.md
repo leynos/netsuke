@@ -1287,6 +1287,22 @@ and YAML fixtures, and were set from the inventory in Table 1.
   gate read a tree another gate had moved. Logs:
   `/tmp/gate{1..9}-netsuke-7-1-2-options-carrying-manifest-loader-entry-point-85d71d9b1.out`.
 
+- [x] (2026-11-01) Branch rebased onto `origin/main` (`e5d57c58`), PR #807's
+  `CONFLICTING` mergeability resolved. The replay boundary was the last
+  inherited commit, `7929a3fc`; 57 commits were replayed and one was dropped.
+  `4f57ddde0` ("Regenerate typos.toml from the shared dictionary") became empty
+  because the refreshed `typos.toml` it wrote is byte-identical to
+  `origin/main`'s, so it was skipped rather than replayed as a no-op. Three
+  conflicts were semantic rather than textual: both branches split the same
+  localization key table, so `KEY_SOURCES`, the module doc comments, the
+  developers' and translators' guides, ADR-0056, and both build-audit test
+  oracles now name four tables, and `ALL_KEYS` in `src/localization/mod.rs`
+  grew from three tables to four in `e3b292e28`. `git range-diff` against
+  `7929a3fc..324b5eb90` shows exactly two rewritten commits, both the ones
+  carrying conflict resolutions, and `git diff --check origin/main HEAD` is
+  clean. The nine-gate batch recorded above binds to `85d71d9b1` only; it does
+  **not** cover the rebased tree.
+
 ## Surprises & discoveries
 
 - Observation: Whitaker's `module_max_lines` stops the run at the first failing
