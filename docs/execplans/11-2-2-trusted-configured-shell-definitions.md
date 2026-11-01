@@ -6,10 +6,10 @@ This ExecPlan is a living document. Keep `Constraints`,
 `Conformance basis`, and `Verification plan` current at each milestone and
 whenever evidence changes the design.
 
-Status: DRAFT
+Status: APPROVED
 
-Implementation requires explicit maintainer approval. Publishing this plan as a
-draft pull request does not authorize implementation or complete roadmap 11.2.2.
+The maintainer approved implementation on 2026-11-01. Approval authorizes the
+milestones in this document; it does not itself complete roadmap 11.2.2.
 
 ## Purpose and observable outcome
 
@@ -104,7 +104,8 @@ explicit and exercise the actual adapters in tests.
   reconcile architecture, contract, and operations findings.
 - [x] 2026-10-20: Pass plan-only formatting, format checks, Markdown/spelling,
   diagram validation, and whitespace checks before publication.
-- [ ] Obtain explicit approval before any implementation.
+- [x] 2026-11-01: Obtain explicit maintainer approval and rebase onto
+  `origin/main` (`da06ffb11`) before implementation.
 - [ ] M1: Establish definition authority and reject unauthorized sources.
 - [ ] M2: Add validated definitions, append merging, and collision proof.
 - [ ] M3: Complete behavioural evidence, documentation, and delivery.
@@ -149,8 +150,10 @@ already supports a selected proof file through `VERUS_FLAGS`.
 ## Outcomes & retrospective
 
 The draft has completed Wyvern reconnaissance and community review. No feature
-implementation, proof, or feature-test result is claimed. Approval,
-implementation, and roadmap closure remain open.
+implementation, proof, or feature-test result is claimed. Maintainer approval
+was granted on 2026-11-01 and the branch was rebased onto `origin/main`
+(`da06ffb11`) before implementation; implementation and roadmap closure remain
+open.
 
 ## Conformance basis
 
@@ -579,6 +582,10 @@ remain authoritative during execution. No external claim replaces an
 integration test against the pinned dependency.
 
 ## Revision note
+
+2026-11-01: Recorded maintainer approval, set `Status: APPROVED`, and rebased
+the branch onto `origin/main` (`da06ffb11`) before implementation. The rebase
+replayed the plan commit unchanged and introduced no source change.
 
 2026-10-20: Initial approval-gated draft, based on two Wyvern reconnaissance
 reports, current source contracts, and external-interface checks. Reconciled
