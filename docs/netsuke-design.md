@@ -3987,12 +3987,34 @@ flowchart TD
 
 #### Discovery scopes and layered merging
 
-Automatic configuration discovery first calls OrthoConfig's `compose_layers()`
-to retain its primary automatic match. If that match does not include the
-project-scope file, a second pass loads that file directly and appends its
-layers. Thus, `compose_layers()` does not merge every scope, and it does not by
-itself establish project/user/system precedence. Environment variables and CLI
-arguments then override the file layers.
+Automatic configuration discovery asks OrthoConfig's `ConfigDiscovery` for its
+candidate paths, then loads each candidate's `extends` chain with
+`load_config_file_as_chain()`, retaining the first chain that exists. It does
+not call `compose_layers()`, because that call returns a flattened layer list
+without reporting which candidate root supplied it, and root provenance is what
+decides whether an occurrence may declare executable policy. The restricted
+walk registers no selector environment variable and injects no explicit path,
+so every candidate it visits is an operator-location candidate or the project
+root; explicit `--config` and `NETSUKE_CONFIG` selection remains on its own
+untrusted path. If the retained chain does not include the project-scope file,
+a second pass loads that file directly and appends its layers. Thus, this walk
+does not merge every scope, and it does not by itself establish
+project/user/system precedence. Environment variables and CLI arguments then
+override the file layers.
+
+Definition authority is recorded per occurrence at discovery time, before any
+flattening, so it survives quarantine and cached replay. A candidate root is
+trusted only when it is a system, XDG, or home location and is not the
+project-scope file. Every occurrence loaded from an untrusted root, and every
+inherited parent of a project or explicitly selected chain, is untrusted. The
+project-scope file is untrusted even when an operator candidate supplied it,
+because a project can influence that file wherever it is read from. A project
+file that exists but cannot be path-normalized cannot be proven distinct from a
+candidate, so discovery fails closed and withholds operator authority for that
+candidate; a missing project file cannot appear as an occurrence and keeps it.
+An occurrence with no recorded path has unknown provenance and is untrusted.
+Only a trusted occurrence may declare the `shells` key, and that key is
+rejected from environment ingress by its normalized top-level spelling.
 
 1. **Explicit override**: `--config <PATH>` and `NETSUKE_CONFIG` are evaluated
    in that precedence order before discovery. These explicit selectors bypass
@@ -4040,7 +4062,7 @@ arguments then override the file layers.
        Directory system config directories, defaults to
        `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
 
-The primary scanner's platform-specific search determines which automatic file
+The candidate order `ConfigDiscovery` generates determines which automatic file
 is retained first. The `-C/--directory` flag anchors the project-scope fallback
 to the specified directory while leaving the scanner's user- and system-scope
 lookups unchanged.

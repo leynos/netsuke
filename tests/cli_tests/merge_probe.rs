@@ -127,6 +127,52 @@ pub(super) fn merge_in_child(
     current_dir: &Path,
     environment: &[(OsString, OsString)],
 ) -> Result<Cli> {
+    let (is_success, payload) = run_probe(args, current_dir, environment)?;
+    ensure!(
+        is_success,
+        "configuration merge probe failed: {}",
+        String::from_utf8_lossy(&payload)
+    );
+    let mut result: ProbeResult =
+        serde_json::from_slice(&payload).context("decode merged configuration probe output")?;
+    result.cli.command = result.command;
+    Ok(result.cli)
+}
+
+/// Merge configuration in an isolated process and return the reported failure.
+///
+/// The worker records the merge error before it exits unsuccessfully, so this
+/// adapter exposes the operator-facing message that a real `netsuke`
+/// invocation would print. A probe that unexpectedly succeeds is an error, not
+/// an empty message, because the test using it exists to observe a rejection.
+///
+/// # Errors
+///
+/// Returns an error if the probe cannot run, if it reports success, or if it
+/// fails without recording a message.
+pub(super) fn merge_in_child_error(
+    args: &[&str],
+    current_dir: &Path,
+    environment: &[(OsString, OsString)],
+) -> Result<String> {
+    let (is_success, payload) = run_probe(args, current_dir, environment)?;
+    ensure!(
+        !is_success,
+        "configuration merge probe unexpectedly succeeded:\n{}",
+        String::from_utf8_lossy(&payload)
+    );
+    String::from_utf8(payload).context("decode merge-probe failure message")
+}
+
+/// Run the merge worker and return whether it succeeded with its payload.
+///
+/// The worker writes JSON on success and the error text on failure to the same
+/// path, so the caller decides how to interpret the bytes.
+fn run_probe(
+    args: &[&str],
+    current_dir: &Path,
+    environment: &[(OsString, OsString)],
+) -> Result<(bool, Vec<u8>)> {
     let output_dir = tempfile::tempdir().context("create merge-probe output directory")?;
     let output_path = output_dir.path().join("merged.json");
     let encoded_args = serde_json::to_string(args).context("encode merge-probe arguments")?;
@@ -158,17 +204,15 @@ pub(super) fn merge_in_child(
         command.env(key.as_os_str(), value);
     }
     let output = command.output().context("run configuration merge probe")?;
-    ensure!(
-        output.status.success(),
-        "configuration merge probe failed:\nstdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-    let merged = test_fs::read(&output_path).context("read merged configuration probe output")?;
-    let mut result: ProbeResult =
-        serde_json::from_slice(&merged).context("decode merged configuration probe output")?;
-    result.cli.command = result.command;
-    Ok(result.cli)
+    let payload = test_fs::read(&output_path).with_context(|| {
+        format!(
+            "read configuration merge probe output (success: {})\nstdout:\n{}\nstderr:\n{}",
+            output.status.success(),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr),
+        )
+    })?;
+    Ok((output.status.success(), payload))
 }
 
 #[test]
@@ -187,9 +231,17 @@ fn merge_probe_worker() -> Result<()> {
     let (cli, matches) =
         netsuke::cli::parse_with_localizer_from(args, &localizer, clap::ColorChoice::Auto)
             .context("parse CLI in merge probe")?;
-    let mut merged = netsuke::cli::merge_with_config(&cli, &matches)
-        .context("merge configuration in probe")?
-        .with_default_command();
+    let mut merged = match netsuke::cli::merge_with_config(&cli, &matches) {
+        Ok(merged) => merged.with_default_command(),
+        Err(error) => {
+            // Record the operator-facing message before failing so the parent
+            // can assert on the rejection reason instead of guessing from a
+            // panic payload.
+            test_fs::write(PathBuf::from(&output_path), error.to_string().into_bytes())
+                .context("write merge-probe failure output")?;
+            return Err(error).context("merge configuration in probe");
+        }
+    };
     // `Cli.command` is `#[serde(skip)]`, so it travels beside the CLI in
     // `ProbeResult::command`; taking it avoids cloning the subcommand tree.
     let command = merged.command.take();
