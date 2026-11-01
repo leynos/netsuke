@@ -411,3 +411,28 @@ unchanged. The implementation is `hash_follows_ambiguous_expression_boundary` in
 and script regressions are in `src/ir/cmd_interpolate/power_shell_tests.rs`,
 with scanner-level token cases in
 `src/ir/cmd_interpolate/substitution/powershell/tokens/tests.rs`.
+
+## Addendum — 2026-11-01: Reject markers after an active POSIX escape
+
+A marker that directly follows an unconsumed POSIX backslash is now rejected in
+`command:`, `script:`, and heredoc-delimiter positions. The path binding
+decides what that backslash escapes: between existing double quotes, a path
+beginning with `"` is encoded as `\"`, so a retained backslash produces `\\"`,
+which the shell reads as a literal backslash followed by a closing quote. The
+rest of the path then reaches the shell as syntax. The insertion encoding, not
+the template, determines the outcome, so no binding can be chosen safely at
+these sites.
+
+The rejection is deliberately broader than the demonstrated exploit: a marker
+after any unpaired backslash fails closed even when the source backslash looks
+inert, because the binding's first character may be escapable. Backslash pairs
+are still consumed as one escaped backslash before the marker, markers inside
+single quotes remain ordinary text, and a backslash-newline continuation does
+not count. Heredoc bodies remain inert.
+
+Command, script, and delimiter traversal share the predicate
+`backslash_escapes_marker` in `src/ir/cmd_interpolate/posix_lexical/mod.rs`.
+The delimiter renderer reports a private `EscapeBeforeMarker` unit error, which
+both traversals map to `IrGenError::InvalidCommand` carrying the original
+template. PowerShell is unchanged: it has no unpaired backslash escape before a
+marker and already rejects markers after its own escape character, the backtick.

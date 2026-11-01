@@ -382,3 +382,7 @@ fn script_default_reaches_the_child_shell(
 /// Script recipe cases, gated per test where they need a POSIX child shell.
 #[path = "ninja_dollar_escaping_tests/scripts.rs"]
 mod scripts;
+
+/// Backslashes immediately before a path marker, executed through Ninja.
+#[path = "ninja_dollar_escaping_tests/backslash.rs"]
+mod backslash;
