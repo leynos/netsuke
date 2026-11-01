@@ -1251,6 +1251,20 @@ dependencies as graph arcs.
   compiler-admission saturation; the settled figures are from the final
   warm-state relaunch of each gate after earlier attempts were killed without
   an exit status.
+- [x] (2026-11-01) The hosted completeness assessment found one in-scope gap:
+  the LEM-1 property generator sampled a bare chain with an optional back arc,
+  not the planned domain of a DAG base. Extended
+  `src/ir/cycle/property_tests/participation_tests.rs` to that domain. It now
+  draws one to twelve edges, splits each edge's one to three aliases between
+  explicit and implicit outputs, attaches prerequisites of every kind that aim
+  at lower-indexed edges or at absent paths, and adds a backbone prerequisite
+  on the previous edge so any back arc closes a cycle. The five-way back-arc
+  variant keeps the acyclic case and each cycle-closing arc class, and forces
+  an implicit alias on the destination only for the variant that needs one. The
+  independent Kahn oracle over the edge graph is unchanged. The focused
+  property test passes (`alias_traversal_agrees_with_edge_oracle`, exit 0). The
+  sequential gate batch on the amended candidate is recorded below when
+  complete.
 
 ## Surprises & discoveries
 
@@ -1599,3 +1613,12 @@ as passes. This revision changes no code: `make check-fmt` and
 `make markdownlint` were run against this exact file content before it was
 committed, so the pushed tree differs from the gated candidate only by prose in
 this ExecPlan that those two gates covered.
+
+Revision 22 (2026-11-01): extended the LEM-1 property generator to the planned
+DAG domain after the hosted completeness assessment named the bare-chain
+generator as the single in-scope omission. The generator now varies the edge
+count, the per-edge split between explicit and implicit output aliases, the
+prerequisite kind, branching and merging prerequisites, repeated producers, and
+absent paths, and it forces an implicit alias only for the back-arc variant
+that requires one. No production code changed, and the independent oracle is
+untouched. The full sequential gate batch is rerun on this candidate.
