@@ -1265,6 +1265,17 @@ dependencies as graph arcs.
   property test passes (`alias_traversal_agrees_with_edge_oracle`, exit 0). The
   sequential gate batch on the amended candidate is recorded below when
   complete.
+- [x] (2026-11-01) The first gate batch on `d951b988e` stopped at
+  `make lint-clippy` with nine denied Clippy lints in the extended generator,
+  and the file was 426 lines against the 400-line cap. Repaired without
+  suppressions: alias targets are clamped rather than reduced modulo, back-arc
+  endpoints are clamped inside their range instead of wrapping, slice access
+  goes through `get` and `get_mut`, the nested `if` became a let-chain, and the
+  independent Kahn oracle moved to
+  `src/ir/cycle/property_tests/edge_oracle.rs`. A focused
+  `cargo clippy -p netsuke-build --lib --tests --all-features -- -D warnings`
+  exits 0, and `alias_traversal_agrees_with_edge_oracle` still passes. Gates
+  five to thirteen never ran, so the full batch restarts from gate one.
 
 ## Surprises & discoveries
 
@@ -1622,3 +1633,12 @@ prerequisite kind, branching and merging prerequisites, repeated producers, and
 absent paths, and it forces an implicit alias only for the back-arc variant
 that requires one. No production code changed, and the independent oracle is
 untouched. The full sequential gate batch is rerun on this candidate.
+
+Revision 23 (2026-11-01): the first gate batch on `d951b988e` failed
+`make lint-clippy` on nine denied lints in the new generator, and the file
+exceeded the 400-line cap. Repaired by clamping indices rather than taking
+remainders, replacing slice indexing with `get` and `get_mut`, collapsing a
+nested `if` into a let-chain, and moving the independent Kahn oracle into
+`src/ir/cycle/property_tests/edge_oracle.rs`. No lint suppression was added.
+The focused Clippy check and the property test pass on the repaired tree, and
+the full batch restarts from gate one.

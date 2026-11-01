@@ -12,6 +12,8 @@ use super::support::{canonicalize_cycle, canonicalize_cycle_by};
 
 mod analyse_tests;
 
+mod edge_oracle;
+
 mod issue322_property_tests;
 
 mod participation_tests;
