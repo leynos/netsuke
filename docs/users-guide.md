@@ -1155,6 +1155,14 @@ only. Translated copy reaches users through the running binary, which embeds
 every catalogue. The generated help describes the complete public CLI, including
 `-C/--directory`, `--config`, and the documented command tree.
 
+Generated help uses the same readable value placeholders as `--help`.
+Configuration-derived options show `-f, --file <FILE>`, `-j, --jobs <N>`,
+`--locale <LOCALE>`, the list options' `<SCHEME>`, `<VAR>`, `<HOST>`, and
+`<TARGET>` names, and the manifest budget options' `<FUEL>`, `<BYTES>`, and
+`<COUNT>` names, rather than internal configuration type names. Parser-only
+selectors such as `-C/--directory` and `--config` show the placeholders the
+command parser declares.
+
 ### Anchor a project with `--directory`
 
 `--directory` changes manifest lookup, project configuration discovery and

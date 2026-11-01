@@ -4094,9 +4094,10 @@ check.
 Release builds generate their manual and PowerShell help explicitly with
 `cargo-orthohelp`, rather than consuming the ordinary-build help artefacts from
 `build.rs`. The metadata root is `netsuke::cli::ReleaseHelpCli`, the sole
-permitted composition site for release help. `CliConfig` supplies only layered
-configuration fields; `Cli::command()` supplies parser-only flags such as
-`-C/--directory` and `--config`, plus documented subcommands, including
+permitted composition site for release help. `CliConfig` supplies the layered
+configuration fields and owns each configuration-derived value placeholder
+through `cli(value_name = "...")`; `Cli::command()` supplies parser-only flags
+such as `-C/--directory` and `--config`, plus documented subcommands, including
 `help targets`. The adapter projects existing CLI Fluent keys onto published
 configuration fields and adds parser-only help metadata without adding an
 environment or file source. It omits the structural `cmds` container. Keep
@@ -4117,10 +4118,11 @@ every derived boolean as `--flag[=BOOL]`, because its *generated* clap parser
 accepts an optional value; Netsuke declares its flags by hand in
 `src/cli/command.rs` and rejects that spelling, so the adapter reduces boolean
 fields back to presence-only switches. Two tests hold both projections:
-`release_help_identifiers_are_netsuke_declared_not_generated` and
-`release_help_cli_value_shapes_match_the_parser` in
-`src/cli/release_help/metadata_tests.rs`. A new derived field, or a new
-upstream metadata change, is expected to reach one of them.
+identifier provenance in `src/cli/release_help/metadata_tests/mod.rs`
+(`release_help_identifiers_are_netsuke_declared_not_generated`), and
+value-shape parity in `src/cli/release_help/metadata_tests/value_shapes.rs`
+(`release_help_cli_value_shapes_match_the_parser`). A new derived field, or a
+new upstream metadata change, is expected to reach one of them.
 
 The root synopsis is cleared for the same reason. `ortho_config` 0.10.0's
 derive defaults `synopsis_id` to a generated `<app>-usage` identifier that no
@@ -4135,6 +4137,31 @@ variable-free key declared in `src/localization/keys.rs` and present in every
 catalogue. The identifier guard collects `synopsis_id` alongside `help_id` and
 `about_id`, and the release-help metadata snapshot pins the published value, so
 a future derive default cannot reintroduce the placeholder silently.
+
+Value placeholders follow the same ownership split. A configuration-derived
+option declares its placeholder in `CliConfig` with `cli(value_name = "...")`;
+without that declaration the generator falls back to a machine type such as
+`UTF8PATHBUF`, `USIZE`, or `LIST`, and publishes it in the manual page and
+`PowerShell` help. `src/cli/release_help/parser_fields.rs` remains responsible
+only for parser-only selectors, which have no configuration source from which
+to derive a placeholder. The parity test compares every value-taking option's
+`cli.value_name` against the first value name `Cli::command()` declares, so
+adding a configuration-derived value-taking option requires matching
+declarations in `src/cli/config/mod.rs` and `src/cli/command.rs`. A parser-only
+selector needs only the parser declaration, because `parser_fields.rs` derives
+its placeholder from that declaration. A placeholder that disagrees with the
+parser fails the test rather than reaching a release artefact. The release-help
+script tests render every declared value name through the fake generator and
+assert the placeholder appears in both the manual page and the PowerShell MAML
+output, and the metadata snapshot records each field's `value_name`, so a lost
+declaration fails the suite before it can reach a release.
+
+The release lane adds a guard on the artefacts themselves:
+`scripts/generate-release-help.sh` rejects a generated manual page or
+PowerShell help that publishes one of the generator's machine type names
+(`UTF8PATHBUF`, `USIZE`, `LIST`, `INT`, `STRING`) as a placeholder, so the real
+renderer is checked on what ships, not only under the fake generator the tests
+drive.
 
 Release automation delegates installation to
 [`install_orthohelp.py`](../scripts/install_orthohelp.py), with the pinned

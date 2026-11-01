@@ -137,12 +137,25 @@ for field in parser_only_fields:
     short = cli["short"]
     parser_only_flags.append(f"-{short}/--{long}" if short else f"--{long}")
 
+value_placeholders = []
+for field in metadata["fields"]:
+    cli = field.get("cli")
+    if not cli or not cli.get("value_name"):
+        continue
+    if not cli["long"]:
+        raise ValueError(f"value-taking {field['name']} metadata must have a long flag")
+    value_placeholders.append(f"{cli['long']}={cli['value_name']}")
+if not value_placeholders:
+    raise ValueError("release-help metadata must declare value placeholders")
+
 print(" ".join(parser_only_flags))
 print(" ".join(command["app_name"] for command in metadata["subcommands"]))
+print(" ".join(value_placeholders))
 PY
 )
 parser_only_flags="${public_cli_surface[0]}"
 subcommands="${public_cli_surface[1]}"
+value_placeholders="${public_cli_surface[2]}"
 
 "#;
 
@@ -161,6 +174,16 @@ MAN
     cat >>"$out_dir/man/man1/netsuke.1" <<MAN
 .SH OPTIONS
 .B $parser_only_flags
+MAN
+    for pair in $value_placeholders; do
+      long="${pair%%=*}"
+      value="${pair#*=}"
+      printf '.TP\n\\fB--%s\\fR \\fI%s\\fP\n' "$long" "$value" >>"$out_dir/man/man1/netsuke.1"
+    done
+    if [[ "${ORTHOHELP_FAKE_FALLBACK_FORMAT:-}" == "man" && -n "${ORTHOHELP_FAKE_FALLBACK:-}" ]]; then
+      printf '.TP\n\\fB--fake-fallback\\fR \\fI%s\\fP\n' "$ORTHOHELP_FAKE_FALLBACK" >>"$out_dir/man/man1/netsuke.1"
+    fi
+    cat >>"$out_dir/man/man1/netsuke.1" <<MAN
 .SH COMMANDS
 $subcommands
 MAN
@@ -170,18 +193,25 @@ MAN
     mkdir -p "$help_dir"
     printf 'function Invoke-%s { param() }\n' "$module_name" >"$out_dir/powershell/$module_name/$module_name.psm1"
     printf '@{\n  RootModule = "%s.psm1"\n  ModuleVersion = "0.1.0"\n}\n' "$module_name" >"$out_dir/powershell/$module_name/$module_name.psd1"
-    cat >"$help_dir/$module_name-help.xml" <<MAML
-<helpItems schema="maml">
-  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
-    <command:details>
-      <command:name>$module_name</command:name>
-    </command:details>
-    <command:description>
-      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">$parser_only_flags $subcommands</maml:para>
-    </command:description>
-  </command:command>
-</helpItems>
-MAML
+    {
+      printf '<helpItems schema="maml">\n'
+      # Both prefixes are declared on the command element so the sibling
+      # `maml:para` and `maml:name` elements inherit a binding. Declaring
+      # `xmlns:maml` on the paragraph instead would leave every `maml:name`
+      # unbound and the document unparseable, which the test now catches.
+      printf '  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:maml="http://schemas.microsoft.com/maml/2004/10">\n'
+      printf '    <command:details>\n      <command:name>%s</command:name>\n    </command:details>\n' "$module_name"
+      printf '    <command:description>\n      <maml:para>%s %s</maml:para>\n    </command:description>\n' "$parser_only_flags" "$subcommands"
+      for pair in $value_placeholders; do
+        long="${pair%%=*}"
+        value="${pair#*=}"
+        printf '    <command:parameter required="true"><maml:name>--%s</maml:name><command:parameterValue required="true">%s</command:parameterValue></command:parameter>\n' "$long" "$value"
+      done
+      if [[ "${ORTHOHELP_FAKE_FALLBACK_FORMAT:-}" == "ps" && -n "${ORTHOHELP_FAKE_FALLBACK:-}" ]]; then
+        printf '    <command:parameter required="true"><maml:name>--fake-fallback</maml:name><command:parameterValue required="true">%s</command:parameterValue></command:parameter>\n' "$ORTHOHELP_FAKE_FALLBACK"
+      fi
+      printf '  </command:command>\n</helpItems>\n'
+    } >"$help_dir/$module_name-help.xml"
     printf 'TOPIC\n    about_%s\n' "$module_name" >"$help_dir/about_$module_name.help.txt"
     ;;
 esac
@@ -221,6 +251,7 @@ pub struct ReleaseHelpRun<'a> {
     source_date_epoch: Option<&'a str>,
     fail_cargo: bool,
     skip_output: Option<&'a str>,
+    fallback_value: Option<(&'a str, &'a str)>,
 }
 
 impl<'a> ReleaseHelpRun<'a> {
@@ -232,6 +263,7 @@ impl<'a> ReleaseHelpRun<'a> {
             source_date_epoch: None,
             fail_cargo: false,
             skip_output: None,
+            fallback_value: None,
         }
     }
 
@@ -256,6 +288,15 @@ impl<'a> ReleaseHelpRun<'a> {
     /// Configure the run to omit one generated output format.
     pub const fn skip_output(mut self, format: &'a str) -> Self {
         self.skip_output = Some(format);
+        self
+    }
+
+    /// Configure the fake generator to publish a machine value name.
+    ///
+    /// The generator writes the name into `format`'s placeholder markup, so the
+    /// script's real-output guard is exercised as it would be by a regression.
+    pub const fn fallback_value(mut self, format: &'a str, value: &'a str) -> Self {
+        self.fallback_value = Some((format, value));
         self
     }
 }
@@ -296,7 +337,9 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
         .env_remove("RELEASE_HELP_CORRELATION_ID")
         .env_remove("SOURCE_DATE_EPOCH")
         .env_remove("ORTHOHELP_FAKE_FAIL")
-        .env_remove("ORTHOHELP_FAKE_SKIP_OUTPUT");
+        .env_remove("ORTHOHELP_FAKE_SKIP_OUTPUT")
+        .env_remove("ORTHOHELP_FAKE_FALLBACK")
+        .env_remove("ORTHOHELP_FAKE_FALLBACK_FORMAT");
 
     if let Some(value) = run.source_date_epoch {
         command.env("SOURCE_DATE_EPOCH", value);
@@ -306,6 +349,11 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
     }
     if let Some(format) = run.skip_output {
         command.env("ORTHOHELP_FAKE_SKIP_OUTPUT", format);
+    }
+    if let Some((format, value)) = run.fallback_value {
+        command
+            .env("ORTHOHELP_FAKE_FALLBACK_FORMAT", format)
+            .env("ORTHOHELP_FAKE_FALLBACK", value);
     }
 
     command.output().context("run release help script")

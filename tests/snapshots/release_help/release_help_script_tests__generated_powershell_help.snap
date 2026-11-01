@@ -12,13 +12,31 @@ function Invoke-CustomNetsuke { param() }
 
 ---
 <helpItems schema="maml">
-  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10">
+  <command:command xmlns:command="http://schemas.microsoft.com/maml/dev/command/2004/10" xmlns:maml="http://schemas.microsoft.com/maml/2004/10">
     <command:details>
       <command:name>CustomNetsuke</command:name>
     </command:details>
     <command:description>
-      <maml:para xmlns:maml="http://schemas.microsoft.com/maml/2004/10">-C/--directory --config build clean graph generate help</maml:para>
+      <maml:para>-C/--directory --config build clean graph generate help</maml:para>
     </command:description>
+    <command:parameter required="true"><maml:name>--file</maml:name><command:parameterValue required="true">FILE</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--jobs</maml:name><command:parameterValue required="true">N</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--locale</maml:name><command:parameterValue required="true">LOCALE</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--fetch-allow-scheme</maml:name><command:parameterValue required="true">SCHEME</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--env-allow-var</maml:name><command:parameterValue required="true">VAR</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--env-block-var</maml:name><command:parameterValue required="true">VAR</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--fetch-allow-host</maml:name><command:parameterValue required="true">HOST</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--fetch-block-host</maml:name><command:parameterValue required="true">HOST</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--manifest-evaluation-fuel</maml:name><command:parameterValue required="true">FUEL</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--manifest-fuel</maml:name><command:parameterValue required="true">FUEL</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--manifest-rendered-value-bytes</maml:name><command:parameterValue required="true">BYTES</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--manifest-rendered-manifest-bytes</maml:name><command:parameterValue required="true">BYTES</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--manifest-source-bytes</maml:name><command:parameterValue required="true">BYTES</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--manifest-foreach-cardinality</maml:name><command:parameterValue required="true">COUNT</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--manifest-expanded-entries</maml:name><command:parameterValue required="true">COUNT</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--default-targets</maml:name><command:parameterValue required="true">TARGET</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--directory</maml:name><command:parameterValue required="true">DIR</command:parameterValue></command:parameter>
+    <command:parameter required="true"><maml:name>--config</maml:name><command:parameterValue required="true">FILE</command:parameterValue></command:parameter>
   </command:command>
 </helpItems>
 

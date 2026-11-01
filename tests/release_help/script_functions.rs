@@ -167,3 +167,48 @@ fn require_file_logs_non_empty_output_size() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn reject_machine_value_placeholders_ignores_ordinary_prose() -> Result<()> {
+    let output = run_script_function(
+        "file=$(mktemp); printf '%s\\n' '.TP' '\\fB--file\\fR \\fIFILE\\fP' \
+         'Text mentions a string and an integer.' >\"$file\"; \
+         reject_machine_value_placeholders \"$file\" man",
+    )?;
+
+    ensure!(
+        output.status.success(),
+        "declared placeholders and prose should pass the guard, got {output:?}"
+    );
+    Ok(())
+}
+
+#[rstest]
+#[case("man", "\\fB--jobs\\fR \\fIUTF8PATHBUF\\fP", "UTF8PATHBUF")]
+#[case(
+    "ps",
+    r#"<command:parameterValue required="true">USIZE</command:parameterValue>"#,
+    "USIZE"
+)]
+fn reject_machine_value_placeholders_rejects_published_machine_type_names(
+    #[case] help_format: &str,
+    #[case] line: &str,
+    #[case] expected: &str,
+) -> Result<()> {
+    let command = format!(
+        "file=$(mktemp); printf '%s\\n' '{line}' >\"$file\"; \
+         reject_machine_value_placeholders \"$file\" {help_format}"
+    );
+    let output = run_script_function(&command)?;
+
+    ensure!(
+        output.status.code() == Some(1),
+        "a machine value name should fail the guard, got {output:?}"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("machine value names published") && stderr.contains(expected),
+        "expected a diagnostic naming {expected}, got {stderr}"
+    );
+    Ok(())
+}

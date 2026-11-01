@@ -3,7 +3,9 @@
 //! The script shells out to `cargo-orthohelp`, so these tests place a fake
 //! `cargo-orthohelp` executable first on `PATH`. This validates command
 //! construction and output verification without requiring network access or a
-//! real `cargo-orthohelp` installation.
+//! real `cargo-orthohelp` installation. The generated PowerShell help is parsed
+//! as XML, so a placeholder emitted under an unbound namespace prefix fails
+//! here rather than passing a substring check.
 
 #![cfg(unix)]
 
@@ -11,15 +13,29 @@ mod release_help;
 
 use anyhow::{Context, Result, ensure};
 use insta::assert_snapshot;
+use netsuke::cli::ReleaseHelpCli;
+use ortho_config::docs::OrthoConfigDocs;
 use release_help::{
     ReleaseHelpRun, ScriptFixture, logged_args, run_release_help, script_fixture, script_path,
     snapshot_settings,
 };
+use roxmltree::Document;
 use rstest::rstest;
 use std::{fs, process::Command};
 
 const DOCUMENTED_SUBCOMMANDS: [&str; 5] = ["build", "clean", "graph", "generate", "help"];
 const PARSER_ONLY_SELECTORS: [&str; 2] = ["-C/--directory", "--config"];
+
+/// Distinct value placeholders the release help must render.
+///
+/// Every configuration-derived value-taking option collapses onto one of these
+/// names, and `DIR` comes from the parser-only `--directory` selector. A
+/// declaration that loses its `value_name` removes its placeholder from both
+/// generated formats, so this list fails the test rather than letting a type
+/// fallback reach a release artefact.
+const EXPECTED_VALUE_NAMES: [&str; 11] = [
+    "BYTES", "COUNT", "DIR", "FILE", "FUEL", "HOST", "LOCALE", "N", "SCHEME", "TARGET", "VAR",
+];
 
 /// Generate and verify a manual page for a non-Windows target.
 ///
@@ -183,6 +199,7 @@ fn assert_man_page_structure(man_page: &str) -> Result<()> {
         "man page should include SYNOPSIS for the binary: {man_page}"
     );
     assert_public_cli_surface(man_page, "man page")?;
+    assert_man_value_placeholders(man_page)?;
     Ok(())
 }
 
@@ -190,13 +207,22 @@ fn assert_man_page_structure(man_page: &str) -> Result<()> {
 ///
 /// # Errors
 ///
-/// Returns an error when a required PowerShell artefact or CLI item is absent.
+/// Returns an error when a required PowerShell artefact or CLI item is absent,
+/// or when the MAML help is not well-formed XML.
 fn assert_powershell_help_structure(
     ps_module: &str,
     ps_manifest: &str,
     maml: &str,
     about_help: &str,
 ) -> Result<()> {
+    // A substring check cannot tell a bound `maml:` prefix from an unbound one,
+    // so parse the document: an undeclared prefix is a hard XML error.
+    let maml_tree = Document::parse(maml)
+        .context("generated MAML help should be well-formed XML with bound prefixes")?;
+    ensure!(
+        maml_tree.root_element().tag_name().name() == "helpItems",
+        "MAML help should be rooted at helpItems: {maml}"
+    );
     ensure!(
         ps_module.contains("function Invoke-CustomNetsuke"),
         "PowerShell module should expose the requested module command: {ps_module}"
@@ -214,6 +240,7 @@ fn assert_powershell_help_structure(
         "about help should name the requested module: {about_help}"
     );
     assert_public_cli_surface(maml, "MAML help")?;
+    assert_maml_value_placeholders(maml)?;
     Ok(())
 }
 
@@ -232,6 +259,104 @@ fn assert_public_cli_surface(document: &str, format_name: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Collect each value-taking option and the placeholder it declares.
+fn declared_value_placeholders() -> Vec<(String, String)> {
+    ReleaseHelpCli::get_doc_metadata()
+        .fields
+        .iter()
+        .filter_map(|field| {
+            let cli = field.cli.as_ref()?;
+            let value_name = cli.value_name.as_ref()?;
+            let long = cli.long.clone()?;
+            Some((long, value_name.clone()))
+        })
+        .collect()
+}
+
+/// Assert that a generated document renders every declared value placeholder.
+///
+/// The man-page and MAML surfaces differ only in markup, so the shared checks
+/// live here and each format supplies its own rendering templates.
+///
+/// # Errors
+///
+/// Returns an error when the metadata declares no placeholders, or when the
+/// document omits a declared placeholder or an expected distinct value name.
+fn assert_value_placeholders(
+    document: &str,
+    format_name: &str,
+    render_option: impl Fn(&str, &str) -> String,
+    render_value: impl Fn(&str) -> String,
+) -> Result<()> {
+    let placeholders = declared_value_placeholders();
+    ensure!(
+        !placeholders.is_empty(),
+        "release-help metadata should declare value placeholders"
+    );
+    for (long, value_name) in &placeholders {
+        let rendered = render_option(long, value_name);
+        ensure!(
+            document.contains(&rendered),
+            "{format_name} should render the {value_name} placeholder for --{long}: {document}"
+        );
+    }
+    for value_name in EXPECTED_VALUE_NAMES {
+        ensure!(
+            placeholders
+                .iter()
+                .any(|(_, name)| name.as_str() == value_name),
+            "release-help metadata should declare the {value_name} placeholder"
+        );
+        let rendered = render_value(value_name);
+        ensure!(
+            document.contains(&rendered),
+            "{format_name} should render the {value_name} placeholder: {document}"
+        );
+    }
+    Ok(())
+}
+
+/// Assert that the manual page renders every declared value placeholder.
+///
+/// # Errors
+///
+/// Returns an error when the metadata declares no placeholders, or when the
+/// manual page omits a declared placeholder or an expected distinct value name.
+fn assert_man_value_placeholders(man_page: &str) -> Result<()> {
+    assert_value_placeholders(
+        man_page,
+        "man page",
+        |long, value_name| format!("\\fB--{long}\\fR \\fI{value_name}\\fP"),
+        |value_name| format!("\\fI{value_name}\\fP"),
+    )
+}
+
+/// Assert that the PowerShell MAML help renders every declared value placeholder.
+///
+/// # Errors
+///
+/// Returns an error when the metadata declares no placeholders, or when the
+/// MAML help omits a declared placeholder or an expected distinct value name.
+fn assert_maml_value_placeholders(maml: &str) -> Result<()> {
+    assert_value_placeholders(
+        maml,
+        "MAML help",
+        |long, value_name| {
+            format!(
+                "<maml:name>--{long}</maml:name>\
+                 <command:parameterValue required=\"true\">{value_name}\
+                 </command:parameterValue>"
+            )
+        },
+        |value_name| {
+            format!(
+                "<command:parameterValue required=\"true\">{value_name}\
+                 </command:parameterValue>"
+            )
+        },
+    )
 }
 
 /// Verify the manual date selected from `SOURCE_DATE_EPOCH`.
@@ -351,6 +476,46 @@ fn fails_when_expected_help_output_is_missing(
     ensure!(
         stderr.contains("build_id=local-0"),
         "missing output annotation should include build id, got {stderr}"
+    );
+    Ok(())
+}
+
+/// Verify that a machine value name in generated help fails the release lane.
+///
+/// The real `cargo-orthohelp` substitutes a machine type name when the metadata
+/// declares no value name. This guard is the only check that reads the
+/// renderer's actual output, so it is the last line between a lost declaration
+/// and a published artefact.
+///
+/// # Errors
+///
+/// Returns an error when the fixture cannot be built, the script unexpectedly
+/// succeeds, or the failure diagnostics cannot be read or validated.
+#[rstest]
+#[case("x86_64-unknown-linux-gnu", "man", "UTF8PATHBUF")]
+#[case("x86_64-pc-windows-msvc", "ps", "USIZE")]
+fn fails_when_generated_help_publishes_a_machine_value_name(
+    script_fixture: Result<ScriptFixture>,
+    #[case] target: &str,
+    #[case] format: &str,
+    #[case] fallback: &str,
+) -> Result<()> {
+    let fixture = script_fixture?;
+    let output = run_release_help(
+        &fixture,
+        ReleaseHelpRun::for_target(target)
+            .source_date_epoch("1")
+            .fallback_value(format, fallback),
+    )?;
+
+    ensure!(
+        !output.status.success(),
+        "script should reject a {fallback} placeholder in {format} output: {output:?}"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("machine value names published") && stderr.contains(fallback),
+        "expected machine value name diagnostic naming {fallback}, got {stderr}"
     );
     Ok(())
 }
