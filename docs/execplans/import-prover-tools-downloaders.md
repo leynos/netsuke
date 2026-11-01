@@ -261,8 +261,14 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       (3 skipped) plus 28 helper tests, 90 CI-script tests, 7 prover-tools
       integration tests, Makefile validation, and diff checks. Logs share
       `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm3-assessment-regressions-final2.out`.
-- [ ] Publish the repaired candidate and request candidate-bound follow-up
-      confirmation on the two closed regression findings.
+- [x] (2026-11-01) Publish candidate `98e024e1edd053fe549012c6ee6ae7e4d93adc54`
+      and receive the completeness/correctness follow-up in
+      [comment 6562877623](https://github.com/leynos/netsuke/pull/1063#issuecomment-6562877623),
+      correlated with request 6562864047 and the original assessment. The
+      response confirms both regression gaps are satisfied and reports no
+      remaining in-scope implementation omission or confirmed correctness
+      defect. It requires hosted warm-cache acceptance before the plan can be
+      marked complete.
 - [ ] EP-M3: Complete hosted warm-cache acceptance, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
       the warm run requires a trusted `main` push.
@@ -396,12 +402,12 @@ published head: the dispatch run missed the new cache key, verified all 15 Kani
 harnesses, and passed mutation compilation. The completeness assessment
 confirmed no implementation defect but identified missing regression coverage
 for `make verus` failure propagation and Kani path precedence in a subsequent
-process. Those tests and the assessment follow-up remain in progress. A hosted
-warm cache remains unavailable until a trusted `main` run saves the new
-generation; a PR cannot perform that write. Both assessment regressions and the
-final 12-gate local sequence now pass. Candidate-bound assessment follow-up is
-pending publication; hosted warm-cache acceptance remains contingent on a
-trusted `main` cache writer.
+process. Both assessment regressions and the final 12-gate local sequence now
+pass. The completeness/correctness follow-up confirms the two coverage findings
+are satisfied on published head `98e024e1edd053fe549012c6ee6ae7e4d93adc54`; it
+found no remaining in-scope implementation omission or confirmed correctness
+defect. Hosted warm-cache acceptance remains contingent on a trusted `main`
+cache writer.
 
 ## Context and orientation
 
@@ -784,3 +790,9 @@ assessment-regression candidate, including the complete Rust and Python test
 suites. The two requested regression cases are closed; publish this candidate
 and request assessment follow-up. Hosted warm-cache acceptance still requires a
 trusted `main` cache writer.
+
+Revision 23 (2026-11-01): Record the candidate-bound assessment follow-up
+confirming both requested coverage findings are satisfied and no in-scope
+implementation omission or confirmed correctness defect remains. Keep the plan
+in progress until hosted warm-cache acceptance is observed from a trusted
+`main` run.
