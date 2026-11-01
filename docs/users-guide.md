@@ -817,7 +817,9 @@ portable unquoted shell word. ASCII letters, digits, `/`, `:`, comma, full
 stop, underscore, and hyphen are accepted; whitespace, control characters, and
 shell punctuation are rejected. This prevents an untrusted checkout filename
 from becoming shell syntax when `item` is interpolated into a `command` or
-`script`.
+`script`. On Unix, a matched filename that contains a literal backslash makes
+`glob()` fail with this shell-quoting error; the backslash is preserved rather
+than rewritten into a directory separator.
 
 ### Define reusable macros
 
