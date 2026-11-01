@@ -269,6 +269,34 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       remaining in-scope implementation omission or confirmed correctness
       defect. It requires hosted warm-cache acceptance before the plan can be
       marked complete.
+- [ ] Reconcile CodeRabbit's current-head review. Source verification confirms
+      that Make's PATH must prioritize the job-local `CARGO_HOME/bin` for both
+      Kani proof consumers, and the formal-verification guide must distinguish
+      CLI installation/version checking from direct `cargo kani` proof runs.
+      The new active-home regression failed on the old Make PATH and passes for
+      both custom and default Cargo homes after the correction. The review's
+      Python functions have docstrings; its Rust test functions are excluded
+      from rustdoc documentation by repository guidance. Add docs to the two
+      changed non-test Rust helpers. Explain this pre-merge warning in the
+      review thread after the full gates and before final reconciliation. The
+      first full gate attempt passed formatting but lint rejected a Boolean
+      positional test parameter. The second attempt passed formatting and that
+      check, then lint rejected one excess local; the test now derives both
+      paths directly from its named home case. Restart all gates from the
+      beginning. The third attempt passed formatting and failed lint on one
+      leftover reference to the removed Boolean local; that condition now uses
+      the named case string, so repeat the complete sequence again.
+      The fourth attempt passed formatting, lint, typecheck, and doc coverage
+      (98.23%) but markdownlint rejected `prioritise` under the repository's
+      Oxford `-ize` spelling gate. The wording now uses `prioritize`. A fifth
+      full sequence then passed all 12 gates, including 4,948 Rust tests (7
+      skipped) plus doctests, 1,669 workflow contracts (3 skipped) plus 28
+      helper tests, 90 CI-script tests, 7 prover-tools integration tests, and
+      98.23% doc coverage. `cs delta` found no issues. Logs share the
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-retry5.out`
+      suffix. The two inline repairs and the docstring-warning disposition
+      still require published-candidate confirmation before this review item
+      can be checked off.
 - [ ] EP-M3: Complete hosted warm-cache acceptance, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
       the warm run requires a trusted `main` push.
@@ -318,6 +346,14 @@ A bounded repository reconnaissance also found an active script inventory in
 `docs/developers-guide.md` under “CI helper scripts”. EP-M1 must update that
 inventory and the formal-verification installation description, while retaining
 the actionlint downloader and its shared support modules.
+
+The PR's formal CodeRabbit review found that the workflow's `GITHUB_PATH`
+publication alone does not control Kani command selection: each Make recipe
+rebuilds PATH and had placed `$HOME/.cargo/bin` ahead of a job-local
+`CARGO_HOME/bin`. The new workflow-contract regression invokes `make kani-ir`
+through a Cargo dispatcher and proves that the active Kani binary wins with
+both default and custom homes. The same review caught an overbroad guide
+sentence that implied Kani proof execution also delegates to the pinned CLI.
 
 ## Decision log
 
@@ -407,7 +443,10 @@ pass. The completeness/correctness follow-up confirms the two coverage findings
 are satisfied on published head `98e024e1edd053fe549012c6ee6ae7e4d93adc54`; it
 found no remaining in-scope implementation omission or confirmed correctness
 defect. Hosted warm-cache acceptance remains contingent on a trusted `main`
-cache writer.
+cache writer. The subsequent formal PR review independently found that Make's
+PATH recuration could select the wrong Kani binary and that the guide
+overstated CLI delegation. Both source corrections are now in the worktree, and
+the focused regression passes for default and custom Cargo homes.
 
 ## Context and orientation
 

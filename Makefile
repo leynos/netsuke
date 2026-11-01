@@ -23,6 +23,9 @@ APP ?= netsuke
 # started with instead, and what that environment exports to a shell function
 # is neither documented nor stable across Make releases.
 CARGO ?= cargo
+# Kani may be installed into a job-local Cargo home, which its subcommand
+# binary must precede the default home on the recipe PATH.
+CARGO_HOME ?= $(HOME)/.cargo
 # The default must be defined before the export: `export CARGO` on its own
 # would define the variable empty and shadow the `?=` default for every recipe.
 export CARGO
@@ -226,10 +229,12 @@ WHITAKER ?= whitaker
 # The build-tools install prefix leads: `-fuse-ld=mold` resolves by PATH order, so
 # the pinned release must outrank any distribution `mold`. Every build target
 # now links with it, so this is global rather than target-specific.
+# Put the active Cargo home first for `cargo kani`; when it is not overridden,
+# that remains the standard `$HOME/.cargo/bin` directory.
 # GO_BIN is appended after the three fixed directories so a tool present in
 # more than one location keeps its current precedence; CI's explicit
 # `ACTIONLINT=` override still wins over all of them.
-export PATH := $(BUILD_TOOLS_PREFIX)/bin:$(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
+export PATH := $(BUILD_TOOLS_PREFIX)/bin:$(CARGO_HOME)/bin:$(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary

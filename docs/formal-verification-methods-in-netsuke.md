@@ -50,15 +50,16 @@ and `src/ir/cmd_interpolate/verification.rs` (2). `src/ir/graph/kani_map.rs` is
 
 The Makefile pins `rust-prover-tools` to
 [`592558f7183b554fc749696246984c5d7300d029`][upstream]. Kani and Verus
-installation and execution delegate to that pinned CLI through `uv tool run`;
-the repository no longer carries a Kani downloader. `make install-kani` uses
-the verified prebuilt release on Linux x86_64 and keeps the Cargo compile
-fallback for other local hosts. CI passes explicit paths for the Kani front-end
-and verified archives. `make verus` defaults to
-`verus/canonical_value/main.rs`; callers can repeat `--proof-file` through
-`VERUS_FLAGS` to select an ordered batch. The runner stops at the first failed
-proof and returns the verifier's status. The developers' guide documents the
-commands and their local usage.
+installation, Kani version checking, and Verus proof execution delegate to that
+pinned CLI through `uv tool run`; `make kani-full` and `make kani-ir` execute
+the installed Kani directly through `cargo kani`. The repository no longer
+carries a Kani downloader. `make install-kani` uses the verified prebuilt
+release on Linux x86_64 and keeps the Cargo compile fallback for other local
+hosts. CI passes explicit paths for the Kani front-end and verified archives.
+`make verus` defaults to `verus/canonical_value/main.rs`; callers can repeat
+`--proof-file` through `VERUS_FLAGS` to select an ordered batch. The runner
+stops at the first failed proof and returns the verifier's status. The
+developers' guide documents the commands and their local usage.
 
 The composite [Kani cache action](../.github/actions/kani-cache/action.yml) owns
 `.kani-cargo`, `.kani-home`, and `.kani-rustup` under a key that includes the
