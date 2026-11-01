@@ -1118,13 +1118,65 @@ and YAML fixtures, and were set from the inventory in Table 1.
   aggregate, which reported no refusal from the `process` family (the plan's
   `hash` seed is inapplicable; see `Surprises & discoveries`)
   (`/tmp/epm3-obl11-fault-netsuke-7-1-2.out`).
+- [x] (2026-11-01) EP-M3 lint repairs. The first batch was red on Whitaker's
+  `module_max_lines`, and each repair unmasked the next offender because the
+  suite stops at the first failing target: `keys.rs` (401 raw lines) split to
+  `manifest_keys.rs` in `a347e9828`; `fidelity_property` (476 lines) plus a
+  `bumpy_road_function` finding in `corpus_fidelity::compare` repaired in
+  `57b925375`; and `test_mode_tests` (448 lines) split into
+  `{mod,probe_rows,registration_scan,refusal_text}.rs` in that same commit.
+  Focused evidence: 7 surface-contract unit tests and 15
+  `manifest_load_options` cases passed before the batch.
+- [x] (2026-11-01) EP-M3 workflow-contract repairs, `e5b1641d4`. The batch at
+  `57b925375`/`8d7f0bdf0` left only `make test-workflow-contracts` red:
+  `test_scope_covers_the_harness_closure` required
+  `src/manifest/test_surface.rs` and
+  `src/stdlib/restricted_helpers/test_mode.rs` in the Kani scope, and
+  `test_repository_modules_follow_directory_layout` rejected the
+  `('stdlib/restricted_helpers', 'test')` group. Both `sources` entries were
+  added in sorted position and `test_mode_tests/` was renamed to
+  `surface_contracts/` (see the Decision log). Re-run: 1520 passed / 3 skipped.
+- [x] (2026-11-01) EP-M3 nine-gate batch at `e5b1641d4`: **all nine green** in
+  16 m 45 s against one unchanged HEAD and a clean tree. check-fmt 2 s,
+  typecheck 162 s, lint 201 s (aggregate, every phase verified), doc-coverage
+  16 s at 98.27 %, test 133 s (4855 passed / 7 skipped, doctests included),
+  markdownlint 22 s, nixie 2 s, test-workflow-contracts 138 s (1520 passed / 3
+  skipped), test-package-verify 329 s. Logs `/tmp/gate<N>-…-e5b1641.out`;
+  per-gate status records `/tmp/netsuke-gates-e5b1641/gate<N>.json`. The
+  batch's own suite report proves the two previously-red node IDs are unmarked,
+  so their absence from the `-q` dot output cannot hide a skip.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [x] EP-M2 — options entry point and thin wrappers.
-- [ ] EP-M3 — `StdlibRegistration::Test`.
+- [x] EP-M3 — `StdlibRegistration::Test`.
 - [ ] EP-M4 — template overlays.
 - [ ] EP-M5 — documentation, ADR, and roadmap closure.
 
 ## Surprises & discoveries
+
+- Observation: Whitaker's `module_max_lines` stops the run at the first failing
+  target, so each repair unmasked the next offender and EP-M3 needed three
+  consecutive rounds: `keys.rs` at 401 raw lines, then `fidelity_property` at
+  476 beside a `bumpy_road_function` finding in `corpus_fidelity::compare`, then
+  `test_mode_tests` at 448. Impact: one red report understates the work;
+  budget a serial loop until `make lint-whitaker` exits 0 rather than a single
+  repair. The house layout is `foo/mod.rs` plus a plain `mod child;`; `#[path]`
+  children are the retired pattern and `clippy::self_named_module_files` denies
+  the alternative. Date/Author: 2026-11-01, implementation agent.
+
+- Observation: `rust_module_layout_test.py` accepts a shared-prefix sibling
+  group only when the collision is coincidental, which is exactly what an
+  exception's rationale must argue. `test_mode.rs` beside `test_mode_tests/`
+  collides because the directory tests that file, so no truthful rationale
+  existed. Impact: the repair is a rename, not an allowlist entry; the module
+  is now `surface_contracts/`, declared `#[cfg(test)] mod surface_contracts;`.
+  Date/Author: 2026-11-01, implementation agent.
+
+- Observation: `kani_proof_scope_test.py` recomputes the harness closure from
+  the sources each proof reaches, so adding loader sources silently widens the
+  required scope. EP-M3's `test_surface.rs` and `test_mode.rs` were reachable
+  and unlisted. Impact: a milestone that adds a module reachable from a Kani
+  harness must add its `sources` entry, in sorted position, in the same commit.
+  Date/Author: 2026-11-01, implementation agent.
 
 - Observation: a gate batch can outlive the tool call that started it, and on
   this host it did. The first dispatch of the `427c175d5` batch stalled at the
@@ -1655,6 +1707,16 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `tests.rs`. Rationale: the existing `tests.rs` is near the 400-line cap, and
   the new rows are a coherent unit about the test surface rather than more
   query-refusal cases. Date/Author: 2026-10-31, implementation agent in EP-M3.
+
+- Decision: those rows live in
+  `src/stdlib/restricted_helpers/surface_contracts/`, a directory module, not
+  in a `test_mode_tests/` directory. Rationale: the module-layout contract
+  rejects a shared `test` prefix between `test_mode.rs` and a sibling directory
+  unless the collision is coincidental, and this one is not — the directory
+  tests that file. Renaming keeps both the contract and its docstring truthful,
+  where an exception entry would have had to argue a coincidence the code
+  contradicts. The declaration is `#[cfg(test)]`, so no production path moves.
+  Date/Author: 2026-11-01, implementation agent in EP-M3.
 
 - Decision: OBL-11's non-vacuity seed is the real `shell` filter rather than
   the documented `hash` filter. Rationale: no corpus manifest uses `hash`, so
