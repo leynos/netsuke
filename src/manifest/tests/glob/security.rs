@@ -86,46 +86,36 @@ fn jinja_glob_rejects_every_representative_shell_requiring_filename(
     Ok(())
 }
 
+/// One unsafe match fails the whole expansion, whether the offending byte is
+/// shell punctuation or a literal Unix backslash that must stay part of the
+/// filename rather than being rewritten into an accepted separator.
 #[cfg(unix)]
 #[rstest]
-fn jinja_glob_rejects_a_match_set_containing_safe_and_unsafe_paths() -> Result<()> {
+#[case::shell_punctuation(
+    "unsafe;file.txt",
+    "one unsafe match must stop the complete glob expansion"
+)]
+#[case::literal_backslash(
+    r"nested\leaf.txt",
+    "a preserved backslash must stop the complete glob expansion"
+)]
+fn jinja_glob_rejects_a_match_set_containing_safe_and_unsafe_paths(
+    #[case] unsafe_filename: &str,
+    #[case] expectation: &str,
+) -> Result<()> {
     let temp = tempdir()?;
     test_fs::write(temp.path().join("safe-file_1.txt"), "ordinary filename")?;
     test_fs::write(
-        temp.path().join("unsafe;file.txt"),
+        temp.path().join(unsafe_filename),
         "attacker-controlled filename",
     )?;
     let pattern = format!("{}/*.txt", temp.path().display());
 
-    let error = from_str(&glob_manifest(&pattern))
-        .expect_err("one unsafe match must stop the complete glob expansion");
+    let error = from_str(&glob_manifest(&pattern)).expect_err(expectation);
     let diagnostic = format!("{error:#}");
     ensure!(
         diagnostic.contains("characters that require shell quoting"),
-        "unexpected diagnostic: {diagnostic}"
-    );
-    Ok(())
-}
-
-/// A literal Unix backslash must be rejected as shell-sensitive rather than
-/// rewritten into an accepted directory separator.
-#[cfg(unix)]
-#[rstest]
-fn jinja_glob_rejects_a_literal_backslash_in_a_mixed_match_set() -> Result<()> {
-    let temp = tempdir()?;
-    test_fs::write(temp.path().join("safe-file_1.txt"), "ordinary filename")?;
-    test_fs::write(
-        temp.path().join(r"nested\leaf.txt"),
-        "attacker-controlled filename",
-    )?;
-    let pattern = format!("{}/*.txt", temp.path().display());
-
-    let error = from_str(&glob_manifest(&pattern))
-        .expect_err("a preserved backslash must stop the complete glob expansion");
-    let diagnostic = format!("{error:#}");
-    ensure!(
-        diagnostic.contains("characters that require shell quoting"),
-        "unexpected diagnostic: {diagnostic}"
+        "unexpected diagnostic for {unsafe_filename:?}: {diagnostic}"
     );
     Ok(())
 }
