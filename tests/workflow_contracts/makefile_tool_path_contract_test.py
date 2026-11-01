@@ -174,6 +174,52 @@ def test_makefile_curates_the_go_tool_directory_on_path(
     )
 
 
+@pytest.mark.parametrize("cargo_home_kind", ["default", "custom"])
+def test_kani_uses_the_active_cargo_home_before_other_kani_binaries(
+    tmp_path: Path, cargo_home_kind: str
+) -> None:
+    """Resolve ``cargo-kani`` from the active home, preserving default precedence."""
+    home = tmp_path / "home"
+    default_cargo_home = home / ".cargo"
+    active_cargo_home = (
+        default_cargo_home
+        if cargo_home_kind == "default"
+        else tmp_path / "custom-cargo"
+    )
+    conflicting_cargo_home = (
+        tmp_path / "conflicting-cargo"
+        if cargo_home_kind == "default"
+        else default_cargo_home
+    )
+    active_marker = tmp_path / "active-kani-invoked"
+    conflicting_marker = tmp_path / "conflicting-kani-invoked"
+    fake_cargo_bin = tmp_path / "fake-cargo-bin"
+    fake_cargo = fake_cargo_bin / "cargo"
+    fake_cargo.parent.mkdir()
+    fake_cargo.write_text('#!/bin/sh\nshift\nexec cargo-kani "$@"\n', encoding="utf-8")
+    fake_cargo.chmod(0o755)
+    _write_stub(active_cargo_home / "bin" / "cargo-kani", active_marker)
+    _write_stub(conflicting_cargo_home / "bin" / "cargo-kani", conflicting_marker)
+
+    overrides = {
+        "PATH": f"{conflicting_cargo_home / 'bin'}:{fake_cargo_bin}:{MINIMAL_PATH}"
+    }
+    if cargo_home_kind != "default":
+        overrides["CARGO_HOME"] = str(active_cargo_home)
+
+    result = _run_make(home, "KANI_FLAGS=--version", "kani-ir", **overrides)
+
+    assert result.returncode == 0, (
+        f"the Kani Make target should execute successfully; stderr was: {result.stderr}"
+    )
+    assert active_marker.exists(), (
+        "cargo kani must resolve cargo-kani from the active CARGO_HOME"
+    )
+    assert not conflicting_marker.exists(), (
+        "another cargo-kani later on PATH must not override the active installation"
+    )
+
+
 @pytest.mark.parametrize("go_environment", GO_TOOL_DIRECTORY_CASES)
 def test_github_actions_lint_finds_a_go_installed_actionlint(
     tmp_path: Path, go_environment: GoEnvironment

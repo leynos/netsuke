@@ -42,6 +42,11 @@ impl FakeProverTools {
         })
     }
 
+    /// Read the arguments recorded by the fake executable.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the invocation log cannot be read.
     fn invocation_args(&self) -> Result<Vec<String>> {
         fs::read_to_string(&self.invocation_log)
             .with_context(|| format!("read {}", self.invocation_log.display()))
@@ -101,6 +106,11 @@ impl ProverMakeCase {
     }
 }
 
+/// Write an executable fake that records each prover-tools argument.
+///
+/// # Errors
+///
+/// Returns an error if the script cannot be written or marked executable.
 fn write_fake_prover_tools(executable: &Path, invocation_log: &Path) -> Result<()> {
     let script = format!(
         r#"#!/bin/sh
