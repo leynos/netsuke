@@ -80,6 +80,7 @@ Table 2: manifest and build-model terms
 | order-only dependency | `order-only dependency` | —                                            | `weak dependency`             |
 | build graph           | `build graph`           | `dependency graph`; `graph`                  | —                             |
 | build edge            | `build edge`            | `edge`                                       | —                             |
+| pool                  | `pool`                  | `Ninja pool`; `console pool`; `custom pool`  | `queue`; `thread pool`        |
 | phony target          | `phony target`          | `implicitly phony target`                    | `fake target`; `false target` |
 | default target        | `default target`        | `manifest default`                           | —                             |
 | build                 | `build` (noun and verb) | `build run`                                  | `compilation` (generic use)   |
@@ -2248,7 +2249,7 @@ inappropriately casual for a build tool's diagnostics.
 Several Netsuke terms conventionally stay as English loan words in Romanian
 technical writing: **build** (as a noun, e.g. "un build reușit"), **cache**,
 **template** (though "șablon" is also common and preferred for Netsuke's Jinja
-templates), **stdlib**, **dyndep**, **phony**, and **pipeline**.
+templates), **stdlib**, **dyndep**, **phony**, **pool**, and **pipeline**.
 **Allowlist**/**blocklist** are calqued, not borrowed, per Microsoft's
 inclusive-language table (see below). **Macro** and **glob** are established
 loans that need no gloss. Loans are written in Latin script with standard
@@ -2284,6 +2285,7 @@ Table 31: Romanian terminology
 | target                 | țintă                               | Distinct from acțiune/regulă; standard in Romanian Makefile/build tutorials.                                                             |
 | action                 | acțiune                             | Netsuke's implicitly phony target; keep distinct from țintă and regulă.                                                                  |
 | rule                   | regulă                              | The Ninja rule construct a target references.                                                                                            |
+| pool                   | pool                                | Loan word, like "build" and "cache", whose definite article also takes a hyphen: "pool-ul consolei", "pool-ul personalizat".             |
 | dependency             | dependență (pl. dependențe)         | Standard Romanian computing term.                                                                                                        |
 | order-only dependency  | dependență doar-de-ordine           | Calque; gloss as "dependență ce `impune` doar ordinea" on first use if needed.                                                           |
 | build (noun)           | build                               | Loan word; widely used untranslated in Romanian developer writing, e.g. "un build reușit".                                               |
@@ -2801,6 +2803,7 @@ Table 37: Vietnamese terminology
 | target                 | mục tiêu                       | Follows [Bazel Vietnamese docs](https://bazel.build/versions/7.4.0/extending/rules?hl=vi); "đích" also seen in GNU Make/manpage translations              |
 | action                 | hành động                      | Follows [Bazel Action docs](https://bazel.build/rules/lib/builtins/Action?hl=vi); distinct from "thao tác" (operation)                                    |
 | rule                   | quy tắc                        | Confirmed across Bazel, gcc, and Poedit `vi.po` translations                                                                                              |
+| pool                   | pool                           | Loan word; compounds stay uninflected: "pool console", "pool tùy chỉnh". Avoid "nhóm" (generic group).                                                    |
 | dependency             | phần phụ thuộc                 | Confirmed in Bazel, Git, and Debian apt `vi.po` translations                                                                                              |
 | order-only dependency  | phần phụ thuộc chỉ theo thứ tự | Calque; Ninja's order-only concept has no established Vietnamese term                                                                                     |
 | build (noun)           | bản dựng                       | Confirmed in [Bazel Vietnamese user manual](https://bazel.build/versions/8.1.0/docs/user-manual?hl=vi)                                                    |
