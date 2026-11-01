@@ -117,7 +117,9 @@ def _normalise_github_digest(reported: object) -> str | None:
     return digest or None
 
 
-def _expected(identity_path: pathlib.Path) -> dict[str, str]:
+def _expected(
+    identity_path: pathlib.Path,
+) -> release_digest_record.DigestRecord:
     """Return the digest each declared asset must have, keyed by name.
 
     The declared set is the record's assets rather than the listing's, so an
@@ -131,8 +133,9 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
 
     Returns
     -------
-    dict[str, str]
-        Asset name to its expected bare hexadecimal digest.
+    release_digest_record.DigestRecord
+        The validated record, mapping each asset name to its expected bare
+        hexadecimal digest.
 
     Raises
     ------
@@ -165,7 +168,7 @@ def _expected(identity_path: pathlib.Path) -> dict[str, str]:
     ...     _ = good.write_text(
     ...         json.dumps({"assets": {"a.tar.gz": digest}}), encoding="utf-8"
     ...     )
-    ...     _expected(good) == {"a.tar.gz": digest}
+    ...     _expected(good).as_mapping() == {"a.tar.gz": digest}
     True
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     empty = Path(tmp) / "empty.json"
@@ -226,7 +229,7 @@ def main(argv: list[str] | None = None) -> int:
     except InputUnreadableError as error:
         print(f"digest record unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
-    return _reconcile_listing(expected, arguments.assets, arguments.output)
+    return _reconcile_listing(expected.as_mapping(), arguments.assets, arguments.output)
 
 
 def _reconcile_listing(
