@@ -6,11 +6,11 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: APPROVED
+Status: IN PROGRESS
 
 Approved by the user on 2026-11-01, with the D-03 and D-12 recommendations
-accepted. The status moves to `IN PROGRESS` when EP-M1 starts, and to
-`COMPLETE` only after EP-M5's reconciliation. These are the only values
+accepted. EP-M1 started on 2026-11-01, so the status is `IN PROGRESS`; it moves
+to `COMPLETE` only after EP-M5's reconciliation. These are the only values
 `tests/execplan_status_contract_tests.rs` accepts.
 
 ## Purpose / big picture
@@ -252,7 +252,16 @@ conflict in `Decision log`, and escalate.
 - [x] (2026-11-01) Plan approved by the user; D-03 and D-12 accepted. RFC
   0006 table 3 gains an output-content row under D-12, and the ADR number is
   re-derived across all branches before the ADR is committed.
-- [ ] EP-M1: characterized toolchain.
+- [x] (2026-11-01) EP-M1: characterized toolchain. The branch was rebased onto
+  `origin/main` and force-pushed with lease to `ccf076040` before this
+  milestone; `make check-fmt`, `make markdownlint`, `make typecheck`,
+  `make test` (4938 nextest tests plus doctests), and `make lint` all passed on
+  that head. `make check-build-tools` reports mold 2.41.0 and
+  `nightly-2026-10-22`; `make kani-check` reports Kani 0.67.0, matching
+  `tools/kani/VERSION`. Recorded versions: rustc 1.101.0-nightly (`1a2c4797e`
+  2026-10-21), cargo 1.101.0-nightly (`3960fa69b` 2026-10-12), cargo-nextest
+  0.9.133, and Verus 0.2026.10.04.426d8b0 installed under
+  `.verus/0.2026.10.04.426d8b0/verus/`. No production file changed.
 - [ ] EP-M2: checked cardinality kernels and admission.
 - [ ] EP-M3: input length, nesting depth, running totals, and refusal
   rendering.
@@ -315,6 +324,30 @@ conflict in `Decision log`, and escalate.
   branch is 056 (`issue-592-…`), so the next free number is 057. Evidence:
   remote-branch sweep on 2026-10-17. Impact: the ADR in EP-M5 is provisionally
   ADR-057 and must be re-derived immediately before it is committed.
+- Observation: the installed Verus 0.2026.10.04.426d8b0 runs offline from
+  `.verus/0.2026.10.04.426d8b0/verus/`. `rust_verify` needs two variables that
+  the wrapper does not set for a direct invocation: `VERUS_Z3_PATH` pointing at
+  the sibling `z3`, and an `LD_LIBRARY_PATH` whose `librustc_driver` hash
+  matches the toolchain the binary was built against. Evidence: without them
+  the run fails 128 with
+  `could not execute z3 process (No such file or directory)` or
+  `error while loading shared libraries: librustc_driver-…so`. Impact: EP-M4
+  uses `make verus`, which supplies both, rather than calling `rust_verify`
+  directly.
+- Observation: three Verus syntax facts that cost a full diagnostic round each.
+  Only one `ensures` clause is permitted per function, with conditions
+  separated by commas; `by (nonlinear_arith)` attaches to an `assert` statement
+  rather than to an `ensures` clause; and unfolding a recursive `open spec fn`
+  is fuel-limited, so a concrete witness such as `2^64` needs
+  `reveal_with_fuel(spec_power, 65)` rather than a bare assertion. Evidence:
+  isolated scratch files under `/tmp/6-1-3-verus-check/`. Impact: the EP-M4
+  proof is written to these shapes.
+- Observation: `vstd::arithmetic::div_mod::lemma_div_multiples_vanish(x, d)`
+  states `(d * x) / d == x`, with the divisor leading, so bridging it to the
+  binomial loop's numerator-leading product needs an explicit commutativity
+  `assert … by (nonlinear_arith)`. Evidence: `/tmp/6-1-3-verus-check/div4.rs`
+  verifies 3 obligations with that shape. Impact: the exact-division lemma in
+  the proof cites it rather than attempting the division directly.
 
 ## Decision log
 
