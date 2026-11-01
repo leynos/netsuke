@@ -72,6 +72,12 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
 - Medium impact, low likelihood: package resolution or upstream downloads are
   unavailable. Separate network setup evidence from offline integration tests;
   report infrastructure failures without claiming successful proof execution.
+- Medium impact, high likelihood after a cache-generation change: the hosted
+  warm-cache run cannot happen until a trusted push to `main` saves the new
+  generation. Pull requests and manual dispatches cannot write that key. Verify
+  cache behaviour locally with disposable paths, record a hosted cold run, and
+  leave the hosted warm run pending until the repository's authorized main
+  workflow populates the key.
 
 ## Progress
 
@@ -164,7 +170,42 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       `fc989b9d631a245e08bb59eb646d346316b1e1cb` and review the exact range
       from `0e0dcbb047b03960127319d919674d604a08a0a4`. CodeRabbit completed
       against all five EP-M2 paths with zero findings.
-- [ ] EP-M3: Complete real-tool acceptance and documentation reconciliation.
+- [x] (2026-11-01) Install Kani 0.67.0 and Verus
+      0.2026.10.04.426d8b0 through the pinned shared CLI. `make kani-check`
+      passed. The bounded Kani suite first timed out twice at its eight-minute
+      cap while compiling cold dependencies, then passed all 15 harnesses on a
+      warm compile; all invocations used the documented systemd scope.
+- [x] (2026-11-01) Exercise Kani installation with disposable install, archive,
+      and `KANI_HOME` paths while leaving shared `CARGO_HOME` untouched. Cold
+      install succeeded; a warm install preserved both verified archive hashes;
+      deleting the disposable `cargo-kani` executable was repaired; corrupting
+      the disposable verifier archive caused it to be replaced with its pinned
+      SHA-256. Logs are under `/tmp/kani-disposable-*-netsuke-import-prover-tools.out`.
+- [x] (2026-11-01) Verify the canonical Verus proof (16 verified), a two-file
+      batch (16 verified per file), and a batch whose second temporary proof
+      contains `assert(false)` (nonzero exit, 15 verified and one error, stopped
+      at that file with the first path reported as proved). No tracked proof
+      source changed.
+- [x] (2026-11-01) Run the first full EP-M3 gate sequence. Eleven gates passed,
+      including 4,947 Rust tests, 1,666 workflow contracts, 90 CI-script tests,
+      7 pinned-CLI integration tests, and 98.23% doc coverage. Markdownlint
+      found one US spelling in the new cache-risk note; the remaining gates
+      completed and passed. Logs share the
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm3-candidate.out`
+      suffix.
+- [x] (2026-11-01) Correct the spelling and remove only the task-created
+      default Kani archive cache before the final gate run.
+- [x] (2026-11-01) Rerun all 12 EP-M3 gates after the spelling fix and plan
+      evidence update. Formatting, lint, typecheck, doc coverage (98.23%),
+      Markdown, Mermaid, Rust tests (4,947 passed, 7 skipped plus doctests),
+      workflow contracts (1,666 passed, 3 skipped plus 28 helper tests), CI
+      scripts (90 passed), prover-tools integration (7 passed), Makefile
+      validation, and diff checks all passed. Logs share the
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm3-spelling-fix-final.out`
+      suffix.
+- [ ] EP-M3: Complete the hosted Kani cache run, milestone review, and PR
+      assessment/delivery. A pull request cannot save the new cache generation;
+      the hosted warm run requires a trusted `main` push.
 
 ## Surprises & discoveries
 
@@ -234,6 +275,10 @@ the actionlint downloader and its shared support modules.
   without upstream prebuilt binaries. Default `make install-kani` to
   `--compile` outside Linux x86_64; CI's explicit install flags keep using the
   verified prebuilt archives and cache paths.
+- 2026-11-01: Keep hosted cache publication under the existing trusted-writer
+  policy. PRs and manual dispatches cannot seed the new generation, so local
+  disposable-cache runs establish warm reuse and repair while a hosted warm run
+  remains contingent on an authorized push to `main`.
 
 ## Outcomes & retrospective
 
@@ -271,7 +316,24 @@ including 4,947 Rust tests, 1,666 workflow contracts, 90 CI script tests and
 98.23% documentation coverage. EP-M2 is committed as
 `fc989b9d631a245e08bb59eb646d346316b1e1cb`; CodeRabbit reviewed its five-file
 delta from the M1 head and reported zero findings. Real-tool acceptance and
-documentation reconciliation remain for EP-M3.
+documentation reconciliation remain for EP-M3. Local real-tool acceptance has
+now passed: Kani 0.67.0 installed and version-checked, and all 15 existing
+harnesses passed in the documented bounded systemd scope after two cold-build
+attempts reached the eight-minute cap. Disposable cold and warm installations
+passed; both pinned archive hashes remained stable on the warm run, an absent
+`cargo-kani` executable was restored, and a corrupted verifier archive was
+replaced with its expected SHA-256. The shared Cargo home was not redirected.
+Verus 0.2026.10.04.426d8b0 verified the canonical proof (16 verified), both
+files in a real two-proof batch (16 verified each), and stopped at a false
+assertion in the second file with a nonzero status (15 verified, one error).
+The formal-verification guide now describes the current delegated commands and
+cache ownership. No Kani or Verus proof source changed, so this migration adds
+no theorem or harness. The first full EP-M3 gate sweep found one spelling error
+in the plan; after correcting it, all 12 gates passed, including 4,947 Rust
+tests, 1,666 workflow contracts, 90 CI-script tests, 7 pinned-CLI integration
+tests, and 98.23% doc coverage. Milestone review and the hosted cold-cache run
+remain outstanding. A hosted warm cache remains unavailable until a trusted
+`main` run saves the new generation; a PR cannot perform that write.
 
 ## Context and orientation
 
@@ -283,18 +345,14 @@ redaction, failure reporting and argv boundaries, including paths with spaces.
 
 `.github/workflows/ci.yml` owns the `kani-smoke` lane.
 `.github/actions/kani-cache/action.yml` restores and saves `.kani-cargo`,
-`.kani-home`, and `.kani-rustup` under a versioned, platform-qualified key.
-`tests/workflow_ci.rs` and `tests/workflow_contracts/kani_cache_test.py`
-currently require the bespoke installer and its `INPUT_*` checksum bindings.
-Scope and metrics contracts live beside the latter. The scope policy itself is
-`tools/kani/proof-scope.toml`; update only tooling entries if the removed
-installer is named, leaving the derived Rust source closure intact.
-
-`scripts/tests/test_ci_install_kani.py` tests the old installer.
-`scripts/tests/test_ci_scripts_metadata.py` inventories CI scripts, and
-`make test-ci-scripts` names their tests explicitly. These references must be
-updated atomically with deletion. Shared archive and containment tests remain
-because actionlint still uses that code.
+`.kani-home`, and `.kani-rustup` under a versioned, platform-qualified key;
+only a cache miss on a push to `main` can save it. `tests/workflow_ci.rs` and
+`tests/workflow_contracts/kani_cache_test.py` enforce the shared installer,
+cache paths, and write policy. `scripts/tests/test_ci_scripts_metadata.py`
+ensures the obsolete Kani downloader and test are absent. The scope policy in
+`tools/kani/proof-scope.toml` retains the proof-source closure while excluding
+the removed script from tooling metrics. Shared archive and containment helpers
+remain because actionlint still uses them.
 
 ## Conformance basis
 
@@ -314,13 +372,17 @@ The inspected upstream revision is
 define the external contract used below.
 
 - R1: Shared pinned acquisition replaces bespoke Kani CI installation.
-  Trace: EP-M1 to E1 installer wiring and E4 cold/warm real-tool evidence.
+  Trace: EP-M1 to E1 installer wiring and EP-M3 to E4 local cold/warm,
+  corruption-repair, real Kani, and hosted-cache evidence.
 - R2: Explicit ordered variadic Verus execution preserves failure.
-  Trace: EP-M2 to E2 argv tests and E3 pinned-CLI execution tests.
+  Trace: EP-M2 to E2 argv tests and E3 pinned-CLI execution tests; EP-M3 adds
+  the canonical proof, real ordered batch, and real first-failure result.
 - R3: Existing CI policy, checksums, redaction and domain isolation survive.
-  Trace: EP-M1 and EP-M2 to E1/E2, then EP-M3 to E4 and full gates.
+  Trace: EP-M1 and EP-M2 to E1/E2, then EP-M3 to E4 local archive fault
+  injection, the current cache-policy documentation, and full gates.
 - R4: Maintainers can reproduce and understand the supported commands.
-  Trace: EP-M1 and EP-M3 to developer/formal-verification guide updates and E4.
+  Trace: EP-M1 and EP-M3 to developer/formal-verification guide updates, actual
+  Kani and Verus invocation, and E4.
 
 [upstream]: https://github.com/leynos/rust-prover-tools/tree/592558f7183b554fc749696246984c5d7300d029
 
@@ -595,3 +657,13 @@ them before the final gate sequence and repeated CLI review.
 Revision 12 (2026-11-01): Record the final platform-fallback gate sequence. All
 11 gates passed after correcting the two spellings. Commit and repeated
 milestone review remain outstanding.
+
+Revision 13 (2026-11-01): Record Kani and Verus real-tool acceptance,
+disposable Kani cache reuse and repair checks, correct the current
+formal-verification state and cache write policy, and note the hosted
+warm-cache dependency on a trusted `main` run. The first documentation gate
+attempt found one spelling error.
+
+Revision 14 (2026-11-01): Correct the spelling, record the successful final
+EP-M3 local gate sequence, and leave hosted cache acceptance and
+review/delivery work pending.

@@ -5167,10 +5167,14 @@ installed command against the version file. Kani manages its own supporting
 Rust nightly toolchain during setup; CI gives that toolchain a separate cached
 `RUSTUP_HOME`. It must not replace the repository's pinned nightly workflow (see
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)).
-Upstream publishes prebuilt Kani only for Linux x86_64, so Make uses the
-verified archive there and defaults to `--compile` on other local hosts to
-preserve Cargo-based installation. The CI job supplies explicit install flags
-and stays on the prebuilt route. Kani 0.67.0's supporting nightly is
+The composite [Kani cache action](../.github/actions/kani-cache/action.yml)
+owns those three workspace-local directories under a key containing the runner
+lane and Kani version. It saves only a cache miss on a push to `main`; pull
+requests and manual dispatches cannot seed a cache generation. Upstream
+publishes prebuilt Kani only for Linux x86_64, so Make uses the verified
+archive there and defaults to `--compile` on other local hosts to preserve
+Cargo-based installation. The CI job supplies explicit install flags and stays
+on the prebuilt route. Kani 0.67.0's supporting nightly is
 `nightly-2025-11-21`, which predates the Polonius default, so Kani
 borrow-checks under NLL. That is currently harmless — the tree has no
 `POLONIUS(...)`-tagged sites — but a future tagged site could fail to verify
