@@ -9,7 +9,7 @@ use anyhow::{Context as _, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
-use super::super::{HelperKind, SURFACE};
+use super::super::{HelperKind, SURFACE, is_loader_owned};
 
 /// Return every literal `add_function`/`add_filter`/`add_test` registration.
 ///
@@ -116,10 +116,9 @@ fn every_inventory_name_is_registered_somewhere() -> Result<()> {
     let mut missing: Vec<&str> = SURFACE
         .iter()
         .filter(|entry| {
-            let is_loader_owned = matches!(entry.name, "env" | "glob");
             let is_loop_registered = entry.kind == HelperKind::Test;
             let is_scanned = scanned.iter().any(|(_, name)| name == entry.name);
-            !(is_loader_owned || is_loop_registered || is_scanned)
+            !(is_loader_owned(entry) || is_loop_registered || is_scanned)
         })
         .map(|entry| entry.name)
         .collect();

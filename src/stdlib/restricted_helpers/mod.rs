@@ -97,8 +97,10 @@ const fn helper(
 /// Inventory template registrations whose behaviour differs by load surface.
 ///
 /// Keep both query and test dispositions beside each registration. Query
-/// refusal stubs and the real file-test registration consume this list now;
-/// test-mode registration and its completeness contract consume it in EP-M3.
+/// refusal stubs, the real file-test registration, and `register_for_test`
+/// consume this list, and `surface_contracts` checks it in both directions:
+/// every row must have a reachable probe, and every literal registration in
+/// the source tree must appear here.
 const SURFACE: &[HelperEntry] = &[
     helper(
         "env",

@@ -1145,6 +1145,18 @@ and YAML fixtures, and were set from the inventory in Table 1.
   per-gate status records `/tmp/netsuke-gates-e5b1641/gate<N>.json`. The
   batch's own suite report proves the two previously-red node IDs are unmarked,
   so their absence from the `-q` dot output cannot hide a skip.
+- [x] (2026-11-01) EP-M3 milestone CodeRabbit CLI review at `0070b8857`.
+  `coderabbit review --agent --committed --base origin/main` (CLI 0.9.2,
+  `origin/main` `da06ffb11`) returned `review_completed`, exit 0, in 572 s
+  over 128 files with six concerns: three minor, three trivial, none major or
+  critical. The organization-wide quota had recovered (2 of 10 remaining
+  afterwards). All six were verified against the current tree and repaired:
+  two plan-file citations (the nextest filter named `load_options`; RFC 0007
+  was cited without its `rfc-` prefix), the stale "consume it in EP-M3" note
+  on `SURFACE`, a restated `is_loader_owned` predicate in the registration
+  scan, the substring-derived call-shape table in `refusal_text.rs`, and a
+  `concat!` failure message whose `{build}`/`{test}` captures never
+  interpolated. Log `/tmp/epm3-coderabbit-review-0070b8857.out`.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [x] EP-M2 — options entry point and thin wrappers.
 - [x] EP-M3 — `StdlibRegistration::Test`.
@@ -2021,7 +2033,7 @@ Not started.
 
 Upstream artefacts, at `main` commit `486b876c`:
 
-- RFC 0007, `docs/rfcs/0007-netsukefile-testing-framework.md` — scope.
+- RFC 0007, `docs/rfcs/rfc-0007-netsukefile-testing-framework.md` — scope.
 - Technical design, `docs/netsuke-test-framework-technical-design.md` (status
   Draft): TD-4.2 (extend `StdlibRegistration`; reuse the refusal mechanism and
   `disabled_env_reader`), TD-4.3 (options, overlays, registration order steps
@@ -2643,7 +2655,7 @@ gates rather than invalidating it:
 export RUSTFLAGS="-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold"
 cargo nextest run --workspace --all-features --test manifest_load_options_tests \
   2>&1 | tee /tmp/focus-netsuke-7-1-2.out
-cargo nextest run --workspace --all-features --lib -E 'test(/manifest::tests::(load_options|test_mode|overlays)/)' \
+cargo nextest run --workspace --all-features --lib -E 'test(/manifest::tests::(loader_options|test_mode|overlays)/)' \
   2>&1 | tee -a /tmp/focus-netsuke-7-1-2.out
 ```
 

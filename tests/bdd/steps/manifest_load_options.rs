@@ -161,11 +161,7 @@ fn both_loads_agree(world: &TestWorld) -> Result<()> {
         .context("the test load must have run")?;
     ensure!(
         build == test,
-        concat!(
-            "the surfaces emitted different Ninja text.\n",
-            "Build:\n{build}\n",
-            "Test:\n{test}"
-        )
+        "the surfaces emitted different Ninja text.\nBuild:\n{build}\nTest:\n{test}"
     );
     Ok(())
 }

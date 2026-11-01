@@ -81,27 +81,16 @@ fn refusals_carry_a_typed_source() -> Result<()> {
 #[test]
 fn refusals_accept_any_call_shape() -> Result<()> {
     let env = refusal_environment();
-    for expression in [
-        "{{ fetch('https://example.invalid') }}",
-        "{{ fetch(url='https://example.invalid') }}",
-        "{{ 'probe' | hash('sha256') }}",
-        "{{ 'probe' | hash() }}",
-        "{{ 'probe' is file }}",
+    for (expression, operation) in [
+        ("{{ fetch('https://example.invalid') }}", "fetch"),
+        ("{{ fetch(url='https://example.invalid') }}", "fetch"),
+        ("{{ 'probe' | hash('sha256') }}", "hash"),
+        ("{{ 'probe' | hash() }}", "hash"),
+        ("{{ 'probe' is file }}", "file"),
     ] {
-        assert_typed_refusal(&env, expression, expr_operation(expression))?;
+        assert_typed_refusal(&env, expression, operation)?;
     }
     Ok(())
-}
-
-/// Return the helper name an expression in the call-shape table exercises.
-fn expr_operation(expression: &str) -> &'static str {
-    if expression.contains("fetch") {
-        "fetch"
-    } else if expression.contains("hash") {
-        "hash"
-    } else {
-        "file"
-    }
 }
 
 /// Pin the English refusal text for one helper.
