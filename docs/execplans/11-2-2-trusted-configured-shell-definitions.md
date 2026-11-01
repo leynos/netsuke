@@ -120,6 +120,9 @@ explicit and exercise the actual adapters in tests.
     (17 of 17: six classifier cases, four properties with their witness, four
     differential cases, and the two pre-existing project-key tests) and the
     end-to-end rejection suite passes (7 of 7), after `make fmt`.
+  - [x] 2026-11-01: Repair the M1 Clippy findings the library-only abort
+    masked, extracting `ProjectKey` into its own module and grouping the
+    discovery merge inputs into `RootTrust` and `ProjectScope`.
   - [ ] 2026-11-01: Run the M1 gate set and the milestone CLI review.
 - [ ] M2: Add validated definitions, append merging, and collision proof.
 - [ ] M3: Complete behavioural evidence, documentation, and delivery.
@@ -184,6 +187,13 @@ configuration hit exactly this and failed with a bare
 `No such file or directory` before the fix, which is why the success path is
 exercised rather than assumed.
 
+The first `lint-clippy` run stopped on the library's five findings, so Clippy
+never compiled the test targets and six further findings in
+`src/cli/discovery/layers/tests/` and `tests/cli_tests/` stayed hidden until
+the gate was re-run after that repair. A green Clippy result therefore only
+covers the targets Clippy reached, and any batch that aborted must be repeated
+in full rather than resumed from the first passing phase.
+
 The branch never edits `typos.toml`. The earlier spelling gate regenerated it
 in place; the rebase onto the current `origin/main` (`5f0a4d123`) delivered
 exactly that regenerated content from upstream, so the working-tree difference
@@ -239,6 +249,12 @@ disappeared and no separate refresh pull request is needed.
   authority call sites. Conflating the two would have silently changed
   deduplication on a normalization failure, which
   `normalization_failure_does_not_fail_discovery` pins.
+- 2026-11-01: Group the discovery merge inputs into `RootTrust` and
+  `ProjectScope`, and move `ProjectKey` into
+  `src/cli/discovery/layers/project_key.rs`. The repository's four-argument
+  limit and its 400-line file boundary both bind here; grouping related
+  evidence and splitting by responsibility are the documented remedies, and
+  neither weakens the authority rule the parameters carry.
 - 2026-11-01: Discharge the C1 property obligation against the classifier
   directly, not only through the written cases. The generator covers every
   (root trust, occurrence location, shells declared) combination, a separate
