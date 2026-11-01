@@ -1,0 +1,182 @@
+name: Publish crate to crates.io
+description: >-
+  Validate and publish the retained package-crate archive only when crates.io
+  does not already contain the same version and bytes.
+
+inputs:
+  identity-path:
+    description: Path to the package-crate identity record.
+    required: true
+  archive-directory:
+    description: Directory containing the one archive named by the identity.
+    required: true
+  tag:
+    description: Validated release tag for this publishing run.
+    required: true
+  commit:
+    description: Full commit SHA that produced the candidate.
+    required: true
+  package-name:
+    description: Expected Cargo package name from release metadata.
+    required: true
+  version:
+    description: Expected Cargo package version from release metadata.
+    required: true
+
+outputs:
+  action:
+    description: Registry decision, either publish or skip.
+    value: ${{ steps.decision.outputs.action }}
+  crate-name:
+    description: Archive basename recorded by package-crate.
+    value: ${{ steps.candidate.outputs.crate-name }}
+  sha256:
+    description: Digest of the validated candidate archive.
+    value: ${{ steps.candidate.outputs.sha256 }}
+  verified-sha256:
+    description: Digest of the downloaded registry archive.
+    value: ${{ steps.verify.outputs.sha256 }}
+
+runs:
+  using: composite
+  steps:
+    - id: candidate
+      name: Validate the packaged candidate
+      shell: bash
+      env:
+        IDENTITY_PATH: ${{ inputs['identity-path'] }}
+        ARCHIVE_DIRECTORY: ${{ inputs['archive-directory'] }}
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_PACKAGE_NAME: ${{ inputs['package-name'] }}
+        RELEASE_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        uv run --no-project --python 3.14 scripts/crates_io_candidate_cli.py check \
+          --identity "$IDENTITY_PATH" \
+          --archive-directory "$ARCHIVE_DIRECTORY" \
+          --tag "$RELEASE_TAG" \
+          --commit "$RELEASE_COMMIT" \
+          --package-name "$RELEASE_PACKAGE_NAME" \
+          --version "$RELEASE_VERSION" \
+          --output "$RUNNER_TEMP/crates-io-candidate.json"
+        crate_name="$(jq -r '.crate' "$RUNNER_TEMP/crates-io-candidate.json")"
+        sha256="$(jq -r '.sha256' "$RUNNER_TEMP/crates-io-candidate.json")"
+        package_name="$(jq -r '.identity.package_name' "$RUNNER_TEMP/crates-io-candidate.json")"
+        {
+          printf 'crate-name=%s\n' "$crate_name"
+          printf 'sha256=%s\n' "$sha256"
+          printf 'package-name=%s\n' "$package_name"
+          printf 'crate-path=%s\n' "$ARCHIVE_DIRECTORY/$crate_name"
+        } >>"$GITHUB_OUTPUT"
+
+    - id: probe
+      name: Probe the registry before mutation
+      shell: bash
+      env:
+        CRATE_NAME: ${{ steps.candidate.outputs.package-name }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        PROBE_DIRECTORY: ${{ runner.temp }}/crates-io-probe
+      run: |
+        set -euo pipefail
+        mkdir -p "$PROBE_DIRECTORY"
+        uv run --no-project --python 3.14 scripts/crates_io_transport_cli.py probe \
+          --crate "$CRATE_NAME" \
+          --version "$RELEASE_VERSION" \
+          --status-file "$PROBE_DIRECTORY/status" \
+          --body-file "$PROBE_DIRECTORY/body"
+
+    - id: decision
+      name: Classify registry state
+      shell: bash
+      env:
+        CANDIDATE_SHA256: ${{ steps.candidate.outputs.sha256 }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        PROBE_DIRECTORY: ${{ runner.temp }}/crates-io-probe
+        DECISION_PATH: ${{ runner.temp }}/crates-io-decision.json
+      run: |
+        set -euo pipefail
+        classify_args=(
+          classify
+          --status "$(cat "$PROBE_DIRECTORY/status")"
+          --version "$RELEASE_VERSION"
+          --sha256 "$CANDIDATE_SHA256"
+          --output "$DECISION_PATH"
+        )
+        if [[ -s "$PROBE_DIRECTORY/body" ]]; then
+          classify_args+=(--body "$PROBE_DIRECTORY/body")
+        fi
+        uv run --no-project --python 3.14 scripts/publish_crates_io_cli.py \
+          "${classify_args[@]}"
+        action="$(jq -r '.action' "$DECISION_PATH")"
+        printf 'action=%s\n' "$action" >>"$GITHUB_OUTPUT"
+
+    - id: auth
+      name: Exchange GitHub identity for a short-lived crates.io token
+      if: steps.decision.outputs.action == 'publish'
+      uses: rust-lang/crates-io-auth-action@3268eb413133e2960fa4ae0e963ca76380c54cd9
+
+    - id: metadata
+      name: Derive registry metadata from the retained archive
+      if: steps.decision.outputs.action == 'publish'
+      shell: bash
+      env:
+        CRATE_ARCHIVE: ${{ steps.candidate.outputs.crate-path }}
+        METADATA_PATH: ${{ runner.temp }}/crates-io-metadata.json
+      run: |
+        set -euo pipefail
+        uv run --no-project --python 3.14 scripts/crates_io_candidate_cli.py metadata \
+          --archive "$CRATE_ARCHIVE" \
+          --output "$METADATA_PATH"
+
+    - id: upload
+      name: Publish the unchanged archive bytes
+      if: steps.decision.outputs.action == 'publish'
+      shell: bash
+      env:
+        CRATE_ARCHIVE: ${{ steps.candidate.outputs.crate-path }}
+        METADATA_PATH: ${{ runner.temp }}/crates-io-metadata.json
+        CRATES_IO_TOKEN: ${{ steps.auth.outputs.token }}
+      run: |
+        set -euo pipefail
+        uv run --no-project --python 3.14 scripts/crates_io_transport_cli.py upload \
+          --metadata "$METADATA_PATH" \
+          --archive "$CRATE_ARCHIVE"
+
+    - id: download
+      name: Download the registry archive for byte verification
+      shell: bash
+      env:
+        CRATE_NAME: ${{ steps.candidate.outputs.package-name }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        DOWNLOAD_DIRECTORY: ${{ runner.temp }}/crates-io-download
+      run: |
+        set -euo pipefail
+        mkdir -p "$DOWNLOAD_DIRECTORY"
+        uv run --no-project --python 3.14 scripts/crates_io_transport_cli.py download \
+          --crate "$CRATE_NAME" \
+          --version "$RELEASE_VERSION" \
+          --archive "$DOWNLOAD_DIRECTORY/$CRATE_NAME-$RELEASE_VERSION.crate" \
+          --status-file "$DOWNLOAD_DIRECTORY/status"
+
+    - id: verify
+      name: Verify downloaded registry bytes
+      shell: bash
+      env:
+        CRATE_ARCHIVE: ${{ runner.temp }}/crates-io-download/${{ steps.candidate.outputs.package-name }}-${{ inputs.version }}.crate
+        CRATE_NAME: ${{ steps.candidate.outputs.package-name }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        CANDIDATE_SHA256: ${{ steps.candidate.outputs.sha256 }}
+        DOWNLOAD_STATUS: ${{ runner.temp }}/crates-io-download/status
+        VERIFICATION_PATH: ${{ runner.temp }}/crates-io-verification.json
+      run: |
+        set -euo pipefail
+        uv run --no-project --python 3.14 scripts/publish_crates_io_cli.py verify \
+          --archive "$CRATE_ARCHIVE" \
+          --crate "$CRATE_NAME" \
+          --version "$RELEASE_VERSION" \
+          --sha256 "$CANDIDATE_SHA256" \
+          --status "$(cat "$DOWNLOAD_STATUS")" \
+          --output "$VERIFICATION_PATH"
+        sha256="$(jq -r '.sha256' "$VERIFICATION_PATH")"
+        printf 'sha256=%s\n' "$sha256" >>"$GITHUB_OUTPUT"

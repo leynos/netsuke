@@ -1,8 +1,9 @@
 """Check network and external-effect boundaries in release modules.
 
-Every release source is network-free, and policy modules additionally avoid
-filesystem access, serialization, HTTP response vocabulary, and provider
-formats. Import spellings are easy to get subtly wrong:
+Only the registry transport CLI and its HTTP adapter may import a network client;
+policy modules additionally avoid filesystem access, serialization, HTTP
+response vocabulary, and provider formats. Import spellings are easy to get
+subtly wrong:
 ``import urllib.request``, ``from urllib import request``, and
 ``import urllib.request as fetch`` all reach the same client, while
 ``import release_digest`` reaches nothing.

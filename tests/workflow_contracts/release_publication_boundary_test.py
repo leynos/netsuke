@@ -16,20 +16,36 @@ from release_publication_imports import (
 )
 from release_publication_modules import (
     ADAPTER_MODULES,
+    NETWORK_FREE_MODULES,
     POLICY_MODULES,
     SOURCE_MODULES,
 )
 from workflow_loading import REPO_ROOT
 
 
-@pytest.mark.parametrize("module", SOURCE_MODULES)
+@pytest.mark.parametrize("module", NETWORK_FREE_MODULES)
 def test_release_sources_import_no_network_client(module: str) -> None:
-    """Keep every release source runnable without a network client."""
+    """Keep policy and non-transport release sources free of network clients."""
     source = (REPO_ROOT / module).read_text(encoding="utf-8")
     offenders = network_offenders(source)
     assert not offenders, (
         f"{module} imports {offenders!r}, so the release source is no longer "
         "network-free; move the request into the workflow step"
+    )
+
+
+@pytest.mark.parametrize(
+    "module",
+    [
+        "scripts/crates_io_transport_cli.py",
+        "scripts/crates_io_transport_http.py",
+    ],
+)
+def test_transport_sources_are_the_only_network_sources(module: str) -> None:
+    """Keep urllib within the bounded registry transport boundary."""
+    source = (REPO_ROOT / module).read_text(encoding="utf-8")
+    assert network_offenders(source), (
+        f"{module} must own an explicit part of registry HTTP transport"
     )
 
 
