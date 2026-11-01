@@ -2395,54 +2395,70 @@ durable decision.
 
 ## Release publication
 
-Publishing a release is split in two, and the split is the design rather than
-an accident of layering. The workflow is the only place that touches a network:
-it checks out, builds, packages, uploads artefacts, and calls the GitHub
-release API. Python policy modules decide what a published byte is from
-in-memory names, mappings, digests, and typed observations. CLI and adapter
-modules own filesystem access, serialization, registry response shapes, and
-GitHub's digest spelling. This keeps decisions independently testable without a
-release and makes the external formats visible at named boundaries; the
-contract tests hold that split as well as the no-network rule.
+The release workflow separates read-only package validation, crates.io
+publication, and GitHub release writing. The crates.io publisher consumes the
+candidate archive and identity from `package-crate`; it does not rebuild the
+package. Python policy modules decide what a published byte is from in-memory
+names, mappings, digests, and typed observations. CLI and adapter modules own
+filesystem access, serialization, registry response shapes, and GitHub's digest
+spelling. This keeps decisions independently testable without a release and
+makes the external formats visible at named boundaries; the contract tests hold
+that split as well as the no-network rule.
 
 ### The release job graph
 
-`release.yml` runs one build set for both modes and then branches into exactly
-one publication job.
+`release.yml` runs one build set for both modes. Pull-request rehearsals run
+the builds and package validation, while the registry publisher and GitHub
+writer are skipped. A tagged publishing run reaches the crates.io publisher and
+the separate GitHub release writer after their prerequisites succeed.
 
-| Job                           | Needs                                                       | `contents` | Mode                       |
-| ----------------------------- | ----------------------------------------------------------- | ---------- | -------------------------- |
-| `metadata`                    | —                                                           | `read`     | always                     |
-| `build-linux`                 | `metadata`                                                  | `read`     | always                     |
-| `build-windows`               | `metadata`                                                  | `read`     | always                     |
-| `build-macos`                 | `metadata`                                                  | `read`     | always                     |
-| `windows-native-recipe-smoke` | `metadata`, the three builds                                | `read`     | always                     |
-| `release-admission-canaries`  | `metadata`                                                  | `read`     | always                     |
-| `package-crate`               | `metadata`                                                  | `read`     | always                     |
-| `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `read`     | `dry_run == 'true'`        |
-| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `write`    | `should_publish == 'true'` |
+| Job                           | Needs                                                       | Permissions                         | Mode                           |
+| ----------------------------- | ----------------------------------------------------------- | ----------------------------------- | ------------------------------ |
+| `metadata`                    | —                                                           | `contents: read`                    | always                         |
+| `build-linux`                 | `metadata`                                                  | `contents: read`                    | always                         |
+| `build-windows`               | `metadata`                                                  | `contents: read`                    | always                         |
+| `build-macos`                 | `metadata`                                                  | `contents: read`                    | always                         |
+| `windows-native-recipe-smoke` | `metadata`                                                  | `contents: read`                    | publish or PR ready-for-review |
+| `release-admission-canaries`  | `metadata`                                                  | `contents: read`, `actions: read`   | always                         |
+| `package-crate`               | `metadata`                                                  | `contents: read`                    | always                         |
+| `publish-crates-io`           | all six validation jobs and `package-crate`                 | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
+| `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
+| `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
 
-*Table 1: `release.yml` jobs, their dependencies, their `contents` scope, and
-the mode each runs in.*
+*Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
 The workflow denies the default grant at the top (`permissions: {}`), so each
-job's token scope is the whole of what it holds. Only `publish-release` takes
-`contents: write`, because only it calls the release API;
-`release-admission-canaries` additionally takes `actions: read` to inspect
-prior runs.
+job's token scope is the whole of what it holds. `publish-crates-io` is
+declared in `release.yml` itself because crates.io Trusted Publishing
+identifies the workflow that requests the OIDC token. It has exactly
+`contents: read` and `id-token: write`, plus the `crates-io` environment. The
+short-lived token is exchanged only after the registry decision says `publish`.
+`publish-release` alone has `contents: write`; neither publishing job receives
+the other's authority. `release-admission-canaries` additionally takes
+`actions: read` to inspect prior runs.
 
 `release` and `publish-release` carry the same five-job dependency list and
 mutually exclusive guards, so a run is a rehearsal or a publication and never
 both. The guards are derived from `determine-release-modes`, which also supplies
 `should_publish` to the artefact upload so the upload stage and the jobs agree
-about the mode.
+about the mode. The registry job has seven prerequisites: `metadata`,
+`package-crate`, all three platform builds, `windows-native-recipe-smoke`, and
+`release-admission-canaries`. Its job-level condition requires every
+prerequisite to succeed, the run not to be cancelled, and
+`should_publish == 'true'`. Pull requests and dry runs therefore skip the job
+before requesting the `crates-io` environment or exchanging credentials.
 
-`package-crate` is deliberately absent from both publication jobs' `needs`. It
-packages the crate, records its identity, and uploads the pair as the
-`release-crate-package` artefact; the job that consumes that artefact is the
-registry publisher, which is not yet part of the workflow. Adding it to
-`publish-release` today would make GitHub publication wait for a package
-nothing downstream reads.
+`package-crate` packages the crate, records its candidate identity and archive
+digest, and uploads them as the `release-crate-package` artefact. The registry
+job downloads that exact artefact into a dedicated directory and validates the
+identity, flat archive name, package name, version, and digest before it probes
+crates.io. Its action consumes the recorded `.crate` bytes directly. It does
+not call `cargo package`, `cargo publish`, or `cargo build`.
+
+The registry job and `publish-release` are independent siblings. The GitHub
+release job is not yet gated on crates.io publication; until
+`verify-release-inventory` lands, a tagged run can publish GitHub assets even
+when crates.io publication fails, leaving the two release surfaces out of sync.
 
 ### Crate-package operation telemetry
 
@@ -2468,9 +2484,8 @@ deterministic.
 
 The operation uses fixed operation, phase, outcome, and error-category labels.
 It omits release tags, artefact names, raw errors, and secrets. This telemetry
-does not alter the `should_publish` guard or make `package-crate` a
-prerequisite of the publication jobs; the registry publisher will consume its
-package artefact in a later stage.
+does not alter the `should_publish` guard. The registry publisher consumes the
+package artefact through its own explicit dependency.
 
 ### Package and asset identity
 
@@ -2516,6 +2531,101 @@ declaration CLI applies that mapping before it calls the policy module, and the
 staged-digest collector uses the same function to find the corresponding file.
 Those two boundary modules are the only production callers; policy modules
 accept GitHub-visible names and do not apply provider-specific transformations.
+
+### crates.io publisher
+
+The `.github/actions/publish-crates-io` composite action validates the
+`release-crate-package` identity and archive before making a registry request.
+The archive basename must be flat, exactly one `.crate` must match the
+identity, its SHA-256 must match the package record, and its packaged manifest
+must name the metadata job's package and version. Candidate rejection stops
+before the probe, credential exchange, or registry mutation.
+
+The action probes the version once and passes the saved status and response
+body to `publish_crates_io_cli classify`, which composes
+`release_registry_response` with `release_reconcile_crates`. The resulting
+state determines whether the workflow exchanges credentials or stops:
+
+| Registry state  | Registry action                          | Credential exchange | Final check               |
+| --------------- | ---------------------------------------- | ------------------- | ------------------------- |
+| `absent`        | Upload the retained candidate bytes once | Yes                 | Download and verify bytes |
+| `identical`     | Skip upload                              | No                  | Download and verify bytes |
+| `conflict`      | Fail without mutation                    | No                  | None                      |
+| `yanked`        | Fail without mutation                    | No                  | None                      |
+| `indeterminate` | Fail closed without mutation             | No                  | None                      |
+
+*Table 4: crates.io version-state decisions.*
+
+The HTTP adapter permits HTTPS requests only to `crates.io` and
+`static.crates.io`. urllib applies the same host and scheme check to every
+outgoing request, including redirect targets, so a redirected probe cannot
+change the registry observation used for classification.
+
+For an absent version, the action reads the packaged `Cargo.toml` and README in
+memory from the `.crate`, derives the registry metadata (including normal,
+development, build, and target-specific dependencies), then uploads the exact
+retained archive bytes. It does not extract and re-tar the package. The upload
+uses the crates.io registry framing: a little-endian 32-bit metadata length,
+the JSON metadata, a little-endian 32-bit archive length, and the `.crate`
+bytes. The short-lived token is supplied only to the upload step as
+`Authorization: Bearer <token>`. The request also sends
+`Accept: application/json`, `Content-Type: application/octet-stream`, and the
+registry adapter's required User-Agent. That step does not retry: a lost
+response can leave the outcome ambiguous, and repeating the write without
+observing registry state could duplicate an upload attempt.
+
+After either a successful upload or an identical-state skip, the action
+downloads `https://static.crates.io/crates/<crate>/<crate>-<version>.crate` and
+compares the downloaded file's SHA-256 with the packaged candidate digest. It
+polls for up to 12 requests, with a 10-second delay between retryable absence,
+network, and server-error responses; each request has a fixed timeout. It does
+not retry a successful download or a digest mismatch. The download and byte
+check run for both `publish` and `skip` decisions.
+
+| CLI result                                        | Exit code | Meaning                                |
+| ------------------------------------------------- | --------- | -------------------------------------- |
+| Candidate check success                           | 0         | Candidate is validated                 |
+| Candidate check rejection / output failure        | 1 / 2     | Stop before registry access            |
+| Probe has no HTTP status                          | 1         | Stop before classification or mutation |
+| Classification permits publish or skip            | 0         | Continue with the recorded decision    |
+| Conflict, yanked, or other action-required state  | 1         | Stop without upload                    |
+| Malformed or unreadable registry response         | 3         | Fail closed                            |
+| Decision or verification record cannot be written | 4         | Stop with an output error              |
+| Upload failure or ambiguous response              | 2         | Stop; do not retry in the same job     |
+| Downloaded bytes match / fail verification        | 0 / 2     | Verified / fail the job                |
+
+*Table 5: Exit statuses used by the candidate and registry CLIs.*
+
+### Recovering a partial crates.io publication
+
+Rerun the failed `publish-crates-io` job in the same tagged workflow run. It
+reuses that run's `release-crate-package` artefact and probes the registry
+again; it does not rebuild the package. If the first upload reached crates.io
+but its response was lost, the fresh probe classifies the version as
+`identical`, skips a second upload, downloads the public archive, and verifies
+its bytes. If the version remains absent, the rerun exchanges a new short-lived
+token and makes one new upload attempt.
+
+A `conflict` or `yanked` result requires operator investigation and a new
+release version. The publisher neither overwrites a conflicting version nor
+attempts to un-yank one. A malformed response, unavailable probe, or otherwise
+indeterminate state fails closed. Resolve the registry or network condition and
+rerun so the publisher starts with a fresh probe.
+
+If upload succeeds but byte verification fails, the version remains published.
+Do not treat a failed verification as a rollback or attempt to overwrite the
+same version. Compare the candidate digest and the publicly downloaded archive,
+retain the failed run's evidence, and escalate a registry-byte discrepancy to
+the crates.io maintainers. Publish a corrected release under a new version only
+after the discrepancy is understood and resolved.
+
+The crates.io environment and trusted-publisher account entry are operator
+configuration. Configure GitHub environment `crates-io` and register the
+repository, `release.yml`, and that environment with crates.io. The workflow
+contains the pinned short-lived OIDC exchange, but no live exchange or release
+has exercised this publisher. The later `verify-release-inventory` job is also
+still open, so `publish-release` does not yet wait for crates.io success and a
+tagged run can temporarily leave the GitHub Release and crate out of sync.
 
 ### Trusted digest records
 
@@ -2577,7 +2687,7 @@ three actions — upload, skip-verified, or conflict — and
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 4: `finalize_github_release_cli` exit statuses.*
+*Table 6: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -2716,7 +2826,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 5: `package-crate` action inputs.*
+*Table 7: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote

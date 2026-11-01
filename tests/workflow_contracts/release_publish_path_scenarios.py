@@ -32,6 +32,15 @@ REQUIRED_NEEDS = {
     "build-macos",
     "windows-native-recipe-smoke",
 }
+CRATES_IO_NEEDS = {
+    "metadata",
+    "package-crate",
+    "build-linux",
+    "build-windows",
+    "build-macos",
+    "windows-native-recipe-smoke",
+    "release-admission-canaries",
+}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -47,14 +56,40 @@ class Scenario:
 
 
 def _needs_results(
-    *, smoke: str = "success", failed_build: str | None = None
+    *,
+    smoke: str = "success",
+    failed_build: str | None = None,
+    failed_need: str | None = None,
+    skipped_need: str | None = None,
 ) -> dict[str, str]:
     """Build a complete needs-result map with one selected outcome."""
-    results = dict.fromkeys(REQUIRED_NEEDS, "success")
+    results = dict.fromkeys(CRATES_IO_NEEDS, "success")
     results["windows-native-recipe-smoke"] = smoke
     if failed_build is not None:
         results[failed_build] = "failure"
+    if failed_need is not None:
+        results[failed_need] = "failure"
+    if skipped_need is not None:
+        results[skipped_need] = "skipped"
     return results
+
+
+def _prerequisite_scenarios(outcome: str) -> tuple[Scenario, ...]:
+    """Create one publishing scenario for each failed or skipped prerequisite."""
+    return tuple(
+        Scenario(
+            f"publish-{need}-{outcome}",
+            "publish",
+            "",
+            _needs_results(
+                failed_need=need if outcome == "failure" else None,
+                skipped_need=need if outcome == "skipped" else None,
+            ),
+            cancelled=False,
+            release_runs=False,
+        )
+        for need in sorted(CRATES_IO_NEEDS)
+    )
 
 
 SCENARIOS = (
@@ -146,4 +181,14 @@ SCENARIOS = (
         cancelled=True,
         release_runs=False,
     ),
+    Scenario(
+        "cancelled-publishing",
+        "publish",
+        "",
+        _needs_results(),
+        cancelled=True,
+        release_runs=False,
+    ),
+    *_prerequisite_scenarios("failure"),
+    *_prerequisite_scenarios("skipped"),
 )

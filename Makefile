@@ -405,6 +405,9 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 test-release-publication: ## Test release-candidate identity and staged inventory exactness
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
+		scripts/tests/test_crates_io_candidate_cli.py \
+		scripts/tests/test_crates_io_transport_cli.py \
+		scripts/tests/test_crates_io_publish_sequence.py \
 		scripts/tests/test_release_candidate.py \
 		scripts/tests/test_release_candidate_cli.py \
 		scripts/tests/test_package_crate_cli.py \
@@ -430,6 +433,9 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_digest_record.py \
 		scripts/tests/test_release_digest_record_files.py \
 		scripts/tests/test_release_staged_digests.py \
+		scripts/crates_io_candidate_cli.py scripts/crates_io_transport_cli.py \
+		scripts/crates_io_transport_http.py \
+		scripts/crates_io_upload_metadata.py \
 		scripts/release_candidate.py scripts/release_candidate_cli.py \
 		scripts/release_identity_record.py \
 		scripts/package_crate_cli.py scripts/publish_crates_io_cli.py \
