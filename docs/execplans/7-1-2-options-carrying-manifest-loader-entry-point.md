@@ -1355,6 +1355,17 @@ and YAML fixtures, and were set from the inventory in Table 1.
   contents, and no entry point's signature or forwarding changed. The nine-gate
   set is re-run against the commit carrying this repair, so the earlier batch
   is a historical record and not this candidate's evidence.
+- [x] (2026-11-01) Kani proof scope covers the new module. Hosted CI failed
+  `tests/workflow_contracts/kani_proof_scope_test.py` on the repair candidate:
+  moving the string loaders made `src/manifest/str_loaders.rs` reachable from
+  `evaluate_when_expression`, and `tools/kani/proof-scope.toml` `sources` did
+  not list it. The path is added in sorted position beside
+  `src/manifest/render/mod.rs`. This is scope bookkeeping, not a proof change:
+  no Kani harness, contract, or model was modified, and the reachable set the
+  existing harnesses see is unchanged. The focused contract test passes (7
+  passed), and the full nine-gate set is re-run against the commit carrying
+  this fix, because the batch that preceded it was stopped at gate 3 rather
+  than allowed to proceed on a tree CI had already shown to be red.
 
 ## Surprises & discoveries
 

@@ -117,6 +117,7 @@ sources = [
   "src/manifest/query.rs",
   "src/manifest/registration.rs",
   "src/manifest/render/mod.rs",
+  "src/manifest/str_loaders.rs",
   "src/manifest/test_surface/mod.rs",
   "src/manifest/test_surface/overlays.rs",
   "src/manifest/workspace.rs",
