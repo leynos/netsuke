@@ -102,6 +102,33 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       (90 passed), Makefile validation and diff check. Logs share the
       `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-r9109b.out`
       suffix.
+- [x] (2026-11-01) Complete the committed EP-M1 CodeRabbit review against
+      approval checkpoint `9a7bcb86f0b326f176fd637dc9a2aafa2080568b` and head
+      `848d8ee866e10a22e92acda602984bfc19b1439e`. It identified a local macOS
+      Kani installation regression; verify the platform evidence and restore
+      the supported compile route before closing the milestone.
+- [x] (2026-11-01) Add the Kani host-selection regression and observe its
+      expected red result before changing Make: Linux x86_64 passed, while
+      macOS arm64 and Linux aarch64 failed because they did not receive
+      `--compile`. Log:
+      `/tmp/test-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-m1-host-fallback-red.out`.
+- [x] (2026-11-01) Default `make install-kani` to upstream's Cargo compile
+      path outside Linux x86_64, retain explicit CI prebuilt flags, document
+      the platform behaviour, and pass all three focused host cases. Green log:
+      `/tmp/test-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-m1-host-fallback-green.out`.
+- [x] (2026-11-01) Run all EP-M1 gates after the platform fallback. Ten passed;
+      Markdown spelling failed on two US spellings, corrected in
+      this revision. Test and review results are otherwise green. The log
+      suffix is `epm1-macos-fallback`.
+- [x] (2026-11-01) Rerun all 11 gates after the spelling correction. Formatting,
+      lint, typecheck, doc coverage (98.23%), Markdown, Mermaid, Rust tests
+      (4,945 passed, 7 skipped plus doctests), workflow contracts (1,666 passed,
+      3 skipped plus 28 helper tests), CI script tests (90 passed), Makefile
+      validation and diff checks all passed. Logs share the
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm1-macos-fallback-final.out`
+      suffix.
+- [ ] Commit the repair and repeat the committed milestone CodeRabbit review
+      against the updated head.
 - [ ] Commit the fully green EP-M1 milestone before starting EP-M2.
 - [ ] EP-M2: Wire explicit Verus proof selection and batch integration tests.
 - [ ] EP-M3: Complete real-tool acceptance and documentation reconciliation.
@@ -114,6 +141,14 @@ execution. The Kani workflow separately ran `scripts/ci/install_kani.py`; its
 two digests matched upstream's `rust_prover_tools/binary_assets.py` exactly.
 EP-M1 now pins the inspected current upstream commit so the same package owns
 both acquisition paths and Verus batch support.
+
+The EP-M1 review caught a local platform regression: the prior pinned
+[`kani.py`](https://github.com/leynos/rust-prover-tools/blob/2ba17da6b7e24160c4041e8d41ba1ba6cca87b35/rust_prover_tools/kani.py)
+installed through Cargo, while the new
+[`kani_binary.py`](https://github.com/leynos/rust-prover-tools/blob/592558f7183b554fc749696246984c5d7300d029/rust_prover_tools/kani_binary.py)
+uses prebuilt archives only on Linux x86_64 and offers `--compile` elsewhere.
+Keep the fast verified-archive route on its supported host and retain the
+Cargo-backed path for other local platforms.
 
 Upstream installs front ends to `$CARGO_HOME/bin` by default and stores
 archives under `.cache/kani`. Netsuke currently uses a version-qualified
@@ -162,6 +197,10 @@ the actionlint downloader and its shared support modules.
   proof run. Upstream offers `z3 install`, but no bespoke Z3 downloader exists
   here. Check the existing Verus pin's solver requirements during acceptance; a
   required new solver pin or support policy is an exception to review.
+- 2026-11-01: Preserve the previous local Kani installation route on hosts
+  without upstream prebuilt binaries. Default `make install-kani` to
+  `--compile` outside Linux x86_64; CI's explicit install flags keep using the
+  verified prebuilt archives and cache paths.
 
 ## Outcomes & retrospective
 
@@ -180,7 +219,15 @@ gate, including formatting, lint, typecheck, documentation coverage, Markdown,
 Mermaid, all Rust tests and doctests, workflow contracts, CI script tests,
 Makefile validation and diff checks. The exact candidate must retain those
 results through the milestone review and commit. Package reuse still leaves
-repository-owned PATH, cache, and proof-selection contracts to verify.
+repository-owned PATH, cache, and proof-selection contracts to verify. The
+committed milestone review then verified that the new installer would regress
+local macOS installs; the pinned upstream supports prebuilt Kani only on Linux
+x86_64 and offers `--compile` for other hosts. A red regression test now
+specifies the host-selection policy. `KANI_HOST_TRIPLE` now selects the
+verified archive only on Linux x86_64; other local hosts receive `--compile`,
+while the workflow's explicit flags preserve CI's cached archive route. All
+three focused Make cases and the final 11 gate sequence pass. The repair still
+needs its commit and a repeat CodeRabbit review.
 
 ## Context and orientation
 
@@ -484,3 +531,24 @@ assignments and update the exact command snapshot before the final EP-M1 sweep.
 Revision 7 (2026-11-01): Record the final EP-M1 gate sequence. All 11 gates
 passed on the workflow-wrap candidate; detailed results and log suffix are in
 Progress. CodeRabbit review and commit remain outstanding.
+
+Revision 8 (2026-11-01): Record the committed EP-M1 CodeRabbit review and its
+verified macOS compatibility finding. Add a host-platform regression test
+before selecting the upstream compile fallback outside Linux x86_64.
+
+Revision 9 (2026-11-01): Confirm the macOS compatibility regression with an
+expected-red Make integration test: Linux x86_64 passed, macOS arm64 and Linux
+aarch64 failed to select `--compile`.
+
+Revision 10 (2026-11-01): Restore Cargo-based Kani installation on hosts
+without the Linux x86_64 prebuilt archive, document the platform behaviour, and
+pass the focused Linux x86_64, macOS arm64 and Linux aarch64 Make cases. Full
+gates and repeat CodeRabbit review remain pending.
+
+Revision 11 (2026-11-01): Record the platform-fallback full gate attempt. Ten
+gates passed; Markdown spelling caught two US spellings in this plan. Correct
+them before the final gate sequence and repeated CLI review.
+
+Revision 12 (2026-11-01): Record the final platform-fallback gate sequence. All
+11 gates passed after correcting the two spellings. Commit and repeated
+milestone review remain outstanding.
