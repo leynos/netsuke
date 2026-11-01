@@ -109,6 +109,18 @@ explicit and exercise the actual adapters in tests.
 - [x] 2026-11-01: Re-rebase onto the advanced `origin/main` (`5f0a4d123`) after
   PR #958 landed, and revalidate the full gate set on the rebased candidate.
 - [ ] M1: Establish definition authority and reject unauthorized sources.
+  - [x] 2026-11-01: Confirm the Red stage on the prebuilt binary: a project
+    `[[shells]]` entry reaches `manifest_not_found`, while a malformed `jobs`
+    value in the same file fails configuration merging, proving the fixture
+    works and only enforcement is missing.
+  - [x] 2026-11-01: Add root-authority classification, the restricted candidate
+    walk, the environment-ingress rejection, and the classifier,
+    differential, and end-to-end rejection tests.
+  - [x] 2026-11-01: Confirm M1 locally: the focused library suite passes
+    (17 of 17: six classifier cases, four properties with their witness, four
+    differential cases, and the two pre-existing project-key tests) and the
+    end-to-end rejection suite passes (7 of 7), after `make fmt`.
+  - [ ] 2026-11-01: Run the M1 gate set and the milestone CLI review.
 - [ ] M2: Add validated definitions, append merging, and collision proof.
 - [ ] M3: Complete behavioural evidence, documentation, and delivery.
 
@@ -137,6 +149,40 @@ authority must therefore be re-derived by normalized path comparison against
 the project file, as planned, and cannot simply read a candidate's scope.
 Nothing in 0.10.0 blocks the design; the walk, `load_config_file_as_chain`, and
 the public `LayerDiscoveryOutcome` fields all exist as the plan assumes.
+
+Red evidence needed no source change. The prebuilt `target/debug/netsuke`
+accepts a project `.netsuke.toml` carrying `[[shells]]` and proceeds to
+`netsuke::runner::manifest_not_found`, while `jobs = "notanumber"` in the same
+file fails configuration merging. The fixture therefore reaches discovery, and
+the only missing piece is enforcement.
+
+`compose_layers()` cannot carry the provenance C1 needs: it returns a flattened
+layer list with no record of which candidate root supplied it. The restricted
+walk reads the same public `candidates()` order, loads each chain with
+`load_config_file_as_chain()`, and reproduces the old error handling exactly,
+because all automatic candidates are optional (`required_bound` is zero unless
+`add_required_path` is called, which Netsuke never does). Dropping the builder's
+`.env_var(CONFIG_ENV_VAR)` is behaviour-preserving: a set `NETSUKE_CONFIG`
+routes to the explicit branch before automatic discovery runs, so the automatic
+path never consumed the selector. Only OrthoConfig's internal discovery
+telemetry is lost, and Netsuke does not consume it. The builder still reports
+the environment source because candidate generation reads `HOME` and the XDG
+variables from it.
+
+A project file that exists but cannot be path-normalized cannot be shown to be
+distinct from a candidate, so `ProjectKey` records `unresolved` and withholds
+operator authority for that scan. A missing project file cannot appear as an
+occurrence, so it keeps operator authority. Preserving exactly one
+`normalized_path_key` call keeps
+`project_layer_scan_normalizes_only_the_project_key` and the replay
+environment-read assertions meaningful.
+
+`test_support::fs::create_dir` is not recursive, so a fixture that creates an
+injected XDG tree must use `create_dir_all` for any intermediate directory it
+has not already made. The differential test that writes an ordinary operator
+configuration hit exactly this and failed with a bare
+`No such file or directory` before the fix, which is why the success path is
+exercised rather than assumed.
 
 The branch never edits `typos.toml`. The earlier spelling gate regenerated it
 in place; the rebase onto the current `origin/main` (`5f0a4d123`) delivered
@@ -168,10 +214,37 @@ disappeared and no separate refresh pull request is needed.
   `LayerDiscoveryOutcome` fields the design relies on. No milestone or contract
   changes. Root authority remains a Netsuke-owned normalized comparison because
   `Candidate.scopes` is not publicly reachable.
+- 2026-11-01: Replace Netsuke's `compose_layers()` call with a restricted
+  `ConfigDiscovery::candidates()` walk. The dependency's composition discards
+  candidate provenance, and C1 cannot be reconstructed from the flattened list.
+  The walk keeps the dependency's candidate generation, order, first-success
+  traversal, and optional-error handling; differential tests compare both
+  outcomes for missing, malformed, inherited, and successful configurations.
+- 2026-11-01: Enforce C1 at the single `retain_layers_and_resolve_json` choke
+  point, on key presence before typed merging, so empty and malformed
+  declarations are rejected rather than silently ignored. During M1 every
+  declaration is rejected, including a trusted one, because no schema exists to
+  validate it yet.
+- 2026-11-01: Treat an unresolvable existing project file as ambiguous and fail
+  closed, rather than assuming operator ownership of every occurrence. A
+  missing project file stays trusted because it cannot occur as a layer.
 - 2026-11-01: Treat the regenerated `typos.toml` as upstream content rather
   than a branch change. The rebase onto `5f0a4d123` supplied the exact file the
   pinned builder produces, so the branch carries no spelling-config diff and
   needs no stacked base pull request.
+- 2026-11-01: Split `ProjectKey` into distinct identification and authority
+  concerns. `matches` and `matches_path` stay literal so the project-scope
+  second pass and deduplication keep their existing outcome even when
+  normalization fails, while the new `is_ambiguous()` feeds only the two
+  authority call sites. Conflating the two would have silently changed
+  deduplication on a normalization failure, which
+  `normalization_failure_does_not_fail_discovery` pins.
+- 2026-11-01: Discharge the C1 property obligation against the classifier
+  directly, not only through the written cases. The generator covers every
+  (root trust, occurrence location, shells declared) combination, a separate
+  property asserts rejection happens exactly when a declaration is present, and
+  a fixed witness proves the generator reaches an operator-authorized
+  occurrence so the properties cannot pass vacuously.
 
 ## Outcomes & retrospective
 
@@ -358,7 +431,11 @@ reversed root order. Include overlapping HOME/XDG/project roots, candidate
 deduplication, normalized aliases, and path-normalization failure; ambiguity
 must never authorize a definition. Verify unauthorized presence always fails,
 no file path alone elevates authority, and unrelated configuration retains its
-existing precedence. The proof does not certify these I/O decisions.
+existing precedence. The restricted walk is additionally compared against
+OrthoConfig's `compose_layers()` as a differential oracle for missing,
+malformed, inherited, and successful configurations; both traversals must
+observe the same layers in the same order or fail with the same text. The proof
+does not certify these I/O decisions.
 
 C2 uses parameterized boundary tests: name lengths 0/1/63/64, invalid ASCII and
 Unicode, all reserved Boolean words, empty/NUL executables, bare/absolute and

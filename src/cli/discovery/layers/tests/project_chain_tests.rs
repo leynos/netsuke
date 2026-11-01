@@ -150,6 +150,8 @@ fn overlapping_roots_keep_operator_and_project_occurrences_separate() -> Result<
         vec![operator],
         vec![project_shared, project_primary],
         None,
+        true,
+        None,
     ));
 
     ensure!(
