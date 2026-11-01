@@ -296,6 +296,11 @@ pub struct BuildEdge {
     pub phony: bool,
     /// Run the command on every invocation regardless of timestamps.
     pub always: bool,
+    /// Run this executable edge in Ninja's serial console pool.
+    ///
+    /// Console selection belongs to an edge rather than its reusable action,
+    /// so actions shared by console and ordinary targets keep one identity.
+    pub console: bool,
 }
 
 mod error;
@@ -304,3 +309,4 @@ mod error;
 mod property_tests;
 
 pub use error::IrGenError;
+pub(crate) use error::manifest_recipe_validation_message;

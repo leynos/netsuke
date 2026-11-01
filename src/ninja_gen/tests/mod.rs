@@ -37,6 +37,7 @@ fn generate_simple_ninja() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
@@ -73,6 +74,7 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("reserved".into(), action);
@@ -174,6 +176,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
@@ -210,6 +213,7 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
@@ -330,11 +334,6 @@ fn unsafe_command_list_entries_return_typed_generation_errors(
     );
 }
 
-#[test]
-fn assert_shell_command_tolerates_complex_syntax() {
-    let command = r#"/bin/sh -c "echo 'nested quotes' && echo \"double\" && (echo subshell)""#;
-    NamedAction::assert_shell_command(command);
-}
 /// Generate Ninja text using the explicit POSIX compatibility renderer.
 fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut ninja = String::new();
@@ -343,6 +342,8 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 }
 
 mod bash_binding;
+mod command_syntax;
+mod console;
 mod isolated_command_list;
 #[path = "legacy_shell.rs"]
 mod power_shell;

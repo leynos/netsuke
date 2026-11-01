@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = error de E/S desconocido.
 manifest.command_list_empty = El campo 'command' no debe estar vacío: proporcione una cadena de comando o una lista no vacía.
 manifest.command_isolation_recipe = El campo 'command_isolation' requiere una receta con una lista de comandos.
 manifest.command_isolation_scalar = 'command_isolation: isolated' requiere una lista de comandos.
+manifest.console_dependency_only = Las entradas que solo declaran dependencias no pueden seleccionar el grupo de consola.
 
 # Errores de IR.
 ir.rule_not_found = No se encontró la regla '{ $rule }' referenciada por el objetivo '{ $target }'.
@@ -197,6 +198,8 @@ ir.invalid_command = Interpolación de comando inválida: { $snippet }.
 
 # Errores de generación de Ninja.
 ninja_gen.missing_action = Falta la acción '{ $id }' referenciada por un borde de compilación.
+ninja_gen.console_dependency_only = El borde de compilación «{ $output }» no puede seleccionar el grupo de consola porque su acción solo declara dependencias.
+ninja_gen.console_pool_conflict = El borde de compilación «{ $output }» selecciona el grupo de consola, pero su acción solicita el grupo personalizado «{ $pool }».
 ninja_gen.format = No se pudo formatear la salida del manifiesto Ninja.
 ninja_gen.dyndep_files_required = Esta compilación requiere un paquete Ninja generado; use `netsuke build`, `netsuke clean` o `netsuke generate` para materializar los archivos dyndep.
 ninja_gen.reserved_output_path = La ruta '{ $path }' está reservada para el estado de dependencias seriales de Netsuke.

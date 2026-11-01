@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = gwall mewnbwn/allbwn anhysbys.
 manifest.command_list_empty = Rhaid i’r maes ‘command’ beidio â bod yn wag: rhowch linyn gorchymyn neu restr nad yw’n wag.
 manifest.command_isolation_recipe = Mae’r maes ‘command_isolation’ yn gofyn am rysáit rhestr orchmynion.
 manifest.command_isolation_scalar = Mae ‘command_isolation: isolated’ yn gofyn am restr orchmynion.
+manifest.console_dependency_only = Ni all cofnodion sy'n cynnwys dibyniaethau yn unig ddewis pwll y consol.
 
 # Gwallau'r cynrychioliad canolradd.
 ir.rule_not_found = Ni chafwyd hyd i'r rheol ‘{ $rule }’ y cyfeirir ati gan y targed ‘{ $target }’.
@@ -197,6 +198,8 @@ ir.invalid_command = Mewnosodiad annilys yn y gorchymyn: { $snippet }.
 
 # Gwallau cynhyrchu Ninja.
 ninja_gen.missing_action = Mae'r weithred ‘{ $id }’ y cyfeirir ati gan ymyl adeiladu ar goll.
+ninja_gen.console_dependency_only = Ni all ymyl adeiladu ‘{ $output }’ ddewis pwll y consol am mai dibyniaethau yn unig yw ei weithred.
+ninja_gen.console_pool_conflict = Mae ymyl adeiladu ‘{ $output }’ yn dewis pwll y consol, ond mae ei weithred yn gofyn am gronfa addasedig ‘{ $pool }’.
 ninja_gen.format = Methwyd â fformatio allbwn y maniffest Ninja.
 ninja_gen.dyndep_files_required = Mae'r adeilad hwn yn gofyn am fwndel Ninja a gynhyrchwyd; defnyddiwch `netsuke build`, `netsuke clean` neu `netsuke generate` er mwyn deunyddoli ffeiliau dyndep.
 ninja_gen.reserved_output_path = Mae'r llwybr '{ $path }' wedi'i gadw ar gyfer cyflwr dibyniaethau cyfresol Netsuke.

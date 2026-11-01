@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = okänt I/O-fel.
 manifest.command_list_empty = Fältet ”command” får inte vara tomt: ange en kommandosträng eller en icke-tom lista.
 manifest.command_isolation_recipe = Fältet ”command_isolation” kräver ett recept med en kommandolista.
 manifest.command_isolation_scalar = ”command_isolation: isolated” kräver en kommandolista.
+manifest.console_dependency_only = Poster som bara anger beroenden kan inte välja konsolpoolen.
 
 # Fel i den interna representationen.
 ir.rule_not_found = Regeln ”{ $rule }” som målet ”{ $target }” hänvisar till hittades inte.
@@ -197,6 +198,8 @@ ir.invalid_command = Ogiltig interpolering i kommandot: { $snippet }.
 
 # Fel vid generering av Ninja.
 ninja_gen.missing_action = Åtgärden ”{ $id }” som en byggbåge hänvisar till saknas.
+ninja_gen.console_dependency_only = Byggbågen ”{ $output }” kan inte välja konsolpoolen eftersom åtgärden bara innehåller beroenden.
+ninja_gen.console_pool_conflict = Byggbågen ”{ $output }” väljer konsolpoolen, men åtgärden begär den anpassade poolen ”{ $pool }”.
 ninja_gen.format = Ninja-manifestets utdata kunde inte formateras.
 ninja_gen.dyndep_files_required = Den här åtgärden kräver ett genererat Ninja-paket; använd `netsuke build`, `netsuke clean` eller `netsuke generate` för att materialisera dyndep-filerna.
 ninja_gen.reserved_output_path = Sökvägen '{ $path }' är reserverad för Netsukes seriella beroendetillstånd.

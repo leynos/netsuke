@@ -1,0 +1,26 @@
+---
+source: tests/ninja_snapshot_tests.rs
+expression: ninja_content
+---
+rule 04ca8490eedc2a14f7ea86f319edd5b7ea47a9b1dc3deab48f610cfba9a50fe0
+  command = echo inline-console
+
+rule 409e0ba0938d3fa40f7344fdd2f33e631f5b4ec8b51527e101bd8f6f29851b1c
+  command = echo streamed-action
+
+rule 942a9563150dd5319d3478ac8b180f7d234b732e102e1a2e1f190dbbc53562e0
+  command = echo ordinary-target
+
+rule aed5f83a13f8763315f10af13630dd88eccbc70c46a8f0a4c2ac132e7f6f2858
+  command = echo ordinary-action
+
+build inline-console: 04ca8490eedc2a14f7ea86f319edd5b7ea47a9b1dc3deab48f610cfba9a50fe0
+  description = Building ⁨inline-console⁩
+  pool = console
+
+build ordinary-action: aed5f83a13f8763315f10af13630dd88eccbc70c46a8f0a4c2ac132e7f6f2858
+
+build ordinary-target: 942a9563150dd5319d3478ac8b180f7d234b732e102e1a2e1f190dbbc53562e0
+
+build streamed-action: 409e0ba0938d3fa40f7344fdd2f33e631f5b4ec8b51527e101bd8f6f29851b1c
+  pool = console

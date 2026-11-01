@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = خطأ إدخال/إخراج غير معروف.
 manifest.command_list_empty = يجب ألّا يكون الحقل «command» فارغًا: قدِّم سلسلة أمر أو قائمة غير فارغة.
 manifest.command_isolation_recipe = يتطلب الحقل «command_isolation» وصفةً تتضمن قائمة أوامر.
 manifest.command_isolation_scalar = يتطلب «command_isolation: isolated» قائمة أوامر.
+manifest.console_dependency_only = لا يمكن للإدخالات التي تقتصر على التبعيات اختيار مجموعة وحدة التحكم.
 
 # أخطاء التمثيل الوسيط.
 ir.rule_not_found = تعذّر العثور على القاعدة «{ $rule }» التي يشير إليها الهدف «{ $target }».
@@ -197,6 +198,8 @@ ir.invalid_command = إقحام غير صالح داخل الأمر: { $snippet 
 
 # أخطاء توليد ملفات Ninja.
 ninja_gen.missing_action = الإجراء «{ $id }» الذي تشير إليه حافة بناء مفقود.
+ninja_gen.console_dependency_only = ‏لا يمكن لحافة البناء «{ $output }» اختيار مجموعة وحدة التحكم لأن إجراءها يقتصر على التبعيات.
+ninja_gen.console_pool_conflict = ‏تختار حافة البناء «{ $output }» مجموعة وحدة التحكم، لكن إجراءها يطلب مجموعة مخصصة «{ $pool }».
 ninja_gen.format = تعذّر تنسيق مخرجات ملف بيانات Ninja.
 ninja_gen.dyndep_files_required = ‏ يتطلّب هذا البناء حزمة Ninja مُنشأة؛ استخدم `netsuke build` أو `netsuke clean` أو `netsuke generate` لتجهيز ملفات dyndep.
 ninja_gen.reserved_output_path = ‏ المسار '{ $path }' محجوز لحالة تبعيات Netsuke التسلسلية.

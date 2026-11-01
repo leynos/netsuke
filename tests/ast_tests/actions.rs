@@ -18,6 +18,7 @@ use super::support::parse_manifest;
         command: "true"
 "#,
     true,
+    false,
     false
 )]
 #[case::explicit_phony_false(
@@ -32,6 +33,22 @@ use super::support::parse_manifest;
         command: "true"
 "#,
     true,
+    false,
+    false
+)]
+#[case::explicit_console_false(
+    r#"
+    netsuke_version: "1.0.0"
+    actions:
+      - name: setup
+        command: "echo hi"
+        console: false
+    targets:
+      - name: done
+        command: "true"
+"#,
+    true,
+    false,
     false
 )]
 #[case::explicit_always_true(
@@ -41,10 +58,12 @@ use super::support::parse_manifest;
       - name: setup
         command: "echo hi"
         always: true
+        console: true
     targets:
       - name: done
         command: "true"
 "#,
+    true,
     true,
     true
 )]
@@ -52,6 +71,7 @@ fn actions_behaviour(
     #[case] yaml: &str,
     #[case] expected_phony: bool,
     #[case] expected_always: bool,
+    #[case] expected_console: bool,
 ) -> Result<()> {
     let manifest = parse_manifest(yaml)?;
     let action = manifest.actions.first().context("expected action entry")?;
@@ -66,6 +86,12 @@ fn actions_behaviour(
         "unexpected always flag: got {}, expected {}",
         action.always,
         expected_always
+    );
+    ensure!(
+        action.console == expected_console,
+        "unexpected console flag: got {}, expected {}",
+        action.console,
+        expected_console
     );
     Ok(())
 }

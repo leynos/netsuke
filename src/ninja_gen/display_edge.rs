@@ -14,6 +14,8 @@ pub(crate) struct DisplayEdge<'a> {
     pub(crate) action_name: &'a str,
     /// Whether the action sets `restat`, suppressing the edge-level override.
     pub(crate) action_restat: bool,
+    /// Pool selected by the shared action rule, if any.
+    pub(crate) action_pool: Option<&'a str>,
     /// Dependencies rendered after `|`, either the edge's implicit deps or lowered serial gates.
     pub(crate) implicit_deps: &'a [Utf8PathBuf],
     /// Optional localized inline-recipe progress description, escaped for Ninja.
@@ -39,6 +41,13 @@ impl Display for DisplayEdge<'_> {
         writeln!(output)?;
         write_flag!(output, "restat", self.edge.always && !self.action_restat);
         write_kv!(output, "description", self.description);
+        if self.edge.console {
+            writeln!(output, "  pool = console")?;
+        } else if self.action_pool == Some("console") {
+            // Rule bindings are inherited by edges, so clear a rule-level
+            // console pool on edges that did not opt in themselves.
+            writeln!(output, "  pool =")?;
+        }
         writeln!(output)
     }
 }

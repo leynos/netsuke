@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = onbekende I/O-fout.
 manifest.command_list_empty = Het veld ‘command’ mag niet leeg zijn: geef een opdrachtreeks of een niet-lege lijst op.
 manifest.command_isolation_recipe = Het veld ‘command_isolation’ vereist een recept met een opdrachtenlijst.
 manifest.command_isolation_scalar = ‘command_isolation: isolated’ vereist een opdrachtenlijst.
+manifest.console_dependency_only = Items die alleen afhankelijkheden aangeven, kunnen de consolepool niet selecteren.
 
 # Fouten in de tussenrepresentatie.
 ir.rule_not_found = De regel ‘{ $rule }’ waarnaar doel ‘{ $target }’ verwijst, is niet gevonden.
@@ -197,6 +198,8 @@ ir.invalid_command = Ongeldige interpolatie in de opdracht: { $snippet }.
 
 # Fouten bij het genereren van Ninja.
 ninja_gen.missing_action = De actie ‘{ $id }’ waarnaar een bouwtak verwijst, ontbreekt.
+ninja_gen.console_dependency_only = De bouwtak ‘{ $output }’ kan de consolepool niet selecteren, omdat de actie alleen afhankelijkheden bevat.
+ninja_gen.console_pool_conflict = De bouwtak ‘{ $output }’ selecteert de consolepool, maar de actie vraagt om de aangepaste pool ‘{ $pool }’.
 ninja_gen.format = De uitvoer van het Ninja-manifest kon niet worden opgemaakt.
 ninja_gen.dyndep_files_required = Deze bewerking vereist een gegenereerde Ninja-bundel; gebruik `netsuke build`, `netsuke clean` of `netsuke generate` om de dyndep-bestanden te materialiseren.
 ninja_gen.reserved_output_path = Het pad '{ $path }' is gereserveerd voor de seriële afhankelijkheidsstatus van Netsuke.

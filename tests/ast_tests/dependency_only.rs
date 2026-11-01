@@ -4,10 +4,10 @@ use anyhow::{Context, Result, ensure};
 use netsuke::localization::{self, keys};
 use netsuke::{
     ast::{CommandIsolation, NetsukeManifest, Recipe, StringOrList},
-    ir::BuildGraph,
+    ir::{BuildGraph, IrGenError},
 };
 use rstest::rstest;
-use test_support::display_error_chain;
+use test_support::{display_error_chain, localizer::locale_localizer};
 
 use super::support::parse_manifest;
 
@@ -222,6 +222,56 @@ fn direct_ast_deserialisation_is_validated_before_ir_lowering() -> Result<()> {
     ensure!(
         error.to_string() == "missing one of command, script, or rule",
         "direct AST lowering should preserve the missing-recipe diagnostic: {error}"
+    );
+    Ok(())
+}
+
+/// Reject console scheduling on dependency-only entries during parsing.
+#[rstest]
+#[case::action("actions:\n  - name: all\n    deps: [lint]\n    console: true\ntargets: []\n")]
+#[case::target("actions: []\ntargets:\n  - name: release\n    deps: [build]\n    console: true\n")]
+fn dependency_only_console_entries_are_rejected(#[case] sections: &str) -> Result<()> {
+    let _locale = locale_localizer("en-US");
+    let yaml = format!("netsuke_version: '1.0.0'\n{sections}");
+    let error =
+        parse_manifest(&yaml).expect_err("dependency-only entries cannot use the console pool");
+    let chain = display_error_chain(error.as_ref());
+    let expected = localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY).to_string();
+    ensure!(
+        chain.contains(&expected),
+        "unexpected console dependency-only diagnostic: {chain}"
+    );
+    Ok(())
+}
+
+/// Preserve the console-specific validation diagnostic during direct IR lowering.
+#[test]
+fn direct_ir_lowering_preserves_console_dependency_only_diagnostic() -> Result<()> {
+    let _locale = locale_localizer("fr");
+    let yaml = concat!(
+        "netsuke_version: '1.0.0'\n",
+        "targets:\n",
+        "  - name: release\n",
+        "    deps: [build]\n",
+        "    console: true\n",
+    );
+    let manifest: NetsukeManifest =
+        serde_saphyr::from_str(yaml).context("directly deserialize the manifest")?;
+    let error = BuildGraph::from_manifest(&manifest)
+        .expect_err("console scheduling on an aggregate should fail IR lowering");
+    ensure!(
+        matches!(
+            &error,
+            IrGenError::InvalidManifest { message }
+                if *message == "console cannot be enabled for dependency-only entries"
+        ),
+        "direct AST lowering should preserve the console diagnostic code: {error}"
+    );
+    let rendered = error.to_string();
+    let expected = localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY).to_string();
+    ensure!(
+        rendered == expected,
+        "direct AST lowering should render exactly the localized manifest diagnostic: {rendered}"
     );
     Ok(())
 }

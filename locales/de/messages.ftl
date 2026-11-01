@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = unbekannter E/A-Fehler.
 manifest.command_list_empty = Das Feld „command“ darf nicht leer sein: Geben Sie eine Befehlszeichenkette oder eine nicht leere Liste an.
 manifest.command_isolation_recipe = Das Feld „command_isolation“ erfordert ein Rezept mit einer Befehlsliste.
 manifest.command_isolation_scalar = „command_isolation: isolated“ erfordert eine Befehlsliste.
+manifest.console_dependency_only = Einträge, die nur Abhängigkeiten angeben, können den Konsolen-Pool nicht auswählen.
 
 # Fehler der Zwischendarstellung.
 ir.rule_not_found = Die vom Ziel „{ $target }“ referenzierte Regel „{ $rule }“ wurde nicht gefunden.
@@ -197,6 +198,8 @@ ir.invalid_command = Ungültige Befehlsinterpolation: { $snippet }.
 
 # Fehler bei der Ninja-Erzeugung.
 ninja_gen.missing_action = Die von einer Build-Kante referenzierte Aktion „{ $id }“ fehlt.
+ninja_gen.console_dependency_only = Die Build-Kante „{ $output }“ kann den Konsolen-Pool nicht auswählen, weil ihre Aktion nur Abhängigkeiten enthält.
+ninja_gen.console_pool_conflict = Die Build-Kante „{ $output }“ wählt den Konsolen-Pool aus, aber ihre Aktion fordert den benutzerdefinierten Pool „{ $pool }“ an.
 ninja_gen.format = Die Ausgabe des Ninja-Manifests konnte nicht formatiert werden.
 ninja_gen.dyndep_files_required = Dieser Build erfordert ein generiertes Ninja-Bundle; verwenden Sie `netsuke build`, `netsuke clean` oder `netsuke generate`, damit die dyndep-Dateien materialisiert werden.
 ninja_gen.reserved_output_path = Der Pfad '{ $path }' ist für den seriellen Abhängigkeitsstatus von Netsuke reserviert.

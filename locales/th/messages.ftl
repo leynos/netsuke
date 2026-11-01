@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = ข้อผิดพลาดรับส่�
 manifest.command_list_empty = ฟิลด์ “command” ต้องไม่ว่าง: ระบุสตริงคำสั่งหรือรายการที่ไม่ว่าง
 manifest.command_isolation_recipe = ฟิลด์ “command_isolation” ต้องใช้สูตรที่มีรายการคำสั่ง
 manifest.command_isolation_scalar = “command_isolation: isolated” ต้องใช้รายการคำสั่ง
+manifest.console_dependency_only = รายการที่ระบุเฉพาะการพึ่งพาไม่สามารถเลือกพูลคอนโซลได้
 
 # ข้อผิดพลาดของรูปแทนระดับกลาง
 ir.rule_not_found = ไม่พบกฎ “{ $rule }” ที่เป้าหมาย “{ $target }” อ้างถึง
@@ -197,6 +198,8 @@ ir.invalid_command = การแทรกค่าในคำสั่งไ�
 
 # ข้อผิดพลาดในการสร้างไฟล์ Ninja
 ninja_gen.missing_action = ไม่มีการกระทำ “{ $id }” ที่เส้นเชื่อมของการสร้างอ้างถึง
+ninja_gen.console_dependency_only = เส้นเชื่อมของการสร้าง “{ $output }” เลือกพูลคอนโซลไม่ได้ เพราะการกระทำมีเฉพาะการพึ่งพาเท่านั้น
+ninja_gen.console_pool_conflict = เส้นเชื่อมของการสร้าง “{ $output }” เลือกพูลคอนโซล แต่การกระทำร้องขอพูลที่กำหนดเอง “{ $pool }”
 ninja_gen.format = จัดรูปแบบผลลัพธ์ของไฟล์รายการ Ninja ไม่สำเร็จ
 ninja_gen.dyndep_files_required = การดำเนินการนี้ต้องใช้บันเดิล Ninja ที่สร้างขึ้น ให้ใช้ `netsuke build`, `netsuke clean` หรือ `netsuke generate` เพื่อทำให้ไฟล์ dyndep พร้อมใช้งาน
 ninja_gen.reserved_output_path = เส้นทาง '{ $path }' สงวนไว้สำหรับสถานะการขึ้นต่อกันแบบลำดับของ Netsuke

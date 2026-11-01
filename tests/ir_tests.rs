@@ -2,8 +2,8 @@
 //!
 //! Directly constructs [`netsuke::ir::BuildGraph`], [`BuildEdge`], and
 //! [`Action`] values and asserts their default state, field semantics, and
-//! canonical edge ownership and output-index lookup. Does not exercise manifest
-//! parsing or Ninja generation.
+//! canonical edge ownership and output-index lookup. It also checks direct
+//! manifest-to-IR validation without invoking Ninja generation.
 
 use camino::Utf8PathBuf;
 use netsuke::ast::Recipe;
@@ -43,6 +43,7 @@ fn create_action_and_edge() {
         progress_label: None,
         phony: false,
         always: true,
+        console: false,
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("id".into(), action);
@@ -107,6 +108,7 @@ fn build_graph_indexes_canonical_targets() {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
     let edge_id = graph
         .insert_edge(edge1)
@@ -141,6 +143,7 @@ fn build_graph_rejects_duplicate_aliases_before_mutation() {
         progress_label: None,
         phony: false,
         always: false,
+        console: false,
     };
 
     let result = graph.insert_edge(edge);

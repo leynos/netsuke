@@ -9,6 +9,7 @@
 //! retained snapshot.
 
 mod check;
+mod console;
 mod labels;
 
 #[cfg(feature = "lint")]
@@ -33,7 +34,8 @@ use netsuke::{
     },
     manifest::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL},
     runner::{
-        BASH_PREFLIGHT_TOTAL, LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
+        BASH_PREFLIGHT_TOTAL, FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL,
+        LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
         NINJA_STATUS_OVERSIZED_LINES_TOTAL, RECIPE_SHELL_RESOLUTIONS_TOTAL,
     },
     stdlib::{
@@ -153,8 +155,10 @@ impl ConfigMetricsRecorder {
                 | WHICH_RESOLUTION_TOTAL
                 | MANIFEST_STRUCTURES_TOTAL
                 | NINJA_STATUS_OVERSIZED_LINES_TOTAL
+                | FORWARD_FAILURES_TOTAL
                 | SHELL_QUOTE_DIALECT_TOTAL
         ) || is_check_metric(name)
+            || console::is_console_metric(name)
     }
 
     /// Admit exact bounded counter series by their registered name.
@@ -204,6 +208,7 @@ impl ConfigMetricsRecorder {
                     ("failure_category", &LEGACY_RECIPE_FAILURE_CATEGORIES),
                 ],
             ),
+            FORWARD_FAILURES_TOTAL => exact_labels(key, &FORWARD_FAILURE_LABELS),
             FILTERED_TARGETS_TOTAL
             | FILTERED_ACTIONS_TOTAL
             | OMITTED_FILTERED_ENTRIES_TOTAL
@@ -216,7 +221,7 @@ impl ConfigMetricsRecorder {
             | SHELL_QUOTE_DIALECT_TOTAL => accepts_stdlib_counter_registration(key),
             #[cfg(feature = "lint")]
             CHECK_TOTAL => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
-            _ => false,
+            _ => console::accepts_registration(key, MetricKind::Counter),
         }
     }
 
@@ -238,7 +243,7 @@ impl ConfigMetricsRecorder {
             ),
             #[cfg(feature = "lint")]
             CHECK_DURATION => exact_labels(key, &[(OUTCOME_LABEL, &CHECK_OUTCOMES)]),
-            _ => false,
+            _ => console::accepts_registration(key, MetricKind::Histogram),
         }
     }
 

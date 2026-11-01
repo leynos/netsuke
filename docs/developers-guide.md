@@ -6414,6 +6414,30 @@ variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
+The manifest `console` Boolean lowers to `BuildEdge.console`. It is scheduling
+metadata owned by the edge because two targets can share one action and rule
+while only one target needs streamed output. `Action.pool` remains unchanged,
+so console selection does not alter action identity or action deduplication.
+`src/ninja_gen/display_edge.rs` emits `pool = console` on that edge. If a
+shared action rule already declares `pool = console`, ordinary edges get an
+empty edge-level `pool =` binding to clear that inherited selection. Shared
+console-scheduling validation runs before both direct Ninja generation and
+dyndep-bundle generation. That validation rejects dependency-only edges and
+custom action pools that conflict with `console`; it accepts an existing
+`Action.pool` value of `console`. Synthetic serial gates and dyndep sidecars
+never inherit either binding.
+
+The emitted `pool = console` binding requires Ninja 1.5 or newer. This minimum
+is separate from the conditional Ninja 1.10 requirement for staged serial
+dependency bundles described below.
+
+AST validation keeps stable diagnostic details separate from localized display
+text. `src/ir/graph/error.rs::manifest_recipe_validation_message` maps a
+recognized manifest detail to the same user-facing message for parsing and
+direct IR lowering. Ninja generator errors use a separate message when an
+output edge is available; the build-script localization slice does not depend
+on this library-only mapping.
+
 `src/ir/cycle/mod.rs::CycleDetector::visit` traverses `inputs` and
 `implicit_deps` when detecting cycles. It intentionally does not traverse
 `order_only_deps`, because order-only dependencies express scheduling order
@@ -6513,11 +6537,12 @@ or add manifest-controlled values to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
-optional preflighted `BashExecutable`, and injected monotonic clock solely for
-this graph-generation composition path. Build and Ninja-tool operations attach
-the runtime binding after preflight; query-only generation leaves it absent. It
-is not a general runner context, shared state container, or reusable public
-API; keep unrelated runner inputs and concerns outside it.
+optional preflighted `BashExecutable`, and injected monotonic clock for the
+graph-generation composition path. The build runner also uses that clock to
+measure its Ninja invocation. Build and Ninja-tool operations attach the
+runtime binding after preflight; query-only generation leaves it absent. It is
+not a general runner context, shared state container, or reusable public API;
+keep unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
@@ -7188,6 +7213,21 @@ never echo the payload.
 The production generator has its own `netsuke::ninja_gen::GeneratedNinja`
 output type; `test_support::ninja_semantics::GeneratedNinja` is the test-side
 borrowed view of generated text.
+
+### `test_support::ninja_edge`
+
+`test_support::ninja_edge::edge_has_console_pool`
+(`test_support/src/ninja_edge.rs`) checks edge-local pool metadata on a named
+generated `build` statement. Snapshot, BDD, and documentation-example tests use
+this shared helper, so their assertions agree about which edge owns an indented
+`pool = console` binding. Its scope is deliberately narrow: it inspects the
+generated text used by these tests and does not parse general Ninja syntax.
+Permitted call sites are test-support and test code only; production code must
+not depend on `test_support`.
+
+The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
+parallel, single-output edges for console generator tests. Keep it within that
+module; other graph shapes use their own fixtures.
 
 ### Temporary Ninja build files
 
@@ -10037,7 +10077,9 @@ success envelope; diagnostic serialization remains in
 generator metadata from the private `src/json_envelope.rs` module. Within
 process execution, `forward_stdout` is the single composition point for
 choosing status-aware or plain child-output draining, and its callers select
-either the terminal or a JSON-mode sink.
+either the terminal or a JSON-mode sink. The copy loop itself, and the
+forwarding-failure vocabulary around it, are owned by
+[`runner::process::streaming`](#module-runnerprocessstreaming).
 
 `ExecutionContext` is the private dispatch context shared by build and clean
 handlers. `run_with_ninja_program` constructs it after resolving output mode
@@ -10127,6 +10169,38 @@ no fixture sentinel text. The governing decision record is
 `docs/adrs/adr-0009-bounded-redacted-telemetry-for-manifest-evaluation.md`,
 which forbids unbounded or caller-controlled values in metric labels and trace
 fields.
+
+### Module: `runner::console_telemetry`
+
+`src/runner/console_telemetry/mod.rs` instruments only the actual Ninja build
+invocation in `execute_build`. It supplements the complete legacy-recipe
+operation timing with subprocess duration and outcome grouped by
+`console_scheduling=enabled|disabled`. Its `runner.ninja.build` span and
+completion event include the aggregate `console_edge_count`, scheduling state,
+`outcome=success|error`, and `error_category=none|io`. Paths, action
+identities, recipe contents, and process error text never enter this boundary.
+The runner's injected monotonic clock supplies the duration measurement.
+
+The generator stores the count of selected user edges privately in
+`GeneratedNinja`; the runner reads that aggregate before consuming the bundle.
+Synthetic serial gates and dyndep sidecars do not contribute to it. The count
+describes configured edges in each attempted build graph, rather than edges
+that Ninja actually executed or time spent in its pool. The subprocess boundary
+emits `netsuke_runner_ninja_build_executions_total`,
+`netsuke_runner_ninja_build_execution_duration_seconds`, and
+`netsuke_runner_ninja_build_console_edges_total`. The first two use scheduling,
+outcome, and error-category labels; the edge counter uses only outcome.
+
+Bundle-generation telemetry records the same scheduling state and aggregate
+count. `netsuke_ninja_dyndep_bundle_generations_total` and
+`netsuke_ninja_dyndep_bundle_generation_duration_seconds` carry scheduling,
+outcome, and the generator's fixed error category, including
+`console_dependency_only` and `console_pool_conflict`.
+`netsuke_ninja_dyndep_bundle_console_edges_total` counts configured console
+edges by generation outcome. `src/observability/recorder/console.rs` owns the
+production retention policy for these six series: it admits their exact kinds
+and finite label sets, rejecting unknown values, extra labels, and missing
+labels. Both emission and retention tests use local recorders.
 
 ### Module: `runner::recipe_shell::telemetry`
 
@@ -10243,6 +10317,58 @@ exits, safely records its resource usage through `RUSAGE_CHILDREN` rather than
 measuring the parent test process. It compares progress parsing with
 `--progress never` and permits a fixed 16 MiB overhead, rejecting memory growth
 proportional to the payload.
+
+### Module: `runner::process::streaming`
+
+`src/runner/process/streaming/` owns the only byte-for-byte copy loop between a
+child's standard streams and a forwarding writer, the bounded Ninja
+status-parsing adapter, and the closed forwarding-failure vocabulary in
+`forward_failure.rs`. No other module may add a second copy loop.
+
+#### Streaming reuse boundary
+
+- **Ownership:** the streaming module owns chunk reads, per-chunk writes and
+  flushes, interrupted-read retries, draining after a failure, the
+  `ForwardStats` record, and the failure classification that telemetry
+  publishes.
+- **Permitted call-sites:** exactly two. `output_forwarding::forward_stdout`
+  forwards stdout, choosing `forward_child_output_with_ninja_status` when
+  progress updates are wanted and `forward_child_output` otherwise.
+  `failure_attribution::forward_stderr_with_attribution` forwards stderr
+  through its marker-observing writer. Both pass the stream identity as
+  `ForwardStream`; no caller may invent a stream label.
+- **Composition rules:** flush each chunk before reading the next one, so a
+  flush failure cannot cause already-accepted bytes to be written again. Retry
+  `io::ErrorKind::Interrupted` reads rather than reporting them. Treat a reader
+  that reports more bytes than the buffer holds as a read failure, because the
+  count is only meaningful as a read result. After any failure, drain the
+  remaining child output so the child cannot block on a full pipe.
+
+#### Failure classification and telemetry
+
+A forwarding failure is classified as one of `read`, `write`, `flush`, or
+`drain`, and attributed to `stdout` or `stderr`. A drain failure after an
+earlier failure is counted separately and never replaces the failure that
+stopped forwarding. The counter `netsuke_ninja_forward_failures_total` carries
+exactly the two labels `stream` and `failure_kind`, whose permitted values are
+the closed arrays `FORWARD_STREAM_VALUES` and `FORWARD_FAILURE_KIND_VALUES`.
+`ConfigMetricsRecorder` admits only those exact series, so a widened label
+value is dropped rather than retained. Each failure also emits a warning event
+carrying the same two fields plus the I/O error. Neither label admits output
+content, paths, or reader and writer types. Adding a failure kind means adding
+an enum variant and its array entry together, never passing a raw string.
+
+#### Result policy
+
+Forwarding loss never changes the reported build result. The child's exit
+status remains authoritative, and a truncated output stream is reported through
+the classified counter and warning event instead. This keeps a deliberately
+closed parent pipe, as produced by `netsuke build | head`, from being reported
+as a build failure. `finalize_streaming` therefore joins the stderr forwarding
+thread for its command-list attribution and discards the forwarding statistics
+the helper has already published. The policy tests in
+`src/runner/process/tests/mod.rs` cover a successful child, a failing child,
+and a failed wait, each with forwarding loss.
 
 ### Module: `runner::process::ninja::program`
 

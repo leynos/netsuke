@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = lỗi vào/ra không xác định.
 manifest.command_list_empty = Trường “command” không được để trống: hãy cung cấp một chuỗi lệnh hoặc một danh sách không rỗng.
 manifest.command_isolation_recipe = Trường “command_isolation” yêu cầu công thức có danh sách lệnh.
 manifest.command_isolation_scalar = “command_isolation: isolated” yêu cầu danh sách lệnh.
+manifest.console_dependency_only = Các mục chỉ khai báo phần phụ thuộc không thể chọn nhóm console.
 
 # Lỗi của biểu diễn trung gian.
 ir.rule_not_found = Không tìm thấy quy tắc “{ $rule }” mà đích “{ $target }” tham chiếu.
@@ -197,6 +198,8 @@ ir.invalid_command = Nội suy không hợp lệ trong lệnh: { $snippet }.
 
 # Lỗi khi tạo tệp Ninja.
 ninja_gen.missing_action = Thiếu hành động “{ $id }” mà một cạnh dựng tham chiếu.
+ninja_gen.console_dependency_only = Cạnh dựng “{ $output }” không thể chọn nhóm console vì hành động của nó chỉ chứa các phụ thuộc.
+ninja_gen.console_pool_conflict = Cạnh dựng “{ $output }” chọn nhóm console, nhưng hành động yêu cầu nhóm tùy chỉnh “{ $pool }”.
 ninja_gen.format = Không định dạng được đầu ra của tệp kê khai Ninja.
 ninja_gen.dyndep_files_required = Thao tác này yêu cầu các tệp Ninja dyndep đã tạo; hãy dùng `netsuke build`, `netsuke clean` hoặc `netsuke generate` để hiện thực hóa chúng.
 ninja_gen.reserved_output_path = Đường dẫn '{ $path }' được dành riêng cho trạng thái phụ thuộc tuần tự của Netsuke.

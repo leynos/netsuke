@@ -184,6 +184,7 @@ manifest.glob.unknown_io_error = 未知的輸入輸出錯誤。
 manifest.command_list_empty = 「command」欄位不得為空：請提供命令字串或非空清單。
 manifest.command_isolation_recipe = 「command_isolation」欄位需要包含命令清單的配方。
 manifest.command_isolation_scalar = 「command_isolation: isolated」需要命令清單。
+manifest.console_dependency_only = 僅宣告相依項目的項目無法選取主控台集區。
 
 # 中介表示法的錯誤。
 ir.rule_not_found = 找不到目標「{ $target }」所參照的規則「{ $rule }」。
@@ -196,6 +197,8 @@ ir.invalid_command = 命令中的插值無效：{ $snippet }。
 
 # Ninja 產生錯誤。
 ninja_gen.missing_action = 缺少建置邊所參照的動作「{ $id }」。
+ninja_gen.console_dependency_only = 建置邊「{ $output }」無法選取主控台集區，因為它的動作只包含相依項目。
+ninja_gen.console_pool_conflict = 建置邊「{ $output }」選取了主控台集區，但它的動作要求自訂集區「{ $pool }」。
 ninja_gen.format = 無法格式化 Ninja 資訊清單的輸出。
 ninja_gen.dyndep_files_required = 此操作需要產生的 Ninja dyndep 檔案；請使用 `netsuke build`、`netsuke clean` 或 `netsuke generate` 以產生這些檔案。
 ninja_gen.reserved_output_path = 路徑「{ $path }」已保留給 Netsuke 的序列相依性狀態。

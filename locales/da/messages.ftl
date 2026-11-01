@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = ukendt I/O-fejl.
 manifest.command_list_empty = Feltet "command" må ikke være tomt: angiv en kommandostreng eller en ikke-tom liste.
 manifest.command_isolation_recipe = Feltet ‘command_isolation’ kræver en opskrift med en kommandoliste.
 manifest.command_isolation_scalar = ‘command_isolation: isolated’ kræver en kommandoliste.
+manifest.console_dependency_only = Poster, der kun angiver afhængigheder, kan ikke vælge konsolpuljen.
 
 # Fejl i den interne repræsentation.
 ir.rule_not_found = Reglen "{ $rule }", som målet "{ $target }" henviser til, blev ikke fundet.
@@ -197,6 +198,8 @@ ir.invalid_command = Ugyldig indsættelse i kommandoen: { $snippet }.
 
 # Fejl under generering af Ninja.
 ninja_gen.missing_action = Handlingen "{ $id }", som en byggekant henviser til, mangler.
+ninja_gen.console_dependency_only = Byggekanten ‘{ $output }’ kan ikke vælge konsolpuljen, fordi handlingen kun indeholder afhængigheder.
+ninja_gen.console_pool_conflict = Byggekanten ‘{ $output }’ vælger konsolpuljen, men handlingen anmoder om den brugerdefinerede pulje ‘{ $pool }’.
 ninja_gen.format = Ninja-manifestets output kunne ikke formateres.
 ninja_gen.dyndep_files_required = Dette build kræver en genereret Ninja-pakke; brug `netsuke build`, `netsuke clean` eller `netsuke generate`, så dyndep-filerne materialiseres.
 ninja_gen.reserved_output_path = Stien '{ $path }' er reserveret til Netsukes serielle afhængighedstilstand.

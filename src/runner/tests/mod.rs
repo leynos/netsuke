@@ -22,6 +22,7 @@ use tracing_subscriber::filter::LevelFilter;
 #[cfg(feature = "lint")]
 mod check_dispatch_tests;
 mod manifest_structure_telemetry_tests;
+mod ninja_build_telemetry_tests;
 
 #[path = "shell_seam_tests.rs"]
 mod shell_seam_tests;
@@ -246,6 +247,7 @@ fn ninja_text_propagates_typed_generation_errors() {
             progress_label: None,
             phony: false,
             always: false,
+            console: false,
         })
         .expect("test graph output aliases must be unique");
 

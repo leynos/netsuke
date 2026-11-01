@@ -186,6 +186,7 @@ manifest.glob.unknown_io_error = erro de E/S desconhecido.
 manifest.command_list_empty = O campo "command" não pode estar vazio: forneça uma cadeia de comando ou uma lista não vazia.
 manifest.command_isolation_recipe = O campo ‘command_isolation’ exige uma receita com uma lista de comandos.
 manifest.command_isolation_scalar = ‘command_isolation: isolated’ exige uma lista de comandos.
+manifest.console_dependency_only = Entradas que declaram apenas dependências não podem selecionar o pool do console.
 
 # Erros da representação intermediária.
 ir.rule_not_found = A regra "{ $rule }" referenciada pelo alvo "{ $target }" não foi encontrada.
@@ -198,6 +199,8 @@ ir.invalid_command = Interpolação de comando inválida: { $snippet }.
 
 # Erros de geração do Ninja.
 ninja_gen.missing_action = Falta a ação "{ $id }" referenciada por uma aresta de build.
+ninja_gen.console_dependency_only = A aresta de build "{ $output }" não pode selecionar o pool do console porque sua ação declara apenas dependências.
+ninja_gen.console_pool_conflict = A aresta de build "{ $output }" seleciona o pool do console, mas sua ação solicita o pool personalizado "{ $pool }".
 ninja_gen.format = Não foi possível formatar a saída do manifesto do Ninja.
 ninja_gen.dyndep_files_required = Esta operação requer um pacote Ninja gerado; use `netsuke build`, `netsuke clean` ou `netsuke generate` para materializar os arquivos dyndep.
 ninja_gen.reserved_output_path = O caminho '{ $path }' está reservado para o estado de dependências seriais do Netsuke.

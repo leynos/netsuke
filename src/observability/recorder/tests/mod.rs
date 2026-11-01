@@ -17,6 +17,8 @@ type SnapshotEntry = (CompositeKey, Option<Unit>, Option<SharedString>, DebugVal
 /// Fixed three-label layout used by recipe-shell counters.
 type MetricLabels = [(&'static str, &'static str); 3];
 
+/// Cover retained console-scheduling generation and build metrics separately.
+mod console_tests;
 /// Cover bounded legacy-recipe operation metric registrations separately.
 mod legacy_recipe_tests;
 
@@ -28,6 +30,9 @@ mod manifest_structure_tests;
 
 /// Cover the unlabelled oversized Ninja status counter separately.
 mod ninja_status_tests;
+
+/// Cover the bounded child-output forwarding failure counter separately.
+mod forwarding_tests;
 
 /// Cover the bounded manifest environment-lookup counter series separately.
 mod env_lookup_tests;

@@ -4,8 +4,8 @@
 //! these parser checks cover only the progress-enabled stdout path.
 
 use super::{
-    NinjaStatusLineState, NinjaStatusParsingReader, NinjaTaskProgressTracker, forward_child_output,
-    forward_child_output_with_ninja_status,
+    ForwardFailureKind, ForwardStream, NinjaStatusLineState, NinjaStatusParsingReader,
+    NinjaTaskProgressTracker, forward_child_output, forward_child_output_with_ninja_status,
 };
 use proptest::prelude::*;
 use std::{
@@ -15,6 +15,11 @@ use std::{
         atomic::{AtomicUsize, Ordering},
     },
 };
+
+#[path = "tests/failure_tests.rs"]
+mod failure_tests;
+#[path = "tests/flush_tests.rs"]
+mod flush_tests;
 
 #[derive(Clone)]
 struct FailingWriter {
@@ -111,7 +116,7 @@ where
         reader,
         &mut output,
         |current, total, description| updates.push((current, total, description.to_owned())),
-        "stdout",
+        ForwardStream::Stdout,
     );
 
     assert_eq!(stats.bytes_read, input.len());
@@ -174,11 +179,11 @@ fn peak_rss_bytes() -> io::Result<u64> {
 fn forward_output_writes_all_bytes_when_parent_alive() {
     let input = b"alpha\nbravo\ncharlie\n".to_vec();
     let reader = BufReader::new(Cursor::new(input.clone()));
-    let stats = forward_child_output(reader, Vec::new(), "stdout");
+    let stats = forward_child_output(reader, Vec::new(), ForwardStream::Stdout);
 
     assert_eq!(stats.bytes_read, input.len());
     assert_eq!(stats.bytes_written, input.len());
-    assert!(!stats.write_failed);
+    assert_eq!(stats.failure, None);
 }
 
 #[test]
@@ -187,11 +192,11 @@ fn forward_output_continues_draining_after_write_failure() {
     let reader = BufReader::new(Cursor::new(input.clone()));
     let write_attempts = Arc::new(AtomicUsize::new(0));
     let failing_writer = FailingWriter::new(write_attempts.clone());
-    let stats = forward_child_output(reader, failing_writer, "stdout");
+    let stats = forward_child_output(reader, failing_writer, ForwardStream::Stdout);
 
     assert_eq!(stats.bytes_read, input.len());
     assert_eq!(write_attempts.load(Ordering::SeqCst), 1);
-    assert!(stats.write_failed);
+    assert_eq!(stats.failure, Some(ForwardFailureKind::Write));
     assert_eq!(stats.bytes_written, 0);
 }
 
@@ -212,7 +217,7 @@ fn forward_output_with_ninja_status_parses_monotonic_updates() {
         |current, total, description| {
             updates.push((current, total, description.to_owned()));
         },
-        "stdout",
+        ForwardStream::Stdout,
     );
 
     assert_eq!(stats.bytes_read, input.len());
@@ -254,7 +259,7 @@ fn bounded_status_reader_forwards_large_unterminated_output() {
         ChunkedReader::new(input.clone(), vec![127; 4096]),
         &mut forwarded,
         |_current, _total, _description| {},
-        "stdout",
+        ForwardStream::Stdout,
     );
 
     assert_eq!(forwarded, input);
@@ -294,7 +299,7 @@ fn split_status_line_updates_once_and_eof_partial_line_stays_bounded() {
         reader,
         &mut output,
         |current, total, description| updates.push((current, total, description.to_owned())),
-        "stdout",
+        ForwardStream::Stdout,
     );
 
     assert_eq!(stats.bytes_read, input.len());
@@ -356,15 +361,18 @@ fn status_parsing_peak_rss_does_not_scale_with_a_large_unterminated_stream() {
     const RSS_ALLOWANCE_BYTES: u64 = 4 * 1024 * 1024;
 
     let plain_before = peak_rss_bytes().expect("getrusage should report initial RSS");
-    let plain_stats =
-        forward_child_output(RepeatingByteReader::new(STREAM_BYTES), io::sink(), "stdout");
+    let plain_stats = forward_child_output(
+        RepeatingByteReader::new(STREAM_BYTES),
+        io::sink(),
+        ForwardStream::Stdout,
+    );
     let plain_after = peak_rss_bytes().expect("getrusage should report plain forwarding RSS");
     let status_before = peak_rss_bytes().expect("getrusage should report status forwarding RSS");
     let status_stats = forward_child_output_with_ninja_status(
         RepeatingByteReader::new(STREAM_BYTES),
         io::sink(),
         |_current, _total, _description| {},
-        "stdout",
+        ForwardStream::Stdout,
     );
     let status_after = peak_rss_bytes().expect("getrusage should report status parsing RSS");
 

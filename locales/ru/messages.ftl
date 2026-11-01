@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = неизвестная ошибка ввода-
 manifest.command_list_empty = Поле «command» не должно быть пустым: укажите строку команды или непустой список.
 manifest.command_isolation_recipe = Поле «command_isolation» требует рецепт со списком команд.
 manifest.command_isolation_scalar = «command_isolation: isolated» требует список команд.
+manifest.console_dependency_only = Записи, объявляющие только зависимости, не могут выбрать пул консоли.
 
 # Ошибки промежуточного представления.
 ir.rule_not_found = Правило «{ $rule }», на которое ссылается цель «{ $target }», не найдено.
@@ -197,6 +198,8 @@ ir.invalid_command = Некорректная подстановка в кома
 
 # Ошибки генерации файлов Ninja.
 ninja_gen.missing_action = Отсутствует действие «{ $id }», на которое ссылается ребро сборки.
+ninja_gen.console_dependency_only = Ребро сборки «{ $output }» не может выбрать пул консоли, поскольку действие содержит только зависимости.
+ninja_gen.console_pool_conflict = Ребро сборки «{ $output }» выбирает пул консоли, но действие запрашивает пользовательский пул «{ $pool }».
 ninja_gen.format = Не удалось отформатировать вывод манифеста Ninja.
 ninja_gen.dyndep_files_required = Для этой операции требуется созданный пакет Ninja; используйте `netsuke build`, `netsuke clean` или `netsuke generate`, чтобы материализовать файлы dyndep.
 ninja_gen.reserved_output_path = Путь '{ $path }' зарезервирован для состояния последовательных зависимостей Netsuke.

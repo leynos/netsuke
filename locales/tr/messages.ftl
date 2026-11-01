@@ -185,6 +185,7 @@ manifest.glob.unknown_io_error = bilinmeyen G/Ç hatası.
 manifest.command_list_empty = "command" alanı boş olmamalıdır: bir komut dizesi veya boş olmayan bir liste verin.
 manifest.command_isolation_recipe = "command_isolation" alanı, komut listesi içeren bir tarif gerektirir.
 manifest.command_isolation_scalar = "command_isolation: isolated" bir komut listesi gerektirir.
+manifest.console_dependency_only = Yalnızca bağımlılık bildiren girdiler konsol havuzunu seçemez.
 
 # Ara gösterim hataları.
 ir.rule_not_found = "{ $target }" hedefinin başvurduğu "{ $rule }" kuralı bulunamadı.
@@ -197,6 +198,8 @@ ir.invalid_command = Komutta geçersiz yerleştirme: { $snippet }.
 
 # Ninja üretimi hataları.
 ninja_gen.missing_action = Bir derleme kenarının başvurduğu "{ $id }" eylemi eksik.
+ninja_gen.console_dependency_only = "{ $output }" derleme kenarı, eylemi yalnızca bağımlılıklardan oluştuğu için konsol havuzunu seçemez.
+ninja_gen.console_pool_conflict = "{ $output }" derleme kenarı konsol havuzunu seçiyor, ancak eylemi özel "{ $pool }" havuzunu istiyor.
 ninja_gen.format = Ninja bildiriminin çıktısı biçimlendirilemedi.
 ninja_gen.dyndep_files_required = Bu işlem oluşturulmuş bir Ninja paketi gerektiriyor; dyndep dosyalarını oluşturmak için `netsuke build`, `netsuke clean` veya `netsuke generate` kullanın.
 ninja_gen.reserved_output_path = '{ $path }' yolu Netsuke'nin seri bağımlılık durumu için ayrılmıştır.

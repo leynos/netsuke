@@ -605,6 +605,11 @@ A target supports these fields:
   and `glob` restriction above applies here too.
 - `phony`: marks a logical target that does not represent a file.
 - `always`: forces the recipe to run whenever the target is requested.
+- `console`: selects Ninja's serial console pool for this executable action or
+  target. It defaults to `false` and is unavailable to dependency-only
+  aggregates. Netsuke rejects a conflicting custom action pool; an action pool
+  already named `console` is accepted for a console edge. Other edges sharing
+  that rule have the inherited console pool cleared.
 - `description`: an optional human-readable summary of the public operation
   the target performs. It is discovery metadata shown by
   `netsuke help targets`; it never replaces a referenced rule's `description`
@@ -612,6 +617,36 @@ A target supports these fields:
 
 `name`, `sources`, `deps`, and `order_only_deps` accept either one string or a
 list of strings.
+
+### Stream long-running output with the console pool
+
+The `console` field ships in the next pre-release, `v0.1.0-beta5`. The published
+`v0.1.0-beta4` release rejects it during manifest validation, so install a
+beta5-or-later release, or build from a checkout of the `main` branch, before
+relying on it.
+
+Set `console: true` on a long-running or interactive action or target, such as
+`lint` or `test`, when its output should appear as it runs:
+
+<!-- tested-example: guide-console-target -->
+
+```yaml
+netsuke_version: "1.0.0"
+targets:
+  - name: lint
+    command: cargo clippy --all-targets
+    console: true
+```
+
+Ninja's console pool is available from Ninja 1.5. It runs console-pool edges
+one at a time in one invocation. While one such edge runs, Ninja buffers
+progress and output from other edges, so enabling the field can reduce parallel
+build throughput.
+
+Outside JSON mode, Netsuke forwards Ninja output as it reads it. Netsuke does
+not provide a pseudo-terminal: the recipe sees a pipe, and visibility still
+depends on the recipe flushing its own output. JSON mode suppresses subprocess
+output so that diagnostics remain parseable.
 
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
