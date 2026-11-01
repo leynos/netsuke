@@ -1264,6 +1264,28 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `ManifestLoadOptions<'a>`; `docs/netsuke-design.md` names the four load
   modes; and roadmap 7.1.2 is ticked with all five of its bullets.
 - [x] EP-M5 — documentation, ADR, and roadmap closure.
+- [x] (2026-11-01) EP-M4 lint repair and second full gate batch. The first
+  batch's `clippy::map_unwrap_or` repair used `Option::map_or_default`, which
+  the repository's pinned nightly accepts but Whitaker rejects: Whitaker
+  compiles the crate on its own `nightly-2026-05-28`, where the method is still
+  unstable (E0658). `make lint` was therefore **red** at `0e23c1c04` on a tree
+  Clippy had passed. `declared_variables` now uses the let-else form its sibling
+  `declared_macros` already uses, which satisfies the lint without the
+  unstable method. Two missing spaces in EP-M5's own documentation
+  (`StdlibRegistration::records_expansion_and_budget_telemetry`,
+  `ManifestLoadOptions::deferred`) were repaired in the same commit,
+  `85d71d9b1`, after `make check-fmt`, `make lint-clippy` and
+  `make lint-whitaker` each exited 0 on that exact content. The nine-gate set
+  was then re-run by the scrutineer against the clean tree at `85d71d9b1` (tree
+  `72e02a6d`) and **all nine exited 0**: `check-fmt` 4 s, `typecheck` 1 264 s,
+  `lint` 184 s, `doc-coverage` 1 195 s, `test` 1 475 s, `markdownlint` 28 s,
+  `nixie` 4 s, `test-workflow-contracts` 148 s, `test-package-verify` 403 s;
+  batch wall clock 78 m 27 s (08:35:23–09:53:50). `make test` ran 4 869 nextest
+  cases (4 869 passed, 7 skipped) and then every doctest target;
+  `make test-workflow-contracts` ran 1 520 passed / 3 skipped and a further 27
+  passed. Every gate log carries the same `HEAD` and tree breadcrumbs, so no
+  gate read a tree another gate had moved. Logs:
+  `/tmp/gate{1..9}-netsuke-7-1-2-options-carrying-manifest-loader-entry-point-85d71d9b1.out`.
 
 ## Surprises & discoveries
 
@@ -1829,6 +1851,28 @@ and YAML fixtures, and were set from the inventory in Table 1.
   predict the crate-internal path shape and treat a missing builder as its own
   failure rather than part of the import error. Date/Author: 2026-11-01,
   implementation agent in EP-M4.
+
+- Observation: a lint repair can pass every gate on the pinned toolchain and
+  still fail the Whitaker stage, because Whitaker builds the crate with its own
+  older nightly. Impact: `clippy::map_unwrap_or` and its "obvious" replacement
+  are not interchangeable here — `Option::map_or_default` is unstable below the
+  pin. Evidence: `make lint` exited 2 at `0e23c1c04` with
+  `error[E0658]: use of unstable library feature 'result_option_map_or_default'`
+  at `src/manifest/test_surface/overlays.rs:273`, while `make lint-clippy` was
+  green on the same bytes. Action: use the let-else form the neighbouring
+  function already used, and keep the comment that records why. Date/Author:
+  2026-11-01, implementation agent in EP-M4.
+
+- Observation: the branch no longer merges cleanly into `origin/main`
+  (`e5d57c58`). Both sides split the same localization key table: this branch
+  moved `MANIFEST_*` into `src/localization/manifest_keys.rs`, while `main`
+  moved `CLAP_ERROR_*` into `clap_error_keys.rs` and added a hand-assembled
+  `ALL_KEYS` union in `src/localization/mod.rs`. Impact: PR #807 reports
+  `mergeable: CONFLICTING` and needs a rebase whose `mod.rs` merge must be
+  audited by hand, because a clean merge would leave `ALL_KEYS` covering three
+  tables while four exist. `tests/build_l10n_keys_tests.rs` and
+  `tests/build_l10n_audit_tests.rs` are the oracles for that resolution.
+  Date/Author: 2026-11-01, implementation agent in EP-M4.
 
 ## Decision log
 
