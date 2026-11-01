@@ -29,6 +29,13 @@
   2.0, and the metadata adapter keeps publishing the switch spelling Netsuke's
   parser actually accepts
   ([#951](https://github.com/leynos/netsuke/issues/951), [#779](https://github.com/leynos/netsuke/issues/779))
+- **Breaking:** reject a `{{ ins }}` or `{{ outs }}` marker that directly
+  follows an unpaired backslash in POSIX and Bash `command:`, `script:`, and
+  heredoc-delimiter text. The retained backslash would escape the first
+  character of the substituted path, so a path beginning with `"` could close a
+  double-quoted string and inject shell syntax. Write `\\{{ outs }}` for a
+  literal backslash, or place the marker inside single quotes
+  ([#984](https://github.com/leynos/netsuke/issues/984))
 
 ## [0.1.0-beta4] - 2026-09-26
 

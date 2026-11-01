@@ -6587,12 +6587,34 @@ uses backticks as escapes and does not enter that protected region. POSIX and
 Bash scanning also preserves comments and heredoc bodies verbatim; keep markers
 out of those regions, where their internal tokens can remain in generated
 recipe text. Heredoc delimiters are scanned for markers and expand normally.
-POSIX and Bash `script:` recipes use the POSIX-aware scanner; PowerShell
-`command:` and `script:` recipes share the PowerShell-aware scanner and reject
-markers in quoted strings, here-strings, `$()`, or immediately after a
-backtick. Typographic PowerShell quote characters also make later markers fail
-closed. PowerShell rejects markers in the raw native-command region after an
-unquoted `--%` stop-parsing token. That region ends at a newline or pipeline
+
+A marker directly after an unpaired backslash is rejected in `command:`,
+`script:`, and heredoc-delimiter traversal alike. The substituted encoding
+decides what the backslash escapes, and a double-quoted path beginning with `"`
+is encoded as `\"`, so a retained backslash cancels the escape and closes the
+string. All three traversals call `backslash_escapes_marker` in
+`src/ir/cmd_interpolate/posix_lexical/mod.rs` before any binding is inserted.
+The heredoc renderer returns a private `EscapeBeforeMarker` unit error, which
+both traversals map to `IrGenError::InvalidCommand` carrying the original
+template; that parity is pinned by
+`delimiter_markers_after_an_active_escape_are_rejected` in
+`src/ir/cmd_interpolate/posix_lexical/tests.rs` and
+`markers_after_an_active_backslash_are_rejected` in
+`src/ir/cmd_interpolate/backslash_marker_tests.rs`. Backslash pairs still
+decode to one escaped backslash before the marker, single-quoted backslashes
+are literal, and a backslash-newline continuation is unaffected. The property
+generators do not emit backslashes, so the independent interpolation oracle is
+unchanged. End-to-end coverage runs a generated command recipe through Ninja and
+`/bin/sh` on Unix, and is skipped when `ninja_integration_workspace` reports
+Ninja is unavailable. Script recipes are covered at the interpolation layer
+only: Ninja wraps a script in a `printf %b` pipeline, and that wrapper already
+collapses a backslash run before the script runs, independently of this
+contract. POSIX and Bash `script:` recipes use the POSIX-aware scanner;
+PowerShell `command:` and `script:` recipes share the PowerShell-aware scanner
+and reject markers in quoted strings, here-strings, `$()`, or immediately after
+a backtick. Typographic PowerShell quote characters also make later markers
+fail closed. PowerShell rejects markers in the raw native-command region after
+an unquoted `--%` stop-parsing token. That region ends at a newline or pipeline
 character; a semicolon does not end it, and scanning resumes after the
 boundary. The path text otherwise reaches the native command literally instead
 of being interpreted as Netsuke's quoted path literal. PowerShell scripts have
