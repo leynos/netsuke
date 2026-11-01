@@ -1598,12 +1598,14 @@ podman run --rm -v "$PWD/dist:/packages:ro,z" \
 
 The contract tests are split across
 `tests/workflow_contracts/linux_package_validation_gate_test.py`, which holds
-the action pin, step order, inputs, dry-run wiring, and architecture mapping,
+the action pin, step order, inputs, dry-run wiring, and the per-architecture
+image builds,
 `tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
-holds the image contents, the verifier's pass and fail paths, and the Polythene
-pin, and `tests/workflow_contracts/linux_package_emulation_test.py`, which
-holds the both-formats requirement and the emulated installation's per-format
-and failure paths. Run `make test-workflow-contracts`.
+holds the image contents, the verifier's pass and fail paths, the Polythene
+pin, and the target-to-architecture mapping with its QEMU setup, and
+`tests/workflow_contracts/linux_package_emulation_test.py`, which holds the
+both-formats requirement and the emulated installation's per-format,
+image-selection, and failure paths. Run `make test-workflow-contracts`.
 
 ### Windows MSI packaging and upgrade validation
 

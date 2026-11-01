@@ -195,14 +195,15 @@ def test_validation_installs_the_packages_the_lane_built() -> None:
 
 
 def test_cross_architecture_packages_are_installed_under_emulation() -> None:
-    """Install the packages the shared action would skip on an arch mismatch.
+    """Bind the emulation step to the lane that skips its packages.
 
     The action skips both its sandbox install and its architecture check when
     the package architecture differs from the runner's, which is the arm64 lane
     on an x64 release runner. Without this step those packages would reach
-    upload having never run. It must therefore be unconditional within the
-    cross-architecture lane, install both formats from the images this lane
-    built, and hand each package to the verifier with its architecture.
+    upload having never run, so it must take the architecture and both image
+    tags from the steps that produced them rather than hard-coding either.
+    What the step then does with them is covered behaviourally in
+    ``linux_package_emulation_test.py``.
     """
     step = named_step(_linux_steps(), EMULATION_STEP)
     env = require_mapping(step.get("env"), f"the {EMULATION_STEP} environment")
@@ -215,21 +216,6 @@ def test_cross_architecture_packages_are_installed_under_emulation() -> None:
     for key, value in expected_env.items():
         assert env.get(key) == value, (
             f"{EMULATION_STEP!r} must read {key} from {value!r}, got {env.get(key)!r}"
-        )
-    run = str(step["run"])
-    fragments = (
-        "debs=(dist/*.deb)",
-        "rpms=(dist/*.rpm)",
-        'packages=("${debs[@]}" "${rpms[@]}")',
-        "*.deb) image=$DEB_IMAGE",
-        "*.rpm) image=$RPM_IMAGE",
-        "sh .github/package-validation/install-emulated-package.sh",
-        '"$image" "$PACKAGE_ARCH" "$package" "$BIN_NAME"',
-    )
-    for fragment in fragments:
-        assert fragment in run, (
-            f"{EMULATION_STEP!r} must install every package with {fragment!r}, "
-            f"got {run!r}"
         )
 
 

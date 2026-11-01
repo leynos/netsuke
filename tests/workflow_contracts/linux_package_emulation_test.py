@@ -29,6 +29,17 @@ if typ.TYPE_CHECKING:
 
 SCRIPT = REPO_ROOT / ".github" / "package-validation" / "install-emulated-package.sh"
 EMULATION_STEP = "Install packages under emulation"
+#: The path the workflow step spells out; it runs from the repository root, so
+#: the step passes this relative path rather than the absolute one above.
+INSTALL_SCRIPT = ".github/package-validation/install-emulated-package.sh"
+DEB_IMAGE = "localhost/netsuke-package-validation-deb:arm64"
+RPM_IMAGE = "localhost/netsuke-package-validation-rpm:arm64"
+
+
+def _step_script() -> str:
+    """Return the Linux packaging job's emulation step script."""
+    steps = job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build")
+    return str(named_step(steps, EMULATION_STEP)["run"])
 
 
 def _run_script(
@@ -134,10 +145,8 @@ def test_workflow_step_requires_both_package_formats(
     dist = tmp_path / "dist"
     dist.mkdir()
     (dist / present).write_bytes(b"")
-    steps = job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build")
-    script = str(named_step(steps, EMULATION_STEP)["run"])
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the step's own script is under test.
-        ["/bin/bash", "-c", script],
+        ["/bin/bash", "-c", _step_script()],
         cwd=tmp_path,
         check=False,
         capture_output=True,
@@ -145,8 +154,8 @@ def test_workflow_step_requires_both_package_formats(
         env={
             "PATH": "/usr/bin:/bin",
             "PACKAGE_ARCH": "arm64",
-            "DEB_IMAGE": "localhost/netsuke-package-validation-deb:arm64",
-            "RPM_IMAGE": "localhost/netsuke-package-validation-rpm:arm64",
+            "DEB_IMAGE": DEB_IMAGE,
+            "RPM_IMAGE": RPM_IMAGE,
             "BIN_NAME": "netsuke",
         },
     )
@@ -157,6 +166,64 @@ def test_workflow_step_requires_both_package_formats(
     assert "::error title=Missing package format::" in result.stdout, (
         f"the step must report the missing format, got {result.stdout!r}"
     )
+
+
+def test_workflow_step_installs_each_format_in_its_own_image(
+    tmp_path: Path,
+) -> None:
+    """Hand each package the image, architecture, and name it needs.
+
+    The step picks the image from the package's extension, so a mapping that
+    swapped them would install a ``.deb`` in the RPM image and surface only on
+    the release runner. Running the step against a recording ``sh`` proves the
+    choice per package, where matching the step's source text would break on a
+    rename while the behaviour stayed correct.
+    """
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    packages = (
+        (dist / "netsuke_0.1.0-1_arm64.deb", DEB_IMAGE),
+        (dist / "netsuke-0.1.0-1.aarch64.rpm", RPM_IMAGE),
+    )
+    for package, _ in packages:
+        package.write_bytes(b"")
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "sh.log"
+    stub = bin_dir / "sh"
+    stub.write_text(f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\n', encoding="utf-8")
+    stub.chmod(0o755)
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the step's own script is under test.
+        ["/bin/bash", "-c", _step_script()],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+        env={
+            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "PACKAGE_ARCH": "arm64",
+            "DEB_IMAGE": DEB_IMAGE,
+            "RPM_IMAGE": RPM_IMAGE,
+            "BIN_NAME": "netsuke",
+        },
+    )
+    assert result.returncode == 0, (
+        f"a dist holding both formats must pass the step, got "
+        f"{result.returncode}: {result.stdout}{result.stderr}"
+    )
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    assert len(calls) == len(packages), (
+        f"the step must install each package once, got {calls!r}"
+    )
+    for package, image in packages:
+        matches = [call for call in calls if package.name in call]
+        assert len(matches) == 1, (
+            f"{package.name} must be installed exactly once, got {calls!r}"
+        )
+        for fragment in (INSTALL_SCRIPT, image, "arm64", "netsuke"):
+            assert fragment in matches[0], (
+                f"installing {package.name} must pass {fragment!r}, got {matches[0]!r}"
+            )
 
 
 def test_fails_when_the_package_is_absent(tmp_path: Path) -> None:
