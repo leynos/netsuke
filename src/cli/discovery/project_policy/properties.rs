@@ -220,6 +220,7 @@ proptest! {
                 ),
                 scope,
                 project_chain,
+                authority: RootAuthority::Operator,
             });
         }
 

@@ -292,6 +292,9 @@ fn project_layer_scan_normalizes_only_the_project_key() -> Result<()> {
     Ok(())
 }
 
+mod authority_properties;
+mod authority_tests;
+mod discovery_differential_tests;
 mod project_chain_tests;
 
 /// Canonicalization failure falls back to literal comparison without failing
