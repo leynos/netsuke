@@ -6816,10 +6816,13 @@ The private `GlobExpansion::into_template_paths` method is the adapter between
 the filesystem query and Jinja values that may later be interpolated into shell
 commands. It accepts only non-empty paths made from ASCII letters, digits, `/`,
 `:`, comma, full stop, underscore, and hyphen. Any whitespace, control
-character, non-ASCII byte, or other punctuation returns a MiniJinja
-`InvalidOperation` error before `foreach` receives the value. This policy is
-Jinja-specific: `glob_paths` retains its filesystem-query contract and returns
-all matching UTF-8 file paths without applying shell-safety validation.
+character, non-ASCII byte, backslash, or other punctuation returns a MiniJinja
+`InvalidOperation` error before `foreach` receives the value. A Unix filename
+containing a literal backslash is rejected here rather than rewritten into an
+accepted directory path, so the value that reaches `foreach` is always the file
+the metadata check selected. This policy is Jinja-specific: `glob_paths`
+retains its filesystem-query contract and returns all matching UTF-8 file paths
+without applying shell-safety validation, leaving quoting to direct callers.
 
 ### Base-directory seam
 
@@ -6839,11 +6842,20 @@ working-directory state during glob expansion.
   retains the unescaped path for result rebasing. `open_root_dir` receives
   `None` for this prepared search because the base is already embedded.
 
-The focused base and property tests cover no-double-base, symlinked base,
-base-path metacharacters, canonicalization failure, nested and parent-relative
-results, absolute patterns, and forward-slash output. Run
-`make bench-glob-expansion` alongside the relevant tests when changing this hot
-path.
+Result normalization happens after capability validation and must not change
+the identity of the matched file. `strip_base` follows the same `cfg(unix)`
+split as `normalize.rs`: on Windows and other platforms where a backslash is a
+separator, it rewrites `\\` to `/`; on Unix, where a backslash is an ordinary
+filename character, it returns the matched spelling unchanged. Rewriting a Unix
+backslash would report a file the capability walk never selected, and a name
+such as `part\..\other.txt` would become the parent-directory traversal
+`part/../other.txt`. Do not reintroduce an unconditional replacement.
+
+The focused base, property, and identity tests cover no-double-base, symlinked
+base, base-path metacharacters, canonicalization failure, nested and
+parent-relative results, absolute patterns, forward-slash directory separators,
+and preserved literal Unix backslashes. Run `make bench-glob-expansion`
+alongside the relevant tests when changing this hot path.
 
 The adjacent configuration-discovery seam keeps its ownership boundary clear:
 `-C/--directory` anchors manifest lookup and automatic project discovery.
