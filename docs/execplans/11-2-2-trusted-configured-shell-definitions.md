@@ -106,6 +106,8 @@ explicit and exercise the actual adapters in tests.
   diagram validation, and whitespace checks before publication.
 - [x] 2026-11-01: Obtain explicit maintainer approval and rebase onto
   `origin/main` (`da06ffb11`) before implementation.
+- [x] 2026-11-01: Re-rebase onto the advanced `origin/main` (`5f0a4d123`) after
+  PR #958 landed, and revalidate the full gate set on the rebased candidate.
 - [ ] M1: Establish definition authority and reject unauthorized sources.
 - [ ] M2: Add validated definitions, append merging, and collision proof.
 - [ ] M3: Complete behavioural evidence, documentation, and delivery.
@@ -127,6 +129,20 @@ The repository already declares `googletest`, `pretty_assertions`, `rstest`,
 `insta`, and property-test tooling. Reuse those dependencies. The Verus runner
 already supports a selected proof file through `VERUS_FLAGS`.
 
+The plan and its external-interface evidence cite OrthoConfig 0.9.0, but
+`Cargo.toml` pins 0.10.0. Inspecting the 0.10.0 registry source confirms that
+`ConfigDiscovery::candidates()` returns bare paths only: the per-candidate
+`Candidate.scopes` field is `pub(super)`, so no public scope label exists. Root
+authority must therefore be re-derived by normalized path comparison against
+the project file, as planned, and cannot simply read a candidate's scope.
+Nothing in 0.10.0 blocks the design; the walk, `load_config_file_as_chain`, and
+the public `LayerDiscoveryOutcome` fields all exist as the plan assumes.
+
+The branch never edits `typos.toml`. The earlier spelling gate regenerated it
+in place; the rebase onto the current `origin/main` (`5f0a4d123`) delivered
+exactly that regenerated content from upstream, so the working-tree difference
+disappeared and no separate refresh pull request is needed.
+
 ## Decision log
 
 - 2026-10-20: Keep the plan approval-gated and the roadmap entry unchecked.
@@ -146,14 +162,24 @@ already supports a selected proof file through `VERUS_FLAGS`.
   focused gate commands. Buzzy Bee/Doggylump added normalized environment
   ingress, bounded escaped diagnostics, late JSON preference evidence, and
   set-based production validation. These review findings are incorporated.
+- 2026-11-01: Record the OrthoConfig version as a deviation, not a defect. The
+  plan cites 0.9.0 while `Cargo.toml` pins 0.10.0; the newer API still exposes
+  `candidates()`, `load_config_file_as_chain`, and the public
+  `LayerDiscoveryOutcome` fields the design relies on. No milestone or contract
+  changes. Root authority remains a Netsuke-owned normalized comparison because
+  `Candidate.scopes` is not publicly reachable.
+- 2026-11-01: Treat the regenerated `typos.toml` as upstream content rather
+  than a branch change. The rebase onto `5f0a4d123` supplied the exact file the
+  pinned builder produces, so the branch carries no spelling-config diff and
+  needs no stacked base pull request.
 
 ## Outcomes & retrospective
 
 The draft has completed Wyvern reconnaissance and community review. No feature
 implementation, proof, or feature-test result is claimed. Maintainer approval
-was granted on 2026-11-01 and the branch was rebased onto `origin/main`
-(`da06ffb11`) before implementation; implementation and roadmap closure remain
-open.
+was granted on 2026-11-01 and the branch was rebased onto `origin/main`, most
+recently `5f0a4d123`, before implementation; implementation and roadmap closure
+remain open.
 
 ## Conformance basis
 
@@ -575,7 +601,9 @@ Firecrawl checked the versioned
 [OrthoConfig 0.9 PostMergeHook documentation](https://docs.rs/ortho_config/0.9.0/ortho_config/trait.PostMergeHook.html)
 on 2026-10-20: the hook runs after declarative merging and returns
 `OrthoResult<()>`. It does not supply a substitute for root authority metadata.
-The checked
+The manifest now pins 0.10.0; the 0.10.0 registry source was inspected on
+2026-11-01 and keeps that hook contract, while `candidates()` returns only
+paths, so root authority stays a Netsuke-owned classification. The checked
 [rust-prover-tools interface](https://github.com/leynos/rust-prover-tools)
 accepts `verus run --proof-file`; the repository's pinned runner and Makefile
 remain authoritative during execution. No external claim replaces an
@@ -586,6 +614,10 @@ integration test against the pinned dependency.
 2026-11-01: Recorded maintainer approval, set `Status: APPROVED`, and rebased
 the branch onto `origin/main` (`da06ffb11`) before implementation. The rebase
 replayed the plan commit unchanged and introduced no source change.
+
+2026-11-01: Rebasing again onto `5f0a4d123` (PR #958) recorded the OrthoConfig
+0.10.0 deviation, the missing public candidate-scope label, and the resolution
+of the regenerated `typos.toml` as upstream content.
 
 2026-10-20: Initial approval-gated draft, based on two Wyvern reconnaissance
 reports, current source contracts, and external-interface checks. Reconciled
