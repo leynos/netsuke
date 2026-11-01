@@ -5194,8 +5194,19 @@ Use the Make targets for day-to-day formal-verification checks:
   harnesses.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 - `make install-verus` and `make verus` delegate to `rust-prover-tools` for
-  the optional Verus installer and proof runner. These targets are not part of
-  the ordinary pull-request gate.
+  the optional Verus installer and proof runner. `make verus` defaults to
+  `verus/canonical_value/main.rs`; setting `VERUS_FLAGS` replaces that default.
+  Repeat `--proof-file` for an ordered batch, quoting each path with spaces as
+  one shell argument:
+
+  ```bash
+  make verus VERUS_FLAGS='--proof-file "verus/first proof.rs" --proof-file verus/second.rs'
+  ```
+
+  The pinned CLI runs files in order, stops at the first failed proof, and
+  returns the verifier's exit status. `make test-prover-tools-integration`
+  exercises this contract with fake verifier processes and never installs
+  Verus. These targets are not part of the ordinary pull-request gate.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`. `Cargo.toml` declares `cfg(kani)` under

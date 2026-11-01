@@ -127,10 +127,40 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       validation and diff checks all passed. Logs share the
       `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm1-macos-fallback-final.out`
       suffix.
-- [ ] Commit the repair and repeat the committed milestone CodeRabbit review
-      against the updated head.
-- [ ] Commit the fully green EP-M1 milestone before starting EP-M2.
-- [ ] EP-M2: Wire explicit Verus proof selection and batch integration tests.
+- [x] (2026-11-01) Commit EP-M1 as
+      `848d8ee866e10a22e92acda602984bfc19b1439e` plus the Kani fallback repair
+      `0e0dcbb047b03960127319d919674d604a08a0a4`.
+- [x] (2026-11-01) Repeat CodeRabbit against the committed EP-M1 delta from
+      approval checkpoint `9a7bcb86f0b326f176fd637dc9a2aafa2080568b` through
+      `0e0dcbb047b03960127319d919674d604a08a0a4`; review completed with zero
+      findings.
+- [x] (2026-11-01) Demonstrate the missing Verus default with the
+      argv-preserving Make recorder, then add the canonical-value default,
+      explicit repeated `--proof-file` and space-containing path cases. The
+      focused suite passes 11/11; logs are
+      `/tmp/test-netsuke-import-prover-tools-epm2-red.out` and
+      `/tmp/test-netsuke-import-prover-tools-epm2-make-green.out`.
+- [x] (2026-11-01) Add a pinned-CLI integration target using fake Verus
+      processes. The seven integration cases pass, covering order,
+      first/middle/last failure, status propagation, missing paths and
+      environment/CLI selection. Log:
+      `/tmp/test-prover-tools-integration-netsuke-import-prover-tools-epm2-space-paths.out`.
+- [x] (2026-11-01) Document the default proof, repeated override syntax and
+      dedicated fake-verifier test target in the developers' guide.
+- [x] (2026-11-01) Address the first EP-M2 lint findings: mark the focused
+      child-process boundary explicitly, set `shell=False`, and attach failure
+      messages to every Python assertion. Both full gate attempts stopped at
+      lint; formatting passed each time. The complete sequence must pass after
+      these corrections.
+- [x] (2026-11-01) Run all 12 EP-M2 gates after the lint fixes. Formatting,
+      lint, typecheck, doc coverage (98.23%), Markdown, Mermaid, Rust tests
+      (4,947 passed, 7 skipped plus doctests), workflow contracts (1,666 passed,
+      3 skipped plus 28 chained helper tests), CI scripts (90 passed), pinned
+      prover-tools integration (7 passed), Makefile validation and diff check
+      all passed. Logs share the
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm2-assert-fix-final.out`
+      suffix.
+- [ ] Commit EP-M2 and review the committed milestone with CodeRabbit.
 - [ ] EP-M3: Complete real-tool acceptance and documentation reconciliation.
 
 ## Surprises & discoveries
@@ -226,17 +256,25 @@ x86_64 and offers `--compile` for other hosts. A red regression test now
 specifies the host-selection policy. `KANI_HOST_TRIPLE` now selects the
 verified archive only on Linux x86_64; other local hosts receive `--compile`,
 while the workflow's explicit flags preserve CI's cached archive route. All
-three focused Make cases and the final 11 gate sequence pass. The repair still
-needs its commit and a repeat CodeRabbit review.
+three focused Make cases and the final 11 gate sequence pass. The repair is
+committed and its repeat CodeRabbit review found no issues. EP-M2 first
+recorded the missing Verus default as an expected failure, then added an
+argv-preserving recorder, the canonical-value default, and tests for repeated
+proof paths with spaces. A pinned-CLI integration suite now exercises batches
+through fake Verus processes, including failure position, status propagation,
+missing inputs, and CLI/environment precedence. All 11 Make boundary cases and
+seven upstream integration cases pass. The full 12-gate EP-M2 sequence passes,
+including 4,947 Rust tests, 1,666 workflow contracts, 90 CI script tests and
+98.23% documentation coverage. Its evidence is in the EP-M2 log set above; the
+milestone commit and CodeRabbit review remain pending.
 
 ## Context and orientation
 
 Work from the Netsuke repository root. `Makefile` defines `PROVER_TOOLS_SOURCE`
 and `PROVER_TOOLS`, plus `install-kani`, `kani-check`, `kani-full`, `kani-ir`,
 `install-verus`, `verus`, and `formal-pr`. `tests/prover_tools_make_tests.rs`
-currently replaces the CLI with a fake executable to test delegation,
-diagnostic redaction and failure reporting; its flattened `$*` log cannot prove
-that paths containing spaces survive as single arguments.
+replaces the CLI with a fake executable to test delegation, diagnostic
+redaction, failure reporting and argv boundaries, including paths with spaces.
 
 `.github/workflows/ci.yml` owns the `kani-smoke` lane.
 `.github/actions/kani-cache/action.yml` restores and saves `.kani-cargo`,

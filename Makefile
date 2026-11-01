@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -219,7 +219,7 @@ PROVER_TOOLS ?= $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 unexport RUSTDOC_FLAGS
 export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)
-VERUS_FLAGS ?=
+VERUS_FLAGS ?= --proof-file verus/canonical_value/main.rs
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
 
@@ -394,6 +394,12 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 		scripts/tests/test_ci_scripts_metadata.py \
 		scripts/tests/test_ci_stage_test_shell.py \
 		scripts/tests/test_ci_support.py \
+		-c /dev/null --rootdir=. -p no:cacheprovider
+
+test-prover-tools-integration: ## Exercise the pinned prover-tools Verus CLI with a fake verifier
+	@PROVER_TOOLS="$(PROVER_TOOLS)" $(UV_ENV) $(UV) run --no-project \
+		--python $(PYTHON_BASELINE) --with pytest==9.0.2 \
+		python -m pytest scripts/tests/test_prover_tools_integration.py -q \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
 # Release-policy modules receive names, digests, mappings, or typed transport
