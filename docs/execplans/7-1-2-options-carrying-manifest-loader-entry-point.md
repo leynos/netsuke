@@ -6,7 +6,7 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
 Approved 2026-10-14 by the user, by explicit instruction to proceed with this
 plan under the `sdlc-implementation` workflow. That approval accepts the
@@ -1250,7 +1250,20 @@ and YAML fixtures, and were set from the inventory in Table 1.
 - [x] EP-M2 — options entry point and thin wrappers.
 - [x] EP-M3 — `StdlibRegistration::Test`.
 - [x] EP-M4 — template overlays.
-- [ ] EP-M5 — documentation, ADR, and roadmap closure.
+- [x] (2026-11-01) EP-M5 documentation.
+      `docs/netsuke-test-framework-technical-design.md`
+  now describes the implemented loader: §4.2 carries the four-variant enum and
+  the `SURFACE` inventory, §4.3 the options, `TestSurface`, overlay types, name
+  rules, and registration order, §5.5 the full refusing inventory with the
+  `which`/`expanduser` deviations, and §7 the globals-enumeration capture the
+  earlier text wrongly denied. Every cited anchor was re-derived from the
+  source. `docs/adrs/adr-0070-deny-by-default-test-mode-stdlib.md` was minted
+  and indexed in `docs/contents.md`; ADR-0050 gained Addendum E for the
+  telemetry scope of derived loads; the developers' guide gained a "Manifest
+  loader entry points" subsection; `docs/polonius.md` records
+  `ManifestLoadOptions<'a>`; `docs/netsuke-design.md` names the four load
+  modes; and roadmap 7.1.2 is ticked with all five of its bullets.
+- [x] EP-M5 — documentation, ADR, and roadmap closure.
 
 ## Surprises & discoveries
 
@@ -2180,7 +2193,42 @@ and YAML fixtures, and were set from the inventory in Table 1.
 
 ## Outcomes & retrospective
 
-Not started.
+Delivered in full. The loader now has one options-carrying entry point,
+`from_str_with_options`, over a crate-private four-variant
+`StdlibRegistration`; the pre-existing entry points are thin wrappers. A
+`TestSurface` grants a deny-by-default stdlib whose availability is decided by
+one `SURFACE` inventory, refuses withheld helpers with a localized diagnostic
+carrying a typed `TestModeRefusal` source, and lets a test replace functions —
+including `glob` — with `TemplateOverlays`, whose name validation and
+registration order are pinned by tests. The build path is unchanged, and the
+differential property over generated pure manifests holds between `Full` and
+`Test`.
+
+Evidence: EP-M0's characterization snapshots, EP-M1's byte-identical
+extractions, EP-M2's wrapper and entry-point suites, EP-M3's `Test` mode and
+differential property, EP-M4's overlay namespace and registration tests with
+two seeded faults proving non-vacuity, and EP-M5's documentation and roadmap
+closure. Every milestone ended with the full gate set run by `scrutineer`; the
+EP-M4 batch's three findings were repaired and re-verified (see `Progress`).
+
+Retrospective:
+
+- The plan's ADR serial was stale. Checking the target namespace before
+  claiming a number — the serial `0060` was already in use on `main` — cost one
+  sweep and prevented a duplicate-serial conflation. Recorded as a deviation,
+  and EP-M5 minted `0070`.
+- A gate batch is cheap to start and expensive to repeat. After the batch
+  reported three findings, repairing and re-verifying each one directly was far
+  faster than another full cycle, and identified two alarming results as
+  invocation artefacts rather than defects.
+- The design's claim that MiniJinja offers no way to retrieve a registered
+  function was wrong. Enumerating `Environment::globals` reaches it, which is
+  what makes a passthrough overlay possible; the documentation now says so and
+  roadmap 7.1.3 can build macro substitution on the same capture.
+
+Remaining work is outside this item: macro substitution (7.1.3), sandbox-rooted
+adapters for `glob`, the file tests, and the file-reading filters (7.4.1), and
+the runner slices that consume the surface.
 
 ## Conformance basis
 

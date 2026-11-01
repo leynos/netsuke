@@ -237,6 +237,28 @@ macro output or internal macro and capture buffering. Addendum B's deferred
 remediation and its MiniJinja 3.0.0-final release condition therefore remain
 unchanged.
 
+## Addendum E: Telemetry scope for derived loads (2026-11-01)
+
+Expansion and budget telemetry describes normal manifest loading: how often
+`foreach`/`when` evaluated, what the resource budget observed, and how a build
+manifest's evaluation behaved. Two derived load modes measure something else
+and must not contribute to those counters.
+
+`ManifestQuery` loads inspect discovery metadata and evaluate a manifest only
+far enough to answer a query. `Test` loads evaluate a manifest under a
+deny-by-default stdlib surface. Counting either as a build-shaped load would
+distort usage evidence and blend a query or test outcome into statistics about
+builds.
+
+The load's registration therefore decides:
+`StdlibRegistration:: records_expansion_and_budget_telemetry` is true for
+`AmbientFull` and `Full` and false for `ManifestQuery` and `Test`. The loader
+passes that decision to the budget adapter and skips the expansion telemetry,
+so a query or test load still enforces the resource ceilings but records
+nothing under the build's telemetry names. This narrows the counters' scope; it
+does not change the budget itself or the guarantee this record's Addenda A–D
+describe.
+
 ## References
 
 - [#651](https://github.com/leynos/netsuke/issues/651) and

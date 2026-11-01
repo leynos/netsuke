@@ -351,6 +351,68 @@ assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
 This snippet mirrors the executable doctest on `from_str_with_env` in the API
 documentation.
 
+### Manifest loader entry points
+
+`ManifestLoadOptions` carries everything a load needs beyond the YAML text and
+its name, and `from_str_with_options` is the entry point that takes it. The
+older entry points are thin wrappers over the same path: `from_str` loads with
+the ambient build stdlib, and `from_str_with_env` differs only in the reader it
+injects.
+
+```rust
+use netsuke::manifest::{
+    EnvAccessPolicy, ManifestEnvironment, ManifestLoadOptions, ManifestName,
+    from_str_with_options, process_env_reader,
+};
+use netsuke::stdlib::StdlibConfig;
+
+let reader = process_env_reader();
+let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
+let options = ManifestLoadOptions::full(
+    StdlibConfig::from_current_dir().expect("open the workspace"),
+    environment,
+);
+let yaml = "netsuke_version: 1.0.0\n";
+let manifest = from_str_with_options(yaml, &ManifestName::new("Netsukefile"), options)
+    .expect("load manifest");
+# let _ = manifest;
+```
+
+- `ManifestLoadOptions::full` selects the complete build stdlib and takes the
+  environment inputs explicitly.
+- `ManifestLoadOptions::test` selects the deny-by-default test surface (see
+  [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md)).
+- `with_budget_limits` and `with_stage_observer` adjust a load without
+  changing its mode.
+
+A path load has to open its workspace before it can decide its stdlib
+configuration, so it goes through a crate-private
+`from_path_with_options(path, registration_for, options)`, where
+`registration_for` turns the opened workspace into a registration. Do not add
+another `from_path_with_*` rung for a new caller: use `from_str_with_options`
+for a string load, or an existing path entry that already opens a workspace.
+
+Two capabilities are reachable only through the test surface, and both are
+compiled unconditionally because a test runner is a production code path:
+
+- `TestSurface::with_env_reader` supplies the reader `env()` answers from;
+  without one, every lookup reports "not set" rather than reading the process.
+- `TestSurface::with_overlays` installs `TemplateOverlays`, which replace
+  template functions by name. Overlays are registered after the stdlib, the
+  manifest `vars`, and the manifest macros, and before `foreach` expansion, so
+  they are visible to `when`, `foreach`, and every rendered field. An overlay
+  may take the name of any stdlib helper, including `glob`, but not `env`, a
+  `__netsuke_`-prefixed name, a manifest `vars` key, or a manifest macro name.
+  `OverlayCall::shadowed` hands a replaced function back to the overlay, so a
+  test can wrap a helper rather than only discard it.
+
+The stdlib surface a test load grants is deny-by-default and comes from one
+inventory, `SURFACE` in `src/stdlib/restricted_helpers/mod.rs`, which records a
+query disposition and a test disposition per helper. A contract test checks it
+in both directions, so a new stdlib helper has to state what each restricted
+surface does with it, and adding a literal registration without a row fails the
+gate.
+
 ### Ninja invocation with an explicit environment
 
 A program calling Netsuke's Rust API can invoke Ninja without touching its own

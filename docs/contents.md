@@ -321,6 +321,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0069](adrs/adr-0069-split-the-localization-key-tables.md): Splitting the
   Fluent key tables by audience under Whitaker's module line cap, while the
   build audit and `keys::ALL_KEYS` keep seeing one key set.
+- [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md):
+  Deny-by-default stdlib surface for `netsuke test`, typed refusal stubs, and
+  template overlays that replace withheld functions by name.
 
 ## Proposals
 

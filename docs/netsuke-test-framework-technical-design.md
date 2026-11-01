@@ -140,23 +140,26 @@ expansion.
 ### 4.2. The restricted-load precedent
 
 `netsuke help targets` established the pattern this framework extends. The
-loader already selects its standard-library boundary through an enum
-(`StdlibRegistration`, `src/manifest/mod.rs:99`) with two variants:
-`Full(Box<StdlibConfig>)` for builds, and `ManifestQuery` for side-effect-free
-discovery. `src/manifest/query.rs` owns that boundary, and
-`register_manifest_query` (`src/stdlib/register.rs:135`) implements it by
+loader selects its standard-library boundary through an enum
+(`StdlibRegistration`, `src/manifest/loader_options.rs:40`). At the end of the
+execution plan (EP-M4) it has four variants: `AmbientFull` for the build path
+rooted at the process working directory, `Full` for a caller-configured build,
+`ManifestQuery` for side-effect-free discovery, and `Test` for the
+deny-by-default test surface. `src/manifest/query.rs` owns the query boundary,
+and `register_manifest_query` (`src/stdlib/register.rs:139`) implements it by
 registering the pure helpers and replacing `env`, `glob`, `fetch`, `shell`,
 `grep`, and `contents` with stubs that raise a located diagnostic naming the
 unavailable operation.
 
-The test runner is a third load mode of exactly this shape, so it extends the
+The test runner is a fourth load mode of exactly this shape, so it extends the
 existing enum rather than introducing a parallel mechanism:
 
 ```rust
-enum StdlibRegistration {
-    Full(Box<StdlibConfig>),
-    ManifestQuery,
-    Test(Box<StdlibConfig>),   // sandbox-rooted; impure helpers refuse
+pub(crate) enum StdlibRegistration {
+    AmbientFull,               // process-rooted build stdlib
+    Full(Box<StdlibConfig>),   // caller-configured build stdlib
+    ManifestQuery,             // side-effect-free discovery
+    Test(Box<TestSurface>),    // deny-by-default; impure helpers refuse
 }
 ```
 
@@ -164,55 +167,98 @@ Three consequences follow, each replacing machinery this design would otherwise
 have invented:
 
 - The disabled-helper diagnostic already exists.
-  `manifest_query_operation_error` (`src/stdlib/register.rs:262`) is the
-  template for the "unavailable under test" messages in §5.5; the test mode
-  reuses the mechanism with its own message keys rather than intercepting
-  MiniJinja's unknown-function error.
-- `disabled_env_reader` (`src/manifest/env/reader.rs:115`) already provides
+  `manifest_query_operation_error`
+  (`src/stdlib/restricted_helpers/query.rs:154`) is the template for the
+  "unavailable under test" messages in §5.5; the test mode reuses the mechanism
+  with its own message keys rather than intercepting MiniJinja's
+  unknown-function error.
+- `disabled_env_reader` (`src/manifest/env/reader.rs:117`) already provides
   a reader that refuses every lookup. The test reader is that reader with the
   case's declared variables layered over it (§5.1).
 - `src/manifest/query.rs` is the precedent module for a capability-scoped
   non-build load, and the test runner's loader entry belongs beside it rather
   than in a new location.
 
+Both restricted modes are driven from one inventory: `SURFACE`
+(`src/stdlib/restricted_helpers/mod.rs:104`) records a query disposition and a
+test disposition beside every helper whose availability depends on the load
+surface. `register_for_test`, the query refusal stubs, and the real file-test
+registration all consume it, and a contract test checks it in both directions,
+so a new helper cannot be registered without stating what each mode does with
+it (C5, §5.5).
+
 ### 4.3. Loader options
 
 The loader gains an options-carrying entry point; the existing entry points
-become thin wrappers over it with default options.
+become thin wrappers over it with default options. As implemented in EP-M2 and
+extended in EP-M3 and EP-M4:
 
 ```rust
+/// Inputs to one manifest load beyond the YAML text and its name.
 pub struct ManifestLoadOptions<'a> {
-    pub registration: StdlibRegistration,
-    pub env_reader: Option<EnvReader>,
-    pub overlays: Option<TemplateOverlays>,
-    pub on_stage: Option<&'a mut dyn FnMut(ManifestLoadStage)>,
+    registration: StdlibRegistration,
+    environment: ManifestEnvironment<'a>,
+    budget_limits: ManifestBudgetLimits,
+    on_stage: Option<&'a mut dyn FnMut(ManifestLoadStage)>,
 }
 
-/// Test-supplied substitutions applied to the MiniJinja environment
-/// after stdlib and manifest-macro registration, before foreach expansion.
-pub struct TemplateOverlays {
-    pub functions: IndexMap<String, OverlayCallable>,
-    pub macro_substitutions: IndexMap<String, String>,
+impl<'a> ManifestLoadOptions<'a> {
+    pub fn full(config: StdlibConfig, environment: ManifestEnvironment<'a>) -> Self;
+    pub fn test(surface: TestSurface) -> Self;
+    pub fn with_budget_limits(self, limits: ManifestBudgetLimits) -> Self;
+    pub fn with_stage_observer(self, on_stage: &'a mut dyn FnMut(ManifestLoadStage)) -> Self;
+    // crate-private: ambient, manifest_query, deferred, with_registration
+}
+
+/// The capabilities granted to a manifest under `netsuke test`.
+pub struct TestSurface { /* config, reader, overlays */ }
+
+impl TestSurface {
+    pub fn new(config: StdlibConfig) -> Self;
+    pub fn with_env_reader(self, reader: EnvReader) -> Self;
+    pub fn with_overlays(self, overlays: TemplateOverlays) -> Self;
+}
+
+/// Test-supplied template functions, registered after stdlib and manifest
+/// macros and before `foreach` expansion.
+#[derive(Clone, Default)]
+pub struct TemplateOverlays { /* functions: IndexMap<String, OverlayCallable> */ }
+
+impl TemplateOverlays {
+    pub fn with_function(self, name: impl Into<String>, callable: OverlayCallable) -> Self;
+    pub fn is_empty(&self) -> bool;
 }
 ```
 
-**Status.** Both sketches above predate the ExecPlan's 2026-09-27 revision
-note, which supersedes them in three respects: `ManifestLoadOptions` carries
-private fields with constructor and builder methods rather than public ones, the
-`Test` variant holds a `Box<TestSurface>` rather than a bare
-`Box<StdlibConfig>`, and `StdlibRegistration` — including its named
-`AmbientFull` variant — stays crate-private. The authoritative shapes are the
-ExecPlan's _Interfaces and dependencies_ section until the documentation
-milestone rewrites this one.
+The fields are private and reached through constructors and builders. The
+public entry is the string load, `from_str_with_options(yaml, name, options)`.
+A path load needs a workspace before it can decide its stdlib configuration, so
+it goes through the crate-private
+`query::from_path_with_options(path, registration_for, options)`, where
+`registration_for: FnOnce(ManifestWorkspace) -> Result<StdlibRegistration>`
+derives the registration from the opened directory.
+`ManifestLoadOptions:: deferred` exists only so string and path loads can share
+one builder chain: its registration is a placeholder that
+`from_path_with_options` always replaces.
 
 `registration` carries the stdlib boundary rather than a bare `StdlibConfig`
 plus a separate `NetworkPolicy`, because §4.2 already binds those together per
 mode: the network policy for a test load is a property of
 `StdlibRegistration::Test`, not an independently settable knob. This keeps one
 place where a load mode's capabilities are decided. `Test` boxes its payload
-like `Full`, matching the existing constructors in `parse_with_config.rs` and
-`query.rs` and keeping the variants near enough in size that the enum stays
-cheap to move.
+like `Full`, keeping the variants near enough in size that the enum stays cheap
+to move, and `StdlibRegistration` itself stays crate-private so the four load
+modes remain the loader's decision rather than an embedder's.
+
+`TestSurface` holds three things and no more: the `StdlibConfig` the surface
+grants (including, via `StdlibConfig::with_clock`, the clock `now()` may read);
+an `EnvReader` that `env()` answers from; and the `TemplateOverlays`. Keeping
+the payload here rather than in the options means the registration enum never
+grows a second capability field. `TestSurface::new` installs
+`disabled_env_reader`, so with no injected reader every lookup reports "not
+set" rather than consulting the process. The options' own `environment` is
+ignored under `Test`: `StdlibRegistration::env_reader` returns the surface's
+reader, and only the surface's.
 
 The structure is named `TemplateOverlays`, not `EnvOverlays`: in this codebase
 "env" means the process environment (ADR-0008, `EnvReader`), and these overlays
@@ -221,22 +267,55 @@ deliberately does not appear here — it has exactly one owner, `StdlibConfig`
 (§5.2). `on_stage` keeps the existing `&mut dyn FnMut` shape from
 `from_path_with_policy_and_env`.
 
-`OverlayCallable` wraps a double's dispatch closure (§7). Registration order
-inside environment construction becomes:
+`TemplateOverlays` ships with the `functions` map only. Macro substitution
+(§5.4) also has to rewrite the macro-import prelude rather than merely add a
+global, so `macro_substitutions` is deferred to roadmap 7.1.3; private fields
+make that addition non-breaking.
 
-1. `env()` and `glob()` from the effective `EnvReader` and glob expander;
-2. stdlib via `register_with_config` (with the test's `StdlibConfig`);
-3. manifest `vars` globals;
-4. manifest macros;
-5. **overlays** — test doubles registered last so they shadow same-named
-   stdlib functions (MiniJinja `add_function` replaces an existing
-   registration), plus macro substitutions, which additionally rewrite the
-   macro-import prelude (§5.4);
-6. `expand_foreach`, deserialization, rendering as today.
+`OverlayCallable` wraps a double's dispatch closure (§7): an
+`Arc<dyn Fn(&OverlayCall<'_, '_>) -> Result<Value, Error> + Send + Sync>`. Each
+invocation is described by an `OverlayCall`, which carries the rendering
+`State`, the argument slice (keyword arguments appended as one trailing
+`Value`, so a forwarded call reproduces the original), and the function the
+overlay replaced, when there was one. That last field is `shadowed()`:
+MiniJinja offers no lookup by name, but registered functions are enumerable
+through `Environment::globals`, so the loader captures the displaced function
+before `add_function` replaces it and hands it to the overlay. An overlay can
+therefore wrap a helper rather than only discard it, which is how a `Spy`
+resolves to the real callable (§7).
+
+Overlay names are checked at load time, because only a load knows which `vars`
+keys and macros the manifest defines:
+
+- An overlay may replace any name the stdlib registered, and `glob()`
+  specifically: replacing a withheld helper is the reason the mechanism exists.
+- An overlay may **not** take `env` (the loader's environment seam), a name
+  with the `__netsuke_` prefix (loader internals), a key in the manifest's
+  `vars`, or a name the manifest's macros define. Each is a typed
+  `TemplateOverlayError::NameCollision` carrying the namespace it collided
+  with, rendered through the localized `manifest.overlay.name_collision`
+  message and the code `[netsuke::manifest::overlay::collision]`.
+- Validation runs before any registration, so a rejected overlay leaves the
+  template environment untouched.
+
+Registration order inside environment construction is:
+
+1. `env()` and `glob()` from the effective `EnvReader` and glob expander, owned
+   by the loader because whether a load may read the host is a property of the
+   load (C5);
+2. the stdlib surface via `register_stdlib` (with the test's `StdlibConfig`);
+3. the manifest's claimed-name namespace is computed, before its `vars` are
+   registered, and is reused by the reserved-name check so the two cannot
+   disagree;
+4. manifest `vars` globals;
+5. manifest macros;
+6. **overlays**, registered last so they shadow same-named stdlib functions
+   (MiniJinja `add_function` replaces an existing registration);
+7. `expand_foreach`, deserialization, rendering as today.
 
 The overlay hook is compiled unconditionally: it is an ordinary parameter, not
 a test-only `cfg`, because the test runner is a production code path of the
-shipped binary.
+shipped binary (C9).
 
 For screen readers: The following flowchart follows one manifest load through
 `from_str_with_options`, branching at the `StdlibRegistration` mode. The
@@ -244,9 +323,10 @@ For screen readers: The following flowchart follows one manifest load through
 registers the query helpers and their refusals, which are then classified;
 `Test` registers the pure helpers and typed refusals, and applies the overlays.
 Every branch converges on foreach/`when` expansion, then on rendering and
-validation. The environment reader is not part of the branch: `Full` and `Test`
-each take one from their caller's options, `AmbientFull` reads the process
-environment, and `ManifestQuery` refuses `env()` outright.
+validation. The environment reader is not part of the branch: `AmbientFull`
+reads the process environment, `Full` takes the caller's `ManifestEnvironment`,
+`Test` takes the surface's injected reader, and `ManifestQuery` refuses `env()`
+outright.
 
 ```mermaid
 flowchart TD
@@ -257,8 +337,8 @@ flowchart TD
     Mode -->|Test| RestrictedTest[Register pure helpers and typed refusals]
     AmbientFull --> AmbientEnv["Read env from the process environment"]
     FullMode --> FullEnv["Use the caller's env reader and clock"]
-    RestrictedTest --> TestEnv["Use the caller's env reader and clock"]
-    TestEnv --> Overlay[Register overlays]
+    RestrictedTest --> TestEnv["Use the surface's env reader and clock"]
+    TestEnv --> Overlay[Check names and register overlays]
     RestrictedQuery --> QueryClassify[Classify query refusals]
     AmbientEnv --> Expand[Expand foreach and when]
     FullEnv --> Expand
@@ -268,11 +348,11 @@ flowchart TD
 ```
 
 _Figure 2: Manifest loading paths by `StdlibRegistration` mode. Only the `Test`
-mode applies overlays; the injected environment reader and clock come from the
-caller's options in `Full` and `Test` alike, since `ManifestLoadOptions::full`
-takes a `ManifestEnvironment` and a `StdlibConfig` whose clock
-`StdlibConfig::with_clock` may have pinned. The expansion, rendering, and
-validation stages after the branch are shared by every mode._
+mode applies overlays. `Full` takes an environment reader from
+`ManifestLoadOptions::full`; `Test` takes one from its `TestSurface`, whose
+`StdlibConfig` may also pin the clock `now()` reads through
+`StdlibConfig::with_clock`. The expansion, rendering, and validation stages
+after the branch are shared by every mode._
 
 ### 4.4. Result views
 
@@ -286,7 +366,7 @@ validation stages after the branch are shared by every mode._
   methods the UX design promises (`has_target`, `has_rule`, `target(name)`
   field access), exposed as a MiniJinja object.
 - `result.ninja` — the string from `ninja_gen::generate`
-  (`src/ninja_gen/mod.rs:106`), which is already deterministic for snapshot
+  (`src/ninja_gen/mod.rs:108`), which is already deterministic for snapshot
   tests.
 
 The IR types themselves are not exposed: the views are a stable assertion
@@ -372,26 +452,72 @@ because the prelude is the half that actually decides which macro renders.
 
 ### 5.5. Stdlib configuration under test
 
-The runner constructs a per-case `StdlibConfig` (`src/stdlib/config/mod.rs:21`)
+The runner constructs a per-case `StdlibConfig` (`src/stdlib/config/mod.rs:26`)
 rooted at the sandbox:
 
 | Knob                                | Test value                                   |
 | ----------------------------------- | -------------------------------------------- |
 | `workspace_root`                    | the case sandbox directory (`cap-std` `Dir`) |
 | `network_policy`                    | deny all                                     |
-| `path_override`, `pathext_override` | empty unless the case stubs `which`          |
+| `path_override`, `pathext_override` | empty; `which` refuses rather than searching |
 | `home_directory`                    | `HomeDirectory::Missing`                     |
 | command helpers                     | registered as refusing stubs (C3)            |
 
 _Table 1: Per-case stdlib configuration._
 
-The command helpers, `fetch`, and the other impure entry points are registered
-as stubs that refuse, following `register_manifest_query` (§4.2) rather than
-being left unregistered. Refusing stubs beat omission: under strict-undefined
-MiniJinja an absent function yields a generic unknown-function error, whereas a
-registered stub raises a located diagnostic that names the operation and points
-at the double syntax. The test mode supplies its own message keys through the
-existing `manifest_query_operation_error` shape.
+Every helper whose availability depends on the load surface has a
+`TestDisposition` row in `SURFACE`
+(`src/stdlib/restricted_helpers/mod.rs:104`), and `register_for_test` registers
+exactly the refused rows as stubs. The implemented inventory is:
+
+| Kind     | Refused under test                                                                                    | Available under test                                                                                                       |
+| -------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Function | `glob`, `fetch`, `which`, `command_available`                                                         | `env` (injected reader), `timedelta`                                                                                       |
+| Filter   | `which`, `shell`, `grep`, `contents`, `realpath`, `expanduser`, `size`, `linecount`, `hash`, `digest` | `basename`, `dirname`, `with_suffix`, `relative_to`, `shell_quote`, `shell_join`, `uniq`, `flatten`, `compact`, `group_by` |
+| Test     | `dir`, `file`, `symlink`, `pipe`, `block_device`, `char_device`, `device`                             | —                                                                                                                          |
+
+_Table 2: The `netsuke test` stdlib surface._
+
+`now()` is a fifth disposition, `ClockInjected`: it is the real helper when the
+surface's `StdlibConfig` carries an injected clock (§5.2) and a refusal
+otherwise, because the ambient clock is a host read. `env()` is available but
+reads only the surface's injected `EnvReader`, never the process.
+
+Refusing stubs beat omission: under strict-undefined MiniJinja an absent
+function yields a generic unknown-function error, whereas a registered stub
+raises a located diagnostic that names the operation and points at the overlay
+syntax. The test mode supplies its own message key
+(`stdlib.test_mode.helper_unavailable`,
+`[netsuke::jinja::test_mode::unavailable]`) through the existing
+`manifest_query_operation_error` shape, and every refusal carries a typed
+`TestModeRefusal` source so a caller can tell a withheld capability from an
+unknown name without matching on text. Because a real helper documents various
+call shapes, each stub accepts any positional and keyword arguments; a narrower
+signature would report an argument-count error instead of the refusal.
+
+Two refusals are deliberate deviations from the "just sandbox it" reading, and
+both are recorded in ADR-0070:
+
+- `which` refuses even though `path_override` and `pathext_override` exist.
+  Those knobs choose where a build looks; a test load has no host path to look
+  in, and a sandbox-rooted resolver is not implemented yet. Running `which`
+  against an empty `PATH` would report a misleading "not found" instead of a
+  refusal that names the withheld capability, so refusal is uniform with the
+  rest of the surface.
+- `expanduser` refuses rather than resolving `~`. The surface's
+  `home_directory` is `HomeDirectory::Missing`, so the real filter would fail
+  anyway, and a resolved home path would expose a host-shaped answer. The
+  refusal names the operation instead.
+
+Of the `StdlibConfig` settings, test mode honours only the clock in roadmap
+7.1.2; the workspace root becomes load-bearing when 7.4.1 roots `glob`, the
+file tests, and the file-reading filters at it.
+
+The functions among the refused rows (`glob`, `which`, `fetch`,
+`command_available`, and a system-clocked `now`) remain replaceable by overlays
+(§4.3); filters and tests are not mockable in the first version (UX design
+§8.6), so a manifest that pipes through `shell` or calls `file` under test
+fails with the refusal rather than a substituted answer.
 
 `workspace_root` alone does not achieve that scoping, and the design must not
 pretend otherwise. Three groups of filesystem helpers bypass it today:
@@ -526,10 +652,13 @@ entry followed by another, and a mismatch under both ordering modes. A `Mock`
 with no accepting entry yields a MiniJinja error carrying a structured payload,
 which the runner converts into the unmatched-call report with its suggested
 YAML stanza. A `Stub` falls back to its `default` or `Undefined`. A `Spy`
-resolves to a handle the runner captured when it constructed the effective
-callable — the runner holds these handles itself rather than retrieving
-previously registered functions from the MiniJinja environment, which offers no
-such retrieval.
+resolves to a handle for the real callable. MiniJinja offers no lookup by name,
+but registered functions are enumerable as environment globals, so a handle can
+be captured rather than reconstructed: the loader's overlay registration (§4.3)
+walks `Environment::globals` before `add_function` replaces a name and hands
+the displaced function to the overlay as `OverlayCall::shadowed`. A spy built
+on an overlay therefore delegates to the function it replaced instead of the
+runner having to re-create it.
 
 Releasing the lock before invoking a spy's delegate is load-bearing, not an
 optimization. A spied callable may call another double — a spied macro whose
@@ -1012,7 +1141,10 @@ The minimum viable implementation, in dependency order:
    replacement semantics for shadowing, and the runner-side handle capture that
    spies depend on (§7). If shadowing fails, the fallback is filtering the
    macro out of `register_manifest_macros` via `TemplateOverlays`, which the
-   options structure already permits.
+   options structure already permits. Roadmap 7.1.2 settled both questions:
+   `add_function` replaces a registration, and the displaced function is
+   reachable by enumerating `Environment::globals` before replacement (§4.3,
+   §7).
 2. Test-suite AST, parser, and discovery (I6). Localization keys for the
    dialect's diagnostics are defined from this phase onwards (§10).
 3. Mock engine and overlays for functions and macro substitution (I1, I3).
@@ -1042,6 +1174,9 @@ reconciled:
   environment injection seams §5 relies on.
 - [ADR-0010](adrs/adr-0010-scope-the-glob-metadata-capability-to-the-literal-prefix.md),
   which governs the glob capability scoping the mock engine and sandbox rely on.
+- [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md), which records
+  the deny-by-default test stdlib surface, its refusal mechanics, and the
+  `which`/`expanduser` deviations §5.5 describes.
 - [Roadmap phase 7](roadmap.md), which tracks the phasing above (§14) as
   numbered deliverables.
 

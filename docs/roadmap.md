@@ -1512,17 +1512,17 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
   - [x] Record the seam classification per
     [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md).
 
-- [ ] 7.1.2. Introduce the options-carrying manifest loader entry point. See
+- [x] 7.1.2. Introduce the options-carrying manifest loader entry point. See
   [technical design §4.3](netsuke-test-framework-technical-design.md).
-  - [ ] Add `ManifestLoadOptions` and `TemplateOverlays`, with existing
+  - [x] Add `ManifestLoadOptions` and `TemplateOverlays`, with existing
     entry points as thin wrappers.
-  - [ ] Extend `StdlibRegistration` with a `Test` mode beside `Full` and
+  - [x] Extend `StdlibRegistration` with a `Test` mode beside `Full` and
     `ManifestQuery` rather than adding a parallel boundary mechanism.
-  - [ ] Reuse the `manifest_query_operation_error` diagnostic shape and
+  - [x] Reuse the `manifest_query_operation_error` diagnostic shape and
     `disabled_env_reader` established by `netsuke help targets`.
-  - [ ] Register overlays after stdlib and manifest macros and before
+  - [x] Register overlays after stdlib and manifest macros and before
     `foreach` expansion.
-  - [ ] Add differential tests showing the build path is unchanged
+  - [x] Add differential tests showing the build path is unchanged
     (invariants I4 and I7).
 
 - [ ] 7.1.3. Spike MiniJinja overlay shadowing for macro substitution.
