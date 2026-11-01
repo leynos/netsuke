@@ -36,7 +36,7 @@ enum Location {
 
 /// Map a generated selector onto its location family.
 fn location(selector: u8) -> Location {
-    match selector % 3 {
+    match selector.rem_euclid(3) {
         0 => Location::Project,
         1 => Location::Discovered,
         _ => Location::Unknown,
