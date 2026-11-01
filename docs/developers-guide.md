@@ -1542,7 +1542,10 @@ lane cannot pass without executing the package.
 For screen readers: the following sequence shows how the workflow builds a
 validation image, hands the package to the shared action, installs it in the
 sandbox, runs the verifier's three checks against the installed package, and
-publishes only when validation passes.
+publishes only when validation passes. On the cross-architecture lane the
+shared action skips its install, and the `Install packages under emulation`
+step performs the same install and verification through
+`install-emulated-package.sh` in the architecture-tagged image.
 
 ```mermaid
 sequenceDiagram
@@ -1577,7 +1580,9 @@ sequenceDiagram
 through sandboxed install and verification to publication. The verifier asks
 the installed package for its startup result, its manual page path, and its
 declared dependencies; only a passing validation lets the workflow reach the
-upload step.
+upload step. The figure follows the shared action's sandbox path; the
+cross-architecture lane repeats the install and verification in the
+architecture-tagged image, as described above.
 
 To reproduce locally from the repository root:
 
@@ -1597,8 +1602,8 @@ the action pin, step order, inputs, dry-run wiring, and architecture mapping,
 `tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
 holds the image contents, the verifier's pass and fail paths, and the Polythene
 pin, and `tests/workflow_contracts/linux_package_emulation_test.py`, which
-holds the both-formats requirement and the emulated install's per-format and
-failure paths. Run `make test-workflow-contracts`.
+holds the both-formats requirement and the emulated installation's per-format
+and failure paths. Run `make test-workflow-contracts`.
 
 ### Windows MSI packaging and upgrade validation
 
