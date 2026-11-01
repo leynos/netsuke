@@ -1476,6 +1476,137 @@ specified licence file. The RPM check compares `PACKAGER`, `URL`, `LICENSE`,
 packaging job before artefact upload. Run `make test-linux-package-metadata`
 for the focused reader and package-validator tests.
 
+### Linux package installation validation
+
+Metadata checks cannot prove a package installs. The Linux packaging job
+therefore runs the pinned `validate-linux-packages` shared action after
+packaging and before the artefacts upload, so a broken package fails the lane
+instead of being published. The action is pinned to the same shared-actions
+revision as `linux-packages`, and the gate is unconditional: it runs on tags
+and in the release dry run.
+
+The action installs each package in a sandbox built from a repository-owned
+image. `.github/package-validation/deb.Containerfile` starts from digest-pinned
+Debian trixie and `.github/package-validation/rpm.Containerfile` from
+digest-pinned Rocky Linux 10. Both distributions provide GLIBC_2.39 or later,
+which the release binary requires; older bases cannot run `netsuke --version`
+at all. Both images remove their documentation exclusions
+(`path-exclude=/usr/share/man`, `tsflags=nodocs`, and `%_excludedocs`) and
+install `man-db`, because a stock minimal image would otherwise omit the manual
+page and fail the check for every package.
+
+The Debian image also installs `ninja-build`, because `dpkg -i` refuses to
+install a package whose declared dependencies are missing. The RPM image
+deliberately does not: `rpm -i --nodeps` skips resolution, so an installed copy
+would only weaken the check. In both cases the verifier reads the package's
+declared metadata, so a package that omits the dependency still fails.
+
+Inside the sandbox, `/usr/local/bin/verify-installed-package` (built from
+`.github/package-validation/verify-installed-package.sh`) checks that
+`netsuke --version` succeeds, that `man -w netsuke` resolves to a non-empty
+path, and that the package declares `ninja-build` through `dpkg-query` or
+`rpm -q --requires`. It fails when neither tool is available rather than
+passing vacuously.
+
+The workflow builds the images with `podman build --arch`, mapping
+`x86_64-unknown-linux-gnu` to `amd64` and `aarch64-unknown-linux-gnu` to
+`arm64`. When the package architecture differs from the runner's, it installs
+`qemu-user-static` and restarts `systemd-binfmt` first. Images are tagged under
+`localhost/` and never pushed, so the packaging job keeps `contents: read`
+permissions.
+
+The shared action resolves Polythene for itself, but its revision predates the
+local-image probe and would treat `localhost/...` as a registry host. The
+repository therefore passes
+`polythene-path: .github/package-validation/polythene_cli.py`, a PEP 723
+wrapper pinned to the Polythene commit that probes `podman image exists` before
+pulling. The filename must not be `polythene.py`: Python puts the script's
+directory first on `sys.path`, so that name shadows the package the wrapper
+imports.
+
+The shared action skips both its sandbox install and its architecture check
+when the package architecture differs from the host's. Both Linux lanes run on
+x64 runners, so an arm64 package would otherwise reach upload having never run.
+The workflow therefore follows the action with an
+`Install packages under emulation` step, guarded on the sandbox step's
+`cross-arch` output. That step first requires both a `.deb` and an `.rpm` in
+`dist`, because it is the only install these packages get and a packaging
+failure that produced one format must stop the lane rather than publish the
+other having never run. It then runs
+`.github/package-validation/install-emulated-package.sh` for each package in
+the architecture-tagged image under the QEMU binfmt handlers the sandbox step
+registered. The script installs with `dpkg -i` or
+`rpm -i --nodeps --nosignature` and then runs the same verifier, so the arm64
+lane cannot pass without executing the package.
+
+For screen readers: the following sequence shows how the workflow builds a
+validation image, hands the package to the shared action, installs it in the
+sandbox, runs the verifier's three checks against the installed package, and
+publishes only when validation passes. On the cross-architecture lane the
+shared action skips its install, and the `Install packages under emulation`
+step performs the same install and verification through
+`install-emulated-package.sh` in the architecture-tagged image.
+
+```mermaid
+sequenceDiagram
+    participant Workflow
+    participant Podman
+    participant Sandbox
+    participant Package
+    participant Verifier
+    participant Upload
+
+    Workflow->>Podman: podman build --arch
+    Podman-->>Workflow: Local validation images
+    Workflow->>Sandbox: validate-linux-packages
+    Sandbox->>Package: Install .deb or .rpm
+    Sandbox->>Verifier: verify-installed-package netsuke
+    Verifier->>Package: netsuke --version
+    Package-->>Verifier: Startup result
+    Verifier->>Package: man -w netsuke
+    Package-->>Verifier: Manual page path
+    Verifier->>Package: dpkg-query -W or rpm -q --requires
+    Package-->>Verifier: Declared dependencies
+    alt Validation passes
+        Verifier-->>Workflow: Success
+        Workflow->>Upload: Publish packages
+    else Validation fails
+        Verifier-->>Workflow: Failure
+        Workflow-->>Upload: Do not publish
+    end
+```
+
+**Figure**: Linux package installation validation sequence from image build
+through sandboxed install and verification to publication. The verifier asks
+the installed package for its startup result, its manual page path, and its
+declared dependencies; only a passing validation lets the workflow reach the
+upload step. The figure follows the shared action's sandbox path; the
+cross-architecture lane repeats the install and verification in the
+architecture-tagged image, as described above.
+
+To reproduce locally from the repository root:
+
+```sh
+podman build --arch amd64 \
+  --file .github/package-validation/deb.Containerfile \
+  --tag localhost/netsuke-package-validation-deb:amd64 \
+  .github/package-validation
+podman run --rm -v "$PWD/dist:/packages:ro,z" \
+  localhost/netsuke-package-validation-deb:amd64 \
+  sh -c 'dpkg -i /packages/*.deb && verify-installed-package netsuke'
+```
+
+The contract tests are split across
+`tests/workflow_contracts/linux_package_validation_gate_test.py`, which holds
+the action pin, step order, inputs, dry-run wiring, and the per-architecture
+image builds,
+`tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
+holds the image contents, the verifier's pass and fail paths, the Polythene
+pin, and the target-to-architecture mapping with its QEMU setup, and
+`tests/workflow_contracts/linux_package_emulation_test.py`, which holds the
+both-formats requirement and the emulated installation's per-format,
+image-selection, and failure paths. Run `make test-workflow-contracts`.
+
 ### Windows MSI packaging and upgrade validation
 
 The Windows packaging workflow passes the repository-owned authoring file as
