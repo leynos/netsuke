@@ -1215,6 +1215,37 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `overlay_glob_drives_a_foreach` still passes under the fault, correctly: the
   loader registers `glob()` before the overlays in both orders, so the overlay
   wins either way.
+- [x] (2026-11-01) EP-M4 gate batch 1, run by the scrutineer over the
+  uncommitted EP-M4 tree at `3fd0db1ce` (content hash `d53b9854b908`, 87 m 13 s
+  wall clock). Seven of nine gates were green; three findings were real and
+  were repaired before the batch was re-run:
+  - `lint` (red, 3 findings, all in `src/manifest/test_surface/overlays.rs`):
+    `type_complexity` at the stored dispatch type, `map(_).unwrap_or_default()`
+    in `declared_variables`, and a `shadow_reuse` binding in
+    `register_overlays`. Fixed with a `Dispatch` type alias, `map_or_default`,
+    and renaming the let-else binding to `supplied`.
+  - `markdownlint` (red, spelling half): `src/manifest/test_surface.rs` was
+    staged as tracked while deleted on disk after the directory split. Fixed by
+    staging the deletion (`git add -A`).
+  - `test-workflow-contracts` (red, Kani proof-scope contract, both
+    directions): the split module left `tools/kani/proof-scope.toml` naming the
+    retired `src/manifest/test_surface.rs`. Retargeted to
+    `src/manifest/test_surface/mod.rs` and `.../overlays.rs` in alphabetical
+    position.
+  Each repair was re-verified on its own rather than by waiting for a second
+  full batch:
+  `cargo clippy -p netsuke-build --lib --all-features -- -D warnings` exited 0
+  in 3 m 29 s with no warnings (`/tmp/lint-clippy-lib-…out`);
+  `make markdownlint` was clean over 207 files; and the proof-scope contract
+  passed 7/7 in 14.02 s under the gate's own `uv` environment. Two initially
+  alarming results were invocation artefacts, not defects:
+  `cargo clippy -p netsuke --lib` fails because the package is `netsuke-build`,
+  and a bare `uv run … pytest tests/workflow_contracts/…` fails at collection
+  with `NameError: name 'Path' is not defined` because the module imports
+  `Path` only under `typ.TYPE_CHECKING` and the Makefile's pinned `--with` set
+  is what supplies it. The batch logs are
+  `/tmp/gate{1..9}-netsuke-7-1-2-options-carrying-manifest-loader-entry-point-d53b9854b908.out`.
+  EP-M4 was committed as `ec80c6bc1` after the repairs.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [x] EP-M2 — options entry point and thin wrappers.
 - [x] EP-M3 — `StdlibRegistration::Test`.
@@ -2136,6 +2167,17 @@ and YAML fixtures, and were set from the inventory in Table 1.
   dispatch keeps each file a single concern. Date/Author: 2026-11-01,
   implementation agent in EP-M4.
 
+- Decision (Deviation from Stage D's stated filename): EP-M5 mints
+  `docs/adrs/adr-0070-deny-by-default-test-mode-stdlib.md`; the plan's
+  `adr-0060-…` serial is stale. Rationale:
+  `docs/adrs/adr-0060-readable-inline-recipe-progress.md` already exists on
+  this branch and on `origin/main`, so reusing `0060` would create the
+  duplicate-serial conflation the repository's ADR conventions forbid. A sweep
+  of all 83 `origin` heads found `adr-0069` the highest serial in use and
+  `adr-0070` free on every head. The deviation changes only the filename: the
+  decision, its scope, and its index entry in `docs/contents.md` are as
+  approved. Date/Author: 2026-11-01, implementation agent in EP-M4.
+
 ## Outcomes & retrospective
 
 Not started.
@@ -2741,17 +2783,18 @@ anchors), §4.3 (options shape, `TestSurface`, overlays in the test surface,
 `macro_substitutions`, overlay name rules), §5.5 (the full refusing inventory
 and the `which`/`expanduser` deviation; the six file-reading filters are
 already recorded there), and §7 (shadowed-function capture is possible). Write
-`docs/adrs/adr-0060-deny-by-default-test-mode-stdlib.md` (surface, refusal code
-and typed source, `is_system` as injection) and index it in `docs/contents.md`.
-Add Addendum E to `docs/adrs/adr-0050-bound-manifest-template-evaluation.md`.
-Add a "Manifest loader entry points" subsection to `docs/developers-guide.md`
-(new callers use `from_str_with_options`; do not add another `from_path_with_*`
-rung; how overlays and the surface inventory work, and that a new stdlib helper
-needs a `SURFACE` row). Record `ManifestLoadOptions<'a>` in `docs/polonius.md`
-(borrowed `ManifestEnvironment` and stage observer; no clones). Add one
-sentence to the manifest-loading section of `docs/netsuke-design.md` naming the
-load modes. Tick roadmap 7.1.2 and its bullets. Run `make fmt`, then the
-Markdown gates.
+`docs/adrs/adr-0070-deny-by-default-test-mode-stdlib.md` (surface, refusal code
+and typed source, `is_system` as injection; serial `0070` rather than the
+`0060` first written here, per the Decision log) and index it in
+`docs/contents.md`. Add Addendum E to
+`docs/adrs/adr-0050-bound-manifest-template-evaluation.md`. Add a "Manifest
+loader entry points" subsection to `docs/developers-guide.md` (new callers use
+`from_str_with_options`; do not add another `from_path_with_*` rung; how
+overlays and the surface inventory work, and that a new stdlib helper needs a
+`SURFACE` row). Record `ManifestLoadOptions<'a>` in `docs/polonius.md` (borrowed
+`ManifestEnvironment` and stage observer; no clones). Add one sentence to the
+manifest-loading section of `docs/netsuke-design.md` naming the load modes.
+Tick roadmap 7.1.2 and its bullets. Run `make fmt`, then the Markdown gates.
 
 ## Concrete steps
 
