@@ -1277,10 +1277,10 @@ observability recorder — provide two definitions: one under
 `src/localization/keys.rs`, `src/localization/check_keys.rs`,
 `src/localization/clap_error_keys.rs`, and `src/localization/manifest_keys.rs`,
 their catalogue entries, and the subcommand-to-key routing in
-`src/cli/l10n/mod.rs` are deliberately not gated.
-The build-time localization audit is bidirectional across all 35 catalogues,
-and gating the constants would make every locale look orphaned; the routing
-only maps command names and carries no linting logic.
+`src/cli/l10n/mod.rs` are deliberately not gated. The build-time localization
+audit is bidirectional across all 35 catalogues, and gating the constants would
+make every locale look orphaned; the routing only maps command names and
+carries no linting logic.
 
 **Test gating.** Check-only integration tests gate the whole test binary with
 an inner `#![cfg(feature = "lint")]` (`tests/check_command_tests.rs`,

@@ -234,11 +234,11 @@ check telemetry; and the `source` and `name` fields of the internal
 `LoadedManifest`. Deliberately not gated: the Fluent message keys in
 `src/localization/keys.rs`, `src/localization/check_keys.rs`,
 `src/localization/clap_error_keys.rs`, and `src/localization/manifest_keys.rs`
-and their catalogue entries, because the
-build-time localization audit is bidirectional across all 35 catalogues and
-gating the constants would make every locale look orphaned; and the
-subcommand-to-key routing in `src/cli/l10n/mod.rs`, which only maps command
-names and carries no linting logic.
+and their catalogue entries, because the build-time localization audit is
+bidirectional across all 35 catalogues and gating the constants would make
+every locale look orphaned; and the subcommand-to-key routing in
+`src/cli/l10n/mod.rs`, which only maps command names and carries no linting
+logic.
 
 Both configurations are verified in continuous integration (CI): the existing
 gates build and test with `--all-features`, and a second, uninstrumented CI
