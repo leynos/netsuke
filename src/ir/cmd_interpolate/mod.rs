@@ -360,3 +360,6 @@ mod powershell_script_tests;
 
 #[cfg(test)]
 mod lexical_boundary_tests;
+
+#[cfg(test)]
+mod backslash_marker_tests;
