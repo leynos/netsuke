@@ -115,10 +115,15 @@ fi
 const FAKE_CARGO_ORTHOHELP_METADATA: &str = r#"mapfile -t public_cli_surface < <(
   python3 - "${ORTHOHELP_FAKE_METADATA:?release-help metadata is required}" <<'PY'
 import json
+import os
 import sys
 
 with open(sys.argv[1], encoding="utf-8") as metadata_file:
     metadata = json.load(metadata_file)
+
+# Mirrors a renderer that silently drops an option, so the script's own
+# rendered-surface verification can be proven live.
+omit_long = os.environ.get("ORTHOHELP_FAKE_OMIT_FLAG", "")
 
 def render_flag(field):
     """Render one documented CLI flag as the generated help spells it."""
@@ -135,7 +140,11 @@ def render_flag(field):
     return rendered
 
 
-documented_fields = [field for field in metadata["fields"] if field["cli"]]
+documented_fields = [
+    field
+    for field in metadata["fields"]
+    if field["cli"] and field["cli"]["long"] != omit_long
+]
 parser_only_fields = [
     field
     for field in documented_fields
@@ -235,6 +244,7 @@ pub struct ReleaseHelpRun<'a> {
     source_date_epoch: Option<&'a str>,
     fail_cargo: bool,
     skip_output: Option<&'a str>,
+    omit_flag: Option<&'a str>,
 }
 
 impl<'a> ReleaseHelpRun<'a> {
@@ -246,6 +256,7 @@ impl<'a> ReleaseHelpRun<'a> {
             source_date_epoch: None,
             fail_cargo: false,
             skip_output: None,
+            omit_flag: None,
         }
     }
 
@@ -270,6 +281,12 @@ impl<'a> ReleaseHelpRun<'a> {
     /// Configure the run to omit one generated output format.
     pub const fn skip_output(mut self, format: &'a str) -> Self {
         self.skip_output = Some(format);
+        self
+    }
+
+    /// Configure the fake generator to drop one documented long flag.
+    pub const fn omit_flag(mut self, long: &'a str) -> Self {
+        self.omit_flag = Some(long);
         self
     }
 }
@@ -310,7 +327,8 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
         .env_remove("RELEASE_HELP_CORRELATION_ID")
         .env_remove("SOURCE_DATE_EPOCH")
         .env_remove("ORTHOHELP_FAKE_FAIL")
-        .env_remove("ORTHOHELP_FAKE_SKIP_OUTPUT");
+        .env_remove("ORTHOHELP_FAKE_SKIP_OUTPUT")
+        .env_remove("ORTHOHELP_FAKE_OMIT_FLAG");
 
     if let Some(value) = run.source_date_epoch {
         command.env("SOURCE_DATE_EPOCH", value);
@@ -320,6 +338,9 @@ pub fn run_release_help(fixture: &ScriptFixture, run: ReleaseHelpRun<'_>) -> Res
     }
     if let Some(format) = run.skip_output {
         command.env("ORTHOHELP_FAKE_SKIP_OUTPUT", format);
+    }
+    if let Some(long) = run.omit_flag {
+        command.env("ORTHOHELP_FAKE_OMIT_FLAG", long);
     }
 
     command.output().context("run release help script")

@@ -93,6 +93,72 @@ require_file() {
   echo "::notice title=Release help output::$(annotation_context output) path=${path} size_bytes=${size}" >&2
 }
 
+# Public CLI surface that issue #960 reconciled with the parser.
+#
+# These spellings are asserted against the artefacts the real renderer writes,
+# not against the metadata it consumes. A projection that never reaches the
+# rendered document, or a renderer that drops an option, fails here.
+reconciled_help_flags=(
+  --directory
+  --config
+  --default-target
+  --color
+  --emoji
+  --progress
+  --accessibility
+  --no-input
+)
+reconciled_help_values=('auto,always,never' 'auto,on,off')
+rejected_help_spelling='--default-targets'
+
+# Flatten a rendered help document into text that one set of checks can read.
+#
+# Man pages escape hyphens as `\-` and wrap text in roff font escapes, while
+# the PowerShell MAML file is plain XML. Removing those escapes and normalising
+# separators lets the same assertions cover both formats without pretending the
+# two renderers share a layout.
+normalise_help_text() {
+  local path="$1"
+  sed -e 's/\\f[BIRP]//g' -e 's/\\-/-/g' -e 's/\\&//g' "$path" |
+    tr '\n' ' ' |
+    sed -e 's/|/,/g' \
+      -e 's/[[:space:]]*,[[:space:]]*/,/g' \
+      -e 's/[[:space:]][[:space:]]*/ /g'
+}
+
+# Fail when a rendered help document lost part of the reconciled surface.
+#
+# `path` is an artefact written by `cargo-orthohelp`, so this check runs against
+# the real renderer's output in every generation, including release builds.
+verify_rendered_surface() {
+  local path="$1"
+  local document
+  document="$(normalise_help_text "$path")"
+
+  local flag
+  for flag in "${reconciled_help_flags[@]}"; do
+    if [[ "$document" != *"$flag"* ]]; then
+      echo "::error title=Release help surface::$(annotation_context output) ${path} omits ${flag}" >&2
+      exit 1
+    fi
+  done
+
+  local values
+  for values in "${reconciled_help_values[@]}"; do
+    if [[ "$document" != *"$values"* ]]; then
+      echo "::error title=Release help surface::$(annotation_context output) ${path} omits the ${values} value set" >&2
+      exit 1
+    fi
+  done
+
+  if [[ "$document" == *"$rejected_help_spelling"* ]]; then
+    echo "::error title=Release help surface::$(annotation_context output) ${path} advertises the rejected ${rejected_help_spelling} spelling" >&2
+    exit 1
+  fi
+
+  echo "::notice title=Release help surface::$(annotation_context output) path=${path} verified" >&2
+}
+
 target_is_windows() {
   local target="$1"
   [[ "$target" == *windows* ]]
@@ -171,6 +237,7 @@ run_cargo_orthohelp "man" \
   --man-date "$man_date"
 
 require_file "$out_dir/man/man1/${bin_name}.1" "manual page was not generated"
+verify_rendered_surface "$out_dir/man/man1/${bin_name}.1"
 
 if target_is_windows "$target"; then
   run_cargo_orthohelp "ps" \
@@ -187,6 +254,7 @@ if target_is_windows "$target"; then
     "PowerShell module manifest was not generated"
   require_file "$out_dir/powershell/$module_name/en-US/$module_name-help.xml" \
     "PowerShell MAML help was not generated"
+  verify_rendered_surface "$out_dir/powershell/$module_name/en-US/$module_name-help.xml"
   require_file "$out_dir/powershell/$module_name/en-US/about_$module_name.help.txt" \
     "PowerShell about help was not generated"
 fi

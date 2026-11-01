@@ -390,6 +390,43 @@ fn fails_when_expected_help_output_is_missing(
     Ok(())
 }
 
+/// Verify that a rendered manual page missing a reconciled flag is rejected.
+///
+/// The script checks the surface of the artefact `cargo-orthohelp` writes, so a
+/// renderer or projection that drops an option fails generation instead of
+/// shipping a manual page that under-describes the parser.
+///
+/// # Errors
+///
+/// Returns an error when the fixture or failure diagnostics cannot be read.
+#[rstest]
+fn fails_when_rendered_help_omits_a_reconciled_flag(
+    script_fixture: Result<ScriptFixture>,
+) -> Result<()> {
+    let fixture = script_fixture?;
+    let output = run_release_help(
+        &fixture,
+        ReleaseHelpRun::for_target("x86_64-unknown-linux-gnu")
+            .source_date_epoch("1")
+            .omit_flag("color"),
+    )?;
+
+    ensure!(
+        !output.status.success(),
+        "script should fail when the manual page omits --color"
+    );
+    let stderr = String::from_utf8(output.stderr).context("stderr should be UTF-8")?;
+    ensure!(
+        stderr.contains("Release help surface"),
+        "expected the rendered-surface annotation, got {stderr}"
+    );
+    ensure!(
+        stderr.contains("omits --color"),
+        "expected the omitted flag to be named, got {stderr}"
+    );
+    Ok(())
+}
+
 /// Verify that generation stops when cargo-orthohelp is unavailable.
 ///
 /// # Errors

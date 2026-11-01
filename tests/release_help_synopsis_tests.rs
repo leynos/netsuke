@@ -57,6 +57,24 @@ def parser_only_selectors(fields):
     return selectors
 
 
+def option_entries(fields):
+    entries = []
+    for field in fields:
+        cli = field.get("cli")
+        if not cli:
+            continue
+        long = cli.get("long")
+        if not long:
+            continue
+        short = cli.get("short")
+        entry = [f"-{short}/--{long}" if short else f"--{long}"]
+        possible_values = cli.get("possible_values") or []
+        if possible_values:
+            entry.append("Possible values: " + ", ".join(possible_values))
+        entries.append(entry)
+    return entries
+
+
 def main():
     arguments = sys.argv[1:]
     if option_value(arguments, "--format") != "man":
@@ -82,8 +100,15 @@ def main():
             ".B netsuke",
             synopsis,
             "",
+            ".SH OPTIONS",
         ]
     )
+    # The script verifies the rendered surface, so this model has to render the
+    # documented options too; only the SYNOPSIS resolution is under test here.
+    for flag, *details in option_entries(metadata.get("fields", [])):
+        man_page += "\n.TP\n.B " + flag
+        for detail in details:
+            man_page += "\n" + detail
     (man_dir / "netsuke.1").write_text(man_page, encoding="utf-8")
     return 0
 

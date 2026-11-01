@@ -4008,13 +4008,11 @@ CLI Fluent keys onto published configuration fields, omits the structural
 environment or file source. It must not add selector precedence, configuration
 loading, or discovery policy to OrthoConfig. Bidirectional parity tests under
 `src/cli/release_help/parity_tests/` hold the documented flags and the parser
-in agreement, and `tests/release_help_script_tests.rs` asserts the reconciled
-flag surface in generated manual and PowerShell help. Selector precedence,
-configuration loading and discovery policy remain in
-`src/cli/discovery/mod.rs`: [ADR 0048] governs `--config` precedence and
-fail-closed selected-file loading, while [ADR 0049] governs `-C/--directory`
-project-discovery rooting and manifest lookup. This boundary avoids a duplicate
-CLI model and is recorded in [ADR-0016].
+in agreement. Selector precedence, configuration loading and discovery policy
+remain in `src/cli/discovery/mod.rs`: [ADR 0048] governs `--config` precedence
+and fail-closed selected-file loading, while [ADR 0049] governs
+`-C/--directory` project-discovery rooting and manifest lookup. This boundary
+avoids a duplicate CLI model and is recorded in [ADR-0016].
 
 Manual pages are generated under
 `target/orthohelp/<target>/release/man/man1/netsuke.1`. Windows targets also
@@ -4025,6 +4023,18 @@ release helper honours `SOURCE_DATE_EPOCH` to produce reproducible manual
 dates, emitting a warning and falling back to `1970-01-01` when the environment
 value is invalid. Release artefacts include these generated help files; the
 published crate remains code-only.
+
+Release-help coverage has two layers. `tests/release_help_script_tests.rs` puts
+a fake `cargo-orthohelp` first on `PATH`, so it exercises the release helper's
+command construction, failure propagation, and its assertions on whatever the
+generator writes; it does not exercise the real renderer, because the fake
+emits the flags straight from the metadata. The real renderer is checked by the
+helper itself: after generating, `scripts/generate-release-help.sh` flattens
+the roff or MAML markup and requires the reconciled flag spellings, the policy
+value sets, and the absence of the rejected `--default-targets` spelling.
+Release automation runs that verification against the pinned `cargo-orthohelp`
+0.10.0 output for every target, so a renderer that drops an option fails the
+release build rather than passing a fake-renderer suite.
 
 [ADR 0048]: adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md
 [ADR 0049]: adrs/adr-0049-base-directory-seam-and-c-anchoring.md
