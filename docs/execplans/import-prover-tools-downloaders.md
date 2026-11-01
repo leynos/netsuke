@@ -1,11 +1,12 @@
 # Import shared prover installers and variadic proof execution
 
-Status: DRAFT
+Status: APPROVED
 
 This ExecPlan is a living document. Keep Constraints, Tolerances, Risks,
 Progress, Surprises & discoveries, Decision log, Outcomes & retrospective,
-Conformance basis, and Verification plan current throughout execution.
-Implementation awaits approval; this pull request proposes the work only.
+Conformance basis, and Verification plan current throughout execution. The user
+approved this plan on 2026-11-01. Implementation follows its scope and
+tolerances.
 
 ## Purpose / big picture
 
@@ -36,8 +37,8 @@ checks. Verus remains optional. No application behaviour changes.
 - Retain shared CI archive helpers while actionlint consumes them. Do not
   migrate unrelated installers, add a mandatory Verus CI job, or change
   `formal-pr` to install tools implicitly.
-- Gate every commit; keep the plan synchronized with evidence. This draft
-  changes only documentation and does not authorize execution by itself.
+- Gate every commit and keep this living plan synchronized with evidence.
+  Stop at the stated tolerance thresholds.
 
 ## Tolerances (exception triggers)
 
@@ -78,7 +79,8 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
   workflow contracts, cache action and proof inventory.
 - [x] (2026-11-01) Resolve and inspect upstream main at
   `592558f7183b554fc749696246984c5d7300d029` and draft this plan.
-- [ ] Obtain implementation approval.
+- [x] (2026-11-01) User approved implementation and set the ExecPlan status to
+      APPROVED before implementation began.
 - [ ] EP-M1: Adopt the pinned shared installer in CI and remove Kani-only code.
 - [ ] EP-M2: Wire explicit Verus proof selection and batch integration tests.
 - [ ] EP-M3: Complete real-tool acceptance and documentation reconciliation.
@@ -106,6 +108,18 @@ still mean one path.
 `scripts/ci/install_actionlint.py` also imports `ci_archive.py` and
 `ci_support.py`. Removing those modules with the Kani script would break an
 unrelated CI installer. There is no bespoke Verus CI downloader in this tree.
+
+Firecrawl retrieval of the upstream users guide at the pinned revision confirms
+the Kani `--version-file`, `--install-dir` and `--cache-dir` options, plus
+repeatable Verus `--proof-file` arguments, ordered execution, first-failure
+behaviour and the unrelated upstream default proof path. Source:
+<https://github.com/leynos/rust-prover-tools/blob/592558f7183b554fc749696246984c5d7300d029/docs/users-guide.md>,
+retrieved 2026-11-01.
+
+A bounded repository reconnaissance also found an active script inventory in
+`docs/developers-guide.md` under “CI helper scripts”. EP-M1 must update that
+inventory and the formal-verification installation description, while retaining
+the actionlint downloader and its shared support modules.
 
 ## Decision log
 
@@ -182,7 +196,7 @@ define the external contract used below.
 - R3: Existing CI policy, checksums, redaction and domain isolation survive.
   Trace: EP-M1 and EP-M2 to E1/E2, then EP-M3 to E4 and full gates.
 - R4: Maintainers can reproduce and understand the supported commands.
-  Trace: EP-M3 to developer/formal-verification guide updates and E4.
+  Trace: EP-M1 and EP-M3 to developer/formal-verification guide updates and E4.
 
 [upstream]: https://github.com/leynos/rust-prover-tools/tree/592558f7183b554fc749696246984c5d7300d029
 
@@ -334,10 +348,10 @@ this migration adds no repository-owned iteration algorithm.
 
 ## Concrete steps and validation
 
-Run commands from the repository root. Before implementation, record branch,
-status and upstream commit, then obtain approval. Use a separate clean checkout
-of upstream for inspection; do not build under `/tmp`. The source reference to
-inspect is the full SHA in Conformance basis.
+Run commands from the repository root. Before each milestone, record branch,
+status and upstream commit, then confirm the plan remains approved. Use a
+separate clean checkout of upstream for inspection; do not build under `/tmp`.
+The source reference to inspect is the full SHA in Conformance basis.
 
 For each milestone, run its new focused tests before and after the edit and
 save the expected red assertion and subsequent green result. `make test`
@@ -388,9 +402,10 @@ admission wrappers and the pinned toolchains intact. The expected evidence is
 version 0.67.0, successful existing harnesses, and two Verus invocations for
 the batch; capture actual verifier totals rather than predicting them here.
 
-For this documentation-only planning PR, run `make fmt`, `make check-fmt`,
-`make markdownlint`, `make nixie`, and `git diff --check`. Code gates and real
-proof runs belong to the future implementation, not claims about this draft.
+Before implementation, a plan-only candidate uses `make fmt`, `make check-fmt`,
+`make markdownlint`, `make nixie`, and `git diff --check`. Once implementation
+begins, run the milestone and acceptance gates listed above; documentation-only
+evidence cannot discharge the code, workflow, or real-prover obligations.
 
 ## Idempotence and recovery
 
@@ -410,5 +425,8 @@ installer and its workflow/Make tests; direct source inspection confirmed the
 external CLI bindings and archive ownership.
 
 Revision 1 (2026-11-01): Draft the installer and variadic-proof migration from
-current repository and upstream evidence. Implementation remains pending
-approval and no acceptance result is claimed.
+current repository and upstream evidence. At that revision no acceptance result
+was claimed.
+
+Revision 2 (2026-11-01): Mark the plan approved at the user’s explicit request
+before starting implementation.
