@@ -123,6 +123,10 @@ explicit and exercise the actual adapters in tests.
   - [x] 2026-11-01: Repair the M1 Clippy findings the library-only abort
     masked, extracting `ProjectKey` into its own module and grouping the
     discovery merge inputs into `RootTrust` and `ProjectScope`.
+  - [x] 2026-11-01: Record `project_key.rs` in the Kani proof scope and group
+    the two authority suites into an `authority/` directory module after
+    `make test-workflow-contracts` rejected both the uncovered proof input and
+    the unrecorded `authority` prefix group.
   - [ ] 2026-11-01: Run the M1 gate set and the milestone CLI review.
 - [ ] M2: Add validated definitions, append merging, and collision proof.
 - [ ] M3: Complete behavioural evidence, documentation, and delivery.
@@ -198,6 +202,19 @@ The branch never edits `typos.toml`. The earlier spelling gate regenerated it
 in place; the rebase onto the current `origin/main` (`5f0a4d123`) delivered
 exactly that regenerated content from upstream, so the working-tree difference
 disappeared and no separate refresh pull request is needed.
+
+The M1 gate batch turned red at `make test-workflow-contracts`, not at any Rust
+gate. Two repository contracts read the source tree as data: the Kani
+proof-scope contract requires every file the `#[kani::proof]` harnesses reach
+to appear in `tools/kani/proof-scope.toml`, and the module-layout contract
+refuses sibling modules that share a first prefix. Adding `project_key.rs` and
+the `authority_tests.rs`/`authority_properties.rs` pair therefore failed both,
+even though `make test` was green and the code ran correctly. The repair records
+`project_key.rs` in the proof scope and groups the two authority suites into
+`src/cli/discovery/layers/tests/authority/`, the layout the
+`src/manifest/tests/*/` modules already use. Neither failure is visible from
+Cargo, so a green `make test` is not evidence that the source-tree contracts
+hold.
 
 ## Decision log
 

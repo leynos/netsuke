@@ -1,13 +1,11 @@
-//! Authority classification for automatically discovered occurrences.
+//! Written cases for definition-authority classification.
 //!
-//! Root authority is decided once, from the provenance of the occurrence,
-//! rather than inferred later from the flattened layer list. These tests drive
-//! that classifier directly, including the fail-closed branches that keep an
-//! unprovable occurrence from being treated as operator configuration.
+//! These drive the classifier directly, including the fail-closed branches that
+//! keep an unprovable occurrence from being treated as operator configuration.
 
-use super::super::super::paths::{FailingPathNormalizer, FsPathNormalizer};
-use super::super::super::project_policy::RootAuthority;
-use super::super::{ProjectKey, scope_discovered_occurrence};
+use super::super::super::super::paths::{FailingPathNormalizer, FsPathNormalizer};
+use super::super::super::super::project_policy::RootAuthority;
+use super::super::super::{ProjectKey, scope_discovered_occurrence};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::MergeLayer;

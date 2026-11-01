@@ -7,9 +7,9 @@
 //! must always fail. Each property is paired with a witness, so none can pass
 //! merely because the generator never reaches an interesting state.
 
-use super::super::super::paths::FsPathNormalizer;
-use super::super::super::project_policy::RootAuthority;
-use super::super::{
+use super::super::super::super::paths::FsPathNormalizer;
+use super::super::super::super::project_policy::RootAuthority;
+use super::super::super::{
     ProjectKey, ScopedFileLayer, retain_layers_and_resolve_json, scope_discovered_occurrence,
 };
 use camino::Utf8PathBuf;
