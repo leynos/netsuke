@@ -148,6 +148,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Το default του env πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
 manifest.vars.not_object = Το `vars` του δηλωτικού πρέπει να είναι αντιστοίχιση ή αντικείμενο.
 manifest.vars.reserved_name = Το κλειδί `vars` '{ $name }' του μανιφέστου είναι δεσμευμένο για ενσωματωμένη βοηθητική συνάρτηση προτύπων· μετονομάστε τη μεταβλητή.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Η επικάλυψη προτύπου '{ $name }' συγκρούεται με τον χώρο ονομάτων { $kind }· μετονομάστε την επικάλυψη.
 manifest.read_failed = Δεν ήταν δυνατή η ανάγνωση του δηλωτικού από { $path }.
 manifest.resolve_workspace_root = Δεν ήταν δυνατός ο προσδιορισμός της ρίζας του χώρου εργασίας.
 manifest.workspace_non_utf8 = Η ριζική διαδρομή του χώρου εργασίας «{ $path }» δεν είναι έγκυρο UTF-8.

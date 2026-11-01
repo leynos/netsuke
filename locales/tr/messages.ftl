@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env default değeri bir dizge olmalıdır, { $kind } alındı.
 manifest.vars.not_object = Bildirimin `vars` alanı bir eşleme ya da nesne olmalıdır.
 manifest.vars.reserved_name = Manifestteki `vars` anahtarı '{ $name }' yerleşik bir şablon yardımcı işlevi için ayrılmıştır; değişkeni yeniden adlandırın.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Şablon kaplaması '{ $name }', { $kind } ad alanıyla çakışıyor; kaplamayı yeniden adlandırın.
 manifest.read_failed = { $path } konumundaki bildirim okunamadı.
 manifest.resolve_workspace_root = Çalışma alanının kökü belirlenemedi.
 manifest.workspace_non_utf8 = "{ $path }" çalışma alanı kök yolu geçerli UTF-8 değil.

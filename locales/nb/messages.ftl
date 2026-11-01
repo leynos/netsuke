@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = default i env må være en streng, mottok { $kind }.
 manifest.vars.not_object = `vars` i manifestet må være en tilordning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøkkel '{ $name }' er reservert for en innebygd malhjelper; gi variabelen et nytt navn.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Maloverlegget '{ $name }' kolliderer med navnerommet { $kind }; gi overlegget et nytt navn.
 manifest.read_failed = Manifestet i { $path } kunne ikke leses.
 manifest.resolve_workspace_root = Roten til arbeidsområdet kunne ikke bestemmes.
 manifest.workspace_non_utf8 = Rotstien til arbeidsområdet «{ $path }» er ikke gyldig UTF-8.

@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env का default स्ट्रिंग होना चाहिए, { $kind } प्राप्त हुआ।
 manifest.vars.not_object = मैनिफ़ेस्ट का `vars` प्रतिचित्रण अथवा वस्तु होना चाहिए।
 manifest.vars.reserved_name = मैनिफ़ेस्ट की `vars` कुंजी '{ $name }' अंतर्निहित टेम्पलेट सहायक के लिए आरक्षित है; चर का नाम बदलें।
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] टेम्पलेट ओवरले '{ $name }' नामस्थान { $kind } से टकराता है; ओवरले का नाम बदलें।
 manifest.read_failed = { $path } से मैनिफ़ेस्ट नहीं पढ़ा जा सका।
 manifest.resolve_workspace_root = कार्यक्षेत्र की जड़ निर्धारित नहीं की जा सकी।
 manifest.workspace_non_utf8 = कार्यक्षेत्र का मूल पथ “{ $path }” मान्य UTF-8 नहीं है।

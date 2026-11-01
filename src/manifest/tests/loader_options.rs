@@ -130,7 +130,7 @@ fn registration_decides_each_capability(#[case] row: Row) {
                 "refusal classifier gate",
                 registration.classifies_query_refusals()
             ),
-            ("overlay grant", registration.accepts_overlays()),
+            ("overlay grant", registration.overlays().is_some()),
         ],
         expected.flags,
         "boolean decisions for {row:?}"

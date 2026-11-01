@@ -11,5 +11,6 @@ mod env;
 mod expansion_telemetry;
 mod glob;
 mod loader_options;
+mod overlays;
 mod test_mode;
 mod wrapper_equivalence;

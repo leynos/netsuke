@@ -147,6 +147,7 @@ manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = مقدار default در env باید رشته باشد، اما { $kind } دریافت شد.
 manifest.vars.not_object = ‏`vars` در مانیفست باید نگاشت یا شیء باشد.
 manifest.vars.reserved_name = کلید `vars` با نام '{ $name }' در مانیفست برای یک کمک‌کننده داخلی قالب رزرو شده است؛ نام متغیر را تغییر دهید.
+manifest.overlay.name_collision = ‏[netsuke::manifest::overlay::collision] هم‌پوشانی قالب '{ $name }' با فضای نام { $kind } تعارض دارد؛ نام هم‌پوشانی را تغییر دهید.
 manifest.read_failed = خواندن مانیفست از { $path } ممکن نشد.
 manifest.resolve_workspace_root = تعیین ریشهٔ فضای کاری ممکن نشد.
 manifest.workspace_non_utf8 = مسیر ریشهٔ فضای کاری «{ $path }» ‏UTF-8 معتبر نیست.

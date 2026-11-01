@@ -1157,10 +1157,68 @@ and YAML fixtures, and were set from the inventory in Table 1.
   the substring-derived call-shape table in `refusal_text.rs`, and a `concat!`
   failure message whose `{build}`/`{test}` captures never interpolated. Log
   `/tmp/epm3-coderabbit-review-0070b8857.out`.
+- [x] (2026-11-01) EP-M4 red stage. Added
+  `src/manifest/tests/overlays/{mod,namespaces,registration}.rs` (OBL-8,
+  OBL-9), scenario 3 with its steps, and the extended OBL-12 embedder fixture,
+  then ran `cargo check -p netsuke-build --lib --tests --all-features`. It
+  failed with `error[E0432]: unresolved import` for
+  `crate::manifest::{OverlayNameKind, TemplateOverlayError}` and
+  `crate::manifest::{OverlayCall, OverlayCallable, TemplateOverlays}`, plus one
+  `error[E0599]: no method named with_overlays found for struct TestSurface`,
+  exit 101. The shape differs from the plan's predicted
+  `unresolved import netsuke::manifest::TemplateOverlays`: the tests live
+  inside the crate and name `crate::` paths, and the missing builder method
+  surfaced as a separate `E0599` rather than an import error. Log:
+  `/tmp/epm4-check.out`; see `Surprises & discoveries`.
+- [x] (2026-11-01) EP-M4 implementation. `src/manifest/test_surface.rs` became
+  the directory module `src/manifest/test_surface/{mod,overlays}.rs`: `mod.rs`
+  keeps `TestSurface` (now carrying `overlays` and the `with_overlays`
+  builder), and `overlays.rs` owns `TemplateOverlays`, `OverlayCallable`,
+  `OverlayCall`, `TemplateOverlayError`, `OverlayNameKind`, `OverlayNamespace`,
+  `overlay_namespace`, validation, and `register_overlays`.
+  `build_template_environment` computes the namespace before step 3, reuses it
+  for the existing reserved-name check, and registers the overlays last, after
+  the macros, so an overlay can replace any helper the earlier steps installed.
+  `StdlibRegistration::overlays()` replaced the `#[cfg(test)]`
+  `accepts_overlays` probe, and the decision table asserts it against all four
+  rows. The collision key `manifest.overlay.name_collision` landed in
+  `manifest_keys.rs` and all 35 catalogues in the same change.
+- [x] (2026-11-01) EP-M4 green-stage compile. The first green attempt failed
+  on two `error[E0277]` sites of my own making: both test closures are typed
+  `Result<Value, minijinja::Error>` but used `?` on an `anyhow::Error` from
+  `.context(...)`. Replaced with
+  `ok_or_else(|| MiniJinjaError::new(ErrorKind::InvalidOperation, …))`, the
+  form a third closure in the same file already used. The re-run finished `dev`
+  in 16 m 11 s at exit 0 after a compile queue that peaked near 250 waiting
+  requests. Logs: `/tmp/epm4-check.out` (red), `/tmp/epm4-check2.out` (green).
+- [x] (2026-11-01) EP-M4 focused verification, all green:
+  `--lib -E 'test(/manifest::tests::(loader_options|test_mode|overlays)/)'` ran
+  27 passed / 2451 skipped (the twelve overlay rows are six namespace and six
+  registration cases); `--test manifest_load_options_embedder` ran 2 passed,
+  including the extended OBL-12 case; `-E 'test(/manifest_load_options/)'` ran
+  18 passed / 4854 skipped, including
+  `manifest_load_options_a_template_overlay_stands_in_for_glob_under_test`
+  (scenario 3). Log: `/tmp/epm4-focused.out`.
+- [x] (2026-11-01) EP-M4 non-vacuity, two seeded faults, both reverted before
+  the green re-run. Fault A disabled overlay validation
+  (`let _ = validate_overlay_names(…)`): 4 of 6 namespace rows failed, and the
+  two "may take this name" rows still passed, which is the intended
+  discrimination (`/tmp/epm4-fault-a-netsuke-7-1-2.out`). Fault B registered
+  the overlays before the stdlib instead of last: initially only
+  `overlay_which_decides_a_when` failed, because
+  `passthrough_overlay_returns_the_shadowed_result` and
+  `overlay_now_sees_the_refusing_stub` compared against, or reported a stack
+  produced by, the stdlib's own answer. Both were strengthened with an
+  `Arc<AtomicUsize>` dispatch counter asserted to be exactly 1; re-seeding
+  fault B then failed three rows, and reverting it returned the twelve-row run
+  to 12 passed (`/tmp/epm4-fault-b2-netsuke-7-1-2.out`).
+  `overlay_glob_drives_a_foreach` still passes under the fault, correctly: the
+  loader registers `glob()` before the overlays in both orders, so the overlay
+  wins either way.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [x] EP-M2 — options entry point and thin wrappers.
 - [x] EP-M3 — `StdlibRegistration::Test`.
-- [ ] EP-M4 — template overlays.
+- [x] EP-M4 — template overlays.
 - [ ] EP-M5 — documentation, ADR, and roadmap closure.
 
 ## Surprises & discoveries
@@ -1706,6 +1764,28 @@ and YAML fixtures, and were set from the inventory in Table 1.
   first attempt that exits 101 says nothing about the rows and must be
   redesigned, matching the EP-M2 finding.
 
+- Observation: a seeded registration-order fault exposed two vacuous EP-M4
+  rows that the green run could not. With the overlays registered before the
+  stdlib, `passthrough_overlay_returns_the_shadowed_result` still passed,
+  because the stdlib's own `timedelta` produced the same rendered command the
+  comparison expected, and `overlay_now_sees_the_refusing_stub` still found a
+  `now` refusal in the error chain, because the stub itself had answered.
+  Impact: an equality-or-error assertion against a helper that exists without
+  the overlay cannot distinguish "the overlay ran" from "the overlay never
+  ran". Repaired by making each closure bump an `Arc<AtomicUsize>` and
+  asserting exactly one dispatch; the re-seeded fault then failed three rows.
+  Date/Author: 2026-11-01, implementation agent in EP-M4.
+
+- Observation: the EP-M4 red transcript does not match the plan's predicted
+  error text. The plan expected
+  `error[E0432]: unresolved import netsuke::manifest::TemplateOverlays`; the
+  run produced three `E0432` lines naming `crate::manifest::…` paths and one
+  `E0599` for the missing `TestSurface::with_overlays`. Impact: the red
+  transcript is evidence of absence, not a fixed string; a future plan should
+  predict the crate-internal path shape and treat a missing builder as its own
+  failure rather than part of the import error. Date/Author: 2026-11-01,
+  implementation agent in EP-M4.
+
 ## Decision log
 
 - Decision: `TestModeRefusal` and its `operation()` accessor are public,
@@ -2024,6 +2104,37 @@ and YAML fixtures, and were set from the inventory in Table 1.
   naming it would make EP-M2's own documentation false on merge. EP-M5 still
   owns the section's full narrative and the design/ADR reconciliation.
   Date/Author: 2026-10-31, implementation agent in EP-M2.
+
+- Decision: `TemplateOverlayError` derives `Debug` and hand-writes `Display`
+  instead of using `thiserror`. Rationale: the message must carry the localized
+  `manifest.overlay.name_collision` text with `name` and `kind` interpolated
+  through `LocalizedMessage::with_arg`, which `thiserror`'s attribute cannot
+  express; the same reason the repository's other localized errors implement
+  `Display` by hand. Date/Author: 2026-11-01, implementation agent in EP-M4.
+
+- Decision: `OverlayNameKind` renders hyphenated, untranslated tokens
+  (`environment-seam`, `loader-internal`, `manifest-variable`,
+  `manifest-macro`) into the collision message. Rationale: the token names the
+  namespace, not the prose around it, so translating it per catalogue would
+  make a diagnostic harder to match; only the surrounding sentence is
+  localized. Date/Author: 2026-11-01, implementation agent in EP-M4.
+
+- Decision: overlays reach the loader through `StdlibRegistration::overlays()`
+  and a `.cloned()` taken before `register_stdlib` consumes the registration.
+  Rationale: `register_stdlib` takes the registration by value, so the
+  capability must be read first; the clone copies an `Arc` handle per callable
+  and the name map, not the dispatch closures, which matches the Polonius-era
+  policy of stating a clone's cost rather than hiding it. A second capability
+  field on the registration enum would duplicate the mode that already decides
+  the grant. Date/Author: 2026-11-01, implementation agent in EP-M4.
+
+- Decision: `src/manifest/test_surface.rs` became the directory module
+  `src/manifest/test_surface/{mod,overlays}.rs`, and the overlay tests became
+  `src/manifest/tests/overlays/{mod,namespaces,registration}.rs`. Rationale:
+  the combined module exceeded the 400-line cap and the house layout is
+  `foo/mod.rs` plus plain `mod child;`; splitting by name-validation versus
+  dispatch keeps each file a single concern. Date/Author: 2026-11-01,
+  implementation agent in EP-M4.
 
 ## Outcomes & retrospective
 
@@ -2501,6 +2612,7 @@ After each milestone, perform the conformance check listed and update
 
 ### EP-M4 — template overlays
 
+- Status: implemented and locally verified on 2026-11-01; see `Progress`.
 - Outcome: `TemplateOverlays`, `OverlayCallable`, `OverlayCall`,
   `TemplateOverlayError`, the collision key in all catalogues, registration
   after macros and before expansion, the third behavioural scenario, and the

@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Az env default értékének karakterláncnak kell lennie, ezt kaptuk: { $kind }.
 manifest.vars.not_object = A jegyzék `vars` mezőjének leképezésnek vagy objektumnak kell lennie.
 manifest.vars.reserved_name = A manifest `vars` kulcsa, '{ $name }', egy beépített sablonsegéd számára fenntartott; nevezze át a változót.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] A(z) '{ $name }' sablonfedés ütközik a(z) { $kind } névtérrel; nevezze át a fedést.
 manifest.read_failed = A jegyzéket nem sikerült beolvasni innen: { $path }.
 manifest.resolve_workspace_root = A munkaterület gyökerét nem sikerült meghatározni.
 manifest.workspace_non_utf8 = A munkaterület gyökérútvonala („{ $path }”) nem érvényes UTF-8.

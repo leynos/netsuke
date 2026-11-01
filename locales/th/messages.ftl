@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = ค่า default ของ env ต้องเป็นสายอักขระ แต่ได้รับ { $kind }
 manifest.vars.not_object = `vars` ของไฟล์รายการต้องเป็นการจับคู่หรือวัตถุ
 manifest.vars.reserved_name = คีย์ `vars` '{ $name }' ของมานิเฟสต์ถูกสงวนไว้สำหรับฟังก์ชันช่วยเทมเพลตในตัว โปรดเปลี่ยนชื่อตัวแปร
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] โอเวอร์เลย์เทมเพลต '{ $name }' ขัดแย้งกับเนมสเปซ { $kind } โปรดเปลี่ยนชื่อโอเวอร์เลย์
 manifest.read_failed = อ่านไฟล์รายการที่ { $path } ไม่สำเร็จ
 manifest.resolve_workspace_root = ระบุรากของพื้นที่ทำงานไม่สำเร็จ
 manifest.workspace_non_utf8 = เส้นทางรากของพื้นที่ทำงาน “{ $path }” ไม่ใช่ UTF-8 ที่ถูกต้อง

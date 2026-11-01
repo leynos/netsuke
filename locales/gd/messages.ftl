@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Feumaidh default env a bhith na shreang; fhuaras { $kind }.
 manifest.vars.not_object = Feumaidh `vars` an fhoirm-liosta a bhith na mhapadh no na oibseact.
 manifest.vars.reserved_name = Tha an iuchair `vars` '{ $name }' sa mhanifest glèidhte do chuidiche teamplaid na broinn; thoir ainm ùr air a' chaochladair.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Tha an tar-lùbadh teamplaid '{ $name }' a' bualadh an raon-ainm { $kind }; thoir ainm ùr air an tar-lùbadh.
 manifest.read_failed = Cha b' urrainnear am foirm-liosta a leughadh o { $path }.
 manifest.resolve_workspace_root = Cha b' urrainnear freumh an raoin-obrach a dhearbhadh.
 manifest.workspace_non_utf8 = Chan eil slighe freumh an raoin-obrach “{ $path }” na UTF-8 dhligheach.

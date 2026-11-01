@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = De default van env moet een tekenreeks zijn, ontvangen { $kind }.
 manifest.vars.not_object = De `vars` van het manifest moet een toewijzing of object zijn.
 manifest.vars.reserved_name = De `vars`-sleutel '{ $name }' in het manifest is gereserveerd voor een ingebouwde sjabloonfunctie; hernoem de variabele.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] De sjabloonoverlay '{ $name }' botst met de naamruimte { $kind }; hernoem de overlay.
 manifest.read_failed = Het manifest in { $path } kon niet worden gelezen.
 manifest.resolve_workspace_root = De hoofdmap van de werkruimte kon niet worden bepaald.
 manifest.workspace_non_utf8 = Het hoofdpad van de werkruimte ‘{ $path }’ is geen geldige UTF-8.

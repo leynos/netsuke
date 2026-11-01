@@ -148,6 +148,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = L'argument default de env doit être une chaîne, reçu { $kind }.
 manifest.vars.not_object = `vars` du manifeste doit être une table ou un objet.
 manifest.vars.reserved_name = La clé `vars` '{ $name }' du manifeste est réservée à une fonction utilitaire de gabarit intégrée ; renommez la variable.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] La superposition de gabarit '{ $name }' entre en conflit avec l'espace de noms { $kind } ; renommez la superposition.
 manifest.read_failed = Impossible de lire le manifeste depuis { $path }.
 manifest.resolve_workspace_root = Impossible de résoudre la racine de l'espace de travail.
 manifest.workspace_non_utf8 = Le chemin racine de l'espace de travail « { $path } » n'est pas de l'UTF-8 valide.

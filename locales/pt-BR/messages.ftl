@@ -148,6 +148,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = O default de env deve ser uma string, recebido { $kind }.
 manifest.vars.not_object = `vars` do manifesto deve ser um mapa ou objeto.
 manifest.vars.reserved_name = A chave `vars` '{ $name }' do manifesto está reservada para uma função auxiliar de template integrada; renomeie a variável.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] A sobreposição de template '{ $name }' entra em conflito com o espaço de nomes { $kind }; renomeie a sobreposição.
 manifest.read_failed = Não foi possível ler o manifesto em { $path }.
 manifest.resolve_workspace_root = Não foi possível resolver a raiz do workspace.
 manifest.workspace_non_utf8 = O caminho da raiz do workspace "{ $path }" não é UTF-8 válido.

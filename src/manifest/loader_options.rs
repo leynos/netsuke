@@ -18,7 +18,7 @@ use minijinja::Environment;
 
 use super::{
     EnvAccessPolicy, EnvReader, ManifestBudgetLimits, ManifestEnvironment, ManifestLoadStage,
-    ManifestName, ManifestParse, NetsukeManifest, TestSurface,
+    ManifestName, ManifestParse, NetsukeManifest, TemplateOverlays, TestSurface,
     budget::adapter::from_str_named,
     registration::{register_env_function, register_glob_function},
 };
@@ -101,17 +101,15 @@ impl StdlibRegistration {
         matches!(self, Self::ManifestQuery)
     }
 
-    /// Report whether this mode may carry template overlays.
+    /// Return the template overlays this mode may register, if any.
     ///
     /// Overlays are a capability grant, so only the test surface admits them.
-    /// No variant grants it yet, and the overlay machinery lands with the test
-    /// surface (EP-M4); the decision table asserts the refusal now so a new
-    /// variant cannot be added without stating its answer.
-    #[cfg(test)]
-    pub(crate) const fn accepts_overlays(&self) -> bool {
+    /// The decision table reads this accessor so a new variant cannot be added
+    /// without stating its answer.
+    pub(crate) fn overlays(&self) -> Option<&TemplateOverlays> {
         match self {
-            Self::Test(_) => true,
-            Self::AmbientFull | Self::Full(_) | Self::ManifestQuery => false,
+            Self::Test(surface) => Some(surface.overlays()),
+            Self::AmbientFull | Self::Full(_) | Self::ManifestQuery => None,
         }
     }
 }

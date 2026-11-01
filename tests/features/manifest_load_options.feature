@@ -18,3 +18,9 @@ Feature: Options-carrying manifest loading
     Then parsing the manifest fails
     And the error message contains "[netsuke::jinja::test_mode::unavailable]"
     And the error message contains "shell"
+
+  Scenario: A template overlay stands in for glob under test
+    Given the manifest file "tests/data/glob.yml"
+    And a template overlay "glob" returning "glob_files/a.txt" and "glob_files/b.txt"
+    When the manifest is loaded in test mode
+    Then the manifest has targets named "a.out, b.out"

@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = default i env skal være en streng, modtog { $kind }.
 manifest.vars.not_object = Manifestets `vars` skal være en tilknytning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøgle '{ $name }' er reserveret til en indbygget skabelonhjælper; omdøb variablen.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Skabelonoverlejringen '{ $name }' er i konflikt med navnerummet { $kind }; omdøb overlejringen.
 manifest.read_failed = Manifestet i { $path } kunne ikke læses.
 manifest.resolve_workspace_root = Roden af arbejdsområdet kunne ikke bestemmes.
 manifest.workspace_non_utf8 = Rodstien for arbejdsområdet "{ $path }" er ikke gyldig UTF-8.

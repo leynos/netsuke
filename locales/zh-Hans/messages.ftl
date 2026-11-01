@@ -146,6 +146,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env 的 default 必须是字符串，但收到了 { $kind }。
 manifest.vars.not_object = 清单的 `vars` 必须是映射或对象。
 manifest.vars.reserved_name = 清单的 `vars` 键 '{ $name }' 已保留给内置模板辅助函数；请重命名该变量。
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] 模板覆盖 '{ $name }' 与 { $kind } 命名空间冲突；请重命名该覆盖。
 manifest.read_failed = 无法读取 { $path } 处的清单。
 manifest.resolve_workspace_root = 无法确定工作区根目录。
 manifest.workspace_non_utf8 = 工作区根路径“{ $path }”不是有效的 UTF-8。

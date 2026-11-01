@@ -23,6 +23,7 @@ define_keys! {
     MANIFEST_ENV_DEFAULT_NOT_STRING => "manifest.env.default_not_string",
     MANIFEST_VARS_NOT_OBJECT => "manifest.vars.not_object",
     MANIFEST_VARS_RESERVED_NAME => "manifest.vars.reserved_name",
+    MANIFEST_OVERLAY_NAME_COLLISION => "manifest.overlay.name_collision",
     MANIFEST_READ_FAILED => "manifest.read_failed",
     MANIFEST_RESOLVE_WORKSPACE_ROOT => "manifest.resolve_workspace_root",
     MANIFEST_WORKSPACE_NON_UTF8 => "manifest.workspace_non_utf8",

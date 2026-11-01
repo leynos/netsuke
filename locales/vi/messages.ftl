@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Giá trị default của env phải là chuỗi, nhưng nhận được { $kind }.
 manifest.vars.not_object = Trường `vars` của tệp kê khai phải là ánh xạ hoặc đối tượng.
 manifest.vars.reserved_name = Khóa `vars` '{ $name }' của tệp kê khai được dành riêng cho hàm trợ giúp mẫu tích hợp; hãy đổi tên biến.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Lớp phủ mẫu '{ $name }' xung đột với không gian tên { $kind }; hãy đổi tên lớp phủ.
 manifest.read_failed = Không đọc được tệp kê khai tại { $path }.
 manifest.resolve_workspace_root = Không xác định được gốc của không gian làm việc.
 manifest.workspace_non_utf8 = Đường dẫn gốc của không gian làm việc “{ $path }” không phải UTF-8 hợp lệ.

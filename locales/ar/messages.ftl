@@ -147,6 +147,7 @@ manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = يجب أن تكون قيمة default في env سلسلة نصية، وتم تلقّي { $kind }.
 manifest.vars.not_object = يجب أن يكون `vars` في ملف البيانات تخطيطًا أو كائنًا.
 manifest.vars.reserved_name = يُعدّ مفتاح `vars` المسمّى '{ $name }' في ملف البيانات محجوزًا لدالة قوالب مدمجة؛ أعد تسمية المتغيّر.
+manifest.overlay.name_collision = ‏[netsuke::manifest::overlay::collision] يتعارض تراكب القالب '{ $name }' مع نطاق { $kind }؛ أعد تسمية التراكب.
 manifest.read_failed = تعذّرت قراءة ملف البيانات من { $path }.
 manifest.resolve_workspace_root = تعذّر تحديد جذر مساحة العمل.
 manifest.workspace_non_utf8 = مسار جذر مساحة العمل «{ $path }» ليس UTF-8 صالحًا.

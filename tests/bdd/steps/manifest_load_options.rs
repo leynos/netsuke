@@ -8,7 +8,9 @@
 //! the differential suites. The second loads a manifest that pipes a command
 //! through `shell`, which the build surface runs literally and the test
 //! surface refuses; the refusal must reach the author as an error naming both
-//! the refusal class and the helper.
+//! the refusal class and the helper. The third supplies a template overlay, so
+//! a test can stand in for a helper the surface withholds without granting the
+//! helper itself.
 //!
 //! Fixtures are read from the repository rather than staged into a temporary
 //! workspace: the loader entry point takes manifest text, so the scenario
@@ -20,7 +22,10 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::{
     ast::NetsukeManifest,
     ir::BuildGraph,
-    manifest::{self, ManifestLoadOptions, ManifestName, TestSurface, from_str_with_options},
+    manifest::{
+        self, ManifestLoadOptions, ManifestName, OverlayCall, OverlayCallable, TemplateOverlays,
+        TestSurface, from_str_with_options,
+    },
     ninja_gen::generate_with_shell,
     recipe_shell::RecipeShell,
     stdlib::StdlibConfig,
@@ -132,19 +137,44 @@ fn load_in_both_modes(world: &TestWorld) -> Result<()> {
     Ok(())
 }
 
+/// Return the test surface, carrying the scenario's overlays when set.
+fn test_surface(world: &TestWorld) -> Result<TestSurface> {
+    let surface = TestSurface::new(scenario_config(world)?);
+    Ok(match world.load_options_overlays.get() {
+        Some(overlays) => surface.with_overlays(overlays),
+        None => surface,
+    })
+}
+
 /// Load the selected manifest through the test registration only.
 #[when("the manifest is loaded in test mode")]
 fn load_in_test_mode(world: &TestWorld) -> Result<()> {
     let path = selected_path(world)?;
     let text = read_fixture(&path)?;
-    let config = scenario_config(world)?;
     let outcome = from_str_with_options(
         &text,
         &ManifestName::new(path.as_str()),
-        ManifestLoadOptions::test(TestSurface::new(config)),
+        ManifestLoadOptions::test(test_surface(world)?),
     )
     .map_err(|error| display_error_chain(error.as_ref()));
     store_parse_outcome(&world.manifest, &world.manifest_error, outcome);
+    Ok(())
+}
+
+/// Register a two-value template overlay the next test load will see.
+#[given("a template overlay {name:string} returning {first:string} and {second:string}")]
+fn add_template_overlay(world: &TestWorld, name: &str, first: &str, second: &str) -> Result<()> {
+    ensure!(
+        !name.trim().is_empty(),
+        "an overlay name must not be an empty string"
+    );
+    let values = vec![first.to_owned(), second.to_owned()];
+    let callable = OverlayCallable::new(move |_call: &OverlayCall<'_, '_>| {
+        Ok(minijinja::value::Value::from_serialize(values.clone()))
+    });
+    world
+        .load_options_overlays
+        .set(TemplateOverlays::default().with_function(name.to_owned(), callable));
     Ok(())
 }
 

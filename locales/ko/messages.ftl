@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env의 default는 문자열이어야 합니다. { $kind }을(를) 받았습니다.
 manifest.vars.not_object = 매니페스트의 `vars`는 매핑이나 객체여야 합니다.
 manifest.vars.reserved_name = 매니페스트의 `vars` 키 '{ $name }'은(는) 내장 템플릿 헬퍼용으로 예약되어 있습니다. 변수 이름을 바꾸십시오.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] 템플릿 오버레이 '{ $name }'이(가) { $kind } 네임스페이스와 충돌합니다. 오버레이 이름을 바꾸십시오.
 manifest.read_failed = { $path }의 매니페스트를 읽지 못했습니다.
 manifest.resolve_workspace_root = 작업 공간의 루트를 확인하지 못했습니다.
 manifest.workspace_non_utf8 = 작업 공간의 루트 경로 '{ $path }'은(는) 올바른 UTF-8이 아닙니다.

@@ -71,7 +71,11 @@ pub(crate) use query::{LoadedManifest, from_path_for_manifest_query_with_source}
 use registration::RESERVED_VAR_NAMES;
 use registration::{localize_recipe_error, register_manifest_vars};
 pub use render::render_manifest;
-pub use test_surface::TestSurface;
+pub use test_surface::{
+    OverlayCall, OverlayCallable, OverlayNameKind, TemplateOverlayError, TemplateOverlays,
+    TestSurface,
+};
+pub(crate) use test_surface::{overlay_namespace, register_overlays};
 #[cfg(test)]
 use workspace::open_manifest_workspace;
 
@@ -207,10 +211,20 @@ fn build_template_environment(
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
     loader_options::register_host_helpers(&mut jinja, &registration, environment, manifest_root);
+    // `register_stdlib` consumes the registration, so the overlays it carries
+    // are taken first. Cloning them copies only the `Arc` handles and the name
+    // map; the dispatch closures stay shared.
+    let overlays = registration.overlays().cloned();
     let _stdlib_state = loader_options::register_stdlib(&mut jinja, registration)?;
-    register_manifest_vars(&doc, &mut jinja, name)?;
+    // Computed before the vars are registered: the manifest's own keys are part
+    // of the namespace an overlay must not take, and the same value answers the
+    // reserved-name check inside `register_manifest_vars`.
+    let namespace = overlay_namespace(&doc);
+    register_manifest_vars(&doc, &mut jinja, name, &namespace)?;
     notify_stage(on_stage, ManifestLoadStage::TemplateExpansion);
     register_manifest_macros_with_budget(&doc, &mut jinja, &budget)?;
+    // Last, so an overlay can replace any helper the steps above installed.
+    register_overlays(&mut jinja, overlays.as_ref(), &namespace)?;
     Ok((doc, jinja, budget))
 }
 

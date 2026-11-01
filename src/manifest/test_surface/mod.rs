@@ -2,14 +2,23 @@
 //!
 //! The surface is deny-by-default. It carries a [`StdlibConfig`] so the caller
 //! can pin the recipe dialect and, by injecting a clock, make `now()`
-//! deterministic; and it carries an [`EnvReader`] so `env()` answers from an
-//! explicit seam rather than the process environment. Without an injected
+//! deterministic; an [`EnvReader`] so `env()` answers from an explicit seam
+//! rather than the process environment; and the [`TemplateOverlays`] a test
+//! supplies in place of the helpers the surface withholds. Without an injected
 //! reader every lookup reports "not set", which is what lets a test manifest
 //! observe that the boundary was withheld without mutating the process.
 //!
-//! Template overlays join this surface in EP-M4. Keeping the payload here
-//! rather than in the loader options means the loader's registration enum never
-//! has to grow a second capability field.
+//! Keeping the payload here rather than in the loader options means the
+//! loader's registration enum never has to grow a second capability field. The
+//! overlay machinery lives in [`overlays`], which also owns the namespace rules
+//! the loader consults before it registers anything.
+
+mod overlays;
+
+pub use overlays::{
+    OverlayCall, OverlayCallable, OverlayNameKind, TemplateOverlayError, TemplateOverlays,
+};
+pub(crate) use overlays::{OverlayNamespace, overlay_namespace, register_overlays};
 
 use super::EnvReader;
 use super::env::disabled_env_reader;
@@ -21,6 +30,8 @@ pub struct TestSurface {
     config: StdlibConfig,
     /// Reader behind `env()`; refuses every lookup by default.
     reader: EnvReader,
+    /// Template functions registered in place of withheld helpers.
+    overlays: TemplateOverlays,
 }
 
 impl TestSurface {
@@ -34,6 +45,7 @@ impl TestSurface {
         Self {
             config,
             reader: disabled_env_reader(),
+            overlays: TemplateOverlays::default(),
         }
     }
 
@@ -41,6 +53,17 @@ impl TestSurface {
     #[must_use]
     pub fn with_env_reader(mut self, reader: EnvReader) -> Self {
         self.reader = reader;
+        self
+    }
+
+    /// Register these template functions for the load.
+    ///
+    /// An overlay replaces a same-named helper and is visible to `foreach`,
+    /// `when`, and every rendered field, so a test can stand in for a helper
+    /// the surface refuses without granting that helper itself.
+    #[must_use]
+    pub fn with_overlays(mut self, overlays: TemplateOverlays) -> Self {
+        self.overlays = overlays;
         self
     }
 
@@ -52,5 +75,10 @@ impl TestSurface {
     /// Return the stdlib configuration this surface grants.
     pub(crate) const fn config(&self) -> &StdlibConfig {
         &self.config
+    }
+
+    /// Return the template overlays this surface grants.
+    pub(crate) const fn overlays(&self) -> &TemplateOverlays {
+        &self.overlays
     }
 }

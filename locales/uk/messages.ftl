@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Значення default у env має бути рядком, отримано { $kind }.
 manifest.vars.not_object = Поле `vars` маніфесту має бути відображенням або об’єктом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' у маніфесті зарезервовано для вбудованої допоміжної функції шаблонів; перейменуйте змінну.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Накладення шаблону '{ $name }' конфліктує з простором імен { $kind }; перейменуйте накладення.
 manifest.read_failed = Не вдалося прочитати маніфест за шляхом { $path }.
 manifest.resolve_workspace_root = Не вдалося визначити корінь робочої області.
 manifest.workspace_non_utf8 = Кореневий шлях робочої області «{ $path }» не є коректним UTF-8.
