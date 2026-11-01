@@ -1231,6 +1231,17 @@ dependencies as graph arcs.
   reference was updated. The changelog entry moved from the released
   `0.1.0-beta4` section to `Unreleased`. Validation and publication remain
   pending on this candidate.
+- [x] (2026-11-01) Refreshed the target and replayed the eight-commit series
+  onto `origin/main` at `e5d57c583` (old head `f7d150c5c`, exclusive boundary
+  `7929a3fc2`, remote branch head `fa6fb6268`). Only `docs/contents.md`
+  conflicted, at the ADR insertion point: main had appended ADR-0069 for the
+  split localization key tables. The resolution keeps main's entry after the
+  cycle entry, so the list stays in ascending serial order. The later renumber
+  commit re-applied over that resolution through the merge backend, leaving the
+  index at ADR-0060 (readable progress), ADR-0068 (cycle detection), ADR-0069
+  (localization tables). No other conflict occurred. `range-diff` pairs all
+  eight commits, and the only content difference from the previously accepted
+  series is main's retained ADR-0069 entry. The new candidate is `065f8a301`.
 
 ## Surprises & discoveries
 
@@ -1317,6 +1328,12 @@ dependencies as graph arcs.
   the changelog, contents index, users', developers', design,
   formal-verification, migration, and roadmap documents was updated. Main's
   ADR-0060 was left untouched.
+- Observation (rebase, 2026-11-01): main landed ADR-0069 for splitting the
+  Fluent localization key tables while this branch held ADR-0068 for cycle
+  detection. Impact: no collision and no further renumbering; the new serial is
+  greater than 0068, so the contents index keeps ascending order as ADR-0060,
+  ADR-0068, ADR-0069. A later serial does not prove that every earlier one is
+  free, so a fresh sweep is still required before any future allocation.
 - Observation (2026-10-25 rebase): main added ADR-0059 and marked ADR-0033 as
   superseded while this branch added its cycle-detection ADR (now ADR-0068) at
   the same index insertion point. The conflict stages contained independent
@@ -1554,3 +1571,12 @@ that field to the two new test modules, kept both records in the shared
 `Unreleased`. Main's new ADR-0060 required a fresh serial sweep: live branches
 hold ADR-0061 through ADR-0067, so this plan's ADR is now ADR-0068. Gate
 results for this candidate are recorded in `Progress` when complete.
+
+Revision 20 (2026-11-01): re-fetched the target and rebased the eight-commit
+series again, from `7929a3fc2` onto `e5d57c583`. The 2026-10-30 candidate's
+gate batch was interrupted before completion and never produced a verdict, so
+it is superseded rather than carried forward. The only conflict was
+`docs/contents.md`, where main had appended ADR-0069; both records are kept and
+the merge backend re-applied the ADR-0068 renumber over the resolution. The
+replayed candidate is `065f8a301`, and its gates are run after the plan edits
+that record this rebase.
