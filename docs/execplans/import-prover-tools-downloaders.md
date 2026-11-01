@@ -217,9 +217,55 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       `5b1f4b22a58adaf61795b2ae271e1a25096e89e0`; all 12 local gates passed
       on that candidate, and focused reassessment of the correction returned
       zero findings.
-- [ ] EP-M3: Complete the hosted Kani cache run, milestone review, and PR
+- [x] (2026-11-01) Complete hosted cold Kani acceptance on published candidate
+      `9a2c0658d62b9c3b59a533733df9ba601e95ad9e` via CI dispatch run
+      [41322090500](https://github.com/leynos/netsuke/actions/runs/41322090500).
+      The run missed
+      `netsuke-kani-v2-Linux-X64-self-hosted-ubuntu2404-0.67.0`, installed
+      Kani 0.67.0, verified all 15 harnesses, and passed mutation patch
+      compilation. Dispatches cannot save the cache generation.
+- [x] (2026-11-01) Receive the ExecPlan completeness and correctness assessment
+      for base `e5d57c58352b51473de4170f86e34fdc9db3ece6` and head
+      `9a2c0658d62b9c3b59a533733df9ba601e95ad9e` in
+      [comment 6560374229](https://github.com/leynos/netsuke/pull/1063#issuecomment-6560374229).
+      It found no confirmed implementation defect, but identified missing
+      Make-boundary Verus failure and subsequent-process Kani PATH regression
+      tests. It also found the hosted cold-run evidence stale in this plan.
+- [x] (2026-11-01) Add both requested regressions: `make verus` child failure
+      status and flag redaction, plus a separate Cargo process that selects the
+      Kani binary published through `GITHUB_PATH` ahead of a conflicting later
+      PATH entry. Both focused tests and the final full gate sequence pass;
+      candidate-bound assessment follow-up remains pending.
+- [x] (2026-11-01) Run the complete local gate sequence after adapting the
+      PATH harness to the repository's subprocess and typing conventions.
+      Eleven gates passed, including 4,948 Rust tests, 1,667 workflow
+      contracts, 90 CI-script tests, 7 prover-tools integration tests, and
+      98.23% doc coverage. Lint found one missing `Returns` section in the new
+      helper docstring; correct it before the final gate sequence. Logs share
+      the `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm3-assessment-regressions-refactor.out`
+      suffix.
+- [x] (2026-11-01) Rerun all gates after adding the helper's return
+      documentation. Eleven passed, with the Python docstring checker
+      clarifying that `Returns` uses a dashed underline and a return type.
+      `make test` again passed 4,948 tests with 7 skipped; workflow contracts
+      passed 1,667 with 3 skipped plus 28 helpers; CI scripts passed 90 tests;
+      prover-tools integration passed 7 tests; doc coverage was 98.23%. Apply
+      the exact documented heading format and rerun the full sequence. Logs
+      share the
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm3-assessment-regressions-final.out`
+      suffix.
+- [x] (2026-11-01) Run the final full local gate sequence after correcting
+      the helper's NumPy-style `Returns` documentation. All 12 gates passed:
+      formatting, lint, typecheck, 98.23% doc coverage, Markdown and Mermaid,
+      4,948 Rust tests (7 skipped) plus doctests, 1,667 workflow contracts
+      (3 skipped) plus 28 helper tests, 90 CI-script tests, 7 prover-tools
+      integration tests, Makefile validation, and diff checks. Logs share
+      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-epm3-assessment-regressions-final2.out`.
+- [ ] Publish the repaired candidate and request candidate-bound follow-up
+      confirmation on the two closed regression findings.
+- [ ] EP-M3: Complete hosted warm-cache acceptance, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
-      the hosted warm run requires a trusted `main` push.
+      the warm run requires a trusted `main` push.
 
 ## Surprises & discoveries
 
@@ -345,9 +391,17 @@ cache ownership. No Kani or Verus proof source changed, so this migration adds
 no theorem or harness. The first full EP-M3 gate sweep found one spelling error
 in the plan; after correcting it, all 12 gates passed, including 4,947 Rust
 tests, 1,666 workflow contracts, 90 CI-script tests, 7 pinned-CLI integration
-tests, and 98.23% doc coverage. Milestone review and the hosted cold-cache run
-remain outstanding. A hosted warm cache remains unavailable until a trusted
-`main` run saves the new generation; a PR cannot perform that write.
+tests, and 98.23% doc coverage. Hosted cold acceptance then passed at the
+published head: the dispatch run missed the new cache key, verified all 15 Kani
+harnesses, and passed mutation compilation. The completeness assessment
+confirmed no implementation defect but identified missing regression coverage
+for `make verus` failure propagation and Kani path precedence in a subsequent
+process. Those tests and the assessment follow-up remain in progress. A hosted
+warm cache remains unavailable until a trusted `main` run saves the new
+generation; a PR cannot perform that write. Both assessment regressions and the
+final 12-gate local sequence now pass. Candidate-bound assessment follow-up is
+pending publication; hosted warm-cache acceptance remains contingent on a
+trusted `main` cache writer.
 
 ## Context and orientation
 
@@ -362,8 +416,9 @@ redaction, failure reporting and argv boundaries, including paths with spaces.
 `.kani-home`, and `.kani-rustup` under a versioned, platform-qualified key;
 only a cache miss on a push to `main` can save it. `tests/workflow_ci.rs` and
 `tests/workflow_contracts/kani_cache_test.py` enforce the shared installer,
-cache paths, and write policy. `scripts/tests/test_ci_scripts_metadata.py`
-ensures the obsolete Kani downloader and test are absent. The scope policy in
+cache paths, write policy, and Kani precedence in a subsequent process.
+`scripts/tests/test_ci_scripts_metadata.py` ensures the obsolete Kani
+downloader and test are absent. The scope policy in
 `tools/kani/proof-scope.toml` retains the proof-source closure while excluding
 the removed script from tooling metrics. Shared archive and containment helpers
 remain because actionlint still uses them.
@@ -505,6 +560,10 @@ E1 verifies R1/R3: the installer is reached only after the scope decision,
 never compiles from source, publishes the intended PATH, and uses only the
 three owned cache directories. Workflow tests exercise run/skip and
 restore/save conditions, explicit nightly selection, and the exact pin source.
+A test runs the install-step shell command and invokes `cargo kani --version`
+from a separate process with a conflicting binary later on PATH; the published
+installer path must win. The harness is local to this workflow contract and
+models only the `GITHUB_PATH` handoff; it is not a shared subprocess fixture.
 Run `make test-workflow-contracts`, `make test-ci-scripts`, and the
 `workflow_ci` Rust integration target via the normal test suite. Negative
 controls restore the old script invocation, remove PATH publication, or permit
@@ -514,9 +573,11 @@ mistaken for equivalent policy.
 
 E2 verifies R2/R3 at Make's boundary. The recorder must record argument counts
 and individual tokens, not flattened text. Named cases cover no override, one
-path, several paths, whitespace and child status 42. A dropped second flag,
-split path, or leaked secret is a failing negative control. This finite
-partition is adequate because Make delegates ordering and iteration upstream.
+path, several paths, whitespace and child status 42 for both the installer and
+the `verus` proof target, including failure-diagnostic redaction. A dropped
+second flag, split path, leaked secret, or swallowed proof failure is a failing
+negative control. This finite partition is adequate because Make delegates
+ordering and iteration upstream.
 
 E3 verifies R2 against the real pinned CLI with fake verifier processes. Three
 existing temporary files witness successful execution; failures at each
@@ -530,10 +591,14 @@ not reimplemented or formally proved by Netsuke.
 E4 verifies R1/R3/R4 in the hosted Linux x86_64 environment and a supported
 local environment. On CI, record a cold run and a subsequent warm run with
 archive reuse, exact Kani version, the proof harness count, mutation gate
-success, scope decision and metrics. Verify an incomplete restored payload is
-repaired by the installer and a bad cached archive is never accepted as valid;
-upstream may replace it with a verified download. Use disposable directories
-for fault injection, never alter shared caches. For Verus, run the existing
+success, scope decision and metrics. The cold run passed on the published
+candidate in dispatch run 41322090500: the new generation missed, Kani 0.67.0
+installed, all 15 harnesses verified, and mutation patch compilation passed. A
+subsequent warm run remains pending until a trusted `main` cache writer
+populates the generation. Verify an incomplete restored payload is repaired by
+the installer and a bad cached archive is never accepted as valid; upstream may
+replace it with a verified download. Use disposable directories for fault
+injection, never alter shared caches. For Verus, run the existing
 canonical-value proof and a batch of two temporary copies through the pinned
 CLI, then introduce a false assertion in one temporary copy and require a
 nonzero result. Record any required solver setup rather than assuming it.
@@ -693,3 +758,29 @@ reassessment remain pending.
 Revision 17 (2026-11-01): Record all 12 local gates passing on the corrected
 candidate and the zero-finding focused reassessment. Hosted Kani cache
 acceptance and PR delivery remain outstanding.
+
+Revision 18 (2026-11-01): Record the successful hosted cold Kani run and the
+ExecPlan completeness assessment, add both requested regression tests, and
+record their focused passes. The full gate sequence and assessment follow-up
+remain pending; hosted warm-cache acceptance remains pending.
+
+Revision 19 (2026-11-01): The first full gate sequence for the assessment
+regressions passed 11 gates; `make lint` identified five repository-specific
+subprocess, import, and local-count findings in the Python contract test. Shape
+the harness to match existing subprocess tests before rerunning the sequence.
+
+Revision 20 (2026-11-01): Record the full gate rerun after adapting the
+workflow harness. Eleven gates passed, including the complete Rust, workflow,
+CI-script, and prover-tools suites; lint found one missing `Returns` section in
+the helper docstring. Add the section and rerun all gates.
+
+Revision 21 (2026-11-01): Record the full gate rerun after adding the Python
+helper's return section. Eleven gates passed; lint requires the repository's
+NumPy-style `Returns` heading with a dashed underline and return type. Apply
+that format and repeat all gates.
+
+Revision 22 (2026-11-01): Record all 12 local gates passing on the final
+assessment-regression candidate, including the complete Rust and Python test
+suites. The two requested regression cases are closed; publish this candidate
+and request assessment follow-up. Hosted warm-cache acceptance still requires a
+trusted `main` cache writer.

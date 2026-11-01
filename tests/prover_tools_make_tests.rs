@@ -274,6 +274,34 @@ fn delegated_prover_target_reports_failure_exit_status() -> Result<()> {
 }
 
 #[test]
+fn verus_target_reports_failure_exit_status_and_redacts_flags() -> Result<()> {
+    let fake = FakeProverTools::new()?;
+    let output = make_command(&fake)
+        .arg("verus")
+        .arg("VERUS_FLAGS=--proof-token=verus-run-secret")
+        .env("PROVER_TOOLS_EXIT", "42")
+        .output()
+        .context("run failing make verus")?;
+
+    ensure!(!output.status.success(), "make verus should fail");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains("prover-tools: target=verus failed exit=42"),
+        "diagnostics should report the failing target and exit status, got `{stderr}`"
+    );
+    ensure!(
+        !stderr.contains("verus-run-secret"),
+        "failure diagnostics should not leak secret flags, got `{stderr}`"
+    );
+    ensure!(
+        fake.invocation_args()? == ["verus", "run", "--proof-token=verus-run-secret"],
+        "the fake verifier should receive the selected proof flags before failing"
+    );
+    Ok(())
+}
+
+#[test]
 fn makefile_pins_prover_tools_to_the_reviewed_upstream_revision() -> Result<()> {
     let makefile = fs::read_to_string("Makefile").context("read Makefile")?;
     ensure!(
