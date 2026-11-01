@@ -6,12 +6,12 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: DRAFT
+Status: APPROVED
 
-Implementation must not begin until the user explicitly approves this plan. On
-approval the status moves to `APPROVED`, then to `IN PROGRESS` when EP-M1
-starts, and to `COMPLETE` only after EP-M5's reconciliation. These are the only
-values `tests/execplan_status_contract_tests.rs` accepts.
+Approved by the user on 2026-11-01, with the D-03 and D-12 recommendations
+accepted. The status moves to `IN PROGRESS` when EP-M1 starts, and to
+`COMPLETE` only after EP-M5's reconciliation. These are the only values
+`tests/execplan_status_contract_tests.rs` accepts.
 
 ## Purpose / big picture
 
@@ -62,9 +62,9 @@ final and does not widen the hardening release defined by issue #594.
   it. Constants never enter `OrthoConfig` or `StdlibConfig`.
 - Cover the four bound families named by roadmap 6.1.3 (input length, nesting
   depth, checked combinatorial cardinality, match counts) plus the output byte
-  total that six child RFCs require (D-12, flagged for approval). Alias
-  expansion nodes belong to roadmap 6.2.2; compiled-pattern size and the
-  pattern cache belong to roadmap 6.5.1. Do not implement them here.
+  total that six child RFCs require, approved under D-12. Alias expansion nodes
+  belong to roadmap 6.2.2; compiled-pattern size and the pattern cache belong
+  to roadmap 6.5.1. Do not implement them here.
 - Cardinality is computed from operand lengths only, with checked arithmetic,
   and compared with the ceiling before any output exists. The helper must not
   accept, iterate, or allocate the output it is bounding. Overflow is a typed
@@ -224,11 +224,12 @@ conflict in `Decision log`, and escalate.
   Severity: medium. Likelihood: high. Mitigation: keep each harness under 60
   seconds, record measured times in the Kani harness table, and treat a breach
   as a Kani tolerance event.
-- Risk: the 8 MiB output-content ceiling is not a row in RFC 0006 table 3, and
+- Risk: the 8 MiB output-content ceiling had no row in RFC 0006 table 3, and
   RFC 0014 reads the input row as the output ceiling. Severity: medium.
-  Likelihood: high. Mitigation: D-12 includes the stream kind; EP-M5 proposes
-  the table 3 amendment in the ADR and puts the question to the RFC owner in
-  the pull request rather than silently editing the parent RFC.
+  Likelihood: high. Mitigation: D-12 includes the stream kind, and EP-M5 adds
+  the table 3 output-content row under the user's approval to amend referenced
+  RFCs, with the ADR recording the decision. The RFC edit is deliberate and
+  reviewed, not a silent change.
 
 ## Progress
 
@@ -248,7 +249,9 @@ conflict in `Decision log`, and escalate.
   formal verification, failure modes and operations, alternatives, conventions)
   and revision. Verdict: proceed with conditions; every condition is folded
   into this revision (see `Revision note`).
-- [ ] Plan approved by the user.
+- [x] (2026-11-01) Plan approved by the user; D-03 and D-12 accepted. RFC
+  0006 table 3 gains an output-content row under D-12, and the ADR number is
+  re-derived across all branches before the ADR is committed.
 - [ ] EP-M1: characterized toolchain.
 - [ ] EP-M2: checked cardinality kernels and admission.
 - [ ] EP-M3: input length, nesting depth, running totals, and refusal
@@ -345,7 +348,12 @@ conflict in `Decision log`, and escalate.
   roadmap 6.1.4 with the first consumer, 6.4.2, whose localized message must
   name both numbers; the ADR records that hand-off. Alternative considered:
   `stdlib.bounds.*` keys now. Rejected for the reasons above. Date/Author:
-  2026-10-17, planning agent; confirmed by the expert panel.
+  2026-10-17, planning agent; confirmed by the expert panel. Approved by the
+  user on 2026-11-01: refusals stay typed and English-only, and the Fluent keys
+  and `netsuke::jinja::` codes are deferred to roadmap 6.1.4 and the consuming
+  modules. The roadmap's "diagnostic names both values" is discharged at the
+  Rust contract level here; the user-facing message arrives with 6.1.4 and
+  6.4.2.
 - D-04. Decision: cardinalities are `u64`; binomial intermediates are `u128`. A
   cardinality above `u64::MAX` is overflow. Rationale: every ceiling is far
   below `u64::MAX`, so a wider type only moves the overflow boundary, and a
@@ -406,18 +414,22 @@ conflict in `Decision log`, and escalate.
   Rationale: the decision is hard to reverse once eight consumer tasks depend
   on it, and it answers step 6.1's central question. Date/Author: 2026-10-17,
   planning agent.
-- D-12. Decision (flagged for approval): include `StreamKind::OutputBytes`
+- D-12. Decision (approved 2026-11-01): include `StreamKind::OutputBytes`
   with an 8 MiB ceiling now, beyond the four families roadmap 6.1.3 names.
   Rationale: six accepted child RFCs fix the value and the `output_too_large`
   behaviour, no roadmap task owns it, and leaving it out means the first
   consumer writes it locally and the rest copy it, which is the duplication
-  D-01 exists to prevent. The cost is one enum variant and one constant. The
-  RFC 0006 table 3 amendment is proposed in the ADR and raised with the RFC
-  owner in the pull request. Alternative: omit it and keep only the
-  `admit(amount)` shape so the variant can be added later; acceptable if the
-  user prefers the narrower reading. Date/Author: 2026-10-17, after panel
-  review (alternatives and failure-modes reviewers recommended inclusion; the
-  contracts reviewer preferred leaving the value to the RFC owner).
+  D-01 exists to prevent. The cost is one enum variant and one constant.
+  Resolution of the table 3 question: RFC 0006 table 3 gains an output-content
+  row for this ceiling in this work rather than dropping the ceiling, because
+  six child RFCs already depend on it and the user approved the necessary RFC
+  amendments. The ADR records the row and its rationale, and the plan edits the
+  RFC directly instead of raising the question in the pull request.
+  Alternative: omit it and keep only the `admit(amount)` shape so the variant
+  could be added later; rejected when the user approved D-12. Date/Author:
+  2026-10-17, after panel review (alternatives and failure-modes reviewers
+  recommended inclusion; the contracts reviewer preferred leaving the value to
+  the RFC owner); 2026-11-01, approved by the user.
 - D-13. Decision: `RunningTotal::admit(amount)` adds with `checked_add`, and
   `admit_one()` is shorthand for `admit(1)`. `RunningTotal` is neither `Copy`
   nor `Clone`. Rationale: every output-content consumer adds element sizes, not
@@ -566,7 +578,10 @@ Documentation and skills to consult while implementing:
 
 ## Conformance basis
 
-- Baseline: `main` at `56c58027fcdfc4dd027834f9fc8bb2708898e8ed`.
+- Baseline: `main` at `da06ffb11d6ccdc30bb4afccbbdbe43adc2207ad`, the
+  rebase target. The plan was drafted against the earlier
+  `56c58027fcdfc4dd027834f9fc8bb2708898e8ed` and replayed unchanged onto the
+  current target.
 - `docs/terms-of-reference.md` goals G4 (deterministic plans) and G8
   (actionable failures), and §2.3 "Trust and purity".
 - `docs/roadmap.md` 6.1.3 (`EP-RQ-613`): cover input length, nesting depth,
@@ -1306,9 +1321,9 @@ Assigned: the documentation obligations in AGENTS.md. End state:
    bounds, one `BoundError` enum, precise per-API refusals, a separate crate);
    decision outcome; consequences; and known risks (the `serde_json`
    off-by-one, the output-content row, the diagnostic hand-off to 6.1.4 and
-   6.4.2). It proposes the RFC 0006 table 3 output-content row. Before creating
-   it, re-derive the next free ADR number and take a number above the highest
-   allocation on any branch:
+   6.4.2). It records the RFC 0006 table 3 output-content row, which item 8
+   adds. Before creating it, re-derive the next free ADR number and take a
+   number above the highest allocation on any branch:
 
    ```sh
    git fetch --all --prune -q
@@ -1352,6 +1367,10 @@ Assigned: the documentation obligations in AGENTS.md. End state:
    `Outcomes & retrospective`.
 7. `docs/roadmap.md`: mark 6.1.3 done (`- [x]`), keeping the text shape that
    `tests/rfc_stdlib_coverage/roadmap.rs` parses.
+8. RFC 0006 table 3: add the output-content row for the 8 MiB ceiling, under
+   the user's approval to amend referenced RFCs, and note the row in the ADR.
+   Keep the table's existing column shape so the documentation gates and the
+   RFC coverage tests still pass.
 
 Acceptance: the standard gate set plus `make nixie` and
 `make test-rfc-stdlib-coverage`, then one full `make kani-ir` inside the Kani
@@ -1444,6 +1463,15 @@ serde_json-1.0.154/src/de.rs:1376:            if $this.remaining_depth == 0 {
 
 2026-10-17, initial draft: written from Wyvern reconnaissance of the stdlib,
 the verification infrastructure, and the child RFCs.
+
+2026-11-01, approved. The user approved the plan and accepted D-03 and D-12.
+D-03 leaves refusals typed and English-only, with Fluent keys and
+`netsuke::jinja::` codes deferred to 6.1.4 and the consuming modules. D-12
+keeps the 8 MiB output-content ceiling and resolves the table 3 question by
+adding the row to RFC 0006, which the user's approval of necessary RFC
+amendments permits. ADR-057 remains provisional and is re-derived across every
+branch immediately before it is committed. The series was rebased onto `main` at
+`da06ffb11` without conflict.
 
 2026-10-17, expert-panel revision. What changed:
 
