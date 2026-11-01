@@ -42,16 +42,17 @@ impl FakeProverTools {
         })
     }
 
-    fn invocations(&self) -> Result<String> {
+    fn invocation_args(&self) -> Result<Vec<String>> {
         fs::read_to_string(&self.invocation_log)
             .with_context(|| format!("read {}", self.invocation_log.display()))
+            .map(|contents| contents.lines().map(str::to_owned).collect())
     }
 }
 
 #[derive(Copy, Clone, Debug)]
 struct ProverMakeCase {
     target: &'static str,
-    expected_args: &'static str,
+    expected_args: &'static [&'static str],
     secret_flags_variable: &'static str,
     secret_flags_value: &'static str,
 }
@@ -60,7 +61,7 @@ impl ProverMakeCase {
     const fn install_kani() -> Self {
         Self {
             target: "install-kani",
-            expected_args: "kani install --api-token=kani-install-secret",
+            expected_args: &["kani", "install", "--api-token=kani-install-secret"],
             secret_flags_variable: "KANI_INSTALL_FLAGS",
             secret_flags_value: "--api-token=kani-install-secret",
         }
@@ -69,7 +70,13 @@ impl ProverMakeCase {
     const fn kani_check() -> Self {
         Self {
             target: "kani-check",
-            expected_args: "kani check-version --kani-command cargo kani --license=kani-check-secret",
+            expected_args: &[
+                "kani",
+                "check-version",
+                "--kani-command",
+                "cargo kani",
+                "--license=kani-check-secret",
+            ],
             secret_flags_variable: "KANI_CHECK_FLAGS",
             secret_flags_value: "--license=kani-check-secret",
         }
@@ -78,7 +85,7 @@ impl ProverMakeCase {
     const fn install_verus() -> Self {
         Self {
             target: "install-verus",
-            expected_args: "verus install --token=verus-install-secret",
+            expected_args: &["verus", "install", "--token=verus-install-secret"],
             secret_flags_variable: "VERUS_INSTALL_FLAGS",
             secret_flags_value: "--token=verus-install-secret",
         }
@@ -87,7 +94,7 @@ impl ProverMakeCase {
     const fn verus() -> Self {
         Self {
             target: "verus",
-            expected_args: "verus run --proof-token=verus-run-secret",
+            expected_args: &["verus", "run", "--proof-token=verus-run-secret"],
             secret_flags_variable: "VERUS_FLAGS",
             secret_flags_value: "--proof-token=verus-run-secret",
         }
@@ -97,7 +104,9 @@ impl ProverMakeCase {
 fn write_fake_prover_tools(executable: &Path, invocation_log: &Path) -> Result<()> {
     let script = format!(
         r#"#!/bin/sh
-printf '%s\n' "$*" >> '{}'
+for argument do
+    printf '%s\n' "$argument" >> '{}'
+done
 exit "${{PROVER_TOOLS_EXIT:-0}}"
 "#,
         invocation_log.display()
@@ -165,12 +174,12 @@ fn delegated_prover_targets_call_tool_and_redact_secret_flags(
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let invocations = fake.invocations()?;
+    let invocations = fake.invocation_args()?;
     ensure!(
-        invocations.contains(case.expected_args),
+        invocations == case.expected_args,
         "fake prover-tools should receive real arguments `{}`, got `{}`",
-        case.expected_args,
-        invocations
+        case.expected_args.join(" | "),
+        invocations.join(" | ")
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -181,6 +190,61 @@ fn delegated_prover_targets_call_tool_and_redact_secret_flags(
     ensure!(
         !stderr.contains(case.secret_flags_value),
         "diagnostics should not leak secret flags, got `{stderr}`"
+    );
+    Ok(())
+}
+
+#[test]
+fn verus_uses_the_canonical_value_proof_by_default() -> Result<()> {
+    let fake = FakeProverTools::new()?;
+    let output = make_command(&fake)
+        .arg("verus")
+        .output()
+        .context("run make verus with its default proof selection")?;
+
+    ensure!(
+        output.status.success(),
+        "make verus should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        fake.invocation_args()?
+            == [
+                "verus",
+                "run",
+                "--proof-file",
+                "verus/canonical_value/main.rs"
+            ],
+        "make verus should pass one default proof-file option as argv tokens"
+    );
+    Ok(())
+}
+
+#[test]
+fn verus_preserves_repeated_proof_files_and_paths_with_spaces() -> Result<()> {
+    let fake = FakeProverTools::new()?;
+    let output = make_command(&fake)
+        .arg("verus")
+        .arg("VERUS_FLAGS=--proof-file 'proof one.rs' --proof-file 'nested/proof two.rs'")
+        .output()
+        .context("run make verus with repeated proof-file options")?;
+
+    ensure!(
+        output.status.success(),
+        "make verus should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        fake.invocation_args()?
+            == [
+                "verus",
+                "run",
+                "--proof-file",
+                "proof one.rs",
+                "--proof-file",
+                "nested/proof two.rs"
+            ],
+        "Make should preserve each quoted proof path as one argv token"
     );
     Ok(())
 }
@@ -254,10 +318,12 @@ fn kani_install_uses_compile_fallback_outside_prebuilt_hosts(
         String::from_utf8_lossy(&output.stderr)
     );
     ensure!(
-        fake.invocations()?
-            .lines()
-            .any(|line| line == expected_invocation),
-        "fake prover-tools should receive `{expected_invocation}`"
+        fake.invocation_args()?
+            == expected_invocation
+                .split_whitespace()
+                .map(str::to_owned)
+                .collect::<Vec<_>>(),
+        "fake prover-tools should receive `{expected_invocation}` as distinct argv tokens"
     );
     Ok(())
 }
