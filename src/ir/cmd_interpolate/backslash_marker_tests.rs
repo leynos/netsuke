@@ -174,7 +174,7 @@ fn inert_text_and_shell_variables_ignore_the_escape_check() {
     );
     for template in [
         format!("# \\{INS_TOKEN}\necho hi"),
-        format!("echo $in $out $ins $outs \\$PATH"),
+        "echo $in $out $ins $outs \\$PATH".to_owned(),
     ] {
         assert_eq!(
             interpolate_script_with_bindings(&template, &bindings)
