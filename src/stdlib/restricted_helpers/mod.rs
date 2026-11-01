@@ -337,6 +337,6 @@ pub(super) fn file_test_names() -> impl Iterator<Item = &'static str> {
 }
 
 #[cfg(test)]
-mod test_mode_tests;
+mod surface_contracts;
 #[cfg(test)]
 mod tests;

@@ -1604,7 +1604,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   `src/stdlib/restricted_helpers/tests.rs` artefact. Evidence: that file was
   already close to the 400-line cap, and the inventory scan, reachable-probe,
   typed-source, and locale rows add roughly 380 lines. They live in
-  `src/stdlib/restricted_helpers/test_mode_tests.rs`, declared beside
+  `src/stdlib/restricted_helpers/surface_contracts/`, declared beside
   `mod tests;`. Impact: the plan's artefact path names are corrected by this
   entry; the coverage is unchanged.
 
@@ -1651,7 +1651,7 @@ and YAML fixtures, and were set from the inventory in Table 1.
   the design's surface. Date/Author: 2026-10-31, implementation agent in EP-M3.
 
 - Decision: the EP-M3 inventory and refusal rows live in
-  `src/stdlib/restricted_helpers/test_mode_tests.rs`, not in the planned
+  `src/stdlib/restricted_helpers/surface_contracts/`, not in the planned
   `tests.rs`. Rationale: the existing `tests.rs` is near the 400-line cap, and
   the new rows are a coherent unit about the test surface rather than more
   query-refusal cases. Date/Author: 2026-10-31, implementation agent in EP-M3.

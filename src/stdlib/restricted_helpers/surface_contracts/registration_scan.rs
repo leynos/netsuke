@@ -1,9 +1,9 @@
 //! The inventory checked against the registration sites in the source tree.
 //!
-//! Split from `test_mode_tests.rs`, which exceeded the module line cap, along
-//! the claim it serves: completeness in both directions is a claim about the
-//! source text rather than about a loaded manifest, so it needs no probe
-//! surface and belongs beside the scanner that reads the registrations.
+//! Split from the single-file contracts module, which outgrew the module line
+//! cap, along the claim it serves: completeness in both directions is a claim
+//! about the source text rather than about a loaded manifest, so it needs no
+//! probe surface and belongs beside the scanner that reads the registrations.
 
 use anyhow::{Context as _, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};

@@ -1,9 +1,9 @@
 //! Every inventory row, exercised through a real manifest load.
 //!
-//! Split from `test_mode_tests.rs`, which exceeded the module line cap, along
-//! the claim it serves: this file is the half that needs a loader, while
-//! `registration_scan.rs` reads the source text and `refusal_text.rs` pins the
-//! refusal shape. The rows are checked together so a single failure report
+//! Split from the single-file contracts module, which outgrew the module line
+//! cap, along the claim it serves: this file is the half that needs a loader,
+//! while `registration_scan.rs` reads the source text and `refusal_text.rs`
+//! pins the refusal shape. The rows are checked together so a single failure report
 //! names every row that drifted rather than only the first.
 
 use minijinja::{Error as MiniJinjaError, ErrorKind};
