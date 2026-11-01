@@ -1,7 +1,7 @@
 //! Verify project-chain quarantine and per-occurrence configuration authority.
 
 use super::super::super::discover_file_layers;
-use super::super::{retain_layers_and_resolve_json, scope_merged_layers};
+use super::super::{RootTrust, retain_layers_and_resolve_json, scope_merged_layers};
 use super::{TestEnv, utf8_directory};
 use crate::cli::Cli;
 use crate::host_pattern::HostPattern;
@@ -150,8 +150,10 @@ fn overlapping_roots_keep_operator_and_project_occurrences_separate() -> Result<
         vec![operator],
         vec![project_shared, project_primary],
         None,
-        true,
-        None,
+        RootTrust {
+            is_trusted_root: true,
+            project_key: None,
+        },
     ));
 
     ensure!(

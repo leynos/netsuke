@@ -3,10 +3,10 @@
 //! Runs the `OrthoConfig` scan and applies the project-scope second pass, so a
 //! project `.netsuke.toml` outranks user-scope files. Project-chain occurrences
 //! retain project authority through quarantine; the same file reached from an
-//! operator root keeps operator authority. Path comparison and its fallback
-//! policy live here because that policy is a discovery decision.
+//! operator root keeps operator authority. The project file's comparison key
+//! and its fallback policy live in [`project_key`] because that policy is a
+//! discovery decision.
 
-use camino::Utf8Path;
 #[cfg(test)]
 use ortho_config::MapEnv;
 use ortho_config::{
@@ -21,8 +21,12 @@ use std::sync::Arc;
 use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
-use super::paths::{PathNormalizer, normalized_path_key, project_scope_file};
+use super::paths::{PathNormalizer, project_scope_file};
 use super::project_policy::scope_project_chain;
+
+mod project_key;
+use project_key::ProjectKey;
+
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
@@ -81,66 +85,26 @@ impl ProjectScopeTrace {
     }
 }
 
-/// Normalized comparison key for the project configuration file.
+/// Authority evidence for one discovered root.
 ///
-/// Discovery computes it once per scan, so each candidate root and each stored
-/// layer occurrence can be classified against it without re-normalizing every
-/// recorded path.
-struct ProjectKey {
-    /// Normalized key, or the literal spelling when resolution failed.
-    key: PathBuf,
-    /// Literal spelling, retained only when the key is not valid UTF-8.
-    lossy: Option<String>,
-    /// Whether an existing project file could not be normalized.
-    ///
-    /// An unresolvable project file cannot be proven distinct from any
-    /// occurrence, so discovery withholds operator authority rather than grant
-    /// it to a project-controlled file.
-    unresolved: bool,
+/// Groups the two facts every occurrence is classified against, so the merge
+/// helpers stay readable and their parameter lists stay within the lint limit.
+#[derive(Clone, Copy)]
+struct RootTrust<'a> {
+    /// Whether the root that produced the chain is an operator root.
+    is_trusted_root: bool,
+    /// Classified identity of the project configuration file, when one exists.
+    project_key: Option<&'a ProjectKey>,
 }
 
-impl ProjectKey {
-    /// Build the comparison key while keeping resolution failures observable.
-    fn classify(normalizer: &impl PathNormalizer, path: &Path) -> Self {
-        let literal = path.to_string_lossy().into_owned();
-        let (key, is_resolved) = match normalized_path_key(normalizer, &literal) {
-            Ok(key) => (key, true),
-            Err(_) => (PathBuf::from(&literal), false),
-        };
-        Self {
-            lossy: key.to_str().is_none().then_some(literal),
-            key,
-            // A missing project file cannot appear as an occurrence, so literal
-            // fallback stays trustworthy; one that exists but will not resolve
-            // does not.
-            unresolved: !is_resolved && path.exists(),
-        }
-    }
-
-    /// Report whether a recorded layer path is the project configuration file.
-    fn matches(&self, path: &Utf8Path) -> bool {
-        self.matches_path(path.as_std_path())
-    }
-
-    /// Report whether a plain path is literally the project configuration file.
-    ///
-    /// Identification stays literal even when normalization failed, so the
-    /// existing project-scope second pass keeps the same deduplication outcome.
-    fn matches_path(&self, path: &Path) -> bool {
-        self.key.as_os_str() == path.as_os_str()
-            || self
-                .lossy
-                .as_deref()
-                .is_some_and(|lossy| lossy == path.to_string_lossy())
-    }
-
-    /// Report whether the project file's identity could not be established.
-    ///
-    /// Authority classification treats every occurrence as possibly the project
-    /// file in that state; only identification, not trust, is ambiguous.
-    fn is_ambiguous(&self) -> bool {
-        self.unresolved
-    }
+/// Project-scope inputs for the second discovery pass.
+struct ProjectScope<'a> {
+    /// Project configuration path used for the second pass.
+    file: Option<&'a Path>,
+    /// Bounded path metadata replayed for the project-scope trace.
+    trace_path: BoundedConfigPath,
+    /// Authority evidence for the discovered root.
+    trust: RootTrust<'a>,
 }
 
 /// Build the restricted automatic discovery scanner.
@@ -180,10 +144,10 @@ fn first_automatic_chain(
             Err(error) => optional_errors.push(error),
         }
     }
-    match optional_errors.into_iter().next() {
-        Some(error) => Err(error),
-        None => Ok((Vec::new(), true)),
-    }
+    optional_errors
+        .into_iter()
+        .next()
+        .map_or_else(|| Ok((Vec::new(), true)), Err)
 }
 
 /// Flatten a file layer chain into owned merge layers.
@@ -246,21 +210,27 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
 
     merge_project_scope_layers(
         file_layers,
-        project_file.as_deref(),
-        project_trace_path,
-        is_trusted_root,
-        project_key.as_ref(),
+        ProjectScope {
+            file: project_file.as_deref(),
+            trace_path: project_trace_path,
+            trust: RootTrust {
+                is_trusted_root,
+                project_key: project_key.as_ref(),
+            },
+        },
     )
 }
 
 /// Load project layers and preserve authority when operator and project paths overlap.
 fn merge_project_scope_layers(
     discovered_layers: Vec<MergeLayer<'static>>,
-    project_file: Option<&Path>,
-    project_trace_path: BoundedConfigPath,
-    is_trusted_root: bool,
-    project_key: Option<&ProjectKey>,
+    scope: ProjectScope<'_>,
 ) -> (Option<ProjectScopeTrace>, OrthoResult<Vec<ScopedFileLayer>>) {
+    let ProjectScope {
+        file: project_file,
+        trace_path: project_trace_path,
+        trust,
+    } = scope;
     let error_trace = ProjectScopeTrace::Appended {
         path: project_trace_path.clone(),
         deduplication: None,
@@ -304,13 +274,7 @@ fn merge_project_scope_layers(
                 deduplication: Some(deduplication),
             })
         };
-        let layers = scope_merged_layers(
-            discovered_layers,
-            project_layers,
-            project_index,
-            is_trusted_root,
-            project_key,
-        );
+        let layers = scope_merged_layers(discovered_layers, project_layers, project_index, trust);
         (trace, layers)
     });
     match result {
@@ -332,8 +296,7 @@ fn scope_merged_layers(
     discovered_layers: Vec<MergeLayer<'static>>,
     project_layers: Vec<MergeLayer<'static>>,
     project_index: Option<usize>,
-    is_trusted_root: bool,
-    project_key: Option<&ProjectKey>,
+    trust: RootTrust<'_>,
 ) -> Vec<ScopedFileLayer> {
     let project_is_root = project_index.is_some_and(|index| index + 1 == discovered_layers.len());
     if let Some(index) = project_index.filter(|_| project_is_root) {
@@ -342,7 +305,7 @@ fn scope_merged_layers(
     let primary_index = project_layers.len().saturating_sub(1);
     discovered_layers
         .into_iter()
-        .map(|layer| scope_discovered_occurrence(layer, is_trusted_root, project_key))
+        .map(|layer| scope_discovered_occurrence(layer, trust.is_trusted_root, trust.project_key))
         .chain(scope_project_chain(project_layers, primary_index))
         .collect()
 }
