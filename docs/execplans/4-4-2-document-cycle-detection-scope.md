@@ -1242,6 +1242,15 @@ dependencies as graph arcs.
   (localization tables). No other conflict occurred. `range-diff` pairs all
   eight commits, and the only content difference from the previously accepted
   series is main's retained ADR-0069 entry. The new candidate is `065f8a301`.
+- [x] (2026-11-01) Completed the full sequential gate batch against
+  `8614ac556`: `check-fmt`, `markdownlint`, `nixie`, `lint-clippy`,
+  `lint-whitaker`, `lint-python`, `github-actions-lint`, `typecheck`,
+  `test-nextest` (4,960 passed, 7 skipped), `doctest`,
+  `test-workflow-contracts`, `test-documentation-contracts`, and `doc-coverage`
+  (98.23% aggregate) all exited 0. The batch ran under heavy host
+  compiler-admission saturation; the settled figures are from the final
+  warm-state relaunch of each gate after earlier attempts were killed without
+  an exit status.
 
 ## Surprises & discoveries
 
@@ -1580,3 +1589,13 @@ it is superseded rather than carried forward. The only conflict was
 the merge backend re-applied the ADR-0068 renumber over the resolution. The
 replayed candidate is `065f8a301`, and its gates are run after the plan edits
 that record this rebase.
+
+Revision 21 (2026-11-01): recorded the green thirteen-gate batch on the
+replayed candidate `8614ac556`. The batch ran under sustained host
+compiler-admission saturation, so several gates needed warm-state relaunches;
+each gate nonetheless reached a real verdict, and the relaunch attempts that
+were killed without writing an exit status are recorded as killed rather than
+as passes. This revision changes no code: `make check-fmt` and
+`make markdownlint` were run against this exact file content before it was
+committed, so the pushed tree differs from the gated candidate only by prose in
+this ExecPlan that those two gates covered.
