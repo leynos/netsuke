@@ -237,7 +237,7 @@ it goes through the crate-private
 `query::from_path_with_options(path, registration_for, options)`, where
 `registration_for: FnOnce(ManifestWorkspace) -> Result<StdlibRegistration>`
 derives the registration from the opened directory.
-`ManifestLoadOptions:: deferred` exists only so string and path loads can share
+`ManifestLoadOptions::deferred` exists only so string and path loads can share
 one builder chain: its registration is a placeholder that
 `from_path_with_options` always replaces.
 

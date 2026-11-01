@@ -251,7 +251,7 @@ distort usage evidence and blend a query or test outcome into statistics about
 builds.
 
 The load's registration therefore decides:
-`StdlibRegistration:: records_expansion_and_budget_telemetry` is true for
+`StdlibRegistration::records_expansion_and_budget_telemetry` is true for
 `AmbientFull` and `Full` and false for `ManifestQuery` and `Test`. The loader
 passes that decision to the budget adapter and skips the expansion telemetry,
 so a query or test load still enforces the resource ceilings but records

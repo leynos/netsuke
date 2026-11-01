@@ -268,9 +268,12 @@ pub(crate) fn overlay_namespace(doc: &ManifestValue) -> OverlayNamespace {
 
 /// Return the keys of the manifest's `vars` section.
 fn declared_variables(doc: &ManifestValue) -> Vec<String> {
-    doc.get("vars")
-        .and_then(ManifestValue::as_object)
-        .map_or_default(|vars| vars.keys().cloned().collect())
+    // A let-else rather than `map_or_default`: Whitaker compiles this crate
+    // with its own older nightly, where that method is still unstable.
+    let Some(vars) = doc.get("vars").and_then(ManifestValue::as_object) else {
+        return Vec::new();
+    };
+    vars.keys().cloned().collect()
 }
 
 /// Return the names of the macros the manifest defines.
