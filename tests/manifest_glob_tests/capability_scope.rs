@@ -69,6 +69,39 @@ fn parent_relative_pattern_expands(temp_dir: tempfile::TempDir) -> Result<()> {
     Ok(())
 }
 
+/// A literal Unix backslash in a matched filename keeps its identity through
+/// the public query, then fails the Jinja adapter's shell-inert check instead
+/// of being rewritten into a directory separator.
+#[cfg(unix)]
+#[rstest]
+fn literal_backslash_filename_is_preserved_then_rejected(
+    temp_dir: tempfile::TempDir,
+) -> Result<()> {
+    let manifest_path = temp_dir.path().join("Netsukefile");
+    test_support::fs::write(&manifest_path, glob_manifest("*.txt"))?;
+    test_support::fs::write(
+        temp_dir.path().join(r"nested\leaf.txt"),
+        "attacker-controlled filename",
+    )?;
+
+    let base =
+        camino::Utf8Path::from_path(temp_dir.path()).context("temporary paths must be UTF-8")?;
+    let direct = netsuke::manifest::glob_paths("*.txt", Some(base))?;
+    ensure!(
+        direct == vec![r"nested\leaf.txt".to_owned()],
+        "the query must preserve the matched filename exactly, got {direct:?}"
+    );
+
+    let error = netsuke::manifest::from_path(&manifest_path)
+        .expect_err("a preserved backslash must fail the shell-inert check");
+    let diagnostic = format!("{error:#}");
+    ensure!(
+        diagnostic.contains("characters that require shell quoting"),
+        "unexpected diagnostic: {diagnostic}"
+    );
+    Ok(())
+}
+
 /// A symbolic link that escapes the literal prefix, and one that dangles,
 /// are both dropped from the expansion without failing the manifest.
 #[cfg(unix)]
