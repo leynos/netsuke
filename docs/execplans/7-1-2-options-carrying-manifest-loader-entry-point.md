@@ -1147,16 +1147,16 @@ and YAML fixtures, and were set from the inventory in Table 1.
   so their absence from the `-q` dot output cannot hide a skip.
 - [x] (2026-11-01) EP-M3 milestone CodeRabbit CLI review at `0070b8857`.
   `coderabbit review --agent --committed --base origin/main` (CLI 0.9.2,
-  `origin/main` `da06ffb11`) returned `review_completed`, exit 0, in 572 s
-  over 128 files with six concerns: three minor, three trivial, none major or
+  `origin/main` `da06ffb11`) returned `review_completed`, exit 0, in 572 s over
+  128 files with six concerns: three minor, three trivial, none major or
   critical. The organization-wide quota had recovered (2 of 10 remaining
-  afterwards). All six were verified against the current tree and repaired:
-  two plan-file citations (the nextest filter named `load_options`; RFC 0007
-  was cited without its `rfc-` prefix), the stale "consume it in EP-M3" note
-  on `SURFACE`, a restated `is_loader_owned` predicate in the registration
-  scan, the substring-derived call-shape table in `refusal_text.rs`, and a
-  `concat!` failure message whose `{build}`/`{test}` captures never
-  interpolated. Log `/tmp/epm3-coderabbit-review-0070b8857.out`.
+  afterwards). All six were verified against the current tree and repaired: two
+  plan-file citations (the nextest filter named `load_options`; RFC 0007 was
+  cited without its `rfc-` prefix), the stale "consume it in EP-M3" note on
+  `SURFACE`, a restated `is_loader_owned` predicate in the registration scan,
+  the substring-derived call-shape table in `refusal_text.rs`, and a `concat!`
+  failure message whose `{build}`/`{test}` captures never interpolated. Log
+  `/tmp/epm3-coderabbit-review-0070b8857.out`.
 - [x] EP-M1 — extractions (restricted helpers, query classifier).
 - [x] EP-M2 — options entry point and thin wrappers.
 - [x] EP-M3 — `StdlibRegistration::Test`.
