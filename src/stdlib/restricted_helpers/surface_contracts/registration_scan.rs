@@ -18,8 +18,17 @@ use super::super::{HelperKind, SURFACE, is_loader_owned};
 /// registrations themselves are the only complete witness. Whitespace between
 /// the call, the parenthesis, and the name literal is tolerated so a reformat
 /// cannot silently hide a name.
-fn scanned_registrations() -> Result<Vec<(Utf8PathBuf, String)>> {
-    const MARKERS: [&str; 3] = ["add_function", "add_filter", "add_test"];
+///
+/// The registration marker decides the helper kind. Functions, filters, and
+/// tests occupy separate `MiniJinja` namespaces, so a name alone does not
+/// identify a registration: a filter called `now` is a different helper from
+/// the inventoried function `now`.
+fn scanned_registrations() -> Result<Vec<(Utf8PathBuf, HelperKind, String)>> {
+    const MARKERS: [(&str, HelperKind); 3] = [
+        ("add_function", HelperKind::Function),
+        ("add_filter", HelperKind::Filter),
+        ("add_test", HelperKind::Test),
+    ];
     let root = Dir::open_ambient_dir(env!("CARGO_MANIFEST_DIR"), ambient_authority())
         .context("open the crate root")?;
     let mut sources = Vec::new();
@@ -29,8 +38,8 @@ fn scanned_registrations() -> Result<Vec<(Utf8PathBuf, String)>> {
         let text = root
             .read_to_string(path.as_str())
             .with_context(|| format!("read {path}"))?;
-        for name in literal_names(&text, &MARKERS) {
-            found.push((path.clone(), name));
+        for (kind, name) in literal_names(&text, &MARKERS) {
+            found.push((path.clone(), kind, name));
         }
     }
     Ok(found)
@@ -56,19 +65,19 @@ fn collect_sources(root: &Dir, directory: &Utf8Path, sources: &mut Vec<Utf8PathB
     Ok(())
 }
 
-/// Return every `marker("name"` occurrence in `text`.
+/// Return every `marker("name"` occurrence in `text` with its helper kind.
 #[expect(
     clippy::string_slice,
     reason = "every offset comes from `str::find`, so each one is a character boundary"
 )]
-fn literal_names(text: &str, markers: &[&str]) -> Vec<String> {
+fn literal_names(text: &str, markers: &[(&str, HelperKind)]) -> Vec<(HelperKind, String)> {
     let mut names = Vec::new();
-    for marker in markers {
+    for (marker, kind) in markers {
         let mut from = 0;
         while let Some(offset) = text[from..].find(marker) {
             let after = from + offset + marker.len();
             if let Some(name) = literal_after(&text[after..]) {
-                names.push(name);
+                names.push((*kind, name));
             }
             from = after;
         }
@@ -88,6 +97,13 @@ fn literal_after(rest: &str) -> Option<String> {
     Some(quoted[..end].to_owned())
 }
 
+/// Report whether `SURFACE` inventories a registration of this kind and name.
+fn is_inventoried(kind: HelperKind, name: &str) -> bool {
+    SURFACE
+        .iter()
+        .any(|entry| entry.kind == kind && entry.name == name)
+}
+
 /// Assert every literal registration appears in `SURFACE`.
 #[test]
 fn every_scanned_registration_is_inventoried() -> Result<()> {
@@ -98,8 +114,8 @@ fn every_scanned_registration_is_inventoried() -> Result<()> {
     );
     let mut unexpected: Vec<String> = scanned
         .iter()
-        .filter(|(_, name)| !SURFACE.iter().any(|entry| entry.name == name))
-        .map(|(path, name)| format!("`{name}` in {path}"))
+        .filter(|(_, kind, name)| !is_inventoried(*kind, name))
+        .map(|(path, kind, name)| format!("`{kind:?} {name}` in {path}"))
         .collect();
     unexpected.sort();
     ensure!(
@@ -113,19 +129,48 @@ fn every_scanned_registration_is_inventoried() -> Result<()> {
 #[test]
 fn every_inventory_name_is_registered_somewhere() -> Result<()> {
     let scanned = scanned_registrations()?;
-    let mut missing: Vec<&str> = SURFACE
+    let mut missing: Vec<String> = SURFACE
         .iter()
         .filter(|entry| {
             let is_loop_registered = entry.kind == HelperKind::Test;
-            let is_scanned = scanned.iter().any(|(_, name)| name == entry.name);
+            let is_scanned = scanned
+                .iter()
+                .any(|(_, kind, name)| *kind == entry.kind && name == entry.name);
             !(is_loader_owned(entry) || is_loop_registered || is_scanned)
         })
-        .map(|entry| entry.name)
+        .map(|entry| format!("{:?} {}", entry.kind, entry.name))
         .collect();
     missing.sort_unstable();
     ensure!(
         missing.is_empty(),
-        "inventory names with no registration site: {missing:?}"
+        "inventory helpers with no registration site: {missing:?}"
     );
     Ok(())
+}
+
+/// Reject a registration whose name is inventoried only under another kind.
+///
+/// `MiniJinja` keeps functions, filters, and tests in separate namespaces, so
+/// `SURFACE` may legitimately hold the same name twice — `which` is both a
+/// function and a filter. The scan must therefore compare the kind as well as
+/// the name; comparing names alone would accept a filter called `now` merely
+/// because the inventoried `now` is a function.
+#[test]
+fn a_registration_is_not_inventoried_under_another_kind() {
+    assert!(
+        is_inventoried(HelperKind::Function, "now"),
+        "the function `now` should be inventoried"
+    );
+    assert!(
+        !is_inventoried(HelperKind::Filter, "now"),
+        "a filter named `now` must not inherit the function's inventory row"
+    );
+    assert!(
+        is_inventoried(HelperKind::Filter, "which"),
+        "the filter `which` should be inventoried"
+    );
+    assert!(
+        is_inventoried(HelperKind::Function, "which"),
+        "the function `which` should be inventoried"
+    );
 }

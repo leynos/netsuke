@@ -75,8 +75,11 @@ impl RestrictedSurface {
 ///
 /// `env()` and `glob()` are load-wide capabilities, so the loader registers
 /// them; a surface that registered them too would overwrite that decision.
+/// The check names the helper kind as well as the name: a filter or test that
+/// happened to share one of these names would be a separate helper, not the
+/// loader's function.
 fn is_loader_owned(entry: &HelperEntry) -> bool {
-    matches!(entry.name, "env" | "glob")
+    entry.kind == HelperKind::Function && matches!(entry.name, "env" | "glob")
 }
 
 /// Construct one inventory row without repeating the field labels.
