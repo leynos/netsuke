@@ -30,6 +30,7 @@ if typ.TYPE_CHECKING:
 
 PACKAGE_JOB = "package-crate"
 PACKAGE_STEP = "Package the crate and record its identity"
+CANDIDATE_STEP = "Validate the packaged candidate offline"
 ARTIFACT_STEP = "Upload the packaged archive to regather"
 ARTIFACT_ACTION = "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
 ACTION_PATH: Path = REPO_ROOT / ".github" / "actions" / "package-crate" / "action.yml"
@@ -51,6 +52,13 @@ EXPECTED_ENVIRONMENT = {
     "RELEASE_PACKAGE_NAME": "${{ inputs['package-name'] }}",
     "RELEASE_VERSION": "${{ inputs.version }}",
     "RELEASE_BIN_NAME": "${{ inputs['bin-name'] }}",
+}
+# The candidate check validates identity and bytes, so it needs every package
+# input except the binary name, which only the packaging step records.
+EXPECTED_CANDIDATE_ENVIRONMENT = {
+    name: value
+    for name, value in EXPECTED_ENVIRONMENT.items()
+    if name != "RELEASE_BIN_NAME"
 }
 EXPECTED_OUTPUTS = {
     "identity-path": "${{ steps.package.outputs.identity-path }}",
@@ -85,6 +93,11 @@ def _action_steps(action: dict[str, object]) -> list[dict[str, object]]:
 def _package_action_step(action: dict[str, object]) -> dict[str, object]:
     """Return the uniquely named package action step."""
     return named_step(_action_steps(action), "Package crate")
+
+
+def _candidate_action_step(action: dict[str, object]) -> dict[str, object]:
+    """Return the uniquely named offline candidate action step."""
+    return named_step(_action_steps(action), CANDIDATE_STEP)
 
 
 def _run_tokens(run: str) -> list[str]:
@@ -164,6 +177,67 @@ def _assert_action_contract(action: dict[str, object]) -> None:
         IDENTITY_PATH,
     ], "the action must invoke the package CLI with every identity input"
 
+    _assert_candidate_step(steps, package)
+
+
+def _assert_candidate_step(
+    steps: list[dict[str, object]], package: dict[str, object]
+) -> None:
+    """Check the offline candidate rehearsal runs after packaging, without network.
+
+    The publisher repeats this validation after the artefact hand-off, so the
+    rehearsal here is what proves the local bytes and record agree before they
+    are uploaded. It must stay offline: a token or a registry request in this
+    step would let a pull-request lane reach the exchange it is meant to avoid.
+    """
+    candidate = named_step(steps, CANDIDATE_STEP)
+    assert candidate.get("id") == "candidate", "the candidate step id must be stable"
+    assert candidate.get("shell") == "bash", "the candidate step must run under Bash"
+    assert steps.index(package) < steps.index(candidate), (
+        "the candidate must be validated after it is packaged"
+    )
+    environment = require_mapping(candidate.get("env"), "candidate environment")
+    assert environment == EXPECTED_CANDIDATE_ENVIRONMENT, (
+        "the candidate step must forward the identity inputs it validates"
+    )
+    run = candidate.get("run")
+    assert isinstance(run, str), "the candidate command must be a shell script"
+    assert run.splitlines()[0] == "set -euo pipefail", (
+        "the candidate command must enable strict shell handling"
+    )
+    assert _run_tokens(run) == [
+        "uv",
+        "run",
+        "--no-project",
+        "--python",
+        "3.14",
+        "scripts/crates_io_candidate_cli.py",
+        "check",
+        "--identity",
+        IDENTITY_PATH,
+        "--archive-directory",
+        "target/package",
+        "${release_mode[@]}",
+        "--commit",
+        "$RELEASE_COMMIT",
+        "--package-name",
+        "$RELEASE_PACKAGE_NAME",
+        "--version",
+        "$RELEASE_VERSION",
+        "--output",
+        "$RUNNER_TEMP/crates-io-candidate.json",
+    ], "the candidate step must validate the packaged archive and identity"
+    assert "release_mode=(--rehearsal)" in run, (
+        "a dry run must validate a tagless rehearsal candidate"
+    )
+    assert 'release_mode=(--tag "$RELEASE_TAG")' in run, (
+        "a publishing run must validate the candidate against its release tag"
+    )
+    for forbidden in ("--token", "curl", "crates.io/api"):
+        assert forbidden not in run, (
+            f"the offline candidate step must not reach the registry: {forbidden}"
+        )
+
 
 def _assert_workflow_contract(workflow: dict[str, object]) -> None:
     """Check package-job dependencies, privilege, and hand-off artefact."""
@@ -224,6 +298,12 @@ def _mutate_action(action: dict[str, object], mutation: str) -> None:
             require_mapping(outputs["crate-name"], "crate-name output")["value"] = (
                 "${{ steps.other.outputs.crate-name }}"
             )
+        case "candidate":
+            candidate = _candidate_action_step(action)
+            run = str(candidate["run"])
+            candidate["run"] = run.replace(
+                "release_mode=(--rehearsal)", 'release_mode=(--tag "$RELEASE_TAG")'
+            )
         case other:
             pytest.fail(f"unknown action mutation {other!r}")
 
@@ -257,9 +337,11 @@ def _assert_complete_package_contract(
     _assert_workflow_contract(workflow)
 
 
-@pytest.mark.parametrize("mutation", ["input", "environment", "command", "output"])
+@pytest.mark.parametrize(
+    "mutation", ["input", "environment", "command", "output", "candidate"]
+)
 def test_action_mutations_are_rejected(mutation: str) -> None:
-    """Prove the action contract detects mutations to its four dimensions."""
+    """Prove the action contract detects mutations to each of its dimensions."""
     action = copy.deepcopy(_action())
     workflow = copy.deepcopy(_workflow())
     _mutate_action(action, mutation)

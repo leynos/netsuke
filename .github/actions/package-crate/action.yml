@@ -96,3 +96,37 @@ runs:
           printf 'crate-name=%s\n' "$crate_name"
           printf 'crate-path=%s\n' "target/package/$crate_name"
         } >>"$GITHUB_OUTPUT"
+
+    - name: Validate the packaged candidate offline
+      id: candidate
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs.tag }}
+        RELEASE_DRY_RUN: ${{ inputs['dry-run'] }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        RELEASE_PACKAGE_NAME: ${{ inputs['package-name'] }}
+        RELEASE_VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        # The publisher validates this candidate again after the artefact
+        # hand-off. Running the same check here, before upload, proves the
+        # archive and its record agree while both are still local, and gives a
+        # pull-request rehearsal the same boundary without a registry request.
+        # The mode selector mirrors the packaging step: a rehearsal records no
+        # tag, so it must be checked as a rehearsal rather than against one.
+        case "$RELEASE_DRY_RUN" in
+          true) release_mode=(--rehearsal) ;;
+          false) release_mode=(--tag "$RELEASE_TAG") ;;
+          *)
+            printf 'dry-run must be true or false, got %s\n' "$RELEASE_DRY_RUN" >&2
+            exit 1
+            ;;
+        esac
+        uv run --no-project --python 3.14 scripts/crates_io_candidate_cli.py check \
+          --identity artifacts/package/identity.json \
+          --archive-directory target/package \
+          "${release_mode[@]}" \
+          --commit "$RELEASE_COMMIT" \
+          --package-name "$RELEASE_PACKAGE_NAME" \
+          --version "$RELEASE_VERSION" \
+          --output "$RUNNER_TEMP/crates-io-candidate.json"
