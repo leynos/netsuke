@@ -907,12 +907,21 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   digest, metadata normalization, request framing, response failures, retry
   bounds, token redaction, and downloaded-byte mismatch. Workflow contracts
   cover the seven dependencies, credential separation, artefact selection,
-  action ordering, and all five registry decisions.
+  action ordering, and all five registry decisions. The candidate boundary is
+  exercised offline in `package-crate`: a dry run validates only a tagless
+  candidate, a publishing run requires its release tag, and supplying neither
+  or both modes is a usage error. Interrupted-publication resume is covered at
+  both levels: the sequence tests drive absent→publish then identical→skip then
+  a successful byte verification, and the workflow contracts require the skip
+  resolution to exclude authentication, metadata, and upload.
 - Conformance check: no long-lived token; checkout uses
   `persist-credentials: false`; only the upload step receives the exchanged
-  token; no package rebuild occurs in the publisher.
+  token; no package rebuild occurs in the publisher; the offline rehearsal step
+  reaches no registry endpoint and holds no credential.
 - Recovery: rerun the failed publisher job in the same workflow run. It reuses
-  `release-crate-package` and probes again before deciding whether to upload.
+  `release-crate-package` and probes again before deciding whether to upload; a
+  version that was published before the interruption classifies as `identical`,
+  so the rerun skips the upload and verifies the public bytes.
 - Remaining gaps: no live exchange or release has exercised the action; the
   package archive file list, inventory verifier, release finalizer, and
   consumer smoke remain open.

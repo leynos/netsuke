@@ -2568,11 +2568,16 @@ prerequisite to succeed, the run not to be cancelled, and
 before requesting the `crates-io` environment or exchanging credentials.
 
 `package-crate` packages the crate, records its candidate identity and archive
-digest, and uploads them as the `release-crate-package` artefact. The registry
-job downloads that exact artefact into a dedicated directory and validates the
-identity, flat archive name, package name, version, and digest before it probes
-crates.io. Its action consumes the recorded `.crate` bytes directly. It does
-not call `cargo package`, `cargo publish`, or `cargo build`.
+digest, and uploads them as the `release-crate-package` artefact. Before the
+upload, the action runs the same offline candidate check the publisher later
+repeats, selecting `--rehearsal` in dry-run mode and `--tag` for a publishing
+run. That check reads only the local identity record and archive, so a
+pull-request lane exercises the candidate boundary without a registry request
+or a token. The registry job downloads that exact artefact into a dedicated
+directory and validates the identity, flat archive name, package name, version,
+and digest before it probes crates.io. Its action consumes the recorded
+`.crate` bytes directly. It does not call `cargo package`, `cargo publish`, or
+`cargo build`.
 
 The registry job and `publish-release` are independent siblings. The GitHub
 release job is not yet gated on crates.io publication; until
@@ -2709,6 +2714,14 @@ identity, its SHA-256 must match the package record, and its packaged manifest
 must name the metadata job's package and version. Candidate rejection stops
 before the probe, credential exchange, or registry mutation.
 
+The `package-crate` action runs the same check offline before it uploads the
+artefact, so the identity and bytes are proved to agree while both are still
+local. That invocation selects `--rehearsal` for a dry run and `--tag` for a
+publishing run: a rehearsal candidate records no tag, and a publishing
+candidate must record exactly the tag being released. Supplying neither mode,
+or both, is a usage error rather than a check that silently accepts whichever
+identity it was handed.
+
 The action probes the version once and passes the saved status and response
 body to `publish_crates_io_cli classify`, which composes
 `release_registry_response` with `release_reconcile_crates`. The resulting
@@ -2795,7 +2808,11 @@ again; it does not rebuild the package. If the first upload reached crates.io
 but its response was lost, the fresh probe classifies the version as
 `identical`, skips a second upload, downloads the public archive, and verifies
 its bytes. If the version remains absent, the rerun exchanges a new short-lived
-token and makes one new upload attempt.
+token and makes one new upload attempt. This resume path is pinned twice: the
+publish-sequence tests drive a first absent probe into a publish decision and a
+second identical probe into a skip followed by a successful byte verification,
+and the workflow-contract tests require the skip resolution to exclude the
+authentication, metadata, and upload steps.
 
 A `conflict` or `yanked` result requires operator investigation and a new
 release version. The publisher neither overwrites a conflicting version nor
