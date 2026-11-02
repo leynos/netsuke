@@ -200,6 +200,27 @@ def test_registry_state_resolves_the_declared_action_sequence(
     )
 
 
+def test_an_interrupted_publication_rerun_never_repeats_the_upload() -> None:
+    """A rerun that observes its own publication skips straight to verification.
+
+    A publication can be interrupted after the upload but before the download
+    is verified. The rerun then observes an identical version, and the action
+    must resolve to the verify-only sequence: exchanging a token or uploading
+    again would either fail on an immutable version or re-request credentials
+    for a publication that already happened.
+    """
+    sequence = _steps_for_decision("skip")
+
+    assert sequence == _SKIP_SEQUENCE, (
+        "an interrupted publication must resume at verification"
+    )
+    for mutating_step in ("auth", "metadata", "upload"):
+        assert mutating_step not in sequence, (
+            f"a rerun must not repeat the {mutating_step} step"
+        )
+    assert "verify" in sequence, "a rerun must still verify the published bytes"
+
+
 def test_publisher_timing_trap_preserves_step_failure(
     tmp_path: pathlib.Path,
 ) -> None:
