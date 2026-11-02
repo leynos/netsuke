@@ -60,6 +60,16 @@
           "weight": 0.0
         }
       ]
+    },
+    {
+      "matching_content_path": "src/ir/cmd_interpolate/posix_lexical/tests.rs",
+      "matching_content_path_doc": "Test-only boundary tables for the POSIX comment scanner, gated behind #[cfg(test)] in src/ir/cmd_interpolate/posix_lexical/mod.rs. Every case supplies a shell fragment and the exact text the interpolator must emit for it, so the scanner's contract is a function of the text it is given and these strings are the subject matter rather than a missing domain type: the module exists to feed the scanner non-ASCII spaces, carriage returns, separators, and substitution closers that no well-formed wrapper would admit. Measured rather than assumed: 10 of the module's 12 arguments are &str (83.3%). Grouping each template, its expected output, and its failure sentence into one case value still leaves 4 of 8 (50.0%); also typing the eleven separator rows as an enum reaches 3 of 8 (37.5%), but only by replacing named table rows with variants whose sole job is to return the prefix string, which constrains nothing the scanner can rely on. The helpers are private and test-only. Reassess if this module gains production callers or a case parameter that is not scanner input or expected output.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
     }
   ]
 }
