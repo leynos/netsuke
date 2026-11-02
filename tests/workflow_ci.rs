@@ -177,129 +177,46 @@ fn ensure_kani_cache_contract(steps: &[Value]) -> Result<()> {
     Ok(())
 }
 
-/// The checked-in installer the Kani smoke job delegates to.
-///
-/// The job's install logic lives in Python so it can be exercised at the
-/// process boundary; see "CI helper scripts" in `docs/developers-guide.md`.
-/// `tests/workflow_contracts/kani_cache_test.py` holds the same contract from
-/// the YAML side, and `scripts/tests/test_ci_install_kani.py` proves each
-/// archive's checksum gates that archive's use.
-const KANI_INSTALL_SCRIPT: &str = "scripts/ci/install_kani.py";
-
-/// The pins the install step must hand the installer, one row per concern.
-///
-/// Each is a checksum the script enforces before unpacking the archive it
-/// describes, so a mismatch must name the payload it belongs to rather than
-/// reporting a generic failure.
-const KANI_INSTALL_PINS: [(&str, &str); 2] = [
-    (
-        "INPUT_FRONTEND_SHA256",
-        "ed2bafc239b834e14c6b66fc4838e342e3bc0b814e548e72ea30e84f83dc0974",
-    ),
-    (
-        "INPUT_BUNDLE_SHA256",
-        "3b5f7afd3b51603ee720db7bc1bc4fe46b5a4f5d36daad9939c4b4c658b51ac0",
-    ),
-];
-
-/// Require the Kani install step to delegate to the installer, with its pins.
-///
-/// The step must run the checked-in script and nothing else, and must pass a
-/// non-empty version plus both archive checksums. A regression that dropped a
-/// pin would otherwise leave the script's `Parameter(required=True)` to fail
-/// the job at run time rather than in review.
-fn ensure_kani_install_delegates_to_script(install_step: &Mapping) -> Result<()> {
+/// Require the Kani install step to use the shared installer and cached paths.
+fn ensure_kani_install_uses_shared_tool(install_step: &Mapping) -> Result<()> {
     let command = mapping_get(install_step, YamlKey("run"))
         .and_then(Value::as_str)
-        .context("Kani release installation should delegate to a script")?;
+        .context("Kani release installation should run the shared Make target")?;
     ensure!(
-        command.trim() == format!("uv run --script {KANI_INSTALL_SCRIPT}"),
-        "Kani smoke job should install through {KANI_INSTALL_SCRIPT}, not inline shell"
+        command.contains("make install-kani"),
+        "Kani smoke job should install through make install-kani"
+    );
+    ensure!(
+        command.contains("--version-file tools/kani/VERSION"),
+        "Kani smoke job should use the repository's pinned version file"
+    );
+    ensure!(
+        command.contains("--install-dir '$CARGO_HOME/bin'"),
+        "Kani smoke job should install into the cached Cargo home"
+    );
+    ensure!(
+        command.contains("--cache-dir '$KANI_HOME/archives'"),
+        "Kani smoke job should store verified archives under KANI_HOME"
     );
     ensure!(
         !command.contains("cargo install"),
-        "Kani smoke job should never compile the verifier from source"
+        "Kani smoke job should not compile the verifier from source"
     );
-    let env = mapping_get(install_step, YamlKey("env"))
-        .context("the Kani install step should declare the pins it passes")
-        .and_then(|value| value_mapping(value, "Kani install step env"))?;
-    let version_is_missing = mapping_get(env, YamlKey("INPUT_KANI_VERSION"))
-        .and_then(Value::as_str)
-        .is_none_or(str::is_empty);
-    let missing_pins: Vec<String> = KANI_INSTALL_PINS
-        .iter()
-        .copied()
-        .filter(|(key, expected)| {
-            mapping_get(env, YamlKey(key))
-                .and_then(Value::as_str)
-                .is_none_or(|value| value != *expected)
-        })
-        .map(|(key, _)| key.to_owned())
-        .collect();
-    let mut missing = Vec::with_capacity(missing_pins.len() + usize::from(version_is_missing));
-    if version_is_missing {
-        missing.push("INPUT_KANI_VERSION".to_owned());
-    }
-    missing.extend(missing_pins);
+    let install_position = command
+        .find("make install-kani")
+        .context("Kani install command should be present")?;
+    let path_position = command
+        .find("printf '%s\\n' \"$CARGO_HOME/bin\" >> \"$GITHUB_PATH\"")
+        .context("Kani smoke job should publish the installed Cargo bin directory")?;
     ensure!(
-        missing.is_empty(),
-        "Kani's binary-only cached installation is missing: {missing:?}"
+        install_position < path_position,
+        "Kani smoke job should publish its install directory after installation"
     );
-    Ok(())
-}
-
-#[test]
-fn unit_rejects_truncated_kani_checksum_pins() -> Result<()> {
-    for (invalid_index, (invalid_key, expected_pin)) in KANI_INSTALL_PINS.iter().enumerate() {
-        let truncated_pin = expected_pin
-            .get(..32)
-            .context("Kani checksum pin should have a UTF-8 boundary at 32 bytes")?;
-        let frontend_pin = if invalid_index == 0 {
-            truncated_pin
-        } else {
-            KANI_INSTALL_PINS[0].1
-        };
-        let bundle_pin = if invalid_index == 1 {
-            truncated_pin
-        } else {
-            KANI_INSTALL_PINS[1].1
-        };
-        let install_step: Value = serde_yaml::from_str(&format!(
-            "run: uv run --script {KANI_INSTALL_SCRIPT}\nenv:\n  INPUT_KANI_VERSION: '0.67.0'\n  INPUT_FRONTEND_SHA256: {frontend_pin}\n  INPUT_BUNDLE_SHA256: {bundle_pin}\n"
-        ))
-        .context("parse Kani install step with a truncated checksum pin")?;
-        let mapping = install_step
-            .as_mapping()
-            .context("Kani install step should be a mapping")?;
-        let error = ensure_kani_install_delegates_to_script(mapping)
-            .err()
-            .context("truncated Kani checksum pin should be rejected")?;
-
-        ensure!(
-            error.to_string().contains(invalid_key),
-            "truncated checksum diagnostic should name {invalid_key}"
-        );
-    }
-    Ok(())
-}
-
-#[test]
-fn unit_rejects_empty_kani_version_pin() -> Result<()> {
-    let install_step: Value = serde_yaml::from_str(&format!(
-        "run: uv run --script {KANI_INSTALL_SCRIPT}\nenv:\n  INPUT_KANI_VERSION: \"\"\n  INPUT_FRONTEND_SHA256: {}\n  INPUT_BUNDLE_SHA256: {}\n",
-        KANI_INSTALL_PINS[0].1, KANI_INSTALL_PINS[1].1
-    ))
-    .context("parse Kani install step with an empty version")?;
-    let mapping = install_step
-        .as_mapping()
-        .context("Kani install step should be a mapping")?;
-
-    let error = ensure_kani_install_delegates_to_script(mapping)
-        .err()
-        .context("empty Kani version pin should be rejected")?;
     ensure!(
-        error.to_string().contains("INPUT_KANI_VERSION"),
-        "missing pin diagnostic should name INPUT_KANI_VERSION"
+        !command.contains("INPUT_KANI_VERSION")
+            && !command.contains("INPUT_FRONTEND_SHA256")
+            && !command.contains("INPUT_BUNDLE_SHA256"),
+        "Kani smoke job should not pass obsolete installer bindings"
     );
     Ok(())
 }
@@ -553,20 +470,28 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         install_kani_index < kani_check_index && kani_check_index < kani_ir_index,
         "Kani smoke job should install Kani, check its version, then run the bounded harnesses"
     );
+    let kani_check = named_step(steps, "Kani version check")?;
+    let kani_check_command = mapping_get(kani_check, YamlKey("run"))
+        .and_then(Value::as_str)
+        .context("Kani smoke job should use the shared version check")?;
+    ensure!(
+        kani_check_command.trim() == "make kani-check",
+        "Kani smoke job should check the installed version through make kani-check"
+    );
     let install_kani = named_step(steps, "Install prebuilt Kani")?;
     let setup_uv = named_step(steps, "Setup uv")?;
     let setup_uv_action = mapping_get(setup_uv, YamlKey("uses"))
         .and_then(Value::as_str)
-        .context("Kani smoke job should set up uv before its installer script")?;
+        .context("Kani smoke job should set up uv before its shared installer")?;
     ensure!(
         setup_uv_action.starts_with("astral-sh/setup-uv@"),
-        "Kani smoke job should set up uv before its installer script"
+        "Kani smoke job should set up uv before its shared installer"
     );
     ensure!(
         step_index(steps, "Setup uv")? < install_kani_index,
-        "Kani smoke job should set up uv before installing Kani through the script"
+        "Kani smoke job should set up uv before installing Kani"
     );
-    ensure_kani_install_delegates_to_script(install_kani)?;
+    ensure_kani_install_uses_shared_tool(install_kani)?;
     // Thirty, not twenty. The job includes a mutation compile gate, which
     // builds the whole dependency graph through the Kani frontend into a cold
     // `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the harness

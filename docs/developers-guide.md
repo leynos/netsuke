@@ -3422,13 +3422,12 @@ invokes each one as `uv run --script scripts/ci/<name>.py`, so the step body is
 one line and every pin the script needs is an `env:` entry beside it, where the
 workflow contract tests can read it.
 
-| Script                         | Workflow step                        |
-| ------------------------------ | ------------------------------------ |
-| `stage_test_shell.py`          | Install test shell dependencies      |
-| `install_actionlint.py`        | Download actionlint                  |
-| `report_sccache_stats.py`      | Show sccache statistics              |
-| `discard_instrumented_tree.py` | Discard the instrumented build tree  |
-| `install_kani.py`              | Install prebuilt Kani (`kani-smoke`) |
+| Script                         | Workflow step                       |
+| ------------------------------ | ----------------------------------- |
+| `stage_test_shell.py`          | Install test shell dependencies     |
+| `install_actionlint.py`        | Download actionlint                 |
+| `report_sccache_stats.py`      | Show sccache statistics             |
+| `discard_instrumented_tree.py` | Discard the instrumented build tree |
 
 `report_sccache_stats.py` also replaces the same report in `ci-windows.yml`,
 `netsukefile-test.yml`, and `coverage-main.yml`, and `coverage-main.yml` runs
@@ -3437,14 +3436,13 @@ purpose. `tests/workflow_contracts/sccache_contract_test.py` requires the
 script on every compiling lane except the release smoke job, which only prints
 the JSON form.
 
-`scripts/ci/ci_support.py` holds what they share: the catalogue, a synchronous
-runner, and `GITHUB_PATH` publication. The installers' other shared concern --
-checksum-verified download and extraction of release archives -- lives in
-`scripts/ci/ci_archive.py`, which is one failure mode (a hostile or stale
-artefact) rather than a second command runner. Downloads accept `https://` and
-`file://` URLs only, and apply the same allowlist to every request `urllib`
-sends, including redirect targets, so a release URL cannot be answered with a
-redirect to a scheme the downloader refuses; the tests serve release fixtures
+`scripts/ci/ci_support.py` holds what the Python helpers share: the catalogue,
+a synchronous runner, and `GITHUB_PATH` publication. The actionlint installer
+uses `scripts/ci/ci_archive.py` for checksum-verified download and extraction
+of release archives. The Kani workflow delegates its archive handling to the
+pinned `rust-prover-tools` package. The shared archive helper restricts URLs to
+`https://` and `file://`, including redirect targets, so a release URL cannot
+redirect to a scheme the downloader refuses. The tests serve release fixtures
 over `file://` so the real download, verification, and extraction path runs
 without a network. Extraction writes each named member under its own base name
 in the destination, and refuses a member whose base name cannot name a file, so
@@ -5157,21 +5155,32 @@ Install or refresh the pinned Kani tool with:
 make install-kani
 ```
 
-Local `make install-kani` delegates to the pinned `rust-prover-tools` CLI
-through `uv tool run`. Continuous integration instead downloads both the
-prebuilt `cargo-kani` front-end and Kani's pinned release bundle, checks their
-pinned SHA-256 values, and caches their installation directories. The CI job
-therefore never compiles the verifier from source. Kani manages its own
-supporting Rust nightly toolchain during setup; CI gives that toolchain a
-separate cached `RUSTUP_HOME`. It must not replace the repository's pinned
-nightly workflow (see
+Both local and CI `make install-kani` calls delegate to the pinned
+`rust-prover-tools` CLI through `uv tool run`. In `kani-smoke`, the workflow
+passes `tools/kani/VERSION`, installs the prebuilt `cargo-kani` front-end into
+the cached `$CARGO_HOME/bin`, and stores verified release archives under
+`$KANI_HOME/archives`. The immutable package revision owns the SHA-256 pins for
+both prebuilt assets, so CI no longer carries a separate downloader or builds
+the verifier from source. The workflow publishes `$CARGO_HOME/bin` through
+`GITHUB_PATH`, then runs `make kani-check` in a later step to check the
+installed command against the version file. Kani manages its own supporting
+Rust nightly toolchain during setup; CI gives that toolchain a separate cached
+`RUSTUP_HOME`. It must not replace the repository's pinned nightly workflow (see
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)).
-Kani 0.67.0's supporting nightly is `nightly-2025-11-21`, which predates the
-Polonius default, so Kani borrow-checks under NLL. That is currently harmless —
-the tree has no `POLONIUS(...)`-tagged sites — but a future tagged site could
-fail to verify under Kani while compiling everywhere else. If that happens,
-move Kani to a build whose nightly is 2026-08-04 or later rather than
-reinstating a `-Zpolonius` directive.
+The composite [Kani cache action](../.github/actions/kani-cache/action.yml)
+owns those three workspace-local directories under a key containing the runner
+lane and Kani version. It saves only a cache miss on a push to `main`; pull
+requests and manual dispatches cannot seed a cache generation. Upstream
+publishes prebuilt Kani only for Linux x86_64, so Make uses the verified
+archive there and defaults to `--compile` on other local hosts to preserve
+Cargo-based installation. The CI job supplies explicit installation flags and
+stays on the prebuilt route. Kani 0.67.0's supporting nightly is
+`nightly-2025-11-21`, which predates the Polonius default, so Kani
+borrow-checks under NLL. That is currently harmless — the tree has no
+`POLONIUS(...)`-tagged sites — but a future tagged site could fail to verify
+under Kani while compiling everywhere else. If that happens, move Kani to a
+build whose nightly is 2026-08-04 or later rather than reinstating a
+`-Zpolonius` directive.
 
 Delegated prover targets print maintainer diagnostics to standard error before
 invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
@@ -5189,8 +5198,19 @@ Use the Make targets for day-to-day formal-verification checks:
   harnesses.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 - `make install-verus` and `make verus` delegate to `rust-prover-tools` for
-  the optional Verus installer and proof runner. These targets are not part of
-  the ordinary pull-request gate.
+  the optional Verus installer and proof runner. `make verus` defaults to
+  `verus/canonical_value/main.rs`; setting `VERUS_FLAGS` replaces that default.
+  Repeat `--proof-file` for an ordered batch, quoting each path with spaces as
+  one shell argument:
+
+  ```bash
+  make verus VERUS_FLAGS='--proof-file "verus/first proof.rs" --proof-file verus/second.rs'
+  ```
+
+  The pinned CLI runs files in order, stops at the first failed proof, and
+  returns the verifier's exit status. `make test-prover-tools-integration`
+  exercises this contract with fake verifier processes and never installs
+  Verus. These targets are not part of the ordinary pull-request gate.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`. `Cargo.toml` declares `cfg(kani)` under

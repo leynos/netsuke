@@ -53,7 +53,7 @@ runs:
         lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
         {
           printf 'writer=%s\n' "${IS_TRUNK_PUSH}"
-          printf 'kani=netsuke-kani-v1-%s-%s\n' "${lane}" "${kani_version}"
+          printf 'kani=netsuke-kani-v2-%s-%s\n' "${lane}" "${kani_version}"
         } >> "$GITHUB_OUTPUT"
 
     - name: Restore Kani payloads
