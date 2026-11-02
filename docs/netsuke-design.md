@@ -2669,8 +2669,10 @@ the selected path, exit status, and bounded, sanitized child output; the path
 and output remain outside telemetry labels. `generate` resolves the same
 binding and writes the absolute Bash path; when no runtime resolves, it fails
 with a missing-runtime diagnostic and writes no plan. Target discovery is
-query-only and receives an inspection-only mode that renders logical names and
-is never executed. A build plan binds the path selected for that operation.
+query-only and renders no Ninja plan; the renderer keeps an inspection-only
+mode that emits logical names for renderer tests and future query-only callers,
+and no executing Ninja run consumes one. A build plan binds the path selected
+for that operation.
 
 The PowerShell route gives each scalar command and script a fresh process. A
 shared command list uses one process and checks `$LASTEXITCODE` immediately

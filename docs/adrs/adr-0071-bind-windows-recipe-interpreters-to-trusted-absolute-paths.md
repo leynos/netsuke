@@ -83,7 +83,8 @@ The resolved path becomes an `InterpreterExecutable`, the renamed and now shared
 `BashExecutable`, which validates that the path is absolute and contains no
 NUL. Recipe rendering accepts one of three private binding modes: `Bound`,
 which renders quoted absolute paths; `InspectionOnly`, which renders logical
-names for query-only plans that are never executed; and `Unbound`, which
+names and is reserved for renderer tests and future query-only callers, since
+no production path renders an executable plan through it; and `Unbound`, which
 rejects PowerShell and Bash commands with
 `NinjaGenError::InterpreterBindingRequired`. Dependency-only graphs render
 successfully under `Unbound` because they have no command.

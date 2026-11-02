@@ -22,7 +22,7 @@ use rstest::rstest;
 /// Build a PowerShell fixture whose path contains a space, Unicode and `$`.
 fn adorned_power_shell_executable() -> InterpreterExecutable {
     let path = if cfg!(windows) {
-        r"C:\Program Files\Netsuke \u{03bb}\$PowerShell\v1.0\powershell.exe"
+        "C:\\Program Files\\Netsuke \u{03bb}\\$PowerShell\\v1.0\\powershell.exe"
     } else {
         "/fixtures/Program Files/Netsuke \u{03bb}/$PowerShell/v1.0/powershell.exe"
     };

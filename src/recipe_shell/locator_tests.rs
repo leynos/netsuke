@@ -34,6 +34,12 @@ fn with_system_directory(system_directory: Option<&Path>) -> FixedSystemDirector
     FixedSystemDirectory(system_directory.map(Path::to_path_buf))
 }
 
+/// Require the locator to reject one fixture system directory.
+fn locate_error(system_directory: Option<&Path>) -> WindowsPowerShellLocationError {
+    locate_windows_power_shell(&with_system_directory(system_directory))
+        .expect_err("the fixture system directory should not bind")
+}
+
 #[test]
 fn locates_the_fixed_engine_path_beneath_the_supplied_system_directory() -> anyhow::Result<()> {
     let workspace = tempfile::tempdir()?;
@@ -61,8 +67,7 @@ fn missing_engine_file_names_the_expected_path() -> anyhow::Result<()> {
     let workspace = tempfile::tempdir()?;
     test_support::fs::create_dir_all(engine_directory(workspace.path()))?;
 
-    let error = locate_windows_power_shell(&with_system_directory(Some(workspace.path())))
-        .expect_err("a missing engine file should fail");
+    let error = locate_error(Some(workspace.path()));
 
     let expected = error.expected_path().expect("failure should name a path");
     anyhow::ensure!(
@@ -81,8 +86,7 @@ fn rejects_a_directory_at_the_engine_path() -> anyhow::Result<()> {
     let workspace = tempfile::tempdir()?;
     test_support::fs::create_dir_all(engine_directory(workspace.path()).join("powershell.exe"))?;
 
-    let error = locate_windows_power_shell(&with_system_directory(Some(workspace.path())))
-        .expect_err("a directory should not be bound as PowerShell");
+    let error = locate_error(Some(workspace.path()));
 
     anyhow::ensure!(
         matches!(error, WindowsPowerShellLocationError::NotRegularFile { .. }),
@@ -91,10 +95,32 @@ fn rejects_a_directory_at_the_engine_path() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A symlink at the engine path is refused rather than followed.
+///
+/// The final component is inspected without following it, so a link to an
+/// otherwise acceptable file cannot substitute for the trusted executable.
+#[cfg(unix)]
+#[test]
+fn rejects_a_symlink_at_the_engine_path() -> anyhow::Result<()> {
+    let workspace = tempfile::tempdir()?;
+    let target = workspace.path().join("real-powershell");
+    test_support::fs::write(&target, b"fixture executable")?;
+    let engine = engine_directory(workspace.path());
+    test_support::fs::create_dir_all(&engine)?;
+    test_support::fs::symlink(&target, engine.join("powershell.exe"))?;
+
+    let error = locate_error(Some(workspace.path()));
+
+    anyhow::ensure!(
+        matches!(error, WindowsPowerShellLocationError::NotRegularFile { .. }),
+        "expected a symlink rejection, got {error:?}"
+    );
+    Ok(())
+}
+
 #[test]
 fn rejects_a_relative_system_directory() {
-    let error = locate_windows_power_shell(&with_system_directory(Some(Path::new("relative"))))
-        .expect_err("a relative system directory should fail");
+    let error = locate_error(Some(Path::new("relative")));
 
     assert!(
         matches!(
@@ -107,8 +133,7 @@ fn rejects_a_relative_system_directory() {
 
 #[test]
 fn reports_an_unavailable_system_directory() {
-    let error = locate_windows_power_shell(&with_system_directory(None))
-        .expect_err("an unavailable system directory should fail");
+    let error = locate_error(None);
 
     assert!(
         matches!(
@@ -127,8 +152,7 @@ fn rejects_a_non_utf8_system_directory() {
 
     let path = PathBuf::from(OsString::from_vec(b"/tmp/netsuke-non-utf8-\xff".to_vec()));
 
-    let error = locate_windows_power_shell(&with_system_directory(Some(&path)))
-        .expect_err("a non-UTF-8 system directory should fail");
+    let error = locate_error(Some(&path));
 
     assert!(
         matches!(

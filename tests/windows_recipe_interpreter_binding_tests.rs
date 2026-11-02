@@ -318,8 +318,7 @@ fn windows_bash_plan_binds_the_absolute_path() -> Result<()> {
     let bash_directory = bash
         .parent()
         .context("bash.exe should have a parent directory")?
-        .to_string_lossy()
-        .into_owned();
+        .to_string();
     let environment = vec![
         ("NETSUKE_WINDOWS_SHELL", "bash"),
         ("PATH", bash_directory.as_str()),

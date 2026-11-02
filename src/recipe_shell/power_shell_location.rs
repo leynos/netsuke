@@ -152,8 +152,10 @@ pub(crate) fn locate_windows_power_shell(
     let expected = engine_directory.join(WINDOWS_POWER_SHELL_EXECUTABLE);
     let handle = Dir::open_ambient_dir(&engine_directory, ambient_authority())
         .map_err(|source| inspection_error(&expected, source))?;
+    // `symlink_metadata` does not follow the final component, so a symlink is
+    // refused as a reparse point instead of being inspected through its target.
     let metadata = handle
-        .metadata(WINDOWS_POWER_SHELL_EXECUTABLE)
+        .symlink_metadata(WINDOWS_POWER_SHELL_EXECUTABLE)
         .map_err(|source| inspection_error(&expected, source))?;
     if !metadata.is_file() || has_reparse_attribute(&metadata) {
         return Err(WindowsPowerShellLocationError::NotRegularFile { expected });

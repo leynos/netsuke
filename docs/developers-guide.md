@@ -983,14 +983,15 @@ The lowering stages have deliberately separate responsibilities:
   semantics. Both paths yield the shared `InterpreterExecutable`, so preflight,
   rule execution and `generate` use one identity. Bindings are resolved for
   build operations, Ninja-tool operations including clean, and `generate`.
-  Target discovery and other query-only callers receive an inspection-only mode
-  that renders logical names only; an executing Ninja run never consumes an
-  inspection-only plan. A `generate` without a resolvable Bash runtime fails
-  with the missing-runtime diagnostic and writes no unbound plan, where it
-  previously emitted the bare name `bash.exe` for later `PATH` resolution.
-  Library generators that take no binding reject PowerShell and Bash commands
-  with `NinjaGenError::InterpreterBindingRequired`. Runner build plans contain
-  the selected absolute path and assume that executable remains available there.
+  Target discovery issues no Ninja plan and needs no binding. The renderer
+  keeps an inspection-only mode that emits logical names for renderer tests and
+  future query-only callers; no executing Ninja run consumes one. A `generate`
+  without a resolvable Bash runtime fails with the missing-runtime diagnostic
+  and writes no unbound plan, where it previously emitted the bare name
+  `bash.exe` for later `PATH` resolution. Library generators that take no
+  binding reject PowerShell and Bash commands with
+  `NinjaGenError::InterpreterBindingRequired`. Runner build plans contain the
+  selected absolute path and assume that executable remains available there.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
   PowerShell uses its per-entry `$LASTEXITCODE` and cmdlet-error policy
@@ -2350,9 +2351,12 @@ trusted interpreter binding: `powershell-paths.ps1` compiles decoy
 `PATH`, and requires both a small and an oversize recipe to produce their real
 output without writing the decoy marker. `bash.ps1` requires `generate` to fail
 with `PATH contains no bash.exe` and to leave no plan behind when Bash is
-selected without a runtime. Because `powershell-paths.ps1` and the decoy
-scenario use `Add-Type`, the native smoke run needs a Windows host with the
-.NET Framework C# compiler that PowerShell 5.1 provides; the
+selected without a runtime. Because `Add-Type` rejects
+`-OutputType ConsoleApplication` under PowerShell 7.1 and later,
+`powershell-paths.ps1` compiles the decoys with the .NET Framework C# compiler,
+`%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, falling back to
+the 32-bit `Framework` directory. The native smoke run therefore needs a
+Windows host carrying that compiler, which the Windows images provide; the
 `windows_recipe_interpreter_binding_tests` integration test covers the same
 decoys through `compile_rust_helper` on the CI image and skips the Ninja
 execution step when `ninja.exe` is absent unless `NETSUKE_REQUIRE_NINJA=1`.

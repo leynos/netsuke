@@ -99,6 +99,20 @@ function New-PowerShellSearchDecoy {
         [string]$Directory
     )
 
+    # Add-Type refuses -OutputType ConsoleApplication as of PowerShell 7.1, and
+    # this suite runs under PowerShell Core, so the decoy is compiled by the
+    # .NET Framework C# compiler that ships with Windows instead.
+    $compilerCandidates = @(
+        (Join-Path $env:SystemRoot 'Microsoft.NET\Framework64\v4.0.30319\csc.exe')
+        (Join-Path $env:SystemRoot 'Microsoft.NET\Framework\v4.0.30319\csc.exe')
+    )
+    $compiler = $compilerCandidates |
+        Where-Object { Test-Path -LiteralPath $_ } |
+        Select-Object -First 1
+    if (-not $compiler) {
+        throw "The .NET Framework C# compiler is unavailable; looked for $($compilerCandidates -join ', ')."
+    }
+
     $source = @'
 public static class Program {
     public static int Main(string[] args) {
@@ -109,8 +123,18 @@ public static class Program {
     }
 }
 '@
-    Add-Type -TypeDefinition $source -OutputType ConsoleApplication `
-        -OutputAssembly (Join-Path $Directory 'powershell.exe') -ErrorAction Stop
+    $sourceFile = Join-Path $Directory 'powershell-decoy.cs'
+    $output = Join-Path $Directory 'powershell.exe'
+    try {
+        [System.IO.File]::WriteAllText($sourceFile, $source)
+        $compilerOutput = & $compiler /nologo /target:exe "/out:$output" $sourceFile 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "The .NET Framework C# compiler failed with exit code ${LASTEXITCODE}: $compilerOutput"
+        }
+    }
+    finally {
+        Remove-Item -Force -LiteralPath $sourceFile -ErrorAction SilentlyContinue
+    }
 }
 
 function Test-PowerShellSearchPathBinding {

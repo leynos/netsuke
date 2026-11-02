@@ -48,7 +48,7 @@
   report also includes unresolved order-only paths
   ([ADR-0068](docs/adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md)).
 
-### Fixed
+### Security
 
 - Preserve `script` bytes byte for byte through the `printf %b` transport, so a
   literal backslash sequence supplied through a placeholder, `env()`, or
