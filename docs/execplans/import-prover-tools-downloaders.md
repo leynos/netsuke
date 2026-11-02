@@ -294,9 +294,10 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       helper tests, 90 CI-script tests, 7 prover-tools integration tests, and
       98.23% doc coverage. `cs delta` found no issues. Logs share the
       `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-retry5.out`
-      suffix. The two inline repairs and the docstring-warning disposition
-      still require published-candidate confirmation before this review item
-      can be checked off. A subsequent candidate-bound assessment response
+      suffix. At that point, the two inline repairs and the Docstring Coverage
+      disposition still required published-candidate confirmation. The two
+      inline repairs have since been confirmed in replies 4437685124 and
+      4437685594. A subsequent candidate-bound assessment response
       ([comment 6565260880](https://github.com/leynos/netsuke/pull/1063#issuecomment-6565260880),
       assessment `import-prover-tools-4af0ff57-completeness-20261101`) found
       four undocumented non-test `ProverMakeCase` constructors and no
@@ -304,8 +305,19 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       historical Docstring Coverage row is still unconfirmed for the current
       head; verify it with a current-head review after the repair. The first
       gate pass found only an ExecPlan reflow issue; after applying `make fmt`,
-      all 12 gates passed. Record that result in Revision 25 below and publish
-      the candidate before requesting current-head review.
+      all 12 gates passed. Revision 25 records the rerun. The candidate was
+      subsequently published before requesting current-head review.
+      Candidate `c3c35c76773ab888ca16c44244ed343f82f7ba93` has since passed
+      all hosted CI runs and CodeScene. Assessment
+      [comment 6566774367](https://github.com/leynos/netsuke/pull/1063#issuecomment-6566774367)
+      on that exact base/head confirms the implementation requirements are
+      satisfied, finds no in-scope omission or correctness defect, and accepts
+      the four constructor docs. It keeps full plan acceptance open until a
+      trusted-main warm-cache run and a current-head diff-scoped Docstring
+      Coverage result are recorded. CodeRabbit's edited summary still covers
+      review head `c7438721ed0ab9700ea4fd81f6ef16f242afb7cb`; its current-head
+      formal review remains queued as `7962aeba`. Keep this item open until the
+      pending review and coverage row are reconciled.
 - [ ] EP-M3: Complete hosted warm-cache acceptance, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
       the warm run requires a trusted `main` push.
@@ -863,5 +875,16 @@ Makefile validation, and `git diff --check`. Logs share the
 `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-5.out` suffix.
 After this final plan update, `make check-fmt`, `make markdownlint`,
 `make nixie`, and `git diff --check` passed (logs use the `final-docs` suffix).
-Commit and publish; current-head review and trusted-main warm-cache acceptance
-remain outstanding.
+The latest repeat after the wording adjustment uses the `final-docs2` suffix.
+This plan update was committed and published in candidate
+`c3c35c76773ab888ca16c44244ed343f82f7ba93`; current-head review and trusted-
+main warm-cache acceptance remained outstanding at that point (see Revision 26).
+
+Revision 26 (2026-11-02): Record that candidate `c3c35c7` passed hosted CI,
+Release Dry Run, Netsukefile Build Test, CodeScene, and Gecko review. The
+candidate-bound completeness response in comment 6566774367 accepts the four
+constructor docs and reports no remaining in-scope omission or correctness
+defect. Full plan acceptance remains open for trusted-main warm-cache evidence
+and a current-head diff-scoped Docstring Coverage result. The formal CodeRabbit
+request 7962aeba is still queued against the PR; its summary remains stale at
+`c7438721`. Keep `Status: IN PROGRESS` until both acceptance items are recorded.
