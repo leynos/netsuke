@@ -5811,9 +5811,10 @@ non-zero exit status on failure.
 Use the Make targets for day-to-day formal-verification checks:
 
 - `make kani-check` runs the fast local version check used by `formal-pr`.
-  This check verifies the installed `cargo kani` command matches
-  `tools/kani/VERSION`.
-- `make kani-full` runs the complete Kani proof suite through `cargo kani`.
+  This check verifies the `cargo-kani` executable in the active `$CARGO_HOME`
+  matches `tools/kani/VERSION`.
+- `make kani-full` runs the complete Kani proof suite through that active-home
+  `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
   It currently delegates to `make kani-full` because all Kani harnesses are IR
   harnesses.

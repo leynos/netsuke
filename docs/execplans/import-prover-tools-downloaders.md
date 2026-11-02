@@ -321,6 +321,29 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
 - [ ] EP-M3: Complete hosted warm-cache acceptance, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
       the warm run requires a trusted `main` push.
+- [ ] Repair CodeRabbit's current-head Kani PATH finding. Review
+      `4438989893` found that `BUILD_TOOLS_PREFIX/bin` can shadow the active
+      Cargo home's `cargo-kani`; the existing regression only put a conflict
+      later on the inherited PATH. The candidate now invokes the active-home
+      executable directly, preserves the global build-tools-first PATH for
+      `mold`, and extends the contract to cover a conflicting build-tools
+      binary and paths containing spaces. The focused contract passed both
+      default and custom Cargo-home cases, and `make kani-check` verified Kani
+      0.67.0 through the active-home binary. Two attempts at the scoped
+      15-harness Kani run timed out during dependency compilation before
+      producing proof results; see Revisions 29 and 30. Full gates, push,
+      exact-head review, and finding reconciliation remain pending.
+- [ ] Reconcile the current-head diff-scoped Docstring Coverage row. The
+      completed review reports 56.25% across 16 functions in 6 files, with 3
+      unsupported declarations. CodeRabbit's response in comment 6569361800
+      confirms that the analyser exposes no declaration-level export. Its
+      independent source inventory lists only `#[test]` and `#[rstest]`
+      functions without Rustdoc comments; it found documentation on touched
+      helpers and Python declarations. Repository guidance excludes Rust test
+      functions from Rustdoc coverage, so do not add test comments to satisfy
+      this row. Reconcile the row against the next published head with source
+      evidence and request confirmation or any non-test declaration still
+      requiring documentation.
 
 ## Surprises & discoveries
 
@@ -888,3 +911,69 @@ defect. Full plan acceptance remains open for trusted-main warm-cache evidence
 and a current-head diff-scoped Docstring Coverage result. The formal CodeRabbit
 request 7962aeba is still queued against the PR; its summary remains stale at
 `c7438721`. Keep `Status: IN PROGRESS` until both acceptance items are recorded.
+
+Revision 27 (2026-11-02): The formal CodeRabbit review completed on
+`55cebb79ac3eb7e1e8fb474ae397e965c59a0ecc`. It found that the active Cargo
+home's `cargo-kani` can lose to a conflicting binary in
+`BUILD_TOOLS_PREFIX/bin` (finding 4438989893). The existing contract did not
+cover that directory. The repair invokes the active-home executable directly
+and keeps the global PATH order that prioritizes the pinned `mold`; a
+regression now covers the conflicting prefix, default and custom Cargo homes,
+and spaces in the home path. The same review reports current-head diff-scoped
+Docstring Coverage at 56.25% (16 functions in 6 files, 3 unsupported). A
+focused request for the exact counted declarations is recorded in comment
+6569348528; await that diagnostic before changing docs. The workflow on `main`
+confirms that only a push event on `main` can write the cache generation;
+manual dispatch cannot provide the pending warm-cache acceptance. Full gates,
+repair publication, current-head review reconciliation, and trusted-main
+acceptance remain outstanding.
+
+Revision 28 (2026-11-02): The focused active-home Kani contract passed for
+default and custom Cargo homes, including a path containing spaces and a
+conflicting `cargo-kani` under `BUILD_TOOLS_PREFIX/bin`. `make kani-check`
+verified Kani 0.67.0 through the active-home executable. CodeRabbit's
+diagnostic response in comment 6569361800 confirms the pre-merge analyser
+exposes no declaration membership. Its independent source inventory found docs
+on touched helpers and Python declarations; the only touched undocumented Rust
+declarations it listed are test functions. Keep the row open for evidence-based
+reconciliation after publishing the repair; do not add Rustdoc comments to
+tests against repository guidance. Full gates and repair publication remain
+pending.
+
+Revision 29 (2026-11-02): The first scoped Kani run reached its documented
+eight-minute runtime cap while compiling dependencies. Systemd recorded
+`Result=timeout`; no proof result was produced. The shared compiler supervisor
+was healthy, with all four slots held and a long queue. Retry once under the
+same scope and limits to reuse the partial build; do not relax the cap or
+bypass compiler admission.
+
+Revision 30 (2026-11-02): The one permitted retry also reached the documented
+eight-minute cap while Cargo waited on the package-cache lock and compiled
+dependencies. Systemd again recorded `Result=timeout`; no Kani proof result was
+produced, and the compiler supervisor remained healthy. Stop further retries.
+The earlier 15-harness result remains valid for the unchanged proof sources;
+the changed active-home command is covered on this candidate by the focused
+path contract and the passing real `make kani-check` against Kani 0.67.0.
+
+Revision 31 (2026-11-02): The first final gate pass on the Kani path repair
+passed formatting and typecheck, but Ruff found one excess local in the new
+path regression. The test now derives the build-tools marker path at each use
+instead of storing it in a separate local. Restart the full gate sequence from
+the beginning against this corrected candidate.
+
+Revision 32 (2026-11-02): After that local-count fix, the full gate sequence
+passed `make check-fmt`, `make lint`, `make typecheck`, and `make doc-coverage`
+(98.23%). Mermaid validation, the 4,948-test nextest suite and doctests,
+workflow contracts (1,669 tests plus 28 supplementary checks), CI scripts (90
+tests), prover-tools integration (7 tests), Makefile validation, and diff
+checks passed. Markdown lint found two American spellings of the analysis
+tool's name; both are corrected to the project spelling. Restart the full
+sequence on the corrected candidate.
+
+Revision 33 (2026-11-02): The corrected candidate passed the full sequential
+gate set: formatting, lint, typecheck, 98.23% doc coverage, Markdown lint,
+Mermaid validation, 4,948 nextest tests (7 skipped), all doctests, workflow
+contracts (1,669 passed, 3 skipped, plus 28 supplementary checks), CI scripts
+(90 passed), prover-tools integration (7 passed), Makefile validation, and diff
+checks. Logs use the `import-prover-tools-r3` suffix under `/tmp`. PR review
+and hosted cache acceptance remain open; keep this plan in progress.
