@@ -29,6 +29,11 @@
   2.0, and the metadata adapter keeps publishing the switch spelling Netsuke's
   parser actually accepts
   ([#951](https://github.com/leynos/netsuke/issues/951), [#779](https://github.com/leynos/netsuke/issues/779))
+- **Breaking:** reject dependency cycles through `sources`, `deps`, or
+  `order_only_deps` during whole-manifest IR validation, including cycles in
+  targets not requested by Ninja. The crate-private `missing_dependencies`
+  report also includes unresolved order-only paths
+  ([ADR-0068](docs/adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md)).
 
 ## [0.1.0-beta4] - 2026-09-26
 

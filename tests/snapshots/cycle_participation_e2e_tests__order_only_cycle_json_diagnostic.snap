@@ -1,0 +1,28 @@
+---
+source: tests/cycle_participation_e2e_tests.rs
+assertion_line: 107
+expression: rendered
+---
+{
+  "schema_version": 1,
+  "generator": {
+    "name": "netsuke",
+    "version": "[version]"
+  },
+  "diagnostics": [
+    {
+      "message": "Failed to build graph from the manifest.",
+      "code": null,
+      "severity": "error",
+      "help": null,
+      "url": null,
+      "causes": [
+        "Circular dependency detected: [\"headers.stamp\", \"tool\", \"headers.stamp\"]."
+      ],
+      "source": null,
+      "primary_span": null,
+      "labels": [],
+      "related": []
+    }
+  ]
+}

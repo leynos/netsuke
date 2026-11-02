@@ -12,7 +12,11 @@ use super::support::{canonicalize_cycle, canonicalize_cycle_by};
 
 mod analyse_tests;
 
+mod edge_oracle;
+
 mod issue322_property_tests;
+
+mod participation_tests;
 
 fn path(name: &str) -> camino::Utf8PathBuf {
     camino::Utf8PathBuf::from(name)

@@ -665,14 +665,19 @@ and test workflow intact. See
   Completed: [ADR-0027](adrs/adr-0027-command-placeholder-contract.md) records
   the contract; the English README and all six translations carry it, with
   executable examples and regression tests.
-- [ ] 4.4.2. Document which dependency kinds participate in cycle detection in
+- [x] 4.4.2. Document which dependency kinds participate in cycle detection in
   the user guide. Requires 4.2.1. See
   [formal-verification-methods-in-netsuke.md §Cycle-participation contract](formal-verification-methods-in-netsuke.md#cycle-participation-contract).
-  - [ ] Decide whether order-only dependencies participate.
-  - [ ] Decide whether implicit outputs participate.
-  - [ ] Document the chosen rule in the user guide's dependency and build-graph
+  - [x] Decide whether order-only dependencies participate.
+  - [x] Decide whether implicit outputs participate.
+  - [x] Document the chosen rule in the user guide's dependency and build-graph
     semantics chapter.
-  - [ ] Align implementation, tests, and documentation with the chosen rule.
+  - [x] Align implementation, tests, and documentation with the chosen rule.
+  Completed:
+  [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md)
+  records that every prerequisite kind participates in whole-manifest cycle
+  detection and that explicit and implicit output aliases name their producing
+  edge; unit, property, BDD, end-to-end, and Kani coverage enforce the rule.
 - [ ] 4.4.3. Evaluate a minimal Verus proof kernel for cycle canonicalization.
   Requires 4.2.2 and 4.1.3. See
   [formal-verification-methods-in-netsuke.md §Optional Verus proof kernel](formal-verification-methods-in-netsuke.md#optional-verus-proof-kernel).
