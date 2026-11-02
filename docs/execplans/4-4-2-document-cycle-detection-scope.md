@@ -1276,6 +1276,20 @@ dependencies as graph arcs.
   `cargo clippy -p netsuke-build --lib --tests --all-features -- -D warnings`
   exits 0, and `alias_traversal_agrees_with_edge_oracle` still passes. Gates
   five to thirteen never ran, so the full batch restarts from gate one.
+- [x] (2026-11-02) The restarted thirteen-gate sequential batch ran on
+  `badf45905` and every gate exited 0 on the first attempt, with no retries:
+  `make check-fmt` (4 s), `make markdownlint` (40 s), `make nixie` (3 s),
+  `make lint-clippy` (442 s), `make lint-whitaker` (6709 s), `make lint-python`
+  (27 s), `make github-actions-lint` (1 s), `make typecheck` (1383 s),
+  `make test-nextest` (415 s; 4960 tests passed, 7 skipped), `make doctest`
+  (655 s), `make test-workflow-contracts` (229 s; 1666 passed and 3 skipped in
+  one suite, 28 passed in another), `make test-documentation-contracts` (73 s;
+  65 passed), and `make doc-coverage` (5573 s; aggregate coverage 98.23%
+  against the 80% threshold). The batch took 4 h 19 m of wall clock, almost all
+  of it compile-slot admission: the host pool held every slot with roughly 400
+  waiters, and `build-limits-status` reported healthy throughout. No build was
+  killed, retried, duplicated, or bypassed, and the worktree was clean before
+  and after.
 
 ## Surprises & discoveries
 
@@ -1642,3 +1656,11 @@ nested `if` into a let-chain, and moving the independent Kahn oracle into
 `src/ir/cycle/property_tests/edge_oracle.rs`. No lint suppression was added.
 The focused Clippy check and the property test pass on the repaired tree, and
 the full batch restarts from gate one.
+
+Revision 24 (2026-11-02): the full thirteen-gate batch on `badf45905` passed
+every gate on the first attempt. Wall-clock cost was dominated by compile-slot
+admission rather than by compilation or tests: the host pool was saturated with
+roughly 400 waiters, and `make lint-whitaker` and `make doc-coverage` spent
+most of their time queued. The candidate therefore carries verified formatting,
+lint, typecheck, unit, behavioural, contract, and documentation-coverage
+evidence.
