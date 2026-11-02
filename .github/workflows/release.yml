@@ -101,7 +101,7 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
       - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           python-version: '3.14'
           enable-cache: false
@@ -148,7 +148,7 @@ jobs:
           manifest_path='Cargo.toml'
           echo "value=$manifest_path" >>"$GITHUB_OUTPUT"
       - name: Install Python for package metadata
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           python-version: '3.14'
           enable-cache: false
@@ -323,7 +323,7 @@ jobs:
           profile: smoke
       - name: Install sccache
         uses: >-
-          taiki-e/install-action@ab6895351a88b908e96a4697860d4ffea5e57dbe
+          taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037
         with:
           tool: sccache@0.16.0
           fallback: none
@@ -369,7 +369,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install Python for admission timings
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           python-version: '3.14'
           enable-cache: false
@@ -447,7 +447,7 @@ jobs:
         uses: >-
           leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
       - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           python-version: '3.14'
           enable-cache: false
@@ -579,7 +579,7 @@ jobs:
         # Pins the interpreter the hoist script runs under to the Python 3.14
         # baseline the repository's Python tooling targets, rather than
         # whichever `python3` the runner image happens to ship.
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           python-version: '3.14'
           # The hoist script is stdlib-only and runs with --no-project, so a
@@ -690,7 +690,7 @@ jobs:
       - name: Install uv
         # Pins the interpreter the release helper scripts run under to the
         # Python 3.14 baseline the repository's Python tooling targets.
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        uses: astral-sh/setup-uv@07a047e608db84b3d8c06cd9a7c7dcc9c355c18e
         with:
           python-version: '3.14'
           # These helpers are stdlib-only, so restoring a dependency cache
