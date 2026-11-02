@@ -232,7 +232,7 @@ action now carries two pins on `main`, because `release` and the new
 invokes to the newer of the two:
 
 ```plaintext
-rust-lang/crates-io-auth-action  c6f97d42243bad5fab37ca0427f495c86d5b1a18  (v1.0.5)
+rust-lang/crates-io-auth-action  3268eb413133e2960fa4ae0e963ca76380c54cd9
 leynos/shared-actions (release job)         a5765019912a8ab6882b12db049c7cde635f3a85
 leynos/shared-actions (publish-release job) 0606ca899ce2995a0c4bc78e660e80832e6e8855
 ```
@@ -528,7 +528,7 @@ release, uploads no asset, and requires no environment approval.
   one job must still run, or the assertion is vacuous.
 
 **AXIOM-1.** The `crates-io-auth-action` at pin
-`c6f97d42243bad5fab37ca0427f495c86d5b1a18` exchanges an OIDC token for a
+`3268eb413133e2960fa4ae0e963ca76380c54cd9` exchanges an OIDC token for a
 registry token on `steps.<id>.outputs.token` and revokes it in a post step.
 Verified by reading its `action.yml`. Its internals are not verified here.
 
@@ -1129,7 +1129,7 @@ def plan_asset_actions(
 ```
 
 Dependencies: none new. `rust-lang/crates-io-auth-action` at
-`c6f97d42243bad5fab37ca0427f495c86d5b1a18` is the only new external action.
+`3268eb413133e2960fa4ae0e963ca76380c54cd9` is the only new external action.
 
 ## Progress
 
