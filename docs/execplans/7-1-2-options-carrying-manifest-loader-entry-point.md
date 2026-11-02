@@ -277,7 +277,7 @@ them back into the design.
 | `tests/manifest_load_options_tests.rs`, `tests/manifest_load_options/*` | public differential and property tests                                   |
 | `tests/features/manifest_load_options.feature`, `tests/bdd/…`           | behavioural scenarios, steps, and `TestWorld` slots                      |
 | `tests/ui/manifest_load_options_embedder_pass.rs`                       | compile-pass fixture pinning the public surface                          |
-| `docs/…`                                                                | design, ADR-0060, ADR-0050 addendum, guides, contents, roadmap           |
+| `docs/…`                                                                | design, ADR-0070, ADR-0050 addendum, guides, contents, roadmap           |
 
 *Table 1: Files in scope.*
 
@@ -2334,7 +2334,9 @@ and YAML fixtures, and were set from the inventory in Table 1.
   of all 83 `origin` heads found `adr-0069` the highest serial in use and
   `adr-0070` free on every head. The deviation changes only the filename: the
   decision, its scope, and its index entry in `docs/contents.md` are as
-  approved. Date/Author: 2026-11-01, implementation agent in EP-M4.
+  approved. Every earlier `ADR-0060` reference in this plan is a historical
+  planning record of the serial as it stood when written; the minted record is
+  ADR-0070. Date/Author: 2026-11-01, implementation agent in EP-M4.
 
 - Decision: the `Tolerances` scope ceiling is recorded as an accepted
   exception, not a stop. Measured from the pull request's comparison base
@@ -2880,8 +2882,9 @@ After each milestone, perform the conformance check listed and update
 
 ### EP-M5 — documentation, ADR, and roadmap closure
 
-- Outcome: design §4.2, §4.3, §5.5, and §7 reconciled; ADR-0060 written and
-  indexed in `docs/contents.md`; ADR-0050 Addendum E; developers' guide,
+- Outcome: design §4.2, §4.3, §5.5, and §7 reconciled; ADR-0070 written and
+  indexed in `docs/contents.md` (the plan's `0060` serial was stale; see
+  `Decision log`); ADR-0050 Addendum E; developers' guide,
   `docs/netsuke-design.md`, and `docs/polonius.md` updated; roadmap 7.1.2 and
   its five bullets ticked; this plan set to `COMPLETE`.
 - Requirements: design §15; AGENTS.md documentation rules.
