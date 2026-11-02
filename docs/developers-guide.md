@@ -1601,8 +1601,11 @@ The contract tests are split across
 the action pin, step order, inputs, dry-run wiring, and the per-architecture
 image builds,
 `tests/workflow_contracts/linux_package_validation_sandbox_test.py`, which
-holds the image contents, the verifier's pass and fail paths, the Polythene
-pin, and the target-to-architecture mapping with its QEMU setup, and
+holds the image contents, the Polythene pin, and the target-to-architecture
+mapping with its QEMU setup,
+`tests/workflow_contracts/linux_package_verifier_test.py`, which holds the
+installed-package verifier's pass and fail paths against stubbed package
+tools, and
 `tests/workflow_contracts/linux_package_emulation_test.py`, which holds the
 both-formats requirement and the emulated installation's per-format,
 image-selection, and failure paths. Run `make test-workflow-contracts`.
