@@ -39,6 +39,7 @@ class CandidateIssue(enum.StrEnum):
     JSON_READ = "could not read {} {}: {}"
     JSON_OBJECT = "{} must be a JSON object"
     REHEARSAL = "a rehearsal identity cannot publish to crates.io"
+    UNEXPECTED_TAG = "a rehearsal candidate must not record a release tag: {!r}"
     IDENTITY_MISMATCH = "candidate identity mismatch: {}"
     CRATE_BASENAME = "identity record crate must be a flat archive basename"
     CRATE_SUFFIX = "identity record crate {!r} must end in .crate"
@@ -75,12 +76,23 @@ class CandidateError(ValueError):
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class CandidateExpectation:
-    """Carry workflow identity that the package artifact must match."""
+    """Carry workflow identity that the package artifact must match.
 
-    tag: str
+    ``tag`` is ``None`` for a rehearsal. A pull request has a merge ref rather
+    than a release tag, so a rehearsed candidate records no tag and this check
+    binds only the commit, package name, and version. A publishing run supplies
+    the tag, and the identity must then record exactly that tag.
+    """
+
+    tag: str | None
     commit: str
     package_name: str
     version: str
+
+    @property
+    def is_rehearsal(self) -> bool:
+        """Whether this expectation accepts a tagless candidate."""
+        return self.tag is None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -133,15 +145,33 @@ def _identity_matches(
     identity: release_candidate.ReleaseIdentity,
     expectation: CandidateExpectation,
 ) -> None:
-    """Require the artifact identity to match this validated release run."""
-    if identity.tag is None:
+    """Require the artifact identity to match this validated release run.
+
+    A rehearsal and a publishing run are distinguished by the tag alone. The
+    rehearsal must record no tag, because inventing one would let a pull
+    request claim a release it never built; the publishing run must record the
+    tag the workflow is releasing, because a candidate built for another tag is
+    not the candidate this run may publish.
+
+    Raises
+    ------
+    CandidateError
+        If a rehearsal records a tag, a publishing run records none, or the
+        identity disagrees with the workflow's commit, package name, version,
+        or tag.
+    """
+    if expectation.is_rehearsal:
+        if identity.tag is not None:
+            raise CandidateError(CandidateIssue.UNEXPECTED_TAG, (identity.tag,))
+    elif identity.tag is None:
         raise CandidateError(CandidateIssue.REHEARSAL)
     expected = {
-        "tag": expectation.tag,
         "commit": expectation.commit,
         "package_name": expectation.package_name,
         "version": expectation.version,
     }
+    if expectation.tag is not None:
+        expected["tag"] = expectation.tag
     actual = {
         "tag": identity.tag,
         "commit": identity.commit,
@@ -313,7 +343,18 @@ def build_parser() -> argparse.ArgumentParser:
     check = commands.add_parser("check", help="validate the packaged candidate")
     check.add_argument("--identity", required=True, type=pathlib.Path)
     check.add_argument("--archive-directory", required=True, type=pathlib.Path)
-    check.add_argument("--tag", required=True)
+    # Exactly one release mode is required, mirroring ``package_crate_cli``.
+    # A caller that supplies neither, or both, reaches an argument error rather
+    # than a check that silently accepts whichever identity it was handed.
+    release_mode = check.add_mutually_exclusive_group(required=True)
+    release_mode.add_argument(
+        "--tag", help="the release tag a publishing candidate must record"
+    )
+    release_mode.add_argument(
+        "--rehearsal",
+        action="store_true",
+        help="accept a candidate that records no release tag",
+    )
     check.add_argument("--commit", required=True)
     check.add_argument("--package-name", required=True)
     check.add_argument("--version", required=True)
@@ -331,7 +372,7 @@ def _record_for_arguments(arguments: argparse.Namespace) -> dict[str, object]:
             arguments.identity,
             arguments.archive_directory,
             CandidateExpectation(
-                arguments.tag,
+                None if arguments.rehearsal else arguments.tag,
                 arguments.commit,
                 arguments.package_name,
                 arguments.version,

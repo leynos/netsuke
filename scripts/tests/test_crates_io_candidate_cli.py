@@ -6,7 +6,7 @@ import json
 import typing as typ
 
 import pytest
-from crates_io_candidate_cli import EXIT_OK, EXIT_REJECTED, main
+from crates_io_candidate_cli import EXIT_OK, EXIT_REJECTED, EXIT_USAGE, main
 from crates_io_candidate_support import (
     BIN_NAME,
     COMMIT,
@@ -50,13 +50,25 @@ class IdentityMismatch:
 DEFAULT_EXPECTATION = CheckExpectation()
 
 
+def _identity(*, tag: str | None = TAG) -> dict[str, object]:
+    """Build one package identity record with the selected release tag."""
+    return {
+        "tag": tag,
+        "commit": COMMIT,
+        "is_prerelease": False,
+        "package_name": PACKAGE_NAME,
+        "version": VERSION,
+        "bin_name": BIN_NAME,
+    }
+
+
 def _check_args(
     record: pathlib.Path,
     directory: pathlib.Path,
     output: pathlib.Path,
     expectation: CheckExpectation = DEFAULT_EXPECTATION,
 ) -> list[str]:
-    """Build the validated-candidate CLI invocation."""
+    """Build the publishing-mode validated-candidate CLI invocation."""
     return [
         "check",
         "--identity",
@@ -65,6 +77,31 @@ def _check_args(
         str(directory),
         "--tag",
         expectation.tag,
+        "--commit",
+        expectation.commit,
+        "--package-name",
+        expectation.package,
+        "--version",
+        expectation.version,
+        "--output",
+        str(output),
+    ]
+
+
+def _rehearsal_args(
+    record: pathlib.Path,
+    directory: pathlib.Path,
+    output: pathlib.Path,
+    expectation: CheckExpectation = DEFAULT_EXPECTATION,
+) -> list[str]:
+    """Build the rehearsal-mode validated-candidate CLI invocation."""
+    return [
+        "check",
+        "--identity",
+        str(record),
+        "--archive-directory",
+        str(directory),
+        "--rehearsal",
         "--commit",
         expectation.commit,
         "--package-name",
@@ -92,6 +129,73 @@ def test_check_records_one_matching_unchanged_archive(tmp_path: pathlib.Path) ->
         "record the digest of the retained bytes"
     )
     assert archive.read_bytes() == original, "validation must not rewrite the archive"
+
+
+def test_check_accepts_a_tagless_rehearsal_candidate(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Accept a rehearsal candidate that records no release tag."""
+    record, archive = write_candidate(
+        tmp_path, overrides=CandidateOverrides(identity=_identity(tag=None))
+    )
+    output = tmp_path / "candidate.json"
+
+    status = main(_rehearsal_args(record, tmp_path, output))
+
+    assert status == EXIT_OK, "a tagless rehearsal candidate must validate"
+    candidate = json.loads(output.read_text(encoding="utf-8"))
+    assert candidate["identity"]["tag"] is None, "retain the absent release tag"
+    assert candidate["crate"] == archive.name, "record the selected archive"
+
+
+def test_check_rejects_a_tagged_candidate_during_rehearsal(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse a rehearsal candidate that claims a release tag."""
+    record, _ = write_candidate(tmp_path)
+    output = tmp_path / "candidate.json"
+
+    status = main(_rehearsal_args(record, tmp_path, output))
+
+    assert status == EXIT_REJECTED, "a rehearsal must not accept a tagged candidate"
+    assert "must not record a release tag" in capsys.readouterr().err, (
+        "explain that the rehearsal candidate carries a tag"
+    )
+    assert not output.exists(), "a refused candidate must produce no record"
+
+
+@pytest.mark.parametrize(
+    "release_mode",
+    [
+        pytest.param([], id="neither-mode"),
+        pytest.param(["--tag", TAG, "--rehearsal"], id="both-modes"),
+    ],
+)
+def test_check_requires_exactly_one_release_mode(
+    tmp_path: pathlib.Path, release_mode: list[str]
+) -> None:
+    """Refuse an invocation that does not select exactly one release mode."""
+    record, _ = write_candidate(tmp_path)
+    output = tmp_path / "candidate.json"
+    arguments = [
+        "check",
+        "--identity",
+        str(record),
+        "--archive-directory",
+        str(tmp_path),
+        *release_mode,
+        "--commit",
+        COMMIT,
+        "--package-name",
+        PACKAGE_NAME,
+        "--version",
+        VERSION,
+        "--output",
+        str(output),
+    ]
+
+    assert main(arguments) == EXIT_USAGE, "the release mode must be unambiguous"
+    assert not output.exists(), "a usage error must produce no candidate record"
 
 
 @pytest.mark.parametrize(
