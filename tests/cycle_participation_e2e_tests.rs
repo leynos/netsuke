@@ -10,7 +10,7 @@ use insta::Settings;
 use std::path::{Path, PathBuf};
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::fs as test_fs;
-use test_support::netsuke::{NetsukeRun, run_netsuke_in};
+use test_support::netsuke::{NetsukeRun, run_netsuke_in, run_netsuke_in_with_env};
 use test_support::ninja::ninja_integration_workspace;
 use test_support::write_exec_with_content;
 
@@ -46,16 +46,18 @@ fn order_only_cycle_rejected_before_ninja() -> Result<()> {
     let sentinel_path = sentinel
         .to_str()
         .context("Ninja sentinel path should be UTF-8")?;
-    let output = assert_cmd::cargo::cargo_bin_cmd!("netsuke")
-        .current_dir(workspace.path())
-        .env("NETSUKE_NINJA", ninja)
-        .env("NETSUKE_NINJA_SENTINEL", sentinel_path)
-        .args(["--no-input", "build"])
-        .output()
-        .context("run Netsuke build with sentinel Ninja")?;
+    let output = run_netsuke_in_with_env(
+        workspace.path(),
+        &["--locale", "en-US", "--no-input", "build"],
+        &[
+            ("NETSUKE_NINJA", ninja),
+            ("NETSUKE_NINJA_SENTINEL", sentinel_path),
+        ],
+    )
+    .context("run Netsuke build with sentinel Ninja")?;
 
-    let stderr = normalize_fluent_isolates(&String::from_utf8(output.stderr)?);
-    ensure!(!output.status.success(), "cycle build should fail");
+    let stderr = normalize_fluent_isolates(&output.stderr);
+    ensure!(!output.success, "cycle build should fail");
     ensure!(
         stderr.contains("Circular dependency detected")
             && stderr.contains("headers.stamp")
@@ -112,12 +114,17 @@ fn order_only_cycle_json_diagnostic() -> Result<()> {
 #[test]
 fn documented_order_only_cycle_is_rejected() -> Result<()> {
     let workspace = manifest_workspace("guide-order-only-cycle-manifest")?;
-    let output = run_netsuke(workspace.path(), &["--no-input", "generate"])?;
+    let output = run_netsuke(
+        workspace.path(),
+        &["--locale", "en-US", "--no-input", "generate"],
+    )?;
     ensure!(!output.success, "documented order-only cycle should fail");
+    let stderr = normalize_fluent_isolates(&output.stderr);
     ensure!(
-        output.stderr.contains("headers.stamp") && output.stderr.contains("tool"),
-        "documented diagnostic should name the cycle: {}",
-        output.stderr
+        stderr.contains(
+            "Circular dependency detected: [\"headers.stamp\", \"tool\", \"headers.stamp\"]."
+        ),
+        "documented diagnostic should render the cycle path as a list: {stderr}"
     );
     Ok(())
 }

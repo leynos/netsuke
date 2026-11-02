@@ -752,9 +752,10 @@ targets:
     deps: tool
 ```
 
-Running `netsuke generate` reports `Circular dependency detected` and the path
-`headers.stamp -> tool -> headers.stamp` before it emits Ninja text. The same
-diagnostic structure is available in JSON mode. See
+Running `netsuke generate` reports
+`Circular dependency detected: ["headers.stamp", "tool", "headers.stamp"].`
+before it emits Ninja text. The same diagnostic structure is available in JSON
+mode. See
 [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md) for
 the decision and its compatibility notes.
 
@@ -1326,10 +1327,6 @@ object alongside the existing action and target catalogue. The root-level
 `--json` option is required before `help`, as in
 `netsuke --json help targets --edges`:
 
-The exported `order_only_deps` edges participate in cycle detection under the
-same whole-manifest rule described in
-[Dependency and build-graph semantics](#dependency-and-build-graph-semantics).
-
 <!-- tested-example: guide-help-targets-edges-json -->
 
 ```json
@@ -1388,6 +1385,10 @@ when absent), `conditional`, `phony`, `always`, `dependency_order`, authored
 `edges`, and a tagged `recipe`. The edge object has `sources`, `deps`, and
 `order_only_deps` arrays. A node name's `default` flag is true exactly when
 that name appears in `defaults`.
+
+The exported `order_only_deps` edges participate in cycle detection under the
+same whole-manifest rule described in
+[Dependency and build-graph semantics](#dependency-and-build-graph-semantics).
 
 Recipe kinds are closed in schema v1: `command` carries `form` (`string` or
 `list`), raw `commands`, and `isolation` (`shared` or `isolated`); `script`
