@@ -2590,8 +2590,9 @@ This transformation involves several steps:
    `CycleDetector` helper exposes a `detect` API and owns the recursion stack
    and visitation map. It borrows target keys from the canonical output index
    so traversal leaves the input graph untouched without cloning keys. Missing
-   dependencies encountered during traversal are logged, collected, and
-   returned alongside any cycle to aid diagnostics.
+   dependencies encountered during traversal are collected and returned
+   alongside any cycle to aid diagnostics. Without a cycle, the IR builder logs
+   only their count at info level.
 
 #### Structured-command shell selection vocabulary
 

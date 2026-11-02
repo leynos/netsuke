@@ -130,6 +130,13 @@ fn documented_order_only_cycle_is_rejected() -> Result<()> {
 }
 
 /// Build a serial aggregate whose earlier dependency relies on a later one.
+///
+/// The declaration order is deliberately contradicted by `a`'s `deps: b`
+/// prerequisite, so this test exercises their interaction rather than serial
+/// declaration order: cycle detection must not report a cycle for the reversed
+/// prerequisite, and the staged build must complete without deadlocking.
+/// Declaration-order serial staging is covered separately by
+/// `tests/serial_dependency_cli_tests.rs`.
 #[test]
 fn serial_earlier_dependency_on_later_builds() -> Result<()> {
     let workspace = match ninja_integration_workspace() {

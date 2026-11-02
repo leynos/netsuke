@@ -53,7 +53,8 @@ pub(crate) struct CycleDetectionReport {
 /// `inputs`, `implicit_deps`, and `order_only_deps`.
 ///
 /// Returns any detected cycle path and missing dependencies encountered
-/// before that cycle.  Missing dependencies emit debug-level tracing events.
+/// before that cycle.  Missing dependencies are collected, not logged; the
+/// caller decides how to report them.
 pub(crate) fn analyse(graph: &BuildGraph) -> CycleDetectionReport {
     let mut detector = CycleDetector::new(graph);
     let cycle = detector.detect();
