@@ -13,7 +13,7 @@ use super::super::{
 };
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedNinja;
-use crate::recipe_shell::BashExecutable;
+use crate::recipe_shell::InterpreterExecutable;
 use crate::runner::process::command_list_targets::CommandListTargetIndex;
 use monotony::MonotonicClock;
 
@@ -25,7 +25,7 @@ pub(in crate::runner) struct GraphGenerationContext<'a> {
     /// Select the legacy-recipe interpreter used during graph generation.
     pub(in crate::runner) recipe_shell: crate::recipe_shell::RecipeShell,
     /// Bind builds to the Bash executable that passed runner preflight.
-    pub(in crate::runner) bash_executable: Option<BashExecutable>,
+    pub(in crate::runner) bash_executable: Option<InterpreterExecutable>,
     /// Measure graph generation with a runner-provided monotonic clock.
     pub(in crate::runner) clock: &'a dyn MonotonicClock,
 }
@@ -35,7 +35,7 @@ impl GraphGenerationContext<'_> {
     #[must_use]
     pub(in crate::runner) fn with_bash_executable(
         &self,
-        bash_executable: Option<BashExecutable>,
+        bash_executable: Option<InterpreterExecutable>,
     ) -> Self {
         GraphGenerationContext {
             recipe_shell: self.recipe_shell,

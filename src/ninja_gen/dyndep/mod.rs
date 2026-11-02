@@ -72,7 +72,7 @@ use crate::ninja_gen::{
     NinjaGenError, RecipeShell, graph_requires_dyndep, join, ordered_default_targets,
     reject_unsupported_path_characters, write_action_rules,
 };
-use crate::recipe_shell::BashExecutable;
+use crate::recipe_shell::InterpreterExecutable;
 use std::fmt::Write as _;
 
 /// Reserved state namespace for serial gate paths.
@@ -119,7 +119,7 @@ pub(crate) fn generate_bundle_for_shell(
 pub(crate) fn generate_bundle_for_shell_with_bash(
     graph: &BuildGraph,
     shell: RecipeShell,
-    bash_executable: Option<&BashExecutable>,
+    bash_executable: Option<&InterpreterExecutable>,
 ) -> Result<GeneratedNinja, NinjaGenError> {
     generate_bundle_inner(graph, shell, bash_executable)
 }
@@ -143,7 +143,7 @@ pub(crate) fn generate_bundle_for_shell_with_bash(
 fn generate_bundle_inner(
     graph: &BuildGraph,
     shell: RecipeShell,
-    bash_executable: Option<&BashExecutable>,
+    bash_executable: Option<&InterpreterExecutable>,
 ) -> Result<GeneratedNinja, NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;

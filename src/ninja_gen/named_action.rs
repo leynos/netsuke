@@ -11,7 +11,7 @@ use super::error::NinjaGenError;
 use super::escape::{ShellText, escape_metadata_value};
 use super::recipe_shell::escape_posix_script;
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
-use crate::recipe_shell::BashExecutable;
+use crate::recipe_shell::InterpreterExecutable;
 use std::fmt::Write;
 
 /// Wrapper struct to display a rule with its identifier.
@@ -151,7 +151,7 @@ impl NamedAction<'_> {
     pub(crate) fn write_into_with_bash<W: Write>(
         &self,
         output: &mut W,
-        bash_executable: Option<&BashExecutable>,
+        bash_executable: Option<&InterpreterExecutable>,
     ) -> Result<(), NinjaGenError> {
         let shell_text = self.shell_text()?;
         let command = match (&self.action.recipe, self.shell) {

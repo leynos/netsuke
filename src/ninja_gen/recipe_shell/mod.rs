@@ -4,7 +4,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 use super::NinjaGenError;
 use super::escape::{NinjaValue, ShellText, escape_ninja_value};
-use crate::recipe_shell::{BashExecutable, RecipeShell};
+use crate::recipe_shell::{InterpreterExecutable, RecipeShell};
 
 mod transport;
 
@@ -115,7 +115,7 @@ impl RecipeShell {
     pub(super) fn command_value_with_bash(
         self,
         script: &ShellText,
-        bash_executable: Option<&BashExecutable>,
+        bash_executable: Option<&InterpreterExecutable>,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         self.command_value_with_error_action(script, PowerShellErrorAction::Stop, bash_executable)
     }
@@ -137,7 +137,7 @@ impl RecipeShell {
         self,
         script: &ShellText,
         error_action: PowerShellErrorAction,
-        bash_executable: Option<&BashExecutable>,
+        bash_executable: Option<&InterpreterExecutable>,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         match self {
             Self::Posix => escape_ninja_value(script).map(RenderedRecipeCommand::Direct),
@@ -312,7 +312,7 @@ impl RecipeShell {
     /// Wrap one POSIX recipe in the explicit Windows Bash compatibility runtime.
     fn bash_command(
         script: &ShellText,
-        bash_executable: Option<&BashExecutable>,
+        bash_executable: Option<&InterpreterExecutable>,
     ) -> Result<NinjaValue, NinjaGenError> {
         let executable = bash_executable.map_or_else(
             || "bash.exe".to_owned(),

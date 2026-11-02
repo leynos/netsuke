@@ -280,7 +280,7 @@ fn assert_failed_probe_diagnostic(
     expected_fragments: &[&str],
 ) -> anyhow::Result<()> {
     let workspace = tempfile::tempdir()?;
-    let executable = crate::recipe_shell::BashExecutable::from_absolute_path(
+    let executable = crate::recipe_shell::InterpreterExecutable::from_absolute_path(
         Utf8PathBuf::from_path_buf(workspace.path().join("Git Bash/bin/bash.exe"))
             .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?,
     )?;

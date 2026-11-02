@@ -19,7 +19,7 @@ use crate::ast::NetsukeManifest;
 use crate::cli::Cli;
 use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
-use crate::recipe_shell::BashExecutable;
+use crate::recipe_shell::InterpreterExecutable;
 use crate::{manifest, ninja_gen};
 use crate::{
     manifest::{EnvAccessPolicy, ManifestEnvironment},
@@ -272,7 +272,7 @@ pub(super) fn ninja_text_for_shell(
 pub(super) fn ninja_text_for_shell_with_bash(
     graph: &BuildGraph,
     shell: crate::recipe_shell::RecipeShell,
-    bash_executable: Option<&BashExecutable>,
+    bash_executable: Option<&InterpreterExecutable>,
 ) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
     ninja_gen::dyndep::generate_bundle_for_shell_with_bash(graph, shell, bash_executable)
 }

@@ -11,36 +11,58 @@
 
 use crate::shell_word::ShellDialect;
 use camino::{Utf8Path, Utf8PathBuf};
+use thiserror::Error;
 
-/// Identify the exact executable bound into a Windows Bash build plan.
+/// Identify the exact interpreter executable bound into a generated plan.
 ///
-/// `RecipeShell::Bash` selects POSIX-compatible quoting. This value separately
-/// records which executable the runner resolved and preflighted, so generated
-/// build commands invoke that same runtime.
+/// A [`RecipeShell`] selects quoting and transport rules; this value separately
+/// records which executable receives the rendered recipe. Binding the absolute
+/// path keeps a generated plan from resolving an unqualified name through
+/// Windows' executable search order, where a workspace file can shadow the
+/// intended interpreter (CWE-427).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub(crate) struct BashExecutable(Utf8PathBuf);
+pub struct InterpreterExecutable(Utf8PathBuf);
 
-impl BashExecutable {
-    /// Construct a Bash executable binding from an absolute UTF-8 path.
+/// Rejections applied while constructing an [`InterpreterExecutable`].
+#[derive(Clone, Debug, Eq, Error, PartialEq)]
+pub enum InterpreterExecutableError {
+    /// The supplied path cannot be executed without a directory search.
+    #[error("interpreter executable path must be absolute: {path}")]
+    RelativePath {
+        /// Path that was supplied to the constructor.
+        path: Utf8PathBuf,
+    },
+    /// A NUL character cannot appear in a process argument.
+    #[error("interpreter executable path cannot contain a NUL character")]
+    NulCharacter,
+}
+
+impl InterpreterExecutable {
+    /// Construct an interpreter binding from an absolute UTF-8 path.
     ///
     /// # Errors
     ///
-    /// Returns an error when `path` is relative or contains a NUL character.
+    /// Returns [`InterpreterExecutableError::RelativePath`] when `path` is not
+    /// absolute, or [`InterpreterExecutableError::NulCharacter`] when it
+    /// contains a NUL character.
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let executable = BashExecutable::from_absolute_path(
-    ///     camino::Utf8PathBuf::from("C:/Program Files/Git/bin/bash.exe"),
-    /// )?;
-    /// assert!(executable.as_path().is_absolute());
     /// ```
-    pub(crate) fn from_absolute_path(path: Utf8PathBuf) -> anyhow::Result<Self> {
-        anyhow::ensure!(path.is_absolute(), "Bash executable path must be absolute");
-        anyhow::ensure!(
-            !path.as_str().contains('\0'),
-            "Bash executable path cannot contain a NUL character"
-        );
+    /// use netsuke::ninja_gen::{InterpreterExecutable, InterpreterExecutableError};
+    ///
+    /// assert!(matches!(
+    ///     InterpreterExecutable::from_absolute_path("bash.exe".into()),
+    ///     Err(InterpreterExecutableError::RelativePath { .. })
+    /// ));
+    /// ```
+    pub fn from_absolute_path(path: Utf8PathBuf) -> Result<Self, InterpreterExecutableError> {
+        if !path.is_absolute() {
+            return Err(InterpreterExecutableError::RelativePath { path });
+        }
+        if path.as_str().contains('\0') {
+            return Err(InterpreterExecutableError::NulCharacter);
+        }
         Ok(Self(path))
     }
 
@@ -48,11 +70,20 @@ impl BashExecutable {
     ///
     /// # Examples
     ///
-    /// ```rust,ignore
-    /// let executable = resolve_bash_runtime()?;
+    /// ```
+    /// use netsuke::ninja_gen::InterpreterExecutable;
+    ///
+    /// let path = if cfg!(windows) {
+    ///     "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+    /// } else {
+    ///     "/bin/sh"
+    /// };
+    /// let executable = InterpreterExecutable::from_absolute_path(path.into())
+    ///     .expect("fixture path should be absolute");
     /// assert!(executable.as_path().is_absolute());
     /// ```
-    pub(crate) fn as_path(&self) -> &Utf8Path {
+    #[must_use]
+    pub fn as_path(&self) -> &Utf8Path {
         &self.0
     }
 }

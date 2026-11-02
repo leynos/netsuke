@@ -11,7 +11,7 @@ use itertools::Itertools;
 
 use crate::{
     ir::{BuildEdge, BuildGraph},
-    recipe_shell::BashExecutable,
+    recipe_shell::InterpreterExecutable,
 };
 
 use super::order::ordered_actions;
@@ -27,7 +27,7 @@ pub(crate) fn write_action_rules<W: Write>(
     graph: &BuildGraph,
     out: &mut W,
     shell: RecipeShell,
-    bash_executable: Option<&BashExecutable>,
+    bash_executable: Option<&InterpreterExecutable>,
 ) -> Result<(), NinjaGenError> {
     for (zero_based_action_index, (id, action)) in ordered_actions(
         graph

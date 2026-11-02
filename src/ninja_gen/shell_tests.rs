@@ -7,7 +7,7 @@ use super::{
     encode_power_shell_script, escape_posix_script, windows_argument,
 };
 use crate::ninja_gen::escape::ShellText;
-use crate::recipe_shell::BashExecutable;
+use crate::recipe_shell::InterpreterExecutable;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use camino::Utf8PathBuf;
 use proptest::prelude::*;
@@ -77,7 +77,7 @@ fn bash_command_value_uses_the_preflighted_executable_path() -> anyhow::Result<(
             .join("bash.exe"),
     )
     .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?;
-    let executable = BashExecutable::from_absolute_path(executable_path)?;
+    let executable = InterpreterExecutable::from_absolute_path(executable_path)?;
 
     let rendered = RecipeShell::Bash
         .command_value_with_bash(&ShellText::new("echo ready".into()), Some(&executable))?

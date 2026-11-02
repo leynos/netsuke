@@ -17,7 +17,7 @@ use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use mockable::Env;
 
-use crate::{recipe_shell::BashExecutable, recipe_shell::RecipeShell};
+use crate::{recipe_shell::InterpreterExecutable, recipe_shell::RecipeShell};
 
 use super::telemetry::{self, BashProbeOutcome};
 
@@ -58,7 +58,7 @@ struct BashRuntimeContext<'a> {
 /// executable cannot be resolved, or the selected Bash fails `--version`.
 pub(in crate::runner) fn resolve_bash_runtime(
     shell: RecipeShell,
-) -> Result<Option<BashExecutable>> {
+) -> Result<Option<InterpreterExecutable>> {
     if !cfg!(windows) || shell != RecipeShell::Bash {
         return Ok(None);
     }
@@ -83,8 +83,8 @@ pub(in crate::runner) fn resolve_bash_runtime(
 /// executable cannot pass the injected probe.
 fn resolve_bash_runtime_with(
     context: &BashRuntimeContext<'_>,
-    probe: impl FnOnce(&BashExecutable) -> io::Result<BashProbeStatus>,
-) -> Result<Option<BashExecutable>> {
+    probe: impl FnOnce(&InterpreterExecutable) -> io::Result<BashProbeStatus>,
+) -> Result<Option<InterpreterExecutable>> {
     if !context.is_windows || context.shell != RecipeShell::Bash {
         return Ok(None);
     }
@@ -125,7 +125,7 @@ fn resolve_bash_runtime_with(
 fn resolve_bash_from_path(
     path_value: Option<OsString>,
     current_dir: &Path,
-) -> Result<BashExecutable> {
+) -> Result<InterpreterExecutable> {
     let Some(path_entries) = path_value else {
         return Err(io::Error::new(io::ErrorKind::NotFound, "PATH is not set"))
             .context(missing_bash_guidance());
@@ -141,7 +141,7 @@ fn resolve_bash_from_path(
             .map_err(|_| anyhow::anyhow!("PATH entry {index} is not a valid UTF-8 path"))?;
         match bash_candidate_in(&utf8_directory) {
             Ok(Some(candidate)) => {
-                return BashExecutable::from_absolute_path(candidate)
+                return InterpreterExecutable::from_absolute_path(candidate)
                     .context("resolved Bash executable must be absolute");
             }
             Ok(None) => {}
@@ -210,7 +210,7 @@ fn is_missing_path_error(error: &io::Error) -> bool {
 ///
 /// Returns an I/O error when the process cannot start, its output cannot be
 /// drained, or its exit status cannot be collected.
-fn probe_bash_runtime(executable: &BashExecutable) -> io::Result<BashProbeStatus> {
+fn probe_bash_runtime(executable: &InterpreterExecutable) -> io::Result<BashProbeStatus> {
     let mut child = Command::new(executable.as_path().as_str())
         .arg("--version")
         .stdout(Stdio::piped())
@@ -321,7 +321,7 @@ fn probe_outcome(result: &io::Result<BashProbeStatus>) -> BashProbeOutcome {
 ///
 /// Returns an error when the process could not launch or exited unsuccessfully.
 fn validate_bash_probe(
-    executable: &BashExecutable,
+    executable: &InterpreterExecutable,
     result: io::Result<BashProbeStatus>,
 ) -> Result<()> {
     let probe_status = result.map_err(|error| {

@@ -29,7 +29,7 @@ mod escape;
 mod recipe_shell;
 mod validation;
 
-pub use crate::recipe_shell::RecipeShell;
+pub use crate::recipe_shell::{InterpreterExecutable, InterpreterExecutableError, RecipeShell};
 pub use error::NinjaGenError;
 pub use explicit_shell::generate_with_shell;
 /// Write `key = value` to a Ninja file when `opt` holds a value.
