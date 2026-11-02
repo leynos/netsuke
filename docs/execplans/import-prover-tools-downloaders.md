@@ -269,81 +269,46 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       remaining in-scope implementation omission or confirmed correctness
       defect. It requires hosted warm-cache acceptance before the plan can be
       marked complete.
-- [ ] Reconcile CodeRabbit's current-head review. Source verification confirms
-      that Make's PATH must prioritize the job-local `CARGO_HOME/bin` for both
-      Kani proof consumers, and the formal-verification guide must distinguish
-      CLI installation/version checking from direct `cargo kani` proof runs.
-      The new active-home regression failed on the old Make PATH and passes for
-      both custom and default Cargo homes after the correction. The review's
-      Python functions have docstrings; its Rust test functions are excluded
-      from rustdoc documentation by repository guidance. Add docs to the two
-      changed non-test Rust helpers. Explain this pre-merge warning in the
-      review thread after the full gates and before final reconciliation. The
-      first full gate attempt passed formatting but lint rejected a Boolean
-      positional test parameter. The second attempt passed formatting and that
-      check, then lint rejected one excess local; the test now derives both
-      paths directly from its named home case. Restart all gates from the
-      beginning. The third attempt passed formatting and failed lint on one
-      leftover reference to the removed Boolean local; that condition now uses
-      the named case string, so repeat the complete sequence again.
-      The fourth attempt passed formatting, lint, typecheck, and doc coverage
-      (98.23%) but markdownlint rejected `prioritise` under the repository's
-      Oxford `-ize` spelling gate. The wording now uses `prioritize`. A fifth
-      full sequence then passed all 12 gates, including 4,948 Rust tests (7
-      skipped) plus doctests, 1,669 workflow contracts (3 skipped) plus 28
-      helper tests, 90 CI-script tests, 7 prover-tools integration tests, and
-      98.23% doc coverage. `cs delta` found no issues. Logs share the
-      `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-retry5.out`
-      suffix. At that point, the two inline repairs and the Docstring Coverage
-      disposition still required published-candidate confirmation. The two
-      inline repairs have since been confirmed in replies 4437685124 and
-      4437685594. A subsequent candidate-bound assessment response
-      ([comment 6565260880](https://github.com/leynos/netsuke/pull/1063#issuecomment-6565260880),
-      assessment `import-prover-tools-4af0ff57-completeness-20261101`) found
-      four undocumented non-test `ProverMakeCase` constructors and no
-      functional defect. All four now have concise usage documentation. The
-      historical Docstring Coverage row is still unconfirmed for the current
-      head; verify it with a current-head review after the repair. The first
-      gate pass found only an ExecPlan reflow issue; after applying `make fmt`,
-      all 12 gates passed. Revision 25 records the rerun. The candidate was
-      subsequently published before requesting current-head review.
-      Candidate `c3c35c76773ab888ca16c44244ed343f82f7ba93` has since passed
-      all hosted CI runs and CodeScene. Assessment
-      [comment 6566774367](https://github.com/leynos/netsuke/pull/1063#issuecomment-6566774367)
-      on that exact base/head confirms the implementation requirements are
-      satisfied, finds no in-scope omission or correctness defect, and accepts
-      the four constructor docs. It keeps full plan acceptance open until a
-      trusted-main warm-cache run and a current-head diff-scoped Docstring
-      Coverage result are recorded. CodeRabbit's edited summary still covers
-      review head `c7438721ed0ab9700ea4fd81f6ef16f242afb7cb`; its current-head
-      formal review remains queued as `7962aeba`. Keep this item open until the
-      pending review and coverage row are reconciled.
-- [ ] EP-M3: Complete hosted warm-cache acceptance, milestone review, and PR
-      assessment/delivery. A pull request cannot save the new cache generation;
-      the warm run requires a trusted `main` push.
-- [ ] Repair CodeRabbit's current-head Kani PATH finding. Review
-      `4438989893` found that `BUILD_TOOLS_PREFIX/bin` can shadow the active
-      Cargo home's `cargo-kani`; the existing regression only put a conflict
-      later on the inherited PATH. The candidate now invokes the active-home
-      executable directly, preserves the global build-tools-first PATH for
-      `mold`, and extends the contract to cover a conflicting build-tools
-      binary and paths containing spaces. The focused contract passed both
-      default and custom Cargo-home cases, and `make kani-check` verified Kani
-      0.67.0 through the active-home binary. Two attempts at the scoped
-      15-harness Kani run timed out during dependency compilation before
-      producing proof results; see Revisions 29 and 30. Full gates, push,
-      exact-head review, and finding reconciliation remain pending.
-- [ ] Reconcile the current-head diff-scoped Docstring Coverage row. The
-      completed review reports 56.25% across 16 functions in 6 files, with 3
-      unsupported declarations. CodeRabbit's response in comment 6569361800
-      confirms that the analyser exposes no declaration-level export. Its
-      independent source inventory lists only `#[test]` and `#[rstest]`
-      functions without Rustdoc comments; it found documentation on touched
-      helpers and Python declarations. Repository guidance excludes Rust test
-      functions from Rustdoc coverage, so do not add test comments to satisfy
-      this row. Reconcile the row against the next published head with source
-      evidence and request confirmation or any non-test declaration still
-      requiring documentation.
+- [ ] Reconcile the current-head CodeRabbit formal review. The candidate-bound
+      implementation assessment [#6573587184](https://github.com/leynos/netsuke/pull/1063#issuecomment-6573587184)
+      (Assessment-ID `import-prover-tools-1e9a9927-completeness-20261102`,
+      base `e5d57c58352b51473de4170f86e34fdc9db3ece6`, head
+      `1e9a992734550d51ef4cc21aee78da590459c6db`) accepts implementation
+      requirements and earlier regression and constructor-documentation
+      findings, with no confirmed functional defect. It confirms that the
+      current hosted Kani run verified all 15 harnesses and reported successful
+      mutation metrics. The two local scoped `make kani-ir` attempts remain
+      inconclusive after their eight-minute caps. The CodeRabbit walkthrough
+      [#6551587870](https://github.com/leynos/netsuke/pull/1063#issuecomment-6551587870)
+      still identifies `55cebb79` as its last reviewed head and `1e9a9927` as
+      unreviewed. Request a formal review after publishing this plan update.
+- [ ] EP-M3: Complete trusted-main warm-cache acceptance and PR
+      assessment/delivery. The candidate-bound assessment confirms the
+      functional requirements; hosted warm-cache evidence remains open because
+      a pull request cannot save the new generation. The warm run requires a
+      trusted `main` push.
+- [x] Repair CodeRabbit's Kani PATH finding. Review `4438989893` identified
+      that `BUILD_TOOLS_PREFIX/bin` could shadow the active Cargo home's
+      `cargo-kani`. The published fix invokes the active-home executable
+      directly, preserves build-tools-first PATH precedence for `mold`, and
+      covers conflicting binaries, default and custom Cargo homes, and paths
+      containing spaces. CodeRabbit confirmed the repair in reply
+      [#4440506630](https://github.com/leynos/netsuke/pull/1063#discussion_r4440506630).
+      The full local gate sequence passed; hosted CI verified Kani 0.67.0 and
+      all 15 harnesses on the candidate. The two local scoped attempts timed
+      out before producing proof results; see Revisions 29 and 30.
+- [ ] Reconcile the current-head diff-scoped Docstring Coverage row. The last
+      completed result reports 56.25% across 16 functions in 6 files, with 3
+      unsupported declarations, but covers head `55cebb79`. CodeRabbit's
+      response in comment 6569361800 confirms that the analyser exposes no
+      declaration-level export. Its source inventory lists only `#[test]` and
+      `#[rstest]` functions without Rustdoc comments and finds documentation
+      on touched helpers and Python declarations. The current functional
+      assessment confirms that the displayed row remains stale; the CodeRabbit
+      check on `1e9a9927` was skipped because review is paused. Do not add Rust
+      test comments or substitute aggregate Rustdoc coverage. Reconcile the row
+      after a formal review of the published plan update, requesting declaration
+      diagnostics if a warning remains.
 
 ## Surprises & discoveries
 
@@ -977,3 +942,17 @@ contracts (1,669 passed, 3 skipped, plus 28 supplementary checks), CI scripts
 (90 passed), prover-tools integration (7 passed), Makefile validation, and diff
 checks. Logs use the `import-prover-tools-r3` suffix under `/tmp`. PR review
 and hosted cache acceptance remain open; keep this plan in progress.
+
+Revision 34 (2026-11-02): Record the exact-head assessment on candidate
+`1e9a992734550d51ef4cc21aee78da590459c6db`. CodeRabbit confirms that the
+implementation requirements and previous regression and
+constructor-documentation findings are satisfied, with no confirmed functional
+defect. The hosted Kani workflow verified version 0.67.0, all 15 harnesses, and
+successful mutation metrics; the two local scoped runs remain inconclusive.
+Hosted CI and Netsukefile Build Test passed, hosted CodeScene passed six
+quality gates with zero annotations, and local `cs delta` found no issues in
+the checked changes. Keep hosted warm-cache acceptance pending until a trusted
+`main` workflow populates the new cache generation. The 56.25% diff-scoped
+Docstring Coverage row still belongs to head `55cebb79`; request a current
+result through formal review after this plan update. Full ExecPlan acceptance
+remains open.
