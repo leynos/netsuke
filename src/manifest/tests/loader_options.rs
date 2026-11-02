@@ -7,8 +7,9 @@
 //!
 //! The `Test` row asserts the deny-by-default surface: `env()` is real over an
 //! injected reader, `glob()` refuses, and the mode neither renders in query
-//! mode, records normal-load telemetry, classifies query refusals, nor grants
-//! overlays today. The overlay grant lands with EP-M4's machinery.
+//! mode, records normal-load telemetry, nor classifies query refusals. It is
+//! the only row that grants template overlays, which is the counterpart of the
+//! refusing stubs: an overlay stands in for a helper the surface withheld.
 
 use rstest::rstest;
 

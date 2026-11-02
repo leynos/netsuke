@@ -38,7 +38,7 @@ pub(crate) enum QueryEvaluation<T> {
 /// halves together.
 ///
 /// The marker is only meaningful for a surface that installs refusal stubs, so
-/// `classifies_query_refusals` decides whether it is recognised at all. A load
+/// `classifies_query_refusals` decides whether it is recognized at all. A load
 /// that owns a complete stdlib treats the marker as an ordinary failure, which
 /// is what keeps a full build from silently tolerating a refusal.
 ///

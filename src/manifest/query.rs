@@ -89,8 +89,9 @@ pub(super) fn from_path_with_options(
                 .with_arg("path", manifest_path.display().to_string())
         })?;
     let name = ManifestName::new(manifest_path.display().to_string());
-    // Clone the root before the closure consumes the workspace: the directory
-    // handle moves into `StdlibConfig`, which is not cloneable.
+    // Clone the root before the closure consumes the workspace. The closure
+    // takes `ManifestWorkspace` by value and moves its `Dir` handle into the
+    // `StdlibConfig` it builds, so the path is no longer readable afterwards.
     let manifest_root = Some(workspace.root.clone());
     let registration = registration_for(workspace)?;
     let manifest = from_str_named(

@@ -68,8 +68,8 @@ well — the owned style was habit, so they carry no toolchain caveat:
   observer, and passes both through to `ManifestParse` by move rather than
   cloning or reboxing them. The lifetime parameter is the caller's, so an
   options value cannot outlive the reader or the observer it borrows; the enum's
-  `TestSurface` payload is owned because it carries the boxed stdlib
-  configuration, which is not cloneable.
+  `TestSurface` payload is owned and boxed so the loader consumes it without
+  borrowing from the caller, and the variants stay close in size.
 
 ## Refusals
 

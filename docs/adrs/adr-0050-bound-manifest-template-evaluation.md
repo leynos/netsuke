@@ -40,15 +40,15 @@ MiB source, 10,000 `foreach` values, and 50,000 expanded entries. Exhaustion
 uses a localized, redacted diagnostic and closed-vocabulary telemetry labels.
 The budget types contain only accounting data; the Jinja adapter owns
 localization and MiniJinja error conversion, and the normal full-load boundary
-owns exhaustion telemetry. Manifest-query loading selects
-`ManifestLoadMode::ManifestQuery`, which suppresses this budget-exhaustion
-metric at the loading boundary; its omitted expansion-report observer controls
-the separate expansion metrics. Other instrumentation remains owned by the
-boundaries that invoke it. Budget values from the project file and every file
-in its `extends` chain may only narrow ceilings established by defaults,
-trusted configuration, the environment, or CLI flags. Malformed, non-positive,
-and unrepresentable budget values are rejected during configuration merge
-rather than treated as absent.
+owns exhaustion telemetry. Manifest-query loading selects the `ManifestQuery`
+stdlib registration, which suppresses this budget-exhaustion metric at the
+loading boundary; its omitted expansion-report observer controls the separate
+expansion metrics. Other instrumentation remains owned by the boundaries that
+invoke it. Budget values from the project file and every file in its `extends`
+chain may only narrow ceilings established by defaults, trusted configuration,
+the environment, or CLI flags. Malformed, non-positive, and unrepresentable
+budget values are rejected during configuration merge rather than treated as
+absent.
 
 After a successful full manifest load, the runner continues to call
 `record_manifest_structure` for the bounded fixed-vocabulary structural counts

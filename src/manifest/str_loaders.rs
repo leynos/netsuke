@@ -21,7 +21,7 @@ use anyhow::Result;
 /// Parse a manifest string using Jinja for value templating.
 ///
 /// The input YAML must be valid on its own. Jinja expressions are evaluated
-/// only inside recognised string fields and the `foreach` and `when` keys.
+/// only inside recognized string fields and the `foreach` and `when` keys.
 ///
 /// # Errors
 ///

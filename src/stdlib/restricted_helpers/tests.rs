@@ -23,7 +23,7 @@
 //! for one helper lands on its block.
 //!
 //! The settings drop insta's module prefix, so the snapshot is named for the
-//! assertion rather than for this file's path. A reorganisation that keeps
+//! assertion rather than for this file's path. A reorganization that keeps
 //! `refusals.snap` in place therefore reads as no behaviour change at all,
 //! which is what let the rows move here from the retired query-helper module.
 //!

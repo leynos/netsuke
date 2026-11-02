@@ -118,16 +118,18 @@ which alone holds scheduling state and writes the report._
 
 ### 4.1. The pipeline today
 
-The loader driver `from_str_named` (`src/manifest/mod.rs:109`) runs six stages:
-read, `serde_saphyr` parse into a JSON value tree, MiniJinja environment
-construction (strict undefined; `env()` and `glob()` registered from an injected
-`EnvReader` and the glob expander; stdlib registered according to the selected
+The loader driver `evaluate_manifest` (`src/manifest/mod.rs:160`), reached
+through the telemetry-adapting wrapper `from_str_named`
+(`src/manifest/budget/adapter.rs:13`), runs six stages: read, `serde_saphyr`
+parse into a JSON value tree, MiniJinja environment construction (strict
+undefined; `env()` and `glob()` registered from an injected `EnvReader` and the
+glob expander; stdlib registered according to the selected
 `StdlibRegistration`; manifest `vars` exposed as globals), macro registration
 plus `expand_foreach` (which also evaluates `when`), `serde_json::from_value`
 deserialization into `NetsukeManifest`, and `render_manifest` string rendering.
 The fullest-parameterized entry point is `from_path_with_policy_and_env`
-(`src/manifest/mod.rs:385`), which already accepts a `NetworkPolicy`, an
-`EnvReader`, and a coarse `ManifestLoadStage` callback.
+(`src/manifest/path_loaders.rs:114`), which already accepts a `NetworkPolicy`,
+an `EnvReader`, and a coarse `ManifestLoadStage` callback.
 
 Two ordering facts drive the design. First, `foreach` and `when` evaluate
 against the raw value tree _before_ typed deserialization, so doubles for
@@ -180,7 +182,7 @@ have invented:
   than in a new location.
 
 Both restricted modes are driven from one inventory: `SURFACE`
-(`src/stdlib/restricted_helpers/mod.rs:104`) records a query disposition and a
+(`src/stdlib/restricted_helpers/mod.rs:107`) records a query disposition and a
 test disposition beside every helper whose availability depends on the load
 surface. `register_for_test`, the query refusal stubs, and the real file-test
 registration all consume it, and a contract test checks it in both directions,
@@ -467,7 +469,7 @@ _Table 1: Per-case stdlib configuration._
 
 Every helper whose availability depends on the load surface has a
 `TestDisposition` row in `SURFACE`
-(`src/stdlib/restricted_helpers/mod.rs:104`), and `register_for_test` registers
+(`src/stdlib/restricted_helpers/mod.rs:107`), and `register_for_test` registers
 exactly the refused rows as stubs. The implemented inventory is:
 
 | Kind     | Refused under test                                                                                    | Available under test                                                                                                       |

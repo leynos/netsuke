@@ -2,7 +2,7 @@
 //!
 //! Split from the single-file contracts module, which outgrew the module line
 //! cap, along the claim it serves: a refusal is only useful if a caller can
-//! recognise it without matching diagnostic text, so these cases render against
+//! recognize it without matching diagnostic text, so these cases render against
 //! a bare `MiniJinja` environment rather than loading a manifest, and the two
 //! text cases then pin what a manifest author actually sees.
 
