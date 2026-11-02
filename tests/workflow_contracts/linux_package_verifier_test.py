@@ -41,6 +41,11 @@ def _pinned_stub(command: str, expected: tuple[str, ...], output: str) -> str:
     The count check comes first because an unset positional parameter would
     otherwise compare equal to an empty expected argument and let a shortened
     invocation through.
+
+    Returns
+    -------
+    str
+        The shell body of a stub that prints ``output`` when the argv matches.
     """
     conditions = [f'[ "$#" -eq {len(expected)} ]']
     conditions.extend(
