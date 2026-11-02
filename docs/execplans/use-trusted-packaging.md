@@ -870,21 +870,25 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   already 688 lines on `main`. The extraction follows the repository's
   documented composite-action convention
   ([cache ownership and bounded CI resources](../developers-guide.md#cache-ownership-and-bounded-ci-resources)).)
-- Requirements: INV-1, LEM-5, and LEM-6 are assigned here; the workflow and
-  permission-separation portions remain open.
-- Acceptance evidence: the target is `make test-workflow-contracts` passing
-  with the permission and mode-matrix tests. The LEM-5 permission suite and the
-  remaining publication jobs have not landed.
+- Requirements: INV-1, LEM-5, and LEM-6 are assigned here. The
+  `publish-crates-io` job and its permission, prerequisite-reachability, and
+  dry-run contracts have landed; the remaining workflow sequence and the
+  separately planned LEM-5 suite remain open.
+- Acceptance evidence: `make test-workflow-contracts` covers the delivered
+  publisher permission, reachability, and mode-matrix contracts. The separate
+  LEM-5 permission suite and remaining publication jobs have not landed.
 - Conformance check: the six existing outputs are unchanged; the three
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
-- Remaining gaps: only `package-crate` is in the new workflow graph. Four
-  job-matched actions and jobs, `upload-declared-assets`, and the LEM-5 suite
-  remain. No crate is published by any run; after the workflow lands, trusted
-  publisher registration and account settings remain maintainer actions. The
-  package already exists on crates.io (`0.1.0-beta1` through `beta4`), so no
-  initial publication is outstanding.
+- Remaining gaps: `package-crate` and `publish-crates-io` are in the workflow
+  graph. Three job-matched actions and jobs remain (`verify-release-inventory`,
+  `finalize-github-release`, and `consumer-smoke`), together with
+  `upload-declared-assets` and the separate LEM-5 suite. No live exchange or
+  release has exercised the publisher, and trusted-publisher registration and
+  account settings remain maintainer actions. The package already exists on
+  crates.io (`0.1.0-beta1` through `beta4`), so no initial publication is
+  outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -1593,12 +1597,15 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   The scope correction from recon at `c1f3f2ed` established that this is not an
   extraction of existing bodies: only `release` and `publish-release` carry the
-  existing upload sequence. Since that reconnaissance, the `package-crate`
-  action and job have landed. Four job-matched actions and jobs remain
-  (`publish-crates-io`, `verify-release-inventory`, `finalize-github-release`
-  and `consumer-smoke`), together with the planned `upload-declared-assets`
-  helper for `publish-release`. No crates.io workflow step exists yet, so Stage
-  C remains open.
+  existing upload sequence. Since that reconnaissance, the `package-crate` and
+  `publish-crates-io` actions and jobs have landed, with workflow contracts for
+  publisher permissions, prerequisite reachability, artefact use, action order,
+  and dry-run isolation. Three job-matched actions and jobs remain
+  (`verify-release-inventory`, `finalize-github-release`, and
+  `consumer-smoke`), together with the planned `upload-declared-assets` helper
+  for `publish-release`. No live exchange or release has exercised the
+  publisher; the external GitHub `crates-io` environment and crates.io
+  publisher registration remain unverified, so Stage C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
   change and committed it as `d604b0cd`. Nine targets pass outright:
