@@ -63,6 +63,9 @@ struct ProverMakeCase {
 }
 
 impl ProverMakeCase {
+    /// Build the Kani installation case.
+    ///
+    /// Use `ProverMakeCase::install_kani()` to select the `install-kani` recipe.
     const fn install_kani() -> Self {
         Self {
             target: "install-kani",
@@ -72,6 +75,9 @@ impl ProverMakeCase {
         }
     }
 
+    /// Build the Kani proof-check case.
+    ///
+    /// Use `ProverMakeCase::kani_check()` to select the `kani-check` recipe.
     const fn kani_check() -> Self {
         Self {
             target: "kani-check",
@@ -87,6 +93,9 @@ impl ProverMakeCase {
         }
     }
 
+    /// Build the Verus installation case.
+    ///
+    /// Use `ProverMakeCase::install_verus()` to select the `install-verus` recipe.
     const fn install_verus() -> Self {
         Self {
             target: "install-verus",
@@ -96,6 +105,9 @@ impl ProverMakeCase {
         }
     }
 
+    /// Build the Verus proof-execution case.
+    ///
+    /// Use `ProverMakeCase::verus()` to select the `verus` recipe.
     const fn verus() -> Self {
         Self {
             target: "verus",

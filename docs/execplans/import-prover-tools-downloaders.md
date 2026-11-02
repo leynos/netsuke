@@ -296,7 +296,16 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       `/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-retry5.out`
       suffix. The two inline repairs and the docstring-warning disposition
       still require published-candidate confirmation before this review item
-      can be checked off.
+      can be checked off. A subsequent candidate-bound assessment response
+      ([comment 6565260880](https://github.com/leynos/netsuke/pull/1063#issuecomment-6565260880),
+      assessment `import-prover-tools-4af0ff57-completeness-20261101`) found
+      four undocumented non-test `ProverMakeCase` constructors and no
+      functional defect. All four now have concise usage documentation. The
+      historical Docstring Coverage row is still unconfirmed for the current
+      head; verify it with a current-head review after the repair. The first
+      gate pass found only an ExecPlan reflow issue; after applying `make fmt`,
+      all 12 gates passed. Record that result in Revision 25 below and publish
+      the candidate before requesting current-head review.
 - [ ] EP-M3: Complete hosted warm-cache acceptance, milestone review, and PR
       assessment/delivery. A pull request cannot save the new cache generation;
       the warm run requires a trusted `main` push.
@@ -835,3 +844,24 @@ confirming both requested coverage findings are satisfied and no in-scope
 implementation omission or confirmed correctness defect remains. Keep the plan
 in progress until hosted warm-cache acceptance is observed from a trusted
 `main` run.
+
+Revision 24 (2026-11-02): Record the candidate-bound assessment response
+identifying four undocumented non-test proof-case constructors. The four
+constructors now have usage documentation; preserve the distinction between
+functional assessment and the still-unconfirmed current-head Docstring Coverage
+result. The first full gate sequence passed 11 of 12 gates; only the ExecPlan's
+Markdown reflow failed `make check-fmt`. After applying the formatter, all 12
+gates passed in the full rerun (see Revision 25). Current-head review and
+trusted-main warm-cache acceptance remain outstanding.
+
+Revision 25 (2026-11-02): Record the final local gate sequence after formatting
+the assessment follow-up. All 12 gates passed: `make check-fmt`, `make lint`,
+`make typecheck`, 98.23% doc coverage, Markdown lint (0 issues), Mermaid
+validation, 4,948 Rust tests plus doctests, 1,669 workflow contracts (3
+skipped) plus 28 helpers, 90 CI-script tests, 7 prover-tools integration tests,
+Makefile validation, and `git diff --check`. Logs share the
+`/tmp/*-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-5.out` suffix.
+After this final plan update, `make check-fmt`, `make markdownlint`,
+`make nixie`, and `git diff --check` passed (logs use the `final-docs` suffix).
+Commit and publish; current-head review and trusted-main warm-cache acceptance
+remain outstanding.
