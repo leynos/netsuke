@@ -72,9 +72,13 @@ before execution, a critical requirement for compatibility with Ninja.
 
    Netsuke has two rendering policies. Full rendering evaluates every manifest
    field for `build`, `generate`, and normal manifest rendering, retaining the
-   full standard library and existing build semantics. Manifest-query rendering
-   is used by `netsuke help targets`: it evaluates discovery metadata and the
-   structural rule selectors required for graph validation, but leaves
+   full standard library and existing build semantics. Above the policy, the
+   loader selects one of four capability modes through `StdlibRegistration`:
+   the ambient full stdlib, a caller-configured full stdlib, the manifest-query
+   surface, and the deny-by-default test surface that registers pure helpers,
+   typed refusals, and test-supplied template overlays. Manifest-query
+   rendering is used by `netsuke help targets`: it evaluates discovery metadata
+   and the structural rule selectors required for graph validation, but leaves
    `command` and `script` recipe bodies unchanged. Build-only helpers in those
    skipped recipe bodies are therefore not evaluated during discovery.
 

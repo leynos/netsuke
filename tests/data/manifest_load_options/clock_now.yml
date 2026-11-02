@@ -1,0 +1,16 @@
+# `now()` output under a fixed clock.
+#
+# Deterministic only for entries that accept a `StdlibConfig`, since that is the
+# only seam carrying the clock. The wrapper-equivalence rows inject
+# `fixed_clock(2026-06-08 12:00:00 UTC)`, so every row over this fixture records
+# the same instant.
+#
+# The call sits in the `description`: `render_target` substitutes it in both
+# render modes, and it is not a recipe body, so the manifest-query surface
+# reaches it too — where `now` is the host-dependent stub rather than the real
+# helper.
+netsuke_version: "1.0.0"
+targets:
+  - name: clock
+    description: "started {{ now() }}"
+    command: "echo stamped"

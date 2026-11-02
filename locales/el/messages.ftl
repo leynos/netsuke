@@ -148,6 +148,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Το default του env πρέπει να είναι συμβολοσειρά· τύπος τιμής που ελήφθη: { $kind }.
 manifest.vars.not_object = Το `vars` του δηλωτικού πρέπει να είναι αντιστοίχιση ή αντικείμενο.
 manifest.vars.reserved_name = Το κλειδί `vars` '{ $name }' του μανιφέστου είναι δεσμευμένο για ενσωματωμένη βοηθητική συνάρτηση προτύπων· μετονομάστε τη μεταβλητή.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Η επικάλυψη προτύπου '{ $name }' συγκρούεται με τον χώρο ονομάτων { $kind }· μετονομάστε την επικάλυψη.
 manifest.read_failed = Δεν ήταν δυνατή η ανάγνωση του δηλωτικού από { $path }.
 manifest.resolve_workspace_root = Δεν ήταν δυνατός ο προσδιορισμός της ρίζας του χώρου εργασίας.
 manifest.workspace_non_utf8 = Η ριζική διαδρομή του χώρου εργασίας «{ $path }» δεν είναι έγκυρο UTF-8.
@@ -298,6 +299,10 @@ stdlib.command.output.mode.capture = καταγραφή
 stdlib.command.output.mode.streaming = συνεχής ροή
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] Το { $operation } δεν είναι διαθέσιμο στο `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

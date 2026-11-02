@@ -235,9 +235,12 @@ make a helper reach both, so a helper registered privately to one surface is
 reachable from a build but invisible to `netsuke help targets`, or the reverse.
 Where the two surfaces must differ, the difference is a deliberate decision to
 record here rather than an accident of which function happened to be edited:
-the recipe-text dialect default above is the one live example, and
-`register_disabled_query_helpers` is the mechanism for a helper the query
-surface must *refuse* rather than serve.
+the recipe-text dialect default above is the one live example. A helper the
+query surface must *refuse* rather than serve is a row in the `SURFACE`
+inventory of `src/stdlib/restricted_helpers/mod.rs`; its disposition there
+drives `restricted_helpers::register_query_refusals` and the build surface's
+file-test names alike, so the inventory row, not a stub call site, is where a
+refusal belongs.
 
 Argument style follows the shape of the options, not the author's taste. A
 trailing sequence of `Option<T>` parameters, as in
@@ -347,6 +350,68 @@ assert!(format!("{:?}", manifest.targets[0].name).contains("release"));
 
 This snippet mirrors the executable doctest on `from_str_with_env` in the API
 documentation.
+
+### Manifest loader entry points
+
+`ManifestLoadOptions` carries everything a load needs beyond the YAML text and
+its name, and `from_str_with_options` is the entry point that takes it. The
+older entry points are thin wrappers over the same path: `from_str` loads with
+the ambient build stdlib, and `from_str_with_env` differs only in the reader it
+injects.
+
+```rust
+use netsuke::manifest::{
+    EnvAccessPolicy, ManifestEnvironment, ManifestLoadOptions, ManifestName,
+    from_str_with_options, process_env_reader,
+};
+use netsuke::stdlib::StdlibConfig;
+
+let reader = process_env_reader();
+let environment = ManifestEnvironment::new(&reader, EnvAccessPolicy::default());
+let options = ManifestLoadOptions::full(
+    StdlibConfig::from_current_dir().expect("open the workspace"),
+    environment,
+);
+let yaml = "netsuke_version: 1.0.0\n";
+let manifest = from_str_with_options(yaml, &ManifestName::new("Netsukefile"), options)
+    .expect("load manifest");
+# let _ = manifest;
+```
+
+- `ManifestLoadOptions::full` selects the complete build stdlib and takes the
+  environment inputs explicitly.
+- `ManifestLoadOptions::test` selects the deny-by-default test surface (see
+  [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md)).
+- `with_budget_limits` and `with_stage_observer` adjust a load without
+  changing its mode.
+
+A path load has to open its workspace before it can decide its stdlib
+configuration, so it goes through a crate-private
+`from_path_with_options(path, registration_for, options)`, where
+`registration_for` turns the opened workspace into a registration. Do not add
+another `from_path_with_*` rung for a new caller: use `from_str_with_options`
+for a string load, or an existing path entry that already opens a workspace.
+
+Two capabilities are reachable only through the test surface, and both are
+compiled unconditionally because a test runner is a production code path:
+
+- `TestSurface::with_env_reader` supplies the reader `env()` answers from;
+  without one, every lookup reports "not set" rather than reading the process.
+- `TestSurface::with_overlays` installs `TemplateOverlays`, which replace
+  template functions by name. Overlays are registered after the stdlib, the
+  manifest `vars`, and the manifest macros, and before `foreach` expansion, so
+  they are visible to `when`, `foreach`, and every rendered field. An overlay
+  may take the name of any stdlib helper, including `glob`, but not `env`, a
+  `__netsuke_`-prefixed name, a manifest `vars` key, or a manifest macro name.
+  `OverlayCall::shadowed` hands a replaced function back to the overlay, so a
+  test can wrap a helper rather than only discard it.
+
+The stdlib surface a test load grants is deny-by-default and comes from one
+inventory, `SURFACE` in `src/stdlib/restricted_helpers/mod.rs`, which records a
+query disposition and a test disposition per helper. A contract test checks it
+in both directions, so a new stdlib helper has to state what each restricted
+surface does with it, and adding a literal registration without a row fails the
+gate.
 
 ### Ninja invocation with an explicit environment
 
@@ -670,9 +735,10 @@ Every user-facing string is a Fluent message keyed from
 message to all 35 catalogues, and keeping its `{ $variables }` identical across
 them: the build audit rejects a missing key, an orphaned key, or a variable set
 that differs from `en-US`. The `netsuke check` keys live in
-`src/localization/check_keys.rs` and the clap error keys in
-`src/localization/clap_error_keys.rs`, both re-exported by `keys.rs`; the audit
-reads all three files as one key set and rejects a key declared twice.
+`src/localization/check_keys.rs`, the clap error keys in
+`src/localization/clap_error_keys.rs`, and the manifest-loading keys in
+`src/localization/manifest_keys.rs`, all re-exported by `keys.rs`; the audit
+reads all four files as one key set and rejects a key declared twice.
 
 A custom `TypedValueParser` that reports `ErrorKind::ValueValidation` must
 attach clap's `InvalidArg` context when clap supplies the argument and must
@@ -1208,12 +1274,13 @@ observability recorder — provide two definitions: one under
 `#[cfg(feature = "lint")]` and a `#[cfg(not(feature = "lint"))]` no-op twin.
 
 **Fluent keys stay ungated.** The Fluent message keys in
-`src/localization/keys.rs`, `src/localization/check_keys.rs`, and
-`src/localization/clap_error_keys.rs`, their catalogue entries, and the
-subcommand-to-key routing in `src/cli/l10n/mod.rs` are deliberately not gated.
-The build-time localization audit is bidirectional across all 35 catalogues,
-and gating the constants would make every locale look orphaned; the routing
-only maps command names and carries no linting logic.
+`src/localization/keys.rs`, `src/localization/check_keys.rs`,
+`src/localization/clap_error_keys.rs`, and `src/localization/manifest_keys.rs`,
+their catalogue entries, and the subcommand-to-key routing in
+`src/cli/l10n/mod.rs` are deliberately not gated. The build-time localization
+audit is bidirectional across all 35 catalogues, and gating the constants would
+make every locale look orphaned; the routing only maps command names and
+carries no linting logic.
 
 **Test gating.** Check-only integration tests gate the whole test binary with
 an inner `#![cfg(feature = "lint")]` (`tests/check_command_tests.rs`,
@@ -6994,6 +7061,38 @@ Text catalogue snapshots must continue to use the unfiltered
 Netsuke generator object, so unrelated `version` fields remain asserted in
 every snapshot.
 
+### The temporary-path snapshot filter
+
+`test_support::temp_path_filter` (`test_support/src/temp_path_filter.rs`) owns
+the single implementation of the temporary-path pattern both snapshot trees
+bind. Each tree still owns its own `insta::Settings` — snapshot directory and
+module-prefix handling differ — but the pattern itself is not restated:
+
+- `src/snapshot_test_support.rs` binds it in `add_temp_dir_filter` for
+  `src/snapshots/`.
+- `tests/manifest_load_options/fixtures/settings.rs` binds it in its own
+  `add_temp_dir_filter` for `tests/snapshots/`.
+
+**Re-use policy:** any snapshot filter that rewrites a path must build its
+pattern here. Do not restate the pattern in a `Settings` builder. The pattern's
+separator class is `[\\/]+`, matching one **or more** of either separator, and
+the `+` is load-bearing: a snapshot can hold a Windows path twice over, because
+a diagnostic quotes the raw single-backslash form while `serde_json` doubles
+every backslash in the serialized half, and it is the serialized half that
+carries the run-specific workspace name. The class `[\\/]` reads as "either
+separator" but matches exactly one character, so the doubled form survives into
+the checked-in snapshot. A trailing separator is trimmed before the class is
+appended, because otherwise two adjacent classes demand two separators where
+the text has one.
+
+The builder is also why its tests are portable. It takes the directory as an
+argument rather than reading `temp_dir()` itself, so the Windows rows run on
+Linux; the defect is invisible on the platform that records the snapshot, and a
+test reading the ambient directory could only ever check that one. The rows
+live beside the builder, so both snapshot trees run the same cases rather than
+each holding a copy — two copies guarded only by their own matching cases can
+drift apart while both stay green.
+
 ### `test_support::fs`
 
 `test_support::fs` (`test_support/src/fs.rs`) is the crate's single
@@ -9789,10 +9888,10 @@ Budget-aware entry points include the `*_with_limits` manifest loaders,
 `expand_foreach_with_budget`, `render_manifest_with_budget`, and
 `render_manifest_for_manifest_query_with_budget`. The ordinary public wrappers
 construct the safe default limits. Build and manifest-query loading use the
-same accounting path. Query loading selects `ManifestLoadMode::ManifestQuery`;
-that mode suppresses budget-exhaustion telemetry at the loading boundary and
-omits the expansion-report observer, while other instrumentation remains owned
-by the boundaries that invoke it.
+same accounting path. Query loading selects the `ManifestQuery` stdlib
+registration, which suppresses budget-exhaustion telemetry at the loading
+boundary and omits the expansion-report observer, while other instrumentation
+remains owned by the boundaries that invoke it.
 
 The runner boundary promotes a budget exhaustion to the typed
 `RunnerError::ManifestBudgetExceeded` variant. Its localized terminal

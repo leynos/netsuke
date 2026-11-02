@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = default i env måste vara en sträng, tog emot { $kind }.
 manifest.vars.not_object = Manifestets `vars` måste vara en mappning eller ett objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nyckel '{ $name }' är reserverad för en inbyggd mallhjälpare; byt namn på variabeln.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Mallöverlägget '{ $name }' krockar med namnutrymmet { $kind }; byt namn på överlägget.
 manifest.read_failed = Manifestet i { $path } kunde inte läsas.
 manifest.resolve_workspace_root = Arbetsytans rot kunde inte fastställas.
 manifest.workspace_non_utf8 = Arbetsytans rotsökväg ”{ $path }” är inte giltig UTF-8.
@@ -297,6 +298,10 @@ stdlib.command.output.mode.capture = infångning
 stdlib.command.output.mode.streaming = strömning
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } är inte tillgänglig under `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

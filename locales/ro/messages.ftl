@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Valoarea default din env trebuie să fie un șir de caractere, s-a primit { $kind }.
 manifest.vars.not_object = Câmpul `vars` al manifestului trebuie să fie o mapare sau un obiect.
 manifest.vars.reserved_name = Cheia `vars` '{ $name }' din manifest este rezervată pentru o funcție ajutătoare de șabloane integrată; redenumiți variabila.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Suprapunerea de șablon '{ $name }' intră în conflict cu spațiul de nume { $kind }; redenumiți suprapunerea.
 manifest.read_failed = Manifestul din { $path } nu a putut fi citit.
 manifest.resolve_workspace_root = Rădăcina spațiului de lucru nu a putut fi determinată.
 manifest.workspace_non_utf8 = Calea rădăcină a spațiului de lucru „{ $path }” nu este UTF-8 valid.
@@ -298,6 +299,10 @@ stdlib.command.output.mode.capture = captură
 stdlib.command.output.mode.streaming = flux continuu
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } nu este disponibil în `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

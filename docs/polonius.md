@@ -63,6 +63,13 @@ well — the owned style was habit, so they carry no toolchain caveat:
   `Vec<&Utf8Path>` borrowed from the snapshot; the search loop reads borrowed
   directories and the paths are copied into the owned `ResolveError::NotFound`
   only at the error boundary.
+- `src/manifest/loader_options.rs` — `ManifestLoadOptions<'a>` borrows its
+  `ManifestEnvironment<'a>` and its `&'a mut dyn FnMut(ManifestLoadStage)`
+  observer, and passes both through to `ManifestParse` by move rather than
+  cloning or reboxing them. The lifetime parameter is the caller's, so an
+  options value cannot outlive the reader or the observer it borrows; the enum's
+  `TestSurface` payload is owned because it carries the boxed stdlib
+  configuration, which is not cloneable.
 
 ## Refusals
 

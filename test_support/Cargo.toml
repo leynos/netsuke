@@ -14,6 +14,11 @@ legacy-digests = ["netsuke/legacy-digests"]
 
 [dependencies]
 tempfile = "3.8.0"
+# The shared temporary-path filter escapes each directory component, so both
+# snapshot trees build the same pattern from one place. Already in the workspace
+# dependency graph as a dev-dependency of the root crate; this adds a second
+# consumer of the same resolved version, not a new crate.
+regex = "1.12.2"
 # Decoding PowerShell `-EncodedCommand` payloads in the shared Ninja-semantics
 # helper must match the encoder the production renderer uses.
 base64 = "0.22.1"

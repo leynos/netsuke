@@ -147,6 +147,7 @@ manifest.env.args_error = ‏[netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = הערך default של env חייב להיות מחרוזת, התקבל { $kind }.
 manifest.vars.not_object = השדה `vars` של המניפסט חייב להיות מיפוי או אובייקט.
 manifest.vars.reserved_name = מפתח `vars` בשם '{ $name }' במניפסט שמור לפונקציית עזר מובנית של תבניות; שנה את שם המשתנה.
+manifest.overlay.name_collision = ‏[netsuke::manifest::overlay::collision] שכבת-העל של התבנית '{ $name }' מתנגשת עם מרחב השמות { $kind }; שנה את שם שכבת-העל.
 manifest.read_failed = לא ניתן היה לקרוא את המניפסט מ‑{ $path }.
 manifest.resolve_workspace_root = לא ניתן היה לקבוע את שורש סביבת העבודה.
 manifest.workspace_non_utf8 = נתיב השורש של סביבת העבודה „{ $path }” אינו UTF-8 תקין.
@@ -299,6 +300,10 @@ stdlib.command.output.mode.capture = לכידה
 stdlib.command.output.mode.streaming = הזרמה
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = ‏[netsuke::jinja::test_mode::unavailable] { $operation } אינו זמין תחת `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = ‏[netsuke::jinja::shell::args] { $details }

@@ -93,6 +93,8 @@ struct ExpansionContext<'a> {
     budget: &'a ManifestBudget,
     /// Name of the manifest section being expanded, such as `targets`.
     section: &'a str,
+    /// Whether a refused helper marks the entry conditional.
+    classifies_query_refusals: bool,
 }
 
 /// Decides how manifest discovery should handle an evaluated `when` expression.
@@ -129,14 +131,22 @@ pub(crate) fn expand_foreach(
     env: &Environment,
 ) -> Result<ExpansionReport> {
     let budget = ManifestBudget::default();
-    expand_foreach_with_budget(doc, env, &budget)
+    // The suite builds both complete and manifest-query environments here, and
+    // only a query surface can emit the refusal marker, so classifying it is
+    // inert for the complete ones.
+    expand_foreach_with_budget(doc, env, &budget, true)
 }
 
 /// Expand targets and actions with the caller's shared manifest resource budget.
+///
+/// `classifies_query_refusals` comes from the load's registration: a discovery
+/// query turns a refused helper into a conditional entry, while a full load
+/// propagates it as a failure.
 pub(crate) fn expand_foreach_with_budget(
     doc: &mut ManifestValue,
     env: &Environment,
     budget: &ManifestBudget,
+    classifies_query_refusals: bool,
 ) -> Result<ExpansionReport> {
     let mut report = ExpansionReport::default();
     for section in ["targets", "actions"] {
@@ -144,6 +154,7 @@ pub(crate) fn expand_foreach_with_budget(
             env,
             budget,
             section,
+            classifies_query_refusals,
         };
         expand_section(doc, &context, &mut report)?;
     }

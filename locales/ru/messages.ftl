@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Значение default в env должно быть строкой, получено { $kind }.
 manifest.vars.not_object = Поле `vars` манифеста должно быть отображением или объектом.
 manifest.vars.reserved_name = Ключ `vars` '{ $name }' в манифесте зарезервирован для встроенной вспомогательной функции шаблонов; переименуйте переменную.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Наложение шаблона '{ $name }' конфликтует с пространством имён { $kind }; переименуйте наложение.
 manifest.read_failed = Не удалось прочитать манифест по пути { $path }.
 manifest.resolve_workspace_root = Не удалось определить корень рабочего пространства.
 manifest.workspace_non_utf8 = Корневой путь рабочего пространства «{ $path }» не является корректным UTF-8.
@@ -299,6 +300,10 @@ stdlib.command.output.mode.capture = перехват
 stdlib.command.output.mode.streaming = потоковая передача
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } недоступен в `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

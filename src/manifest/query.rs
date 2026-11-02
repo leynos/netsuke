@@ -1,17 +1,18 @@
 //! Workspace-backed manifest loading for builds and discovery queries.
 //!
 //! This module owns the capability-scoped filesystem boundary shared by normal
-//! manifest loading and `netsuke help targets`. The latter selects a restricted
-//! stdlib registration so it can render discovery metadata without allowing
-//! network requests, cache writes, or command execution.
+//! manifest loading and `netsuke help targets`. The caller supplies the
+//! [`StdlibRegistration`] each load needs — a discovery query selects the
+//! restricted surface — so this module only reads, names, and hands the
+//! manifest to the string loader.
 
 use super::{
-    EnvAccessPolicy, ExpansionReportObserver, ManifestBudgetLimits, ManifestEnvironment,
-    ManifestLoadStage, ManifestName, ManifestParse, NetsukeManifest, StdlibConfig,
-    StdlibRegistration, env::disabled_env_reader, from_str_named, loading::trace_expansion_report,
-    notify_stage, workspace::open_manifest_workspace,
+    ManifestBudgetLimits, ManifestLoadOptions, ManifestLoadStage, ManifestName, NetsukeManifest,
+    StdlibRegistration,
+    budget::adapter::from_str_named,
+    workspace::{ManifestWorkspace, open_manifest_workspace},
 };
-use crate::{localization, localization::keys, stdlib::NetworkPolicy};
+use crate::{localization, localization::keys};
 use anyhow::{Context, Result};
 use std::path::Path;
 
@@ -55,46 +56,56 @@ pub(crate) fn from_path_for_manifest_query_with_source(
     budget_limits: ManifestBudgetLimits,
     on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
 ) -> Result<LoadedManifest> {
-    let env_reader = disabled_env_reader();
-    let environment = ManifestEnvironment::new(&env_reader, EnvAccessPolicy::default());
-    from_path_with_registration(ManifestLoadRequest {
-        path: path.as_ref(),
-        environment: &environment,
-        budget_limits,
-        on_stage,
-        mode: ManifestLoadMode::ManifestQuery,
-    })
+    let mut options = ManifestLoadOptions::manifest_query().with_budget_limits(budget_limits);
+    if let Some(observer) = on_stage {
+        options = options.with_stage_observer(observer);
+    }
+    from_path_with_options(
+        path,
+        |_workspace| Ok(StdlibRegistration::ManifestQuery),
+        options,
+    )
 }
 
-/// Load a full manifest with explicit policy, environment inputs, and
-/// resource ceilings.
+/// Read one manifest through the capability-scoped workspace boundary.
 ///
-/// `recipe_shell` is the interpreter the runner resolved; the template
-/// filters and IR lowering must agree on it, so it is threaded here rather
-/// than re-derived from the environment.
-#[expect(
-    clippy::too_many_arguments,
-    reason = "This compatibility entry point keeps the established policy, environment, budget, shell, and stage-observer seams explicit."
-)]
-pub(super) fn from_path_with_policy_and_environment_and_limits(
+/// `registration_for` derives the load's capabilities from the opened
+/// workspace. That is what lets a path load configure the stdlib against the
+/// directory the manifest actually lives in; string loads have no workspace, so
+/// they decide their registration up front instead.
+pub(super) fn from_path_with_options(
     path: impl AsRef<Path>,
-    policy: NetworkPolicy,
-    environment: &ManifestEnvironment<'_>,
-    budget_limits: ManifestBudgetLimits,
-    recipe_shell: crate::recipe_shell::RecipeShell,
-    on_stage: Option<&mut dyn FnMut(ManifestLoadStage)>,
-) -> Result<NetsukeManifest> {
-    from_path_with_registration(ManifestLoadRequest {
-        path: path.as_ref(),
-        environment,
-        budget_limits,
-        on_stage,
-        mode: ManifestLoadMode::Full {
-            policy,
-            recipe_shell,
-        },
+    registration_for: impl FnOnce(ManifestWorkspace) -> Result<StdlibRegistration>,
+    mut options: ManifestLoadOptions<'_>,
+) -> Result<LoadedManifest> {
+    let manifest_path = path.as_ref();
+    options.notify(ManifestLoadStage::ManifestIngestion);
+    let workspace = open_manifest_workspace(manifest_path, None)?;
+    let data = workspace
+        .dir
+        .read_to_string(&workspace.manifest_file)
+        .with_context(|| {
+            localization::message(keys::MANIFEST_READ_FAILED)
+                .with_arg("path", manifest_path.display().to_string())
+        })?;
+    let name = ManifestName::new(manifest_path.display().to_string());
+    // Clone the root before the closure consumes the workspace: the directory
+    // handle moves into `StdlibConfig`, which is not cloneable.
+    let manifest_root = Some(workspace.root.clone());
+    let registration = registration_for(workspace)?;
+    let manifest = from_str_named(
+        &data,
+        options
+            .with_registration(registration)
+            .into_parse(&name, manifest_root),
+    )?;
+    Ok(LoadedManifest {
+        manifest,
+        #[cfg(feature = "lint")]
+        source: data,
+        #[cfg(feature = "lint")]
+        name: name.as_ref().to_owned(),
     })
-    .map(|loaded| loaded.manifest)
 }
 
 /// A rendered manifest together with the source text it was parsed from.
@@ -110,92 +121,4 @@ pub(crate) struct LoadedManifest {
     /// The display name the diagnostics label the source with.
     #[cfg(feature = "lint")]
     pub(crate) name: String,
-}
-
-/// Select the standard-library boundary for a manifest load.
-enum ManifestLoadMode {
-    /// A normal build load with a configured network policy and the
-    /// interpreter the runner resolved.
-    Full {
-        /// Network grant ceiling applied to fetch helpers.
-        policy: NetworkPolicy,
-        /// Interpreter whose quoting rules the template filters follow.
-        recipe_shell: crate::recipe_shell::RecipeShell,
-    },
-    /// A metadata-only load that must not construct an ambient stdlib config.
-    ///
-    /// Query-rendered metadata uses a fixed `sh` dialect for shell quoting,
-    /// independent of the host and build-shell configuration. Resolving the
-    /// build shell here would make a metadata query inspect a setting it does
-    /// not use and could make help fail on an unrelated malformed override.
-    ManifestQuery,
-}
-
-/// Hold the dependencies needed to load one manifest from a workspace path.
-struct ManifestLoadRequest<'path, 'env, 'stage> {
-    /// Identifies the manifest file on the capability-scoped workspace boundary.
-    path: &'path Path,
-    /// Reads environment variables and carries the policy for `env()` lookups.
-    environment: &'env ManifestEnvironment<'env>,
-    /// Supplies immutable resource ceilings for this parse.
-    budget_limits: ManifestBudgetLimits,
-    /// Observes load phases without changing parsing behaviour.
-    on_stage: Option<&'stage mut dyn FnMut(ManifestLoadStage)>,
-    /// Selects full or metadata-only standard-library registration.
-    mode: ManifestLoadMode,
-}
-
-/// Read a manifest and render it with the selected stdlib registration.
-fn from_path_with_registration(
-    mut request: ManifestLoadRequest<'_, '_, '_>,
-) -> Result<LoadedManifest> {
-    notify_stage(&mut request.on_stage, ManifestLoadStage::ManifestIngestion);
-    let workspace = open_manifest_workspace(request.path, None)?;
-    let data = workspace
-        .dir
-        .read_to_string(&workspace.manifest_file)
-        .with_context(|| {
-            localization::message(keys::MANIFEST_READ_FAILED)
-                .with_arg("path", request.path.display().to_string())
-        })?;
-    let name = ManifestName::new(request.path.display().to_string());
-    let (stdlib_registration, expansion_report_observer): (
-        StdlibRegistration,
-        Option<ExpansionReportObserver>,
-    ) = match request.mode {
-        ManifestLoadMode::Full {
-            policy,
-            recipe_shell,
-        } => (
-            StdlibRegistration::Full(Box::new(
-                StdlibConfig::new(workspace.dir)?
-                    .with_workspace_root_path(&workspace.root)?
-                    .with_network_policy(policy)
-                    .with_recipe_shell(recipe_shell),
-            )),
-            Some(trace_expansion_report),
-        ),
-        ManifestLoadMode::ManifestQuery => (StdlibRegistration::ManifestQuery, None),
-    };
-    let manifest_root = Some(workspace.root);
-    let manifest = from_str_named(
-        &data,
-        ManifestParse {
-            name: &name,
-            stdlib_registration: Some(stdlib_registration),
-            env_reader: request.environment.reader(),
-            env_access_policy: request.environment.access_policy(),
-            manifest_root,
-            expansion_report_observer,
-            budget_limits: request.budget_limits,
-        },
-        &mut request.on_stage,
-    )?;
-    Ok(LoadedManifest {
-        manifest,
-        #[cfg(feature = "lint")]
-        source: data,
-        #[cfg(feature = "lint")]
-        name: name.as_ref().to_owned(),
-    })
 }

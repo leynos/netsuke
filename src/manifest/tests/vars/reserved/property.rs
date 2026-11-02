@@ -7,7 +7,8 @@
 //! handwritten example.
 
 use crate::manifest::{
-    ManifestError, ManifestName, ManifestValue, RESERVED_VAR_NAMES, register_manifest_vars,
+    ManifestError, ManifestName, ManifestValue, RESERVED_VAR_NAMES, overlay_namespace,
+    register_manifest_vars,
 };
 use minijinja::Environment;
 use proptest::prelude::*;
@@ -71,10 +72,15 @@ fn doc_with_vars(vars: Map<String, Value>) -> ManifestValue {
 /// Register `vars` into a fresh environment, returning it alongside the result.
 fn register(vars: Map<String, Value>) -> (Environment<'static>, Result<(), ManifestError>) {
     let mut jinja = Environment::new();
+    let doc = doc_with_vars(vars);
+    // Built exactly as the loader builds it, so the property exercises the
+    // namespace the real reserved-name check reads.
+    let namespace = overlay_namespace(&doc);
     let result = register_manifest_vars(
-        &doc_with_vars(vars),
+        &doc,
         &mut jinja,
         &ManifestName::new("Netsukefile"),
+        &namespace,
     );
     (jinja, result)
 }

@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Rhaid i default env fod yn llinyn, derbyniwyd { $kind }.
 manifest.vars.not_object = Rhaid i `vars` y maniffest fod yn fap neu'n wrthrych.
 manifest.vars.reserved_name = Mae'r allwedd `vars` '{ $name }' yn y maniffest wedi'i chadw ar gyfer cynorthwyydd templed mewnol; ailenwch y newidyn.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Mae'r troshaeniad templed '{ $name }' yn gwrthdaro â'r gofod enw { $kind }; ailenwch y troshaeniad.
 manifest.read_failed = Methwyd â darllen y maniffest o { $path }.
 manifest.resolve_workspace_root = Methwyd â phennu gwraidd y gweithle.
 manifest.workspace_non_utf8 = Nid yw llwybr gwraidd y gweithle ‘{ $path }’ yn UTF-8 dilys.
@@ -301,6 +302,10 @@ stdlib.command.output.mode.capture = dal
 stdlib.command.output.mode.streaming = ffrydio
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] Nid yw { $operation } ar gael o dan `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

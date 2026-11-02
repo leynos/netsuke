@@ -150,6 +150,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env default must be a string, received { $kind }.
 manifest.vars.not_object = Manifest `vars` must be a map/object.
 manifest.vars.reserved_name = Manifest `vars` key '{ $name }' is reserved for a built-in template helper; rename the variable.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Template overlay '{ $name }' collides with the { $kind } namespace; rename the overlay.
 manifest.read_failed = Failed to read manifest at { $path }.
 manifest.resolve_workspace_root = Failed to resolve workspace root.
 manifest.workspace_non_utf8 = Workspace root path '{ $path }' is not valid UTF-8.
@@ -300,6 +301,10 @@ stdlib.command.output.mode.capture = capture
 stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } is unavailable under `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

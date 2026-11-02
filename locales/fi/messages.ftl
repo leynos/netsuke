@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = default env-funktiossa on oltava merkkijono, vastaanotettiin { $kind }.
 manifest.vars.not_object = Manifestin `vars` on oltava kuvaus tai objekti.
 manifest.vars.reserved_name = Manifestin `vars`-avain '{ $name }' on varattu sisäänrakennetulle mallineapufunktiolle; nimeä muuttuja uudelleen.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Mallineen ohitus '{ $name }' törmää nimiavaruuteen { $kind }; nimeä ohitus uudelleen.
 manifest.read_failed = Manifestia ei voitu lukea polusta { $path }.
 manifest.resolve_workspace_root = Työtilan juurta ei voitu selvittää.
 manifest.workspace_non_utf8 = Työtilan juuripolku ”{ $path }” ei ole kelvollista UTF-8:aa.
@@ -297,6 +298,10 @@ stdlib.command.output.mode.capture = talteenotto
 stdlib.command.output.mode.streaming = virtaus
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } ei ole käytettävissä komennossa `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

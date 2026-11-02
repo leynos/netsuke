@@ -146,6 +146,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env 的 default 必須是字串，但收到 { $kind }。
 manifest.vars.not_object = 資訊清單的 `vars` 必須是對應或物件。
 manifest.vars.reserved_name = 清單的 `vars` 鍵 '{ $name }' 已保留給內建範本輔助函式；請重新命名該變數。
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] 範本覆蓋 '{ $name }' 與 { $kind } 命名空間衝突；請重新命名該覆蓋。
 manifest.read_failed = 無法讀取 { $path } 的資訊清單。
 manifest.resolve_workspace_root = 無法判定工作區的根目錄。
 manifest.workspace_non_utf8 = 工作區根路徑「{ $path }」不是有效的 UTF-8。
@@ -295,6 +296,10 @@ stdlib.command.output.mode.capture = 擷取
 stdlib.command.output.mode.streaming = 串流
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } 在 `netsuke test` 下無法使用。
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

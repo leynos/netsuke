@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = default i env skal være en streng, modtog { $kind }.
 manifest.vars.not_object = Manifestets `vars` skal være en tilknytning eller et objekt.
 manifest.vars.reserved_name = Manifestets `vars`-nøgle '{ $name }' er reserveret til en indbygget skabelonhjælper; omdøb variablen.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Skabelonoverlejringen '{ $name }' er i konflikt med navnerummet { $kind }; omdøb overlejringen.
 manifest.read_failed = Manifestet i { $path } kunne ikke læses.
 manifest.resolve_workspace_root = Roden af arbejdsområdet kunne ikke bestemmes.
 manifest.workspace_non_utf8 = Rodstien for arbejdsområdet "{ $path }" er ikke gyldig UTF-8.
@@ -297,6 +298,10 @@ stdlib.command.output.mode.capture = opsamling
 stdlib.command.output.mode.streaming = strømning
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } er ikke tilgængelig under `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

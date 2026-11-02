@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env の default は文字列でなければなりません。{ $kind } を受け取りました。
 manifest.vars.not_object = マニフェストの `vars` はマップまたはオブジェクトでなければなりません。
 manifest.vars.reserved_name = マニフェストの `vars` キー '{ $name }' は組み込みのテンプレートヘルパー用に予約されています。変数名を変更してください。
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] テンプレートオーバーレイ '{ $name }' は { $kind } 名前空間と衝突します。オーバーレイ名を変更してください。
 manifest.read_failed = { $path } のマニフェストを読み取れませんでした。
 manifest.resolve_workspace_root = ワークスペースのルートを特定できませんでした。
 manifest.workspace_non_utf8 = ワークスペースのルートパス「{ $path }」は有効な UTF-8 ではありません。
@@ -296,6 +297,10 @@ stdlib.command.output.mode.capture = 取り込み
 stdlib.command.output.mode.streaming = ストリーミング
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } は `netsuke test` では使用できません。
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

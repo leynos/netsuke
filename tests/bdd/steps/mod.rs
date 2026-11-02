@@ -39,6 +39,7 @@ mod json_diagnostics;
 mod locale_resolution;
 mod manifest;
 mod manifest_command;
+mod manifest_load_options;
 mod ninja;
 mod process;
 mod progress_output;
