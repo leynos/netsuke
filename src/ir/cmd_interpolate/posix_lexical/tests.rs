@@ -1,18 +1,12 @@
-//! Unit tests for POSIX heredoc delimiter interpolation.
+//! Unit tests for POSIX heredoc delimiter interpolation and comment boundaries.
 
 use super::super::{
     CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell,
     interpolate_command_with_bindings, interpolate_script_with_bindings,
-    CommandBindings, INS_TOKEN, OUTS_TOKEN, RecipeShell, interpolate_command_with_bindings,
-    interpolate_script_with_bindings,
 };
 
 use camino::Utf8PathBuf;
 use rstest::rstest;
-
-
-//! Unit tests for POSIX heredoc delimiter interpolation and comment boundaries.
-};
 
 /// Path whose unquoted encoding is executable shell syntax inside double quotes.
 const HOSTILE_PATH: &str = "x\"; touch injected; echo \"y";
