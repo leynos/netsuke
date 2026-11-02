@@ -11,7 +11,9 @@ mod path_syntax;
 mod rule_utils;
 
 use dyndep::reject_reserved_paths;
-pub use dyndep::{GeneratedDyndep, GeneratedNinja, generate_bundle};
+pub use dyndep::{
+    GeneratedDyndep, GeneratedNinja, generate_bundle, generate_bundle_with_interpreter,
+};
 pub(crate) use path_syntax::{reject_unsupported_path_characters, validated_ninja_path};
 pub(crate) use rule_utils::{
     edge_requires_gates, graph_requires_dyndep, join, path_key, write_action_rules,
@@ -31,7 +33,8 @@ mod validation;
 
 pub use crate::recipe_shell::{InterpreterExecutable, InterpreterExecutableError, RecipeShell};
 pub use error::NinjaGenError;
-pub use explicit_shell::generate_with_shell;
+pub use explicit_shell::{generate_with_interpreter, generate_with_shell};
+pub(crate) use recipe_shell::InterpreterBinding;
 /// Write `key = value` to a Ninja file when `opt` holds a value.
 ///
 /// The indented assignment is emitted only for present values, so optional
@@ -158,6 +161,25 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
     generate_into_with_shell(graph, out, RecipeShell::host_default())
 }
 
+/// Resolve the interpreter binding a public generation entry point can
+/// establish on its own.
+///
+/// Windows PowerShell is resolved through the trusted system-directory locator
+/// so a generated plan never carries an unqualified executable name. Other
+/// shells keep their existing runner-owned resolution policy and bind nothing
+/// here. A locator failure leaves the binding unresolved; rendering a recipe
+/// then reports [`NinjaGenError::InterpreterBindingRequired`], while a
+/// dependency-only graph still succeeds.
+pub(crate) fn resolve_default_interpreter(shell: RecipeShell) -> Option<InterpreterExecutable> {
+    if !cfg!(windows) || shell != RecipeShell::PowerShell {
+        return None;
+    }
+    crate::recipe_shell::locate_windows_power_shell(
+        &crate::recipe_shell::KnownFolderSystemDirectory,
+    )
+    .ok()
+}
+
 /// Write a Ninja build file for one explicit legacy recipe interpreter.
 ///
 /// # Errors
@@ -169,6 +191,41 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     out: &mut W,
     shell: RecipeShell,
 ) -> Result<(), NinjaGenError> {
+    let interpreter = resolve_default_interpreter(shell);
+    let binding = interpreter
+        .as_ref()
+        .map_or(InterpreterBinding::Unbound, InterpreterBinding::Bound);
+    generate_into_with_binding(graph, out, shell, binding)
+}
+
+/// Write a Ninja build file with one trusted interpreter executable.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError`] when the graph cannot be represented safely or
+/// writing the generated output fails.
+pub(crate) fn generate_into_with_interpreter<W: Write>(
+    graph: &BuildGraph,
+    out: &mut W,
+    shell: RecipeShell,
+    interpreter: &InterpreterExecutable,
+) -> Result<(), NinjaGenError> {
+    generate_into_with_binding(graph, out, shell, InterpreterBinding::Bound(interpreter))
+}
+
+/// Write a Ninja build file with an explicit interpreter binding mode.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError`] when the graph cannot be represented safely,
+/// a recipe needs an unresolved interpreter binding, or writing the generated
+/// output fails.
+pub(crate) fn generate_into_with_binding<W: Write>(
+    graph: &BuildGraph,
+    out: &mut W,
+    shell: RecipeShell,
+    binding: InterpreterBinding<'_>,
+) -> Result<(), NinjaGenError> {
     let localizer = localization::localizer();
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
@@ -177,7 +234,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
             message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),
         });
     }
-    write_action_rules(graph, out, shell, None)?;
+    write_action_rules(graph, out, shell, binding)?;
     for edge in ordered_edges(graph.edges()) {
         let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
         write!(

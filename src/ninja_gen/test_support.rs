@@ -3,10 +3,23 @@
 use crate::{
     ast::{CommandIsolation, Recipe, StringOrList},
     ir::{Action, BuildGraph},
+    recipe_shell::InterpreterExecutable,
 };
 use anyhow::{Result, bail, ensure};
+use camino::Utf8PathBuf;
 
 use super::{NinjaGenError, generate, generate_bundle, generate_into};
+
+/// Build the fixture Windows PowerShell executable for the test platform.
+pub(super) fn power_shell_interpreter() -> InterpreterExecutable {
+    let path = if cfg!(windows) {
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    } else {
+        "/fixtures/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+    };
+    InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(path))
+        .expect("fixture interpreter path should be absolute and NUL-free")
+}
 
 /// Construct a command action with the stable default metadata used in tests.
 pub(super) const fn command_action(command: StringOrList) -> Action {

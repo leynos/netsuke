@@ -84,6 +84,24 @@ pub enum NinjaGenError {
         /// Largest completed recipe Netsuke encodes in memory.
         maximum_bytes: usize,
     },
+    /// A legacy recipe needs an interpreter execution binding that was not resolved.
+    #[error(
+        "the {shell:?} legacy recipe interpreter is not bound to an executable; resolve it before rendering commands"
+    )]
+    InterpreterBindingRequired {
+        /// Interpreter whose command could not be rendered.
+        shell: crate::recipe_shell::RecipeShell,
+    },
+    /// A PowerShell parent command exceeds Windows' command-line limit.
+    #[error(
+        "PowerShell parent command needs {actual_characters} command-line characters, exceeding the {maximum_characters}-character limit"
+    )]
+    PowerShellParentCommandLineTooLong {
+        /// UTF-16 code-unit length of the parent command line.
+        actual_characters: usize,
+        /// Largest command line accepted before Windows' terminating NUL.
+        maximum_characters: usize,
+    },
     /// An isolated PowerShell entry exceeds Windows' child command-line limit.
     #[error(
         "PowerShell command-list entry {entry_index} needs {actual_characters} command-line characters, exceeding the {maximum_characters}-character limit"

@@ -5,6 +5,9 @@ Checks PowerShell path-placeholder safety in the Windows recipe smoke suite.
 .DESCRIPTION
 Runs safe unquoted path placeholders and confirms quoted script markers fail
 closed before a semicolon-bearing source path can become PowerShell syntax.
+Also places a marker-writing decoy named `powershell.exe` in the working
+directory and at the front of `PATH`, then requires short and oversized recipes
+to still run under the trusted system-directory executable.
 #>
 function Test-PathPlaceholderScript {
     param(
@@ -87,5 +90,64 @@ function Test-QuotedScriptPlaceholderRejection {
     }
     finally {
         Remove-Item -Recurse -Force -LiteralPath $workspace -ErrorAction SilentlyContinue
+    }
+}
+
+function New-PowerShellSearchDecoy {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Directory
+    )
+
+    $source = @'
+public static class Program {
+    public static int Main(string[] args) {
+        System.IO.File.WriteAllText(
+            "decoy-powershell-marker.txt",
+            "powershell decoy executed");
+        return 41;
+    }
+}
+'@
+    Add-Type -TypeDefinition $source -OutputType ConsoleApplication `
+        -OutputAssembly (Join-Path $Directory 'powershell.exe') -ErrorAction Stop
+}
+
+function Test-PowerShellSearchPathBinding {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Netsuke
+    )
+
+    $workspace = (Get-Location).Path
+    $decoyPath = Join-Path $workspace 'decoy-path'
+    New-Item -ItemType Directory -Path $decoyPath | Out-Null
+    New-PowerShellSearchDecoy -Directory $workspace
+    New-PowerShellSearchDecoy -Directory $decoyPath
+    $environmentState = @(
+        Get-EnvironmentVariableState -Name 'PATH'
+        Get-EnvironmentVariableState -Name 'NETSUKE_NINJA'
+    )
+    try {
+        $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
+        $env:PATH = $decoyPath + [IO.Path]::PathSeparator + $env:PATH
+        Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'scalar')
+        Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'scalar interpreter with spaces.txt') `
+            -Expected 'Desktop' -Message 'A working-directory powershell.exe decoy captured a short recipe'
+        Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'large-scalar')
+        Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large scalar.txt') -Expected 'scalar' `
+            -Message 'A PATH powershell.exe decoy captured a response-file recipe'
+        if (Test-Path -LiteralPath 'decoy-powershell-marker.txt') {
+            throw 'Windows resolved an unqualified powershell.exe through executable search.'
+        }
+    }
+    finally {
+        foreach ($state in $environmentState) {
+            Restore-EnvironmentVariableState -State $state
+        }
+        Remove-Item -Recurse -Force -LiteralPath $decoyPath -ErrorAction SilentlyContinue
+        Remove-Item -Force -LiteralPath (Join-Path $workspace 'powershell.exe') -ErrorAction SilentlyContinue
+        Remove-Item -Force -LiteralPath (Join-Path $workspace 'decoy-powershell-marker.txt') `
+            -ErrorAction SilentlyContinue
     }
 }

@@ -9,8 +9,14 @@
 //! That module is deliberately not linked here — it is private, and a public
 //! module's docs may not name it with an intra-doc link.
 
+mod power_shell_location;
+
 use crate::shell_word::ShellDialect;
 use camino::{Utf8Path, Utf8PathBuf};
+pub(crate) use power_shell_location::{
+    KnownFolderSystemDirectory, SystemDirectory, WindowsPowerShellLocationError,
+    locate_windows_power_shell,
+};
 use thiserror::Error;
 
 /// Identify the exact interpreter executable bound into a generated plan.

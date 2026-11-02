@@ -2,11 +2,12 @@
 
 use super::{
     ISOLATED_POWER_SHELL_CHILD_ARGUMENT_PREFIX, ISOLATED_POWER_SHELL_CHILD_EXECUTABLE,
-    MAX_POWER_SHELL_COMMAND_LINE, MAX_POWER_SHELL_RECIPE_BYTES, POWER_SHELL_COMMAND_PREFIX,
-    POWER_SHELL_RESPONSE_FILE_COMMAND, RecipeShell, RenderedRecipeCommand,
-    encode_power_shell_script, escape_posix_script, windows_argument,
+    InterpreterBinding, MAX_POWER_SHELL_COMMAND_LINE, MAX_POWER_SHELL_RECIPE_BYTES,
+    POWER_SHELL_ENCODED_ARGUMENTS, POWER_SHELL_RESPONSE_FILE_ARGUMENTS, RecipeShell,
+    RenderedRecipeCommand, encode_power_shell_script, escape_posix_script, windows_argument,
 };
 use crate::ninja_gen::escape::ShellText;
+use crate::ninja_gen::test_support::power_shell_interpreter;
 use crate::recipe_shell::InterpreterExecutable;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use camino::Utf8PathBuf;
@@ -36,12 +37,16 @@ fn posix_script_escaping_applies_one_layer_per_parser(#[case] input: &str, #[cas
 /// Verify that encoded PowerShell commands hide recipe dollars from Ninja.
 #[test]
 fn power_shell_command_hides_recipe_dollars_from_ninja() {
+    let executable = power_shell_interpreter();
     let rendered = RecipeShell::PowerShell
-        .command_value(&ShellText::new("$env:NETSUKE_SMOKE".into()))
+        .command_value_with_interpreter(
+            &ShellText::new("$env:NETSUKE_SMOKE".into()),
+            InterpreterBinding::Bound(&executable),
+        )
         .expect("PowerShell encoding should succeed")
         .command()
         .to_string();
-    assert!(rendered.starts_with("powershell.exe "));
+    assert!(rendered.starts_with(&windows_argument(executable.as_path().as_str())));
     assert!(!rendered.contains("NETSUKE_SMOKE"));
 }
 
@@ -80,7 +85,10 @@ fn bash_command_value_uses_the_preflighted_executable_path() -> anyhow::Result<(
     let executable = InterpreterExecutable::from_absolute_path(executable_path)?;
 
     let rendered = RecipeShell::Bash
-        .command_value_with_bash(&ShellText::new("echo ready".into()), Some(&executable))?
+        .command_value_with_interpreter(
+            &ShellText::new("echo ready".into()),
+            InterpreterBinding::Bound(&executable),
+        )?
         .command()
         .to_string();
 
@@ -223,19 +231,24 @@ fn isolated_power_shell_builder_is_unavailable_for_other_shells() {
 /// Verify that oversized recipes use a response file instead of a command-line payload.
 #[test]
 fn power_shell_commands_exceeding_the_windows_limit_use_a_response_file() {
+    let executable = power_shell_interpreter();
     let recipe = "x".repeat(12_500);
     let result = RecipeShell::PowerShell
-        .command_value(&ShellText::new(recipe.clone()))
+        .command_value_with_interpreter(
+            &ShellText::new(recipe.clone()),
+            InterpreterBinding::Bound(&executable),
+        )
         .expect("oversized recipes should use a response file");
     assert!(matches!(
         &result,
         RenderedRecipeCommand::ResponseFile { .. }
     ));
     assert!(!result.command().to_string().contains(&recipe));
-    assert_eq!(
-        result.command().to_string(),
-        POWER_SHELL_RESPONSE_FILE_COMMAND
+    let expected = format!(
+        "{}{POWER_SHELL_RESPONSE_FILE_ARGUMENTS}",
+        windows_argument(executable.as_path().as_str())
     );
+    assert_eq!(result.command().to_string(), expected);
     let content = result
         .response_file_content()
         .expect("oversized recipes should include a response-file script")
@@ -276,13 +289,21 @@ proptest! {
     ) {
         let ordinary = text.into_iter().collect::<String>();
         let recipe = format!("{ordinary} $env:NAME $value ${{name}}");
+        let executable = power_shell_interpreter();
         let rendered = RecipeShell::PowerShell
-            .command_value(&ShellText::new(recipe.clone()))
+            .command_value_with_interpreter(
+                &ShellText::new(recipe.clone()),
+                InterpreterBinding::Bound(&executable),
+            )
             .expect("bounded PowerShell recipe should encode")
             .command()
             .to_string();
+        let prefix = format!(
+            "{}{POWER_SHELL_ENCODED_ARGUMENTS}",
+            windows_argument(executable.as_path().as_str())
+        );
         let payload = rendered
-            .strip_prefix(POWER_SHELL_COMMAND_PREFIX)
+            .strip_prefix(&prefix)
             .expect("rendered command should carry an encoded payload");
         let decoded_bytes = STANDARD.decode(payload).expect("payload should be Base64");
         let (pairs, remainder) = decoded_bytes.as_chunks::<2>();

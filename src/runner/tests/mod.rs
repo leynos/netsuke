@@ -91,7 +91,7 @@ impl GraphGenerationFixture {
     fn graph_generation_context(&self) -> GraphGenerationContext<'_> {
         GraphGenerationContext {
             recipe_shell: RecipeShell::host_default(),
-            bash_executable: None,
+            interpreter_binding: None,
             clock: &self.clock,
         }
     }

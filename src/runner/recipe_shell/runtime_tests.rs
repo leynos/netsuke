@@ -164,10 +164,10 @@ fn bash_preflight_probes_the_selected_absolute_path() -> anyhow::Result<()> {
             restat: false,
         },
     );
-    let bundle = crate::ninja_gen::dyndep::generate_bundle_for_shell_with_bash(
+    let bundle = crate::ninja_gen::dyndep::generate_bundle_with_interpreter(
         &graph,
         RecipeShell::Bash,
-        Some(&selected),
+        &selected,
     )?;
     let ninja_path = selected.as_path().as_str().replace('$', "$$");
     anyhow::ensure!(

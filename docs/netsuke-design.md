@@ -2647,21 +2647,30 @@ are evidence for the later YAML contract review, not new coercion rules.
 
 `RecipeShell` is the backend boundary for completed legacy recipe text. The
 host default is POSIX shell text on Unix and Windows PowerShell on Windows.
-PowerShell recipes are encoded as UTF-16LE Base64 and emitted as
-`powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass
--EncodedCommand …`,
-so the shell that launched Netsuke does not select the recipe interpreter. On
-Windows, `NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility
-route. Before a build or Ninja-tool operation, the runner searches the injected
-`PATH` entries from left to right, resolves the selected `bash.exe` to an
-absolute path, and probes that exact executable with `--version`. The runner
-passes the same path to Ninja command rendering, preventing process launch from
-selecting a different application- or system-directory executable. A failed
-probe reports the selected path, exit status, and bounded, sanitized child
-output; the path and output remain outside telemetry labels. `generate` and
-target discovery do not require an installed Bash runtime. A saved plan from
-`generate` retains the literal `bash.exe` command name and resolves it from the
-execution-time `PATH`; a build plan binds the path selected for that operation.
+PowerShell recipes are encoded as UTF-16LE Base64 and emitted as a quoted
+absolute interpreter followed by
+`-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand …`,
+so neither the shell that launched Netsuke nor Windows executable search
+selects the recipe interpreter. On Windows, the parent is always
+`<System>\WindowsPowerShell\v1.0\powershell.exe`, built from the Known Folder
+API's system directory by `src/recipe_shell/power_shell_location.rs`. The
+lookup reads no environment variable, does not consult `PATH` or the current
+directory, does not select `pwsh.exe`, and never launches a candidate as a
+probe; the returned `InterpreterExecutable` is the only binding the renderer
+accepts. It authenticates location, not content: no Authenticode check runs,
+and the resolution-to-launch race remains documented in ADR-0071. On Windows,
+`NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility route.
+Before a build or Ninja-tool operation, the runner searches the injected `PATH`
+entries from left to right, resolves the selected `bash.exe` to an absolute
+path, and probes that exact executable with `--version`. The runner passes the
+same path to Ninja command rendering, preventing process launch from selecting
+a different application- or system-directory executable. A failed probe reports
+the selected path, exit status, and bounded, sanitized child output; the path
+and output remain outside telemetry labels. `generate` resolves the same
+binding and writes the absolute Bash path; when no runtime resolves, it fails
+with a missing-runtime diagnostic and writes no plan. Target discovery is
+query-only and receives an inspection-only mode that renders logical names and
+is never executed. A build plan binds the path selected for that operation.
 
 The PowerShell route gives each scalar command and script a fresh process. A
 shared command list uses one process and checks `$LASTEXITCODE` immediately
@@ -2681,14 +2690,18 @@ modes. Target discovery and generation do not execute recipes, so they do not
 require the optional Bash runtime.
 
 PowerShell recipes that fit within the 32,766-character Windows command-line
-limit use `-EncodedCommand`. Each isolated child command line is checked
-against that same limit, with an error naming the one-based entry and measured
-length. The 1 MiB bound applies to the complete parent script, including its
-encoded child payloads. Larger parent recipes use Ninja's per-edge `rspfile` and
-`rspfile_content` bindings instead: Ninja writes the unique `$out`-derived
-`.ps1` response file immediately before the action. It contains an ASCII
-PowerShell bootstrap and the Base64 UTF-16LE recipe payload. The command
-invokes it with `powershell.exe -File "$rspfile"`; PowerShell decodes the
+limit use `-EncodedCommand`. The check counts the complete unescaped command in
+UTF-16 code units, bound executable and arguments before the Base64 payload,
+and Ninja escaping is applied only after the length decision. Each isolated
+child command line is checked against that same limit, with an error naming the
+one-based entry and measured length. The 1 MiB bound applies to the complete
+parent script, including its encoded child payloads. Larger parent recipes use
+Ninja's per-edge `rspfile` and `rspfile_content` bindings instead: Ninja writes
+the unique `$out`-derived `.ps1` response file immediately before the action.
+It contains an ASCII PowerShell bootstrap and the Base64 UTF-16LE recipe
+payload. The command invokes it with the same bound absolute executable
+followed by `-File "$rspfile"`; a response-file parent that would itself exceed
+32,766 UTF-16 code units is rejected during generation. PowerShell decodes the
 payload, and the bootstrap removes its own `$PSCommandPath` in a `finally`
 block after the recipe succeeds or fails. The per-edge name isolates concurrent
 actions in the build working directory; generation and target-discovery queries
@@ -2715,10 +2728,11 @@ structures to the Ninja file syntax.
 
    When an action's `recipe` is a script, the generated rule wraps the script
    in the configured platform-specific interpreter. Unix uses `/bin/sh -e -c`,
-   while Windows defaults to `powershell -Command`; an explicit manifest
-   `interpreter` overrides the platform default. On the POSIX and Bash routes
-   the script reaches that interpreter through the layered transport described
-   under *POSIX script transport encoding* below.
+   while Windows defaults to the trusted absolute Windows PowerShell binding
+   described in §2.3 with `-EncodedCommand`; an explicit manifest `interpreter`
+   overrides the platform default. On the POSIX and Bash routes the script
+   reaches that interpreter through the layered transport described under
+   *POSIX script transport encoding* below.
 
    Command and script text must be converted from IR text to backend text at
    this stage. After Netsuke placeholders have been resolved, remaining literal

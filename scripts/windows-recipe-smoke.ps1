@@ -263,6 +263,7 @@ function Invoke-WindowsRecipeScenarios {
 
     Test-TargetDiscovery -Netsuke $Netsuke
     Test-InterpreterSelection -Netsuke $Netsuke
+    Test-PowerShellSearchPathBinding -Netsuke $Netsuke
     Test-DollarSyntax -Netsuke $Netsuke
     Test-OrderedCommandList -Netsuke $Netsuke
     Test-IsolatedPowerShellLists -Netsuke $Netsuke

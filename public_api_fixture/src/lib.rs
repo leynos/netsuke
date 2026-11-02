@@ -10,6 +10,7 @@ pub mod cli_configuration;
 pub mod command_env;
 pub mod command_list;
 pub mod config_cached_discovery;
+pub mod interpreter_binding;
 pub mod ir_gen_error;
 pub mod legacy_recipe_telemetry;
 #[cfg(feature = "lint")]

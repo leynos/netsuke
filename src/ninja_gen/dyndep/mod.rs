@@ -69,8 +69,9 @@ use render::render_edges;
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
 use crate::ninja_gen::{
-    NinjaGenError, RecipeShell, graph_requires_dyndep, join, ordered_default_targets,
-    reject_unsupported_path_characters, write_action_rules,
+    InterpreterBinding, NinjaGenError, RecipeShell, graph_requires_dyndep, join,
+    ordered_default_targets, reject_unsupported_path_characters, resolve_default_interpreter,
+    write_action_rules,
 };
 use crate::recipe_shell::InterpreterExecutable;
 use std::fmt::Write as _;
@@ -107,21 +108,91 @@ pub(crate) fn generate_bundle_for_shell(
     graph: &BuildGraph,
     shell: RecipeShell,
 ) -> Result<GeneratedNinja, NinjaGenError> {
-    generate_bundle_for_shell_with_bash(graph, shell, None)
+    let interpreter = resolve_default_interpreter(shell);
+    let binding = interpreter
+        .as_ref()
+        .map_or(InterpreterBinding::Unbound, InterpreterBinding::Bound);
+    generate_bundle_inner(graph, shell, binding)
 }
 
-/// Generate one bundle with an optional runner-selected Bash executable.
+/// Generate a complete Ninja bundle bound to one trusted interpreter.
+///
+/// The binding is used verbatim for `PowerShell` and `Bash` recipes. A
+/// [`RecipeShell::Posix`] recipe ignores it because Ninja launches the host
+/// shell itself.
+///
+/// # Examples
+///
+/// ```rust,no_run
+/// use camino::Utf8PathBuf;
+/// use netsuke::ast::{CommandIsolation, Recipe};
+/// use netsuke::ir::{Action, BuildEdge, BuildGraph};
+/// use netsuke::ninja_gen::{
+///     InterpreterExecutable, RecipeShell, generate_bundle_with_interpreter,
+/// };
+///
+/// let mut graph = BuildGraph::default();
+/// graph.actions.insert("a".into(), Action {
+///     recipe: Recipe::Command {
+///         command: "true".into(),
+///         isolation: CommandIsolation::Shared,
+///     },
+///     description: None,
+///     depfile: None,
+///     deps_format: None,
+///     pool: None,
+///     restat: false,
+/// });
+/// graph.insert_edge(BuildEdge {
+///     action_id: "a".into(),
+///     inputs: Vec::new(),
+///     implicit_deps: Vec::new(),
+///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
+///     explicit_outputs: vec![Utf8PathBuf::from("out")],
+///     implicit_outputs: Vec::new(),
+///     order_only_deps: Vec::new(),
+///     progress_label: None,
+///     phony: false,
+///     always: false,
+/// }).expect("test graph output aliases must be unique");
+/// let executable_path = if cfg!(windows) {
+///     "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+/// } else {
+///     "/bin/sh"
+/// };
+/// let executable = InterpreterExecutable::from_absolute_path(executable_path.into())
+///     .expect("fixture path should be absolute");
+/// let bundle = generate_bundle_with_interpreter(&graph, RecipeShell::Posix, &executable)
+///     .expect("POSIX rendering should ignore the binding");
+/// assert!(bundle.build_file().contains("command = true"));
+/// ```
 ///
 /// # Errors
 ///
 /// Returns [`NinjaGenError`] when the graph cannot be represented safely or
 /// the generated bundle cannot be written.
-pub(crate) fn generate_bundle_for_shell_with_bash(
+pub fn generate_bundle_with_interpreter(
     graph: &BuildGraph,
     shell: RecipeShell,
-    bash_executable: Option<&InterpreterExecutable>,
+    interpreter: &InterpreterExecutable,
 ) -> Result<GeneratedNinja, NinjaGenError> {
-    generate_bundle_inner(graph, shell, bash_executable)
+    generate_bundle_inner(graph, shell, InterpreterBinding::Bound(interpreter))
+}
+
+/// Generate one bundle with an already-resolved interpreter binding.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError`] when the graph cannot be represented safely, a
+/// recipe needs an unresolved interpreter binding, or the generated bundle
+/// cannot be written.
+pub(crate) fn generate_bundle_for_shell_with_interpreter(
+    graph: &BuildGraph,
+    shell: RecipeShell,
+    interpreter: Option<&InterpreterExecutable>,
+) -> Result<GeneratedNinja, NinjaGenError> {
+    let binding = interpreter.map_or(InterpreterBinding::Unbound, InterpreterBinding::Bound);
+    generate_bundle_inner(graph, shell, binding)
 }
 
 /// Construct the [`GeneratedNinja`] bundle for `graph`.
@@ -143,7 +214,7 @@ pub(crate) fn generate_bundle_for_shell_with_bash(
 fn generate_bundle_inner(
     graph: &BuildGraph,
     shell: RecipeShell,
-    bash_executable: Option<&InterpreterExecutable>,
+    binding: InterpreterBinding<'_>,
 ) -> Result<GeneratedNinja, NinjaGenError> {
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
@@ -154,7 +225,7 @@ fn generate_bundle_inner(
         writeln!(out, "ninja_required_version = 1.10\n")?;
     }
 
-    write_action_rules(graph, &mut out, shell, bash_executable)?;
+    write_action_rules(graph, &mut out, shell, binding)?;
 
     let localizer = localization::localizer();
     let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;

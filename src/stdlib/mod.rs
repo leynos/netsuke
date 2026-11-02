@@ -13,7 +13,7 @@ mod command;
 mod config;
 mod io_helpers;
 mod network;
-mod path;
+pub(crate) mod path;
 mod recipe_text;
 mod register;
 mod restricted_helpers;

@@ -1,6 +1,7 @@
 //! Resolves and validates the Windows legacy-recipe interpreter selection.
 
 mod bash_runtime;
+mod power_shell_runtime;
 pub(in crate::runner) mod telemetry;
 pub(super) use bash_runtime::resolve_bash_runtime;
 
@@ -8,7 +9,9 @@ use anyhow::{Result, bail};
 use mockable::Env;
 use std::ffi::OsString;
 
-use crate::recipe_shell::RecipeShell;
+use crate::recipe_shell::{InterpreterExecutable, RecipeShell};
+
+use power_shell_runtime::resolve_power_shell_runtime;
 
 /// Names the optional Windows legacy-recipe interpreter override.
 pub(super) const WINDOWS_SHELL_ENV: &str = "NETSUKE_WINDOWS_SHELL";
@@ -26,6 +29,47 @@ pub(super) fn resolve_recipe_shell_with(env: &impl Env) -> Result<RecipeShell> {
         return Ok(RecipeShell::Posix);
     }
     resolve_windows_recipe_shell(env.os_string(WINDOWS_SHELL_ENV))
+}
+
+/// Resolve the executable bound to the selected legacy-recipe interpreter.
+///
+/// Windows PowerShell is bound through the trusted system-directory locator so
+/// that generated recipes never resolve an unqualified `powershell.exe`. A
+/// Windows Bash selection keeps its existing explicit `PATH` policy. Posix
+/// recipes and non-Windows hosts bind nothing because Ninja launches their
+/// interpreter itself.
+///
+/// # Errors
+///
+/// Returns an error when the selected interpreter cannot be located or
+/// validated.
+pub(in crate::runner) fn resolve_interpreter_binding(
+    shell: RecipeShell,
+) -> Result<Option<InterpreterExecutable>> {
+    resolve_interpreter_binding_with(shell, cfg!(windows), resolve_power_shell_runtime, || {
+        resolve_bash_runtime(shell)
+    })
+}
+
+/// Dispatch interpreter binding with the platform and lookups injected.
+///
+/// Each branch consults at most one lookup so a PowerShell build can never
+/// probe Bash, and a Bash build can never inspect the Windows system
+/// directory.
+fn resolve_interpreter_binding_with(
+    shell: RecipeShell,
+    is_windows: bool,
+    resolve_power_shell: impl FnOnce() -> Result<InterpreterExecutable>,
+    resolve_bash: impl FnOnce() -> Result<Option<InterpreterExecutable>>,
+) -> Result<Option<InterpreterExecutable>> {
+    if !is_windows {
+        return Ok(None);
+    }
+    match shell {
+        RecipeShell::PowerShell => resolve_power_shell().map(Some),
+        RecipeShell::Bash => resolve_bash(),
+        RecipeShell::Posix => Ok(None),
+    }
 }
 
 /// Resolve the configured Windows recipe shell from one raw environment value.
@@ -108,3 +152,7 @@ mod tests {
         assert!(error.to_string().contains("powershell` or `bash"));
     }
 }
+
+#[cfg(test)]
+#[path = "interpreter_binding_tests.rs"]
+mod interpreter_binding_tests;

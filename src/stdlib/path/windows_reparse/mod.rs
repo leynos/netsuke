@@ -76,7 +76,7 @@ pub(super) fn apply_open_flags(options: &mut OpenOptions, follow_symlinks: bool)
 /// name-surrogate test — the shape `FileType::is_symlink` uses — misses every
 /// tag that is not a name surrogate, such as a deduplication or cloud
 /// placeholder.
-pub(super) const fn is_prohibited_reparse_point(file_attributes: u32) -> bool {
+pub(crate) const fn is_prohibited_reparse_point(file_attributes: u32) -> bool {
     file_attributes & FILE_ATTRIBUTE_REPARSE_POINT != 0
 }
 

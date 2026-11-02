@@ -156,6 +156,11 @@ ortho_config = { version = "0.10.0", features = ["serde_json"] }
 sys-locale = "0.3.2"
 unicode-width = "0.2.1"
 
+# Windows legacy recipes bind Windows PowerShell through the Known Folder API
+# rather than Windows' executable search order; see ADR-0071.
+[target.'cfg(windows)'.dependencies]
+known-folders = "1.4.2"
+
 [build-dependencies]
 cap-std = "3.4.4"
 camino = { version = "1.2.0", features = ["serde1"] }

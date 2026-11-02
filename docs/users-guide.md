@@ -407,6 +407,17 @@ started from PowerShell, `cmd.exe`, an IDE, or Git Bash therefore uses the same
 recipe interpreter. This is a Windows PowerShell contract, not a PowerShell Core
 (`pwsh`) contract.
 
+Each generated Windows PowerShell command names the interpreter by an absolute
+path beneath the Windows system directory,
+`<System>\WindowsPowerShell\v1.0\powershell.exe`, resolved through the Known
+Folder API. The path is quoted with Windows argument rules, so a system
+directory containing spaces still reaches `CreateProcess` as one executable
+token. Netsuke never reads `PATH`, the current directory, `SystemRoot`,
+`WINDIR`, or `PSHOME` to find the parent interpreter, never substitutes
+`pwsh.exe`, and never launches the interpreter as a probe. Binding the location
+does not authenticate the file: Netsuke does not verify an Authenticode
+signature, and the usual resolution-to-launch race remains.
+
 Scalar commands and scripts each receive a fresh PowerShell process. A `shared`
 command list receives one PowerShell process: entries run in declaration order,
 and each generated entry is followed immediately by a `$LASTEXITCODE` check;
@@ -445,11 +456,12 @@ command-line limit. Larger recipes are rejected before Netsuke allocates their
 UTF-16LE and Base64 payload. Each Ninja edge derives a unique response-file
 name from `$out`; Ninja creates a unique `.ps1` file in the edge's working
 directory containing an ASCII PowerShell bootstrap and the Base64 UTF-16LE
-recipe payload. The command invokes it with `powershell.exe -File "$rspfile"`.
-The bootstrap removes its own `$PSCommandPath` in a `finally` block, including
-when the recipe succeeds or fails. Query-only generation emits these bindings
-but does not create files. Response-file setup failures are reported by Ninja
-as execution errors.
+recipe payload. The command invokes the same bound absolute interpreter with
+`-File "$rspfile"`, so the large-recipe transport does not reintroduce a search
+for `powershell.exe`. The bootstrap removes its own `$PSCommandPath` in a
+`finally` block, including when the recipe succeeds or fails. Query-only
+generation emits these bindings but does not create files. Response-file setup
+failures are reported by Ninja as execution errors.
 
 An isolated PowerShell list also encodes each entry for its child process.
 Ninja generation rejects child command lines that already exceed 32,766
@@ -496,13 +508,16 @@ Ninja-tool execution, Netsuke checks this selection. If `bash.exe --version`
 cannot run, it stops with the selected path, probe status, and bounded output.
 Netsuke searches `PATH` from left to right and uses that same absolute
 executable for the probe and generated build commands. It does not fall back to
-an executable outside `PATH` when the selected runtime fails. `generate` does
-not probe Bash: its output retains the `bash.exe` command name, so Ninja
-resolves Bash from `PATH` when that saved plan is later run. `help targets`
-does not require Bash. In CI, install Git explicitly, prepend its `bin`
-directory to `PATH`, set `NETSUKE_WINDOWS_SHELL=bash`, and launch Netsuke
-normally from a `pwsh` step; do not rely on a workflow-wide `shell: bash`
-setting.
+an executable outside `PATH` when the selected runtime fails. This is an
+explicit trust decision: the first `bash.exe` on `PATH` is selected even if a
+working directory or an earlier `PATH` entry places an untrusted file there, so
+control `PATH` for the whole `netsuke` invocation. `generate` performs the same
+lookup and writes the absolute path into the saved plan; without a resolvable
+`bash.exe` it fails with a missing-runtime diagnostic and writes no unbound
+plan. `help targets` does not require Bash. In CI, install Git explicitly,
+prepend its `bin` directory to `PATH`, set `NETSUKE_WINDOWS_SHELL=bash`, and
+launch Netsuke normally from a `pwsh` step; do not rely on a workflow-wide
+`shell: bash` setting.
 
 For the Unix default and the explicit Bash route, each list entry is evaluated
 inside its own brace group and the groups are joined with `&&`. The entry is

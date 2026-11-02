@@ -1,9 +1,9 @@
 diff --git a/src/ninja_gen/dyndep/mod.rs b/src/ninja_gen/dyndep/mod.rs
 --- a/src/ninja_gen/dyndep/mod.rs
 +++ b/src/ninja_gen/dyndep/mod.rs
-@@ -156,14 +156,14 @@
+@@ -227,14 +227,14 @@
  
-     write_action_rules(graph, &mut out, shell, bash_executable)?;
+     write_action_rules(graph, &mut out, shell, binding)?;
  
 -    let localizer = localization::localizer();
 -    let dyndep_files = render_edges(graph, &mut out, localizer.as_ref())?;
@@ -22,10 +22,10 @@ diff --git a/src/ninja_gen/dyndep/mod.rs b/src/ninja_gen/dyndep/mod.rs
 diff --git a/src/ninja_gen/mod.rs b/src/ninja_gen/mod.rs
 --- a/src/ninja_gen/mod.rs
 +++ b/src/ninja_gen/mod.rs
-@@ -178,6 +178,12 @@
+@@ -235,6 +235,12 @@
          });
      }
-     write_action_rules(graph, out, shell, None)?;
+     write_action_rules(graph, out, shell, binding)?;
 +
 +    let defaults = ordered_default_targets(graph);
 +    if !defaults.is_empty() {
@@ -35,7 +35,7 @@ diff --git a/src/ninja_gen/mod.rs b/src/ninja_gen/mod.rs
      for edge in ordered_edges(graph.edges()) {
          let metadata = edge_metadata::for_edge(graph, edge, localizer.as_ref())?;
          write!(
-@@ -193,11 +199,6 @@
+@@ -250,11 +256,6 @@
          )?;
      }
  

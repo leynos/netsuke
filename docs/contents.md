@@ -331,6 +331,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md):
   Deny-by-default stdlib surface for `netsuke test`, typed refusal stubs, and
   template overlays that replace withheld functions by name.
+- [ADR-0071](adrs/adr-0071-bind-windows-recipe-interpreters-to-trusted-absolute-paths.md):
+  Binding Windows recipe interpreters to a trusted absolute path, so Windows
+  executable search cannot select a workspace-controlled decoy.
 
 ## Proposals
 
