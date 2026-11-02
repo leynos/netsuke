@@ -280,8 +280,10 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       mutation metrics. The two local scoped `make kani-ir` attempts remain
       inconclusive after their eight-minute caps. The CodeRabbit walkthrough
       [#6551587870](https://github.com/leynos/netsuke/pull/1063#issuecomment-6551587870)
-      still identifies `55cebb79` as its last reviewed head and `1e9a9927` as
-      unreviewed. Request a formal review after publishing this plan update.
+      still identifies `55cebb79` as its last reviewed head. The latest
+      published candidates remain unreviewed because CodeRabbit is paused.
+      Request a formal review on the latest published head after this plan
+      correction.
 - [ ] EP-M3: Complete trusted-main warm-cache acceptance and PR
       assessment/delivery. The candidate-bound assessment confirms the
       functional requirements; hosted warm-cache evidence remains open because
@@ -300,12 +302,14 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
 - [ ] Reconcile the current-head diff-scoped Docstring Coverage row. The last
       completed result reports 56.25% across 16 functions in 6 files, with 3
       unsupported declarations, but covers head `55cebb79`. CodeRabbit's
-      response in comment 6569361800 confirms that the analyser exposes no
-      declaration-level export. Its source inventory lists only `#[test]` and
+      response in comment 6569361800 records an access limitation: the
+      available report and check output expose no declaration-level diagnostics,
+      and that conversation could not access internal analyser records. Its
+      source inventory lists only `#[test]` and
       `#[rstest]` functions without Rustdoc comments and finds documentation
       on touched helpers and Python declarations. The current functional
-      assessment confirms that the displayed row remains stale; the CodeRabbit
-      check on `1e9a9927` was skipped because review is paused. Do not add Rust
+      assessment confirms that the displayed row remains stale; checks on the
+      recent candidates were skipped because review is paused. Do not add Rust
       test comments or substitute aggregate Rustdoc coverage. Reconcile the row
       after a formal review of the published plan update, requesting declaration
       diagnostics if a warning remains.
@@ -454,8 +458,20 @@ found no remaining in-scope implementation omission or confirmed correctness
 defect. Hosted warm-cache acceptance remains contingent on a trusted `main`
 cache writer. The subsequent formal PR review independently found that Make's
 PATH recuration could select the wrong Kani binary and that the guide
-overstated CLI delegation. Both source corrections are now in the worktree, and
-the focused regression passes for default and custom Cargo homes.
+overstated CLI delegation. The first PATH correction prioritized the active job
+Cargo home, but a later review found that `BUILD_TOOLS_PREFIX/bin` could still
+shadow `cargo-kani`. Commit `1e9a992734550d51ef4cc21aee78da590459c6db` now
+invokes the active Cargo home's executable directly while preserving
+build-tools-first PATH precedence for `mold`; the regression covers conflicting
+binaries, default and custom Cargo homes, and paths with spaces. CodeRabbit
+confirmed the repair in reply
+[#4440506630](https://github.com/leynos/netsuke/pull/1063#discussion_r4440506630).
+The guide distinguishes the pinned CLI's installation and version-checking
+roles from proof execution by Make targets; CodeRabbit confirmed that
+correction in reply
+[#4437685594](https://github.com/leynos/netsuke/pull/1063#discussion_r4437685594).
+Both corrections are published. Current-head hosted Kani smoke verified
+version 0.67.0 and all 15 harnesses.
 
 ## Context and orientation
 
@@ -956,3 +972,15 @@ the checked changes. Keep hosted warm-cache acceptance pending until a trusted
 Docstring Coverage row still belongs to head `55cebb79`; request a current
 result through formal review after this plan update. Full ExecPlan acceptance
 remains open.
+
+Revision 35 (2026-11-02): Record the focused Progress-assessment response
+[#6574621268](https://github.com/leynos/netsuke/pull/1063#issuecomment-6574621268)
+on head `4f1861e98d2b15d53f2026ccfeef4cac3df32142`. CodeRabbit accepts
+Revision 34's reconciliation, confirms the Kani PATH repair and the two
+outstanding acceptance items, and retains `Status: IN PROGRESS`. Correct its
+two wording findings: describe analyser output as unavailable at declaration
+level without claiming no authorized backend exists, and update Outcomes with
+the published, separately confirmed initial PATH and final active-home
+executable repairs. Keep hosted warm-cache and current-head diff-scoped
+Docstring Coverage open; the walkthrough still reports the stale `55cebb79`
+review and current formal review remains pending.
