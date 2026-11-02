@@ -30,34 +30,32 @@ CRATE_NAME = "netsuke-build"
 VERSION = "1.2.3"
 
 
-def _probe_args(status_path: pathlib.Path, body_path: pathlib.Path) -> list[str]:
-    """Build one reusable registry probe invocation."""
-    return [
-        "probe",
+def _registry_args(operation: str, paths: dict[str, pathlib.Path]) -> list[str]:
+    """Build registry identity arguments followed by ordered path options."""
+    arguments = [
+        operation,
         "--crate",
         CRATE_NAME,
         "--version",
         VERSION,
-        "--status-file",
-        str(status_path),
-        "--body-file",
-        str(body_path),
     ]
+    for option, path in paths.items():
+        arguments.extend((option, str(path)))
+    return arguments
+
+
+def _probe_args(status_path: pathlib.Path, body_path: pathlib.Path) -> list[str]:
+    """Build one reusable registry probe invocation."""
+    return _registry_args(
+        "probe", {"--status-file": status_path, "--body-file": body_path}
+    )
 
 
 def _download_args(archive_path: pathlib.Path, status_path: pathlib.Path) -> list[str]:
     """Build one reusable archive-download invocation."""
-    return [
-        "download",
-        "--crate",
-        CRATE_NAME,
-        "--version",
-        VERSION,
-        "--archive",
-        str(archive_path),
-        "--status-file",
-        str(status_path),
-    ]
+    return _registry_args(
+        "download", {"--archive": archive_path, "--status-file": status_path}
+    )
 
 
 def _upload_args(metadata_path: pathlib.Path, archive_path: pathlib.Path) -> list[str]:

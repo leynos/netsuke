@@ -69,6 +69,15 @@ class PackagedManifest:
     readme_file: str | None
 
 
+def _metadata_table(
+    value: object, issue: MetadataIssue, context: tuple[object, ...] = ()
+) -> dict[str, object]:
+    """Require a manifest table with its boundary-specific diagnostic."""
+    if not isinstance(value, dict):
+        raise MetadataError(issue, context)
+    return value
+
+
 def _string_list(value: object, field: str) -> list[str]:
     """Return a string array from a manifest field, or an empty array."""
     if value is None:
@@ -76,6 +85,31 @@ def _string_list(value: object, field: str) -> list[str]:
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
         raise MetadataError(MetadataIssue.STRING_ARRAY, (field,))
     return value
+
+
+def _select_readme_member(
+    package: tarfile.TarFile, root: str, candidates: list[str]
+) -> str | None:
+    """Select the first regular README member after validating each path."""
+    for candidate in candidates:
+        relative = pathlib.PurePosixPath(candidate)
+        if not _is_safe_readme_path(candidate, relative):
+            raise MetadataError(MetadataIssue.README_PATH, (candidate,))
+        member_name = f"{root}/{relative.as_posix()}"
+        member = next(
+            (item for item in package.getmembers() if item.name == member_name), None
+        )
+        if member is not None and member.isfile():
+            return member_name
+    return None
+
+
+def _readme_contents(package: tarfile.TarFile, selected: str) -> str:
+    """Read the selected README member as UTF-8 without extracting it."""
+    member_file = package.extractfile(selected)
+    if member_file is None:
+        raise MetadataError(MetadataIssue.README_READ, (selected,))
+    return member_file.read().decode("utf-8")
 
 
 def _readme_file(
@@ -86,26 +120,12 @@ def _readme_file(
     if configured is False:
         return None, None
     candidates = [configured] if isinstance(configured, str) else list(_AUTO_READMES)
-    selected: str | None = None
-    for candidate in candidates:
-        relative = pathlib.PurePosixPath(candidate)
-        if not _is_safe_readme_path(candidate, relative):
-            raise MetadataError(MetadataIssue.README_PATH, (candidate,))
-        member_name = f"{root}/{relative.as_posix()}"
-        member = next(
-            (item for item in package.getmembers() if item.name == member_name), None
-        )
-        if member is not None and member.isfile():
-            selected = member_name
-            break
+    selected = _select_readme_member(package, root, candidates)
     if selected is None:
         if isinstance(configured, str):
             raise MetadataError(MetadataIssue.README_ABSENT, (configured,))
         return None, None
-    member_file = package.extractfile(selected)
-    if member_file is None:
-        raise MetadataError(MetadataIssue.README_READ, (selected,))
-    return member_file.read().decode("utf-8"), selected.removeprefix(f"{root}/")
+    return _readme_contents(package, selected), selected.removeprefix(f"{root}/")
 
 
 def _is_safe_readme_path(candidate: str, path: pathlib.PurePosixPath) -> bool:
@@ -113,25 +133,36 @@ def _is_safe_readme_path(candidate: str, path: pathlib.PurePosixPath) -> bool:
     return not path.is_absolute() and ".." not in path.parts and "\\" not in candidate
 
 
-def _dependency(
-    name: str, specification: object, kind: str, target: str | None
-) -> dict[str, object]:
-    """Normalize one Cargo dependency into registry upload fields."""
+def _dependency_specification(name: str, specification: object) -> dict[str, object]:
+    """Normalize a dependency's string or table specification to a mapping."""
     match specification:
         case str() as version:
-            fields: dict[str, object] = {"version": version}
+            return {"version": version}
         case dict() as fields:
-            pass
+            return fields
         case _:
             raise MetadataError(MetadataIssue.DEPENDENCY_SPEC, (name,))
-    version_req = fields.get("version")
-    if not isinstance(version_req, str):
-        raise MetadataError(MetadataIssue.DEPENDENCY_VERSION, (name,))
-    features = _string_list(fields.get("features"), f"dependency {name}.features")
+
+
+def _dependency_flags(name: str, fields: dict[str, object]) -> tuple[bool, bool]:
+    """Require optional and default-feature flags to retain Cargo's booleans."""
     optional = fields.get("optional", False)
     default_features = fields.get("default-features", True)
     if not isinstance(optional, bool) or not isinstance(default_features, bool):
         raise MetadataError(MetadataIssue.DEPENDENCY_FLAGS, (name,))
+    return optional, default_features
+
+
+def _dependency(
+    name: str, specification: object, kind: str, target: str | None
+) -> dict[str, object]:
+    """Normalize one Cargo dependency into registry upload fields."""
+    fields = _dependency_specification(name, specification)
+    version_req = fields.get("version")
+    if not isinstance(version_req, str):
+        raise MetadataError(MetadataIssue.DEPENDENCY_VERSION, (name,))
+    features = _string_list(fields.get("features"), f"dependency {name}.features")
+    optional, default_features = _dependency_flags(name, fields)
     package_name = fields.get("package", name)
     if not isinstance(package_name, str):
         raise MetadataError(MetadataIssue.DEPENDENCY_RENAME, (name,))
@@ -151,25 +182,37 @@ def _dependency(
     }
 
 
-def _dependency_records(manifest: dict[str, object]) -> list[dict[str, object]]:
-    """Flatten normal, development, build and target-specific dependencies."""
+def _dependency_tables(
+    tables: dict[str, object], target: str | None, issue: MetadataIssue
+) -> list[tuple[str, dict[str, object], str | None]]:
+    """Collect the three dependency kinds for one manifest or target table."""
     sources: list[tuple[str, dict[str, object], str | None]] = []
     for table_name, kind in _DEPENDENCY_KINDS:
-        table = manifest.get(table_name, {})
-        if not isinstance(table, dict):
-            raise MetadataError(MetadataIssue.MANIFEST_TABLE, (table_name,))
-        sources.append((kind, table, None))
-    targets = manifest.get("target", {})
-    if not isinstance(targets, dict):
-        raise MetadataError(MetadataIssue.TARGET_TABLE)
+        table = _metadata_table(tables.get(table_name, {}), issue, (table_name,))
+        sources.append((kind, table, target))
+    return sources
+
+
+def _target_dependency_tables(
+    manifest: dict[str, object],
+) -> list[tuple[str, dict[str, object], str | None]]:
+    """Collect validated dependency tables for each target in insertion order."""
+    targets = _metadata_table(manifest.get("target", {}), MetadataIssue.TARGET_TABLE)
+    sources: list[tuple[str, dict[str, object], str | None]] = []
     for target, raw_tables in targets.items():
-        if not isinstance(target, str) or not isinstance(raw_tables, dict):
+        if not isinstance(target, str):
             raise MetadataError(MetadataIssue.TARGET_SHAPE)
-        for table_name, kind in _DEPENDENCY_KINDS:
-            table = raw_tables.get(table_name, {})
-            if not isinstance(table, dict):
-                raise MetadataError(MetadataIssue.TARGET_DEPENDENCIES, (table_name,))
-            sources.append((kind, table, target))
+        tables = _metadata_table(raw_tables, MetadataIssue.TARGET_SHAPE)
+        sources.extend(
+            _dependency_tables(tables, target, MetadataIssue.TARGET_DEPENDENCIES)
+        )
+    return sources
+
+
+def _dependency_records(manifest: dict[str, object]) -> list[dict[str, object]]:
+    """Flatten normal, development, build and target-specific dependencies."""
+    sources = _dependency_tables(manifest, None, MetadataIssue.MANIFEST_TABLE)
+    sources.extend(_target_dependency_tables(manifest))
     return [
         _dependency(name, specification, kind, target)
         for kind, table, target in sources
@@ -177,26 +220,36 @@ def _dependency_records(manifest: dict[str, object]) -> list[dict[str, object]]:
     ]
 
 
+def _manifest_member(archive: tarfile.TarFile) -> tarfile.TarInfo:
+    """Require the retained archive to contain one regular Cargo manifest."""
+    manifests = [
+        member for member in archive.getmembers() if member.name.endswith("/Cargo.toml")
+    ]
+    if len(manifests) != 1 or not manifests[0].isfile():
+        raise MetadataError(MetadataIssue.MANIFEST_COUNT)
+    return manifests[0]
+
+
+def _manifest_tables(
+    archive: tarfile.TarFile, member: tarfile.TarInfo
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Parse the packaged manifest and require its package table."""
+    manifest_file = archive.extractfile(member)
+    if manifest_file is None:
+        raise MetadataError(MetadataIssue.MANIFEST_READ)
+    manifest = tomllib.loads(manifest_file.read().decode("utf-8"))
+    package = _metadata_table(manifest.get("package"), MetadataIssue.PACKAGE_TABLE)
+    return manifest, package
+
+
 def _read_packaged_manifest(archive_path: pathlib.Path) -> PackagedManifest:
     """Read the sole packaged manifest and README without extracting files."""
     try:
         archive_bytes = archive_path.read_bytes()
         with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as archive:
-            manifests = [
-                member
-                for member in archive.getmembers()
-                if member.name.endswith("/Cargo.toml")
-            ]
-            if len(manifests) != 1 or not manifests[0].isfile():
-                raise MetadataError(MetadataIssue.MANIFEST_COUNT)
-            manifest_file = archive.extractfile(manifests[0])
-            if manifest_file is None:
-                raise MetadataError(MetadataIssue.MANIFEST_READ)
-            manifest = tomllib.loads(manifest_file.read().decode("utf-8"))
-            package = manifest.get("package")
-            if not isinstance(package, dict):
-                raise MetadataError(MetadataIssue.PACKAGE_TABLE)
-            root = manifests[0].name.removesuffix("/Cargo.toml")
+            member = _manifest_member(archive)
+            manifest, package = _manifest_tables(archive, member)
+            root = member.name.removesuffix("/Cargo.toml")
             readme, readme_file = _readme_file(archive, root, package)
     except (OSError, UnicodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
         raise MetadataError(MetadataIssue.ARCHIVE_READ, (error,)) from error
@@ -231,8 +284,8 @@ def package_metadata(archive_path: pathlib.Path) -> dict[str, object]:
         raise MetadataError(MetadataIssue.PACKAGE_IDENTITY)
     badges = manifest.get("badges", {})
     features = manifest.get("features", {})
-    if not isinstance(badges, dict) or not isinstance(features, dict):
-        raise MetadataError(MetadataIssue.PACKAGE_FEATURES)
+    badges = _metadata_table(badges, MetadataIssue.PACKAGE_FEATURES)
+    features = _metadata_table(features, MetadataIssue.PACKAGE_FEATURES)
     normalized_features = {
         feature: _string_list(values, f"features.{feature}")
         for feature, values in sorted(features.items())

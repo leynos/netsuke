@@ -309,30 +309,37 @@ def _check_scenario(check: ScenarioCheck) -> None:
         )
     if release_runs and scenario.release_runs:
         _check_release_staging(check.release, scenario, contexts, check.violations)
-    check_publication_path(
-        PublicationCheck(
-            release=check.release,
-            scenario=scenario,
-            outputs=outputs,
-            violations=check.violations,
-        )
+    publication_check = PublicationCheck(
+        release=check.release,
+        scenario=scenario,
+        outputs=outputs,
+        violations=check.violations,
     )
+    check_publication_path(publication_check)
     publisher_job = workflow_job(check.release, "publish-crates-io")
     publisher_contexts: dict[str, object] = {
         "needs": _needs_context(publisher_job, scenario, outputs),
         "status": {"cancelled": scenario.cancelled},
         "github": {"event": {"action": scenario.event_action}},
     }
-    check_crates_io_publication(
-        publisher_job,
-        PublicationCheck(
-            release=check.release,
-            scenario=scenario,
-            outputs=outputs,
-            violations=check.violations,
-        ),
-        publisher_contexts,
+    check_crates_io_publication(publisher_job, publication_check, publisher_contexts)
+
+
+def _check_publisher_action(
+    release: dict[str, object],
+    publisher_action: dict[str, object] | None,
+    violations: list[str],
+) -> None:
+    """Load an omitted publisher manifest and check the action's wiring."""
+    action = (
+        publisher_action
+        if publisher_action is not None
+        else action_sources().get(CRATES_IO_ACTION_PATH)
     )
+    if action is None:
+        violations.append("publish-crates-io.action: composite manifest is missing")
+    else:
+        check_crates_io_action_contract(release, action, violations)
 
 
 def check_release_publish_path(
@@ -374,15 +381,7 @@ def check_release_publish_path(
     )
     _check_release_needs(release, violations)
     _check_release_step_order(release, violations)
-    action = (
-        publisher_action
-        if publisher_action is not None
-        else action_sources().get(CRATES_IO_ACTION_PATH)
-    )
-    if action is None:
-        violations.append("publish-crates-io.action: composite manifest is missing")
-    else:
-        check_crates_io_action_contract(release, action, violations)
+    _check_publisher_action(release, publisher_action, violations)
     for scenario in SCENARIOS:
         _check_scenario(
             ScenarioCheck(

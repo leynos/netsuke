@@ -157,23 +157,54 @@ def _identity_matches(
         raise CandidateError(CandidateIssue.IDENTITY_MISMATCH, (", ".join(mismatches),))
 
 
-def _recorded_archive(
-    record: dict[str, object], directory: pathlib.Path
-) -> tuple[str, pathlib.Path]:
-    """Validate the archive basename before joining it to the artifact path."""
+def _crate_basename(record: dict[str, object]) -> str:
+    """Require the recorded crate name to be a flat archive basename."""
     crate = record.get("crate")
     if not isinstance(crate, str) or not release_asset_names.is_bare_file_name(crate):
         raise CandidateError(CandidateIssue.CRATE_BASENAME)
     if not crate.endswith(".crate"):
         raise CandidateError(CandidateIssue.CRATE_SUFFIX, (crate,))
+    return crate
+
+
+def _recorded_archive(
+    record: dict[str, object], directory: pathlib.Path
+) -> tuple[str, pathlib.Path]:
+    """Select the sole archive after validating its recorded basename."""
+    crate = _crate_basename(record)
     archives = sorted(directory.glob("*.crate"))
-    if len(archives) != 1 or archives[0].name != crate:
-        found = [archive.name for archive in archives]
+    found = [archive.name for archive in archives]
+    if found != [crate]:
         raise CandidateError(CandidateIssue.ARCHIVE_COUNT, (crate, found))
     archive = directory / crate
     if archive.is_symlink() or not archive.is_file():
         raise CandidateError(CandidateIssue.ARCHIVE_FILE, (crate,))
     return crate, archive
+
+
+def _manifest_contents(package: tarfile.TarFile, member_name: str) -> str:
+    """Read the one regular manifest member with the expected archive identity."""
+    matches = [member for member in package.getmembers() if member.name == member_name]
+    if len(matches) != 1 or not matches[0].isfile():
+        raise CandidateError(CandidateIssue.MANIFEST_MEMBER, (member_name,))
+    manifest_file = package.extractfile(matches[0])
+    if manifest_file is None:
+        raise CandidateError(CandidateIssue.MANIFEST_READ, (member_name,))
+    return manifest_file.read().decode("utf-8")
+
+
+def _check_manifest_identity(
+    manifest: dict[str, object], package_name: str, version: str
+) -> None:
+    """Require the packaged manifest identity to match the validated workflow."""
+    package_table = manifest.get("package")
+    if not isinstance(package_table, dict):
+        raise CandidateError(CandidateIssue.PACKAGE_TABLE)
+    if (
+        package_table.get("name") != package_name
+        or package_table.get("version") != version
+    ):
+        raise CandidateError(CandidateIssue.MANIFEST_IDENTITY)
 
 
 def _packaged_manifest(
@@ -184,26 +215,42 @@ def _packaged_manifest(
     try:
         archive_bytes = archive_path.read_bytes()
         with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as package:
-            matches = [
-                member for member in package.getmembers() if member.name == member_name
-            ]
-            if len(matches) != 1 or not matches[0].isfile():
-                raise CandidateError(CandidateIssue.MANIFEST_MEMBER, (member_name,))
-            manifest_file = package.extractfile(matches[0])
-            if manifest_file is None:
-                raise CandidateError(CandidateIssue.MANIFEST_READ, (member_name,))
-            manifest = tomllib.loads(manifest_file.read().decode("utf-8"))
+            manifest = tomllib.loads(_manifest_contents(package, member_name))
     except (OSError, UnicodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
         raise CandidateError(CandidateIssue.MANIFEST_PARSE, (error,)) from error
-    package_table = manifest.get("package")
-    if not isinstance(package_table, dict):
-        raise CandidateError(CandidateIssue.PACKAGE_TABLE)
-    if (
-        package_table.get("name") != package_name
-        or package_table.get("version") != version
-    ):
-        raise CandidateError(CandidateIssue.MANIFEST_IDENTITY)
+    _check_manifest_identity(manifest, package_name, version)
     return manifest
+
+
+def _recorded_identity(record: dict[str, object]) -> release_candidate.ReleaseIdentity:
+    """Parse the identity object while retaining candidate-specific diagnostics."""
+    raw_identity = record.get("identity")
+    if not isinstance(raw_identity, dict):
+        raise CandidateError(CandidateIssue.IDENTITY_OBJECT)
+    try:
+        return release_identity_record.identity_from_mapping(raw_identity)
+    except release_candidate.IdentityError as error:
+        raise CandidateError(CandidateIssue.IDENTITY_INVALID, (error,)) from error
+
+
+def _recorded_digest(record: dict[str, object]) -> str:
+    """Require the identity record's digest to be lowercase SHA-256 text."""
+    digest = record.get("sha256")
+    if not isinstance(digest, str) or len(digest) != SHA256_DIGEST_LENGTH:
+        raise CandidateError(CandidateIssue.DIGEST_MISSING)
+    if any(character not in "0123456789abcdef" for character in digest):
+        raise CandidateError(CandidateIssue.DIGEST_FORMAT)
+    return digest
+
+
+def _validated_digest(archive: pathlib.Path, expected_digest: str) -> str:
+    """Hash the retained archive and require the recorded candidate digest."""
+    observed_digest = release_digest_files.digest_of_file(archive)
+    if not release_digest.constant_time_equal(observed_digest, expected_digest):
+        raise CandidateError(
+            CandidateIssue.DIGEST_MISMATCH, (observed_digest, expected_digest)
+        )
+    return observed_digest
 
 
 def validate_candidate(
@@ -218,11 +265,8 @@ def validate_candidate(
     ValidatedCandidate
         The identity and exact archive path and digest after validation.
 
-    Raises
-    ------
-    CandidateError
-        If the identity is a rehearsal, disagrees with the workflow, or does
-        not vouch for the one flat archive and its packaged manifest.
+    A rehearsal or mismatched identity, archive digest or packaged manifest
+    raises ``CandidateError`` through the focused validation helpers below.
 
     Examples
     --------
@@ -230,28 +274,10 @@ def validate_candidate(
     'validate_candidate'
     """
     record = _read_json_mapping(identity_path, "package identity")
-    raw_identity = record.get("identity")
-    if not isinstance(raw_identity, dict):
-        raise CandidateError(CandidateIssue.IDENTITY_OBJECT)
-    try:
-        identity = release_identity_record.identity_from_mapping(raw_identity)
-    except release_candidate.IdentityError as error:
-        raise CandidateError(CandidateIssue.IDENTITY_INVALID, (error,)) from error
+    identity = _recorded_identity(record)
     _identity_matches(identity, expectation)
     crate, archive = _recorded_archive(record, archive_directory)
-    expected_digest = record.get("sha256")
-    if (
-        not isinstance(expected_digest, str)
-        or len(expected_digest) != SHA256_DIGEST_LENGTH
-    ):
-        raise CandidateError(CandidateIssue.DIGEST_MISSING)
-    if any(character not in "0123456789abcdef" for character in expected_digest):
-        raise CandidateError(CandidateIssue.DIGEST_FORMAT)
-    observed_digest = release_digest_files.digest_of_file(archive)
-    if not release_digest.constant_time_equal(observed_digest, expected_digest):
-        raise CandidateError(
-            CandidateIssue.DIGEST_MISMATCH, (observed_digest, expected_digest)
-        )
+    observed_digest = _validated_digest(archive, _recorded_digest(record))
     _ = _packaged_manifest(archive, expectation.package_name, expectation.version)
     return ValidatedCandidate(identity, crate, archive, observed_digest)
 
@@ -298,6 +324,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _record_for_arguments(arguments: argparse.Namespace) -> dict[str, object]:
+    """Compute the requested candidate record before the output boundary writes it."""
+    if arguments.command == "check":
+        candidate = validate_candidate(
+            arguments.identity,
+            arguments.archive_directory,
+            CandidateExpectation(
+                arguments.tag,
+                arguments.commit,
+                arguments.package_name,
+                arguments.version,
+            ),
+        )
+        return candidate.as_record()
+    return crates_io_upload_metadata.package_metadata(arguments.archive)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Run candidate validation or metadata derivation and return its status."""
     try:
@@ -305,20 +348,7 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as error:
         return EXIT_OK if error.code == 0 else EXIT_USAGE
     try:
-        if arguments.command == "check":
-            candidate = validate_candidate(
-                arguments.identity,
-                arguments.archive_directory,
-                CandidateExpectation(
-                    arguments.tag,
-                    arguments.commit,
-                    arguments.package_name,
-                    arguments.version,
-                ),
-            )
-            record = candidate.as_record()
-        else:
-            record = crates_io_upload_metadata.package_metadata(arguments.archive)
+        record = _record_for_arguments(arguments)
         _write_json(arguments.output, record)
     except (CandidateError, crates_io_upload_metadata.MetadataError) as error:
         print(f"crates.io candidate rejected: {error}", file=sys.stderr)

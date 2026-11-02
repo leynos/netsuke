@@ -2514,6 +2514,13 @@ spelling. This keeps decisions independently testable without a release and
 makes the external formats visible at named boundaries; the contract tests hold
 that split as well as the no-network rule.
 
+Private helpers in `scripts/crates_io_candidate_cli.py` and
+`scripts/crates_io_upload_metadata.py` compose only their module's candidate
+validation or metadata operation. Candidate-manifest parsing checks the
+expected member identity; metadata-manifest parsing applies the sole-manifest
+and README rules. Workflow reachability helpers stay within their contract
+module, and the common transport argument builder stays in its test module.
+
 ### The release job graph
 
 `release.yml` runs one build set for both modes. Pull-request rehearsals run
