@@ -44,7 +44,7 @@ def _pinned_stub(command: str, expected: tuple[str, ...], output: str) -> str:
     """
     conditions = [f'[ "$#" -eq {len(expected)} ]']
     conditions.extend(
-        f'[ "${position}" = \'{argument}\' ]'
+        f"[ \"${position}\" = '{argument}' ]"
         for position, argument in enumerate(expected, start=1)
     )
     guarded = " &&\n    ".join(conditions)
