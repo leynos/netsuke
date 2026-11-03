@@ -5,6 +5,10 @@
 //! limit.
 
 use super::*;
+
+// Only the Unix-gated transport case decodes a Bash command line, so on Windows
+// this import would be unused and `-D warnings` would reject the test build.
+#[cfg(unix)]
 use test_support::shell_transport::decode_bash_transport;
 
 mod transport;
