@@ -12,7 +12,6 @@ use camino::Utf8PathBuf;
 use std::collections::HashSet;
 use tempfile::{TempDir, tempdir};
 use test_support::fs as test_fs;
-use test_support::netsuke::NetsukeRun;
 
 const DOCUMENTS: &[(&str, FencePolicy)] = &[
     ("README.md", FencePolicy::RequireMarkers),
@@ -111,21 +110,6 @@ pub fn manifest_workspace(id: &str) -> Result<TempDir> {
     test_fs::write(workspace.path().join("Netsukefile"), example.body)
         .with_context(|| format!("write Netsukefile for '{id}'"))?;
     Ok(workspace)
-}
-
-/// Assert that a documented Netsuke invocation completed successfully.
-///
-/// # Errors
-///
-/// Returns an error containing the captured output when the invocation fails.
-pub fn assert_success(run: &NetsukeRun, context: &str) -> Result<()> {
-    ensure!(
-        run.success,
-        "{context} should succeed; stdout:\n{}\nstderr:\n{}",
-        run.stdout,
-        run.stderr
-    );
-    Ok(())
 }
 
 fn load_document(path: &'static str, policy: FencePolicy) -> Result<Vec<DocumentedExample>> {

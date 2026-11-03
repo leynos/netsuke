@@ -4,10 +4,14 @@
 
 mod documentation_examples;
 
+#[path = "documentation_examples/assertions.rs"]
+mod documentation_example_assertions;
+
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
-use documentation_examples::{assert_success, documented_example, manifest_workspace};
+use documentation_example_assertions::assert_success;
+use documentation_examples::{documented_example, manifest_workspace};
 use rstest::rstest;
 use rustix::fs::{Dev, FileType, Mode, mknodat};
 use std::path::Path;

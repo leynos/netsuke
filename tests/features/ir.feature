@@ -42,3 +42,17 @@ Feature: BuildGraph
   Scenario: Circular dependency detection
     When the manifest file "tests/data/circular.yml" is compiled to IR
     Then IR generation fails
+
+  Scenario: Order-only dependency cycle is rejected
+    When the manifest file "tests/data/order_only_cycle.yml" is compiled to IR
+    Then IR generation fails
+    And the IR cycle is "headers.stamp -> tool -> headers.stamp"
+
+  Scenario: Cycle through a non-first output is rejected
+    When the manifest file "tests/data/multi_output_cycle.yml" is compiled to IR
+    Then IR generation fails
+    And the IR cycle is "a.extra -> b -> a.extra"
+
+  Scenario: Serial ordering adds no cycle
+    When the manifest file "tests/data/serial_earlier_depends_on_later.yml" is compiled to IR
+    Then the graph has 3 targets

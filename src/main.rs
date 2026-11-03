@@ -8,8 +8,8 @@ use clap::error::ErrorKind;
 use miette::Report;
 use netsuke::theme::ThemeContext;
 use netsuke::{
-    cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest, output_mode,
-    output_prefs, runner,
+    cli, cli_localization, diagnostic_json, ir::IrGenError, locale_resolution, localization,
+    manifest, output_mode, output_prefs, runner,
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
@@ -41,7 +41,9 @@ impl DiagMode {
         matches!(self, Self::Json)
     }
 }
+
 mod observability;
+
 mod startup_tracing;
 
 #[cfg(test)]
@@ -70,6 +72,7 @@ where
     /// Environment provider consulted during configuration discovery and merge.
     config_env: &'a E,
 }
+
 /// Send buffered startup diagnostics where `mode` says they belong.
 ///
 /// Human mode releases them to stderr; JSON mode drops them, so the diagnostic
@@ -270,6 +273,7 @@ fn set_tracing_filter(level: LevelFilter) {
         handle.modify(|filter| *filter = level).ok();
     }
 }
+
 /// Resolve and install the localizer used while parsing startup arguments.
 fn startup_localizer(
     args: &[OsString],
@@ -317,6 +321,7 @@ fn parse_cli_or_exit(
         }
     }
 }
+
 /// Apply the effective output filter and install the runtime localizer.
 fn configure_runtime(
     merged_cli: &cli::Cli,
@@ -347,6 +352,11 @@ fn handle_runner_error(
         return diagnostic_json::emit_or_fallback(render_runtime_error_json(&err));
     }
     let prefix = prefs.error_prefix();
+    if let Some(cycle_error) = circular_dependency_cause(&err) {
+        tracing::error!(error_kind = "circular_dependency", "runner failed");
+        drop(writeln!(io::stderr(), "{prefix} {cycle_error}"));
+        return ExitCode::FAILURE;
+    }
     match err.downcast::<runner::RunnerError>() {
         Ok(runner_err) => {
             let report = Report::new(runner_err);
@@ -358,6 +368,15 @@ fn handle_runner_error(
         }
     }
     ExitCode::FAILURE
+}
+
+/// Find a circular-dependency error inside a contextual runner failure.
+fn circular_dependency_cause(error: &anyhow::Error) -> Option<&IrGenError> {
+    error.chain().find_map(|cause| {
+        cause
+            .downcast_ref::<IrGenError>()
+            .filter(|ir_error| matches!(ir_error, IrGenError::CircularDependency { .. }))
+    })
 }
 
 /// Select the most specific JSON-safe diagnostic representation for a failure.

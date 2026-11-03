@@ -4,8 +4,12 @@
 
 mod documentation_examples;
 
+#[path = "documentation_examples/assertions.rs"]
+mod documentation_example_assertions;
+
 use anyhow::{Context, Result, bail, ensure};
-use documentation_examples::{assert_success, documented_example, manifest_workspace};
+use documentation_example_assertions::assert_success;
+use documentation_examples::{documented_example, manifest_workspace};
 use googletest::{assert_that, matchers::contains_substring};
 use mockable::{DefaultEnv, Env};
 use netsuke::{

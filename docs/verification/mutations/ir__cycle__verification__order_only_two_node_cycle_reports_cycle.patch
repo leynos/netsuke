@@ -1,0 +1,10 @@
+diff --git a/src/ir/cycle/detector.rs b/src/ir/cycle/detector.rs
+--- a/src/ir/cycle/detector.rs
++++ b/src/ir/cycle/detector.rs
+@@ -221,5 +221,5 @@
+         if implicit_cycle.is_cycle() {
+             return implicit_cycle;
+         }
+-        self.visit_dependencies(node, &edge.order_only_deps, search)
++        CycleVisitResult::None
+     }

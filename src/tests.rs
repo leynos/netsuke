@@ -2,6 +2,7 @@
 
 use super::*;
 use anyhow::{Result, ensure};
+use camino::Utf8PathBuf;
 use netsuke::localization::keys;
 use ortho_config::OrthoError;
 use rstest::rstest;
@@ -340,6 +341,47 @@ fn config_load_errors_include_operational_context() -> Result<()> {
             && !recorded.contains("read failure")
             && !recorded.contains("must be positive"),
         "configuration tracing must not expose raw errors or paths: {recorded:?}"
+    );
+    Ok(())
+}
+
+/// Keep manifest-derived cycle paths out of runner tracing events.
+#[test]
+fn human_cycle_failures_log_only_the_bounded_error_category() -> Result<()> {
+    const PRIVATE_TARGET: &str = "manifest-private-target";
+    let cycle = vec![
+        Utf8PathBuf::from(PRIVATE_TARGET),
+        Utf8PathBuf::from(PRIVATE_TARGET),
+    ];
+    let message =
+        localization::message(keys::IR_CIRCULAR_DEPENDENCY).with_arg("cycle", format!("{cycle:?}"));
+    let error = anyhow::Error::new(IrGenError::CircularDependency {
+        cycle,
+        missing_dependencies: Vec::new(),
+        message,
+    });
+    let prefs = output_prefs::resolve_with(Some(true), |_| None);
+    let (exit_code, events) =
+        test_tracing_capture::with_test_subscriber(LevelFilter::TRACE, |captured| {
+            let exit_code = handle_runner_error(error, prefs, DiagMode::Human);
+            (exit_code, captured.snapshot())
+        });
+
+    ensure!(
+        exit_code == ExitCode::FAILURE,
+        "a cycle diagnostic must fail the command"
+    );
+    let event = events
+        .iter()
+        .find(|event| event.contains("runner failed"))
+        .ok_or_else(|| anyhow::anyhow!("expected a runner failure event, got {events:?}"))?;
+    ensure!(
+        event.contains("error_kind=\"circular_dependency\""),
+        "the event must use the fixed error category: {event}"
+    );
+    ensure!(
+        !event.contains(PRIVATE_TARGET),
+        "the event must not expose manifest target names: {event}"
     );
     Ok(())
 }

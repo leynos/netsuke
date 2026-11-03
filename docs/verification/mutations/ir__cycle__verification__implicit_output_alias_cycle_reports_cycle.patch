@@ -1,0 +1,12 @@
+diff --git a/src/ir/graph/mod.rs b/src/ir/graph/mod.rs
+--- a/src/ir/graph/mod.rs
++++ b/src/ir/graph/mod.rs
+@@ -94,8 +94,5 @@ impl BuildGraph {
+             for output in &stored_edge.explicit_outputs {
+                 Self::index_output(&mut self.targets, output, edge_id);
+             }
+-            for output in &stored_edge.implicit_outputs {
+-                Self::index_output(&mut self.targets, output, edge_id);
+-            }
+         }
+     }

@@ -1,0 +1,8 @@
+netsuke_version: "1.0.0"
+targets:
+  - name: tool
+    command: "touch tool"
+    order_only_deps: headers.stamp
+  - name: headers.stamp
+    command: "touch headers.stamp"
+    deps: tool
