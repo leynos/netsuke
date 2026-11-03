@@ -25,10 +25,10 @@ execution-time `PATH`. The runner's build path already bound the Bash
 executable it had probed, but the library and `generate` surfaces did not
 require any binding, and nothing bound PowerShell at all.
 
-Two constraints shape the remedy. Recipe rendering is a pure transformation
-over the build graph, so it cannot perform I/O or consult ambient state; and
-query-only callers, such as target discovery, must render without a resolvable
-runtime because they never execute the result.
+Two constraints shape the remedy. Rendering a command is a pure transformation
+of its recipe text and binding, so it can neither perform I/O nor consult
+ambient state; and query-only callers, such as target discovery, must render
+without a resolvable runtime because they never execute the result.
 
 ## Decision drivers
 
@@ -88,6 +88,17 @@ no production path renders an executable plan through it; and `Unbound`, which
 rejects PowerShell and Bash commands with
 `NinjaGenError::InterpreterBindingRequired`. Dependency-only graphs render
 successfully under `Unbound` because they have no command.
+
+Default resolution sits above the renderer rather than inside it. `generate`,
+`generate_into`, `generate_with_shell` and `generate_bundle` ask the runner
+dispatcher for a binding before they render; on Windows PowerShell that
+performs a Known Folder query and a filesystem inspection, and on every other
+host it binds nothing. The `*_with_interpreter` entry points skip that
+resolution, and the internal `generate_into_with_binding` path receives an
+already-resolved binding, so rendering itself remains a pure function of the
+graph, shell and binding once the binding exists. The resolved path is
+therefore a host-dependent input to generation, of the kind ADR-0030's
+determinism key covers through its environment and platform elements.
 
 `src/runner/recipe_shell/mod.rs` dispatches binding resolution. Windows
 PowerShell uses the trusted locator; Windows Bash uses the unchanged

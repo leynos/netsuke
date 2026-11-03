@@ -155,6 +155,10 @@ function Test-PowerShellSearchPathBinding {
     try {
         $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
         $env:PATH = $decoyPath + [IO.Path]::PathSeparator + $env:PATH
+        # A previous phase writes this output, so a stale copy would satisfy the
+        # assertion below even if this build never ran the recipe.
+        Remove-Item -Force -LiteralPath 'scalar interpreter with spaces.txt' `
+            -ErrorAction SilentlyContinue
         Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'scalar')
         Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'scalar interpreter with spaces.txt') `
             -Expected 'Desktop' -Message 'A working-directory powershell.exe decoy captured a short recipe'

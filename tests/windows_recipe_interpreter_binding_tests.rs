@@ -148,6 +148,29 @@ fn skip_or_require_ninja(reason: &str) -> Result<()> {
     Ok(())
 }
 
+/// Windows variables a child process needs before it can start an executable.
+///
+/// The runner helper clears the environment, which is right for hermetic
+/// assertions about search paths but wrong for actually executing Windows
+/// programs: without the system root DLL loading fails, and without a temp
+/// directory `std::env::temp_dir()` falls back to `C:\Windows`. Neither
+/// variable participates in executable search, which is all this test
+/// constrains, so they pass through unmodified.
+const INHERITED_WINDOWS_VARIABLES: [&str; 12] = [
+    "SystemRoot",
+    "windir",
+    "SystemDrive",
+    "TEMP",
+    "TMP",
+    "PATHEXT",
+    "COMSPEC",
+    "USERPROFILE",
+    "HOMEDRIVE",
+    "HOMEPATH",
+    "APPDATA",
+    "LOCALAPPDATA",
+];
+
 /// Build the child environment that exposes the decoys.
 fn decoy_environment(decoys: &Decoys, ninja: &Utf8PathBuf) -> Result<Vec<(String, String)>> {
     let real_path = DefaultEnv
@@ -161,10 +184,15 @@ fn decoy_environment(decoys: &Decoys, ninja: &Utf8PathBuf) -> Result<Vec<(String
     .context("assemble child PATH")?
     .to_string_lossy()
     .into_owned();
-    Ok(vec![
-        ("PATH".to_owned(), path),
-        ("NETSUKE_NINJA".to_owned(), ninja.to_string()),
-    ])
+    let mut environment: Vec<(String, String)> = Vec::new();
+    for name in INHERITED_WINDOWS_VARIABLES {
+        if let Some(value) = DefaultEnv.string(name) {
+            environment.push((name.to_owned(), value));
+        }
+    }
+    environment.push(("PATH".to_owned(), path));
+    environment.push(("NETSUKE_NINJA".to_owned(), ninja.to_string()));
+    Ok(environment)
 }
 
 /// Borrow an environment table as the string pairs the runner expects.
@@ -215,7 +243,10 @@ fn windows_power_shell_binding_ignores_executable_search_decoys() -> Result<()> 
     let run = run_netsuke_in_with_env(workspace.path(), &["build", "small", "large"], &borrowed)?;
     ensure!(
         run.success,
-        "Windows PowerShell recipe failed with decoys present: {}",
+        "Windows PowerShell recipe failed with decoys present\n\
+         --- stdout ---\n{}\n\
+         --- stderr ---\n{}",
+        run.stdout,
         run.stderr
     );
 
