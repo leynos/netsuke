@@ -1,5 +1,13 @@
 #!/bin/sh
-
+# Verify that a package installed from the release artefacts is usable.
+#
+# The shared validate-linux-packages action runs this command inside its
+# sandbox after installing the package, so it sees the same files an end user
+# would receive. It checks the three promises that package metadata alone
+# cannot prove: the binary starts, the manual page resolves, and the
+# `ninja-build` dependency is declared.
+#
+# Usage: verify-installed-package.sh PACKAGE-NAME
 set -eu
 
 if [ "$#" -lt 1 ] || [ -z "$1" ]; then
