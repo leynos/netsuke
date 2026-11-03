@@ -89,16 +89,27 @@ rejects PowerShell and Bash commands with
 `NinjaGenError::InterpreterBindingRequired`. Dependency-only graphs render
 successfully under `Unbound` because they have no command.
 
-Default resolution sits above the renderer rather than inside it. `generate`,
-`generate_into`, `generate_with_shell` and `generate_bundle` ask the runner
-dispatcher for a binding before they render; on Windows PowerShell that
-performs a Known Folder query and a filesystem inspection, and on every other
-host it binds nothing. The `*_with_interpreter` entry points skip that
+Default resolution sits above the renderer rather than inside it. The library
+entry points `generate`, `generate_into`, `generate_with_shell` and
+`generate_bundle` call `resolve_default_interpreter` in `src/ninja_gen/mod.rs`,
+which invokes `locate_windows_power_shell` directly: that performs a Known
+Folder query and a filesystem inspection, binds only `RecipeShell::PowerShell`
+on Windows, and binds nothing elsewhere. `src/ninja_gen` cannot depend on the
+runner, so this is a deliberate second call site for the same port rather than
+a shared dispatcher. The `*_with_interpreter` entry points skip that
 resolution, and the internal `generate_into_with_binding` path receives an
 already-resolved binding, so rendering itself remains a pure function of the
 graph, shell and binding once the binding exists. The resolved path is
 therefore a host-dependent input to generation, of the kind ADR-0030's
 determinism key covers through its environment and platform elements.
+
+The two resolution policies are not interchangeable. Library callers that select
+`RecipeShell::Bash` render under `Unbound`, because the Bash runtime lookup
+belongs to the runner and needs an injected `PATH`; such a caller must supply an
+`InterpreterExecutable` through `generate_with_interpreter` or
+`generate_bundle_with_interpreter`, or accept
+`NinjaGenError::InterpreterBindingRequired`. The runner binding below is what
+binds Windows Bash for CLI operations.
 
 `src/runner/recipe_shell/mod.rs` dispatches binding resolution. Windows
 PowerShell uses the trusted locator; Windows Bash uses the unchanged

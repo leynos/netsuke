@@ -376,16 +376,24 @@ fn windows_bash_plan_binds_the_absolute_path() -> Result<()> {
 ///
 /// Running the Bash decoy here proves the helper compiled and that a decoy
 /// launched by mistake would be identifiable independently of the PowerShell
-/// one.
+/// one. The decoy writes its marker relative to its working directory, so it
+/// runs in a scratch directory; otherwise every Windows test run would leave
+/// an untracked file in the package root.
 #[test]
 fn bash_decoy_exits_with_its_distinct_status() -> Result<()> {
     let decoys = compile_decoys()?;
+    let scratch = tempfile::tempdir().context("create decoy working directory")?;
     let status = std::process::Command::new(decoys.bash.as_std_path())
+        .current_dir(scratch.path())
         .status()
         .context("run bash decoy")?;
     ensure!(
         status.code() == Some(BASH_DECOY_EXIT),
         "bash decoy exited with {status:?}"
+    );
+    ensure!(
+        test_fs::exists(scratch.path().join(BASH_MARKER)),
+        "the bash decoy should write its marker to its working directory"
     );
     ensure!(
         BASH_DECOY_EXIT != POWERSHELL_DECOY_EXIT,
