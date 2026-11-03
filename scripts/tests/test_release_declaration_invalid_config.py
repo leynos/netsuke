@@ -82,6 +82,14 @@ class Case(typ.NamedTuple):
             ),
             id="platform-is-an-integer",
         ),
+        pytest.param(
+            Case(
+                '[targets]\nlinux = { platform = "" }\n',
+                "target without a platform",
+                "an empty platform names no platform",
+            ),
+            id="platform-is-empty",
+        ),
     ],
 )
 def test_malformed_targets_are_reported_as_input_faults(
