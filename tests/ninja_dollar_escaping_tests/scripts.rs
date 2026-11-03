@@ -4,6 +4,8 @@ use super::*;
 #[cfg(unix)]
 use netsuke::manifest::{EnvAccessPolicy, EnvReadError, EnvReader};
 #[cfg(unix)]
+use std::fmt::Display;
+#[cfg(unix)]
 use std::sync::Arc;
 
 /// Verify script `$in` and `$out` become literal shell variables in Ninja.
@@ -220,34 +222,85 @@ fn dollar_free_commands_remain_byte_identical() -> Result<()> {
 #[cfg(unix)]
 const BACKSLASH_PAYLOAD: &str = r"\047;>injected;#";
 
-/// Run one generated script and return its byte-exact output and workspace.
+/// Generate and execute a one-target manifest whose script writes `out`.
 #[cfg(unix)]
-fn ninja_output_bytes(
-    ninja: &str,
+fn run_transported_script(
+    manifest: &netsuke::ast::NetsukeManifest,
     input: Option<(&str, &str)>,
 ) -> Result<(Vec<u8>, NinjaWorkspace)> {
-    let workspace = run_ninja_workspace(ninja, &[], input)?;
+    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
+        manifest,
+        RecipeShell::Posix,
+    )?)?;
+    let workspace = run_ninja_workspace(&ninja, &[], input)?;
     let bytes = test_support::fs::read(workspace.path.join("out"))
         .context("read byte-exact script output")?;
     Ok((bytes, workspace))
 }
 
-/// Assert the transported script kept `expected` and executed no redirect.
+/// The script content a transport assertion covers.
 #[cfg(unix)]
-fn assert_payload_is_inert(
+#[derive(Clone, Copy)]
+enum TransportSubject {
+    /// Bytes written by a script literal.
+    ScriptBytes,
+    /// A path inserted through a marker.
+    InputPath,
+    /// A `shell_quote`d `env()` fallback.
+    EnvFallback,
+    /// A quoted-heredoc body.
+    HeredocBytes,
+}
+
+#[cfg(unix)]
+impl TransportSubject {
+    /// Return the wording used in assertion diagnostics.
+    const fn label(self) -> &'static str {
+        match self {
+            Self::ScriptBytes => "script bytes",
+            Self::InputPath => "input path",
+            Self::EnvFallback => "env fallback",
+            Self::HeredocBytes => "heredoc bytes",
+        }
+    }
+}
+
+/// Assert one quoted-heredoc body crosses the transport byte for byte.
+#[cfg(unix)]
+fn assert_quoted_heredoc_preserves(body: impl Display) -> Result<()> {
+    let source = format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      cat > {{{{ outs }}}} <<'EOF'\n      {body}\n      EOF\n"
+    );
+    let manifest = manifest::from_str(&source)?;
+    let (actual, workspace) = run_transported_script(&manifest, None)?;
+    let expected = format!("{body}\n");
+    assert_transport_preserved(
+        &actual,
+        &workspace,
+        expected.as_bytes(),
+        TransportSubject::HeredocBytes,
+    )
+}
+
+/// Assert the transport kept `expected` and executed no injected redirect.
+#[cfg(unix)]
+fn assert_transport_preserved(
     actual: &[u8],
     workspace: &NinjaWorkspace,
     expected: &[u8],
+    subject: TransportSubject,
 ) -> Result<()> {
     ensure!(
         actual == expected,
-        "script bytes changed in transport: expected {:?}, got {:?}",
+        "{} changed in transport: expected {:?}, got {:?}",
+        subject.label(),
         String::from_utf8_lossy(expected),
         String::from_utf8_lossy(actual)
     );
     ensure!(
         !test_support::fs::exists(workspace.path.join("injected")),
-        "transported script bytes executed the injected redirect"
+        "{} executed the injected redirect",
+        subject.label()
     );
     Ok(())
 }
@@ -260,13 +313,13 @@ fn script_source_backslash_payload_is_not_reinterpreted() -> Result<()> {
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      printf '%s' '{BACKSLASH_PAYLOAD}' > {{{{ outs }}}}\n"
     );
     let manifest = manifest::from_str(&source)?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
-    assert_payload_is_inert(&actual, &workspace, BACKSLASH_PAYLOAD.as_bytes())
+    let (actual, workspace) = run_transported_script(&manifest, None)?;
+    assert_transport_preserved(
+        &actual,
+        &workspace,
+        BACKSLASH_PAYLOAD.as_bytes(),
+        TransportSubject::ScriptBytes,
+    )
 }
 
 /// Verify an input path survives each marker quoting context.
@@ -280,14 +333,14 @@ fn input_path_backslash_payload_is_not_reinterpreted(#[case] script_line: &str) 
         "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    sources: '{BACKSLASH_PAYLOAD}'\n    script: |\n      {script_line}\n"
     );
     let manifest = manifest::from_str(&source)?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
     let (actual, workspace) =
-        ninja_output_bytes(&ninja, Some((BACKSLASH_PAYLOAD, "input-contents")))?;
-    assert_payload_is_inert(&actual, &workspace, BACKSLASH_PAYLOAD.as_bytes())
+        run_transported_script(&manifest, Some((BACKSLASH_PAYLOAD, "input-contents")))?;
+    assert_transport_preserved(
+        &actual,
+        &workspace,
+        BACKSLASH_PAYLOAD.as_bytes(),
+        TransportSubject::InputPath,
+    )
 }
 
 /// Verify a `shell_quote`d `env()` fallback reaches the final interpreter intact.
@@ -304,14 +357,14 @@ fn env_fallback_through_shell_quote_is_not_reinterpreted() -> Result<()> {
     let reader: EnvReader = Arc::new(|_| Err(EnvReadError::NotPresent));
     let manifest =
         manifest::from_str_with_env_and_policy(&source, &reader, &EnvAccessPolicy::default())?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
+    let (actual, workspace) = run_transported_script(&manifest, None)?;
     let expected = format!("{BACKSLASH_PAYLOAD}\n");
-    assert_payload_is_inert(&actual, &workspace, expected.as_bytes())
+    assert_transport_preserved(
+        &actual,
+        &workspace,
+        expected.as_bytes(),
+        TransportSubject::EnvFallback,
+    )
 }
 
 /// Return printable ASCII with every Jinja delimiter pair removed.
@@ -344,53 +397,12 @@ fn printable_ascii_without_jinja_delimiters() -> String {
 #[case::before_backtick(r"\`")]
 #[case::before_dollar(r"\$")]
 fn quoted_heredoc_preserves_backslash_sequences(#[case] body: &str) -> Result<()> {
-    let source = format!(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      cat > {{{{ outs }}}} <<'EOF'\n      {body}\n      EOF\n"
-    );
-    let manifest = manifest::from_str(&source)?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
-    let expected = format!("{body}\n");
-    ensure!(
-        actual == expected.as_bytes(),
-        "heredoc bytes changed in transport: expected {body:?}, got {:?}",
-        String::from_utf8_lossy(&actual)
-    );
-    ensure!(
-        !test_support::fs::exists(workspace.path.join("injected")),
-        "heredoc bytes executed the injected redirect"
-    );
-    Ok(())
+    assert_quoted_heredoc_preserves(body)
 }
 
 /// Verify the printable ASCII range survives the quoted-heredoc transport.
 #[cfg(unix)]
 #[rstest]
 fn quoted_heredoc_preserves_printable_ascii() -> Result<()> {
-    let body = printable_ascii_without_jinja_delimiters();
-    let source = format!(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      cat > {{{{ outs }}}} <<'EOF'\n      {body}\n      EOF\n"
-    );
-    let manifest = manifest::from_str(&source)?;
-    let ninja = generate_posix(&BuildGraph::from_manifest_for_shell(
-        &manifest,
-        RecipeShell::Posix,
-    )?)?;
-
-    let (actual, workspace) = ninja_output_bytes(&ninja, None)?;
-    let expected = format!("{body}\n");
-    ensure!(
-        actual == expected.as_bytes(),
-        "printable ASCII changed in transport: expected {body:?}, got {:?}",
-        String::from_utf8_lossy(&actual)
-    );
-    ensure!(
-        !test_support::fs::exists(workspace.path.join("injected")),
-        "printable ASCII bytes executed the injected redirect"
-    );
-    Ok(())
+    assert_quoted_heredoc_preserves(printable_ascii_without_jinja_delimiters())
 }
