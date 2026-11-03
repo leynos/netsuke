@@ -33,6 +33,8 @@ VERIFY_SCRIPT = VALIDATION_DIR / "verify-installed-package.sh"
 #: so every dependency stub below rejects an argv it did not expect.
 DEB_ARGV = ("-W", "-f=${Depends}\\n", "netsuke")
 RPM_ARGV = ("-q", "--requires", "netsuke")
+VERSION_ARGV = ("--version",)
+MAN_ARGV = ("-w", "netsuke")
 
 
 def _pinned_stub(command: str, expected: tuple[str, ...], output: str) -> str:
@@ -74,8 +76,8 @@ def _rpm_stub(requirements: str) -> str:
 
 
 PASSING_STUBS = {
-    "netsuke": "printf 'netsuke 0.1.0\\n'",
-    "man": "printf '/usr/share/man/man1/netsuke.1.gz\\n'",
+    "netsuke": _pinned_stub("netsuke", VERSION_ARGV, "netsuke 0.1.0\\n"),
+    "man": _pinned_stub("man", MAN_ARGV, "/usr/share/man/man1/netsuke.1.gz\\n"),
     "dpkg-query": _deb_stub("ninja-build"),
 }
 
