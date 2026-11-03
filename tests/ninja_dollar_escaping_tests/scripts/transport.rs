@@ -5,6 +5,10 @@
 //! redirect ran. Everything here is Unix-only because the generated wrapper
 //! is a POSIX shell command.
 
+// Every case in this module is Unix-only, so the parent imports are too.
+// Leaving this ungated makes the import unused on Windows, where `-D warnings`
+// turns that into a build failure.
+#[cfg(unix)]
 use super::*;
 #[cfg(unix)]
 use netsuke::manifest::{EnvAccessPolicy, EnvReadError, EnvReader};
