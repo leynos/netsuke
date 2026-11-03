@@ -23,8 +23,13 @@ use thiserror::Error;
 
 use super::{InterpreterExecutable, InterpreterExecutableError};
 
-/// Directory of the Windows PowerShell engine beneath the system directory.
-const WINDOWS_POWER_SHELL_DIRECTORY: &str = "WindowsPowerShell/v1.0";
+/// Components of the Windows PowerShell engine directory.
+///
+/// The components are joined one at a time so the bound path uses the host
+/// separator throughout, matching the documented
+/// `<System>\WindowsPowerShell\v1.0\powershell.exe` form in plans and
+/// diagnostics.
+const WINDOWS_POWER_SHELL_DIRECTORY: [&str; 2] = ["WindowsPowerShell", "v1.0"];
 
 /// Executable name inside the Windows PowerShell engine directory.
 const WINDOWS_POWER_SHELL_EXECUTABLE: &str = "powershell.exe";
@@ -148,7 +153,11 @@ pub(crate) fn locate_windows_power_shell(
         });
     }
 
-    let engine_directory = system_directory.join(WINDOWS_POWER_SHELL_DIRECTORY);
+    let engine_directory = WINDOWS_POWER_SHELL_DIRECTORY
+        .into_iter()
+        .fold(system_directory, |directory, component| {
+            directory.join(component)
+        });
     let expected = engine_directory.join(WINDOWS_POWER_SHELL_EXECUTABLE);
     let handle = Dir::open_ambient_dir(&engine_directory, ambient_authority())
         .map_err(|source| inspection_error(&expected, source))?;

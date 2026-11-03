@@ -133,6 +133,10 @@ fn host_executable(name: &str) -> Option<Utf8PathBuf> {
 /// # Errors
 /// Return an error only when `NETSUKE_REQUIRE_NINJA=1` turns the skip into a
 /// failure.
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: an unavailable prerequisite must be visible in the captured test output instead of passing silently"
+)]
 fn skip_or_require_ninja(reason: &str) -> Result<()> {
     if DefaultEnv
         .os_string("NETSUKE_REQUIRE_NINJA")
@@ -207,9 +211,8 @@ fn windows_power_shell_binding_ignores_executable_search_decoys() -> Result<()> 
         .context("write Windows recipe manifest")?;
 
     let environment = decoy_environment(&decoys, &ninja)?;
-    let environment = borrowed_environment(&environment);
-    let run =
-        run_netsuke_in_with_env(workspace.path(), &["build", "small", "large"], &environment)?;
+    let borrowed = borrowed_environment(&environment);
+    let run = run_netsuke_in_with_env(workspace.path(), &["build", "small", "large"], &borrowed)?;
     ensure!(
         run.success,
         "Windows PowerShell recipe failed with decoys present: {}",
@@ -272,8 +275,8 @@ fn windows_bash_generation_requires_a_resolved_runtime() -> Result<()> {
     let workspace = tempfile::tempdir().context("create workspace")?;
     test_fs::write(workspace.path().join("Netsukefile"), manifest())
         .context("write Windows recipe manifest")?;
-    let empty_path = tempfile::tempdir().context("create empty PATH directory")?;
-    let empty_path = empty_path.path().to_string_lossy().into_owned();
+    let empty_path_directory = tempfile::tempdir().context("create empty PATH directory")?;
+    let empty_path = empty_path_directory.path().to_string_lossy().into_owned();
     let plan = workspace.path().join("unbound-plan.ninja");
     let plan_text = plan.to_string_lossy().into_owned();
     let environment = vec![
@@ -305,6 +308,10 @@ fn windows_bash_generation_requires_a_resolved_runtime() -> Result<()> {
 
 /// A real Bash on `PATH` is bound into the plan by its absolute path.
 #[test]
+#[expect(
+    clippy::print_stderr,
+    reason = "test harness: an unavailable prerequisite must be visible in the captured test output instead of passing silently"
+)]
 fn windows_bash_plan_binds_the_absolute_path() -> Result<()> {
     let Some(bash) = host_executable("bash.exe") else {
         eprintln!("skipped: no real bash.exe on PATH");

@@ -86,7 +86,7 @@ pub enum NinjaGenError {
     },
     /// A legacy recipe needs an interpreter execution binding that was not resolved.
     #[error(
-        "the {shell:?} legacy recipe interpreter is not bound to an executable; resolve it before rendering commands"
+        "the {shell:?} legacy recipe interpreter is not bound to an executable; supply a trusted absolute path through generate_with_interpreter or generate_bundle_with_interpreter"
     )]
     InterpreterBindingRequired {
         /// Interpreter whose command could not be rendered.

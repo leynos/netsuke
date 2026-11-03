@@ -88,9 +88,14 @@ struct GraphGenerationFixture {
 
 impl GraphGenerationFixture {
     /// Construct the graph-generation context borrowing this fixture's clock.
+    ///
+    /// These cases assert stage ordering, logging, and telemetry rather than
+    /// interpreter selection, so they pin the POSIX renderer. Deriving the
+    /// host default would make a Windows run require an interpreter binding
+    /// this fixture has no reason to locate.
     fn graph_generation_context(&self) -> GraphGenerationContext<'_> {
         GraphGenerationContext {
-            recipe_shell: RecipeShell::host_default(),
+            recipe_shell: RecipeShell::Posix,
             interpreter_binding: None,
             clock: &self.clock,
         }

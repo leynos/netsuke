@@ -2,6 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
+use rstest::rstest;
+
 #[cfg(not(windows))]
 use super::KnownFolderSystemDirectory;
 use super::{SystemDirectory, WindowsPowerShellLocationError, locate_windows_power_shell};
@@ -38,6 +40,54 @@ fn with_system_directory(system_directory: Option<&Path>) -> FixedSystemDirector
 fn locate_error(system_directory: Option<&Path>) -> WindowsPowerShellLocationError {
     locate_windows_power_shell(&with_system_directory(system_directory))
         .expect_err("the fixture system directory should not bind")
+}
+
+/// Require one locator failure to match an expected variant.
+///
+/// The rejection cases differ only in fixture setup and expected variant, so
+/// the shared assertion keeps their diagnostics in one place.
+fn ensure_rejected(
+    error: &WindowsPowerShellLocationError,
+    expected: fn(&WindowsPowerShellLocationError) -> bool,
+    description: &str,
+) {
+    assert!(
+        expected(error),
+        "expected a {description} rejection, got {error:?}"
+    );
+}
+
+/// Return whether the failure rejected a non-regular engine file.
+fn is_not_regular_file(failure: &WindowsPowerShellLocationError) -> bool {
+    matches!(
+        failure,
+        WindowsPowerShellLocationError::NotRegularFile { .. }
+    )
+}
+
+/// Return whether the failure rejected a relative system directory.
+fn is_relative_directory(failure: &WindowsPowerShellLocationError) -> bool {
+    matches!(
+        failure,
+        WindowsPowerShellLocationError::RelativeSystemDirectory { .. }
+    )
+}
+
+/// Return whether the failure reports an unavailable system directory.
+fn is_unavailable_directory(failure: &WindowsPowerShellLocationError) -> bool {
+    matches!(
+        failure,
+        WindowsPowerShellLocationError::SystemDirectoryUnavailable
+    )
+}
+
+/// Return whether the failure rejected a non-UTF-8 system directory.
+#[cfg(unix)]
+fn is_non_utf8_directory(failure: &WindowsPowerShellLocationError) -> bool {
+    matches!(
+        failure,
+        WindowsPowerShellLocationError::NonUtf8SystemDirectory { .. }
+    )
 }
 
 #[test]
@@ -88,10 +138,7 @@ fn rejects_a_directory_at_the_engine_path() -> anyhow::Result<()> {
 
     let error = locate_error(Some(workspace.path()));
 
-    anyhow::ensure!(
-        matches!(error, WindowsPowerShellLocationError::NotRegularFile { .. }),
-        "expected a regular-file rejection, got {error:?}"
-    );
+    ensure_rejected(&error, is_not_regular_file, "non-regular-file");
     Ok(())
 }
 
@@ -111,37 +158,27 @@ fn rejects_a_symlink_at_the_engine_path() -> anyhow::Result<()> {
 
     let error = locate_error(Some(workspace.path()));
 
-    anyhow::ensure!(
-        matches!(error, WindowsPowerShellLocationError::NotRegularFile { .. }),
-        "expected a symlink rejection, got {error:?}"
-    );
+    ensure_rejected(&error, is_not_regular_file, "non-regular-file");
     Ok(())
 }
 
-#[test]
-fn rejects_a_relative_system_directory() {
-    let error = locate_error(Some(Path::new("relative")));
-
-    assert!(
-        matches!(
-            error,
-            WindowsPowerShellLocationError::RelativeSystemDirectory { .. }
-        ),
-        "expected a relative-directory rejection, got {error:?}"
-    );
-}
-
-#[test]
-fn reports_an_unavailable_system_directory() {
-    let error = locate_error(None);
-
-    assert!(
-        matches!(
-            error,
-            WindowsPowerShellLocationError::SystemDirectoryUnavailable
-        ),
-        "expected an unavailable-directory failure, got {error:?}"
-    );
+/// Rejection cases that need no filesystem fixture.
+///
+/// The relative and unavailable cases share one shape, so the table keeps the
+/// pair from drifting into near-duplicate functions.
+#[rstest]
+#[case::relative_directory(
+    Some(Path::new("relative")),
+    is_relative_directory,
+    "relative-directory"
+)]
+#[case::unavailable_directory(None, is_unavailable_directory, "unavailable-directory")]
+fn rejects_unsupported_system_directories(
+    #[case] system_directory: Option<&Path>,
+    #[case] expected: fn(&WindowsPowerShellLocationError) -> bool,
+    #[case] description: &str,
+) {
+    ensure_rejected(&locate_error(system_directory), expected, description);
 }
 
 #[cfg(unix)]
@@ -154,13 +191,7 @@ fn rejects_a_non_utf8_system_directory() {
 
     let error = locate_error(Some(&path));
 
-    assert!(
-        matches!(
-            error,
-            WindowsPowerShellLocationError::NonUtf8SystemDirectory { .. }
-        ),
-        "expected a non-UTF-8 directory rejection, got {error:?}"
-    );
+    ensure_rejected(&error, is_non_utf8_directory, "non-UTF-8 directory");
 }
 
 #[test]
