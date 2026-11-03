@@ -102,19 +102,14 @@ def validate_digest_record(
 
 
 def _asset_mapping(record: object) -> dict[str, object]:
-    """Return the non-empty asset mapping from a decoded record.
+    """Return the asset mapping from a decoded record.
 
     Returns
     -------
     dict[str, object]
         The unvalidated digest values from the record's ``assets`` member,
-        keyed by asset name.
-
-    Raises
-    ------
-    release_digest_record.DigestRecordError
-        If the record is not a non-empty mapping of string-keyed asset
-        entries.
+        keyed by asset name. Each shape check raises the error of the helper
+        that performs it.
 
     Examples
     --------
@@ -126,9 +121,6 @@ def _asset_mapping(record: object) -> dict[str, object]:
         container.get(ASSETS_MEMBER),
         f"the digest record must carry an '{ASSETS_MEMBER}' mapping",
     )
-    if not declared:
-        msg = "the digest record declares no assets, so there is nothing to verify"
-        raise release_digest_record.DigestRecordError(msg)
     return _string_keyed(declared)
 
 
@@ -164,8 +156,8 @@ def _string_keyed(declared: dict[object, object]) -> dict[str, object]:
     """Return the asset mapping after refusing a non-string asset name.
 
     JSON object keys are always strings, so a non-string key can only arrive
-    as an already decoded value; the check belongs to this adapter because a
-    mixed-type key set would later break ``sorted``.
+    as an already decoded value. ``DigestRecord`` refuses such a key with the
+    same message.
 
     Returns
     -------

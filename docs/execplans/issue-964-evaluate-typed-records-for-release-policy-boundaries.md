@@ -291,6 +291,13 @@ records and are unchanged.
       ADR-0068, this plan, and the trusted-packaging decision log now record
       that the record refuses the value earlier than policy did, with the same
       exit status and no weakened release check.
+- [x] Remove the adapter's duplicate empty-assets refusal, raised by the
+      CodeRabbit review of `c1a608460`. `DigestRecord.__post_init__` already
+      refuses an empty record with the same message on every construction
+      path, so `_asset_mapping` keeps only the member name and the mapping
+      shape checks. The `_string_keyed` note that called its check necessary
+      for `sorted` was wrong, because `_validated_entry` refuses a non-string
+      key in the same message before sorting; the docstring now says so.
 
 ## Outcomes and retrospective
 
