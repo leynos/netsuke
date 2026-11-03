@@ -909,7 +909,7 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   cover the seven dependencies, credential separation, artefact selection,
   action ordering, and all five registry decisions. The candidate boundary is
   exercised offline in `package-crate`: a dry run validates only a tagless
-  candidate, a publishing run requires its release tag, and supplying neither
+  candidate, a publishing run requires its release tag, and supplying no mode
   or both modes is a usage error. Interrupted-publication resume is covered at
   both levels: the sequence tests drive absent→publish then identical→skip then
   a successful byte verification, and the workflow contracts require the skip

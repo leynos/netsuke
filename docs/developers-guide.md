@@ -2718,9 +2718,9 @@ The `package-crate` action runs the same check offline before it uploads the
 artefact, so the identity and bytes are proved to agree while both are still
 local. That invocation selects `--rehearsal` for a dry run and `--tag` for a
 publishing run: a rehearsal candidate records no tag, and a publishing
-candidate must record exactly the tag being released. Supplying neither mode,
-or both, is a usage error rather than a check that silently accepts whichever
-identity it was handed.
+candidate must record exactly the tag being released. Supplying no mode, or
+both modes, is a usage error rather than a check that silently accepts
+whichever identity it was handed.
 
 The action probes the version once and passes the saved status and response
 body to `publish_crates_io_cli classify`, which composes
