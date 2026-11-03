@@ -30,11 +30,11 @@ proptest! {
         let mut first = doc.clone();
         let first_budget = ManifestBudget::new(limits)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let first_result = expand_foreach_with_budget(&mut first, &env, &first_budget);
+        let first_result = expand_foreach_with_budget(&mut first, &env, &first_budget, true);
         let mut second = doc;
         let second_budget = ManifestBudget::new(limits)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;
-        let second_result = expand_foreach_with_budget(&mut second, &env, &second_budget);
+        let second_result = expand_foreach_with_budget(&mut second, &env, &second_budget, true);
 
         if values.len() <= CARDINALITY_LIMIT {
             first_result.map_err(|error| TestCaseError::fail(error.to_string()))?;

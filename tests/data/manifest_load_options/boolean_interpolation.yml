@@ -1,0 +1,21 @@
+# The only fixture whose output differs by registration surface.
+#
+# `{{ true }}` and `{{ false }}` are Jinja literals, so `Display for Value`
+# decides their text: `True`/`False` by default, `true`/`false` once
+# `register_legacy_boolean_formatter` installs its formatter. That formatter is
+# installed by the build registration and *not* by the manifest-query
+# registration, so this fixture is the observable lever separating the two
+# surfaces at the manifest level.
+#
+# The literals sit in a target-level `vars` entry and in the target
+# `description` because `render_target` substitutes those fields in both render
+# modes; a top-level `vars` block would not do, since `render_manifest_with_mode`
+# only clones it as rule context and never renders its values.
+netsuke_version: "1.0.0"
+targets:
+  - name: booleans
+    description: "literals: {{ true }}/{{ false }}"
+    vars:
+      enabled: "{{ true }}"
+      disabled: "{{ false }}"
+    command: "echo {{ enabled }} {{ disabled }}"

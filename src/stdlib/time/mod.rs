@@ -47,8 +47,17 @@ const OFFSET_FMT: &[FormatItem<'static>] =
 /// every evaluation, so a caller that injects a provider observes it on each
 /// call rather than once at registration.
 pub(crate) fn register_functions(env: &mut Environment<'_>, clock: WallClock) {
-    env.add_function("now", move |kwargs: Kwargs| now(&kwargs, &clock));
+    register_now(env, clock);
     register_query_functions(env);
+}
+
+/// Register the `now()` helper over an injected clock.
+///
+/// The test surface calls this only when its configuration carries an injected
+/// clock; with the ambient clock it registers a refusal instead, because
+/// reading the host clock would make a test load unrepeatable.
+pub(crate) fn register_now(env: &mut Environment<'_>, clock: WallClock) {
+    env.add_function("now", move |kwargs: Kwargs| now(&kwargs, &clock));
 }
 
 /// Register time helpers whose output does not depend on the current clock.

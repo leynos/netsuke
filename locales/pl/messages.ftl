@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Wartość default w env musi być łańcuchem znaków; typ otrzymanej wartości: { $kind }.
 manifest.vars.not_object = Pole `vars` manifestu musi być odwzorowaniem lub obiektem.
 manifest.vars.reserved_name = Klucz `vars` '{ $name }' w manifeście jest zarezerwowany dla wbudowanej funkcji pomocniczej szablonów; zmień nazwę zmiennej.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Nakładka szablonu '{ $name }' koliduje z przestrzenią nazw { $kind }; zmień nazwę nakładki.
 manifest.read_failed = Nie udało się odczytać manifestu z { $path }.
 manifest.resolve_workspace_root = Nie udało się ustalić katalogu głównego obszaru roboczego.
 manifest.workspace_non_utf8 = Ścieżka główna obszaru roboczego „{ $path }” nie jest prawidłowym UTF-8.
@@ -299,6 +300,10 @@ stdlib.command.output.mode.capture = przechwytywanie
 stdlib.command.output.mode.streaming = strumieniowanie
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } jest niedostępne w `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

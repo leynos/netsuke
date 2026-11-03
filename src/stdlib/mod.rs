@@ -16,6 +16,7 @@ mod network;
 mod path;
 mod recipe_text;
 mod register;
+mod restricted_helpers;
 mod time;
 mod which;
 
@@ -34,8 +35,13 @@ pub use network::{
 };
 pub use path::{FILE_READ_FILTER_VALUES, FILE_READ_OUTCOME_VALUES, FILE_READ_TOTAL};
 pub use recipe_text::{DIALECT_SOURCE_VALUES, DIALECT_VALUES, SHELL_QUOTE_DIALECT_TOTAL};
-pub(crate) use register::{is_manifest_query_disabled_error, register_manifest_query};
+pub(crate) use register::register_manifest_query;
 pub use register::{register, register_with_config, value_from_bytes};
+pub use restricted_helpers::TestModeRefusal;
+pub(crate) use restricted_helpers::{
+    RestrictedSurface, is_manifest_query_disabled_error, register_env_refusal, register_for_test,
+    register_glob_refusal,
+};
 pub use time::{ClockInstant, ClockProvider, fixed_clock, system_clock};
 pub use which::{
     RESOLVE_ERROR_CATEGORY_VALUES, WHICH_CACHE_OUTCOME_VALUES, WHICH_CACHE_TOTAL,

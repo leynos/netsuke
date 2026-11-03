@@ -40,15 +40,15 @@ MiB source, 10,000 `foreach` values, and 50,000 expanded entries. Exhaustion
 uses a localized, redacted diagnostic and closed-vocabulary telemetry labels.
 The budget types contain only accounting data; the Jinja adapter owns
 localization and MiniJinja error conversion, and the normal full-load boundary
-owns exhaustion telemetry. Manifest-query loading selects
-`ManifestLoadMode::ManifestQuery`, which suppresses this budget-exhaustion
-metric at the loading boundary; its omitted expansion-report observer controls
-the separate expansion metrics. Other instrumentation remains owned by the
-boundaries that invoke it. Budget values from the project file and every file
-in its `extends` chain may only narrow ceilings established by defaults,
-trusted configuration, the environment, or CLI flags. Malformed, non-positive,
-and unrepresentable budget values are rejected during configuration merge
-rather than treated as absent.
+owns exhaustion telemetry. Manifest-query loading selects the `ManifestQuery`
+stdlib registration, which suppresses this budget-exhaustion metric at the
+loading boundary; its omitted expansion-report observer controls the separate
+expansion metrics. Other instrumentation remains owned by the boundaries that
+invoke it. Budget values from the project file and every file in its `extends`
+chain may only narrow ceilings established by defaults, trusted configuration,
+the environment, or CLI flags. Malformed, non-positive, and unrepresentable
+budget values are rejected during configuration merge rather than treated as
+absent.
 
 After a successful full manifest load, the runner continues to call
 `record_manifest_structure` for the bounded fixed-vocabulary structural counts
@@ -236,6 +236,28 @@ completed value. It narrows an allocation hazard but does not bound aggregate
 macro output or internal macro and capture buffering. Addendum B's deferred
 remediation and its MiniJinja 3.0.0-final release condition therefore remain
 unchanged.
+
+## Addendum E: Telemetry scope for derived loads (2026-11-01)
+
+Expansion and budget telemetry describes normal manifest loading: how often
+`foreach`/`when` evaluated, what the resource budget observed, and how a build
+manifest's evaluation behaved. Two derived load modes measure something else
+and must not contribute to those counters.
+
+`ManifestQuery` loads inspect discovery metadata and evaluate a manifest only
+far enough to answer a query. `Test` loads evaluate a manifest under a
+deny-by-default stdlib surface. Counting either as a build-shaped load would
+distort usage evidence and blend a query or test outcome into statistics about
+builds.
+
+The load's registration therefore decides:
+`StdlibRegistration::records_expansion_and_budget_telemetry` is true for
+`AmbientFull` and `Full` and false for `ManifestQuery` and `Test`. The loader
+passes that decision to the budget adapter and skips the expansion telemetry,
+so a query or test load still enforces the resource ceilings but records
+nothing under the build's telemetry names. This narrows the counters' scope; it
+does not change the budget itself or the guarantee this record's Addenda A–D
+describe.
 
 ## References
 

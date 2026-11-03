@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = default pada env harus berupa untai, menerima { $kind }.
 manifest.vars.not_object = `vars` pada manifes harus berupa pemetaan atau objek.
 manifest.vars.reserved_name = Kunci `vars` '{ $name }' pada manifes dicadangkan untuk fungsi bantu templat bawaan; ganti nama variabel tersebut.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Lapisan templat '{ $name }' bertabrakan dengan ruang nama { $kind }; ganti nama lapisan tersebut.
 manifest.read_failed = Manifes di { $path } tidak dapat dibaca.
 manifest.resolve_workspace_root = Akar ruang kerja tidak dapat ditentukan.
 manifest.workspace_non_utf8 = Jalur akar ruang kerja "{ $path }" bukan UTF-8 yang sah.
@@ -296,6 +297,10 @@ stdlib.command.output.mode.capture = penangkapan
 stdlib.command.output.mode.streaming = penstriman
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } tidak tersedia di bawah `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

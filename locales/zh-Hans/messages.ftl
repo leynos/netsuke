@@ -146,6 +146,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = env 的 default 必须是字符串，但收到了 { $kind }。
 manifest.vars.not_object = 清单的 `vars` 必须是映射或对象。
 manifest.vars.reserved_name = 清单的 `vars` 键 '{ $name }' 已保留给内置模板辅助函数；请重命名该变量。
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] 模板覆盖 '{ $name }' 与 { $kind } 命名空间冲突；请重命名该覆盖。
 manifest.read_failed = 无法读取 { $path } 处的清单。
 manifest.resolve_workspace_root = 无法确定工作区根目录。
 manifest.workspace_non_utf8 = 工作区根路径“{ $path }”不是有效的 UTF-8。
@@ -295,6 +296,10 @@ stdlib.command.output.mode.capture = 捕获
 stdlib.command.output.mode.streaming = 流式
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } 在 `netsuke test` 下不可用。
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

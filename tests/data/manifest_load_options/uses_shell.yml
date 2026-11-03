@@ -1,0 +1,19 @@
+# `shell` under a benign command.
+#
+# The build surface executes this filter literally, so the command is `echo
+# fixture`: a row that reaches it spawns a shell and prints one word, which is
+# harmless and has no filesystem effect. The manifest-query surface registers
+# `shell` as a deliberate failure instead, so the same fixture exercises the
+# refusal path there.
+#
+# `shell` is a filter, so it needs a value on the left; the empty string
+# supplies one and the command ignores its input.
+#
+# The call is in the `description` so both the build and query surfaces reach
+# it: recipe bodies are skipped in the query render mode, but descriptions are
+# substituted in both.
+netsuke_version: "1.0.0"
+targets:
+  - name: shelled
+    description: "{{ '' | shell('echo fixture') }}"
+    command: "echo shelled"

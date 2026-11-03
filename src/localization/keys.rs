@@ -2,13 +2,15 @@
 //!
 //! This file holds the general key table: the build-time localization audit
 //! parses its `define_keys!` invocation, and the macro itself is defined in
-//! the parent module. The `netsuke check` keys live in `check_keys.rs` and
-//! the clap error keys in `clap_error_keys.rs`; both are re-exported here, so
-//! every key is still reached as `keys::NAME`.
+//! the parent module. The `netsuke check` keys live in `check_keys.rs`, the
+//! clap error keys in `clap_error_keys.rs`, and the manifest keys in
+//! `manifest_keys.rs`; all are re-exported here, so every key is still reached
+//! as `keys::NAME`.
 
 pub use super::check_keys::*;
 pub use super::clap_error_keys::*;
-// The union of all three tables lives in the parent module, where the line
+pub use super::manifest_keys::*;
+// The union of all four tables lives in the parent module, where the line
 // budget allows it; re-exported here because `keys` is the name callers use.
 pub use super::ALL_KEYS;
 
@@ -113,58 +115,6 @@ define_keys! {
     RUNNER_IO_DYNDEP_TEMP_COLLISIONS => "runner.io.dyndep.temp_collisions",
     RUNNER_IO_DYNDEP_TOO_LARGE => "runner.io.dyndep.too_large",
     RUNNER_IO_DYNDEP_RETENTION => "runner.io.dyndep.retention",
-    MANIFEST_PARSE => "manifest.parse",
-    MANIFEST_STRUCTURE_ERROR => "manifest.structure_error",
-    MANIFEST_YAML_PARSE => "manifest.yaml.parse",
-    MANIFEST_YAML_LABEL => "manifest.yaml.label",
-    MANIFEST_YAML_HINT_TABS => "manifest.yaml.hint.tabs",
-    MANIFEST_YAML_HINT_LIST_ITEM => "manifest.yaml.hint.list_item",
-    MANIFEST_YAML_HINT_EXPECTED_COLON => "manifest.yaml.hint.expected_colon",
-    MANIFEST_YAML_HINT_MAPPING_VALUES => "manifest.yaml.hint.mapping_values",
-    MANIFEST_YAML_HINT_INVALID_TOKEN => "manifest.yaml.hint.invalid_token",
-    MANIFEST_YAML_HINT_ESCAPE => "manifest.yaml.hint.escape",
-    MANIFEST_ENV_MISSING => "manifest.env.missing",
-    MANIFEST_ENV_INVALID_UTF8 => "manifest.env.invalid_utf8",
-    MANIFEST_ENV_BLOCKED => "manifest.env.blocked",
-    MANIFEST_ENV_ARGS_ERROR => "manifest.env.args_error",
-    MANIFEST_ENV_DEFAULT_NOT_STRING => "manifest.env.default_not_string",
-    MANIFEST_VARS_NOT_OBJECT => "manifest.vars.not_object",
-    MANIFEST_VARS_RESERVED_NAME => "manifest.vars.reserved_name",
-    MANIFEST_READ_FAILED => "manifest.read_failed",
-    MANIFEST_RESOLVE_WORKSPACE_ROOT => "manifest.resolve_workspace_root",
-    MANIFEST_WORKSPACE_NON_UTF8 => "manifest.workspace_non_utf8",
-    MANIFEST_PATH_NON_UTF8 => "manifest.path_non_utf8",
-    MANIFEST_PATH_MISSING_NAME => "manifest.path_missing_name",
-    MANIFEST_OPEN_WORKSPACE_FAILED => "manifest.open_workspace_failed",
-    MANIFEST_FOREACH_NOT_ITERABLE => "manifest.foreach.not_iterable",
-    MANIFEST_FOREACH_SERIALISE_ITEM => "manifest.foreach.serialise_item",
-    MANIFEST_BUDGET_EXCEEDED => "manifest.budget.exceeded",
-    MANIFEST_WHEN_EMPTY => "manifest.when.empty",
-    MANIFEST_WHEN_EVAL_ERROR => "manifest.when.eval_error",
-    MANIFEST_WHEN_TEMPLATE_ERROR => "manifest.when.template_error",
-    MANIFEST_TARGET_VARS_NOT_OBJECT => "manifest.target.vars_not_object",
-    MANIFEST_VARS_ENTRY_NOT_OBJECT => "manifest.vars.entry_not_object",
-    MANIFEST_FIELD_NOT_STRING => "manifest.field_not_string",
-    MANIFEST_EXPRESSION_PARSE_ERROR => "manifest.expression.parse_error",
-    MANIFEST_EXPRESSION_EVAL_ERROR => "manifest.expression.eval_error",
-    MANIFEST_MACRO_SIGNATURE_MISSING_IDENTIFIER => "manifest.macro.signature_missing_identifier",
-    MANIFEST_MACRO_SIGNATURE_MISSING_PARAMS => "manifest.macro.signature_missing_params",
-    MANIFEST_MACRO_COMPILE_FAILED => "manifest.macro.compile_failed",
-    MANIFEST_MACRO_SEQUENCE_INVALID => "manifest.macro.sequence_invalid",
-    MANIFEST_MACRO_REGISTER_FAILED => "manifest.macro.register_failed",
-    MANIFEST_MACRO_NOT_INITIALISED => "manifest.macro.not_initialised",
-    MANIFEST_MACRO_CALLER_INVALID => "manifest.macro.caller_invalid",
-    MANIFEST_MACRO_TEMPLATE_LOAD_FAILED => "manifest.macro.template_load_failed",
-    MANIFEST_MACRO_INIT_FAILED => "manifest.macro.init_failed",
-    MANIFEST_MACRO_MISSING => "manifest.macro.missing",
-    MANIFEST_GLOB_UNMATCHED_BRACE => "manifest.glob.unmatched_brace",
-    MANIFEST_GLOB_INVALID_PATTERN => "manifest.glob.invalid_pattern",
-    MANIFEST_GLOB_UNKNOWN_PATTERN_ERROR => "manifest.glob.unknown_pattern_error",
-    MANIFEST_GLOB_IO_FAILED => "manifest.glob.io_failed",
-    MANIFEST_GLOB_UNKNOWN_IO_ERROR => "manifest.glob.unknown_io_error",
-    MANIFEST_COMMAND_LIST_EMPTY => "manifest.command_list_empty",
-    MANIFEST_COMMAND_ISOLATION_RECIPE => "manifest.command_isolation_recipe",
-    MANIFEST_COMMAND_ISOLATION_SCALAR => "manifest.command_isolation_scalar",
     IR_RULE_NOT_FOUND => "ir.rule_not_found",
     IR_MULTIPLE_RULES => "ir.multiple_rules",
     IR_EMPTY_RULE => "ir.empty_rule",
@@ -212,6 +162,7 @@ define_keys! {
     STDLIB_CONFIG_OPEN_WORKSPACE_ROOT => "stdlib.config.open_workspace_root",
     STDLIB_CONFIG_RESOLVE_CWD => "stdlib.config.resolve_cwd",
     STDLIB_CONFIG_CWD_NON_UTF8 => "stdlib.config.cwd_non_utf8",
+    STDLIB_TEST_MODE_HELPER_UNAVAILABLE => "stdlib.test_mode.helper_unavailable",
     STDLIB_FETCH_URL_INVALID => "stdlib.fetch.url_invalid",
     STDLIB_FETCH_DISALLOWED => "stdlib.fetch.disallowed",
     STDLIB_FETCH_FAILED => "stdlib.fetch.failed",

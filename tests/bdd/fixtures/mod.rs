@@ -10,7 +10,7 @@ use camino::Utf8PathBuf;
 use minijinja::value::Value;
 use netsuke::cli::Cli;
 use netsuke::localization::LocalizerGuard;
-use netsuke::manifest::EnvAccessPolicy;
+use netsuke::manifest::{EnvAccessPolicy, TemplateOverlays};
 use netsuke::output_mode::OutputMode;
 use netsuke::output_prefs::OutputPrefs;
 use netsuke::runner::CommandEnv;
@@ -52,6 +52,14 @@ pub struct TestWorld {
     pub manifest_budget_limits: Slot<netsuke::manifest::ManifestBudgetLimits>,
     /// Environment access policy applied while parsing the current manifest.
     pub manifest_env_access_policy: RefCell<EnvAccessPolicy>,
+    /// Repository-relative manifest selected by the loader-options scenarios.
+    pub load_options_path: Slot<String>,
+    /// Ninja text produced by the build-surface load.
+    pub load_options_build_ninja: Slot<String>,
+    /// Ninja text produced by the test-surface load.
+    pub load_options_test_ninja: Slot<String>,
+    /// Template overlays the test-surface load registers.
+    pub load_options_overlays: Slot<TemplateOverlays>,
 
     // IR state (non-Clone)
     /// Build graph derived from the active manifest.

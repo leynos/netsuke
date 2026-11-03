@@ -115,6 +115,11 @@ impl WallClock {
     }
 
     /// Whether the ambient host clock is installed.
+    ///
+    /// This is a capability answer, not a diagnostic: the test surface admits
+    /// `now()` only when this is `false`, because an injected clock makes the
+    /// result repeatable while the ambient clock is a host read. Production
+    /// renders never ask — they register `now()` unconditionally.
     pub(crate) const fn is_system(&self) -> bool {
         self.is_system
     }

@@ -148,6 +148,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Il default di env deve essere una stringa, ricevuto { $kind }.
 manifest.vars.not_object = `vars` del manifest deve essere una mappa o un oggetto.
 manifest.vars.reserved_name = La chiave `vars` '{ $name }' del manifest è riservata a una funzione di supporto per i template integrata; rinomina la variabile.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] La sovrapposizione del template '{ $name }' è in conflitto con lo spazio dei nomi { $kind }; rinomina la sovrapposizione.
 manifest.read_failed = Impossibile leggere il manifest in { $path }.
 manifest.resolve_workspace_root = Impossibile risolvere la radice dell'area di lavoro.
 manifest.workspace_non_utf8 = Il percorso radice dell'area di lavoro «{ $path }» non è UTF-8 valido.
@@ -298,6 +299,10 @@ stdlib.command.output.mode.capture = cattura
 stdlib.command.output.mode.streaming = streaming
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } non è disponibile con `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

@@ -17,7 +17,10 @@ use serde::Serialize;
 mod call;
 mod expression;
 mod invocation;
+mod query_classification;
 pub(crate) use expression::{ExpressionEvaluation, evaluate_with_state};
+pub(crate) use query_classification::QueryEvaluation;
+use query_classification::classify_query_evaluation;
 pub(crate) mod telemetry;
 
 // Only the manifest test suite reaches the helper through the parent path;
@@ -29,16 +32,18 @@ use invocation::{make_macro_fn, validate_macro};
 /// Global name holding accumulated import statements for manifest macros.
 const MACRO_IMPORTS_GLOBAL: &str = "__netsuke_manifest_macro_imports";
 
-/// Represents a Jinja evaluation that may be disabled in manifest-query mode.
+/// Borrow the budget and refusal policy one `when` evaluation runs under.
 ///
-/// This preserves the distinction between a false condition and a condition
-/// that discovery cannot safely inspect, without leaking `MiniJinja` errors
-/// into manifest expansion.
-pub(crate) enum QueryEvaluation<T> {
-    /// Holds a successfully evaluated value.
-    Value(T),
-    /// Marks an expression that invoked a query-disabled helper.
-    QueryDisabled,
+/// Bundling the pair keeps `evaluate_when_expression` and
+/// `render_when_template` within the repository's four-argument limit while
+/// still letting the caller decide whether a refused helper is a conditional
+/// entry or a genuine failure (C5).
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct EvaluationBoundary<'a> {
+    /// Shared resource accounting for this complete manifest evaluation.
+    pub(crate) budget: &'a ManifestBudget,
+    /// Whether a refused helper marks the condition conditional.
+    pub(crate) classifies_query_refusals: bool,
 }
 
 /// Evaluate a `when` expression when it has expression syntax.
@@ -54,9 +59,10 @@ pub(crate) fn evaluate_when_expression(
     env: &Environment,
     expression: &str,
     context: &Value,
-    budget: &ManifestBudget,
+    boundary: EvaluationBoundary<'_>,
 ) -> Result<Option<QueryEvaluation<bool>>> {
-    budget
+    boundary
+        .budget
         .charge_source(expression.len(), ManifestBudgetStage::Source)
         .map_err(|exhaustion| exhaustion.into_error(ErrorKind::InvalidOperation))?;
     if env.compile_expression(expression).is_err() {
@@ -64,7 +70,7 @@ pub(crate) fn evaluate_when_expression(
     }
     let evaluation = evaluate_with_state(
         env,
-        budget,
+        boundary.budget,
         &ExpressionEvaluation {
             expression,
             context,
@@ -73,7 +79,7 @@ pub(crate) fn evaluate_when_expression(
     );
     match evaluation {
         Err(error) if is_budget_error(&error) => Err(error.into()),
-        result => classify_query_evaluation(result)
+        result => classify_query_evaluation(result, boundary.classifies_query_refusals)
             .map(|query_evaluation| query_evaluation.map(|value| value.is_true()))
             .with_context(|| {
                 localization::message(keys::MANIFEST_WHEN_EVAL_ERROR).with_arg("expr", expression)
@@ -92,11 +98,11 @@ pub(crate) fn render_when_template(
     env: &Environment,
     template: &str,
     context: &Value,
-    budget: &ManifestBudget,
+    boundary: EvaluationBoundary<'_>,
 ) -> Result<QueryEvaluation<String>> {
     let evaluation = render_template_at(
         env,
-        budget,
+        boundary.budget,
         &TemplateRenderRequest {
             template,
             context,
@@ -105,42 +111,16 @@ pub(crate) fn render_when_template(
     );
     match evaluation {
         Err(error) if is_budget_error(&error) => Err(error.into()),
-        result => classify_query_evaluation(result).with_context(|| {
-            localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", template)
-        }),
+        result => classify_query_evaluation(result, boundary.classifies_query_refusals)
+            .with_context(|| {
+                localization::message(keys::MANIFEST_WHEN_TEMPLATE_ERROR).with_arg("expr", template)
+            }),
     }
 }
 
 /// Return whether a `MiniJinja` failure originated at the budget boundary.
 fn is_budget_error(error: &Error) -> bool {
     matches!(error.kind(), ErrorKind::OutOfFuel | ErrorKind::WriteFailure)
-}
-
-/// Convert a `MiniJinja` result into the query-safe evaluation boundary.
-///
-/// The stdlib marks intentionally disabled helpers with a stable `MiniJinja`
-/// error. Keeping the adapter here confines that implementation detail to the
-/// Jinja boundary; manifest expansion consumes only [`QueryEvaluation`].
-fn classify_query_evaluation<T>(
-    evaluation: std::result::Result<T, Error>,
-) -> Result<QueryEvaluation<T>> {
-    match evaluation {
-        Ok(value) => Ok(QueryEvaluation::Value(value)),
-        Err(error) if crate::stdlib::is_manifest_query_disabled_error(&error) => {
-            Ok(QueryEvaluation::QueryDisabled)
-        }
-        Err(error) => Err(error.into()),
-    }
-}
-
-impl<T> QueryEvaluation<T> {
-    /// Transform a successful value while preserving query-disabled state.
-    fn map<U>(self, transform: impl FnOnce(T) -> U) -> QueryEvaluation<U> {
-        match self {
-            Self::Value(value) => QueryEvaluation::Value(transform(value)),
-            Self::QueryDisabled => QueryEvaluation::QueryDisabled,
-        }
-    }
 }
 
 /// Extract the macro identifier from a signature string.

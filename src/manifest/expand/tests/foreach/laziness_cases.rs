@@ -86,7 +86,7 @@ fn foreach_stops_consuming_before_the_cardinality_limit() -> Result<()> {
     };
     let budget = ManifestBudget::new(limits)?;
 
-    let error = expand_foreach_with_budget(&mut doc, &env, &budget)
+    let error = expand_foreach_with_budget(&mut doc, &env, &budget, true)
         .expect_err("the third value must exceed the per-foreach cardinality limit");
     let rendered = normalize_fluent_isolates(&format!("{error:#}"));
     ensure!(

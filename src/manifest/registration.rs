@@ -11,6 +11,7 @@ use super::{
     env::env_var_with_default,
     glob::{GlobBaseCache, expand_manifest_template_glob},
     map_data_error,
+    test_surface::OverlayNamespace,
 };
 use crate::{
     ast::{
@@ -137,6 +138,10 @@ pub(super) fn localize_recipe_error(error: serde_json::Error) -> serde_json::Err
 
 /// Expose the manifest's `vars` section as Jinja globals.
 ///
+/// The reserved-name check reads `namespace` rather than re-deriving the key
+/// list, so it cannot disagree with the overlay namespace rule about which
+/// names this manifest already claims.
+///
 /// # Errors
 ///
 /// Returns a structural manifest error for non-object variables or helper-name collisions.
@@ -144,6 +149,7 @@ pub(super) fn register_manifest_vars(
     doc: &ManifestValue,
     jinja: &mut Environment<'_>,
     name: &ManifestName,
+    namespace: &OverlayNamespace,
 ) -> Result<(), ManifestError> {
     let Some(vars_value) = doc.get("vars") else {
         return Ok(());
@@ -151,10 +157,7 @@ pub(super) fn register_manifest_vars(
     let vars = vars_value.as_object().ok_or_else(|| {
         manifest_structure_error(&localization::message(keys::MANIFEST_VARS_NOT_OBJECT), name)
     })?;
-    if let Some(reserved) = vars
-        .keys()
-        .find(|key| RESERVED_VAR_NAMES.contains(&key.as_str()))
-    {
+    if let Some(reserved) = namespace.reserved_variable(&RESERVED_VAR_NAMES) {
         return Err(manifest_structure_error(
             &localization::message(keys::MANIFEST_VARS_RESERVED_NAME).with_arg("name", reserved),
             name,

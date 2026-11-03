@@ -147,6 +147,7 @@ manifest.env.args_error = [netsuke::jinja::env::args] { $details }
 manifest.env.default_not_string = Hodnota default v env musí být řetězec; typ obdržené hodnoty: { $kind }.
 manifest.vars.not_object = Položka `vars` manifestu musí být mapování nebo objekt.
 manifest.vars.reserved_name = Klíč `vars` '{ $name }' v manifestu je vyhrazen pro vestavěného pomocníka šablon; přejmenujte proměnnou.
+manifest.overlay.name_collision = [netsuke::manifest::overlay::collision] Překryv šablony '{ $name }' koliduje s oborem { $kind }; přejmenujte překryv.
 manifest.read_failed = Manifest v { $path } se nepodařilo přečíst.
 manifest.resolve_workspace_root = Kořen pracovního prostoru se nepodařilo určit.
 manifest.workspace_non_utf8 = Kořenová cesta pracovního prostoru „{ $path }“ není platné UTF-8.
@@ -299,6 +300,10 @@ stdlib.command.output.mode.capture = zachytávání
 stdlib.command.output.mode.streaming = proudové zpracování
 stdlib.command.output.stream.stdout = stdout
 stdlib.command.output.stream.stderr = stderr
+
+# Test-mode helper refusals.
+stdlib.test_mode.helper_unavailable = [netsuke::jinja::test_mode::unavailable] { $operation } není dostupné v rámci `netsuke test`.
+
 
 # Recipe-text shell quoting diagnostics.
 stdlib.shell.args_error = [netsuke::jinja::shell::args] { $details }

@@ -1512,17 +1512,17 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
   - [x] Record the seam classification per
     [ADR-0008](adrs/adr-0008-environment-seam-taxonomy.md).
 
-- [ ] 7.1.2. Introduce the options-carrying manifest loader entry point. See
+- [x] 7.1.2. Introduce the options-carrying manifest loader entry point. See
   [technical design §4.3](netsuke-test-framework-technical-design.md).
-  - [ ] Add `ManifestLoadOptions` and `TemplateOverlays`, with existing
+  - [x] Add `ManifestLoadOptions` and `TemplateOverlays`, with existing
     entry points as thin wrappers.
-  - [ ] Extend `StdlibRegistration` with a `Test` mode beside `Full` and
+  - [x] Extend `StdlibRegistration` with a `Test` mode beside `Full` and
     `ManifestQuery` rather than adding a parallel boundary mechanism.
-  - [ ] Reuse the `manifest_query_operation_error` diagnostic shape and
+  - [x] Reuse the `manifest_query_operation_error` diagnostic shape and
     `disabled_env_reader` established by `netsuke help targets`.
-  - [ ] Register overlays after stdlib and manifest macros and before
+  - [x] Register overlays after stdlib and manifest macros and before
     `foreach` expansion.
-  - [ ] Add differential tests showing the build path is unchanged
+  - [x] Add differential tests showing the build path is unchanged
     (invariants I4 and I7).
 
 - [ ] 7.1.3. Spike MiniJinja overlay shadowing for macro substitution.
@@ -1585,13 +1585,16 @@ Objective: deliver the `netsuke test` command and YAML test dialect specified in
 
 ### 7.4. Fixture engine
 
-- [ ] 7.4.1. Add sandbox-rooted `glob()` and file-test adapters for the
-  test registration. Requires: 7.1.2. See
+- [ ] 7.4.1. Add sandbox-rooted `glob()`, file-test, and file-reading filter
+  adapters for the test registration. Requires: 7.1.2. See
   [technical design §5.5](netsuke-test-framework-technical-design.md).
   - [ ] Resolve relative glob patterns against the case sandbox rather
     than the process working directory.
   - [ ] Resolve file-test paths through the sandbox handle instead of
     `open_ambient_dir`, rejecting escapes.
+  - [ ] Resolve the `contents`, `size`, `linecount`, `hash`, `digest`, and
+    `realpath` filters through the sandbox handle instead of the process
+    working directory, rejecting escapes and keeping the bounded-read limits.
   - [ ] Leave the build path's ADR-0010 behaviour unchanged.
 
 - [ ] 7.4.2. Implement the fixture lifecycle. See

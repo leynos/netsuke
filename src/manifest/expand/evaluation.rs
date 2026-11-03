@@ -108,11 +108,15 @@ fn eval_when(
         "{}",
         localization::message(keys::MANIFEST_WHEN_EMPTY)
     );
+    let boundary = super::super::jinja_macros::EvaluationBoundary {
+        budget: expansion.budget,
+        classifies_query_refusals: expansion.classifies_query_refusals,
+    };
     if let Some(evaluation) = super::super::jinja_macros::evaluate_when_expression(
         expansion.env,
         expr,
         context,
-        expansion.budget,
+        boundary,
     )? {
         return Ok(match evaluation {
             super::super::jinja_macros::QueryEvaluation::Value(is_true) => when_evaluation(is_true),
@@ -125,7 +129,7 @@ fn eval_when(
         expansion.env,
         expr,
         context,
-        expansion.budget,
+        boundary,
     )? {
         super::super::jinja_macros::QueryEvaluation::Value(output) => output,
         super::super::jinja_macros::QueryEvaluation::QueryDisabled => {

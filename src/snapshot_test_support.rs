@@ -6,6 +6,7 @@
 use insta::Settings;
 use rstest::fixture;
 use std::path::PathBuf;
+use test_support::temp_path_filter::temp_dir_filter_pattern;
 
 use crate::output_mode::OutputMode;
 use crate::output_prefs::{OutputPrefs, resolve_from_theme_with};
@@ -33,6 +34,41 @@ pub(crate) fn snapshot_settings(subdir: &str) -> Settings {
             .join(subdir),
     );
     settings
+}
+
+/// Build snapshot settings rooted at `src/snapshots/<subdir>` with the module
+/// path left out of the snapshot name.
+///
+/// [`snapshot_settings`] keeps insta's module-prefixed names, which is right for
+/// a suite whose modules are settled. It is wrong for a suite that a later
+/// milestone moves between modules: the prefix changes with the module, so the
+/// snapshot would be renamed — and a rename during a pure move reads as a
+/// behaviour change. Removing the prefix makes the name depend only on the
+/// assertion, so the rows survive being relocated.
+///
+/// Both of a snapshot's incidental inputs are neutralized here, because both
+/// would otherwise vary without the code under test varying: the module path
+/// names the file, and a temporary directory reaches the text whenever a row
+/// stages a workspace and an error names it.
+///
+/// Callers pass a directory unique to their suite, because two rows in
+/// different modules sharing one name would silently overwrite each other.
+pub(crate) fn stable_snapshot_settings(subdir: &str) -> Settings {
+    let mut settings = snapshot_settings(subdir);
+    settings.set_prepend_module_to_snapshot(false);
+    add_temp_dir_filter(&mut settings);
+    settings
+}
+
+/// Replace the temporary-directory prefix of any absolute path with a
+/// placeholder.
+///
+/// Resolving the directory here rather than in
+/// [`temp_dir_filter_pattern`] keeps the pattern a pure function of its input,
+/// so a test can assert the Windows spelling on any host.
+fn add_temp_dir_filter(settings: &mut Settings) {
+    let temp_dir = std::env::temp_dir().display().to_string();
+    settings.add_filter(&temp_dir_filter_pattern(&temp_dir), "[TMP]");
 }
 
 /// Add a redaction filter for the Netsuke generator version.
@@ -100,7 +136,18 @@ pub(crate) fn theme_prefs(theme: ThemePreference) -> OutputPrefs {
 
 #[cfg(test)]
 mod tests {
-    //! Verify that generator-version redaction remains scoped across `SemVer` values.
+    //! Verify the generator-version filter redacts exactly what it claims.
+    //!
+    //! Both snapshot filters are the reason a checked-in snapshot repeats on a
+    //! machine that did not record it: one hides the generator version across
+    //! `SemVer` values, the other hides the temporary directory a staged
+    //! workspace lives in.
+    //!
+    //! Only the version filter is exercised here, because it is the only one
+    //! this module still owns. The temporary-path pattern moved to
+    //! `test_support::temp_path_filter` and its cases moved with it, so this
+    //! crate and the integration suite share one set of rows rather than
+    //! holding a copy each.
 
     use super::*;
     use proptest::prelude::*;

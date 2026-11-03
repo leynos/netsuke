@@ -57,6 +57,7 @@ fn stage_audit_inputs(destination: &Path) -> Result<()> {
         "src/localization/keys.rs",
         "src/localization/check_keys.rs",
         "src/localization/clap_error_keys.rs",
+        "src/localization/manifest_keys.rs",
     ] {
         fs::copy(root.join(keys), destination.join(keys))?;
     }
