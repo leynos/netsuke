@@ -30,7 +30,7 @@ if typ.TYPE_CHECKING:
 class CheckExpectation:
     """Carry workflow identity values passed to the candidate CLI."""
 
-    tag: str = TAG
+    tag: str | None = TAG
     commit: str = COMMIT
     package: str = PACKAGE_NAME
     version: str = VERSION
@@ -48,6 +48,7 @@ class IdentityMismatch:
 
 
 DEFAULT_EXPECTATION = CheckExpectation()
+REHEARSAL_EXPECTATION = CheckExpectation(tag=None)
 
 
 def _identity(*, tag: str | None = TAG) -> dict[str, object]:
@@ -68,40 +69,20 @@ def _check_args(
     output: pathlib.Path,
     expectation: CheckExpectation = DEFAULT_EXPECTATION,
 ) -> list[str]:
-    """Build the publishing-mode validated-candidate CLI invocation."""
+    """Build the validated-candidate CLI invocation for the expectation's mode."""
+    # An expectation without a tag rehearses the candidate; one with a tag
+    # publishes it. The mode is derived from the same value the check is
+    # expected to agree with, not supplied separately.
+    release_mode = (
+        ["--rehearsal"] if expectation.tag is None else ["--tag", expectation.tag]
+    )
     return [
         "check",
         "--identity",
         str(record),
         "--archive-directory",
         str(directory),
-        "--tag",
-        expectation.tag,
-        "--commit",
-        expectation.commit,
-        "--package-name",
-        expectation.package,
-        "--version",
-        expectation.version,
-        "--output",
-        str(output),
-    ]
-
-
-def _rehearsal_args(
-    record: pathlib.Path,
-    directory: pathlib.Path,
-    output: pathlib.Path,
-    expectation: CheckExpectation = DEFAULT_EXPECTATION,
-) -> list[str]:
-    """Build the rehearsal-mode validated-candidate CLI invocation."""
-    return [
-        "check",
-        "--identity",
-        str(record),
-        "--archive-directory",
-        str(directory),
-        "--rehearsal",
+        *release_mode,
         "--commit",
         expectation.commit,
         "--package-name",
@@ -140,7 +121,7 @@ def test_check_accepts_a_tagless_rehearsal_candidate(
     )
     output = tmp_path / "candidate.json"
 
-    status = main(_rehearsal_args(record, tmp_path, output))
+    status = main(_check_args(record, tmp_path, output, REHEARSAL_EXPECTATION))
 
     assert status == EXIT_OK, "a tagless rehearsal candidate must validate"
     candidate = json.loads(output.read_text(encoding="utf-8"))
@@ -155,7 +136,7 @@ def test_check_rejects_a_tagged_candidate_during_rehearsal(
     record, _ = write_candidate(tmp_path)
     output = tmp_path / "candidate.json"
 
-    status = main(_rehearsal_args(record, tmp_path, output))
+    status = main(_check_args(record, tmp_path, output, REHEARSAL_EXPECTATION))
 
     assert status == EXIT_REJECTED, "a rehearsal must not accept a tagged candidate"
     assert "must not record a release tag" in capsys.readouterr().err, (

@@ -8,7 +8,6 @@ modules; this module owns JSON, TOML, tar and filesystem boundaries.
 
 import argparse
 import dataclasses
-import enum
 import io
 import json
 import pathlib
@@ -16,7 +15,6 @@ import sys
 import tarfile
 import tempfile
 import tomllib
-import typing as typ
 
 import crates_io_upload_metadata
 import release_asset_names
@@ -24,6 +22,7 @@ import release_candidate
 import release_digest
 import release_digest_files
 import release_identity_record
+from crates_io_candidate_errors import CandidateError, CandidateIssue
 
 EXIT_OK = 0
 EXIT_REJECTED = 1
@@ -31,47 +30,6 @@ EXIT_OUTPUT_ERROR = 2
 EXIT_USAGE = 64
 
 SHA256_DIGEST_LENGTH = 64
-
-
-class CandidateIssue(enum.StrEnum):
-    """Classify failures while checking the retained release candidate."""
-
-    JSON_READ = "could not read {} {}: {}"
-    JSON_OBJECT = "{} must be a JSON object"
-    REHEARSAL = "a rehearsal identity cannot publish to crates.io"
-    UNEXPECTED_TAG = "a rehearsal candidate must not record a release tag: {!r}"
-    IDENTITY_MISMATCH = "candidate identity mismatch: {}"
-    CRATE_BASENAME = "identity record crate must be a flat archive basename"
-    CRATE_SUFFIX = "identity record crate {!r} must end in .crate"
-    ARCHIVE_COUNT = "expected exactly one matching .crate named {!r}, found {!r}"
-    ARCHIVE_FILE = "candidate archive is not a regular file: {!r}"
-    MANIFEST_MEMBER = "archive must contain exactly one regular {!r}"
-    MANIFEST_READ = "could not read packaged manifest {!r}"
-    MANIFEST_PARSE = "could not read packaged Cargo manifest: {}"
-    PACKAGE_TABLE = "packaged manifest has no [package] table"
-    MANIFEST_IDENTITY = (
-        "packaged manifest identity does not match the validated candidate"
-    )
-    IDENTITY_OBJECT = "package identity record has no identity object"
-    IDENTITY_INVALID = "invalid package identity: {}"
-    DIGEST_MISSING = "package identity record has no SHA-256 digest"
-    DIGEST_FORMAT = "package identity SHA-256 must be lowercase hexadecimal"
-    DIGEST_MISMATCH = "candidate archive digest {} disagrees with identity record {}"
-
-
-class CandidateError(ValueError):
-    """Carry a classified candidate error and its display values."""
-
-    def __init__(self, issue: CandidateIssue, context: tuple[object, ...] = ()) -> None:
-        """Store the candidate issue and values used to render its diagnostic."""
-        self.issue = issue
-        self.context = context
-        super().__init__(str(self))
-
-    @typ.override
-    def __str__(self) -> str:
-        """Render the issue with its associated diagnostic values."""
-        return self.issue.value.format(*self.context)
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -141,11 +99,11 @@ def _read_json_mapping(path: pathlib.Path, label: str) -> dict[str, object]:
     return parsed
 
 
-def _identity_matches(
+def _require_release_mode(
     identity: release_candidate.ReleaseIdentity,
     expectation: CandidateExpectation,
 ) -> None:
-    """Require the artifact identity to match this validated release run.
+    """Require the recorded tag to agree with the run's release mode.
 
     A rehearsal and a publishing run are distinguished by the tag alone. The
     rehearsal must record no tag, because inventing one would let a pull
@@ -156,15 +114,28 @@ def _identity_matches(
     Raises
     ------
     CandidateError
-        If a rehearsal records a tag, a publishing run records none, or the
-        identity disagrees with the workflow's commit, package name, version,
-        or tag.
+        If a rehearsal records a tag or a publishing run records none.
     """
     if expectation.is_rehearsal:
         if identity.tag is not None:
             raise CandidateError(CandidateIssue.UNEXPECTED_TAG, (identity.tag,))
     elif identity.tag is None:
         raise CandidateError(CandidateIssue.REHEARSAL)
+
+
+def _identity_matches(
+    identity: release_candidate.ReleaseIdentity,
+    expectation: CandidateExpectation,
+) -> None:
+    """Require the artifact identity to match this validated release run.
+
+    Raises
+    ------
+    CandidateError
+        If the recorded tag disagrees with the release mode, or the identity
+        disagrees with the workflow's commit, package name, version, or tag.
+    """
+    _require_release_mode(identity, expectation)
     expected = {
         "commit": expectation.commit,
         "package_name": expectation.package_name,
