@@ -566,7 +566,7 @@ The programme owner may close the meta-issue only when:
   the audit accounts for retained checks, alternate constructors, and both
   transport routes.
 - Parser qualification covers the declared dialect and platform matrix;
-  unsupported cases reject explicitly and unavailable evidence is visible.
+  unsupported cases reject explicitly, and unavailable evidence is visible.
 - Required property tests, interpreter comparisons, Kani checks, Verus proofs,
   and semantic negative controls pass for the recorded source revision.
 - The ledger distinguishes bounded checks, unbounded refinements, sampled
