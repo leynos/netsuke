@@ -160,7 +160,13 @@ function Test-MissingBashRuntimeDiagnostic {
         Get-EnvironmentVariableState -Name 'PATH'
     )
     try {
-        $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
+        # Get-Command may report several ninja applications; NETSUKE_NINJA names
+        # exactly one program, so an array would be joined into an invalid path.
+        $ninja = Get-Command ninja -CommandType Application | Select-Object -First 1
+        if (-not $ninja) {
+            throw 'The missing-runtime scenario requires a ninja application on PATH.'
+        }
+        $env:NETSUKE_NINJA = $ninja.Path
         $env:NETSUKE_WINDOWS_SHELL = 'bash'
         $env:PATH = $Workspace
         Assert-BashTargetDiscoveryWithoutRuntime -Netsuke $Netsuke

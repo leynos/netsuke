@@ -153,7 +153,13 @@ function Test-PowerShellSearchPathBinding {
         Get-EnvironmentVariableState -Name 'NETSUKE_NINJA'
     )
     try {
-        $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
+        # Get-Command may report several ninja applications; NETSUKE_NINJA names
+        # exactly one program, so an array would be joined into an invalid path.
+        $ninja = Get-Command ninja -CommandType Application | Select-Object -First 1
+        if (-not $ninja) {
+            throw 'The decoy scenario requires a ninja application on PATH.'
+        }
+        $env:NETSUKE_NINJA = $ninja.Path
         $env:PATH = $decoyPath + [IO.Path]::PathSeparator + $env:PATH
         # A previous phase writes this output, so a stale copy would satisfy the
         # assertion below even if this build never ran the recipe.
@@ -162,6 +168,9 @@ function Test-PowerShellSearchPathBinding {
         Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'scalar')
         Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'scalar interpreter with spaces.txt') `
             -Expected 'Desktop' -Message 'A working-directory powershell.exe decoy captured a short recipe'
+        # Ninja treats an existing output as up to date, so a file left by an
+        # earlier invocation would satisfy the assertion without this build.
+        Remove-Item -Force -LiteralPath 'large scalar.txt' -ErrorAction SilentlyContinue
         Invoke-Netsuke -Netsuke $Netsuke -Arguments @('build', 'large-scalar')
         Assert-Equal -Actual (Get-Content -Raw -LiteralPath 'large scalar.txt') -Expected 'scalar' `
             -Message 'A PATH powershell.exe decoy captured a response-file recipe'
@@ -174,6 +183,9 @@ function Test-PowerShellSearchPathBinding {
             Restore-EnvironmentVariableState -State $state
         }
         Remove-Item -Recurse -Force -LiteralPath $decoyPath -ErrorAction SilentlyContinue
+        # A later phase builds this target again, so a stale output would let
+        # its assertion pass without running the response-file recipe.
+        Remove-Item -Force -LiteralPath 'large scalar.txt' -ErrorAction SilentlyContinue
         Remove-Item -Force -LiteralPath (Join-Path $workspace 'powershell.exe') -ErrorAction SilentlyContinue
         Remove-Item -Force -LiteralPath (Join-Path $workspace 'decoy-powershell-marker.txt') `
             -ErrorAction SilentlyContinue
