@@ -26,6 +26,9 @@ CARGO ?= cargo
 # Kani is installed into the active Cargo home; its targets name that binary
 # directly so PATH can keep the pinned build-tools directory first for mold.
 CARGO_HOME ?= $(HOME)/.cargo
+# The compiled Kani installer invokes `cargo kani` by name. Export the home so
+# its recipe can prefer the newly installed subcommand for that invocation.
+export CARGO_HOME
 # The default must be defined before the export: `export CARGO` on its own
 # would define the variable empty and shadow the `?=` default for every recipe.
 export CARGO
@@ -44,6 +47,9 @@ NEXTEST_BUILD_JOBS ?=
 NEXTEST_TEST_JOBS ?=
 CLIPPY_FLAGS ?= --workspace --all-targets --all-features -- -D warnings
 KANI ?= "$(CARGO_HOME)/bin/cargo-kani"
+# Escape shell single quotes while preserving the quotes that keep paths with
+# spaces together for prover-tools' command parser.
+KANI_SHELL_ARG := $(subst ','"'"',$(KANI))
 KANI_FLAGS ?=
 # Use the verified archive on its supported host; retain Cargo installation
 # for developers on other platforms. CI sets explicit cached install flags.
@@ -652,13 +658,13 @@ install-kani: ## Install the pinned Kani verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
 	@printf 'prover-tools: target=install-kani kani-version=%s\n' "$$(cat '$(KANI_VERSION_FILE)')" >&2
 	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani install <redacted-flags>' >&2
-	@$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-kani failed exit=%s\n' "$$status" >&2; exit "$$status"; }
+	@PATH="$$CARGO_HOME/bin:$$PATH" $(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-kani failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-check: ## Check the installed Kani verifier version
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
-	@printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI)' "$$(cat '$(KANI_VERSION_FILE)')" >&2
+	@printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$(cat '$(KANI_VERSION_FILE)')" >&2
 	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani check-version --kani-command <redacted-command> <redacted-flags>' >&2
-	@$(PROVER_TOOLS) kani check-version --kani-command '$(KANI)' $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
+	@$(PROVER_TOOLS) kani check-version --kani-command '$(KANI_SHELL_ARG)' $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
 kani-full: ## Run the full Kani verification suite
 	$(KANI_RUSTFLAGS) $(KANI) $(KANI_FLAGS)

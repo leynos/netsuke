@@ -269,6 +269,19 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       remaining in-scope implementation omission or confirmed correctness
       defect. It requires hosted warm-cache acceptance before the plan can be
       marked complete.
+- [x] (2026-11-03) Receive the queued CodeRabbit review request `f31cfc30` on
+      published head `15f413bac8fcda6a96c344261125aeddbfd2f774`. Review
+      [#5743914948](https://github.com/leynos/netsuke/pull/1063#pullrequestreview-5743914948)
+      completed in check run
+      [125570930194](https://github.com/leynos/netsuke/runs/125570930194) and
+      reported two valid Makefile edge cases: the `--compile` Kani installer
+      could select a conflicting `cargo-kani`, and an apostrophe in
+      `CARGO_HOME` broke the `kani-check` shell argument. Focused regressions
+      reproduced both failures before the repair and initially passed in the
+      existing 14-test Makefile target. The two regressions have since been
+      moved to tests/prover_tools_make_edge_tests.rs to keep the original
+      test file within the repository's 400-line limit. The new target and all
+      12 repository gates now pass on the final candidate; see Revision 41.
 - [ ] Reconcile the current-head CodeRabbit formal review. The candidate-bound
       implementation assessment [#6573587184](https://github.com/leynos/netsuke/pull/1063#issuecomment-6573587184)
       (Assessment-ID `import-prover-tools-1e9a9927-completeness-20261102`,
@@ -278,17 +291,16 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       findings, with no confirmed functional defect. It confirms that the
       current hosted Kani run verified all 15 harnesses and reported successful
       mutation metrics. The two local scoped `make kani-ir` attempts remain
-      inconclusive after their eight-minute caps. The CodeRabbit walkthrough
-      [#6551587870](https://github.com/leynos/netsuke/pull/1063#issuecomment-6551587870)
-      still identifies `55cebb79` as its last reviewed head. The latest
-      published candidates remain unreviewed because CodeRabbit is paused.
-      Request a formal review on the latest published head after this plan
-      correction.
+      inconclusive after their eight-minute caps. Review #5743914948 covers
+      head `15f413bac8fcda6a96c344261125aeddbfd2f774`; resolve its two findings,
+      publish the repairs, and reconcile the summary and pre-merge rows for the
+      resulting head. The CodeRabbit review check reports completion, but its
+      review decision requests changes until those findings are addressed.
 - [ ] EP-M3: Complete trusted-main warm-cache acceptance and PR
       assessment/delivery. The candidate-bound assessment confirms the
       functional requirements; hosted warm-cache evidence remains open because
-      a pull request cannot save the new generation. The warm run requires a
-      trusted `main` push.
+      a pull request cannot save the new generation. After the authorized merge,
+      observe a trusted `main` run that writes and reuses the new generation.
 - [x] Repair CodeRabbit's Kani PATH finding. Review `4438989893` identified
       that `BUILD_TOOLS_PREFIX/bin` could shadow the active Cargo home's
       `cargo-kani`. The published fix invokes the active-home executable
@@ -299,20 +311,21 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       The full local gate sequence passed; hosted CI verified Kani 0.67.0 and
       all 15 harnesses on the candidate. The two local scoped attempts timed
       out before producing proof results; see Revisions 29 and 30.
-- [ ] Reconcile the current-head diff-scoped Docstring Coverage row. The last
-      completed result reports 56.25% across 16 functions in 6 files, with 3
-      unsupported declarations, but covers head `55cebb79`. CodeRabbit's
+- [ ] Reconcile the current-head diff-scoped Docstring Coverage row. The
+      latest available summary reports 56.25% across 16 functions in 6 files,
+      with 4 unsupported declarations, while its review-completed line names
+      head `15f413ba`. CodeRabbit's
       response in comment 6569361800 records an access limitation: the
       available report and check output expose no declaration-level diagnostics,
       and that conversation could not access internal analyser records. Its
       source inventory lists only `#[test]` and
       `#[rstest]` functions without Rustdoc comments and finds documentation
-      on touched helpers and Python declarations. The current functional
-      assessment confirms that the displayed row remains stale; checks on the
-      recent candidates were skipped because review is paused. Do not add Rust
-      test comments or substitute aggregate Rustdoc coverage. Reconcile the row
-      after a formal review of the published plan update, requesting declaration
-      diagnostics if a warning remains.
+      on touched helpers and Python declarations. The completed formal review
+      reports findings but supplies no refreshed declaration diagnostics. Do
+      not add Rust test comments or substitute aggregate Rustdoc coverage.
+      Reconcile the row against the latest summary and pre-merge output after
+      the repair review, requesting declaration diagnostics if a warning
+      remains.
 
 ## Surprises & discoveries
 
@@ -471,7 +484,22 @@ roles from proof execution by Make targets; CodeRabbit confirmed that
 correction in reply
 [#4437685594](https://github.com/leynos/netsuke/pull/1063#discussion_r4437685594).
 Both corrections are published. Current-head hosted Kani smoke verified
-version 0.67.0 and all 15 harnesses.
+version 0.67.0 and all 15 harnesses. The next completed formal review on
+`15f413bac8fcda6a96c344261125aeddbfd2f774` found two additional Make boundary
+cases: the `--compile` installer could resolve a conflicting
+`BUILD_TOOLS_PREFIX/bin/cargo-kani`, and shell quoting failed when the active
+Cargo home contained an apostrophe. Both defects reproduced with focused tests.
+The install recipe now prepends the exported active Cargo home only for the
+installer invocation, leaving Make's global build-tools-first order intact;
+`kani-check` uses a shell-escaped command value. Both regressions pass in the
+focused Rust suite (2/2). All 12 sequential repository gates now pass on the
+final candidate, including 4,950 nextest tests, all doctests, 1,669 workflow
+contracts, 90 CI-script tests, seven prover-tools integration tests, and 98.23%
+doc coverage. The exact-base CodeScene delta reports no new findings, the new
+edge-test file scores 10.0 with no review findings, and the hosted CodeScene
+check reports six quality gates passed. Publication of this repair,
+current-head review reconciliation, and trusted-main warm-cache acceptance
+remain open.
 
 ## Context and orientation
 
@@ -634,20 +662,25 @@ A test runs the install-step shell command and invokes `cargo kani --version`
 from a separate process with a conflicting binary later on PATH; the published
 installer path must win. The harness is local to this workflow contract and
 models only the `GITHUB_PATH` handoff; it is not a shared subprocess fixture.
-Run `make test-workflow-contracts`, `make test-ci-scripts`, and the
-`workflow_ci` Rust integration target via the normal test suite. Negative
-controls restore the old script invocation, remove PATH publication, or permit
-a pull-request cache write; each must fail the corresponding test. Keep full
-checksums in expected boundary data or evidence so a truncated pin cannot be
-mistaken for equivalent policy.
+The source-compile fallback also runs a fake `cargo kani setup` with a
+conflicting `cargo-kani` under `BUILD_TOOLS_PREFIX/bin`; the installer
+invocation must select the active Cargo home's executable while preserving the
+global build-tools-first order used to resolve `mold`. Run
+`make test-workflow-contracts`, `make test-ci-scripts`, and the `workflow_ci`
+Rust integration target via the normal test suite. Negative controls restore
+the old script invocation, remove PATH publication, or permit a pull-request
+cache write; each must fail the corresponding test. Keep full checksums in
+expected boundary data or evidence so a truncated pin cannot be mistaken for
+equivalent policy.
 
 E2 verifies R2/R3 at Make's boundary. The recorder must record argument counts
 and individual tokens, not flattened text. Named cases cover no override, one
-path, several paths, whitespace and child status 42 for both the installer and
-the `verus` proof target, including failure-diagnostic redaction. A dropped
-second flag, split path, leaked secret, or swallowed proof failure is a failing
-negative control. This finite partition is adequate because Make delegates
-ordering and iteration upstream.
+path, several paths, whitespace, apostrophes in the active Cargo home, and
+child status 42 for both the installer and the `verus` proof target, including
+failure-diagnostic redaction. A dropped second flag, split path, malformed
+shell command, leaked secret, or swallowed proof failure is a failing negative
+control. This finite partition is adequate because Make delegates ordering and
+iteration upstream.
 
 E3 verifies R2 against the real pinned CLI with fake verifier processes. Three
 existing temporary files witness successful execution; failures at each
@@ -984,3 +1017,79 @@ the published, separately confirmed initial PATH and final active-home
 executable repairs. Keep hosted warm-cache and current-head diff-scoped
 Docstring Coverage open; the walkthrough still reports the stale `55cebb79`
 review and current formal review remains pending.
+
+Revision 36 (2026-11-03): The queued current-head review completed on
+`15f413bac8fcda6a96c344261125aeddbfd2f774`. CodeRabbit's check reports “Review
+completed” and review
+[#5743914948](https://github.com/leynos/netsuke/pull/1063#pullrequestreview-5743914948)
+supplies a Makefile finding about `cargo-kani` shadowing in the `--compile`
+installer path;
+[comment 4448218361](https://github.com/leynos/netsuke/pull/1063#discussion_r4448218361)
+identifies apostrophe quoting in `kani-check`. Read-only source verification
+and focused pre-fix tests confirmed both defects. The Makefile repairs and
+regressions initially passed the existing 14-test Rust target. The two new edge
+regressions are now in tests/prover_tools_make_edge_tests.rs so the existing
+test file remains below the repository's 400-line limit; final validation is
+pending. The full sequential gates, review replies and confirmation,
+current-head review/pre-merge reconciliation, and trusted-main warm-cache
+acceptance remain open; keep the plan `IN PROGRESS`.
+
+Revision 37 (2026-11-03): The extracted edge-test target passed on the current
+worktree: 2 tests passed, 0 skipped, using cargo nextest run --test
+prover_tools_make_edge_tests. The scrutineer waited in the healthy shared
+compiler queue and completed normally; the full log is
+/tmp/test-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-edge-regressions.out.
+The test-file split keeps tests/prover_tools_make_tests.rs at 379 lines. Run
+all 12 repository gates sequentially from the beginning on the final candidate;
+then commit, publish, reconcile current-head review findings and pre-merge
+checks, and observe trusted-main warm-cache acceptance. Keep Status: IN
+PROGRESS.
+
+Revision 38 (2026-11-03): The first post-review full gate sequence passed 11 of
+12 gates, including typecheck, 98.23% doc coverage, Markdown/Mermaid, 4,950
+tests (7 skipped) plus doctests, workflow contracts, CI scripts, prover-tools
+integration, Makefile validation and diff checks. Clippy rejected the new
+regression's direct PATH read. Remove that redundant override and rely on
+Makefile's exported PATH, where the injected BUILD_TOOLS_PREFIX/bin precedes
+CARGO_HOME/bin; set the apostrophe test's CARGO_HOME to its custom path
+explicitly. The corrected focused target then passed 2 tests with none skipped,
+using cargo nextest run --test prover_tools_make_edge_tests; the log is
+/tmp/test-a97788bc-4b29-45ee-b2bb-7ed1bab5f9fc-import-prover-tools-policy-fix.out.
+Restart all 12 gates on this corrected candidate before commit or publication.
+Keep the plan IN PROGRESS.
+
+Revision 39 (2026-11-03): The next sequential gate pass again passed 11 of 12
+gates, including 4,950 tests (7 skipped), all doctests, workflow contracts, and
+98.23% doc coverage. Whitaker rejected ten direct std::fs operations in
+tests/prover_tools_make_edge_tests.rs under the capability-based filesystem
+policy. The edge tests now open their temporary roots as cap_std::fs::Dir and
+create, read, and inspect files through that capability. Restart the full
+12-gate sequence on this candidate; do not commit or publish until it passes.
+Keep Status: IN PROGRESS.
+
+Revision 40 (2026-11-03): The capability-based filesystem repair passed
+documentation, workflow, integration, and Makefile gates, but lint, typecheck,
+and the Rust test build rejected an unused invocation_log binding. The fake
+prover-tools helper now returns only its executable path; the second test reads
+its invocation log through the temporary-root Dir. Restart all 12 gates from
+the beginning on this candidate before commit or publication. Keep Status: IN
+PROGRESS.
+
+Revision 41 (2026-11-03): All 12 repository gates passed sequentially on the
+final worktree based on published head
+`15f413bac8fcda6a96c344261125aeddbfd2f774`. The run passed `make check-fmt`,
+`make lint`, `make typecheck`, `make doc-coverage` (98.23%),
+`make markdownlint` (212 files, zero issues), `make nixie`, `make test` (4,950
+passed, 7 skipped, plus all doctests), `make test-workflow-contracts` (1,669
+passed, 3 skipped, plus 28 helper tests), `make test-ci-scripts` (90 passed),
+`make test-prover-tools-integration` (7 passed), `mbake validate Makefile`, and
+`git diff --check`. Logs share the suffix
+`import-prover-tools-unused-binding-fixed-final`; final build admission was
+healthy. CodeScene CLI 1.0.52 reported no new findings for the exact PR base
+`e5d57c58352b51473de4170f86e34fdc9db3ece6` through published head
+`15f413bac8fcda6a96c344261125aeddbfd2f774`; focused review of the new edge
+tests returned score 10.0 with no findings. The hosted CodeScene check on that
+head passed all six quality gates with no annotations. Publish the validated
+repair, reconcile the current-head formal review and Docstring Coverage row,
+and observe trusted-main warm-cache acceptance before completing this plan.
+Keep Status: IN PROGRESS.
