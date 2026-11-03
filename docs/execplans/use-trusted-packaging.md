@@ -4157,9 +4157,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   typed-record proposal and adopts it for the seams where an external shape
   reaches policy: staging targets become `StagingTargets`, and the trusted
   digest record becomes `DigestRecord`. Domain-shaped name-to-value mappings
-  remain where no external format defines them. Every existing rejection
-  category and every identity and inventory check is retained. This resolves
-  the 2026-10-28 deferral and does not change the trusted-publishing Stage C or
+  remain where no external format defines them. Every identity and inventory
+  check is retained, and every rejection category keeps its type except one
+  deliberate tightening: an empty `platform` string is now refused by the
+  record as `MalformedTargetError` rather than by policy as
+  `UnknownPlatformError`, with the same CLI exit status. This resolves the
+  2026-10-28 deferral and does not change the trusted-publishing Stage C or
   Stage D status: Stage C remains partial and Stage D remains open. See
   [ADR-0071](../adrs/adr-0071-typed-records-for-release-policy-boundaries.md)
   and

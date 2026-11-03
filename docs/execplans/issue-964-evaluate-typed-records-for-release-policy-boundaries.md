@@ -3,11 +3,14 @@
 Status: COMPLETE
 
 The decision is recorded as ADR-0068, the migration has landed, and the branch
-is rebased onto `origin/main` at `9bfb3e117` with the deterministic gate set
-re-run on the rebased head. CodeRabbit reported no findings on the final review
-before the first rebase. Draft pull request
-[#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
-maintainer review; merging is outside this plan's scope.
+is rebased onto `origin/main` at `e5d57c583`, whose tree is identical to the
+previous target `9bfb3e117`, with the deterministic gate set re-run on the
+rebased head. Review found one edge case where the new record refuses an empty
+`platform` string earlier than the old policy did; the tightening is recorded
+under *Outcomes and retrospective* and pinned by a malformed-configuration
+case. CodeRabbit reported no findings on the final review before the first
+rebase. Draft pull request [#1052](https://github.com/leynos/netsuke/pull/1052)
+carries the branch for maintainer review; merging is outside this plan's scope.
 
 ## Purpose
 
@@ -178,6 +181,10 @@ Adoption is justified only when all four hold:
    named adapter or CLI, and policy receives a domain value.
 2. **Preserved rejection categories.** Every existing refusal keeps its type
    and its message semantics, and the tests that prove each refusal still pass.
+   One exception was accepted during delivery: an empty `platform` string is
+   refused earlier as `MalformedTargetError` rather than later as
+   `UnknownPlatformError`, with the same CLI exit status. It is recorded under
+   *Outcomes and retrospective*.
 3. **Fewer duplicated checks.** The staging-target double decode disappears,
    and the digest comparison can no longer be called with an unvalidated
    mapping through the normal path.
@@ -275,6 +282,15 @@ records and are unchanged.
       tracked rule. Beyond the ADR index, the target commits touch CLI help
       metadata, localization keys, and generated spelling configuration; none
       reaches a release-policy seam, so no further branch change follows.
+- [x] Replay once more onto `e5d57c583`, whose tree is identical to
+      `9bfb3e117`. The replay re-parented all 14 commits with no content
+      change: the new head's tree hash equals the old head's, `range-diff`
+      reports every commit unchanged, and `git diff --check` is clean.
+- [x] Address the post-review qualification about `platform = ""`. The
+      malformed-configuration table gains a `platform-is-empty` case, and
+      ADR-0068, this plan, and the trusted-packaging decision log now record
+      that the record refuses the value earlier than policy did, with the same
+      exit status and no weakened release check.
 
 ## Outcomes and retrospective
 
@@ -297,6 +313,15 @@ The empty-record, exact-coverage, missing-download, and multi-asset mismatch
 checks are unchanged, and commit identity is still an exact string comparison.
 The staging decode still runs before discovery, so a malformed table fails on
 the configuration rather than on a later adapter.
+
+One diagnosis was deliberately tightened. An empty `platform` string used to
+pass the CLI's string check and reach policy, which rejected it as
+`UnknownPlatformError`. The record's constructor now refuses it earlier as
+`MalformedTargetError(MISSING_PLATFORM)`. The configuration is still rejected
+with the same CLI exit status and no release protection is weakened, but the
+exception category, the diagnosis, and the validation timing are not identical
+to the former behaviour. The malformed-configuration table pins the new
+diagnosis as a `platform-is-empty` case.
 
 Three points were less mechanical than the estimate suggested:
 
@@ -339,7 +364,8 @@ The regression evidence is pinned rather than incidental. The nine
 previously-rejected digest shapes and eight staging shapes were committed
 before the migration and still pass after it, now asserted through the new
 decoders; the policy suites construct records directly, so they test the
-decision rather than the decoding.
+decision rather than the decoding. The empty-platform case is a ninth staging
+row, added to pin the tightened diagnosis described above.
 
 Gate evidence, first bound to the migration commit `716f9b914`:
 `make check-fmt` (366 Python files, 209 Markdown files unchanged),

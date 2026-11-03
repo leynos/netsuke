@@ -49,7 +49,11 @@ may legitimately decide over.
 - Give each external record shape exactly one decoding location, owned by an
   adapter or CLI that already handles its serialization.
 - Preserve every existing rejection category and its type, so operators keep
-  the same diagnosis and the same exit status.
+  the same diagnosis and the same exit status. One tightening is accepted: an
+  empty `platform` string is refused by the record as
+  `MalformedTargetError(MISSING_PLATFORM)` instead of reaching policy as
+  `UnknownPlatformError`. The configuration is still rejected with the same
+  exit status, and no release check is weakened.
 - Remove the duplicated staging-config decode without weakening the check that
   refuses a malformed `targets` table before discovery iterates it.
 - Keep the migration bounded, so the change is reviewable and its test
@@ -131,7 +135,12 @@ external record shapes:
 Every existing error type is retained: `MissingTargetsError`,
 `MalformedTargetError` with `MalformedTargetKind`, `DigestRecordError`, and
 `RecordedDigestMismatchError`. The migration moves where they are raised, not
-what they mean.
+what they mean, with one deliberate exception. An empty `platform` string used
+to pass the CLI's string check and was rejected later by policy as
+`UnknownPlatformError`; the record's constructor now refuses it as
+`MalformedTargetError(MISSING_PLATFORM)`. The rejection moves earlier and
+changes category, but the configuration still fails the same CLI exit status
+and no inventory or identity check is relaxed.
 
 ## Consequences
 
