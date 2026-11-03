@@ -1,8 +1,9 @@
 """Hold release-policy and adapter responsibilities at their boundaries.
 
-Every release source is network-free. Policy sources additionally decide only
-from in-memory values; file access, serialization, response schemas, and
-provider-specific formats belong in the named adapters and CLIs.
+Release sources outside the declared transport boundary are network-free.
+Policy sources additionally decide only from in-memory values; file access,
+serialization, response schemas, and provider-specific formats belong in the
+named adapters and CLIs.
 
 Run via ``make test-workflow-contracts``.
 """

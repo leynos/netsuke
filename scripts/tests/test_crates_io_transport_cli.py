@@ -1,22 +1,27 @@
 """Specify bounded crates.io probe, upload, and downloaded-byte transport."""
 
+import io
 import json
 import typing as typ
 import urllib.error
 import urllib.request
+import urllib.response
+from email.message import Message
 
+import crates_io_transport_http
 import pytest
 from crates_io_transport_cli import (
     DOWNLOAD_ATTEMPTS,
     EXIT_OK,
-    EXIT_TRANSPORT_ERROR,
     EXIT_UPLOAD_FAILED,
     main,
 )
-from crates_io_transport_http import RegistryUrlError, _AllowlistedRequestHandler
+from crates_io_transport_http import RegistryUrlError
 from crates_io_transport_support import (
     FakeOpener,
     FakeResponse,
+    HandlerListOwner,
+    ResponseWithMessage,
     assert_upload_frame_matches,
     http_error_response,
     missing_response,
@@ -28,6 +33,63 @@ if typ.TYPE_CHECKING:
 TEST_CREDENTIAL = "short-lived-test-value"
 CRATE_NAME = "netsuke-build"
 VERSION = "1.2.3"
+REGISTRY_PREFIX = "https://crates.io/api/v1/crates/"
+
+
+def test_build_request_rejects_an_unallowlisted_initial_url() -> None:
+    """Reject a non-registry destination at the public request builder."""
+    with pytest.raises(RegistryUrlError):
+        crates_io_transport_http.build_request(
+            "https://attacker.example/forged-response", headers={}
+        )
+
+
+def test_default_opener_rejects_an_unallowlisted_redirect_target(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Apply the installed request handler to a real urllib redirect chain."""
+    opener = typ.cast("HandlerListOwner", crates_io_transport_http._HTTP_OPENER)
+    https_handler = next(
+        handler
+        for handler in opener.handlers
+        if isinstance(handler, urllib.request.HTTPSHandler)
+    )
+
+    def redirect_response(
+        request: urllib.request.Request,
+    ) -> urllib.response.addinfourl:
+        """Return a redirect response aimed at an unallowlisted host.
+
+        Parameters
+        ----------
+        request : urllib.request.Request
+            Request whose URL becomes the response origin.
+
+        Returns
+        -------
+        urllib.response.addinfourl
+            A redirect to the attacker-controlled test host.
+
+        Examples
+        --------
+        >>> redirect_response(urllib.request.Request("https://crates.io")).code
+        302
+        """
+        headers = Message()
+        headers["Location"] = "https://attacker.example/forged-response"
+        response = urllib.response.addinfourl(
+            io.BytesIO(), headers, request.full_url, code=302
+        )
+        typ.cast("ResponseWithMessage", response).msg = "Found"
+        return response
+
+    monkeypatch.setattr(https_handler, "https_open", redirect_response)
+    request = crates_io_transport_http.build_request(
+        f"{REGISTRY_PREFIX}{CRATE_NAME}/{VERSION}", headers={}
+    )
+
+    with pytest.raises(RegistryUrlError):
+        crates_io_transport_http.default_opener(request, timeout=1.0)
 
 
 def _registry_args(operation: str, paths: dict[str, pathlib.Path]) -> list[str]:
@@ -51,11 +113,16 @@ def _probe_args(status_path: pathlib.Path, body_path: pathlib.Path) -> list[str]
     )
 
 
-def _download_args(archive_path: pathlib.Path, status_path: pathlib.Path) -> list[str]:
+def _download_args(
+    archive_path: pathlib.Path,
+    status_path: pathlib.Path,
+    report_path: pathlib.Path | None = None,
+) -> list[str]:
     """Build one reusable archive-download invocation."""
-    return _registry_args(
-        "download", {"--archive": archive_path, "--status-file": status_path}
-    )
+    paths = {"--archive": archive_path, "--status-file": status_path}
+    if report_path is not None:
+        paths["--report-file"] = report_path
+    return _registry_args("download", paths)
 
 
 def _upload_args(metadata_path: pathlib.Path, archive_path: pathlib.Path) -> list[str]:
@@ -67,42 +134,6 @@ def _upload_args(metadata_path: pathlib.Path, archive_path: pathlib.Path) -> lis
         "--archive",
         str(archive_path),
     ]
-
-
-@pytest.mark.parametrize(
-    ("url", "hook"),
-    [
-        pytest.param(
-            "https://attacker.example/forged-response",
-            "https_request",
-            id="unallowlisted-host",
-        ),
-        pytest.param("ftp://crates.io/forged-response", "ftp_request", id="ftp"),
-    ],
-)
-def test_request_handler_rejects_an_unallowlisted_redirect_target(
-    url: str, hook: str
-) -> None:
-    """Recheck the URL urllib opens after following a registry redirect."""
-    handler = _AllowlistedRequestHandler(frozenset({"crates.io"}))
-    request = urllib.request.Request(  # ruff: ignore[suspicious-url-open-usage] - test a rejected redirect target
-        url
-    )
-
-    with pytest.raises(RegistryUrlError):
-        getattr(handler, hook)(request)
-
-
-def test_probe_maps_a_rejected_redirect_to_a_transport_failure(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Treat rejected redirect targets as an unavailable registry observation."""
-    opener = FakeOpener(RegistryUrlError())
-
-    result = main(_probe_args(tmp_path / "status", tmp_path / "body"), opener=opener)
-
-    assert result == EXIT_TRANSPORT_ERROR, "reject a forged registry probe"
-    assert len(opener.requests) == 1, "do not retry a rejected probe redirect"
 
 
 def test_probe_saves_http_status_and_body_without_retry(
@@ -126,21 +157,6 @@ def test_probe_saves_http_status_and_body_without_retry(
         "save the registry's HTTP status"
     )
     assert body.read_bytes() == b'{"errors":[]}', "save the response body unchanged"
-
-
-def test_probe_fails_closed_when_no_http_status_exists(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Do not turn a connection failure into an absent registry version."""
-    status = tmp_path / "status.txt"
-    body = tmp_path / "body.json"
-    opener = FakeOpener(urllib.error.URLError("offline"))
-
-    result = main(_probe_args(status, body), opener=opener)
-
-    assert result == EXIT_TRANSPORT_ERROR, "a probe without status must fail closed"
-    assert len(opener.requests) == 1, "the failed probe must not retry"
-    assert not status.exists(), "a missing status must not be written as HTTP 404"
 
 
 def test_probe_uses_the_adapter_user_agent_and_bounded_timeout(
@@ -175,9 +191,10 @@ def test_download_retries_transient_responses_then_stops_after_success(
     )
     archive = tmp_path / "candidate.crate"
     status = tmp_path / "status.txt"
+    report = tmp_path / "download-report.json"
 
     result = main(
-        _download_args(archive, status),
+        _download_args(archive, status, report),
         opener=opener,
         sleeper=delays.append,
     )
@@ -191,6 +208,10 @@ def test_download_retries_transient_responses_then_stops_after_success(
     assert status.read_text(encoding="ascii").strip() == "200", (
         "record the successful download status"
     )
+    diagnostics = json.loads(report.read_text(encoding="ascii"))
+    assert diagnostics["attempts"] == 2, "record the retry count"
+    assert diagnostics["status_class"] == "2xx", "record only the status class"
+    assert diagnostics["elapsed_ms"] >= 0, "record elapsed time"
 
 
 def test_download_retries_absence_only_to_its_fixed_attempt_budget(

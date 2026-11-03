@@ -1,0 +1,27 @@
+## Release operation telemetry
+
+- Operation: `publish_crates_io`
+- Dry run: `false`
+- Job status: `success`
+- Error category: `none`
+- Upload error output present: `false`
+
+- Publisher context:
+  - `crate_name`: `netsuke-build`
+  - `version`: `1.2.3-beta.1`
+  - `registry_state`: `absent`
+  - `action`: `publish`
+  - `verification_verdict`: `success`
+
+- Phase outcomes:
+  - `crate_candidate_validation`: `success` (1.000s)
+  - `registry_probe`: `success` (1.000s)
+  - `registry_decision`: `success` (1.000s)
+  - `trusted_publishing_authentication`: `success` (1.000s)
+  - `registry_metadata_derivation`: `success` (1.000s)
+  - `registry_upload`: `success` (1.000s)
+  - `registry_download`: `success` (1.000s)
+    - Attempts: `3`
+    - Last HTTP status class: `4xx`
+    - Retry duration: `20123ms`
+  - `registry_byte_verification`: `success` (1.000s)

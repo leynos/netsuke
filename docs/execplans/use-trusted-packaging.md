@@ -852,12 +852,16 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Requirements: LEM-1, LEM-2, LEM-3, LEM-4 discharged.
 - Acceptance evidence: `make test-release-publication` passes; each module's
   reject rows fail before the module exists.
-- Conformance check: no module exceeds 400 lines; no source imports a network
-  client, asserted by `test_release_sources_import_no_network_client` in
-  `release_publication_boundary_test.py` over `SOURCE_MODULES`. The
-  `POLICY_MODULES` contract also rejects file IO, JSON/TOML parsing, HTTP
-  status codes, and GitHub digest syntax in policy code. Both boundaries have
-  positive controls; Ruff, Pylint, Interrogate, and ty pass.
+- Conformance check: no module exceeds 400 lines; modules outside the
+  transport boundary import no network client, as asserted by
+  `test_release_sources_import_no_network_client` in
+  `release_publication_boundary_test.py` over `NETWORK_FREE_MODULES`. The only
+  network sources are `scripts/crates_io_transport_cli.py` and
+  `scripts/crates_io_transport_http.py`, covered by
+  `test_transport_sources_are_the_only_network_sources`. The `POLICY_MODULES`
+  contract also rejects file IO, JSON/TOML parsing, HTTP status codes, and
+  GitHub digest syntax in policy code. Both boundaries have positive controls;
+  Ruff, Pylint, Interrogate, and ty pass.
 - Recovery: the modules are additive; revert the commit.
 - Remaining gaps: the remaining publication workflow jobs and stages are open.
 - Compatibility decision: none; these are new private modules.
@@ -2621,6 +2625,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `markdownlint` (zero issues), and `nixie`. No live exchange or release was
   performed; inventory verification, finalization, and consumer smoke remain
   open, and `publish-release` is not gated on this publisher yet.
+- [x] (2026-11-03) Completed the bounded publisher telemetry and transport
+  review follow-up. The always-run summary and JSONL artefact include sanitized
+  crate/version, registry state/action, verification verdict, phase timings,
+  and bounded download retry facts. Redirects outside the registry host
+  allowlist are rejected, and incomplete HTTP responses retain the probe,
+  retry, and ambiguous-upload behaviour. All nine ordered local gates passed on
+  the candidate: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.23%),
+  `test` (4,943 nextest tests and doctests), `test-workflow-contracts` (1,696
+  passed, 3 skipped, plus 28 script checks), `test-release-publication` (514
+  passed), `markdownlint` (zero issues), and `nixie`. No live exchange or
+  release was performed; inventory verification, finalization, and consumer
+  smoke remain open, and `publish-release` is not gated on this publisher yet.
 
 ## Surprises & discoveries
 
@@ -4251,3 +4267,17 @@ gates passed: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.23%), `test`
 runbook, plan, and ADR now record the delivered publisher and its recovery
 behaviour; Stage C remains partial, and no live exchange, release, or registry
 account change has occurred.
+
+Draft 21, 2026-11-02: review follow-up adds bounded crates.io publisher phase
+telemetry and download retry diagnostics to the first publisher stage. The
+summary and JSONL artefact run after failures. This is operational evidence
+only: Stage C remains partial, the GitHub release finalizer and consumer smoke
+remain open, and no live exchange or release has been exercised.
+
+Draft 22, 2026-11-03: completed the telemetry and transport review follow-up.
+Bounded publisher context now survives sanitization into the summary and JSONL
+records; the release-publication snapshot and transport boundary tests verify
+it. All nine local gates passed, including 4,943 nextest tests, 1,696 workflow
+contracts, 514 release-publication tests, 98.23% documentation coverage, zero
+Markdown lint issues, and Mermaid validation. Stage C remains partial; no live
+exchange or release has been exercised.

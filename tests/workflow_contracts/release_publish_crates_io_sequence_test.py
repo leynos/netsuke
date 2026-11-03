@@ -1,24 +1,86 @@
 """Bind each registry decision to the steps declared by the composite action."""
 
+import dataclasses as dc
+import json
+import typing as typ
+
 import pytest
 from action_run_sources import action_sources, action_steps
+from publish_crates_io_cli import (
+    EXIT_ACTION_REQUIRED,
+    EXIT_OK,
+    EXIT_RESPONSE_ERROR,
+)
+from publish_crates_io_cli import (
+    main as classify_registry,
+)
 from release_publish_crates_io_contracts import (
     ACTION_PATH,
     ACTION_STEP_ORDER,
     PUBLISH_ONLY,
 )
 
+if typ.TYPE_CHECKING:
+    import pathlib
+
+VERSION = "1.2.3"
+SHA256 = "ab" * 32
 _BASE_SEQUENCE = ("candidate", "probe", "decision")
 _PUBLISH_SEQUENCE = (
     *_BASE_SEQUENCE,
+    "auth_start",
     "auth",
+    "auth_end",
     "metadata",
     "upload",
     "download",
     "verify",
 )
-_SKIP_SEQUENCE = (*_BASE_SEQUENCE, "download", "verify")
-_FAIL_SEQUENCE = _BASE_SEQUENCE
+_SKIP_SEQUENCE = (*_BASE_SEQUENCE, "auth_end", "download", "verify")
+_FAIL_SEQUENCE = (*_BASE_SEQUENCE, "auth_end")
+
+
+@dc.dataclass(frozen=True, slots=True)
+class RegistryScenario:
+    """Pair one registry response with its expected action and sequence."""
+
+    status: int
+    body: bytes
+    state: str
+    action: str
+    exit_code: int
+    sequence: tuple[str, ...]
+
+
+def _registry_response(*, checksum: str = SHA256, yanked: bool = False) -> bytes:
+    """Encode a crates.io version observation for the intended release."""
+    return json.dumps({
+        "version": {"num": VERSION, "checksum": checksum, "yanked": yanked}
+    }).encode("utf-8")
+
+
+def _classify_registry_response(
+    directory: pathlib.Path, scenario: RegistryScenario
+) -> tuple[int, dict[str, object]]:
+    """Run the policy CLI over one saved registry observation."""
+    body_path = directory / "response.json"
+    decision_path = directory / "decision.json"
+    _ = body_path.write_bytes(scenario.body)
+    result = classify_registry([
+        "classify",
+        "--status",
+        str(scenario.status),
+        "--body",
+        str(body_path),
+        "--version",
+        VERSION,
+        "--sha256",
+        SHA256,
+        "--output",
+        str(decision_path),
+    ])
+    decision = json.loads(decision_path.read_text(encoding="utf-8"))
+    return result, decision
 
 
 def _steps_for_decision(decision: str) -> tuple[str, ...]:
@@ -47,6 +109,8 @@ def _step_runs_for_decision(
     guard: object, decision: str, *, after_failed_decision: bool
 ) -> bool:
     """Resolve guards and implicit success after a failed decision."""
+    if guard == "always()":
+        return True
     if after_failed_decision:
         return False
     if guard is None:
@@ -56,32 +120,76 @@ def _step_runs_for_decision(
 
 
 @pytest.mark.parametrize(
-    ("state", "decision", "expected_sequence"),
+    "scenario",
     [
-        pytest.param("absent", "publish", _PUBLISH_SEQUENCE, id="absent-publishes"),
-        pytest.param("identical", "skip", _SKIP_SEQUENCE, id="identical-verifies"),
-        pytest.param("conflict", "fail", _FAIL_SEQUENCE, id="conflict-stops"),
-        pytest.param("yanked", "fail", _FAIL_SEQUENCE, id="yanked-stops"),
         pytest.param(
-            "indeterminate",
-            "fail",
-            _FAIL_SEQUENCE,
+            RegistryScenario(404, b"", "absent", "publish", EXIT_OK, _PUBLISH_SEQUENCE),
+            id="absent-publishes",
+        ),
+        pytest.param(
+            RegistryScenario(
+                200, _registry_response(), "identical", "skip", EXIT_OK, _SKIP_SEQUENCE
+            ),
+            id="identical-verifies",
+        ),
+        pytest.param(
+            RegistryScenario(
+                200,
+                _registry_response(checksum="cd" * 32),
+                "conflict",
+                "fail",
+                EXIT_ACTION_REQUIRED,
+                _FAIL_SEQUENCE,
+            ),
+            id="conflict-stops",
+        ),
+        pytest.param(
+            RegistryScenario(
+                200,
+                _registry_response(yanked=True),
+                "yanked",
+                "fail",
+                EXIT_ACTION_REQUIRED,
+                _FAIL_SEQUENCE,
+            ),
+            id="yanked-stops",
+        ),
+        pytest.param(
+            RegistryScenario(
+                200,
+                b"[]",
+                "indeterminate",
+                "fail",
+                EXIT_RESPONSE_ERROR,
+                _FAIL_SEQUENCE,
+            ),
             id="malformed-response-stops",
         ),
         pytest.param(
-            "indeterminate",
-            "fail",
-            _FAIL_SEQUENCE,
+            RegistryScenario(
+                503,
+                b"busy",
+                "indeterminate",
+                "fail",
+                EXIT_ACTION_REQUIRED,
+                _FAIL_SEQUENCE,
+            ),
             id="unavailable-response-stops",
         ),
     ],
 )
 def test_registry_state_resolves_the_declared_action_sequence(
-    state: str, decision: str, expected_sequence: tuple[str, ...]
+    tmp_path: pathlib.Path, scenario: RegistryScenario
 ) -> None:
-    """Evaluate the manifest guards for every registry state and outcome."""
-    actual_sequence = _steps_for_decision(decision)
+    """Resolve each workflow sequence from the policy CLI's decision record."""
+    result, decision = _classify_registry_response(tmp_path, scenario)
 
-    assert actual_sequence == expected_sequence, (
-        f"the {state} state must resolve to the {decision} action sequence"
+    assert result == scenario.exit_code, "classify each registry observation"
+    assert decision["state"] == scenario.state, "record the observed registry state"
+    assert decision["action"] == scenario.action, "record its permitted action"
+    actual_sequence = _steps_for_decision(str(decision["action"]))
+
+    assert actual_sequence == scenario.sequence, (
+        f"the {scenario.state} state must resolve to the "
+        f"{scenario.action} action sequence"
     )

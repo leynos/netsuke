@@ -1,5 +1,7 @@
 """Keep release staging read-only and isolate publishing credentials."""
 
+from copy import deepcopy
+
 from action_run_sources import action_sources
 from release_publish_crates_io_contracts import (
     ACTION_PATH,
@@ -35,6 +37,24 @@ def test_staging_is_read_only_and_only_publication_can_write() -> None:
     _assert_github_release_scopes(release)
     _assert_crates_io_contract(release)
     _assert_checkouts_do_not_persist_credentials(release)
+
+
+def test_verified_digest_output_comes_from_the_verification_step() -> None:
+    """Reject an action output that reports the candidate digest as verified."""
+    release = load_workflow(RELEASE_WORKFLOW_PATH)
+    action = deepcopy(action_sources()[ACTION_PATH])
+    outputs = require_mapping(action.get("outputs"), "publisher action.outputs")
+    verified = require_mapping(
+        outputs.get("verified-sha256"), "publisher verified-sha256 output"
+    )
+    verified["value"] = "${{ steps.candidate.outputs.sha256 }}"
+    violations: list[str] = []
+
+    check_crates_io_action_contract(release, action, violations)
+
+    assert any(
+        "action-output.verified-sha256" in violation for violation in violations
+    ), "the published digest must come from the downloaded-byte verification step"
 
 
 def _assert_github_release_scopes(release: dict[str, object]) -> None:

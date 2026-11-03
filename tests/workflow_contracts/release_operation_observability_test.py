@@ -39,7 +39,11 @@ from release_operation_observability_support import (
     staging_observation,
     timed_phases,
 )
-from workflow_loading import RELEASE_WORKFLOW_PATH, job_steps, load_workflow
+from workflow_loading import (
+    RELEASE_WORKFLOW_PATH,
+    job_steps,
+    load_workflow,
+)
 
 if typ.TYPE_CHECKING:
     import pathlib

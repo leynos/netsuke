@@ -2,8 +2,7 @@
 
 ## Status
 
-Accepted. The crates.io publisher is implemented in `release.yml`; a live
-Trusted Publishing exchange has not yet been performed.
+Accepted.
 
 ## Date
 
@@ -143,20 +142,17 @@ itself, with no long-lived registry credential stored anywhere.
   one manual token-authenticated upload. `netsuke-build` is already published,
   so this precondition is satisfied and no manual step is outstanding.
 
-**Status of the decision.** Accepted and implemented for the first publisher
-stage. `release.yml` declares `publish-crates-io`, which consumes the retained
-`package-crate` archive, probes the registry before mutation, publishes only an
-absent version, skips an identical version, and verifies downloaded bytes
-against the candidate digest. It uses the `crates-io` environment and a
-short-lived Trusted Publishing exchange; no long-lived registry secret is
-required. No live exchange or release has exercised this workflow. The
-inventory verifier, GitHub release finalizer, and consumer smoke test remain
-open in the trusted-packaging ExecPlan, and `publish-release` is not yet gated
-on the crates.io job. Until those stages land, this addendum records a
-partially implemented mechanism rather than an end-to-end release path.
+**Status of the decision.** Accepted as the target mechanism; not yet
+implemented. `release.yml` currently packages the crate in `package-crate` and
+publishes nothing to crates.io. The job that performs the exchange, the
+inventory verifier that checks downloaded bytes against the pre-upload digest
+record, the release finalizer, and the consumer smoke test are described in the
+trusted-packaging ExecPlan and remain to be written. Until they land, a release
+run publishes GitHub assets only, and this addendum records the shape the
+registry path is to take rather than a mechanism in use.
 
-The offline policy modules that support the decision are in place, and the
-`publish-crates-io` action calls them. Policy modules compare in-memory facts;
+The offline policy modules that support the decision are already in place and
+are what the unwritten job will call. Policy modules compare in-memory facts;
 the CLI and named adapters own file access, JSON/TOML serialization, registry
 response schemas, HTTP status codes, and GitHub's digest spelling. In
 particular, `release_reconcile_crates` receives typed registry observations,
@@ -164,3 +160,22 @@ particular, `release_reconcile_crates` receives typed registry observations,
 `release_reconcile_github` receives bare digest strings. Those modules reach
 neither the network nor filesystem or provider formats; workflow steps make the
 network requests, and the adapters translate their results.
+
+## Addendum (2026-11-02): first publisher stage implemented
+
+The 2026-10-24 decision is implemented for its first publisher stage.
+`release.yml` declares `publish-crates-io`, which consumes the retained
+`package-crate` archive, probes the registry before mutation, publishes only an
+absent version, skips an identical version, and verifies downloaded bytes
+against the candidate digest. It uses the `crates-io` environment and a
+short-lived Trusted Publishing exchange; no long-lived registry secret is
+required. The publisher also records bounded phase outcomes and timings, plus
+download retry count, status class, and elapsed time, in an always-run job
+summary and JSONL artefact. These diagnostics do not constitute a live
+publishing exercise.
+
+No live exchange or release has exercised this workflow. The inventory
+verifier, GitHub release finalizer, and consumer smoke test remain open in the
+trusted-packaging ExecPlan, and `publish-release` is not yet gated on the
+crates.io job. Until those stages land, this addendum records a partially
+implemented mechanism rather than an end-to-end release path.

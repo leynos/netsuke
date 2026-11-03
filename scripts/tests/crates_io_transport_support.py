@@ -3,8 +3,21 @@
 import http.client
 import io
 import struct
+import typing as typ
 import urllib.error
 import urllib.request
+
+
+class HandlerListOwner(typ.Protocol):
+    """Describe urllib objects that expose their configured handlers."""
+
+    handlers: list[urllib.request.BaseHandler]
+
+
+class ResponseWithMessage(typ.Protocol):
+    """Expose the status phrase attached to urllib redirect responses."""
+
+    msg: str
 
 
 def unpack_upload_frame(payload: bytes) -> tuple[bytes, bytes, int]:

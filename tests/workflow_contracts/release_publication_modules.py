@@ -10,6 +10,7 @@ explicit decision about which side owns its effects.
 SECTION_MODULES = (
     "scripts/tests/test_crates_io_candidate_cli.py",
     "scripts/tests/test_crates_io_transport_cli.py",
+    "scripts/tests/test_crates_io_transport_properties.py",
     "scripts/tests/test_crates_io_publish_sequence.py",
     "scripts/tests/test_release_candidate.py",
     "scripts/tests/test_release_candidate_cli.py",

@@ -8,6 +8,7 @@ import re
 import typing as typ
 
 from action_run_sources import action_steps
+from release_publish_crates_io_action_shape import ACTION_OUTPUTS, ACTION_STEP_ORDER
 from workflow_loading import (
     job_steps,
     require_mapping,
@@ -40,17 +41,6 @@ ACTION_INPUTS = {
     "package-name",
     "version",
 }
-ACTION_OUTPUTS = {"action", "crate-name", "sha256", "verified-sha256"}
-ACTION_STEP_ORDER = (
-    "candidate",
-    "probe",
-    "decision",
-    "auth",
-    "metadata",
-    "upload",
-    "download",
-    "verify",
-)
 PUBLISH_ONLY = "steps.decision.outputs.action == 'publish'"
 TOKEN_OUTPUT = "$" + "{{ steps.auth.outputs.token }}"
 CANDIDATE_PACKAGE_OUTPUT = "$" + "{{ steps.candidate.outputs.package-name }}"
@@ -324,10 +314,17 @@ def _check_action_manifest_shape(
         violations.append(
             "publish-crates-io.action-inputs: expected exactly six inputs"
         )
-    if set(outputs) != ACTION_OUTPUTS:
+    if set(outputs) != set(ACTION_OUTPUTS):
         violations.append(
             "publish-crates-io.action-outputs: expected exactly four outputs"
         )
+    for name, expected_expression in ACTION_OUTPUTS.items():
+        output = outputs.get(name)
+        if not isinstance(output, dict) or output.get("value") != expected_expression:
+            violations.append(
+                f"publish-crates-io.action-output.{name}: "
+                f"value must be {expected_expression!r}"
+            )
 
 
 def _check_checkout_and_interpreter(

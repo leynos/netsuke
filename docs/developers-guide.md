@@ -2519,7 +2519,10 @@ Private helpers in `scripts/crates_io_candidate_cli.py` and
 validation or metadata operation. Candidate-manifest parsing checks the
 expected member identity; metadata-manifest parsing applies the sole-manifest
 and README rules. Workflow reachability helpers stay within their contract
-module, and the common transport argument builder stays in its test module.
+module, and the common transport argument builder stays in its test module. The
+environment normalizers in `scripts/release_operation_observability.py` also
+remain private to that entry point; other release scripts consume its typed
+`OperationObservation` rather than parsing workflow keys themselves.
 
 ### The release job graph
 
@@ -2603,6 +2606,28 @@ It omits release tags, artefact names, raw errors, and secrets. This telemetry
 does not alter the `should_publish` guard. The registry publisher consumes the
 package artefact through its own explicit dependency.
 
+### crates.io publisher telemetry
+
+The `publish-crates-io` job uses the `publish_crates_io` operation from
+`scripts/release_operation_catalog.py`. That module owns the fixed phase and
+outcome vocabulary shared by release telemetry. It also validates the
+crate/version context and selects fixed registry-state, action, and
+verification labels for trace events; those identity fields do not become
+metric labels. The `scripts/release_operation_telemetry.py` renderer turns
+those labels into the job summary and JSONL metrics;
+`scripts/release_operation_observability.py` maps the composite action's
+declared outputs into that record. Add an operation or phase only when a
+release job can report it, and keep workflow contracts in step with the
+catalogue.
+
+The action reports candidate validation, registry probe and decision,
+authentication, metadata derivation, upload, download, and byte-verification
+outcomes and timings. The download phase also reports its fixed attempt count,
+last HTTP status class, and elapsed milliseconds. It omits response bodies,
+URLs, and credentials. The job writes its summary and JSONL artefact under
+`if: always()` so failed publishing attempts remain diagnosable; this records
+operational state, not proof of a live exchange or a complete release.
+
 ### Package and asset identity
 
 The Cargo package and the binary it installs are different names, and every
@@ -2675,7 +2700,19 @@ state determines whether the workflow exchanges credentials or stops:
 The HTTP adapter permits HTTPS requests only to `crates.io` and
 `static.crates.io`. urllib applies the same host and scheme check to every
 outgoing request, including redirect targets, so a redirected probe cannot
-change the registry observation used for classification.
+change the registry observation used for classification. Its `poll_archive`
+helper owns bounded absence and server-error retries only for
+`crates_io_transport_cli.download`; probe and upload retain their single-shot
+request behaviour. The transport CLI remains responsible for writing
+archive/status files and the bounded retry report.
+
+Four focused test modules cover this new publisher path:
+`test_crates_io_candidate_cli.py`, `test_crates_io_transport_cli.py`,
+`test_crates_io_transport_properties.py`, and
+`test_crates_io_publish_sequence.py`. The source boundary includes
+`crates_io_candidate_cli.py`, `crates_io_upload_metadata.py`,
+`crates_io_transport_cli.py`, and `crates_io_transport_http.py`; the shared
+crates.io API policy remains in `release_crates_io_adapter.py` under `scripts/`.
 
 For an absent version, the action reads the packaged `Cargo.toml` and README in
 memory from the `.crate`, derives the registry metadata (including normal,
@@ -2909,7 +2946,8 @@ release policy, response adapters do not choose whether a run publishes, and
 policy modules do not grow convenience access to these boundaries. Composition
 stays in the existing CLIs rather than in a general-purpose port layer.
 
-Every release-publication source module must remain network-free.
+Every release-publication source outside the declared HTTP transport boundary
+must remain network-free.
 `tests/workflow_contracts/release_publication_boundary_test.py` checks that
 property with helpers from `release_publication_imports.py`, and the behaviour
 is deliberate: `import urllib.request`, `from urllib import request`, and
@@ -2917,13 +2955,15 @@ is deliberate: `import urllib.request`, `from urllib import request`, and
 `import release_digest` reaches nothing. `NETWORK_MODULES` bans the clients
 and, by naming a package, bans its submodules with it.
 
-`test_release_sources_import_no_network_client` applies that predicate to every
-source module named by `test-release-publication`. The same contract applies
-`policy_boundary_offenders` to the pure `POLICY_MODULES` list, rejecting file,
-serialization, HTTP-status, and provider-format work there. Both detectors have
-positive controls, so either check fails if its predicate stops matching.
-Adding a network client or moving an external format into policy is a design
-change, not a small convenience.
+`test_release_sources_import_no_network_client` applies that predicate to
+`NETWORK_FREE_MODULES`, the source list with `crates_io_transport_cli.py` and
+`crates_io_transport_http.py` excluded.
+`test_transport_sources_are_the_only_network_sources` names those two allowed
+transport modules. The same contract applies `policy_boundary_offenders` to the
+pure `POLICY_MODULES` list, rejecting file, serialization, HTTP-status, and
+provider-format work there. Both detectors have positive controls, so either
+check fails if its predicate stops matching. Adding a network client or moving
+an external format into policy is a design change, not a small convenience.
 
 ### The `package-crate` composite action
 
@@ -2968,7 +3008,7 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the twenty-four `scripts/tests/test_*.py`
+`make test-release-publication` runs the twenty-nine `scripts/tests/test_*.py`
 modules for the release-policy CLIs and their library modules, then runs the
 same source modules under `--doctest-modules`, so the examples in their
 docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,
