@@ -28,11 +28,11 @@ _CRATE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 _VERSION = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+-]{0,127}")
 
 
-def publisher_context(
+def _publisher_identity_context(
     # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
     outputs: "cabc.Mapping[str, object]",
 ) -> dict[str, str]:
-    """Select bounded registry context from publisher action outputs.
+    """Select only regex-valid crate and version fields from action outputs.
 
     Parameters
     ----------
@@ -42,22 +42,48 @@ def publisher_context(
     Returns
     -------
     dict[str, str]
-        Safe crate identity and fixed registry decision fields.
+        Validated crate and version fields.
 
     Examples
     --------
-    >>> publisher_context({"registry-state": "absent"})["registry_state"]
-    'absent'
+    >>> _publisher_identity_context(
+    ...     {"package-name": "netsuke-build", "crate-version": "1.2.3"}
+    ... )
+    {'crate_name': 'netsuke-build', 'version': '1.2.3'}
     """
     context: dict[str, str] = {}
     for field, output, pattern in (
-        ("crate_name", "crate-name", _CRATE_NAME),
+        ("crate_name", "package-name", _CRATE_NAME),
         ("version", "crate-version", _VERSION),
     ):
         value = outputs.get(output)
         if isinstance(value, str) and pattern.fullmatch(value):
             context[field] = value
+    return context
 
+
+def _publisher_decision_context(
+    # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
+    outputs: "cabc.Mapping[str, object]",
+) -> dict[str, str]:
+    """Select only fixed registry state, action, and verification labels.
+
+    Parameters
+    ----------
+    outputs
+        The action's declared outputs, including decision labels.
+
+    Returns
+    -------
+    dict[str, str]
+        Fixed registry labels with an unknown verification fallback.
+
+    Examples
+    --------
+    >>> _publisher_decision_context({"registry-state": "absent"})
+    {'registry_state': 'absent', 'verification_verdict': 'unknown'}
+    """
+    context: dict[str, str] = {}
     registry_state = outputs.get("registry-state")
     if isinstance(registry_state, str) and registry_state in REGISTRY_STATES:
         context["registry_state"] = registry_state
@@ -69,6 +95,33 @@ def publisher_context(
         verdict if isinstance(verdict, str) and verdict in VALID_OUTCOMES else "unknown"
     )
     return context
+
+
+def publisher_context(
+    # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
+    outputs: "cabc.Mapping[str, object]",
+) -> dict[str, str]:
+    """Compose validated identity and fixed decision context for trace records.
+
+    Parameters
+    ----------
+    outputs
+        The action's declared outputs.
+
+    Returns
+    -------
+    dict[str, str]
+        Safe crate identity and fixed registry decision fields.
+
+    Examples
+    --------
+    >>> publisher_context({"registry-state": "absent"})["registry_state"]
+    'absent'
+    """
+    return {
+        **_publisher_identity_context(outputs),
+        **_publisher_decision_context(outputs),
+    }
 
 
 PHASES = {

@@ -14,8 +14,10 @@ from crates_io_candidate_support import (
     TAG,
     VERSION,
     archive_bytes,
+    manifest_text,
     write_candidate,
 )
+from crates_io_upload_metadata import MetadataError, MetadataIssue, package_metadata
 
 EXPECTED_README = "# Netsuke\n\nPackaged documentation.\n"
 
@@ -270,3 +272,68 @@ def test_metadata_normalizes_manifest_and_all_dependency_kinds(
     assert archive.read_bytes() == original, (
         "metadata derivation must retain exact bytes"
     )
+
+
+def test_metadata_rejects_missing_archive(tmp_path: pathlib.Path) -> None:
+    """Classify an absent archive as an archive-read failure."""
+    with pytest.raises(MetadataError) as error:
+        package_metadata(tmp_path / "missing.crate")
+
+    assert error.value.issue is MetadataIssue.ARCHIVE_READ, (
+        "classify unreadable candidate archives"
+    )
+
+
+def test_metadata_rejects_invalid_archive(tmp_path: pathlib.Path) -> None:
+    """Classify malformed tar bytes as an archive-read failure."""
+    archive = tmp_path / "invalid.crate"
+    _ = archive.write_bytes(b"not a gzip tar archive")
+
+    with pytest.raises(MetadataError) as error:
+        package_metadata(archive)
+
+    assert error.value.issue is MetadataIssue.ARCHIVE_READ, (
+        "classify archives that cannot be opened"
+    )
+
+
+@pytest.mark.parametrize(
+    ("manifests", "expected_issue"),
+    [
+        pytest.param((), MetadataIssue.MANIFEST_COUNT, id="missing-manifest"),
+        pytest.param(
+            (manifest_text(), manifest_text()),
+            MetadataIssue.MANIFEST_COUNT,
+            id="duplicate-manifest",
+        ),
+        pytest.param(("[package\n",), MetadataIssue.ARCHIVE_READ, id="malformed-toml"),
+        pytest.param(
+            ("[workspace]\nmembers = []\n",),
+            MetadataIssue.PACKAGE_TABLE,
+            id="missing-package-table",
+        ),
+        pytest.param(
+            ("package = 1\n",),
+            MetadataIssue.PACKAGE_TABLE,
+            id="invalid-package-table",
+        ),
+        pytest.param(
+            ("[package]\nname = 1\nversion = '1.0.0'\n",),
+            MetadataIssue.PACKAGE_IDENTITY,
+            id="invalid-package-identity",
+        ),
+    ],
+)
+def test_metadata_rejects_malformed_packaged_manifests(
+    tmp_path: pathlib.Path,
+    manifests: tuple[str, ...],
+    expected_issue: MetadataIssue,
+) -> None:
+    """Report the precise issue for invalid packaged Cargo manifests."""
+    archive = tmp_path / "malformed.crate"
+    _ = archive.write_bytes(archive_bytes(manifests=manifests))
+
+    with pytest.raises(MetadataError) as error:
+        package_metadata(archive)
+
+    assert error.value.issue is expected_issue, "retain the manifest issue category"

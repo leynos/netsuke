@@ -2626,7 +2626,21 @@ outcomes and timings. The download phase also reports its fixed attempt count,
 last HTTP status class, and elapsed milliseconds. It omits response bodies,
 URLs, and credentials. The job writes its summary and JSONL artefact under
 `if: always()` so failed publishing attempts remain diagnosable; this records
-operational state, not proof of a live exchange or a complete release.
+operational state, not proof of a live exchange or a complete release. The
+`crate-name` action output retains the archive basename, while the separate
+`package-name` output carries the Cargo package identifier used in telemetry.
+
+The metric and trace record builders in `release_operation_records.py` are
+private to that module and composed only by `release_operation_telemetry.py`,
+which preserves operation and phase order. The renderer and record builder
+share the bounded observation types; neither is a public extension interface.
+The identity and decision selectors in `release_operation_catalog.py` are
+private and composed only by `publisher_context`. Callers use the public
+observation and context functions, not these builders. The publisher
+observability contract's module-scoped `publisher_telemetry` fixture is shared
+only by its focused summary, retry metric, and sensitive-value tests. Keep
+these responsibilities within their owning modules; the record module is
+limited to in-memory metrics and trace construction for this renderer.
 
 ### Package and asset identity
 

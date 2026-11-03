@@ -7,6 +7,7 @@ the workflow contract checks the parsed action against them.
 ACTION_OUTPUTS = {
     "action": "${{ steps.decision.outputs.action }}",
     "crate-name": "${{ steps.candidate.outputs.crate-name }}",
+    "package-name": "${{ steps.candidate.outputs.package-name }}",
     "crate-version": "${{ inputs.version }}",
     "registry-state": "${{ steps.decision.outputs.state }}",
     "verification-verdict": "${{ steps.verify.outcome }}",
@@ -60,3 +61,38 @@ ACTION_STEP_ORDER = (
     "download",
     "verify",
 )
+
+
+def classification_outputs_are_fail_closed(decision_run: str) -> bool:
+    """Require bounded decision outputs before a failed classifier returns.
+
+    Returns
+    -------
+    bool
+        Whether the action exports the classifier decision before propagating failure.
+
+    Examples
+    --------
+    >>> classification_outputs_are_fail_closed("")
+    False
+    """
+    action_output = 'printf \'action=%s\\n\' "$action" >>"$GITHUB_OUTPUT"'
+    state_output = 'printf \'state=%s\\n\' "$state" >>"$GITHUB_OUTPUT"'
+    exit_status = 'exit "$classification_status"'
+    required_fragments = (
+        "if uv run --no-project --python 3.14 scripts/publish_crates_io_cli.py",
+        "classification_status=0",
+        "classification_status=$?",
+        "action=fail",
+        "state=indeterminate",
+        'if [[ "$classification_status" -ne 0 ]]',
+        exit_status,
+    )
+    exit_position = decision_run.find(exit_status)
+    outputs_precede_failure = all(
+        0 <= decision_run.find(output) < exit_position
+        for output in (action_output, state_output)
+    )
+    return all(fragment in decision_run for fragment in required_fragments) and (
+        outputs_precede_failure
+    )

@@ -30,6 +30,9 @@ outputs:
   crate-name:
     description: Archive basename recorded by package-crate.
     value: ${{ steps.candidate.outputs.crate-name }}
+  package-name:
+    description: Cargo package name validated from the retained archive.
+    value: ${{ steps.candidate.outputs.package-name }}
   crate-version:
     description: Version being verified against the registry.
     value: ${{ inputs.version }}
@@ -214,12 +217,38 @@ runs:
         if [[ -s "$PROBE_DIRECTORY/body" ]]; then
           classify_args+=(--body "$PROBE_DIRECTORY/body")
         fi
-        uv run --no-project --python 3.14 scripts/publish_crates_io_cli.py \
-          "${classify_args[@]}"
-        action="$(jq -r '.action' "$DECISION_PATH")"
-        state="$(jq -r '.state // "indeterminate"' "$DECISION_PATH")"
+        classification_status=0
+        if uv run --no-project --python 3.14 scripts/publish_crates_io_cli.py \
+          "${classify_args[@]}"; then
+          :
+        else
+          classification_status=$?
+        fi
+        action=fail
+        state=indeterminate
+        if [[ -s "$DECISION_PATH" ]]; then
+          action="$(jq -r '.action // empty' "$DECISION_PATH" 2>/dev/null)" || action=""
+          state="$(jq -r '.state // empty' "$DECISION_PATH" 2>/dev/null)" || state=""
+        else
+          classification_status=1
+        fi
+        case "$action" in
+          publish|skip|fail) ;;
+          *) action=fail; classification_status=1 ;;
+        esac
+        case "$state" in
+          absent|identical|conflict|yanked|indeterminate) ;;
+          *) action=fail; state=indeterminate; classification_status=1 ;;
+        esac
+        if [[ "$classification_status" -ne 0 ]]; then
+          action=fail
+        fi
+        if [[ "$action" == fail && "$classification_status" -eq 0 ]]; then
+          classification_status=1
+        fi
         printf 'action=%s\n' "$action" >>"$GITHUB_OUTPUT"
         printf 'state=%s\n' "$state" >>"$GITHUB_OUTPUT"
+        exit "$classification_status"
 
     - id: auth_start
       name: Start Trusted Publishing authentication timing

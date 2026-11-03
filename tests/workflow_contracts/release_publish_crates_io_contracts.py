@@ -8,7 +8,11 @@ import re
 import typing as typ
 
 from action_run_sources import action_steps
-from release_publish_crates_io_action_shape import ACTION_OUTPUTS, ACTION_STEP_ORDER
+from release_publish_crates_io_action_shape import (
+    ACTION_OUTPUTS,
+    ACTION_STEP_ORDER,
+    classification_outputs_are_fail_closed,
+)
 from workflow_loading import (
     job_steps,
     require_mapping,
@@ -225,8 +229,15 @@ def _check_candidate_and_classification(
             "publish-crates-io.candidate: validate and read the identity record fields"
         )
     decision_run = str(steps[positions["decision"]].get("run", ""))
-    if "publish_crates_io_cli.py" not in decision_run or "classify" not in decision_run:
-        violations.append("publish-crates-io.classify: offline policy CLI is required")
+    classification_is_fail_closed = all((
+        "publish_crates_io_cli.py" in decision_run,
+        "classify" in decision_run,
+        classification_outputs_are_fail_closed(decision_run),
+    ))
+    if not classification_is_fail_closed:
+        violations.append(
+            "publish-crates-io.classify: require fail-closed decision outputs"
+        )
 
 
 def _check_upload_token_and_download_identity(
@@ -316,7 +327,7 @@ def _check_action_manifest_shape(
         )
     if set(outputs) != set(ACTION_OUTPUTS):
         violations.append(
-            "publish-crates-io.action-outputs: expected exactly four outputs"
+            "publish-crates-io.action-outputs: declared output set changed"
         )
     for name, expected_expression in ACTION_OUTPUTS.items():
         output = outputs.get(name)

@@ -48,8 +48,9 @@ def test_crates_io_job_retains_phase_observability(
     assert_retained_telemetry_policy(steps)
 
 
-def test_publisher_summary_exposes_bounded_download_retry_diagnostics() -> None:
-    """Record attempt count, status class, and elapsed time without raw data."""
+@pytest.fixture(scope="module")
+def publisher_telemetry() -> tuple[str, str, list[dict[str, object]]]:
+    """Build the publisher telemetry fixture shared by focused contract tests."""
     outputs = {
         f"{phase.replace('_', '-')}-{suffix}": value
         for phase in OPERATION_PHASES["publish_crates_io"]
@@ -60,7 +61,8 @@ def test_publisher_summary_exposes_bounded_download_retry_diagnostics() -> None:
         )
     }
     outputs.update({
-        "crate-name": "netsuke-build",
+        "crate-name": "netsuke-build-1.2.3-beta.1.crate",
+        "package-name": "netsuke-build",
         "crate-version": "1.2.3-beta.1",
         "registry-state": "absent",
         "action": "publish",
@@ -87,13 +89,14 @@ def test_publisher_summary_exposes_bounded_download_retry_diagnostics() -> None:
 
     summary, jsonl = render_observation(observation)
     records = [json.loads(line) for line in jsonl.splitlines()]
-    retry_metrics = {
-        record["metric"]: record
-        for record in records
-        if record.get("record_type") == "metric"
-        and str(record.get("metric", "")).startswith("release_registry_download_")
-    }
+    return summary, jsonl, records
 
+
+def test_publisher_summary_retains_bounded_context(
+    publisher_telemetry: tuple[str, str, list[dict[str, object]]],
+) -> None:
+    """Keep the approved publisher summary and validated context fields."""
+    summary, _, records = publisher_telemetry
     expected_summary = (
         Path(__file__).parent
         / "snapshots"
@@ -102,6 +105,31 @@ def test_publisher_summary_exposes_bounded_download_retry_diagnostics() -> None:
     assert summary == expected_summary, (
         "publisher summary must retain bounded registry context and retry facts"
     )
+    trace_records = [
+        record for record in records if record.get("record_type") == "trace_event"
+    ]
+    assert trace_records, "publisher telemetry must emit phase trace records"
+    assert all(
+        record.get("crate_name") == "netsuke-build"
+        and record.get("version") == "1.2.3-beta.1"
+        and record.get("registry_state") == "absent"
+        and record.get("action") == "publish"
+        and record.get("verification_verdict") == "success"
+        for record in trace_records
+    ), "trace events must retain the bounded publisher context"
+
+
+def test_publisher_retry_metrics_retain_bounded_values(
+    publisher_telemetry: tuple[str, str, list[dict[str, object]]],
+) -> None:
+    """Record retry count, status class, and elapsed time as fixed metrics."""
+    _, _, records = publisher_telemetry
+    retry_metrics = {
+        record["metric"]: record
+        for record in records
+        if record.get("record_type") == "metric"
+        and str(record.get("metric", "")).startswith("release_registry_download_")
+    }
     assert retry_metrics["release_registry_download_attempts"]["value"] == 3, (
         "retry metrics must retain the bounded download attempt count"
     )
@@ -111,26 +139,13 @@ def test_publisher_summary_exposes_bounded_download_retry_diagnostics() -> None:
     assert (
         retry_metrics["release_registry_download_status_class"]["status_class"] == "4xx"
     ), "retry metrics must retain only the HTTP status class"
-    trace_records = [
-        record for record in records if record.get("record_type") == "trace_event"
-    ]
-    assert trace_records, "publisher telemetry must emit phase trace records"
-    for record in trace_records:
-        assert record.get("crate_name") == "netsuke-build", (
-            "trace events must retain the validated crate name"
-        )
-        assert record.get("version") == "1.2.3-beta.1", (
-            "trace events must retain the validated crate version"
-        )
-        assert record.get("registry_state") == "absent", (
-            "trace events must retain the fixed registry state"
-        )
-        assert record.get("action") == "publish", (
-            "trace events must retain the publish/skip action"
-        )
-        assert record.get("verification_verdict") == "success", (
-            "trace events must retain the verification outcome"
-        )
+
+
+def test_publisher_telemetry_omits_raw_sensitive_values(
+    publisher_telemetry: tuple[str, str, list[dict[str, object]]],
+) -> None:
+    """Exclude digest, token, response body, and URL values from telemetry."""
+    summary, jsonl, _ = publisher_telemetry
     assert not any(
         value in summary + jsonl
         for value in (
@@ -145,7 +160,7 @@ def test_publisher_summary_exposes_bounded_download_retry_diagnostics() -> None:
 def test_publisher_context_discards_invalid_registry_labels() -> None:
     """Keep unsafe identifiers and unrecognized state labels out of telemetry."""
     context = publisher_context({
-        "crate-name": "netsuke-build\nInjected heading",
+        "package-name": "netsuke-build\nInjected heading",
         "crate-version": "1.0.0`malicious",
         "registry-state": [],
         "action": {"publish": True},
@@ -155,3 +170,48 @@ def test_publisher_context_discards_invalid_registry_labels() -> None:
     assert context == {"verification_verdict": "unknown"}, (
         "publisher telemetry must accept only valid identifiers and fixed labels"
     )
+
+
+@pytest.mark.parametrize("registry_state", ["conflict", "yanked", "indeterminate"])
+def test_rejected_registry_decisions_remain_in_failure_telemetry(
+    registry_state: str,
+) -> None:
+    """Retain rejected state and action in the failed publisher record."""
+    outputs = {
+        "crate-name": "netsuke-build-1.2.3.crate",
+        "package-name": "netsuke-build",
+        "crate-version": "1.2.3",
+        "registry-state": registry_state,
+        "action": "fail",
+        "registry-decision-outcome": "failure",
+        "registry-decision-started-ns": "1000000000",
+        "registry-decision-ended-ns": "2000000000",
+        "registry-byte-verification-outcome": "skipped",
+    }
+    observation = observation_from_environment(
+        {
+            "RELEASE_OPERATION": "publish_crates_io",
+            "RELEASE_DRY_RUN": "false",
+            "JOB_STATUS": "failure",
+            "UPLOAD_ERROR_PRESENT": "false",
+            "PUBLISHER_OUTPUTS": json.dumps(outputs),
+        },
+        ended_ns=2_100_000_000,
+    )
+
+    summary, jsonl = render_observation(observation)
+    records = [json.loads(line) for line in jsonl.splitlines()]
+    trace_records = [
+        record for record in records if record.get("record_type") == "trace_event"
+    ]
+
+    assert f"`registry_state`: `{registry_state}`" in summary, (
+        "report the rejected registry observation"
+    )
+    assert "`action`: `fail`" in summary, "report that classification blocked mutation"
+    assert trace_records, "emit a phase record for the failed classifier"
+    assert all(
+        record.get("registry_state") == registry_state
+        and record.get("action") == "fail"
+        for record in trace_records
+    ), "trace records must retain rejected decisions"

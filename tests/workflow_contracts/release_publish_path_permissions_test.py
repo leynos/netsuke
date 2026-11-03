@@ -2,7 +2,7 @@
 
 from copy import deepcopy
 
-from action_run_sources import action_sources
+from action_run_sources import action_sources, action_steps
 from release_publish_crates_io_contracts import (
     ACTION_PATH,
     check_crates_io_action_contract,
@@ -55,6 +55,27 @@ def test_verified_digest_output_comes_from_the_verification_step() -> None:
     assert any(
         "action-output.verified-sha256" in violation for violation in violations
     ), "the published digest must come from the downloaded-byte verification step"
+
+
+def test_rejected_classification_exports_outputs_before_failure() -> None:
+    """Guard telemetry outputs when registry classification rejects mutation."""
+    release = load_workflow(RELEASE_WORKFLOW_PATH)
+    action = deepcopy(action_sources()[ACTION_PATH])
+    decision = next(
+        step
+        for step in action_steps(ACTION_PATH, action)
+        if step.get("id") == "decision"
+    )
+    decision["run"] = str(decision.get("run", "")).replace(
+        'printf \'state=%s\\n\' "$state" >>"$GITHUB_OUTPUT"\n', ""
+    )
+    violations: list[str] = []
+
+    check_crates_io_action_contract(release, action, violations)
+
+    assert any(
+        "classify: require fail-closed decision outputs" in item for item in violations
+    ), "the classifier contract must require rejected-state telemetry"
 
 
 def _assert_github_release_scopes(release: dict[str, object]) -> None:

@@ -58,19 +58,27 @@ def archive_bytes(
     name: str = PACKAGE_NAME,
     version: str = VERSION,
     manifest_version: str | None = None,
+    manifests: tuple[str, ...] | None = None,
 ) -> bytes:
-    """Return a gzip tar archive containing the manifest and README."""
+    """Return a gzip tar archive with configurable packaged manifests."""
     root = f"{name}-{version}"
     packaged_version = manifest_version if manifest_version is not None else version
+    packaged_manifests = (
+        manifests
+        if manifests is not None
+        else (manifest_text(name=name, version=packaged_version),)
+    )
     output = io.BytesIO()
     with tarfile.open(fileobj=output, mode="w:gz") as archive:
-        for filename, content in (
+        members = [
             (
-                "Cargo.toml",
-                manifest_text(name=name, version=packaged_version).encode(),
-            ),
-            ("README.md", b"# Netsuke\n\nPackaged documentation.\n"),
-        ):
+                "Cargo.toml" if index == 0 else f"duplicate-{index}/Cargo.toml",
+                content.encode(),
+            )
+            for index, content in enumerate(packaged_manifests)
+        ]
+        members.append(("README.md", b"# Netsuke\n\nPackaged documentation.\n"))
+        for filename, content in members:
             encoded = io.BytesIO(content)
             info = tarfile.TarInfo(f"{root}/{filename}")
             info.size = len(content)
