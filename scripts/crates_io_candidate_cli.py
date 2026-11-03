@@ -3,21 +3,20 @@
 This adapter reads the identity artifact and `.crate` bytes produced by
 ``package-crate``. It never invokes Cargo or rewrites the archive. The
 registry policy remains in :mod:`publish_crates_io_cli` and its pure policy
-modules; this module owns JSON, TOML, tar and filesystem boundaries.
+modules; this module owns the JSON and filesystem boundaries, while
+:mod:`crates_io_candidate_archive` owns reading the archive and the manifest
+it packages.
 """
 
 import argparse
 import dataclasses
-import io
 import json
 import pathlib
 import sys
-import tarfile
 import tempfile
-import tomllib
 
+import crates_io_candidate_archive
 import crates_io_upload_metadata
-import release_asset_names
 import release_candidate
 import release_digest
 import release_digest_files
@@ -158,71 +157,6 @@ def _identity_matches(
         raise CandidateError(CandidateIssue.IDENTITY_MISMATCH, (", ".join(mismatches),))
 
 
-def _crate_basename(record: dict[str, object]) -> str:
-    """Require the recorded crate name to be a flat archive basename."""
-    crate = record.get("crate")
-    if not isinstance(crate, str) or not release_asset_names.is_bare_file_name(crate):
-        raise CandidateError(CandidateIssue.CRATE_BASENAME)
-    if not crate.endswith(".crate"):
-        raise CandidateError(CandidateIssue.CRATE_SUFFIX, (crate,))
-    return crate
-
-
-def _recorded_archive(
-    record: dict[str, object], directory: pathlib.Path
-) -> tuple[str, pathlib.Path]:
-    """Select the sole archive after validating its recorded basename."""
-    crate = _crate_basename(record)
-    archives = sorted(directory.glob("*.crate"))
-    found = [archive.name for archive in archives]
-    if found != [crate]:
-        raise CandidateError(CandidateIssue.ARCHIVE_COUNT, (crate, found))
-    archive = directory / crate
-    if archive.is_symlink() or not archive.is_file():
-        raise CandidateError(CandidateIssue.ARCHIVE_FILE, (crate,))
-    return crate, archive
-
-
-def _manifest_contents(package: tarfile.TarFile, member_name: str) -> str:
-    """Read the one regular manifest member with the expected archive identity."""
-    matches = [member for member in package.getmembers() if member.name == member_name]
-    if len(matches) != 1 or not matches[0].isfile():
-        raise CandidateError(CandidateIssue.MANIFEST_MEMBER, (member_name,))
-    manifest_file = package.extractfile(matches[0])
-    if manifest_file is None:
-        raise CandidateError(CandidateIssue.MANIFEST_READ, (member_name,))
-    return manifest_file.read().decode("utf-8")
-
-
-def _check_manifest_identity(
-    manifest: dict[str, object], package_name: str, version: str
-) -> None:
-    """Require the packaged manifest identity to match the validated workflow."""
-    package_table = manifest.get("package")
-    if not isinstance(package_table, dict):
-        raise CandidateError(CandidateIssue.PACKAGE_TABLE)
-    if (
-        package_table.get("name") != package_name
-        or package_table.get("version") != version
-    ):
-        raise CandidateError(CandidateIssue.MANIFEST_IDENTITY)
-
-
-def _packaged_manifest(
-    archive_path: pathlib.Path, package_name: str, version: str
-) -> dict[str, object]:
-    """Read and validate the Cargo manifest stored in the retained archive."""
-    member_name = f"{package_name}-{version}/Cargo.toml"
-    try:
-        archive_bytes = archive_path.read_bytes()
-        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as package:
-            manifest = tomllib.loads(_manifest_contents(package, member_name))
-    except (OSError, UnicodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
-        raise CandidateError(CandidateIssue.MANIFEST_PARSE, (error,)) from error
-    _check_manifest_identity(manifest, package_name, version)
-    return manifest
-
-
 def _recorded_identity(record: dict[str, object]) -> release_candidate.ReleaseIdentity:
     """Parse the identity object while retaining candidate-specific diagnostics."""
     raw_identity = record.get("identity")
@@ -277,9 +211,13 @@ def validate_candidate(
     record = _read_json_mapping(identity_path, "package identity")
     identity = _recorded_identity(record)
     _identity_matches(identity, expectation)
-    crate, archive = _recorded_archive(record, archive_directory)
+    crate, archive = crates_io_candidate_archive.archive_and_crate(
+        record, archive_directory
+    )
     observed_digest = _validated_digest(archive, _recorded_digest(record))
-    _ = _packaged_manifest(archive, expectation.package_name, expectation.version)
+    _ = crates_io_candidate_archive.read_packaged_manifest(
+        archive, expectation.package_name, expectation.version
+    )
     return ValidatedCandidate(identity, crate, archive, observed_digest)
 
 
