@@ -31,7 +31,27 @@ def _crate_basename(record: dict[str, object]) -> str:
 def archive_and_crate(
     record: dict[str, object], directory: pathlib.Path
 ) -> tuple[str, pathlib.Path]:
-    """Select the sole archive after validating its recorded basename."""
+    """Select the sole archive after validating its recorded basename.
+
+    Parameters
+    ----------
+    record : dict[str, object]
+        The identity record whose ``crate`` entry names the expected archive.
+    directory : pathlib.Path
+        The directory holding the packaged ``.crate`` files.
+
+    Returns
+    -------
+    tuple[str, pathlib.Path]
+        The validated archive basename and its path.
+
+    Raises
+    ------
+    CandidateError
+        If the recorded name is not a flat ``.crate`` basename, the directory
+        does not hold exactly that archive, or the archive is not a regular
+        file.
+    """
     crate = _crate_basename(record)
     archives = sorted(directory.glob("*.crate"))
     found = [archive.name for archive in archives]
@@ -71,7 +91,28 @@ def _check_manifest_identity(
 def read_packaged_manifest(
     archive_path: pathlib.Path, package_name: str, version: str
 ) -> dict[str, object]:
-    """Read and validate the Cargo manifest stored in the retained archive."""
+    """Read and validate the Cargo manifest stored in the retained archive.
+
+    Parameters
+    ----------
+    archive_path : pathlib.Path
+        The retained ``.crate`` archive to read.
+    package_name : str
+        The package name the packaged manifest must declare.
+    version : str
+        The version the packaged manifest must declare.
+
+    Returns
+    -------
+    dict[str, object]
+        The parsed packaged manifest.
+
+    Raises
+    ------
+    CandidateError
+        If the archive cannot be read, holds no single regular manifest, or
+        declares a different package name or version.
+    """
     member_name = f"{package_name}-{version}/Cargo.toml"
     try:
         archive_bytes = archive_path.read_bytes()
