@@ -394,5 +394,5 @@ fn script_default_reaches_the_child_shell(
 }
 
 /// Script recipe cases, gated per test where they need a POSIX child shell.
-#[path = "ninja_dollar_escaping_tests/scripts.rs"]
+#[path = "ninja_dollar_escaping_tests/scripts/mod.rs"]
 mod scripts;

@@ -1043,16 +1043,17 @@ Two test layers guard the contract:
   `posix_script_escaping_applies_one_layer_per_parser`. Update that table, and
   the snapshot under `tests/snapshots/ninja/`, whenever the encoded shape
   changes intentionally.
-- `tests/ninja_dollar_escaping_tests/scripts.rs` asserts the stronger
-  property: a generated Ninja target, run by real Ninja, writes byte-exact
-  output and creates no file named by an injected redirect. Those execution
-  cases are Unix-only, because they run the generated wrapper under a POSIX
-  shell, and they fail when `ninja` is unavailable: `required_ninja_workspace`
-  propagates the probe error and each case returns it with `?`, so
-  `NETSUKE_REQUIRE_NINJA` does not change their outcome. CI sets that variable
-  for the jobs that exercise Ninja, where suites that opt into an availability
-  skip would otherwise pass without running. Real-Ninja coverage cannot reach a
-  Windows host from this suite, so it does not execute `bash.exe`.
+- `tests/ninja_dollar_escaping_tests/scripts/` asserts the stronger property:
+  its `transport.rs` cases run a generated Ninja target under real Ninja and
+  check that it writes byte-exact output and creates no file named by an
+  injected redirect. Those execution cases are Unix-only, because they run the
+  generated wrapper under a POSIX shell, and they fail when `ninja` is
+  unavailable: `required_ninja_workspace` propagates the probe error and each
+  case returns it with `?`, so `NETSUKE_REQUIRE_NINJA` does not change their
+  outcome. CI sets that variable for the jobs that exercise Ninja, where suites
+  that opt into an availability skip would otherwise pass without running.
+  Real-Ninja coverage cannot reach a Windows host from this suite, so it does
+  not execute `bash.exe`.
 
 The Bash route has no separate transport encoder: it wraps the same encoded
 POSIX script as `bash.exe -e -c "<windows argument>"`. Coverage for it comes
