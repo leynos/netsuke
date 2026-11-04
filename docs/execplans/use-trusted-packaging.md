@@ -4314,3 +4314,19 @@ schedule moved into their own modules so every publisher suite stays under the
 repository's file-length cap; the release-publication registry, the Makefile
 recipe, and the developers' guide now agree on thirty-two modules. Stage C
 remains partial; no live exchange or release has been exercised.
+
+Draft 25, 2026-11-04: expanded the publisher validation coverage from the
+remaining pre-merge findings. Initial requests and redirects exercise every
+rejected registry-URL policy, upload tests prove that missing or empty tokens
+and oversized frames stop before a request, and the polling property checks the
+exact stop point, final outcome, and delay schedule. The property uses the same
+named delay and timeout values to construct its policy and verify the observed
+schedule. The current authentication references use the implemented pin
+`3268eb413133e2960fa4ae0e963ca76380c54cd9`.
+
+The nine local gates passed sequentially on the final candidate: formatting,
+lint, typecheck, documentation coverage (98.30%, 6,657/6,772), Rust tests
+(5,026 passed, 7 skipped, plus doctests), workflow contracts (1,713 passed, 3
+skipped, plus 28 script-helper checks), release-publication tests (592 passed),
+Markdown lint (0 issues), and Mermaid validation (all diagrams valid). Stage C
+remains partial; no live exchange or release has been exercised.

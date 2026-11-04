@@ -36,12 +36,23 @@ if typ.TYPE_CHECKING:
 REGISTRY_PREFIX = "https://crates.io/api/v1/crates/"
 
 
-def test_build_request_rejects_an_unallowlisted_initial_url() -> None:
-    """Reject a non-registry destination at the public request builder."""
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://attacker.example/forged-response", id="unallowlisted"),
+        pytest.param("http://crates.io/api/v1", id="plain-http"),
+        pytest.param("https://user@crates.io/api/v1", id="userinfo"),
+        pytest.param("https://crates.io:443/api/v1", id="explicit-port"),
+        pytest.param("https://crates.io/api/v1#fragment", id="fragment"),
+        pytest.param("https://crates.io:abc/api/v1", id="non-numeric-port"),
+        pytest.param("https://crates.io:99999/api/v1", id="out-of-range-port"),
+        pytest.param("https://[::1/api/v1", id="unbracketed-ipv6"),
+    ],
+)
+def test_build_request_rejects_every_disallowed_initial_url(url: str) -> None:
+    """Reject every URL-policy violation at the public request builder."""
     with pytest.raises(RegistryUrlError):
-        crates_io_registry_http.build_request(
-            "https://attacker.example/forged-response", headers={}
-        )
+        crates_io_registry_http.build_request(url, headers={})
 
 
 def _install_redirect(monkeypatch: pytest.MonkeyPatch, location: str) -> None:
@@ -88,6 +99,10 @@ def _install_redirect(monkeypatch: pytest.MonkeyPatch, location: str) -> None:
     "location",
     [
         pytest.param("https://attacker.example/forged-response", id="unallowlisted"),
+        pytest.param("http://crates.io/forged", id="plain-http"),
+        pytest.param("https://user@crates.io/forged", id="userinfo"),
+        pytest.param("https://crates.io:443/forged", id="explicit-port"),
+        pytest.param("https://crates.io/forged#fragment", id="fragment"),
         pytest.param("https://crates.io:abc/forged", id="non-numeric-port"),
         pytest.param("https://crates.io:99999/forged", id="out-of-range-port"),
         pytest.param("https://[::1/forged", id="unbracketed-ipv6"),

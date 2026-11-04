@@ -26,19 +26,30 @@ if typ.TYPE_CHECKING:
     import pathlib
 
 
-def test_upload_without_a_token_sends_no_request(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+@pytest.mark.parametrize(
+    "environment",
+    [
+        pytest.param({}, id="missing-token"),
+        pytest.param({"CRATES_IO_TOKEN": ""}, id="empty-token"),
+    ],
+)
+def test_upload_without_a_usable_token_sends_no_request(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    environment: dict[str, str],
 ) -> None:
-    """Refuse an unauthenticated upload before it reaches the registry."""
+    """Refuse a missing or empty token before contacting the registry."""
     metadata = tmp_path / "metadata.json"
     archive = tmp_path / "candidate.crate"
     _ = metadata.write_text("{}", encoding="utf-8")
     _ = archive.write_bytes(b"bytes")
     opener = FakeOpener(FakeResponse(200, b"{}"))
 
-    result = main(upload_args(metadata, archive), opener=opener, environment={})
+    result = main(
+        upload_args(metadata, archive), opener=opener, environment=environment
+    )
 
-    assert result == EXIT_UPLOAD_FAILED, "a missing token must fail the upload"
+    assert result == EXIT_UPLOAD_FAILED, "an unusable token must fail the upload"
     assert not opener.requests, "never send an unauthenticated registry upload"
     assert "no short-lived token" in capsys.readouterr().err, (
         "name the missing credential in the diagnostic"
@@ -101,6 +112,32 @@ def test_upload_frame_bounds_each_field_at_the_addressable_length(
     frame = _upload_frame(bytes(metadata_size), bytes(archive_size))
     assert len(frame) == 8 + metadata_size + archive_size, (
         "encode both length prefixes without padding"
+    )
+
+
+def test_upload_rejects_an_oversized_frame_before_sending_a_request(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Reject an oversized CLI frame before the opener can send it."""
+    monkeypatch.setattr(crates_io_transport_cli, "MAX_FRAME_LENGTH", 8)
+    metadata = tmp_path / "metadata.json"
+    archive = tmp_path / "candidate.crate"
+    _ = metadata.write_bytes(b"{}")
+    _ = archive.write_bytes(b"123456789")
+    opener = FakeOpener(FakeResponse(200, b"{}"))
+
+    result = main(
+        upload_args(metadata, archive),
+        opener=opener,
+        environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
+    )
+
+    assert result == EXIT_UPLOAD_FAILED, "an oversized frame must fail the upload"
+    assert not opener.requests, "never send a frame that cannot be represented"
+    assert "unsigned 32-bit" in capsys.readouterr().err, (
+        "diagnose the fixed-width upload limit"
     )
 
 

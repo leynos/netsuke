@@ -12,6 +12,7 @@ import urllib.request
 import pytest
 from crates_io_transport_http import (
     DownloadPollPolicy,
+    DownloadPollResult,
     _download_status_class,
     _retryable_download_status,
     poll_archive,
@@ -25,6 +26,10 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 ARCHIVE_URL = "https://static.crates.io/crates/netsuke-build/netsuke-build-1.2.3.crate"
+# Zero delay keeps the property fast, so the schedule assertion below must expect
+# this value rather than a nominal retry pause.
+DELAY_SECONDS = 0.0
+TIMEOUT_SECONDS = 1.0
 
 RETRYABLE_404 = "retryable-404"
 RETRYABLE_503 = "retryable-503"
@@ -32,6 +37,20 @@ TERMINAL_200 = "terminal-200"
 TERMINAL_422 = "terminal-422"
 OFFLINE = "offline"
 TERMINAL_OUTCOMES = frozenset({TERMINAL_200, TERMINAL_422})
+EXPECTED_RESPONSES: dict[str, tuple[int, bytes] | None] = {
+    RETRYABLE_404: (404, b"absent"),
+    RETRYABLE_503: (503, b"busy"),
+    TERMINAL_200: (200, b"archive"),
+    TERMINAL_422: (422, b"rejected"),
+    OFFLINE: None,
+}
+EXPECTED_STATUS_CLASSES = {
+    RETRYABLE_404: "4xx",
+    RETRYABLE_503: "5xx",
+    TERMINAL_200: "2xx",
+    TERMINAL_422: "4xx",
+    OFFLINE: "unknown",
+}
 
 
 def _outcome(name: str) -> FakeResponse | BaseException:
@@ -48,8 +67,8 @@ def _outcome(name: str) -> FakeResponse | BaseException:
 
 def _poll(
     attempts: int, names: list[str]
-) -> tuple[list[urllib.request.Request], list[float], int]:
-    """Run one bounded poll and return its requests, delays, and attempt count."""
+) -> tuple[list[urllib.request.Request], list[float], DownloadPollResult]:
+    """Run one bounded poll and return requests, delays, and its result."""
     request = urllib.request.Request(ARCHIVE_URL)
     # An empty opener queue would surface as IndexError, so repeat the generated
     # sequence until it can exhaust the largest permitted budget.
@@ -57,9 +76,12 @@ def _poll(
     delays: list[float] = []
 
     result = poll_archive(
-        opener, request, DownloadPollPolicy(attempts, 0.0, 1.0), delays.append
+        opener,
+        request,
+        DownloadPollPolicy(attempts, DELAY_SECONDS, TIMEOUT_SECONDS),
+        delays.append,
     )
-    return [request for request, _timeout in opener.requests], delays, result.attempts
+    return [request for request, _timeout in opener.requests], delays, result
 
 
 @settings(max_examples=100, deadline=None, derandomize=True)
@@ -80,21 +102,49 @@ def _poll(
 def test_poll_archive_honours_its_budget_and_stops_on_the_first_terminal_response(
     attempts: int, names: list[str]
 ) -> None:
-    """Stop at the first terminal outcome, or at the attempt budget.
+    """Return the last outcome at the first terminal point or budget edge.
 
-    Three things tie the observable call schedule to the policy: no more
-    requests than permitted, one delay between every pair of consecutive
-    requests and none after the last, and an immediate stop when the very first
-    response is terminal.
+    The generated schedule proves the stop position, final response and status,
+    plus one configured delay between consecutive attempts and none afterward.
     """
-    _requests, delays, reported_attempts = _poll(attempts, names)
+    generated_schedule = [names[index % len(names)] for index in range(attempts)]
+    terminal_index = next(
+        (
+            index
+            for index, name in enumerate(generated_schedule)
+            if name in TERMINAL_OUTCOMES
+        ),
+        None,
+    )
+    expected_attempts = attempts if terminal_index is None else terminal_index + 1
+    expected_last_outcome = generated_schedule[expected_attempts - 1]
 
-    assert 1 <= reported_attempts <= attempts, "never exceed the attempt budget"
-    assert len(delays) == max(0, reported_attempts - 1), (
+    requests, delays, result = _poll(attempts, names)
+
+    assert result.attempts == expected_attempts, (
+        "stop at the first terminal response or exhaust the attempt budget"
+    )
+    assert len(requests) == expected_attempts, (
+        "make exactly one request for every consumed outcome"
+    )
+    assert delays == [DELAY_SECONDS] * (expected_attempts - 1), (
         "wait exactly between consecutive requests, never after the last"
     )
-    if names[0] in TERMINAL_OUTCOMES:
-        assert reported_attempts == 1, "a terminal response ends the poll at once"
+    assert result.response == EXPECTED_RESPONSES[expected_last_outcome], (
+        "return the response from the last consumed outcome"
+    )
+    assert result.status_class == EXPECTED_STATUS_CLASSES[expected_last_outcome], (
+        "classify the last consumed outcome"
+    )
+    if expected_last_outcome == OFFLINE:
+        assert isinstance(result.last_error, urllib.error.URLError), (
+            "retain the final transport error when no response arrived"
+        )
+        assert result.last_error.reason == "offline", (
+            "retain the reason from the final transport error"
+        )
+    else:
+        assert result.last_error is None, "a received response clears transport errors"
 
 
 @pytest.mark.parametrize(
@@ -153,7 +203,10 @@ def test_poll_archive_keeps_the_first_non_retryable_response() -> None:
     )
 
     result = poll_archive(
-        opener, request, DownloadPollPolicy(3, 0.0, 1.0), lambda _delay: None
+        opener,
+        request,
+        DownloadPollPolicy(3, DELAY_SECONDS, TIMEOUT_SECONDS),
+        lambda _delay: None,
     )
 
     assert result.response == (422, b"rejected"), "retain the terminating response"
