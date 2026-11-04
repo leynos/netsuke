@@ -8,14 +8,47 @@ The record is constructed directly, as a decoded adapter would construct it;
 that produce each refusal.
 """
 
+import operator
+import string
 import typing as typ
 
 import pytest
 import release_digest
 import release_digest_record
+from hypothesis import given, settings
+from hypothesis import strategies as st
 
 DIGEST = "ab" * 32
 OTHER = "cd" * 32
+
+#: An asset name a release could publish, kept short so examples stay readable.
+_ASSET_NAME = st.from_regex(r"[a-z][a-z0-9_-]{0,7}", fullmatch=True)
+#: A SHA-256 digest in either case, so normalization is exercised.
+_HEX_DIGEST = st.text(
+    alphabet=string.hexdigits,
+    min_size=release_digest.DIGEST_HEX_LENGTH,
+    max_size=release_digest.DIGEST_HEX_LENGTH,
+)
+
+
+@st.composite
+def _declared_digests(draw: st.DrawFn) -> dict[str, str]:
+    """Generate a non-empty asset mapping of arbitrary size and case.
+
+    Returns
+    -------
+    dict[str, str]
+        Distinct asset names mapped to hexadecimal digests in either case.
+    """
+    pairs = draw(
+        st.lists(
+            st.tuples(_ASSET_NAME, _HEX_DIGEST),
+            min_size=1,
+            max_size=6,
+            unique_by=operator.itemgetter(0),
+        )
+    )
+    return dict(pairs)
 
 
 def _trusted(digests: dict[str, object]) -> release_digest_record.DigestRecord:
@@ -29,6 +62,50 @@ def test_a_record_normalizes_digest_case() -> None:
 
     assert record.as_mapping() == {"a": DIGEST}, (
         "an uppercase digest describes the same bytes and must compare equal"
+    )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(declared=_declared_digests())
+def test_from_mapping_normalizes_every_generated_record(
+    declared: dict[str, str],
+) -> None:
+    """Normalize case and order for a non-empty mapping of any size.
+
+    The comparisons rely on these invariants, so they have to hold for every
+    size, case variant, and insertion order rather than for the few examples
+    the table rows pin.
+    """
+    record = release_digest_record.DigestRecord.from_mapping(declared)
+    expected = {name: digest.lower() for name, digest in declared.items()}
+
+    assert record.as_mapping() == expected, "case must be normalized, not kept"
+    assert record.names() == set(expected), "no asset name may be gained or lost"
+    assert list(record.entries) == sorted(expected.items()), (
+        "entries must be sorted by name, so insertion order cannot matter"
+    )
+
+
+@settings(max_examples=200, deadline=None, derandomize=True)
+@given(declared=_declared_digests())
+def test_a_canonical_record_is_the_same_however_it_was_built(
+    declared: dict[str, str],
+) -> None:
+    """Agree between the factory and a canonical direct construction.
+
+    An adapter decodes through the factory while a caller that already holds
+    the canonical form may construct the record directly. The two must be
+    interchangeable, or the type guarantee would depend on the constructor.
+    """
+    normalized = {name: digest.lower() for name, digest in declared.items()}
+    from_factory = release_digest_record.DigestRecord.from_mapping(declared)
+    canonical = release_digest_record.DigestRecord(tuple(sorted(normalized.items())))
+
+    assert canonical == from_factory, (
+        "a canonical direct construction must equal the factory's record"
+    )
+    assert canonical.as_mapping() == normalized, (
+        "the direct record must expose the normalized mapping unchanged"
     )
 
 
