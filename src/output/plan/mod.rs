@@ -1,11 +1,11 @@
 //! Resolve all terminal presentation choices from policies and captured facts.
 //!
-//! [`crate::output_prefs::OutputPrefs`], [`crate::theme::ThemeContext`],
-//! [`crate::theme::ResolvedTheme`], and the runner's `ReporterOptions` each
-//! capture one presentation facet. This pure module composes those facets
-//! once. Its permitted callers are the binary composition root, `runner`, and
-//! tests; I/O adapters consume the resulting [`DisplayPlan`] and never
-//! re-derive presentation decisions.
+//! [`crate::output_prefs::OutputPrefs`], [`crate::theme::ThemeContext`], and
+//! [`crate::theme::ResolvedTheme`] each capture one presentation facet. The
+//! runner reporter also used to resolve its own choices. This pure module
+//! composes those facets once. Its permitted callers are the binary composition
+//! root, `runner`, and tests; I/O adapters consume the resulting [`DisplayPlan`]
+//! and never re-derive presentation decisions.
 
 use crate::cli::config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
 use crate::output_mode::{EnvSignals, OutputMode};

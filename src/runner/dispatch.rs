@@ -11,6 +11,7 @@ use super::{
 #[cfg(feature = "lint")]
 use crate::cli::CheckArgs;
 use crate::cli::{BuildArgs, Cli, Commands, HelpArgs, HelpTopic};
+use crate::display_plan::DisplayPlan;
 use crate::localization::keys;
 use crate::result_json;
 use anyhow::{Context, Result};
@@ -30,7 +31,7 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
         Commands::Generate { output } => handle_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
         Commands::Graph(args) => graph::handle_graph(cli, &args, context),
-        Commands::Help(args) => execute_help(cli, &args, context.reporter),
+        Commands::Help(args) => execute_help(cli, &args, context.display_plan, context.reporter),
     }
 }
 
@@ -42,12 +43,13 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
 pub(super) fn execute_help(
     cli: &Cli,
     args: &HelpArgs,
+    plan: DisplayPlan,
     reporter: &dyn crate::status::StatusReporter,
 ) -> Result<()> {
     match args.topic.as_ref() {
         None => help::render_root_help(),
         Some(HelpTopic::Targets(target_args)) => {
-            help::handle_help_targets(cli, target_args.edges, reporter)
+            help::handle_help_targets(cli, target_args.edges, plan, reporter)
         }
         Some(HelpTopic::Build) => help::render_subcommand_help("build"),
         #[cfg(feature = "lint")]

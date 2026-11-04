@@ -6,14 +6,17 @@
 use clap::ArgMatches;
 use clap::error::ErrorKind;
 use miette::Report;
-use netsuke::theme::ThemeContext;
 use netsuke::{
-    cli, cli_localization, diagnostic_json, ir::IrGenError, locale_resolution, localization,
-    manifest, output_mode, output_prefs, runner,
+    cli, cli_localization, diagnostic_json,
+    display_plan::{DisplayPlan, TerminalFacts, resolve_display_plan},
+    ir::IrGenError,
+    locale_resolution, localization, manifest,
+    output_mode::EnvSignals,
+    output_prefs, runner,
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
 use std::sync::Arc;
 use tracing_subscriber::filter::LevelFilter;
@@ -57,8 +60,8 @@ use startup_tracing::StartupWriter;
 
 /// Injectable dependencies for one invocation of the startup composition root.
 ///
-/// Production supplies process-backed adapters, while tests use in-memory
-/// adapters to keep locale and configuration environment access deterministic.
+/// Production supplies process-backed adapters and captured stream facts,
+/// while tests inject deterministic environment and terminal values.
 struct RunWithArgsDependencies<'a, L, S, C, E>
 where
     L: locale_resolution::LocaleEnvProvider,
@@ -74,6 +77,10 @@ where
     configuration_clock: &'a C,
     /// Environment provider consulted during configuration discovery and merge.
     config_env: &'a E,
+    /// Whether stdout was connected to a terminal at process entry.
+    stdout_is_terminal: bool,
+    /// Whether stderr was connected to a terminal at process entry.
+    stderr_is_terminal: bool,
 }
 
 /// Send buffered startup diagnostics where `mode` says they belong.
@@ -94,6 +101,10 @@ fn settle_startup_diagnostics(writer: &StartupWriter, mode: DiagMode) {
 }
 
 /// Collect production arguments and environment providers, then run Netsuke.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the process entrypoint captures each terminal stream once"
+)]
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
@@ -105,9 +116,15 @@ fn main() -> ExitCode {
         system_locale: &system_locale,
         configuration_clock: &configuration_clock,
         config_env: &config_env,
+        stdout_is_terminal: io::stdout().is_terminal(),
+        stderr_is_terminal: io::stderr().is_terminal(),
     };
     let startup_writer = StartupWriter::buffering();
-    main_tracing::init_tracing(LevelFilter::WARN, startup_writer.clone());
+    main_tracing::init_tracing(
+        LevelFilter::WARN,
+        startup_writer.clone(),
+        dependencies.stderr_is_terminal,
+    );
     run_with_args(args, &dependencies, &startup_writer)
 }
 
@@ -144,10 +161,16 @@ where
             Err(code) => return code,
         };
     let verbose = parsed_cli.verbose;
+    let terminal_facts = TerminalFacts::from_signals(
+        EnvSignals::read(|key| dependencies.locale_env.var(key)),
+        dependencies.stdout_is_terminal,
+        dependencies.stderr_is_terminal,
+    );
     if is_informational_help(&parsed_cli) {
+        let plan = resolve_display_plan(parsed_cli.display_policies(), terminal_facts);
         settle_startup_diagnostics(startup_writer, startup_mode);
         return finish_run(
-            run_cli(&parsed_cli, dependencies.system_locale, startup_mode),
+            run_cli(&parsed_cli, dependencies.system_locale, startup_mode, plan),
             verbose,
         );
     }
@@ -170,15 +193,10 @@ where
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
 
     configure_runtime(&merged_cli, dependencies.system_locale, runtime_mode);
-    let output_mode =
-        output_mode::resolve(merged_cli.accessibility_override(), Some(merged_cli.color));
-    let prefs = output_prefs::resolve_from_theme(
-        merged_cli.theme_preference(),
-        ThemeContext::new(None, Some(merged_cli.color), output_mode),
-    );
-    let exit_code = match runner::run(&merged_cli, prefs) {
+    let plan = resolve_display_plan(merged_cli.display_policies(), terminal_facts);
+    let exit_code = match runner::run(&merged_cli, plan) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, prefs, runtime_mode),
+        Err(err) => handle_runner_error(err, plan.prefs(), runtime_mode),
     };
     finish_run(exit_code, merged_verbose)
 }
@@ -209,16 +227,12 @@ fn run_cli(
     cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,
     runtime_mode: DiagMode,
+    plan: DisplayPlan,
 ) -> ExitCode {
     configure_runtime(cli, system_locale, runtime_mode);
-    let output_mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
-    let prefs = output_prefs::resolve_from_theme(
-        cli.theme_preference(),
-        ThemeContext::new(None, Some(cli.color), output_mode),
-    );
-    match runner::run(cli, prefs) {
+    match runner::run(cli, plan) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, prefs, runtime_mode),
+        Err(err) => handle_runner_error(err, plan.prefs(), runtime_mode),
     }
 }
 

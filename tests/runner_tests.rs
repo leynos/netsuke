@@ -3,8 +3,8 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use netsuke::cli::{Cli, Commands};
+use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::localization::{self, keys};
-use netsuke::output_prefs;
 use netsuke::runner::{BuildTargets, run, run_ninja, run_ninja_tool, run_with_ninja_program};
 use rstest::{fixture, rstest};
 use std::path::{Path, PathBuf};
@@ -86,7 +86,10 @@ fn run_exits_with_manifest_error_on_invalid_version() -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
+    let Err(err) = run(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    ) else {
         bail!("expected run to fail for invalid manifest");
     };
     let expected = localization::message(keys::RUNNER_CONTEXT_LOAD_MANIFEST)
@@ -119,9 +122,11 @@ fn assert_ninja_failure_propagates(command: Option<Commands>) -> Result<()> {
         ..Cli::default()
     };
 
-    let Err(err) =
-        run_with_ninja_program(&cli, output_prefs::resolve(None), utf8_path(&ninja_path)?)
-    else {
+    let Err(err) = run_with_ninja_program(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+        utf8_path(&ninja_path)?,
+    ) else {
         bail!("expected run to fail when ninja exits non-zero");
     };
     let messages: Vec<String> = err
@@ -179,8 +184,12 @@ fn run_ninja_not_found() -> Result<()> {
 fn run_executes_ninja_without_persisting_file() -> Result<()> {
     let (_ninja_dir, ninja_path, temp, cli) = setup_ninja_env_test()?;
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), utf8_path(&ninja_path)?)
-        .context("expected build to succeed")?;
+    run_with_ninja_program(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+        utf8_path(&ninja_path)?,
+    )
+    .context("expected build to succeed")?;
 
     // Ensure no ninja file remains in project directory
     ensure!(
@@ -197,7 +206,11 @@ fn run_generate_with_output_keeps_file() -> Result<()> {
     let output_path = temp.path().join("generated.ninja");
     let cli = generate_cli(&manifest_path, temp.path(), &output_path)?;
 
-    run(&cli, output_prefs::resolve(None)).context("expected generate to succeed")?;
+    run(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    )
+    .context("expected generate to succeed")?;
 
     ensure!(
         output_path.exists(),
@@ -232,8 +245,11 @@ fn run_generate_with_output_creates_parent_dirs() -> Result<()> {
     );
     let cli = generate_cli(&manifest_path, temp.path(), &output_path)?;
 
-    run(&cli, output_prefs::resolve(None))
-        .context("expected generate to succeed with nested output path")?;
+    run(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    )
+    .context("expected generate to succeed with nested output path")?;
     ensure!(output_path.exists(), "output path should be created");
     ensure!(nested_dir.exists(), "nested directory should be created");
     Ok(())
@@ -245,7 +261,11 @@ fn run_generate_subcommand_writes_file() -> Result<()> {
     let output_path = temp.path().join("standalone.ninja");
     let cli = generate_cli(&manifest_path, temp.path(), &output_path)?;
 
-    run(&cli, output_prefs::resolve(None)).context("expected generate subcommand to succeed")?;
+    run(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    )
+    .context("expected generate subcommand to succeed")?;
     ensure!(
         output_path.exists(),
         "generate command should create output file"
@@ -281,7 +301,10 @@ fn run_generate_rejects_environment_variable_blocked_by_cli_policy() -> Result<(
         ..Cli::default()
     };
 
-    let Err(err) = run(&cli, output_prefs::resolve(None)) else {
+    let Err(err) = run(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    ) else {
         bail!("expected generate to reject a blocked environment lookup");
     };
     let diagnostic = format!("{err:#}");
@@ -314,8 +337,11 @@ fn run_generate_subcommand_accepts_relative_manifest_path() -> Result<()> {
         ..Cli::default()
     };
 
-    run(&cli, output_prefs::resolve(None))
-        .context("expected generate subcommand to accept relative manifest path")?;
+    run(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    )
+    .context("expected generate subcommand to accept relative manifest path")?;
     ensure!(
         output_path.exists(),
         "generate command should create output file for relative manifest path"
@@ -335,7 +361,7 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
 
     run_with_ninja_program(
         &cli,
-        output_prefs::resolve(None),
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
         utf8_path(&ninja_env_path)?,
     )
     .context("expected injected Ninja programme to be used")?;
@@ -346,8 +372,12 @@ fn run_respects_env_override_for_ninja() -> Result<()> {
 fn run_succeeds_with_checking_ninja_env() -> Result<()> {
     let (_ninja_dir, ninja_path, _temp, cli) = setup_ninja_env_test()?;
 
-    run_with_ninja_program(&cli, output_prefs::resolve(None), utf8_path(&ninja_path)?)
-        .context("expected run to succeed using NINJA_ENV check binary")?;
+    run_with_ninja_program(
+        &cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+        utf8_path(&ninja_path)?,
+    )
+    .context("expected run to succeed using NINJA_ENV check binary")?;
     ensure!(ninja_path.exists(), "fake ninja should remain present");
     Ok(())
 }

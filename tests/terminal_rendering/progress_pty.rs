@@ -1,6 +1,9 @@
 //! Check redraw and task-text behaviour with a Unix pseudo-terminal.
 
-use super::support::{STAGE_LABELS, TerminalWorkspace, stage_labels_in_output_order, visible_text};
+use super::support::{
+    STAGE_LABELS, TerminalWorkspace, display_plan_for_args, stage_labels_in_output_order,
+    visible_text,
+};
 use anyhow::{Context, Result, ensure};
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
@@ -13,23 +16,25 @@ use test_support::terminal::{Attach, classify};
 #[case::always_redraws("always")]
 fn standard_progress_redraws_on_a_capable_terminal(#[case] progress_policy: &str) -> Result<()> {
     let workspace = TerminalWorkspace::new()?;
+    let args = [
+        "--accessibility",
+        "off",
+        "--progress",
+        progress_policy,
+        "generate",
+    ];
+    let env = [("TERM", "xterm-256color")];
+    let plan = display_plan_for_args(&args, &env, false, true)?;
     let output = workspace
-        .run_pty(
-            &[
-                "--accessibility",
-                "off",
-                "--progress",
-                progress_policy,
-                "generate",
-            ],
-            &[("TERM", "xterm-256color")],
-            Attach::StderrOnly,
-        )
+        .run_pty(&args, &env, Attach::StderrOnly)
         .context("run terminal progress-policy case")?;
     ensure!(output.status.success(), "generate should succeed");
 
     let terminal = visible_text(&output.terminal);
-    expect_that!(classify(&output.terminal).has_redraw, eq(true));
+    expect_that!(
+        classify(&output.terminal).has_redraw,
+        eq(plan.live_progress())
+    );
     assert_eq!(
         stage_labels_in_output_order(&terminal).as_slice(),
         STAGE_LABELS.as_slice(),
@@ -41,18 +46,20 @@ fn standard_progress_redraws_on_a_capable_terminal(#[case] progress_policy: &str
 #[test]
 fn terminal_progress_never_suppresses_stage_output() -> Result<()> {
     let workspace = TerminalWorkspace::new()?;
+    let args = ["--accessibility", "off", "--progress", "never", "generate"];
+    let env = [("TERM", "xterm-256color")];
+    let plan = display_plan_for_args(&args, &env, false, true)?;
     let output = workspace
-        .run_pty(
-            &["--accessibility", "off", "--progress", "never", "generate"],
-            &[("TERM", "xterm-256color")],
-            Attach::StderrOnly,
-        )
+        .run_pty(&args, &env, Attach::StderrOnly)
         .context("run terminal progress-never case")?;
     ensure!(output.status.success(), "generate should succeed");
 
     let terminal = visible_text(&output.terminal);
     expect_that!(terminal.as_str(), not(contains_substring("Stage 1/6")));
-    expect_that!(classify(&output.terminal).has_redraw, eq(false));
+    expect_that!(
+        classify(&output.terminal).has_redraw,
+        eq(plan.live_progress())
+    );
     Ok(())
 }
 
@@ -60,12 +67,11 @@ fn terminal_progress_never_suppresses_stage_output() -> Result<()> {
 #[test]
 fn task_updates_stay_plain_when_stdout_is_piped_and_stderr_is_terminal() -> Result<()> {
     let workspace = TerminalWorkspace::new()?;
+    let args = ["--accessibility", "off", "--progress", "always", "build"];
+    let env = [("TERM", "xterm-256color")];
+    let plan = display_plan_for_args(&args, &env, false, true)?;
     let output = workspace
-        .run_pty(
-            &["--accessibility", "off", "--progress", "always", "build"],
-            &[("TERM", "xterm-256color")],
-            Attach::StderrOnly,
-        )
+        .run_pty(&args, &env, Attach::StderrOnly)
         .context("run task updates with piped stdout")?;
     ensure!(output.status.success(), "build should succeed");
 
@@ -90,7 +96,10 @@ fn task_updates_stay_plain_when_stdout_is_piped_and_stderr_is_terminal() -> Resu
         .collect::<Vec<_>>();
     expect_that!(task_lines.len(), eq(2));
     for line in task_lines {
-        expect_that!(classify(line).has_any_escape, eq(false));
+        expect_that!(
+            classify(line).has_any_escape,
+            eq(!plan.force_text_task_updates())
+        );
         expect_that!(classify(line).has_redraw, eq(false));
     }
     Ok(())

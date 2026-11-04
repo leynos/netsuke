@@ -3,7 +3,11 @@
 use anyhow::{Context, Result};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
+use clap::Parser;
+use netsuke::cli::Cli;
+use netsuke::display_plan::{DisplayPlan, TerminalFacts, resolve_display_plan};
 use netsuke::locale_resolution::{LocaleEnvProvider, SystemEnv};
+use netsuke::output_mode::EnvSignals;
 #[cfg(unix)]
 use std::time::Duration;
 use std::{path::Path, process::Command};
@@ -21,6 +25,36 @@ pub const STAGE_LABELS: [&str; 6] = [
     "Stage 5/6: Building and validating dependency graph",
     "Stage 6/6: Synthesizing Ninja build plan",
 ];
+
+/// Resolve the expected display plan from CLI arguments and terminal facts.
+///
+/// # Examples
+///
+/// ```ignore
+/// let plan = display_plan_for_args(&["--progress", "always"], &[], false, false)?;
+/// ```
+///
+/// # Errors
+///
+/// Returns an error when the argument list is not a valid Netsuke CLI.
+pub(super) fn display_plan_for_args(
+    args: &[&str],
+    extra_env: &[(&str, &str)],
+    stdout_is_terminal: bool,
+    stderr_is_terminal: bool,
+) -> Result<DisplayPlan> {
+    let cli = Cli::try_parse_from(std::iter::once("netsuke").chain(args.iter().copied()))
+        .context("parse display-policy arguments")?;
+    let env = |key: &str| {
+        extra_env
+            .iter()
+            .find_map(|(name, value)| (*name == key).then(|| String::from(*value)))
+            .or_else(|| (key == "TERM").then(|| String::from("xterm-256color")))
+    };
+    let signals = EnvSignals::read(env);
+    let facts = TerminalFacts::from_signals(signals, stdout_is_terminal, stderr_is_terminal);
+    Ok(resolve_display_plan(cli.display_policies(), facts))
+}
 
 /// Keep a temporary Netsukefile workspace and a deterministic fake Ninja alive.
 ///

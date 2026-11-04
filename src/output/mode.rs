@@ -6,7 +6,6 @@
 //! forced via explicit configuration.
 
 use crate::cli::ColourPolicy;
-use std::env;
 
 /// Whether terminal output should use accessible (static text) or standard
 /// (potentially animated) formatting.
@@ -138,35 +137,6 @@ impl EnvSignals {
             OutputMode::Standard
         }
     }
-}
-
-/// Resolve the output mode from explicit configuration and environment.
-///
-/// Precedence:
-/// 1. Explicit configuration (`accessible` field): `Some(true)` forces
-///    [`Accessible`](OutputMode::Accessible), `Some(false)` forces
-///    [`Standard`](OutputMode::Standard).
-/// 2. `NO_COLOR` environment variable (any value, including empty):
-///    [`Accessible`](OutputMode::Accessible).
-/// 3. `TERM=dumb`: [`Accessible`](OutputMode::Accessible).
-/// 4. Default: [`Standard`](OutputMode::Standard).
-///
-/// # Examples
-///
-/// ```
-/// use netsuke::output_mode::{OutputMode, resolve};
-///
-/// // Explicit configuration takes highest precedence.
-/// assert_eq!(resolve(Some(true), None), OutputMode::Accessible);
-/// assert_eq!(resolve(Some(false), None), OutputMode::Standard);
-/// ```
-#[must_use]
-#[expect(
-    clippy::disallowed_methods,
-    reason = "composition root: supplies the process environment to the read_env seam"
-)]
-pub fn resolve(explicit: Option<bool>, colour_policy: Option<ColourPolicy>) -> OutputMode {
-    resolve_with(explicit, colour_policy, |key| env::var(key).ok())
 }
 
 /// Testable variant that accepts an environment lookup function.

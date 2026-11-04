@@ -21,6 +21,7 @@ use tracing_subscriber::filter::LevelFilter;
 
 #[cfg(feature = "lint")]
 mod check_dispatch_tests;
+
 mod manifest_structure_telemetry_tests;
 
 #[path = "shell_seam_tests.rs"]
@@ -32,7 +33,9 @@ const MINIMAL_MANIFEST: &str = concat!(
     "  - name: hello\n",
     "    command: echo hi\n",
 );
+
 const MANIFEST_LOG_SENTINEL: &str = "s3cr3t-manifest-sentinel";
+
 const MANIFEST_WITH_LOG_SENTINEL: &str = concat!(
     "netsuke_version: \"1.0.0\"\n",
     "targets:\n",
@@ -376,12 +379,15 @@ fn help_targets_bypasses_ninja_program_resolution(#[case] edges: bool) -> Result
         ..Cli::default()
     };
     let resolver_called = Cell::new(false);
+    let plan = crate::display_plan::resolve_display_plan(
+        cli.display_policies(),
+        crate::display_plan::TerminalFacts::default(),
+    );
 
-    let result =
-        run_with_ninja_program_resolver(&cli, crate::output_prefs::resolve(None), None, || {
-            resolver_called.set(true);
-            Utf8PathBuf::from("ninja")
-        });
+    let result = run_with_ninja_program_resolver(&cli, plan, None, || {
+        resolver_called.set(true);
+        Utf8PathBuf::from("ninja")
+    });
 
     ensure!(result.is_err(), "missing help manifest should fail");
     ensure!(

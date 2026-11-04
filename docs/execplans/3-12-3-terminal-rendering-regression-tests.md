@@ -350,11 +350,29 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   progress expectations. All seven serial candidate gates passed: check-fmt,
   lint, doc coverage (98.35%), typecheck, 5,117 tests (7 skipped) plus
   doctests, Markdown lint (217 files, zero issues), and Nixie.
+- [x] (2026-11-04) Completed EP-M2 commit 4's runtime rewire: the binary
+  captures terminal and environment facts once, runner and reporter paths
+  consume `DisplayPlan`, ambient output resolvers are removed, and EP-M1
+  expectations use plan projections. Hosted CI on the previous head found that
+  `src/output/plan/mod.rs` was missing from Kani proof scope; the current
+  candidate adds the module. Its first lint run found that runtime-only policy
+  helpers in `cli/config/mod.rs` become dead code in the schema-only `build.rs`
+  compilation. Moved those helpers into `cli/preferences.rs` and kept the
+  configuration types in their existing module to avoid an unused re-export.
+  Clippy also required `main_tracing::init_tracing` to consume the
+  stderr-terminal fact captured by `main`, rather than make its own terminal
+  query. The full serial gates passed on candidate base
+  `9dc62a0b7522d998e6a1a2e506398286174e1fbc` with an unchanged worktree diff
+  (SHA-256 `d4b3701c6f0ddd57a31d28b18453aecfbdb85937677e91bc713fbf91def9fd52`):
+  `make check-fmt`, `make lint`, `make doc-coverage` (98.35%), `make typecheck`,
+  `make test` (5,114 passed, 7 skipped; doctests passed), `make markdownlint`
+  (217 files, zero issues), `make nixie`, and `make test-workflow-contracts`
+  (1,666 passed, 3 skipped, plus 28 passed). No snapshots changed.
 - [x] EP-M0: terminal test harness.
-- [ ] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
-  cases and 20-run loaded-host stress evidence are recorded above; the
-  corrected candidate still needs hosted Windows validation.
-- [ ] EP-M2: display-plan core and single resolution.
+- [x] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
+  cases and 20-run loaded-host stress evidence are recorded above; hosted
+  Windows build and lint lanes passed on the rebased candidate.
+- [x] EP-M2: display-plan core and single resolution.
 - [ ] EP-M3: bind colour and glyph decisions to the emitters.
 - [ ] EP-M4: contract snapshots, pinning scenarios, documentation, ADR,
   roadmap.
@@ -376,9 +394,9 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 
 - Observation: `--color` governs no ANSI emitter today; its only effect is on
   accessible-mode selection through `NO_COLOR` semantics. Evidence:
-  `src/theme/mod.rs` documents `ColourTokens` as placeholders;
-  `src/main.rs::init_tracing` sets `with_ansi(io::stderr().is_terminal())`;
-  `src/` contains no `miette::set_hook` or `clap::ColorChoice`; baseline rows
+  `src/theme/mod.rs` documents `ColourTokens` as placeholders; the pre-EP-M2
+  `init_tracing` sampled `io::stderr().is_terminal()`; `src/` contains no
+  `miette::set_hook` or `clap::ColorChoice`; baseline rows
   `verbose-colnever-tty`, `missing-colnever-tty`, `help-colnever-tty`. Impact:
   the colour sub-bullet needs EP-M3.
 - Observation: an explicit `with_ansi(true)` in `tracing-subscriber` 0.3.23
@@ -1497,12 +1515,17 @@ pub const fn startup_colour(hint: ColourPolicy, facts: TerminalFacts) -> bool;
 ```
 
 In `src/cli/preferences.rs`, add
-`Cli::display_policies(&self) -> DisplayPolicies`, and move the
-`EmojiPolicy -> Option<ThemePreference>` and
-`AccessibilityPolicy -> Option<bool>` mappings onto the enums in
-`src/cli/config/mod.rs` as `const fn`s that the existing `Cli` accessors
-delegate to. ADR-0060 records these enums as approved value dependencies of the
-core (an open item in RFC 0027).
+`Cli::display_policies(&self) -> DisplayPolicies`. Put the
+`EmojiPolicy -> Option<bool>`, `AccessibilityPolicy -> Option<bool>`, and
+`ProgressPolicy -> bool` projections on their policy enums as `const fn`s, and
+have the existing `Cli` accessors delegate to them. Keep these runtime-only
+implementations in `cli/preferences.rs`, beside the `Cli` accessors: `build.rs`
+compiles `cli/config/mod.rs` as a schema-only slice, where the unused policy
+methods trigger denied dead-code warnings. `Cli::theme_preference` converts the
+emoji projection to `ThemePreference`. Clippy also required
+`main_tracing::init_tracing` to consume the stderr-terminal fact captured by
+`main`, rather than make its own terminal query. ADR-0060 records these enums
+as approved value dependencies of the core (an open item in RFC 0027).
 
 Changed public signatures: `runner::run(cli: &Cli, plan: DisplayPlan)`,
 `runner::run_with_ninja_program(cli: &Cli, plan: DisplayPlan, program:
