@@ -28,6 +28,118 @@ impl OutputMode {
     }
 }
 
+/// Environment facts shared by output-mode and theme resolution.
+///
+/// This type reduces the raw `NO_COLOR` and `TERM` values once so downstream
+/// resolvers can make consistent decisions without reading environment strings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct EnvSignals {
+    /// Whether `NO_COLOR` is set, including when its value is empty.
+    pub no_color_set: bool,
+    /// Whether `TERM` is exactly `dumb`.
+    pub term_dumb: bool,
+    /// Whether live terminal redraws are supported by the platform facts.
+    pub redraw_capable: bool,
+}
+
+impl EnvSignals {
+    /// Read environment strings and reduce them to shared output facts.
+    ///
+    /// Unix platforms require a set, non-`dumb` `TERM` for redraw capability;
+    /// other platforms only exclude `TERM=dumb`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::output_mode::EnvSignals;
+    ///
+    /// let signals = EnvSignals::read(|key| match key {
+    ///     "NO_COLOR" => Some(String::from("1")),
+    ///     "TERM" => Some(String::from("xterm-256color")),
+    ///     _ => None,
+    /// });
+    /// assert!(signals.no_color_set);
+    /// assert!(!signals.term_dumb);
+    /// ```
+    #[must_use]
+    pub fn read(read_env: impl Fn(&str) -> Option<String>) -> Self {
+        let no_color_set = read_env("NO_COLOR").is_some();
+        let term = read_env("TERM");
+        let term_dumb = term.as_deref() == Some("dumb");
+        #[cfg(unix)]
+        let redraw_capable = term.is_some() && !term_dumb;
+        #[cfg(not(unix))]
+        let redraw_capable = !term_dumb;
+
+        Self {
+            no_color_set,
+            term_dumb,
+            redraw_capable,
+        }
+    }
+
+    /// Return whether the colour policy treats `NO_COLOR` as active.
+    ///
+    /// `always` ignores the environment signal, while `never` acts like an
+    /// active signal so existing accessibility behavior remains consistent.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::output_mode::EnvSignals;
+    ///
+    /// assert!(EnvSignals {
+    ///     no_color_set: true,
+    ///     ..EnvSignals::default()
+    /// }
+    /// .no_color_active(None));
+    /// ```
+    #[must_use]
+    pub const fn no_color_active(self, colour_policy: Option<ColourPolicy>) -> bool {
+        match colour_policy {
+            Some(ColourPolicy::Always) => false,
+            Some(ColourPolicy::Never) => true,
+            Some(ColourPolicy::Auto) | None => self.no_color_set,
+        }
+    }
+
+    /// Resolve accessible or standard output mode from these facts.
+    ///
+    /// Explicit configuration takes precedence, followed by active `NO_COLOR`,
+    /// `TERM=dumb`, and the standard-mode default.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::output_mode::{EnvSignals, OutputMode};
+    ///
+    /// assert_eq!(
+    ///     EnvSignals::default().resolve_output_mode(None, None),
+    ///     OutputMode::Standard,
+    /// );
+    /// ```
+    #[must_use]
+    pub const fn resolve_output_mode(
+        self,
+        explicit: Option<bool>,
+        colour_policy: Option<ColourPolicy>,
+    ) -> OutputMode {
+        if let Some(forced) = explicit {
+            return if forced {
+                OutputMode::Accessible
+            } else {
+                OutputMode::Standard
+            };
+        }
+
+        if self.no_color_active(colour_policy) || self.term_dumb {
+            OutputMode::Accessible
+        } else {
+            OutputMode::Standard
+        }
+    }
+}
+
 /// Resolve the output mode from explicit configuration and environment.
 ///
 /// Precedence:
@@ -82,148 +194,9 @@ pub fn resolve_with<F>(
 where
     F: Fn(&str) -> Option<String>,
 {
-    if let Some(forced) = explicit {
-        return if forced {
-            OutputMode::Accessible
-        } else {
-            OutputMode::Standard
-        };
-    }
-
-    if no_color_active_with(colour_policy, &read_env) {
-        return OutputMode::Accessible;
-    }
-
-    if read_env("TERM").as_deref() == Some("dumb") {
-        return OutputMode::Accessible;
-    }
-
-    OutputMode::Standard
-}
-
-/// Resolve whether `NO_COLOR` should be treated as active under the configured
-/// colour policy.
-pub(crate) fn no_color_active_with<F>(colour_policy: Option<ColourPolicy>, read_env: &F) -> bool
-where
-    F: Fn(&str) -> Option<String>,
-{
-    match colour_policy {
-        Some(ColourPolicy::Always) => false,
-        Some(ColourPolicy::Never) => true,
-        Some(ColourPolicy::Auto) | None => read_env("NO_COLOR").is_some(),
-    }
+    EnvSignals::read(read_env).resolve_output_mode(explicit, colour_policy)
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for output mode resolution from environment signals.
-
-    use super::*;
-    use rstest::rstest;
-
-    /// Build an environment lookup from optional `NO_COLOR` and `TERM` values.
-    fn fake_env<'a>(
-        no_color: Option<&'a str>,
-        term: Option<&'a str>,
-    ) -> impl Fn(&str) -> Option<String> + 'a {
-        move |key| match key {
-            "NO_COLOR" => no_color.map(String::from),
-            "TERM" => term.map(String::from),
-            _ => None,
-        }
-    }
-
-    #[rstest]
-    #[case::explicit_true_forces_accessible(
-        Some(true),
-        None,
-        (None, None),
-        OutputMode::Accessible
-    )]
-    #[case::explicit_false_overrides_all(
-        Some(false),
-        None,
-        (Some("1"), Some("dumb")),
-        OutputMode::Standard
-    )]
-    #[case::no_color_triggers_accessible(
-        None,
-        None,
-        (Some("1"), None),
-        OutputMode::Accessible
-    )]
-    #[case::term_dumb_triggers_accessible(
-        None,
-        None,
-        (None, Some("dumb")),
-        OutputMode::Accessible
-    )]
-    #[case::normal_term_stays_standard(
-        None,
-        None,
-        (None, Some("xterm-256color")),
-        OutputMode::Standard
-    )]
-    #[case::no_env_defaults_to_standard(
-        None,
-        None,
-        (None, None),
-        OutputMode::Standard
-    )]
-    #[case::empty_no_color_triggers_accessible(
-        None,
-        None,
-        (Some(""), None),
-        OutputMode::Accessible
-    )]
-    #[case::no_color_takes_precedence_over_term(
-        None,
-        None,
-        (Some("1"), Some("xterm-256color")),
-        OutputMode::Accessible
-    )]
-    #[case::explicit_false_overrides_no_color(
-        Some(false),
-        None,
-        (Some("1"), None),
-        OutputMode::Standard
-    )]
-    #[case::explicit_true_without_env(
-        Some(true),
-        None,
-        (None, Some("xterm-256color")),
-        OutputMode::Accessible
-    )]
-    #[case::colour_policy_always_ignores_no_color(
-        None,
-        Some(ColourPolicy::Always),
-        (Some("1"), Some("xterm-256color")),
-        OutputMode::Standard
-    )]
-    #[case::colour_policy_never_forces_accessible(
-        None,
-        Some(ColourPolicy::Never),
-        (None, Some("xterm-256color")),
-        OutputMode::Accessible
-    )]
-    fn resolve_output_mode(
-        #[case] explicit: Option<bool>,
-        #[case] colour_policy: Option<ColourPolicy>,
-        #[case] env_values: (Option<&str>, Option<&str>),
-        #[case] expected: OutputMode,
-    ) {
-        let (no_color, term) = env_values;
-        let env = fake_env(no_color, term);
-        assert_eq!(resolve_with(explicit, colour_policy, env), expected);
-    }
-
-    #[test]
-    fn is_accessible_returns_true_for_accessible() {
-        assert!(OutputMode::Accessible.is_accessible());
-    }
-
-    #[test]
-    fn is_accessible_returns_false_for_standard() {
-        assert!(!OutputMode::Standard.is_accessible());
-    }
-}
+#[path = "mode/tests.rs"]
+mod tests;

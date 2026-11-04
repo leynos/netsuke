@@ -326,6 +326,18 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   source and behaviour remain unchanged. All seven serial gates passed:
   check-fmt, lint, doc coverage (98.33%), typecheck, test (5,094 passed, 7
   skipped; doctests passed), markdownlint (217 files, zero issues), and Nixie.
+- [x] (2026-11-04) Completed EP-M2 commit 2: added public
+  `output_mode::EnvSignals`, its `NO_COLOR` policy and mode methods, and moved
+  `resolve_with` plus `theme::resolve_theme` onto the shared signal read. The
+  old theme-local signal type is gone. The witness table covers nine explicit
+  environment classes, and the property compares both resolvers with copies of
+  their previous rules over arbitrary strings; the focused nextest run passed
+  all 10 cases. Whitaker required moving the output-mode unit tests into
+  `src/output/mode/tests.rs` to keep each source file below 400 lines. All
+  seven serial gates passed: doc coverage (98.33%), typecheck, 5,104 nextest
+  tests (7 skipped) plus doctests, Markdown lint (217 files, zero issues), and
+  Nixie. The host sccache was unavailable during tests; healthy admission ran
+  the test binaries uncached.
 - [x] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; the
