@@ -254,6 +254,9 @@ fn transport_character() -> impl Strategy<Value = char> {
     ]
 }
 
+// The property drives the Unix-only helpers above, so it is gated with them.
+// Without this, Windows compiles the block against helpers that do not exist.
+#[cfg(unix)]
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(32))]
 
