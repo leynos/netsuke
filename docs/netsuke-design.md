@@ -2759,8 +2759,8 @@ structures to the Ninja file syntax.
 #### POSIX script transport encoding
 
 A `script` recipe may span many lines, while a Ninja `command` binding must
-remain on one. The POSIX and Bash renderers therefore carry the script through
-a transport that reconstructs it when Ninja runs the rule:
+remain on one line. The POSIX and Bash renderers therefore carry the script
+through a transport that reconstructs it when Ninja runs the rule:
 
 ```ninja
 command = /bin/sh -e -c "printf %b '<encoded>' | /bin/sh -e"
