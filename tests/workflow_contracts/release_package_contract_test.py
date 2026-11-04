@@ -9,6 +9,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import copy
+import re
 import shlex
 import typing as typ
 
@@ -227,12 +228,14 @@ def _assert_candidate_step(
         "--output",
         "$RUNNER_TEMP/crates-io-candidate.json",
     ], "the candidate step must validate the packaged archive and identity"
-    assert "release_mode=(--rehearsal)" in run, (
+    # Each pattern names one case arm and the assignment on that same line. A
+    # search for the assignments alone would accept a swapped mapping.
+    assert re.search(r"true\)\s+(release_mode=\(--rehearsal\))", run, re.MULTILINE), (
         "a dry run must validate a tagless rehearsal candidate"
     )
-    assert 'release_mode=(--tag "$RELEASE_TAG")' in run, (
-        "a publishing run must validate the candidate against its release tag"
-    )
+    assert re.search(
+        r'false\)\s+(release_mode=\(--tag "\$RELEASE_TAG"\))', run, re.MULTILINE
+    ), "a publishing run must validate the candidate against its release tag"
     for forbidden in ("--token", "curl", "crates.io/api"):
         assert forbidden not in run, (
             f"the offline candidate step must not reach the registry: {forbidden}"
