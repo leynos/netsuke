@@ -279,10 +279,28 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   (1,666 passed, 3 skipped, plus 28 passed). The worktree was clean. The EP-M0
   PTY smoke test still needs its idle-pool run; its loaded-host run passed
   earlier.
-- [ ] EP-M0: terminal test harness.
-- [x] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
-  cases and 20-run loaded-host stress evidence are recorded above; the full
-  post-rebase suite also passed.
+- [x] (2026-11-04) The interim PR head
+  `b940bd2eae5b13629808169f64a1b2c02afbefdf` passed hosted Linux, Kani,
+  default-feature, and release jobs, but its Windows test and lint jobs failed.
+  The test build exposed PTY-only JSON cases and imports that were not
+  Unix-gated; Clippy required the non-Unix no-op script permission helper to be
+  `const`. Fix these before marking EP-M1 complete.
+- [x] (2026-11-04) The PTY smoke suite passed 20/20 stress iterations with all
+  three tests passing in each iteration after the compiler pool reached zero
+  held and queued work. Together with the earlier loaded-host run (60/60
+  executions), this completes EP-M0.
+- [x] (2026-11-04) Corrected EP-M1's Windows compile boundaries by moving the
+  JSON PTY case behind a Unix-only module declaration, gating only the PTY
+  imports in shared support, and providing a separate non-Unix `const` no-op
+  permission helper. The corrected candidate passed `make check-fmt`,
+  `make lint`, `make doc-coverage` (98.33%), `make typecheck`, `make test`
+  (5,078 passed, 7 skipped; doctests passed), `make markdownlint` (217 files,
+  zero issues), and `make nixie`; run the hosted Windows lanes before marking
+  EP-M1 complete.
+- [x] EP-M0: terminal test harness.
+- [ ] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
+  cases and 20-run loaded-host stress evidence are recorded above; the
+  corrected candidate still needs hosted Windows validation.
 - [ ] EP-M2: display-plan core and single resolution.
 - [ ] EP-M3: bind colour and glyph decisions to the emitters.
 - [ ] EP-M4: contract snapshots, pinning scenarios, documentation, ADR,
@@ -371,6 +389,16 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   when it only wraps a PTY descriptor. Impact: the harness keeps descriptors as
   `OwnedFd`, passes them to `Stdio`, and reads the PTY master with nix so
   terminal capture does not introduce an ambient filesystem API.
+- Observation: the JSON rendering file contained both piped and PTY tests,
+  while only the module declaration can reliably keep Unix-only APIs out of a
+  Windows build. Evidence: hosted Windows CI could not resolve the gated PTY
+  exports or `TerminalWorkspace::run_pty` from `json.rs` and shared support.
+  Impact: move the PTY case into `json_pty.rs`, gate that module declaration,
+  and gate the matching imports and method surface.
+- Observation: `cfg_attr` cannot inject the `const` function modifier.
+  Evidence: the first Windows-lint fix attempt failed during Rust parsing on
+  Linux at `#[cfg_attr(not(unix), const)]`. Impact: define the Unix fallible
+  helper and non-Unix `const` no-op as separate target-gated functions.
 
 ## Decision log
 
