@@ -292,11 +292,26 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 - [x] (2026-11-04) Corrected EP-M1's Windows compile boundaries by moving the
   JSON PTY case behind a Unix-only module declaration, gating only the PTY
   imports in shared support, and providing a separate non-Unix `const` no-op
-  permission helper. The corrected candidate passed `make check-fmt`,
-  `make lint`, `make doc-coverage` (98.33%), `make typecheck`, `make test`
-  (5,078 passed, 7 skipped; doctests passed), `make markdownlint` (217 files,
-  zero issues), and `make nixie`; run the hosted Windows lanes before marking
-  EP-M1 complete.
+  permission helper. Candidate `2c3d43540eb7a62744915e290cfadc236d14bac8` passed
+  `make check-fmt`, `make lint`, `make doc-coverage` (98.33%),
+  `make typecheck`, `make test` (5,078 passed, 7 skipped; doctests passed),
+  `make markdownlint` (217 files, zero issues), and `make nixie`; run the
+  hosted Windows lanes before marking EP-M1 complete.
+- [x] (2026-11-04) Rebased the seven-commit series from old head
+  `2c3d43540eb7a62744915e290cfadc236d14bac8` onto target
+  `01c7190e12943255cda00b1affc65efec0249726`, using
+  `a6009675e017303367cd2821837af2cebf5b94cd` as the exclusive replay boundary
+  established by the earlier rebase. The rebase was linear and clean;
+  `range-diff` matched all seven commits and the post-rebase audit preserved
+  all 18 target-only paths, including the expected release-help test deletion.
+  The only shared path, `docs/developers-guide.md`, retains both the target's
+  parser-parity guidance and this branch's terminal test guidance. The host's
+  global `~/.config/git/attributes` selects Weave for `*.rs`, but the
+  repository has no tracked Weave opt-in; followed the Weave skill's
+  unattended-rebase policy by using built-in Git merge with
+  `core.attributesFile=/dev/null` and `zdiff3`. Recovery refs preserve the old
+  head, boundary, target, and first rebase result. New head:
+  `940ee40c9248ae429effd3f5d49ad76173dd1585`.
 - [x] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; the
