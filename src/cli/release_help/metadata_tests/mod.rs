@@ -3,14 +3,13 @@
 //! The tests cover the configuration-help projection, parser-only field and
 //! value-shape derivation, localization, and the identifiers carried by the
 //! composed root and immediate subcommand documentation metadata. Value-shape
-//! parity with the parser lives in [`value_shapes`].
+//! parity with the parser lives in [`super::parity_tests`].
 
 use super::*;
+use crate::cli::configured_command;
 use anyhow::{Context, Result, ensure};
 use clap::Command;
 use rstest::rstest;
-
-mod value_shapes;
 
 use super::parser_fields::documented_clap_parser_field;
 
@@ -168,7 +167,7 @@ fn config_metadata_localization_handles_known_and_structural_fields(
         .context("CliConfig metadata should include a field fixture")?;
     field.name = field_name.to_owned();
 
-    let localized_fields = localized_config_help(vec![field])?;
+    let localized_fields = localized_config_help(&configured_command(None), vec![field])?;
 
     match expected_help_id {
         Some(help_id) => {
@@ -202,7 +201,7 @@ fn config_metadata_localization_rejects_unknown_fields() -> Result<()> {
         .context("CliConfig metadata should include a field fixture")?;
     field.name = "unknown".to_owned();
 
-    let error = localized_config_help(vec![field])
+    let error = localized_config_help(&configured_command(None), vec![field])
         .err()
         .context("unknown configuration metadata should be rejected")?;
     ensure!(
