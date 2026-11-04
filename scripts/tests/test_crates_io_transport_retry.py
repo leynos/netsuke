@@ -117,7 +117,9 @@ def test_retryable_status_window_covers_absence_and_server_errors_only(
     status: int, *, expected_retryable: bool
 ) -> None:
     """Retry absence and 5xx responses, and stop on every other status."""
-    assert _retryable_download_status(status) is expected_retryable
+    assert _retryable_download_status(status) is expected_retryable, (
+        f"status {status} retryability"
+    )
 
 
 @pytest.mark.parametrize(
@@ -136,7 +138,9 @@ def test_status_classification_reports_only_bounded_labels(
     status: int, status_class: str
 ) -> None:
     """Report a fixed status class so the report keeps low cardinality."""
-    assert _download_status_class(status) == status_class
+    assert _download_status_class(status) == status_class, (
+        f"status {status} must classify as {status_class!r}"
+    )
 
 
 def test_poll_archive_keeps_the_first_non_retryable_response() -> None:

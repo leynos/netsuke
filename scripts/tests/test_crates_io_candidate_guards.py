@@ -143,12 +143,13 @@ def test_check_rejects_malformed_recorded_digests(
     expected: str,
 ) -> None:
     """Refuse recorded digests that are absent or not lowercase SHA-256 hex."""
-    if recorded_digest == "uppercase":
-        sha256: object = "A" * 64
-    elif recorded_digest == "non-hex":
-        sha256 = "g" * 64
-    else:
-        sha256 = None
+    match recorded_digest:
+        case "uppercase":
+            sha256: object = "A" * 64
+        case "non-hex":
+            sha256 = "g" * 64
+        case _:
+            sha256 = None
     record, _ = write_candidate(tmp_path, overrides=CandidateOverrides(sha256=sha256))
     if sha256 is None:
         payload = json.loads(record.read_text(encoding="utf-8"))
