@@ -7387,6 +7387,10 @@ dependency-only edges and custom action pools that conflict with `console`; it
 accepts an existing `Action.pool` value of `console`. Synthetic serial gates
 and dyndep sidecars never inherit either binding.
 
+`ninja_gen::CONSOLE_POOL` is the single production spelling of Ninja's built-in
+pool. Keep its use within the edge renderer and shared console-scheduling
+validator; tests continue to assert the emitted `console` value directly.
+
 The emitted `pool = console` binding requires Ninja 1.5 or newer. This minimum
 is separate from the conditional Ninja 1.10 requirement for staged serial
 dependency bundles described below.
