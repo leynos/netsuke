@@ -16,7 +16,7 @@ from crates_io_transport_cli import (
     DOWNLOAD_ATTEMPTS,
     EXIT_OK,
     EXIT_TRANSPORT_ERROR,
-    EXIT_UPLOAD_FAILED,
+    TransportTiming,
     _upload_frame,
     main,
 )
@@ -30,7 +30,6 @@ if typ.TYPE_CHECKING:
 
 CRATE = "netsuke-build"
 VERSION = "1.2.3"
-TEST_CREDENTIAL = "short-lived-test-value"
 IDENTIFIER = st.text(
     alphabet=string.ascii_letters + string.digits + "_-.", min_size=1, max_size=16
 )
@@ -184,7 +183,9 @@ def test_download_retries_incomplete_http_responses_to_its_budget(
     ])
 
     result = main(
-        _download_args(archive, status, report), opener=opener, sleeper=delays.append
+        _download_args(archive, status, report),
+        opener=opener,
+        timing=TransportTiming(sleeper=delays.append),
     )
 
     assert result == EXIT_OK, "the offline verifier handles the sentinel"
@@ -198,31 +199,6 @@ def test_download_retries_incomplete_http_responses_to_its_budget(
     assert diagnostics["attempts"] == DOWNLOAD_ATTEMPTS, "record bounded attempts"
     assert diagnostics["status_class"] == "unknown", "hide absent status details"
     assert diagnostics["elapsed_ms"] >= 0, "record non-negative elapsed time"
-
-
-def test_upload_treats_an_incomplete_http_response_as_ambiguous(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Fail once on a truncated upload response without leaking the token."""
-    metadata = tmp_path / "metadata.json"
-    archive = tmp_path / "archive.crate"
-    _ = metadata.write_bytes(b"{}")
-    _ = archive.write_bytes(b"candidate")
-    opener = FakeOpener(http.client.IncompleteRead(TEST_CREDENTIAL.encode(), 1))
-
-    result = main(
-        ["upload", "--metadata", str(metadata), "--archive", str(archive)],
-        opener=opener,
-        environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
-    )
-
-    assert result == EXIT_UPLOAD_FAILED, "a truncated write response is ambiguous"
-    assert len(opener.requests) == 1, "never retry an ambiguous upload"
-    captured = capsys.readouterr()
-    assert "outcome is ambiguous" in captured.err, "diagnose the uncertain write"
-    assert TEST_CREDENTIAL not in captured.out + captured.err, (
-        "redact the short-lived token"
-    )
 
 
 @settings(max_examples=100, deadline=None, derandomize=True)

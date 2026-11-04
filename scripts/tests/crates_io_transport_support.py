@@ -7,6 +7,8 @@ import typing as typ
 import urllib.error
 import urllib.request
 
+TEST_CREDENTIAL = "short-lived-test-value"
+
 
 class HandlerListOwner(typ.Protocol):
     """Describe urllib objects that expose their configured handlers."""

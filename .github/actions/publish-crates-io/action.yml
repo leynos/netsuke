@@ -145,12 +145,8 @@ runs:
         RELEASE_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
-        started_ns="$(date +%s%N)"
-        printf 'started_ns=%s\n' "$started_ns" >>"$GITHUB_OUTPUT"
-        finish_step_timing() {
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
-        }
-        trap finish_step_timing EXIT
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start_step
         uv run --no-project --python 3.14 scripts/crates_io_candidate_cli.py check \
           --identity "$IDENTITY_PATH" \
           --archive-directory "$ARCHIVE_DIRECTORY" \
@@ -178,12 +174,8 @@ runs:
         PROBE_DIRECTORY: ${{ runner.temp }}/crates-io-probe
       run: |
         set -euo pipefail
-        started_ns="$(date +%s%N)"
-        printf 'started_ns=%s\n' "$started_ns" >>"$GITHUB_OUTPUT"
-        finish_step_timing() {
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
-        }
-        trap finish_step_timing EXIT
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start_step
         mkdir -p "$PROBE_DIRECTORY"
         uv run --no-project --python 3.14 scripts/crates_io_transport_cli.py probe \
           --crate "$CRATE_NAME" \
@@ -201,12 +193,8 @@ runs:
         DECISION_PATH: ${{ runner.temp }}/crates-io-decision.json
       run: |
         set -euo pipefail
-        started_ns="$(date +%s%N)"
-        printf 'started_ns=%s\n' "$started_ns" >>"$GITHUB_OUTPUT"
-        finish_step_timing() {
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
-        }
-        trap finish_step_timing EXIT
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start_step
         classify_args=(
           classify
           --status "$(cat "$PROBE_DIRECTORY/status")"
@@ -254,7 +242,9 @@ runs:
       name: Start Trusted Publishing authentication timing
       if: steps.decision.outputs.action == 'publish'
       shell: bash
-      run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      run: |
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start
 
     - id: auth
       name: Exchange GitHub identity for a short-lived crates.io token
@@ -268,8 +258,9 @@ runs:
       env:
         AUTH_STARTED_NS: ${{ steps.auth_start.outputs.started_ns }}
       run: |
+        source "$GITHUB_ACTION_PATH/timing.sh"
         if [[ -n "$AUTH_STARTED_NS" ]]; then
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+          publisher_timing_end
         fi
 
     - id: metadata
@@ -281,12 +272,8 @@ runs:
         METADATA_PATH: ${{ runner.temp }}/crates-io-metadata.json
       run: |
         set -euo pipefail
-        started_ns="$(date +%s%N)"
-        printf 'started_ns=%s\n' "$started_ns" >>"$GITHUB_OUTPUT"
-        finish_step_timing() {
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
-        }
-        trap finish_step_timing EXIT
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start_step
         uv run --no-project --python 3.14 scripts/crates_io_candidate_cli.py metadata \
           --archive "$CRATE_ARCHIVE" \
           --output "$METADATA_PATH"
@@ -301,12 +288,8 @@ runs:
         CRATES_IO_TOKEN: ${{ steps.auth.outputs.token }}
       run: |
         set -euo pipefail
-        started_ns="$(date +%s%N)"
-        printf 'started_ns=%s\n' "$started_ns" >>"$GITHUB_OUTPUT"
-        finish_step_timing() {
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
-        }
-        trap finish_step_timing EXIT
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start_step
         uv run --no-project --python 3.14 scripts/crates_io_transport_cli.py upload \
           --metadata "$METADATA_PATH" \
           --archive "$CRATE_ARCHIVE"
@@ -321,12 +304,8 @@ runs:
         DOWNLOAD_REPORT: ${{ runner.temp }}/crates-io-download/report.json
       run: |
         set -euo pipefail
-        started_ns="$(date +%s%N)"
-        printf 'started_ns=%s\n' "$started_ns" >>"$GITHUB_OUTPUT"
-        finish_step_timing() {
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
-        }
-        trap finish_step_timing EXIT
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start_step
         mkdir -p "$DOWNLOAD_DIRECTORY"
         uv run --no-project --python 3.14 scripts/crates_io_transport_cli.py download \
           --crate "$CRATE_NAME" \
@@ -350,12 +329,8 @@ runs:
         VERIFICATION_PATH: ${{ runner.temp }}/crates-io-verification.json
       run: |
         set -euo pipefail
-        started_ns="$(date +%s%N)"
-        printf 'started_ns=%s\n' "$started_ns" >>"$GITHUB_OUTPUT"
-        finish_step_timing() {
-          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
-        }
-        trap finish_step_timing EXIT
+        source "$GITHUB_ACTION_PATH/timing.sh"
+        publisher_timing_start_step
         uv run --no-project --python 3.14 scripts/publish_crates_io_cli.py verify \
           --archive "$CRATE_ARCHIVE" \
           --crate "$CRATE_NAME" \

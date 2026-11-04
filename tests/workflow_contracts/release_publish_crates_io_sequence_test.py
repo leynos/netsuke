@@ -2,7 +2,11 @@
 
 import dataclasses as dc
 import json
+import os
+import shutil
+import subprocess  # ruff: ignore[suspicious-subprocess-import] - test a fixed local shell helper.
 import typing as typ
+from pathlib import Path
 
 import pytest
 from action_run_sources import action_sources, action_steps
@@ -19,6 +23,7 @@ from release_publish_crates_io_contracts import (
     ACTION_STEP_ORDER,
     PUBLISH_ONLY,
 )
+from release_publish_crates_io_timing_contracts import TIMING_HELPER_PATH
 
 if typ.TYPE_CHECKING:
     import pathlib
@@ -193,3 +198,67 @@ def test_registry_state_resolves_the_declared_action_sequence(
         f"the {scenario.state} state must resolve to the "
         f"{scenario.action} action sequence"
     )
+
+
+def test_publisher_timing_trap_preserves_step_failure(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Write both timing outputs while preserving a failed step's status."""
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir()
+    fake_date = fake_bin / "date"
+    _ = fake_date.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        '[[ "$*" == "+%s%N" ]]\n'
+        'if [[ -e "$DATE_CALLS" ]]; then\n'
+        "  printf '2\\n' >\"$DATE_CALLS\"\n"
+        "  printf '21123000000\\n'\n"
+        "else\n"
+        "  printf '1\\n' >\"$DATE_CALLS\"\n"
+        "  printf '1000000000\\n'\n"
+        "fi\n",
+        encoding="utf-8",
+    )
+    fake_date.chmod(0o755)
+    output_path = tmp_path / "github-output"
+    action_directory = (
+        Path(__file__).resolve().parents[2] / Path(TIMING_HELPER_PATH).parent
+    )
+    environment = os.environ.copy()
+    environment.update({
+        "DATE_CALLS": str(tmp_path / "date-calls"),
+        "GITHUB_ACTION_PATH": str(action_directory),
+        "GITHUB_OUTPUT": str(output_path),
+        "PATH": os.pathsep.join((str(fake_bin), environment.get("PATH", ""))),
+    })
+    bash_path = shutil.which("bash")
+    assert bash_path is not None, "the timing helper test requires bash"
+    helper_command = "\n".join((
+        'source "$GITHUB_ACTION_PATH/timing.sh"',
+        "publisher_timing_start_step",
+        "exit 23",
+        "",
+    ))
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - fixed helper script; shell is disabled.
+        [
+            bash_path,
+            "--noprofile",
+            "--norc",
+            "-e",
+            "-u",
+            "-o",
+            "pipefail",
+            "-c",
+            helper_command,
+        ],
+        capture_output=True,
+        check=False,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode == 23, "the EXIT trap must preserve a failed step"
+    assert output_path.read_text(encoding="utf-8") == (
+        "started_ns=1000000000\nended_ns=21123000000\n"
+    ), "record the shared timing fields from the helper"

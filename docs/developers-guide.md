@@ -2630,6 +2630,16 @@ operational state, not proof of a live exchange or a complete release. The
 `crate-name` action output retains the archive basename, while the separate
 `package-name` output carries the Cargo package identifier used in telemetry.
 
+`DownloadRequest` receives a monotonic-nanosecond clock for elapsed-time
+reporting. The transport CLI's `main` boundary selects the system clock when
+the caller omits one; the clock affects only the reported download duration,
+not retry or registry decisions. The composite action sources
+`.github/actions/publish-crates-io/timing.sh` for its `started_ns` and
+`ended_ns` outputs. That helper owns runner-time sampling and the per-step exit
+trap, and its only permitted callers are the steps in the `publish-crates-io`
+action. It is not a shared workflow timing library; other release workflows
+retain their own timing contracts.
+
 The metric and trace record builders in `release_operation_records.py` are
 private to that module and composed only by `release_operation_telemetry.py`,
 which preserves operation and phase order. The renderer and record builder

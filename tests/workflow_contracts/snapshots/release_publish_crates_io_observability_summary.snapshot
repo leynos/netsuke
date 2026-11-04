@@ -8,20 +8,20 @@
 
 - Publisher context:
   - `crate_name`: `netsuke-build`
-  - `version`: `1.2.3-beta.1`
+  - `version`: `<version>`
   - `registry_state`: `absent`
   - `action`: `publish`
   - `verification_verdict`: `success`
 
 - Phase outcomes:
-  - `crate_candidate_validation`: `success` (1.000s)
-  - `registry_probe`: `success` (1.000s)
-  - `registry_decision`: `success` (1.000s)
-  - `trusted_publishing_authentication`: `success` (1.000s)
-  - `registry_metadata_derivation`: `success` (1.000s)
-  - `registry_upload`: `success` (1.000s)
-  - `registry_download`: `success` (1.000s)
+  - `crate_candidate_validation`: `success` (<duration>)
+  - `registry_probe`: `success` (<duration>)
+  - `registry_decision`: `success` (<duration>)
+  - `trusted_publishing_authentication`: `success` (<duration>)
+  - `registry_metadata_derivation`: `success` (<duration>)
+  - `registry_upload`: `success` (<duration>)
+  - `registry_download`: `success` (<duration>)
     - Attempts: `3`
     - Last HTTP status class: `4xx`
-    - Retry duration: `20123ms`
-  - `registry_byte_verification`: `success` (1.000s)
+    - Retry duration: `<elapsed-ms>`
+  - `registry_byte_verification`: `success` (<duration>)

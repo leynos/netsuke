@@ -1,6 +1,7 @@
 """Protect publisher phase reporting and bounded retry diagnostics."""
 
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -92,19 +93,26 @@ def publisher_telemetry() -> tuple[str, str, list[dict[str, object]]]:
     return summary, jsonl, records
 
 
-def test_publisher_summary_retains_bounded_context(
+def test_publisher_summary_matches_approved_snapshot(
     publisher_telemetry: tuple[str, str, list[dict[str, object]]],
 ) -> None:
-    """Keep the approved publisher summary and validated context fields."""
-    summary, _, records = publisher_telemetry
+    """Keep the approved publisher summary stable after value normalization."""
+    summary, _, _ = publisher_telemetry
     expected_summary = (
         Path(__file__).parent
         / "snapshots"
         / "release_publish_crates_io_observability_summary.snapshot"
     ).read_text(encoding="utf-8")
-    assert summary == expected_summary, (
+    assert _normalise_publisher_summary(summary) == expected_summary, (
         "publisher summary must retain bounded registry context and retry facts"
     )
+
+
+def test_publisher_trace_retains_bounded_context(
+    publisher_telemetry: tuple[str, str, list[dict[str, object]]],
+) -> None:
+    """Keep approved identity and decision fields in each phase trace."""
+    _, _, records = publisher_telemetry
     trace_records = [
         record for record in records if record.get("record_type") == "trace_event"
     ]
@@ -117,6 +125,42 @@ def test_publisher_summary_retains_bounded_context(
         and record.get("verification_verdict") == "success"
         for record in trace_records
     ), "trace events must retain the bounded publisher context"
+
+
+def test_publisher_phase_metrics_convert_fixed_durations_to_seconds(
+    publisher_telemetry: tuple[str, str, list[dict[str, object]]],
+) -> None:
+    """Convert each deterministic one-second phase duration into seconds."""
+    _, _, records = publisher_telemetry
+    phase_durations = {
+        str(record["phase"]): record["value"]
+        for record in records
+        if record.get("record_type") == "metric"
+        and record.get("metric") == "release_phase_duration_seconds"
+    }
+    assert phase_durations == dict.fromkeys(
+        OPERATION_PHASES["publish_crates_io"], 1.0
+    ), "convert each fixed one-second phase to seconds"
+
+
+def _normalise_publisher_summary(summary: str) -> str:
+    """Replace version and timing values before snapshot comparison.
+
+    Returns
+    -------
+    str
+        Summary text with version and timing values replaced by placeholders.
+
+    Examples
+    --------
+    >>> _normalise_publisher_summary(
+    ...     "`version`: `1.2.3` (2.000s) Retry duration: `123ms`"
+    ... )
+    '`version`: `<version>` (<duration>) Retry duration: `<elapsed-ms>`'
+    """
+    summary = re.sub(r"(?<=`version`: `)[^`]+(?=`)", "<version>", summary)
+    summary = re.sub(r"\(\d+(?:\.\d+)?s\)", "(<duration>)", summary)
+    return re.sub(r"(?<=Retry duration: `)\d+ms(?=`)", "<elapsed-ms>", summary)
 
 
 def test_publisher_retry_metrics_retain_bounded_values(

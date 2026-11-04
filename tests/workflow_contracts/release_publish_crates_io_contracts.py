@@ -13,6 +13,9 @@ from release_publish_crates_io_action_shape import (
     ACTION_STEP_ORDER,
     classification_outputs_are_fail_closed,
 )
+from release_publish_crates_io_timing_contracts import (
+    check_action_timing_boundary,
+)
 from workflow_loading import (
     job_steps,
     require_mapping,
@@ -194,7 +197,7 @@ def _check_publish_only_steps(
     steps: list[dict[str, object]], positions: dict[str, int], violations: list[str]
 ) -> None:
     """Require the auth exchange and upload preparation to follow publish only."""
-    guarded_steps = ("auth", "metadata", "upload")
+    guarded_steps = ("auth_start", "auth", "metadata", "upload")
     violations.extend(
         f"publish-crates-io.{name}-guard: require the publish decision"
         for name in guarded_steps
@@ -375,6 +378,7 @@ def check_crates_io_action_contract(
     _check_action_manifest_shape(action, violations)
     action_steps_value, positions = _ordered_action_steps(action, violations)
     _check_action_effect_gates(action_steps_value, positions, violations)
+    check_action_timing_boundary(action_steps_value, positions, violations)
     _check_forbidden_inputs(
         (
             ("publish-crates-io", [job, steps]),

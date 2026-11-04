@@ -2637,6 +2637,22 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   passed), `markdownlint` (zero issues), and `nixie`. No live exchange or
   release was performed; inventory verification, finalization, and consumer
   smoke remain open, and `publish-release` is not gated on this publisher yet.
+- [x] (2026-11-04) Addressed the current-head CodeRabbit pre-merge findings
+  within the publisher telemetry scope. The transport CLI now injects the
+  monotonic clock used for elapsed download reporting; the composite action
+  routes phase timing through its action-owned helper; and the summary snapshot
+  normalizes version and timing fields while retaining exact semantic metric
+  assertions. The action's auth pin is
+  `3268eb413133e2960fa4ae0e963ca76380c54cd9`, matching the plan's dependency,
+  AXIOM-1, and dependency-summary references. Before a CodeScene-driven test
+  decomposition, the full nine-gate sequence passed: doc coverage was 98.30%,
+  nextest passed 5,026 tests with 7 skipped and 2 leaky, workflow contracts
+  passed 1,709 tests with 3 skipped, and release-publication tests passed 530.
+  Markdown lint reported zero issues across 215 files; Mermaid validation
+  passed. The observability test's focused CodeScene delta is now clean. The
+  final ordered gate run follows this progress entry. These changes do not
+  alter registry decisions or complete the still-open finalization,
+  inventory-verification, or consumer-smoke stages.
 
 ## Surprises & discoveries
 
@@ -4281,3 +4297,10 @@ it. All nine local gates passed, including 4,943 nextest tests, 1,696 workflow
 contracts, 514 release-publication tests, 98.23% documentation coverage, zero
 Markdown lint issues, and Mermaid validation. Stage C remains partial; no live
 exchange or release has been exercised.
+
+Draft 23, 2026-11-04: corrected the current crates.io authentication pin in the
+dependency overview, AXIOM-1, and dependency summary to match the action at
+`3268eb413133e2960fa4ae0e963ca76380c54cd9`. Added an injected monotonic clock
+and action-local timing boundary in response to pre-merge review, and
+normalized variable snapshot fields while retaining exact semantic assertions.
+Stage C remains partial; no live exchange or release has been exercised.

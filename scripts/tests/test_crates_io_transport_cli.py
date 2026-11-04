@@ -14,7 +14,7 @@ from crates_io_registry_http import RegistryUrlError
 from crates_io_transport_cli import (
     DOWNLOAD_ATTEMPTS,
     EXIT_OK,
-    EXIT_UPLOAD_FAILED,
+    TransportTiming,
     main,
 )
 from crates_io_transport_support import (
@@ -22,7 +22,6 @@ from crates_io_transport_support import (
     FakeResponse,
     HandlerListOwner,
     ResponseWithMessage,
-    assert_upload_frame_matches,
     http_error_response,
     missing_response,
 )
@@ -30,7 +29,6 @@ from crates_io_transport_support import (
 if typ.TYPE_CHECKING:
     import pathlib
 
-TEST_CREDENTIAL = "short-lived-test-value"
 CRATE_NAME = "netsuke-build"
 VERSION = "1.2.3"
 REGISTRY_PREFIX = "https://crates.io/api/v1/crates/"
@@ -125,17 +123,6 @@ def _download_args(
     return _registry_args("download", paths)
 
 
-def _upload_args(metadata_path: pathlib.Path, archive_path: pathlib.Path) -> list[str]:
-    """Build one reusable one-shot upload invocation."""
-    return [
-        "upload",
-        "--metadata",
-        str(metadata_path),
-        "--archive",
-        str(archive_path),
-    ]
-
-
 def test_probe_saves_http_status_and_body_without_retry(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -192,11 +179,15 @@ def test_download_retries_transient_responses_then_stops_after_success(
     archive = tmp_path / "candidate.crate"
     status = tmp_path / "status.txt"
     report = tmp_path / "download-report.json"
+    clock_samples = iter((1_000_000_000, 21_123_000_000))
 
     result = main(
         _download_args(archive, status, report),
         opener=opener,
-        sleeper=delays.append,
+        timing=TransportTiming(
+            sleeper=delays.append,
+            monotonic_clock_ns=lambda: next(clock_samples),
+        ),
     )
 
     assert result == EXIT_OK, "the download step records its final response"
@@ -211,7 +202,7 @@ def test_download_retries_transient_responses_then_stops_after_success(
     diagnostics = json.loads(report.read_text(encoding="ascii"))
     assert diagnostics["attempts"] == 2, "record the retry count"
     assert diagnostics["status_class"] == "2xx", "record only the status class"
-    assert diagnostics["elapsed_ms"] >= 0, "record elapsed time"
+    assert diagnostics["elapsed_ms"] == 20_123, "convert injected nanoseconds to ms"
 
 
 def test_download_retries_absence_only_to_its_fixed_attempt_budget(
@@ -228,11 +219,16 @@ def test_download_retries_absence_only_to_its_fixed_attempt_budget(
     delays: list[float] = []
     archive = tmp_path / "candidate.crate"
     status = tmp_path / "status.txt"
+    report = tmp_path / "download-report.json"
+    clock_samples = iter((4_000_000_000, 11_000_000_000))
 
     result = main(
-        _download_args(archive, status),
+        _download_args(archive, status, report),
         opener=opener,
-        sleeper=delays.append,
+        timing=TransportTiming(
+            sleeper=delays.append,
+            monotonic_clock_ns=lambda: next(clock_samples),
+        ),
     )
 
     assert result == EXIT_OK, "the transport records exhausted polling for verification"
@@ -242,6 +238,30 @@ def test_download_retries_absence_only_to_its_fixed_attempt_budget(
         "retain the final absence status"
     )
     assert archive.read_bytes() == b"absent", "retain the final response body"
+    diagnostics = json.loads(report.read_text(encoding="ascii"))
+    assert diagnostics["attempts"] == DOWNLOAD_ATTEMPTS, "record all attempts"
+    assert diagnostics["elapsed_ms"] == 7_000, "time exhausted polling exactly"
+
+
+def test_download_report_clamps_a_backwards_clock_to_zero(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Keep elapsed download telemetry non-negative when a clock regresses."""
+    archive = tmp_path / "candidate.crate"
+    status = tmp_path / "status.txt"
+    report = tmp_path / "download-report.json"
+    clock_samples = iter((2_000_000_000, 1_000_000_000))
+    opener = FakeOpener(FakeResponse(200, b"archive"))
+
+    result = main(
+        _download_args(archive, status, report),
+        opener=opener,
+        timing=TransportTiming(monotonic_clock_ns=lambda: next(clock_samples)),
+    )
+
+    assert result == EXIT_OK, "a completed download should be recorded"
+    diagnostics = json.loads(report.read_text(encoding="ascii"))
+    assert diagnostics["elapsed_ms"] == 0, "clamp elapsed time at zero"
 
 
 def test_download_records_no_status_after_transient_network_exhaustion(
@@ -256,7 +276,7 @@ def test_download_records_no_status_after_transient_network_exhaustion(
     result = main(
         _download_args(archive, status),
         opener=opener,
-        sleeper=lambda _delay: None,
+        timing=TransportTiming(sleeper=lambda _delay: None),
     )
 
     assert result == EXIT_OK, "the offline verifier consumes the transport sentinel"
@@ -264,136 +284,3 @@ def test_download_records_no_status_after_transient_network_exhaustion(
         "record missing HTTP status as indeterminate"
     )
     assert archive.read_bytes() == b"", "do not invent a response body"
-
-
-def test_upload_frames_metadata_and_exact_archive_bytes(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Send Cargo's documented two-length frame and surface registry warnings."""
-    metadata = tmp_path / "metadata.json"
-    archive = tmp_path / "candidate.crate"
-    metadata_bytes = b'{"name":"netsuke-build","vers":"1.2.3"}'
-    archive_bytes = b"retained crate bytes"
-    _ = metadata.write_bytes(metadata_bytes)
-    _ = archive.write_bytes(archive_bytes)
-    opener = FakeOpener(FakeResponse(200, b'{"warnings":{"other":["accepted"]}}'))
-
-    result = main(
-        _upload_args(metadata, archive),
-        opener=opener,
-        environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
-    )
-
-    assert result == EXIT_OK, "a valid crates.io upload response should succeed"
-    request, _timeout = opener.requests[0]
-    payload = request.data
-    assert isinstance(payload, bytes), "frame upload data as exact binary bytes"
-    assert_upload_frame_matches(payload, metadata_bytes, archive_bytes)
-    assert request.get_header("Authorization") == f"Bearer {TEST_CREDENTIAL}", (
-        "send the exchanged token with the registry's Bearer scheme"
-    )
-    assert request.get_header("Accept") == "application/json", (
-        "request a JSON upload response"
-    )
-    assert request.get_header("Content-type") == "application/octet-stream", (
-        "send the registry's binary upload framing"
-    )
-    assert request.get_method() == "PUT", "publish through the registry upload method"
-    assert request.full_url == "https://crates.io/api/v1/crates/new", (
-        "publish to the crates.io upload endpoint"
-    )
-    assert TEST_CREDENTIAL not in capsys.readouterr().out, "never print the token"
-
-
-def test_upload_fails_on_registry_errors_and_never_retries(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Treat a 2xx error body as failure and do not repeat an ambiguous upload."""
-    metadata = tmp_path / "metadata.json"
-    archive = tmp_path / "candidate.crate"
-    _ = metadata.write_text(json.dumps({"name": "netsuke-build"}), encoding="utf-8")
-    _ = archive.write_bytes(b"bytes")
-    opener = FakeOpener(FakeResponse(201, b'{"errors":[{"detail":"rejected"}]}'))
-
-    result = main(
-        _upload_args(metadata, archive),
-        opener=opener,
-        environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
-    )
-
-    assert result == EXIT_UPLOAD_FAILED, "a response containing errors is a failure"
-    assert len(opener.requests) == 1, "never retry an upload in the same job"
-
-
-@pytest.mark.parametrize(
-    ("body", "expected_diagnostic"),
-    [
-        pytest.param(
-            b'{"errors":[{"detail":"metadata rejected"}]}',
-            "HTTP status 422: metadata rejected",
-            id="include-registry-detail",
-        ),
-        pytest.param(
-            f'{{"errors":[{{"detail":"{TEST_CREDENTIAL}"}}]}}'.encode(),
-            "HTTP status 422: [REDACTED]",
-            id="redact-token-in-registry-detail",
-        ),
-        pytest.param(b"not JSON", "HTTP status 422", id="malformed-body-fallback"),
-        pytest.param(
-            b'{"message":"rejected"}',
-            "HTTP status 422",
-            id="missing-detail-fallback",
-        ),
-    ],
-)
-def test_upload_reports_registry_error_details_safely(
-    tmp_path: pathlib.Path,
-    capsys: pytest.CaptureFixture[str],
-    body: bytes,
-    expected_diagnostic: str,
-) -> None:
-    """Show usable registry errors and fall back without exposing the token."""
-    metadata = tmp_path / "metadata.json"
-    archive = tmp_path / "candidate.crate"
-    _ = metadata.write_text("{}", encoding="utf-8")
-    _ = archive.write_bytes(b"bytes")
-    error = http_error_response("https://crates.io/api/v1/crates/new", 422, body)
-
-    result = main(
-        _upload_args(metadata, archive),
-        opener=FakeOpener(error),
-        environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
-    )
-
-    assert result == EXIT_UPLOAD_FAILED, "a non-success upload response must fail"
-    captured = capsys.readouterr()
-    assert expected_diagnostic in captured.err, (
-        "diagnose a registry rejection while retaining a status fallback"
-    )
-    assert TEST_CREDENTIAL not in captured.out + captured.err, (
-        "never expose the exchanged token in a registry error detail"
-    )
-
-
-def test_upload_redacts_token_from_ambiguous_network_error(
-    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Do not expose the short-lived token when the request outcome is unknown."""
-    metadata = tmp_path / "metadata.json"
-    archive = tmp_path / "candidate.crate"
-    _ = metadata.write_text("{}", encoding="utf-8")
-    _ = archive.write_bytes(b"bytes")
-    opener = FakeOpener(OSError(f"connection closed after receiving {TEST_CREDENTIAL}"))
-
-    result = main(
-        _upload_args(metadata, archive),
-        opener=opener,
-        environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
-    )
-
-    assert result == EXIT_UPLOAD_FAILED, "an ambiguous upload response must fail"
-    captured = capsys.readouterr()
-    assert TEST_CREDENTIAL not in captured.out + captured.err, (
-        "redact the short-lived token from diagnostics"
-    )
-    assert len(opener.requests) == 1, "never retry an ambiguous upload"

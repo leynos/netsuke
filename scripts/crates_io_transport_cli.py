@@ -39,6 +39,15 @@ REGISTRY_API = "https://crates.io/api/v1"
 type Opener = cabc.Callable[..., crates_io_registry_http.HttpResponse]
 type Environment = cabc.Mapping[str, str]
 type Sleeper = cabc.Callable[[float], None]
+type MonotonicClock = cabc.Callable[[], int]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class TransportTiming:
+    """Carry the delay and monotonic clock used by bounded downloads."""
+
+    sleeper: Sleeper = time.sleep
+    monotonic_clock_ns: MonotonicClock = time.monotonic_ns
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -54,7 +63,7 @@ class ProbeRequest:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class DownloadRequest:
-    """Carry archive polling inputs, output paths and injected boundaries."""
+    """Carry archive inputs, paths, and injected opener, sleeper, and clock."""
 
     crate: str
     version: str
@@ -62,6 +71,7 @@ class DownloadRequest:
     status_path: pathlib.Path
     opener: Opener
     sleeper: Sleeper
+    monotonic_clock_ns: MonotonicClock
     report_path: pathlib.Path | None = None
 
 
@@ -116,7 +126,7 @@ def download(request_data: DownloadRequest) -> int:
     Parameters
     ----------
     request_data : DownloadRequest
-        Crate identity, output paths, opener, and sleeper.
+        Crate identity, output paths, opener, sleeper, and monotonic clock.
 
     Returns
     -------
@@ -137,7 +147,7 @@ def download(request_data: DownloadRequest) -> int:
     result = crates_io_transport_http.DownloadPollResult(
         response=None, attempts=0, status_class="unknown", last_error=None
     )
-    started_ns = time.monotonic_ns()
+    started_ns = request_data.monotonic_clock_ns()
     try:
         result = crates_io_transport_http.poll_archive(
             request_data.opener,
@@ -164,7 +174,10 @@ def download(request_data: DownloadRequest) -> int:
             )
     finally:
         if request_data.report_path is not None:
-            elapsed_ms = max(0, (time.monotonic_ns() - started_ns) // 1_000_000)
+            elapsed_ms = max(
+                0,
+                (request_data.monotonic_clock_ns() - started_ns) // 1_000_000,
+            )
             crates_io_transport_http.save_download_report(
                 request_data.report_path,
                 attempts=result.attempts,
@@ -301,7 +314,7 @@ def main(
     *,
     opener: Opener | None = None,
     environment: Environment | None = None,
-    sleeper: Sleeper = time.sleep,
+    timing: TransportTiming | None = None,
 ) -> int:
     """Run one transport command using injected external boundaries.
 
@@ -313,8 +326,8 @@ def main(
         Registry opener; use the allowlisted opener when omitted.
     environment : Environment or None
         Environment mapping used to read the upload token.
-    sleeper : Sleeper
-        Delay function for bounded archive polling.
+    timing : TransportTiming
+        Delay and monotonic clock for bounded archive polling.
 
     Returns
     -------
@@ -327,6 +340,7 @@ def main(
     except SystemExit as error:
         return EXIT_OK if error.code == 0 else EXIT_USAGE
     selected_opener = opener or crates_io_registry_http.default_opener
+    selected_timing = TransportTiming() if timing is None else timing
     if arguments.command == "probe":
         return probe(
             ProbeRequest(
@@ -340,13 +354,14 @@ def main(
     if arguments.command == "download":
         return download(
             DownloadRequest(
-                arguments.crate,
-                arguments.version,
-                arguments.archive,
-                arguments.status_file,
-                selected_opener,
-                sleeper,
-                arguments.report_file,
+                crate=arguments.crate,
+                version=arguments.version,
+                archive_path=arguments.archive,
+                status_path=arguments.status_file,
+                opener=selected_opener,
+                sleeper=selected_timing.sleeper,
+                monotonic_clock_ns=selected_timing.monotonic_clock_ns,
+                report_path=arguments.report_file,
             )
         )
     selected_environment = os.environ if environment is None else environment
