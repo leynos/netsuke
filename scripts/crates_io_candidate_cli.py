@@ -102,19 +102,12 @@ def _require_release_mode(
     identity: release_candidate.ReleaseIdentity,
     expectation: CandidateExpectation,
 ) -> None:
-    """Require the recorded tag to agree with the run's release mode.
-
-    A rehearsal and a publishing run are distinguished by the tag alone. The
-    rehearsal must record no tag, because inventing one would let a pull
-    request claim a release it never built; the publishing run must record the
-    tag the workflow is releasing, because a candidate built for another tag is
-    not the candidate this run may publish.
-
-    Raises
-    ------
-    CandidateError
-        If a rehearsal records a tag or a publishing run records none.
-    """
+    """Require the recorded tag to agree with the run's release mode."""
+    # A rehearsal and a publishing run are distinguished by the tag alone. A
+    # rehearsal must record no tag, because inventing one would let a pull
+    # request claim a release it never built. A publishing run must record the
+    # tag it releases, because a candidate built for another tag is not
+    # publishable here.
     if expectation.is_rehearsal:
         if identity.tag is not None:
             raise CandidateError(CandidateIssue.UNEXPECTED_TAG, (identity.tag,))
@@ -126,14 +119,7 @@ def _identity_matches(
     identity: release_candidate.ReleaseIdentity,
     expectation: CandidateExpectation,
 ) -> None:
-    """Require the artifact identity to match this validated release run.
-
-    Raises
-    ------
-    CandidateError
-        If the recorded tag disagrees with the release mode, or the identity
-        disagrees with the workflow's commit, package name, version, or tag.
-    """
+    """Require the artifact identity to match this validated release run."""
     _require_release_mode(identity, expectation)
     expected = {
         "commit": expectation.commit,

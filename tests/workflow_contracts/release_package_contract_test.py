@@ -184,13 +184,11 @@ def _assert_action_contract(action: dict[str, object]) -> None:
 def _assert_candidate_step(
     steps: list[dict[str, object]], package: dict[str, object]
 ) -> None:
-    """Check the offline candidate rehearsal runs after packaging, without network.
-
-    The publisher repeats this validation after the artefact hand-off, so the
-    rehearsal here is what proves the local bytes and record agree before they
-    are uploaded. It must stay offline: a token or a registry request in this
-    step would let a pull-request lane reach the exchange it is meant to avoid.
-    """
+    """Check the offline candidate step runs after packaging, without network."""
+    # The publisher repeats this validation after the artefact hand-off, so this
+    # step proves the local bytes and record agree before upload. It must stay
+    # offline: a token or registry request here would let a pull-request lane
+    # reach the exchange it is meant to avoid.
     candidate = named_step(steps, CANDIDATE_STEP)
     assert candidate.get("id") == "candidate", "the candidate step id must be stable"
     assert candidate.get("shell") == "bash", "the candidate step must run under Bash"

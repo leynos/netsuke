@@ -20,12 +20,13 @@ if typ.TYPE_CHECKING:
 
 def _crate_basename(record: dict[str, object]) -> str:
     """Require the recorded crate name to be a flat archive basename."""
-    crate = record.get("crate")
-    if not isinstance(crate, str) or not release_asset_names.is_bare_file_name(crate):
-        raise CandidateError(CandidateIssue.CRATE_BASENAME)
-    if not crate.endswith(".crate"):
-        raise CandidateError(CandidateIssue.CRATE_SUFFIX, (crate,))
-    return crate
+    match record.get("crate"):
+        case str() as crate if release_asset_names.is_bare_file_name(crate):
+            if not crate.endswith(".crate"):
+                raise CandidateError(CandidateIssue.CRATE_SUFFIX, (crate,))
+            return crate
+        case _:
+            raise CandidateError(CandidateIssue.CRATE_BASENAME)
 
 
 def archive_and_crate(
@@ -78,14 +79,18 @@ def _check_manifest_identity(
     manifest: dict[str, object], package_name: str, version: str
 ) -> None:
     """Require the packaged manifest identity to match the validated workflow."""
-    package_table = manifest.get("package")
-    if not isinstance(package_table, dict):
-        raise CandidateError(CandidateIssue.PACKAGE_TABLE)
-    if (
-        package_table.get("name") != package_name
-        or package_table.get("version") != version
-    ):
-        raise CandidateError(CandidateIssue.MANIFEST_IDENTITY)
+    # A missing or non-mapping package table is a structural fault, while a
+    # mapping that names another package is an identity mismatch; the two
+    # issues stay distinct so the workflow can report which one occurred.
+    match manifest.get("package"):
+        case {"name": name, "version": found} if (
+            name == package_name and found == version
+        ):
+            return
+        case dict():
+            raise CandidateError(CandidateIssue.MANIFEST_IDENTITY)
+        case _:
+            raise CandidateError(CandidateIssue.PACKAGE_TABLE)
 
 
 def read_packaged_manifest(
