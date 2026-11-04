@@ -37,7 +37,15 @@ class CandidateIssue(enum.StrEnum):
 
 
 class CandidateError(ValueError):
-    """Carry a classified candidate error and its display values."""
+    """Carry a classified candidate error and its display values.
+
+    Examples
+    --------
+    >>> str(CandidateError(CandidateIssue.PACKAGE_TABLE))
+    'packaged manifest has no [package] table'
+    >>> str(CandidateError(CandidateIssue.UNEXPECTED_TAG, ("v1.2.3",)))
+    "a rehearsal candidate must not record a release tag: 'v1.2.3'"
+    """
 
     def __init__(self, issue: CandidateIssue, context: tuple[object, ...] = ()) -> None:
         """Store the candidate issue and values used to render its diagnostic."""

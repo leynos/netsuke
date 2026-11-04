@@ -47,6 +47,7 @@ SECTION_MODULES = (
 SOURCE_MODULES = (
     "scripts/crates_io_candidate_archive.py",
     "scripts/crates_io_candidate_cli.py",
+    "scripts/crates_io_candidate_errors.py",
     "scripts/crates_io_transport_cli.py",
     "scripts/crates_io_registry_http.py",
     "scripts/crates_io_transport_http.py",
@@ -79,6 +80,7 @@ SOURCE_MODULES = (
 
 #: Sources that decide from already parsed, in-memory values.
 POLICY_MODULES = (
+    "scripts/crates_io_candidate_errors.py",
     "scripts/release_candidate.py",
     "scripts/release_identity_record.py",
     "scripts/release_semver.py",
