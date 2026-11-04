@@ -9,15 +9,15 @@ sections that match the features they use.
 
 ## Impact at a glance
 
-| Priority          | Area                   | What to do                                                          |
-| ----------------- | ---------------------- | ------------------------------------------------------------------- |
-| Required          | Checkout source builds | Use the pinned Rust toolchain before building from a checkout.      |
-| Required          | Linux checkout builds  | Install the pinned `mold` linker before building from a checkout.   |
-| Review if enabled | Manifest scheduling    | Opt in only where immediate console output is useful.               |
-| Required          | `Target` literals      | Add `description` and `console` to every literal.                   |
-| Required          | `BuildEdge` literals   | Add `output_visibility` to every literal.                           |
-| Review if enabled | Existing pool choices  | Avoid dependency-only entries and conflicting action pools.         |
-| Optional          | Existing manifests     | Omit `console` to retain ordinary scheduling; it defaults to false. |
+| Priority          | Area                       | What to do                                                          |
+| ----------------- | -------------------------- | ------------------------------------------------------------------- |
+| Required          | Checkout source builds     | Use the pinned Rust toolchain before building from a checkout.      |
+| Required          | Linux checkout builds      | Install the pinned `mold` linker before building from a checkout.   |
+| Review if enabled | Manifest scheduling        | Opt in only where immediate console output is useful.               |
+| Required          | `Target` literals          | Add `description` and `console` to every literal.                   |
+| Required          | `BuildEdge` literals       | Add `output_visibility` to every literal.                           |
+| Review if enabled | Rust `Action.pool` choices | Check custom pool values for conflicts with `console`.              |
+| Optional          | Existing manifests         | Omit `console` to retain ordinary scheduling; it defaults to false. |
 
 _Table 1: migration obligations for the beta series and console-pool option._
 
@@ -892,8 +892,7 @@ owned sink and completion-ordering contract.
 - [ ] Install the pinned Rust toolchain before building from a checkout.
 - [ ] On Linux, install the pinned linker before the first source build.
 - [ ] Review the migration sections for manifest or API features in use.
-- [ ] Before opting into `console`, use Ninja 1.5 or later and check that the
-  action does not request a conflicting custom pool or contention class.
+- [ ] Before opting into `console`, use Ninja 1.5 or later.
 - [ ] Add `console: false` or `console: true` to Rust `Target` literals.
 - [ ] Add `output_visibility: EdgeOutputVisibility::Buffered` or `Immediate`
   to Rust `BuildEdge` literals.
@@ -905,10 +904,11 @@ owned sink and completion-ordering contract.
 - **Error:** `Build edge 'build/stamp' cannot select the console pool because its
   action is dependency-only.`
   - **Fix:** Enable console scheduling only on an executable action or target.
-- **Error:** `Build edge 'build/stamp' selects the console pool but its action
-  requests custom pool 'compile'.`
-  - **Fix:** Remove the conflicting action pool, or select `console` there only
-    when the action itself should use the console pool.
+- **Rust API error (`Action.pool`):**
+  `Build edge 'build/stamp' selects the console pool but its action requests
+  custom pool 'compile'.`
+  - **Fix:** For Rust callers, remove the conflicting `Action.pool` value or
+    set it to `console` when that edge should use the console pool.
 
 ## Diagnostics
 

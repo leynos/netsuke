@@ -2172,8 +2172,9 @@ gerund, e.g. "A compilar…" for "Building…".
 
 Several Netsuke terms stay as English loanwords in European Portuguese
 technical prose: `cache` (feminine, written in italics per Priberam and the
-[translatewiki.net Portuguese cheatsheet](https://translatewiki.net/wiki/Portal:Pt/Cheatsheet/pt))
-and `macro` (feminine, unchanged). Product and syntax identifiers (Netsuke,
+[translatewiki.net Portuguese cheatsheet](https://translatewiki.net/wiki/Portal:Pt/Cheatsheet/pt)),
+`macro` (feminine, unchanged), and Ninja's `pool` (masculine; use "pool da
+consola" and "pool personalizado"). Product and syntax identifiers (Netsuke,
 Ninja, Fluent, Jinja, YAML, `stdout`, `stderr`, `dyndep`) are invariant and
 carry no diacritics or gender marking.
 
@@ -2211,6 +2212,7 @@ Table 30: Portuguese, Portugal terminology
 | action                 | ação                        | AO90 spelling (not "acção"); distinct word from "alvo" and "regra" per Netsuke's three-way distinction.                                                                                                                                                                     |
 | rule                   | regra                       | Matches the [GNU Make Portuguese manual](https://www.ecoop.net/coop/translated/GNUMake4.4/ch09.pt.html) ("regra").                                                                                                                                                          |
 | dependency             | dependência                 | Standard software term.                                                                                                                                                                                                                                                     |
+| pool                   | pool                        | Retain Ninja's English scheduling term; use "pool da consola" and "pool personalizado".                                                                                                                                                                                     |
 | order-only dependency  | dependência apenas de ordem | Compositional; no established Portuguese precedent found for this Ninja-specific concept.                                                                                                                                                                                   |
 | build (noun)           | compilação                  | Use "build" as an unmarked loan only when referring to a specific numbered build artefact, not the process.                                                                                                                                                                 |
 | build (verb)           | compilar                    | "Gerar" is acceptable when the build does not compile source code, mirroring the same ambiguity in English.                                                                                                                                                                 |
