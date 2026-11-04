@@ -4,8 +4,9 @@ This adapter reads the identity artifact and `.crate` bytes produced by
 ``package-crate``. It never invokes Cargo or rewrites the archive. The
 registry policy remains in :mod:`publish_crates_io_cli` and its pure policy
 modules; this module owns the JSON and filesystem boundaries, while
-:mod:`crates_io_candidate_archive` owns reading the archive and the manifest
-it packages.
+:mod:`crates_io_candidate_archive` reads the archive and the manifest it
+packages and :mod:`crates_io_candidate_policy` decides whether the parsed
+facts describe this release run.
 """
 
 import argparse
@@ -16,12 +17,14 @@ import sys
 import tempfile
 
 import crates_io_candidate_archive
+import crates_io_candidate_policy
 import crates_io_upload_metadata
 import release_candidate
 import release_digest
 import release_digest_files
 import release_identity_record
 from crates_io_candidate_errors import CandidateError, CandidateIssue
+from crates_io_candidate_policy import CandidateExpectation
 
 EXIT_OK = 0
 EXIT_REJECTED = 1
@@ -29,27 +32,6 @@ EXIT_OUTPUT_ERROR = 2
 EXIT_USAGE = 64
 
 SHA256_DIGEST_LENGTH = 64
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class CandidateExpectation:
-    """Carry workflow identity that the package artifact must match.
-
-    ``tag`` is ``None`` for a rehearsal. A pull request has a merge ref rather
-    than a release tag, so a rehearsed candidate records no tag and this check
-    binds only the commit, package name, and version. A publishing run supplies
-    the tag, and the identity must then record exactly that tag.
-    """
-
-    tag: str | None
-    commit: str
-    package_name: str
-    version: str
-
-    @property
-    def is_rehearsal(self) -> bool:
-        """Whether this expectation accepts a tagless candidate."""
-        return self.tag is None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -98,51 +80,6 @@ def _read_json_mapping(path: pathlib.Path, label: str) -> dict[str, object]:
     return parsed
 
 
-def _require_release_mode(
-    identity: release_candidate.ReleaseIdentity,
-    expectation: CandidateExpectation,
-) -> None:
-    """Require the recorded tag to agree with the run's release mode."""
-    # A rehearsal and a publishing run are distinguished by the tag alone. A
-    # rehearsal must record no tag, because inventing one would let a pull
-    # request claim a release it never built. A publishing run must record the
-    # tag it releases, because a candidate built for another tag is not
-    # publishable here.
-    if expectation.is_rehearsal:
-        if identity.tag is not None:
-            raise CandidateError(CandidateIssue.UNEXPECTED_TAG, (identity.tag,))
-    elif identity.tag is None:
-        raise CandidateError(CandidateIssue.REHEARSAL)
-
-
-def _identity_matches(
-    identity: release_candidate.ReleaseIdentity,
-    expectation: CandidateExpectation,
-) -> None:
-    """Require the artifact identity to match this validated release run."""
-    _require_release_mode(identity, expectation)
-    expected = {
-        "commit": expectation.commit,
-        "package_name": expectation.package_name,
-        "version": expectation.version,
-    }
-    if expectation.tag is not None:
-        expected["tag"] = expectation.tag
-    actual = {
-        "tag": identity.tag,
-        "commit": identity.commit,
-        "package_name": identity.package_name,
-        "version": identity.version,
-    }
-    mismatches = [
-        f"{field}={actual[field]!r} (expected {value!r})"
-        for field, value in expected.items()
-        if actual[field] != value
-    ]
-    if mismatches:
-        raise CandidateError(CandidateIssue.IDENTITY_MISMATCH, (", ".join(mismatches),))
-
-
 def _recorded_identity(record: dict[str, object]) -> release_candidate.ReleaseIdentity:
     """Parse the identity object while retaining candidate-specific diagnostics."""
     raw_identity = record.get("identity")
@@ -183,10 +120,12 @@ def validate_candidate(
 
     A publishing expectation requires the identity to record exactly the
     expected tag. A rehearsal expectation requires the identity to record no
-    tag. Both modes bind the commit, package name, and version. A rejection in
-    any focused validation helper below surfaces as ``CandidateError``, so a
-    mismatched identity, archive, digest, or packaged manifest fails
-    validation rather than returning a partially checked candidate.
+    tag. Both modes bind the commit, package name, and version. The acceptance
+    rules live in :mod:`crates_io_candidate_policy`; this function reads the
+    boundaries they are applied to, and a rejection from either the policy or a
+    focused reader surfaces as ``CandidateError``, so a mismatched identity,
+    archive, digest, or packaged manifest fails validation rather than
+    returning a partially checked candidate.
 
     Parameters
     ----------
@@ -209,13 +148,14 @@ def validate_candidate(
     """
     record = _read_json_mapping(identity_path, "package identity")
     identity = _recorded_identity(record)
-    _identity_matches(identity, expectation)
+    crates_io_candidate_policy.require_identity_matches(identity, expectation)
     crate, archive = crates_io_candidate_archive.archive_and_crate(
         record, archive_directory
     )
     observed_digest = _validated_digest(archive, _recorded_digest(record))
-    _ = crates_io_candidate_archive.read_packaged_manifest(
-        archive, expectation.package_name, expectation.version
+    manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
+    crates_io_candidate_policy.require_manifest_identity(
+        manifest, expectation.package_name, expectation.version
     )
     return ValidatedCandidate(identity, crate, archive, observed_digest)
 

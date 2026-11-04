@@ -22,7 +22,7 @@ class CandidateIssue(enum.StrEnum):
     CRATE_SUFFIX = "identity record crate {!r} must end in .crate"
     ARCHIVE_COUNT = "expected exactly one matching .crate named {!r}, found {!r}"
     ARCHIVE_FILE = "candidate archive is not a regular file: {!r}"
-    MANIFEST_MEMBER = "archive must contain exactly one regular {!r}"
+    MANIFEST_MEMBER = "archive must contain exactly one packaged Cargo.toml, found {!r}"
     MANIFEST_READ = "could not read packaged manifest {!r}"
     MANIFEST_PARSE = "could not read packaged Cargo manifest: {}"
     PACKAGE_TABLE = "packaged manifest has no [package] table"

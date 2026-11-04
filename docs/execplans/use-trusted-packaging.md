@@ -2690,9 +2690,36 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   exchange or release was performed; finalization, inventory verification, and
   the consumer smoke test remain open, and `publish-release` is still not gated
   on the crates.io job.
+- [x] (2026-11-04) Separated candidate policy from candidate reading. The
+  archive adapter now reports what the retained `.crate` contains:
+  `read_packaged_manifest` parses the sole packaged `Cargo.toml` and returns it
+  without comparing the identity it declares, and the manifest member is
+  selected by its packaged shape rather than by a name built from the expected
+  package and version. `scripts/crates_io_candidate_policy.py` holds the
+  workflow expectation and the three decisions it drives:
+  `require_release_mode`, `require_identity_matches`, and
+  `require_manifest_identity`. The command-line module composes the readers
+  with that policy and keeps only its digest check. The new source and its
+  suite are registered in `SOURCE_MODULES`, `POLICY_MODULES`,
+  `SECTION_MODULES`, and the `test-release-publication` recipe, so the
+  policy/adapter partition covers it and its doctests run. This answers the
+  CodeRabbit pre-merge Domain Architecture row without changing which
+  candidates are accepted.
 
 ## Surprises & discoveries
 
+- Observation: **A policy module may import its annotated type only for type
+  checking, but its doctests then have to import that type themselves.** Ruff's
+  `TC002` (`typing-only-third-party-import`) flags `import release_candidate` in
+  `scripts/crates_io_candidate_policy.py`, because the module only names
+  `release_candidate.ReleaseIdentity` in annotations, and the repository's
+  Python 3.14 baseline evaluates those lazily. Moving the import behind
+  `typing.TYPE_CHECKING` satisfies the rule, but a doctest shares the module's
+  runtime globals, so an example that constructed an identity would then fail
+  with `NameError`. Each policy example therefore begins with its own
+  `>>> import release_candidate`. The alternatives are gate-blocked too:
+  keeping the runtime import is what `TC002` flags, and
+  `from __future__ import annotations` is refused by house lint `C9112`.
 - Observation: **Cargo has no command mode that uploads an existing `.crate`
   archive.** `cargo publish` prepares the package archive itself, so invoking
   it in the privileged publishing job would rebuild rather than publish the

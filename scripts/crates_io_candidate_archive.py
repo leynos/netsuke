@@ -2,8 +2,10 @@
 
 This adapter owns the tar and TOML boundary of candidate validation. It
 selects the single archived ``.crate`` recorded by the identity artifact and
-reads the ``Cargo.toml`` that archive packages, so the command-line module can
+parses the ``Cargo.toml`` that archive packages, so the command-line module can
 compare both against the release workflow without opening an archive itself.
+It reports what the archive contains and leaves acceptance to
+:mod:`crates_io_candidate_policy`.
 """
 
 import io
@@ -75,66 +77,61 @@ def archive_and_crate(
     return crate, archive
 
 
-def _manifest_contents(package: tarfile.TarFile, member_name: str) -> str:
-    """Read the one regular manifest member with the expected archive identity."""
-    matches = [member for member in package.getmembers() if member.name == member_name]
-    if len(matches) != 1 or not matches[0].isfile():
-        raise CandidateError(CandidateIssue.MANIFEST_MEMBER, (member_name,))
-    manifest_file = package.extractfile(matches[0])
+def _manifest_member(package: tarfile.TarFile) -> tarfile.TarInfo:
+    """Require the archive to hold exactly one regular packaged Cargo manifest."""
+    # A packaged crate has one top-level ``<package>-<version>`` directory, so
+    # its manifest sits exactly one path segment down. Matching the shape rather
+    # than a name built from the expected identity keeps this reader free of the
+    # identity comparison the policy module performs.
+    manifests = [
+        member
+        for member in package.getmembers()
+        if member.name.count("/") == 1 and member.name.endswith("/Cargo.toml")
+    ]
+    found = [member.name for member in manifests]
+    if len(manifests) != 1 or not manifests[0].isfile():
+        raise CandidateError(CandidateIssue.MANIFEST_MEMBER, (found,))
+    return manifests[0]
+
+
+def _manifest_contents(package: tarfile.TarFile) -> str:
+    """Read the sole packaged manifest member as decoded text."""
+    member = _manifest_member(package)
+    manifest_file = package.extractfile(member)
     if manifest_file is None:
-        raise CandidateError(CandidateIssue.MANIFEST_READ, (member_name,))
+        raise CandidateError(CandidateIssue.MANIFEST_READ, (member.name,))
     return manifest_file.read().decode("utf-8")
 
 
-def _check_manifest_identity(
-    manifest: dict[str, object], package_name: str, version: str
-) -> None:
-    """Require the packaged manifest identity to match the validated workflow."""
-    # A missing or non-mapping package table is a structural fault, while a
-    # mapping that names another package is an identity mismatch; the two
-    # issues stay distinct so the workflow can report which one occurred.
-    match manifest.get("package"):
-        case {"name": name, "version": found} if (
-            name == package_name and found == version
-        ):
-            return
-        case dict():
-            raise CandidateError(CandidateIssue.MANIFEST_IDENTITY)
-        case _:
-            raise CandidateError(CandidateIssue.PACKAGE_TABLE)
-
-
-def read_packaged_manifest(
-    archive_path: pathlib.Path, package_name: str, version: str
-) -> dict[str, object]:
-    """Read and validate the Cargo manifest stored in the retained archive.
+def read_packaged_manifest(archive_path: pathlib.Path) -> dict[str, object]:
+    """Read the Cargo manifest stored in the retained archive.
 
     Parameters
     ----------
     archive_path : pathlib.Path
         The retained ``.crate`` archive to read.
-    package_name : str
-        The package name the packaged manifest must declare.
-    version : str
-        The version the packaged manifest must declare.
 
     Returns
     -------
     dict[str, object]
-        The parsed packaged manifest.
+        The parsed packaged manifest, with its identity as the archive records
+        it. Comparing that identity against the release workflow belongs to
+        :func:`crates_io_candidate_policy.require_manifest_identity`.
 
     Raises
     ------
     CandidateError
-        If the archive cannot be read, holds no single regular manifest, or
-        declares a different package name or version.
+        If the archive cannot be read, or holds no single regular packaged
+        manifest.
+
+    Examples
+    --------
+    >>> read_packaged_manifest.__name__
+    'read_packaged_manifest'
     """
-    member_name = f"{package_name}-{version}/Cargo.toml"
     try:
         archive_bytes = archive_path.read_bytes()
         with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as package:
-            manifest = tomllib.loads(_manifest_contents(package, member_name))
+            return tomllib.loads(_manifest_contents(package))
     except (OSError, UnicodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
         raise CandidateError(CandidateIssue.MANIFEST_PARSE, (error,)) from error
-    _check_manifest_identity(manifest, package_name, version)
-    return manifest

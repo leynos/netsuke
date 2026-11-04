@@ -408,6 +408,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_crates_io_candidate_cli.py \
 		scripts/tests/test_crates_io_candidate_guards.py \
 		scripts/tests/test_crates_io_candidate_metadata.py \
+		scripts/tests/test_crates_io_candidate_policy.py \
 		scripts/tests/test_crates_io_transport_cli.py \
 		scripts/tests/test_crates_io_transport_upload.py \
 		scripts/tests/test_crates_io_transport_properties.py \
@@ -441,6 +442,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/crates_io_candidate_cli.py \
 		scripts/crates_io_candidate_archive.py \
 		scripts/crates_io_candidate_errors.py \
+		scripts/crates_io_candidate_policy.py \
 		scripts/crates_io_transport_cli.py \
 		scripts/crates_io_registry_http.py \
 		scripts/crates_io_transport_http.py \

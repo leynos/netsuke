@@ -2518,9 +2518,13 @@ Private helpers in `scripts/crates_io_candidate_cli.py` and
 `scripts/crates_io_upload_metadata.py` compose only their module's candidate
 validation or metadata operation. `scripts/crates_io_candidate_archive.py` owns
 the tar and TOML boundary: `archive_and_crate` selects the sole recorded
-`.crate`, and `read_packaged_manifest` parses its `Cargo.toml` and requires the
-packaged package name and version to match. The command-line module composes
-that adapter with its own identity, digest, and release-mode checks.
+`.crate`, and `read_packaged_manifest` parses the `Cargo.toml` it packages
+without judging the identity that manifest declares.
+`scripts/crates_io_candidate_policy.py` makes the decisions: it holds the
+workflow expectation, requires the recorded release mode to agree with it,
+compares the identity record against it, and requires the packaged manifest to
+name the same package and version. The command-line module composes those
+readers with the policy and its own digest check.
 `scripts/crates_io_candidate_errors.py` holds the shared `CandidateIssue` and
 `CandidateError` vocabulary, so every rejection carries one stable category
 rather than a format-specific exception. Metadata-manifest parsing applies the
@@ -2760,10 +2764,12 @@ Eight focused test modules cover this new publisher path:
 `test_crates_io_transport_upload.py`, `test_crates_io_transport_properties.py`,
 `test_crates_io_transport_retry.py`, and `test_crates_io_publish_sequence.py`.
 The candidate metadata module holds the metadata-mode tests that the check-mode
-module would otherwise carry. The candidate guards module pins the archive
-file-kind checks, the damaged identity-record and recorded-digest rejections,
-and the three packaged-README selection outcomes; the upload module pins the
-little-endian metadata and archive framing, the missing-token and
+module would otherwise carry. The candidate policy module names each acceptance
+rule's accept and reject outcome directly, so a changed rule fails there rather
+than only through a whole-command rejection. The candidate guards module pins
+the archive file-kind checks, the damaged identity-record and recorded-digest
+rejections, and the three packaged-README selection outcomes; the upload module
+pins the little-endian metadata and archive framing, the missing-token and
 non-object-metadata refusals, the redacted credential diagnostics, and the exit
 statuses a rejected upload reports. The retry module pins the polling budget,
 the delay between retries, and the status window that ends a poll early; the
@@ -2771,9 +2777,10 @@ shared argument builders both transport suites drive live in
 `crates_io_transport_support.py` so a flag change reaches them together. The
 source boundary includes `crates_io_candidate_cli.py`,
 `crates_io_candidate_archive.py`, `crates_io_candidate_errors.py`,
-`crates_io_upload_metadata.py`, `crates_io_transport_cli.py`,
-`crates_io_registry_http.py`, and `crates_io_transport_http.py`; the shared
-crates.io API policy remains in `release_crates_io_adapter.py` under `scripts/`.
+`crates_io_candidate_policy.py`, `crates_io_upload_metadata.py`,
+`crates_io_transport_cli.py`, `crates_io_registry_http.py`, and
+`crates_io_transport_http.py`; the shared crates.io API policy remains in
+`release_crates_io_adapter.py` under `scripts/`.
 
 For an absent version, the action reads the packaged `Cargo.toml` and README in
 memory from the `.crate`, derives the registry metadata (including normal,
