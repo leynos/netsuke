@@ -37,7 +37,7 @@ fn generate_simple_ninja() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
@@ -74,7 +74,7 @@ fn string_generation_apis_reject_reserved_paths() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("reserved".into(), action);
@@ -176,7 +176,7 @@ fn generate_script_ninja_round_trips() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);
@@ -213,7 +213,7 @@ fn generate_command_list_ninja_joins_a_fail_fast_chain() -> Result<()> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("a".into(), action);

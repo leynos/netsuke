@@ -110,7 +110,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: false,
             always: false,
-            console: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         },
         BuildEdge {
             action_id: "aggregate".into(),
@@ -123,7 +123,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: true,
             always: false,
-            console: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         },
         BuildEdge {
             action_id: "aggregate".into(),
@@ -136,7 +136,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: true,
             always: false,
-            console: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         },
         BuildEdge {
             action_id: "aggregate".into(),
@@ -149,7 +149,7 @@ fn crash_shaped_graph() -> BuildGraph {
             progress_label: None,
             phony: true,
             always: false,
-            console: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         },
     ] {
         // A duplicate alias would silently change the graph this test exists to

@@ -1,7 +1,7 @@
 //! Tests for console selection across staged serial dependency bundles.
 
 use super::{generate_bundle, graph_with_edge, serial_edge};
-use crate::ir::{BuildEdge, DependencyOrder};
+use crate::ir::{BuildEdge, DependencyOrder, EdgeOutputVisibility};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 
@@ -10,7 +10,7 @@ use camino::Utf8PathBuf;
 #[test]
 fn console_serial_parent_does_not_mark_gates_or_sidecars() -> Result<()> {
     let mut edge = serial_edge("all", &["check-fmt", "lint"]);
-    edge.console = true;
+    edge.output_visibility = EdgeOutputVisibility::Immediate;
     let graph = graph_with_edge(edge);
     let bundle = generate_bundle(&graph)?;
     ensure!(
@@ -73,7 +73,7 @@ fn console_serial_parent_does_not_mark_gates_or_sidecars() -> Result<()> {
 #[test]
 fn ordinary_dyndep_edge_clears_a_shared_console_action_pool() -> Result<()> {
     let mut selected = serial_edge("all", &["check-fmt", "lint"]);
-    selected.console = true;
+    selected.output_visibility = EdgeOutputVisibility::Immediate;
     let mut graph = graph_with_edge(selected);
     graph.actions.get_mut("a").expect("test action exists").pool = Some("console".into());
     graph
@@ -88,7 +88,7 @@ fn ordinary_dyndep_edge_clears_a_shared_console_action_pool() -> Result<()> {
             progress_label: None,
             phony: false,
             always: false,
-            console: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         })
         .expect("test graph output aliases must be unique");
 

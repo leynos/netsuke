@@ -84,7 +84,7 @@ fn implicit_output_is_used_when_an_edge_has_no_explicit_output(
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     });
     assert!(result.is_ok(), "test edge outputs should be unique");
 

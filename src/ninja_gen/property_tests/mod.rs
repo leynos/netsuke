@@ -90,7 +90,7 @@ fn serial_graph(dependencies: Vec<Utf8PathBuf>) -> BuildGraph {
                 progress_label: None,
                 phony: false,
                 always: false,
-                console: false,
+                output_visibility: crate::ir::EdgeOutputVisibility::default(),
             })
             .is_ok(),
         "test graph output aliases must be unique",

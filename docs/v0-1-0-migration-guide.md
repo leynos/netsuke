@@ -15,7 +15,7 @@ sections that match the features they use.
 | Required          | Linux checkout builds  | Install the pinned `mold` linker before building from a checkout.   |
 | Review if enabled | Manifest scheduling    | Opt in only where immediate console output is useful.               |
 | Required          | `Target` literals      | Add `description` and `console` to every literal.                   |
-| Required          | `BuildEdge` literals   | Add `console` to every literal.                                     |
+| Required          | `BuildEdge` literals   | Add `output_visibility` to every literal.                           |
 | Review if enabled | Existing pool choices  | Avoid dependency-only entries and conflicting action pools.         |
 | Optional          | Existing manifests     | Omit `console` to retain ordinary scheduling; it defaults to false. |
 
@@ -64,12 +64,14 @@ their input boundary.
 Rust callers that construct `Target` with a struct literal must add the new
 `description` field (set it to `None` or `Some(...)`) and the `console` field
 (set it to `false` or `true`). Callers that construct `BuildEdge` with a struct
-literal must add `console` for the same reason: both types expose public fields
-and neither is `#[non_exhaustive]`. Deserialized manifests remain compatible
-because `console` defaults to `false`. Callers constructing `NinjaBuildRequest`
-or `NinjaToolRequest` must replace `cli: &cli` with `options: &options`.
-Callers that read `BuildGraph::targets` must use the graph accessors instead;
-see
+literal must add `output_visibility` for the same reason: both types expose
+public fields and neither is `#[non_exhaustive]`. Use
+`EdgeOutputVisibility::Buffered` for ordinary edges and `Immediate` when the
+manifest's `console: true` behaviour is required. Deserialized manifests remain
+compatible because `console` defaults to `false`. Callers constructing
+`NinjaBuildRequest` or `NinjaToolRequest` must replace `cli: &cli` with
+`options: &options`. Callers that read `BuildGraph::targets` must use the graph
+accessors instead; see
 [Resolve build-graph outputs through the accessors](#resolve-build-graph-outputs-through-the-accessors).
 Every other addition is opt-in.
 
@@ -870,7 +872,6 @@ impact
 | File-reading filters         | The `contents`, `linecount`, `hash`, and `digest` filters now read under one 8 MiB default byte budget; a symlink final component is rejected unless `follow_symlinks=true` opts in, while FIFOs and devices are rejected outright, and per-call `max_bytes` can only narrow the budget.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Configure file reading limits](users-guide.md#configure-file-reading-limits)                                            |
 | Script shell variables       | **Breaking:** `$in` and `$out` in `script:` recipes are shell variables, as they already were in `command:` recipes. Use `{{ ins }}` and `{{ outs }}` for Netsuke path substitution.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | [Script shell variables](#replace-script-in-and-out-path-substitution)                                                   |
 | Build graph                  | **Breaking for callers of the unstable Rust API:** each logical build edge is stored once and indexed by output through `EdgeId`; `BuildGraph::targets` is no longer public.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | [Graph accessors](#resolve-build-graph-outputs-through-the-accessors)                                                    |
-
 ## What does not need to change
 
 The convenience wrappers keep their child-process behaviour: the child inherits
@@ -893,8 +894,9 @@ owned sink and completion-ordering contract.
 - [ ] Review the migration sections for manifest or API features in use.
 - [ ] Before opting into `console`, use Ninja 1.5 or later and check that the
   action does not request a conflicting custom pool or contention class.
-- [ ] Add `console: false` or `console: true` to Rust `Target` and `BuildEdge`
-  struct literals.
+- [ ] Add `console: false` or `console: true` to Rust `Target` literals.
+- [ ] Add `output_visibility: EdgeOutputVisibility::Buffered` or `Immediate`
+  to Rust `BuildEdge` literals.
 
 ## Common errors and fixes
 

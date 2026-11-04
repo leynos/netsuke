@@ -41,7 +41,7 @@ impl Display for DisplayEdge<'_> {
         writeln!(output)?;
         write_flag!(output, "restat", self.edge.always && !self.action_restat);
         write_kv!(output, "description", self.description);
-        if self.edge.console {
+        if self.edge.output_visibility == crate::ir::EdgeOutputVisibility::Immediate {
             writeln!(output, "  pool = console")?;
         } else if self.action_pool == Some("console") {
             // Rule bindings are inherited by edges, so clear a rule-level

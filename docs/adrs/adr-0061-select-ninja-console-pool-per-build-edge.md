@@ -2,9 +2,10 @@
 
 ## Status
 
-Accepted. Actions and targets may set `console: true`; Netsuke carries that
-choice on `BuildEdge` and writes `pool = console` on the generated build edge.
-The option defaults to `false` and does not change `Action` identity.
+Accepted. Actions and targets may set `console: true`; manifest lowering stores
+the backend-neutral request as `BuildEdge.output_visibility`, and the Ninja
+adapter maps `Immediate` to `pool = console` on the generated build edge. The
+option defaults to `false` and does not change `Action` identity.
 
 ## Date
 
@@ -35,7 +36,12 @@ owner.
 ## Decision outcome
 
 - Add a default-false `console` Boolean to manifest actions and targets, and
-  carry it as `BuildEdge.console`.
+  lower it to `EdgeOutputVisibility::Immediate` or `Buffered` on the
+  `BuildEdge`.
+- Keep `EdgeOutputVisibility` backend-neutral. Manifest lowering owns the
+  conversion from the YAML option; each backend owns the mapping to its
+  scheduling and output mechanisms. The Ninja adapter alone knows the pool name
+  and edge-level clearing syntax.
 - Emit an edge-level `pool = console` binding only for selected user edges.
   When an action rule declares `pool = console`, emit an empty edge-level
   `pool =` binding on its ordinary edges so they do not inherit console
@@ -50,13 +56,13 @@ owner.
 - Validate these rules before both direct Ninja generation and dyndep-bundle
   generation, preserving the existing missing-action diagnostic path.
 
-Adding the field to the public `Target` and `BuildEdge` structs breaks
-downstream Rust callers that construct either type with a struct literal. Both
-structs expose public fields and neither is `#[non_exhaustive]`, so an existing
-literal fails to compile until it names `console`. The package currently
-declares version `0.1.0-beta4`, and this source break is accepted for the next
-pre-release API: callers must provide `console`. The default only preserves
-manifest compatibility through Serde.
+Adding fields to the public `Target` and `BuildEdge` structs breaks downstream
+Rust callers that construct either type with a struct literal. Both structs
+expose public fields and neither is `#[non_exhaustive]`, so callers must add
+`console` to `Target` and `output_visibility` to `BuildEdge`. The package
+currently declares version `0.1.0-beta4`, and this source break is accepted for
+the next pre-release API. The default only preserves manifest compatibility
+through Serde.
 
 Ninja runs console-pool edges one at a time in one invocation. Output from
 other edges is held while a console edge runs. Netsuke forwards Ninja output as

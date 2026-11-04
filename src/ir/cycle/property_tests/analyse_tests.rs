@@ -127,7 +127,7 @@ fn analyse_resolves_non_first_output_alias_as_dependency() {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     };
     graph
         .insert_edge(producer)

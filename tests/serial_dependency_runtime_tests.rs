@@ -50,7 +50,7 @@ fn edge(
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     }
 }
 

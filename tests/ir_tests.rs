@@ -7,7 +7,7 @@
 
 use camino::Utf8PathBuf;
 use netsuke::ast::Recipe;
-use netsuke::ir::{Action, BuildEdge, BuildGraph, IrGenError};
+use netsuke::ir::{Action, BuildEdge, BuildGraph, EdgeOutputVisibility, IrGenError};
 use rstest::rstest;
 
 #[rstest]
@@ -43,7 +43,7 @@ fn create_action_and_edge() {
         progress_label: None,
         phony: false,
         always: true,
-        console: false,
+        output_visibility: EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("id".into(), action);
@@ -108,7 +108,7 @@ fn build_graph_indexes_canonical_targets() {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: EdgeOutputVisibility::default(),
     };
     let edge_id = graph
         .insert_edge(edge1)
@@ -143,7 +143,7 @@ fn build_graph_rejects_duplicate_aliases_before_mutation() {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: EdgeOutputVisibility::default(),
     };
 
     let result = graph.insert_edge(edge);

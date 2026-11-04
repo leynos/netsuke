@@ -37,7 +37,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         progress_label: None,
         phony: true,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule a\n",
@@ -65,7 +65,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule compile\n",
@@ -93,7 +93,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule b\n",
@@ -121,7 +121,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule b\n",
@@ -149,7 +149,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule b\n",
@@ -177,7 +177,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule b\n",
@@ -205,7 +205,7 @@ fn generate_posix(graph: &BuildGraph) -> Result<String, NinjaGenError> {
         progress_label: None,
         phony: true,
         always: false,
-        console: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     },
     concat!(
         "rule phony\n",
@@ -266,7 +266,7 @@ fn generate_multiline_script_snapshot() {
             progress_label: None,
             phony: false,
             always: false,
-            console: false,
+            output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
         })
         .expect("test graph output aliases must be unique");
     graph.default_targets.push(Utf8PathBuf::from("out"));

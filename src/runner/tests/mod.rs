@@ -256,7 +256,7 @@ fn ninja_text_propagates_typed_generation_errors() {
             progress_label: None,
             phony: false,
             always: false,
-            console: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         })
         .expect("test graph output aliases must be unique");
 

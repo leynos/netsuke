@@ -6,7 +6,7 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::ast::{CommandIsolation, Recipe, StringOrList};
-use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder};
+use netsuke::ir::{Action, BuildEdge, BuildGraph, DependencyOrder, EdgeOutputVisibility};
 use netsuke::ninja_gen::generate;
 use rstest::{fixture, rstest};
 use std::process::Command;
@@ -54,7 +54,7 @@ fn run_action(
         progress_label: progress_label.map(str::to_owned),
         phony: false,
         always: false,
-        console: false,
+        output_visibility: EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);

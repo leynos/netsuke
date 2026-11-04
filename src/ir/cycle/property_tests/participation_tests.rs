@@ -319,6 +319,7 @@ fn build_edge(index: usize, counts: AliasCounts) -> BuildEdge {
         order_only_deps: Vec::new(),
         phony: false,
         always: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::Buffered,
     }
 }
 

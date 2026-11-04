@@ -198,7 +198,7 @@ fn edge_with(spec: EdgeSpec<'_>) -> BuildEdge {
         order_only_deps: spec.order_only_deps,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     }
 }
 
