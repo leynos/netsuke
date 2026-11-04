@@ -1,6 +1,12 @@
 //! Script recipe integration cases for Ninja dollar escaping.
+//!
+//! The byte-preservation cases for the POSIX `printf %b` transport live in
+//! the [`transport`] submodule, so each file stays within the module size
+//! limit.
 
 use super::*;
+
+mod transport;
 
 /// Verify script `$in` and `$out` become literal shell variables in Ninja.
 #[rstest]

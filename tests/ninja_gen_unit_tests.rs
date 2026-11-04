@@ -273,7 +273,7 @@ fn generate_multiline_script_snapshot() {
         assert_snapshot!("multiline_script_ninja", &ninja);
     });
     assert!(
-        ninja.contains("printf %b") && ninja.contains("\\n"),
-        "script should use printf %b with encoded newlines",
+        ninja.contains("printf %b") && ninja.contains("\\\\n"),
+        "script should use printf %b with a doubly escaped newline",
     );
 }

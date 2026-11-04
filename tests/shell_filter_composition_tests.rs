@@ -34,6 +34,8 @@ use netsuke::{
 use rstest::rstest;
 use std::process::Command;
 
+#[path = "shell_filter_composition_tests/backslash_transport.rs"]
+mod backslash_transport;
 #[path = "shell_filter_composition_tests/composition_support.rs"]
 mod composition_support;
 

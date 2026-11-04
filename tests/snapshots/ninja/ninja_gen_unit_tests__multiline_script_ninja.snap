@@ -4,7 +4,7 @@ assertion_line: 262
 expression: "&ninja"
 ---
 rule script
-  command = /bin/sh -e -c "printf %b 'echo one\necho two' | /bin/sh -e"
+  command = /bin/sh -e -c "printf %b 'echo one\\necho two' | /bin/sh -e"
 
 build out: script
 
