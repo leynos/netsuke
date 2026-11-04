@@ -435,6 +435,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_digest_record_files.py \
 		scripts/tests/test_release_staged_digests.py \
 		scripts/crates_io_candidate_cli.py scripts/crates_io_transport_cli.py \
+		scripts/crates_io_registry_http.py \
 		scripts/crates_io_transport_http.py \
 		scripts/crates_io_upload_metadata.py \
 		scripts/release_candidate.py scripts/release_candidate_cli.py \

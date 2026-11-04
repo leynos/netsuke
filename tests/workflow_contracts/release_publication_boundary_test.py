@@ -39,6 +39,7 @@ def test_release_sources_import_no_network_client(module: str) -> None:
     "module",
     [
         "scripts/crates_io_transport_cli.py",
+        "scripts/crates_io_registry_http.py",
         "scripts/crates_io_transport_http.py",
     ],
 )

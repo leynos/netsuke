@@ -112,6 +112,41 @@ def _append_retry_metrics(lines: list[str], step: StepState) -> None:
         ))
 
 
+def _publisher_context_lines(
+    # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
+    context: "cabc.Mapping[str, str]",
+) -> list[str]:
+    """Format only the fixed, sanitised publisher context fields.
+
+    Parameters
+    ----------
+    context
+        The bounded context fields selected by ``publisher_context``.
+
+    Returns
+    -------
+    list[str]
+        Markdown list items for context fields that are present.
+
+    Examples
+    --------
+    >>> _publisher_context_lines({"crate_name": "netsuke", "action": "publish"})
+    ['  - `crate_name`: `netsuke`', '  - `action`: `publish`']
+    """
+    fields = (
+        "crate_name",
+        "version",
+        "registry_state",
+        "action",
+        "verification_verdict",
+    )
+    return [
+        f"  - `{field}`: `{value}`"
+        for field in fields
+        if (value := context.get(field)) is not None
+    ]
+
+
 def _render_summary(observation: OperationObservation, error_category: str) -> str:
     """Render the bounded Markdown summary for one sanitised observation.
 
@@ -142,17 +177,7 @@ def _render_summary(observation: OperationObservation, error_category: str) -> s
         f"- Error category: `{error_category}`",
         f"- Upload error output present: `{upload_error_present}`",
     ]
-    context_lines = [
-        f"  - `{field}`: `{value}`"
-        for field in (
-            "crate_name",
-            "version",
-            "registry_state",
-            "action",
-            "verification_verdict",
-        )
-        if (value := observation.context.get(field)) is not None
-    ]
+    context_lines = _publisher_context_lines(observation.context)
     if context_lines:
         lines.extend(("", "- Publisher context:", *context_lines))
     lines.extend(("", "- Phase outcomes:"))
@@ -176,7 +201,11 @@ def render_observation(observation: OperationObservation) -> tuple[str, str]:
         ended_ns=observation.ended_ns,
         steps={phase: _sanitised_step(observation, phase) for phase in phases},
         upload_error_present=observation.upload_error_present,
-        context=publisher_context(observation.context),
+        context=(
+            publisher_context(observation.context)
+            if observation.operation == "publish_crates_io"
+            else {}
+        ),
     )
     error_category = _error_category(safe_observation)
     records = _metric_records(safe_observation, error_category)

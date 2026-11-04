@@ -11,6 +11,7 @@ import urllib.request
 
 import crates_io_upload_metadata
 import pytest
+from crates_io_registry_http import RegistryUrlError, _AllowlistedRequestHandler
 from crates_io_transport_cli import (
     DOWNLOAD_ATTEMPTS,
     EXIT_OK,
@@ -19,7 +20,6 @@ from crates_io_transport_cli import (
     _upload_frame,
     main,
 )
-from crates_io_transport_http import RegistryUrlError, _AllowlistedRequestHandler
 from crates_io_transport_support import FakeOpener
 from crates_io_upload_metadata import MetadataError, MetadataIssue
 from hypothesis import given, settings

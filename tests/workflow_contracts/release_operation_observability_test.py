@@ -13,6 +13,7 @@ repository's 400-line cap.
 Run via ``make test-workflow-contracts``.
 """
 
+import dataclasses
 import json
 import typing as typ
 
@@ -117,6 +118,41 @@ def test_observability_records_fixed_metrics_without_unbounded_data() -> None:
     assert {
         record["phase"] for record in metrics if "phase" in record
     } == expected_phases, "phase metrics must use only fixed release phase labels"
+
+
+def test_non_publisher_observations_omit_publisher_context() -> None:
+    """Keep publisher identity and registry decisions out of staging output."""
+    observation = dataclasses.replace(
+        staging_observation(),
+        context={
+            "package-name": "netsuke-build",
+            "crate-version": "1.2.3",
+            "registry-state": "absent",
+            "action": "publish",
+            "registry-byte-verification-outcome": "success",
+        },
+    )
+
+    summary, jsonl = render_observation(observation)
+    traces = [
+        json.loads(line)
+        for line in jsonl.splitlines()
+        if '"record_type":"trace_event"' in line
+    ]
+
+    assert "- Publisher context:" not in summary, (
+        "staging summaries must not include crates.io publisher context"
+    )
+    assert all(
+        not {
+            "crate_name",
+            "version",
+            "registry_state",
+            "action",
+            "verification_verdict",
+        }.intersection(record)
+        for record in traces
+    ), "staging trace events must not include publisher-only fields"
 
 
 def test_observability_records_bounded_phase_events() -> None:

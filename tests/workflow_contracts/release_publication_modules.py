@@ -43,6 +43,7 @@ SECTION_MODULES = (
 SOURCE_MODULES = (
     "scripts/crates_io_candidate_cli.py",
     "scripts/crates_io_transport_cli.py",
+    "scripts/crates_io_registry_http.py",
     "scripts/crates_io_transport_http.py",
     "scripts/crates_io_upload_metadata.py",
     "scripts/release_candidate.py",
@@ -91,6 +92,7 @@ POLICY_MODULES = (
 ADAPTER_MODULES = (
     "scripts/crates_io_candidate_cli.py",
     "scripts/crates_io_transport_cli.py",
+    "scripts/crates_io_registry_http.py",
     "scripts/crates_io_transport_http.py",
     "scripts/crates_io_upload_metadata.py",
     "scripts/release_candidate_cli.py",
@@ -108,13 +110,14 @@ ADAPTER_MODULES = (
 )
 
 #: Sources whose imports must remain free of network clients. The transport
-#: CLI and HTTP adapter own the network boundary; the CLI uses a fake opener.
+#: CLI and HTTP adapters own the network boundary; policy tests inject fakes.
 NETWORK_FREE_MODULES = tuple(
     module
     for module in SOURCE_MODULES
     if module
     not in {
         "scripts/crates_io_transport_cli.py",
+        "scripts/crates_io_registry_http.py",
         "scripts/crates_io_transport_http.py",
     }
 )

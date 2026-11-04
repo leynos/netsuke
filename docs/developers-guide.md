@@ -2640,7 +2640,10 @@ observation and context functions, not these builders. The publisher
 observability contract's module-scoped `publisher_telemetry` fixture is shared
 only by its focused summary, retry metric, and sensitive-value tests. Keep
 these responsibilities within their owning modules; the record module is
-limited to in-memory metrics and trace construction for this renderer.
+limited to in-memory metrics and trace construction for this renderer. The
+`_publisher_context_lines` helper is private to `_render_summary`; callers
+should use `render_observation` rather than treating Markdown context lines as
+a reusable interface.
 
 ### Package and asset identity
 
@@ -2711,22 +2714,24 @@ state determines whether the workflow exchanges credentials or stops:
 
 *Table 4: crates.io version-state decisions.*
 
-The HTTP adapter permits HTTPS requests only to `crates.io` and
-`static.crates.io`. urllib applies the same host and scheme check to every
-outgoing request, including redirect targets, so a redirected probe cannot
-change the registry observation used for classification. Its `poll_archive`
-helper owns bounded absence and server-error retries only for
-`crates_io_transport_cli.download`; probe and upload retain their single-shot
-request behaviour. The transport CLI remains responsible for writing
-archive/status files and the bounded retry report.
+The `crates_io_registry_http.py` adapter permits HTTPS requests only to
+`crates.io` and `static.crates.io`. urllib applies the same host and scheme
+check to every outgoing request, including redirect targets, so a redirected
+probe cannot change the registry observation used for classification. The
+`crates_io_transport_http.py` adapter captures responses and owns bounded
+absence and server-error retries only for `crates_io_transport_cli.download`;
+probe and upload retain their single-shot request behaviour. The transport CLI
+remains responsible for writing archive/status files and the bounded retry
+report.
 
 Four focused test modules cover this new publisher path:
 `test_crates_io_candidate_cli.py`, `test_crates_io_transport_cli.py`,
 `test_crates_io_transport_properties.py`, and
 `test_crates_io_publish_sequence.py`. The source boundary includes
 `crates_io_candidate_cli.py`, `crates_io_upload_metadata.py`,
-`crates_io_transport_cli.py`, and `crates_io_transport_http.py`; the shared
-crates.io API policy remains in `release_crates_io_adapter.py` under `scripts/`.
+`crates_io_transport_cli.py`, `crates_io_registry_http.py`, and
+`crates_io_transport_http.py`; the shared crates.io API policy remains in
+`release_crates_io_adapter.py` under `scripts/`.
 
 For an absent version, the action reads the packaged `Cargo.toml` and README in
 memory from the `.crate`, derives the registry metadata (including normal,
@@ -2970,9 +2975,9 @@ is deliberate: `import urllib.request`, `from urllib import request`, and
 and, by naming a package, bans its submodules with it.
 
 `test_release_sources_import_no_network_client` applies that predicate to
-`NETWORK_FREE_MODULES`, the source list with `crates_io_transport_cli.py` and
-`crates_io_transport_http.py` excluded.
-`test_transport_sources_are_the_only_network_sources` names those two allowed
+`NETWORK_FREE_MODULES`, the source list with the registry transport CLI and
+both HTTP adapters excluded.
+`test_transport_sources_are_the_only_network_sources` names those three allowed
 transport modules. The same contract applies `policy_boundary_offenders` to the
 pure `POLICY_MODULES` list, rejecting file, serialization, HTTP-status, and
 provider-format work there. Both detectors have positive controls, so either

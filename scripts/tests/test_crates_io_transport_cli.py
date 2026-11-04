@@ -8,15 +8,15 @@ import urllib.request
 import urllib.response
 from email.message import Message
 
-import crates_io_transport_http
+import crates_io_registry_http
 import pytest
+from crates_io_registry_http import RegistryUrlError
 from crates_io_transport_cli import (
     DOWNLOAD_ATTEMPTS,
     EXIT_OK,
     EXIT_UPLOAD_FAILED,
     main,
 )
-from crates_io_transport_http import RegistryUrlError
 from crates_io_transport_support import (
     FakeOpener,
     FakeResponse,
@@ -39,7 +39,7 @@ REGISTRY_PREFIX = "https://crates.io/api/v1/crates/"
 def test_build_request_rejects_an_unallowlisted_initial_url() -> None:
     """Reject a non-registry destination at the public request builder."""
     with pytest.raises(RegistryUrlError):
-        crates_io_transport_http.build_request(
+        crates_io_registry_http.build_request(
             "https://attacker.example/forged-response", headers={}
         )
 
@@ -48,7 +48,7 @@ def test_default_opener_rejects_an_unallowlisted_redirect_target(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Apply the installed request handler to a real urllib redirect chain."""
-    opener = typ.cast("HandlerListOwner", crates_io_transport_http._HTTP_OPENER)
+    opener = typ.cast("HandlerListOwner", crates_io_registry_http._HTTP_OPENER)
     https_handler = next(
         handler
         for handler in opener.handlers
@@ -84,12 +84,12 @@ def test_default_opener_rejects_an_unallowlisted_redirect_target(
         return response
 
     monkeypatch.setattr(https_handler, "https_open", redirect_response)
-    request = crates_io_transport_http.build_request(
+    request = crates_io_registry_http.build_request(
         f"{REGISTRY_PREFIX}{CRATE_NAME}/{VERSION}", headers={}
     )
 
     with pytest.raises(RegistryUrlError):
-        crates_io_transport_http.default_opener(request, timeout=1.0)
+        crates_io_registry_http.default_opener(request, timeout=1.0)
 
 
 def _registry_args(operation: str, paths: dict[str, pathlib.Path]) -> list[str]:

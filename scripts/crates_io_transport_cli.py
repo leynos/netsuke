@@ -1,8 +1,8 @@
 """Drive bounded crates.io probe, download, and upload commands.
 
-The HTTP adapter owns request construction and response capture; this CLI
-writes observations for offline policy commands. Injected external boundaries
-keep the commands testable without process-wide environment mutation.
+The registry HTTP adapter owns request construction and redirect policy; the
+transport HTTP adapter captures responses. This CLI writes observations for
+offline policy commands and injects testable external boundaries.
 
 >>> _upload_frame(b"{}", b"archive")[:4] == struct.pack("<I", 2)
 True
@@ -20,6 +20,7 @@ import sys
 import time
 import urllib.parse
 
+import crates_io_registry_http
 import crates_io_transport_http
 import release_crates_io_adapter
 
@@ -35,7 +36,7 @@ MAX_FRAME_LENGTH = (1 << 32) - 1
 REGISTRY_API = "https://crates.io/api/v1"
 
 
-type Opener = cabc.Callable[..., crates_io_transport_http.HttpResponse]
+type Opener = cabc.Callable[..., crates_io_registry_http.HttpResponse]
 type Environment = cabc.Mapping[str, str]
 type Sleeper = cabc.Callable[[float], None]
 
@@ -92,7 +93,7 @@ def probe(request_data: ProbeRequest) -> int:
     int
         ``EXIT_OK`` or ``EXIT_TRANSPORT_ERROR``.
     """
-    request = crates_io_transport_http.build_request(
+    request = crates_io_registry_http.build_request(
         _probe_url(request_data.crate, request_data.version),
         headers=release_crates_io_adapter.required_headers(),
     )
@@ -127,7 +128,7 @@ def download(request_data: DownloadRequest) -> int:
     If all attempts lack a response, write status ``0`` and empty bytes for the
     offline verifier to reject.
     """
-    request = crates_io_transport_http.build_request(
+    request = crates_io_registry_http.build_request(
         release_crates_io_adapter.download_url(
             request_data.crate, request_data.version
         ),
@@ -238,7 +239,7 @@ def upload(
     payload = _upload_payload(metadata_path, archive_path)
     if payload is None:
         return EXIT_UPLOAD_FAILED
-    request = crates_io_transport_http.build_request(
+    request = crates_io_registry_http.build_request(
         f"{REGISTRY_API}/crates/new",
         data=payload,
         headers={
@@ -325,7 +326,7 @@ def main(
         arguments = build_parser().parse_args(argv)
     except SystemExit as error:
         return EXIT_OK if error.code == 0 else EXIT_USAGE
-    selected_opener = opener or crates_io_transport_http.default_opener
+    selected_opener = opener or crates_io_registry_http.default_opener
     if arguments.command == "probe":
         return probe(
             ProbeRequest(
