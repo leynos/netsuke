@@ -12,6 +12,9 @@ mod emoji;
 mod emoji_pty;
 #[path = "terminal_rendering/json.rs"]
 mod json;
+#[cfg(unix)]
+#[path = "terminal_rendering/json_pty.rs"]
+mod json_pty;
 #[path = "terminal_rendering/progress.rs"]
 mod progress;
 #[cfg(unix)]

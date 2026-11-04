@@ -4,12 +4,13 @@ use anyhow::{Context, Result};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::locale_resolution::{LocaleEnvProvider, SystemEnv};
-use std::{path::Path, process::Command, time::Duration};
+#[cfg(unix)]
+use std::time::Duration;
+use std::{path::Path, process::Command};
 use tempfile::{TempDir, tempdir};
-use test_support::{
-    ninja_script::write_fake_ninja_script,
-    terminal::{Attach, PtyOutput, PtyRequest, run_in_pty},
-};
+use test_support::ninja_script::write_fake_ninja_script;
+#[cfg(unix)]
+use test_support::terminal::{Attach, PtyOutput, PtyRequest, run_in_pty};
 
 /// Stage labels emitted by a successful `generate` command in English.
 pub const STAGE_LABELS: [&str; 6] = [

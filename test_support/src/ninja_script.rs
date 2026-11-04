@@ -94,27 +94,32 @@ pub fn write_fake_ninja_script(
 /// ```ignore
 /// make_script_executable(&directory, Utf8Path::new("ninja"))?;
 /// ```
-#[cfg_attr(
-    not(unix),
-    expect(
-        clippy::unnecessary_wraps,
-        reason = "the signature matches the Unix implementation, whose permission change can fail"
-    )
-)]
+#[cfg(unix)]
 fn make_script_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
-    #[cfg(unix)]
-    {
-        let mut permissions = dir
-            .metadata(path)
-            .with_context(|| format!("read metadata for {path}"))?
-            .permissions();
-        permissions.set_mode(0o755);
-        dir.set_permissions(path, permissions)
-            .with_context(|| format!("set executable bit for {path}"))?;
-    }
+    let mut permissions = dir
+        .metadata(path)
+        .with_context(|| format!("read metadata for {path}"))?
+        .permissions();
+    permissions.set_mode(0o755);
+    dir.set_permissions(path, permissions)
+        .with_context(|| format!("set executable bit for {path}"))?;
+    Ok(())
+}
 
-    #[cfg(not(unix))]
-    let _ = (dir, path);
-
+/// Leave fake Ninja permissions unchanged on platforms without executable bits.
+///
+/// # Examples
+///
+/// ```ignore
+/// make_script_executable(&directory, Utf8Path::new("ninja"))?;
+/// ```
+///
+/// The operation returns `Ok(())` without changing file permissions.
+#[cfg(not(unix))]
+#[expect(
+    clippy::unnecessary_wraps,
+    reason = "the signature matches the Unix implementation, whose permission change can fail"
+)]
+const fn make_script_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
     Ok(())
 }
