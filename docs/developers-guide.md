@@ -2516,13 +2516,20 @@ that split as well as the no-network rule.
 
 Private helpers in `scripts/crates_io_candidate_cli.py` and
 `scripts/crates_io_upload_metadata.py` compose only their module's candidate
-validation or metadata operation. Candidate-manifest parsing checks the
-expected member identity; metadata-manifest parsing applies the sole-manifest
-and README rules. Workflow reachability helpers stay within their contract
-module, and the common transport argument builder stays in its test module. The
-environment normalizers in `scripts/release_operation_observability.py` also
-remain private to that entry point; other release scripts consume its typed
-`OperationObservation` rather than parsing workflow keys themselves.
+validation or metadata operation. `scripts/crates_io_candidate_archive.py` owns
+the tar and TOML boundary: `archive_and_crate` selects the sole recorded
+`.crate`, and `read_packaged_manifest` parses its `Cargo.toml` and requires the
+packaged package name and version to match. The command-line module composes
+that adapter with its own identity, digest, and release-mode checks.
+`scripts/crates_io_candidate_errors.py` holds the shared `CandidateIssue` and
+`CandidateError` vocabulary, so every rejection carries one stable category
+rather than a format-specific exception. Metadata-manifest parsing applies the
+sole-manifest and README rules. Workflow reachability helpers stay within their
+contract module, and the common transport argument builder stays in its test
+module. The environment normalizers in
+`scripts/release_operation_observability.py` also remain private to that entry
+point; other release scripts consume its typed `OperationObservation` rather
+than parsing workflow keys themselves.
 
 ### The release job graph
 
@@ -2763,6 +2770,7 @@ the delay between retries, and the status window that ends a poll early; the
 shared argument builders both transport suites drive live in
 `crates_io_transport_support.py` so a flag change reaches them together. The
 source boundary includes `crates_io_candidate_cli.py`,
+`crates_io_candidate_archive.py`, `crates_io_candidate_errors.py`,
 `crates_io_upload_metadata.py`, `crates_io_transport_cli.py`,
 `crates_io_registry_http.py`, and `crates_io_transport_http.py`; the shared
 crates.io API policy remains in `release_crates_io_adapter.py` under `scripts/`.

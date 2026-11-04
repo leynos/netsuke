@@ -91,6 +91,19 @@ The workflow supplies `7` when the value is omitted or empty. The resolved
 version is used for Windows WiX packaging. The Python resolver rejects an
 unexpectedly empty value and values containing carriage returns or line feeds.
 
+Before the `package-crate` job uploads its artefact, the action validates the
+retained candidate offline. It requires the package identity, the single
+recorded `.crate`, its SHA-256 digest, and the `Cargo.toml` inside the archive
+to agree with the run. A pull-request dry run is checked as a rehearsal and
+must record no release tag; a publishing run supplies the tag, and the identity
+must record exactly that tag. This step never contacts the registry.
+
+When a publication is interrupted, rerun the crates.io publisher job. It
+re-probes the registry before any mutation: an absent version is published from
+the retained bytes, an identical version skips the upload and verifies the
+downloaded archive against the packaged digest, and a conflicting or yanked
+version, or an indeterminate response, stops without changing the registry.
+
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
 in v0.1.0-beta4. Windows PowerShell help files are published beside each MSI as
