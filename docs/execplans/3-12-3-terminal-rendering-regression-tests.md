@@ -338,6 +338,18 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   tests (7 skipped) plus doctests, Markdown lint (217 files, zero issues), and
   Nixie. The host sccache was unavailable during tests; healthy admission ran
   the test binaries uncached.
+- [x] (2026-11-04) Completed EP-M2 commit 3: added the
+  pure `display_plan` core, its public re-export, and the 5,184-case sweep with
+  an extracted independent truth model. The focused sweep passed 1/1 and the
+  plan unit cases passed 14/14. Three seeded faults were detected with 288,
+  864, and 1,080 mismatching points respectively. The initial `auto == always`
+  assertion also compared a `never` input with `always`; narrowed it to the
+  `auto` policy coordinate, as D3 requires. Clippy then exposed long test
+  helpers, indexed coverage arrays, and a boolean-heavy expected-value struct;
+  split the sweep into named helpers, used bitsets for coverage, and grouped
+  progress expectations. All seven serial candidate gates passed: check-fmt,
+  lint, doc coverage (98.35%), typecheck, 5,117 tests (7 skipped) plus
+  doctests, Markdown lint (217 files, zero issues), and Nixie.
 - [x] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; the
@@ -1382,6 +1394,26 @@ verbose-colalways-pipe             sgr=0    cursor=0
 help-colnever-tty                  sgr=113  cursor=0
 help-nocolor-tty                   sgr=0    cursor=0
 ```
+
+EP-M2 commit 3 red-green evidence, 2026-11-04: the focused command
+`cargo nextest run --test cli_tests -E 'test(display_plan)'` passed 1/1 on the
+clean candidate
+(`/tmp/display-plan-focused-7d2cdc6e-6293-4c60-8e07-9edea901ad54.out`); the
+plan unit tests passed 14/14
+(`/tmp/display-plan-unit-7d2cdc6e-6293-4c60-8e07-9edea901ad54.out`). Deliberate
+faults made the same sweep report 288 mismatches after exchanging the
+`NO_COLOR` and `TERM=dumb` facts for mode resolution, 864 after enabling colour
+for `ColourPolicy::Never`, and 1,080 after ignoring `stdout_is_terminal` for
+task updates. Their logs are
+`/tmp/display-plan-seed-signal-swap-7d2cdc6e-6293-4c60-8e07-9edea901ad54.out`,
+`/tmp/display-plan-seed-never-colour-7d2cdc6e-6293-4c60-8e07-9edea901ad54.out`,
+and
+`/tmp/display-plan-seed-stdout-fact-7d2cdc6e-6293-4c60-8e07-9edea901ad54.out`.
+Each seeded production fault was reverted before the next experiment. The full
+gate logs for the clean candidate use the `-3.out` suffix: `check-fmt`, `lint`,
+`doc-coverage`, `typecheck`, `test`, `markdownlint`, and `nixie`. Doc coverage
+measured 98.35%; nextest passed 5,117 tests with 7 skipped, and doctests
+passed. The earlier Nixie temporary-directory failure did not recur.
 
 ## Interfaces and dependencies
 
