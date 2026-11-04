@@ -13,6 +13,7 @@ from crates_io_candidate_support import (
     PACKAGE_NAME,
     TAG,
     VERSION,
+    CandidateOverrides,
     archive_bytes,
     manifest_text,
     write_candidate,
@@ -143,7 +144,9 @@ def test_check_rejects_rehearsal_and_identity_mismatches(
         "bin_name": BIN_NAME,
     }
     identity[mismatch.identity_field] = mismatch.identity_value
-    record, _ = write_candidate(tmp_path, identity=identity)
+    record, _ = write_candidate(
+        tmp_path, overrides=CandidateOverrides(identity=identity)
+    )
     output = tmp_path / "candidate.json"
     expectation = dataclasses.replace(
         CheckExpectation(), **{mismatch.expectation_field: mismatch.expectation_value}
@@ -165,7 +168,9 @@ def test_check_rejects_non_flat_archive_basename(
     tmp_path: pathlib.Path, crate_name: str
 ) -> None:
     """Validate the recorded basename before joining it to the artifact path."""
-    record, _ = write_candidate(tmp_path, crate_name=crate_name)
+    record, _ = write_candidate(
+        tmp_path, overrides=CandidateOverrides(crate_name=crate_name)
+    )
     output = tmp_path / "candidate.json"
 
     assert main(_check_args(record, tmp_path, output)) == EXIT_REJECTED, (
@@ -190,7 +195,10 @@ def test_check_refuses_digest_and_packaged_manifest_mismatches(
 ) -> None:
     """Require the candidate digest and packaged Cargo identity to agree."""
     record, _ = write_candidate(
-        tmp_path, crate_bytes=archive_bytes(manifest_version="9.9.9")
+        tmp_path,
+        overrides=CandidateOverrides(
+            crate_bytes=archive_bytes(manifest_version="9.9.9")
+        ),
     )
     output = tmp_path / "candidate.json"
 

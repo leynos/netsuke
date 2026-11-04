@@ -7,6 +7,7 @@ malformed recorded digests, and the three packaged-README selection outcomes.
 It lives apart so each module stays within the repository's file-length cap.
 """
 
+import dataclasses
 import json
 import typing as typ
 
@@ -17,6 +18,7 @@ from crates_io_candidate_support import (
     PACKAGE_NAME,
     TAG,
     VERSION,
+    CandidateOverrides,
     archive_bytes,
     manifest_text,
     write_candidate,
@@ -29,16 +31,34 @@ if typ.TYPE_CHECKING:
 EXPECTED_README = "# Netsuke\n\nPackaged documentation.\n"
 
 
-def _check_args(
-    record: pathlib.Path, directory: pathlib.Path, output: pathlib.Path
-) -> list[str]:
+@dataclasses.dataclass(frozen=True, slots=True)
+class CandidatePaths:
+    """Carry the three filesystem roles the candidate CLI is given.
+
+    The record and the archive directory are always the fixture's own identity
+    record and its parent directory, while the output path names a file the run
+    must not create. Keeping them together means the rejection helper takes one
+    argument per concern instead of one per path.
+    """
+
+    record: pathlib.Path
+    directory: pathlib.Path
+    output: pathlib.Path
+
+
+def _fixture_paths(record: pathlib.Path, directory: pathlib.Path) -> CandidatePaths:
+    """Pair a fixture record with the conventional candidate output path."""
+    return CandidatePaths(record, directory, directory / "candidate.json")
+
+
+def _check_args(paths: CandidatePaths) -> list[str]:
     """Build the validated-candidate CLI invocation for the fixture identity."""
     return [
         "check",
         "--identity",
-        str(record),
+        str(paths.record),
         "--archive-directory",
-        str(directory),
+        str(paths.directory),
         "--tag",
         TAG,
         "--commit",
@@ -48,23 +68,21 @@ def _check_args(
         "--version",
         VERSION,
         "--output",
-        str(output),
+        str(paths.output),
     ]
 
 
 def _assert_rejected_without_output(
-    capsys: pytest.CaptureFixture[str],
-    record: pathlib.Path,
-    directory: pathlib.Path,
-    output: pathlib.Path,
-    expected: str,
+    capsys: pytest.CaptureFixture[str], paths: CandidatePaths, expected: str
 ) -> None:
     """Require a classified rejection that leaves no candidate record."""
-    assert main(_check_args(record, directory, output)) == EXIT_REJECTED, (
+    assert main(_check_args(paths)) == EXIT_REJECTED, (
         f"reject the candidate for {expected!r}"
     )
     assert expected in capsys.readouterr().err, f"report {expected!r} as the reason"
-    assert not output.exists(), "a rejected candidate must not write an output record"
+    assert not paths.output.exists(), (
+        "a rejected candidate must not write an output record"
+    )
 
 
 def test_check_rejects_symlinked_archive(
@@ -79,11 +97,7 @@ def test_check_rejects_symlinked_archive(
     archive.symlink_to(target)
 
     _assert_rejected_without_output(
-        capsys,
-        record,
-        tmp_path,
-        tmp_path / "candidate.json",
-        "not a regular file",
+        capsys, _fixture_paths(record, tmp_path), "not a regular file"
     )
 
 
@@ -96,11 +110,7 @@ def test_check_rejects_directory_named_like_the_archive(
     archive.mkdir()
 
     _assert_rejected_without_output(
-        capsys,
-        record,
-        tmp_path,
-        tmp_path / "candidate.json",
-        "not a regular file",
+        capsys, _fixture_paths(record, tmp_path), "not a regular file"
     )
 
 
@@ -114,11 +124,7 @@ def test_check_rejects_missing_identity_object(
     _ = record.write_text(json.dumps(payload), encoding="utf-8")
 
     _assert_rejected_without_output(
-        capsys,
-        record,
-        tmp_path,
-        tmp_path / "candidate.json",
-        "has no identity object",
+        capsys, _fixture_paths(record, tmp_path), "has no identity object"
     )
 
 
@@ -143,15 +149,13 @@ def test_check_rejects_malformed_recorded_digests(
         sha256 = "g" * 64
     else:
         sha256 = None
-    record, _ = write_candidate(tmp_path, sha256=sha256)
+    record, _ = write_candidate(tmp_path, overrides=CandidateOverrides(sha256=sha256))
     if sha256 is None:
         payload = json.loads(record.read_text(encoding="utf-8"))
         del payload["sha256"]
         _ = record.write_text(json.dumps(payload), encoding="utf-8")
 
-    _assert_rejected_without_output(
-        capsys, record, tmp_path, tmp_path / "candidate.json", expected
-    )
+    _assert_rejected_without_output(capsys, _fixture_paths(record, tmp_path), expected)
 
 
 def _metadata_archive(
