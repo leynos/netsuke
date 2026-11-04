@@ -77,7 +77,7 @@ Current responsibilities span
 [`cmd_interpolate`](../../src/ir/cmd_interpolate/mod.rs),
 [`shell_word`](../../src/shell_word.rs),
 [`recipe_shell`](../../src/recipe_shell.rs),
-[`ninja_gen::recipe_shell`](../../src/ninja_gen/recipe_shell.rs), and the
+[`ninja_gen::recipe_shell`](../../src/ninja_gen/recipe_shell/mod.rs), and the
 [`glob` adapter](../../src/manifest/glob/mod.rs). The linter also has a
 [`shellscan`](../../src/lint/rules/shellscan/mod.rs) module. Its advisory
 analysis MUST NOT become a second authority for executable-recipe admission.
