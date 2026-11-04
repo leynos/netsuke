@@ -267,8 +267,22 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   are superseded and the branch kept its fake-Ninja promotion plus the new
   normalization helpers. The full gate set is being rerun on the rebased
   candidate.
+- [x] (2026-11-04) Rebased again onto the verified PR target,
+  `origin/main` at `a6009675e017303367cd2821837af2cebf5b94cd`. Resolved the
+  `test_support/src/lib.rs` conflict by retaining both the target's
+  `temp_path_filter` and this branch's fake-Ninja and terminal modules; kept
+  the target-side lockfile and regenerated it with `make typecheck`. All eight
+  post-rebase gates passed on `a9ba648db2dbec89df8d82fbc3fbecfa261ad4a0`:
+  `make check-fmt`, `make lint`, `make doc-coverage` (98.33%), `make typecheck`,
+  `make test` (5,078 passed, 7 skipped; doctests passed), `make markdownlint`
+  (217 files, zero issues), `make nixie`, and `make test-workflow-contracts`
+  (1,666 passed, 3 skipped, plus 28 passed). The worktree was clean. The EP-M0
+  PTY smoke test still needs its idle-pool run; its loaded-host run passed
+  earlier.
 - [ ] EP-M0: terminal test harness.
-- [ ] EP-M1: regression suite for already-correct behaviour.
+- [x] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
+  cases and 20-run loaded-host stress evidence are recorded above; the full
+  post-rebase suite also passed.
 - [ ] EP-M2: display-plan core and single resolution.
 - [ ] EP-M3: bind colour and glyph decisions to the emitters.
 - [ ] EP-M4: contract snapshots, pinning scenarios, documentation, ADR,
