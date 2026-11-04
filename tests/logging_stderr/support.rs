@@ -9,6 +9,9 @@ use std::path::Path;
 use tempfile::{TempDir, tempdir};
 pub(super) use test_support::ninja_script::write_fake_ninja_script;
 
+#[cfg(unix)]
+use crate::command_list_failure_support::FAILURE_PREFIX;
+
 #[fixture]
 pub(super) fn temp_with_minimal_manifest() -> Result<TempDir> {
     let temp = tempdir().context("create temp dir")?;
@@ -33,41 +36,54 @@ pub(super) fn open_workspace(temp: &TempDir) -> Result<Dir> {
         .with_context(|| format!("open temporary workspace {workspace_path}"))
 }
 
-/// Return a stable diagnostic fragment with its fingerprints replaced.
 #[cfg(unix)]
-pub(super) fn normalized_diagnostic_fragment(
-    message: &str,
-    identifying_field: &str,
-) -> Option<String> {
-    let line = message
-        .lines()
-        .find(|line| line.contains(identifying_field))?;
-    let start = line.find(identifying_field)?;
-    Some(normalize_fingerprints(line.get(start..)?))
-}
-
-/// Select the rendered human error and replace its action fingerprint.
-#[cfg(unix)]
-pub(super) fn normalized_human_error_fragment(
-    message: &str,
-    failure_prefix: &str,
-) -> Option<String> {
-    let error = human_error_fragment(message, failure_prefix)?;
-    let diagnostic_start = error.find("ninja exited with")?;
-    Some(normalize_fingerprints(error.get(diagnostic_start..)?))
-}
-
-/// Return the rendered human error line carrying command-list attribution.
-#[cfg(unix)]
-pub(super) fn human_error_fragment<'message>(
+pub(super) struct CommandListDiagnostics<'message> {
     message: &'message str,
-    failure_prefix: &str,
-) -> Option<&'message str> {
-    message.lines().find(|line| {
-        line.contains("Error:")
-            && line.contains("ninja exited with")
-            && line.contains(failure_prefix)
-    })
+}
+
+#[cfg(unix)]
+impl<'message> CommandListDiagnostics<'message> {
+    /// Wrap captured output for command-list diagnostic projections.
+    pub(super) const fn new(message: &'message str) -> Self {
+        Self { message }
+    }
+
+    /// Return the rendered human error line carrying command-list attribution.
+    pub(super) fn human_error_fragment(&self) -> Option<&'message str> {
+        self.message.lines().find(|line| {
+            line.contains("Error:")
+                && line.contains("ninja exited with")
+                && line.contains(FAILURE_PREFIX)
+        })
+    }
+
+    /// Return a stable human error fragment with its fingerprint replaced.
+    pub(super) fn normalized_human_error_fragment(&self) -> Option<String> {
+        let error = self.human_error_fragment()?;
+        let diagnostic_start = error.find("ninja exited with")?;
+        Some(normalize_fingerprints(error.get(diagnostic_start..)?))
+    }
+
+    /// Return a stable JSON failure marker with its fingerprint replaced.
+    pub(super) fn normalized_failure_marker_fragment(&self) -> Option<String> {
+        let line = self
+            .message
+            .lines()
+            .find(|line| line.contains(FAILURE_PREFIX))?;
+        let start = line.find(FAILURE_PREFIX)?;
+        Some(normalize_fingerprints(line.get(start..)?))
+    }
+
+    /// Return a stable tracing action field with its fingerprint replaced.
+    pub(super) fn normalized_tracing_fragment(&self) -> Option<String> {
+        const ACTION_FIELD: &str = "command_list_action=";
+        let line = self
+            .message
+            .lines()
+            .find(|line| line.contains(ACTION_FIELD))?;
+        let start = line.find(ACTION_FIELD)?;
+        Some(normalize_fingerprints(line.get(start..)?))
+    }
 }
 
 /// Replace every fixed-width hexadecimal fingerprint in a diagnostic fragment.
