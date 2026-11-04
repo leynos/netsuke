@@ -917,7 +917,8 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Conformance check: no long-lived token; checkout uses
   `persist-credentials: false`; only the upload step receives the exchanged
   token; no package rebuild occurs in the publisher; the offline rehearsal step
-  reaches no registry endpoint and holds no credential.
+  holds no credential and its shell text names no credential flag, fetch tool,
+  or registry URL.
 - Recovery: rerun the failed publisher job in the same workflow run. It reuses
   `release-crate-package` and probes again before deciding whether to upload; a
   version that was published before the interruption classifies as `identical`,

@@ -45,6 +45,7 @@ SECTION_MODULES = (
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
 SOURCE_MODULES = (
+    "scripts/crates_io_candidate_archive.py",
     "scripts/crates_io_candidate_cli.py",
     "scripts/crates_io_transport_cli.py",
     "scripts/crates_io_registry_http.py",
@@ -94,6 +95,7 @@ POLICY_MODULES = (
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
 ADAPTER_MODULES = (
+    "scripts/crates_io_candidate_archive.py",
     "scripts/crates_io_candidate_cli.py",
     "scripts/crates_io_transport_cli.py",
     "scripts/crates_io_registry_http.py",

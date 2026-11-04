@@ -52,6 +52,17 @@ def archive_and_crate(
         If the recorded name is not a flat ``.crate`` basename, the directory
         does not hold exactly that archive, or the archive is not a regular
         file.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     root = Path(directory)
+    ...     _ = (root / "netsuke-1.2.3.crate").write_bytes(b"archive")
+    ...     crate, path = archive_and_crate({"crate": "netsuke-1.2.3.crate"}, root)
+    ...     print(crate, path.name, path.is_file())
+    netsuke-1.2.3.crate netsuke-1.2.3.crate True
     """
     crate = _crate_basename(record)
     archives = sorted(directory.glob("*.crate"))

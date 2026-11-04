@@ -189,4 +189,5 @@ publisher repeats the check after downloading the artefact, so an interrupted
 publication can be rerun: the second probe observes `identical`, skips the
 upload, and verifies the public bytes. Both the resume sequence and the
 rehearsal boundary are held by tests, the latter as a workflow-contract
-assertion that the offline step reaches no registry endpoint.
+assertion that the offline step's shell text names no credential flag, fetch
+tool, or registry URL.

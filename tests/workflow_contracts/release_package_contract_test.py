@@ -234,7 +234,10 @@ def _assert_candidate_step(
     assert re.search(
         r'false\)\s+(release_mode=\(--tag "\$RELEASE_TAG"\))', run, re.MULTILINE
     ), "a publishing run must validate the candidate against its release tag"
-    for forbidden in ("--token", "curl", "crates.io/api"):
+    # A denylist over the whole step, not only the tokenized command: a later
+    # line could otherwise add its own fetch. It catches the named routes, so
+    # it supports the offline claim without being a proof of it.
+    for forbidden in ("--token", "TOKEN", "curl", "wget", "http", "crates.io"):
         assert forbidden not in run, (
             f"the offline candidate step must not reach the registry: {forbidden}"
         )
