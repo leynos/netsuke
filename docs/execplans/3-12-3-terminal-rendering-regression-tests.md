@@ -319,6 +319,13 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   unnecessary gate; all seven serial candidate gates passed, including doc
   coverage (98.33%) and 5,094 tests plus doctests. Markdown lint reported zero
   issues across 217 files, and Nixie passed.
+- [x] (2026-11-04) Completed EP-M2 commit 1: moved process-wide tracing setup
+  into `src/main_tracing/mod.rs` and extracted the shared pre-clap option-value
+  scanner. Updated `config_load` to use the relocated filter setter and kept
+  `SubscriberExt` available to the existing test module under `cfg(test)`; test
+  source and behaviour remain unchanged. All seven serial gates passed:
+  check-fmt, lint, doc coverage (98.33%), typecheck, test (5,094 passed, 7
+  skipped; doctests passed), markdownlint (217 files, zero issues), and Nixie.
 - [x] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; the
