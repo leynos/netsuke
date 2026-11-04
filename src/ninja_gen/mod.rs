@@ -56,6 +56,9 @@ macro_rules! write_flag {
     };
 }
 
+/// Name Ninja's built-in pool shared by edge rendering and validation.
+const CONSOLE_POOL: &str = "console";
+
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
 mod edge_metadata;

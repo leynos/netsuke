@@ -1,7 +1,7 @@
 //! Validate recipes and metadata before Ninja rendering.
 
 use super::command_list::{CommandListEntry, CommandListEntryError, command_list_entry_error};
-use super::{NinjaGenError, RecipeShell, escape::validate_ninja_value};
+use super::{CONSOLE_POOL, NinjaGenError, RecipeShell, escape::validate_ninja_value};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
 use crate::ir::{Action, BuildEdge, BuildGraph};
 use crate::localization::{self, keys};
@@ -44,7 +44,7 @@ fn validate_console_edge(edge: &BuildEdge, action: &Action) -> Result<(), NinjaG
     }
     if let Some(pool) = action.pool.as_deref() {
         validate_ninja_value(pool)?;
-        if pool != "console" {
+        if pool != CONSOLE_POOL {
             return Err(NinjaGenError::ConsolePoolConflict {
                 message: localization::message(keys::NINJA_GEN_CONSOLE_POOL_CONFLICT)
                     .with_arg("output", &output)
