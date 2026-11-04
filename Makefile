@@ -407,6 +407,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
 		scripts/tests/test_crates_io_candidate_cli.py \
 		scripts/tests/test_crates_io_candidate_guards.py \
+		scripts/tests/test_crates_io_candidate_metadata.py \
 		scripts/tests/test_crates_io_transport_cli.py \
 		scripts/tests/test_crates_io_transport_upload.py \
 		scripts/tests/test_crates_io_transport_properties.py \
