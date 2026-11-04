@@ -313,7 +313,7 @@ records and are unchanged.
 
 The evaluation adopted Option B, narrowed to the external-shape seams, and
 recorded it as
-[ADR-0068](../adrs/adr-0068-typed-records-for-release-policy-boundaries.md).
+[ADR-0071](../adrs/adr-0071-typed-records-for-release-policy-boundaries.md).
 Two records now cross the boundary: `StagingTargets` (with `StagingTarget`
 entries) in `release_declaration`, and `DigestRecord` in
 `release_digest_record`. `release_declaration_cli` owns the `targets` and
