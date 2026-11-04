@@ -8,9 +8,11 @@ previous target `9bfb3e117`, with the deterministic gate set re-run on the
 rebased head. Review found one edge case where the new record refuses an empty
 `platform` string earlier than the old policy did; the tightening is recorded
 under *Outcomes and retrospective* and pinned by a malformed-configuration
-case. CodeRabbit reported no findings on the final review before the first
-rebase. Draft pull request [#1052](https://github.com/leynos/netsuke/pull/1052)
-carries the branch for maintainer review; merging is outside this plan's scope.
+case. CodeRabbit reported no findings on its first review, then raised the
+record invariants, a duplicate adapter check, and a property-test gap on review
+of the rebased head; all three are addressed. Draft pull request
+[#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
+maintainer review; merging is outside this plan's scope.
 
 ## Purpose
 
@@ -296,8 +298,16 @@ records and are unchanged.
       refuses an empty record with the same message on every construction
       path, so `_asset_mapping` keeps only the member name and the mapping
       shape checks. The `_string_keyed` note that called its check necessary
-      for `sorted` was wrong, because `_validated_entry` refuses a non-string
+      for `sorted` was wrong because `_validated_entry` refuses a non-string
       key in the same message before sorting; the docstring now says so.
+- [x] Answer the `Testing (Property / Proof)` pre-merge warning from the same
+      review, which asked for generated coverage of `DigestRecord`. Two
+      Hypothesis properties now assert that a non-empty mapping of arbitrary
+      size, case, and insertion order normalizes to lowercase, keeps exactly
+      the declared names, and sorts by name, and that a canonical direct
+      construction equals the factory's record. Both properties were checked
+      against a mutant that drops the factory's sort: each fails on it, so the
+      evidence is a detected defect rather than a green run beside the code.
 
 ## Outcomes and retrospective
 
