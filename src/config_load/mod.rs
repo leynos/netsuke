@@ -13,9 +13,10 @@ use std::{
     time::Duration,
 };
 
+use super::main_tracing::set_tracing_filter;
 use super::{
-    DiagMode, StartupWriter, diagnostic_json, observability, set_tracing_filter,
-    settle_startup_diagnostics, startup_filter,
+    DiagMode, StartupWriter, diagnostic_json, observability, settle_startup_diagnostics,
+    startup_filter,
 };
 
 /// Cached diagnostic resolution carried into the full configuration merge.

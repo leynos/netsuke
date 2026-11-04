@@ -13,12 +13,13 @@ use netsuke::{
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
-use std::io::{self, IsTerminal, Write};
+use std::io::{self, Write};
 use std::process::ExitCode;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{Registry, fmt, reload};
+// Keep the subscriber extension visible to src/tests.rs through `use super::*`.
+#[cfg(test)]
+use tracing_subscriber::layer::SubscriberExt;
 
 use monotony::{MonotonicClock, StdMonotonicClock};
 /// Selects whether diagnostics render as human text or JSON documents.
@@ -43,6 +44,8 @@ impl DiagMode {
 }
 
 mod observability;
+
+mod main_tracing;
 
 mod startup_tracing;
 
@@ -104,7 +107,7 @@ fn main() -> ExitCode {
         config_env: &config_env,
     };
     let startup_writer = StartupWriter::buffering();
-    init_tracing(LevelFilter::WARN, startup_writer.clone());
+    main_tracing::init_tracing(LevelFilter::WARN, startup_writer.clone());
     run_with_args(args, &dependencies, &startup_writer)
 }
 
@@ -219,9 +222,6 @@ fn run_cli(
     }
 }
 
-/// Handle for adjusting the installed subscriber's level after startup.
-static TRACING_FILTER: OnceLock<reload::Handle<LevelFilter, Registry>> = OnceLock::new();
-
 /// Choose the stderr verbosity for `mode`.
 ///
 /// JSON mode silences tracing entirely so stderr carries only the diagnostic
@@ -238,39 +238,6 @@ const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
         LevelFilter::TRACE
     } else {
         LevelFilter::WARN
-    }
-}
-
-/// Install the process-wide subscriber with a reloadable level filter set to
-/// `initial`.
-///
-/// Only the first call installs; later calls are ignored so exactly one global
-/// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
-/// rather than by installing a second subscriber. Events go to `writer`, which
-/// buffers until the effective mode is known and then releases to stderr or
-/// discards — never to stdout, so a JSON document is never interleaved.
-fn init_tracing(initial: LevelFilter, writer: StartupWriter) {
-    let (filter, handle) = reload::Layer::new(initial);
-    if Registry::default()
-        .with(filter)
-        .with(
-            fmt::layer()
-                .with_writer(writer)
-                // Colour only a terminal; piped or redirected logs stay plain so
-                // they remain greppable and free of escape sequences.
-                .with_ansi(io::stderr().is_terminal()),
-        )
-        .try_init()
-        .is_ok()
-    {
-        TRACING_FILTER.set(handle).ok();
-    }
-}
-
-/// Adjust the installed subscriber's level, if one was installed.
-fn set_tracing_filter(level: LevelFilter) {
-    if let Some(handle) = TRACING_FILTER.get() {
-        handle.modify(|filter| *filter = level).ok();
     }
 }
 
@@ -331,7 +298,7 @@ fn configure_runtime(
     // Raised before the localizer is built, so a fallback warning is both
     // visible in a normal run and suppressed in JSON mode, where stderr
     // carries the diagnostic document.
-    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
+    main_tracing::set_tracing_filter(startup_filter(mode, merged_cli.verbose));
 
     let runtime_locale = locale_resolution::resolve_runtime_locale(merged_cli, system_locale);
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
