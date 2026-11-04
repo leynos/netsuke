@@ -7798,8 +7798,10 @@ not depend on `test_support`.
 `test_support::ninja_edge::edge_pool_bindings` returns the named edge's exact
 `pool =` bindings. It distinguishes `pool = console` for an opted-in edge, an
 empty `pool =` binding that clears an inherited console pool, and no binding
-for an ordinary edge. Keep this helper within test-support and test code; it
-does not parse general Ninja syntax.
+for an ordinary edge. The property test in
+`src/ninja_gen/property_tests/console.rs` uses it for user-edge, serial-parent
+and synthetic-gate assertions. Keep this helper within test-support and test
+code; it does not parse general Ninja syntax.
 
 The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
 parallel, single-output edges for console generator tests. Keep it within that
