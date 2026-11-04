@@ -181,13 +181,26 @@ def validate_candidate(
 ) -> ValidatedCandidate:
     """Validate identity, artifact selection, digest and packaged manifest.
 
+    A publishing expectation requires the identity to record exactly the
+    expected tag. A rehearsal expectation requires the identity to record no
+    tag. Both modes bind the commit, package name, and version. A rejection in
+    any focused validation helper below surfaces as ``CandidateError``, so a
+    mismatched identity, archive, digest, or packaged manifest fails
+    validation rather than returning a partially checked candidate.
+
+    Parameters
+    ----------
+    identity_path : pathlib.Path
+        The package identity record to read.
+    archive_directory : pathlib.Path
+        The directory holding the sole retained ``.crate`` archive.
+    expectation : CandidateExpectation
+        The workflow identity, with ``tag`` set to ``None`` for a rehearsal.
+
     Returns
     -------
     ValidatedCandidate
         The identity and exact archive path and digest after validation.
-
-    A rehearsal or mismatched identity, archive digest or packaged manifest
-    raises ``CandidateError`` through the focused validation helpers below.
 
     Examples
     --------
