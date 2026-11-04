@@ -2663,6 +2663,33 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   final ordered gate run follows this progress entry. These changes do not
   alter registry decisions or complete the still-open finalization,
   inventory-verification, or consumer-smoke stages.
+- [x] (2026-11-04) Issue #1065 delivered the offline candidate boundary and the
+  interrupted-publication resume path. `crates_io_candidate_cli.py check` now
+  requires exactly one release mode: `--tag` for a publishing run, which must
+  record that tag, and `--rehearsal` for a tagless candidate, which a
+  pull-request lane can exercise without a registry request. Supplying neither
+  mode, or both, is an argument error. Archive and manifest reading moved to
+  `scripts/crates_io_candidate_archive.py`, and the rejection vocabulary to
+  `scripts/crates_io_candidate_errors.py`; both are registered in
+  `SOURCE_MODULES`, the policy/adapter partition, and the
+  `test-release-publication` doctest recipe, so an unwired module fails the
+  suite. The `package-crate` composite action runs the check after packaging
+  and before the artefact upload, selecting the mode from its `dry-run` input,
+  and the workflow contract pins the step's id, ordering, environment, exact
+  command, and offline nature, with a mutation case that proves the contract
+  notices a rehearsal checked as a publishing run. The publish-sequence tests
+  drive an interrupted publication: a first absent probe decides to publish, a
+  second identical probe decides to skip, and a byte verification confirms the
+  served archive, with the contract requiring the skip resolution to exclude
+  the authentication, metadata, and upload steps. All eleven ordered gates
+  passed at `9254093eb`: doc coverage 98.30%, nextest 5,026 passed with 7
+  skipped plus doctests, workflow contracts 28 passed, release-publication 537
+  passed, documentation contracts 15 passed, Markdown lint zero issues across
+  215 files, Mermaid validation, spelling, lint at 10.00/10, and typecheck.
+  CodeRabbit's fourth agent review of the head reported zero findings. No live
+  exchange or release was performed; finalization, inventory verification, and
+  the consumer smoke test remain open, and `publish-release` is still not gated
+  on the crates.io job.
 
 ## Surprises & discoveries
 
