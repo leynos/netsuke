@@ -7,7 +7,6 @@ use netsuke::runner::NINJA_ENV;
 use rstest::fixture;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
-#[cfg(unix)]
 pub(super) use test_support::ninja_script::write_fake_ninja_script;
 
 #[fixture]

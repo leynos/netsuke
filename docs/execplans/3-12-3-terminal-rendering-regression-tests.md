@@ -312,6 +312,13 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `core.attributesFile=/dev/null` and `zdiff3`. Recovery refs preserve the old
   head, boundary, target, and first rebase result. New head:
   `940ee40c9248ae429effd3f5d49ad76173dd1585`.
+- [x] (2026-11-04) Hosted Windows validation of the rebased candidate found
+  that `tests/logging_stderr/support.rs` still marked the shared fake-Ninja
+  re-export Unix-only. The helper itself writes `.cmd` scripts on Windows, and
+  `tests/logging_stderr/verbose.rs` uses it in the piped suite. Removed the
+  unnecessary gate; all seven serial candidate gates passed, including doc
+  coverage (98.33%) and 5,094 tests plus doctests. Markdown lint reported zero
+  issues across 217 files, and Nixie passed.
 - [x] EP-M0: terminal test harness.
 - [ ] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; the
