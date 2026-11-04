@@ -13,6 +13,8 @@ use super::*;
 #[cfg(unix)]
 use netsuke::manifest::{EnvAccessPolicy, EnvReadError, EnvReader};
 #[cfg(unix)]
+use proptest::prelude::*;
+#[cfg(unix)]
 use std::fmt::Display;
 #[cfg(unix)]
 use std::sync::Arc;
@@ -69,12 +71,27 @@ impl TransportSubject {
     }
 }
 
+/// Build a manifest whose script writes `body` through a quoted heredoc.
+///
+/// Every line is indented to the YAML block scalar's content column, so a
+/// multi-line body stays inside the script value. The heredoc is quoted, so the
+/// final interpreter writes the bytes literally rather than expanding them.
+#[cfg(unix)]
+fn quoted_heredoc_manifest(body: &str) -> String {
+    let indented = body
+        .split('\n')
+        .map(|line| format!("      {line}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    format!(
+        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      cat > {{{{ outs }}}} <<'EOF'\n{indented}\n      EOF\n"
+    )
+}
+
 /// Assert one quoted-heredoc body crosses the transport byte for byte.
 #[cfg(unix)]
 fn assert_quoted_heredoc_preserves(body: impl Display) -> Result<()> {
-    let source = format!(
-        "netsuke_version: '1.0.0'\ntargets:\n  - name: out\n    script: |\n      cat > {{{{ outs }}}} <<'EOF'\n      {body}\n      EOF\n"
-    );
+    let source = quoted_heredoc_manifest(&body.to_string());
     let manifest = manifest::from_str(&source)?;
     let (actual, workspace) = run_transported_script(&manifest, None)?;
     let expected = format!("{body}\n");
@@ -209,4 +226,65 @@ fn quoted_heredoc_preserves_backslash_sequences(#[case] body: &str) -> Result<()
 #[rstest]
 fn quoted_heredoc_preserves_printable_ascii() -> Result<()> {
     assert_quoted_heredoc_preserves(printable_ascii_without_jinja_delimiters())
+}
+
+/// Generate one character that is meaningful to the transport or ordinary text.
+///
+/// The transport-sensitive characters are weighted equally with ordinary
+/// printable ASCII so generated bodies mix and repeat them. Carriage return and
+/// NUL are excluded because the encoder rejects them, and braces are excluded
+/// because the manifest is a Jinja template.
+#[cfg(unix)]
+fn transport_character() -> impl Strategy<Value = char> {
+    prop_oneof![
+        Just('\\'),
+        Just('\''),
+        Just('$'),
+        Just('"'),
+        Just('`'),
+        Just('\n'),
+        Just('\t'),
+        any::<char>().prop_filter(
+            "printable ASCII that is not a Jinja delimiter",
+            |character| {
+                (character.is_ascii_graphic() || *character == ' ')
+                    && !matches!(character, '{' | '}')
+            }
+        ),
+    ]
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(32))]
+
+    /// Verify generated script bytes survive the real Ninja transport.
+    ///
+    /// The fixed cases above pin the reported payload and each backslash
+    /// sequence. This property covers the wider input range those examples
+    /// cannot: mixed and repeated transport-sensitive characters, line feeds,
+    /// and ordinary text, all carried through a real Ninja run and a real
+    /// `printf %b` into the final interpreter.
+    #[test]
+    fn quoted_heredoc_transport_round_trips_generated_bytes(
+        body in proptest::collection::vec(transport_character(), 0..64)
+            .prop_map(|characters| characters.into_iter().collect::<String>())
+            .prop_filter("no heredoc terminator line", |body| {
+                !body.split('\n').any(|line| line == "EOF")
+            }),
+    ) {
+        let source = quoted_heredoc_manifest(&body);
+        let manifest = manifest::from_str(&source).expect("generated manifest should parse");
+        let (actual, workspace) = run_transported_script(&manifest, None)
+            .expect("generated script should run under Ninja");
+        let expected = format!("{body}\n");
+        prop_assert_eq!(
+            actual.as_slice(),
+            expected.as_bytes(),
+            "generated script bytes changed in transport"
+        );
+        prop_assert!(
+            !test_support::fs::exists(workspace.path.join("injected")),
+            "generated script executed an injected redirect"
+        );
+    }
 }

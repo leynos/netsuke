@@ -1053,7 +1053,10 @@ Two test layers guard the contract:
   outcome. CI sets that variable for the jobs that exercise Ninja, where suites
   that opt into an availability skip would otherwise pass without running.
   Real-Ninja coverage cannot reach a Windows host from this suite, so it does
-  not execute `bash.exe`.
+  not execute `bash.exe`. A `proptest` property in the same file generates
+  mixed and repeated transport-sensitive characters, line feeds, and ordinary
+  text, and asserts the same byte-exact outcome, so the fixed cases remain
+  readable examples rather than the whole input range.
 
 The Bash route has no separate transport encoder: it wraps the same encoded
 POSIX script as `bash.exe -e -c "<windows argument>"`. Coverage for it comes
