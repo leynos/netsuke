@@ -247,18 +247,20 @@ fn dependency_only_console_entries_are_rejected(#[case] sections: &str) -> Resul
 /// Preserve the console-specific validation diagnostic during direct IR lowering.
 #[test]
 fn direct_ir_lowering_preserves_console_dependency_only_diagnostic() -> Result<()> {
-    let _locale = locale_localizer("fr");
-    let yaml = concat!(
-        "netsuke_version: '1.0.0'\n",
-        "targets:\n",
-        "  - name: release\n",
-        "    deps: [build]\n",
-        "    console: true\n",
-    );
-    let manifest: NetsukeManifest =
-        serde_saphyr::from_str(yaml).context("directly deserialize the manifest")?;
-    let error = BuildGraph::from_manifest(&manifest)
-        .expect_err("console scheduling on an aggregate should fail IR lowering");
+    let error = {
+        let _locale = locale_localizer("en-US");
+        let yaml = concat!(
+            "netsuke_version: '1.0.0'\n",
+            "targets:\n",
+            "  - name: release\n",
+            "    deps: [build]\n",
+            "    console: true\n",
+        );
+        let manifest: NetsukeManifest =
+            serde_saphyr::from_str(yaml).context("directly deserialize the manifest")?;
+        BuildGraph::from_manifest(&manifest)
+            .expect_err("console scheduling on an aggregate should fail IR lowering")
+    };
     ensure!(
         matches!(
             &error,
@@ -268,10 +270,15 @@ fn direct_ir_lowering_preserves_console_dependency_only_diagnostic() -> Result<(
         "direct AST lowering should preserve the console diagnostic code: {error}"
     );
     let rendered = error.to_string();
-    let expected = localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY).to_string();
+    let expected = "console cannot be enabled for dependency-only entries";
     ensure!(
         rendered == expected,
-        "direct AST lowering should render exactly the localized manifest diagnostic: {rendered}"
+        "direct AST lowering should render its stable diagnostic: {rendered}"
+    );
+    let _locale = locale_localizer("fr");
+    ensure!(
+        error.to_string() == expected,
+        "IR diagnostic rendering must not depend on the active locale"
     );
     Ok(())
 }

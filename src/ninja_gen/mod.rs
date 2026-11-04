@@ -69,7 +69,7 @@ use order::{ordered_default_targets, ordered_edges};
 /// # Examples
 /// ```
 /// use netsuke::ast::{CommandIsolation, Recipe};
-/// use netsuke::ir::{Action, BuildEdge, BuildGraph};
+/// use netsuke::ir::{Action, BuildEdge, BuildGraph, EdgeOutputVisibility};
 /// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
@@ -86,7 +86,8 @@ use order::{ordered_default_targets, ordered_edges};
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
-///     progress_label: None, phony: false, always: false, console: false
+///     progress_label: None, phony: false, always: false,
+///     output_visibility: EdgeOutputVisibility::Buffered
 /// }).expect("test graph output aliases must be unique");
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
 /// let text = netsuke::ninja_gen::generate(&graph)?;
@@ -119,7 +120,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// # Examples
 /// ```
 /// use netsuke::ast::{CommandIsolation, Recipe};
-/// use netsuke::ir::{Action, BuildEdge, BuildGraph};
+/// use netsuke::ir::{Action, BuildEdge, BuildGraph, EdgeOutputVisibility};
 /// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
@@ -136,7 +137,8 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
-///     progress_label: None, phony: false, always: false, console: false
+///     progress_label: None, phony: false, always: false,
+///     output_visibility: EdgeOutputVisibility::Buffered
 /// }).expect("test graph output aliases must be unique");
 /// let mut out = String::new();
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {

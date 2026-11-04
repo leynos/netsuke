@@ -54,7 +54,7 @@ fn dependency_only_console_graph(world: &TestWorld) -> Result<()> {
             progress_label: None,
             phony: true,
             always: false,
-            console: true,
+            output_visibility: netsuke::ir::EdgeOutputVisibility::Immediate,
         })
         .context("insert dependency-only console edge")?;
     world.build_graph.set_value(graph);

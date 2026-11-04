@@ -43,7 +43,7 @@ pub(super) fn edge_strategy_with_ranges(
                     progress_label: None,
                     phony: false,
                     always: false,
-                    console: false,
+                    output_visibility: crate::ir::EdgeOutputVisibility::default(),
                 }
             },
         )

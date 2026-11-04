@@ -1,6 +1,7 @@
 //! Verify each forwarded output chunk becomes visible before the next read.
 
 use super::{ChunkedReader, ForwardFailureKind, ForwardStream, forward_child_output};
+use proptest::prelude::*;
 use std::{
     cell::RefCell,
     io::{self, Read, Write},
@@ -32,6 +33,7 @@ struct FlushBufferWriter {
     visible: Vec<u8>,
     snapshots: Vec<Vec<u8>>,
     maximum_write: usize,
+    write_count: usize,
     events: Rc<RefCell<Vec<ForwardingEvent>>>,
 }
 
@@ -47,6 +49,7 @@ impl FlushBufferWriter {
 
 impl Write for FlushBufferWriter {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.write_count = self.write_count.saturating_add(1);
         let count = bytes.len().min(self.maximum_write);
         let Some(prefix) = bytes.get(..count) else {
             return Err(io::Error::other("writer prefix is outside the input"));
@@ -60,6 +63,50 @@ impl Write for FlushBufferWriter {
         self.visible.append(&mut self.pending);
         self.snapshots.push(self.visible.clone());
         Ok(())
+    }
+}
+
+proptest! {
+    #[test]
+    fn copy_and_flush_preserves_generated_chunks_and_flush_order(
+        chunks in prop::collection::vec(
+            prop::collection::vec(any::<u8>(), 1..20),
+            0..9,
+        ),
+        maximum_write in 1_usize..9,
+    ) {
+        let input = chunks.iter().flatten().copied().collect::<Vec<_>>();
+        let chunk_sizes = chunks.iter().map(Vec::len).collect::<Vec<_>>();
+        let events = Rc::default();
+        let mut reader = ObservedReader {
+            inner: ChunkedReader::new(input.clone(), chunk_sizes),
+            events: Rc::clone(&events),
+        };
+        let mut writer = FlushBufferWriter::new(maximum_write, Rc::clone(&events));
+
+        let result = super::super::copy_and_flush(&mut reader, &mut writer);
+        prop_assert!(result.is_ok(), "copy_and_flush failed: {:?}", result.err());
+        prop_assert_eq!(&writer.visible, &input);
+
+        let mut visible = Vec::new();
+        let expected_snapshots = chunks.iter().map(|chunk| {
+            visible.extend_from_slice(chunk);
+            visible.clone()
+        }).collect::<Vec<_>>();
+        prop_assert_eq!(&writer.snapshots, &expected_snapshots);
+
+        let expected_write_count = chunks.iter()
+            .map(|chunk| chunk.len().div_ceil(maximum_write))
+            .sum::<usize>();
+        prop_assert_eq!(writer.write_count, expected_write_count);
+
+        let mut expected_events = Vec::new();
+        for chunk in &chunks {
+            expected_events.push(ForwardingEvent::Read(chunk.len()));
+            expected_events.push(ForwardingEvent::Flush);
+        }
+        expected_events.push(ForwardingEvent::Read(0));
+        prop_assert_eq!(&*events.borrow(), &expected_events);
     }
 }
 

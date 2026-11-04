@@ -54,7 +54,7 @@
 //!         progress_label: None,
 //!         phony: false,
 //!         always: false,
-//!         console: false,
+//!         output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
 //! }).expect("test graph output aliases must be unique");
 //! let bundle = generate_bundle(&graph).expect("generate bundle");
 //! assert!(bundle.build_file().contains("ninja_required_version = 1.10"));
@@ -174,7 +174,10 @@ fn generate_bundle_inner(
     Ok(GeneratedNinja {
         build_file: out,
         dyndep_files,
-        console_edge_count: graph.edges().filter(|edge| edge.console).count(),
+        console_edge_count: graph
+            .edges()
+            .filter(|edge| edge.output_visibility == crate::ir::EdgeOutputVisibility::Immediate)
+            .count(),
     })
 }
 

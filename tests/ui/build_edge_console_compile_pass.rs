@@ -1,4 +1,4 @@
-//! Compile the public console scheduling flag as an external crate would.
+//! Compile the public output visibility request as an external crate would.
 
 use netsuke::ast::{
     CommandIsolation, DependencyOrder as AstDependencyOrder, Recipe, StringOrList, Target,
@@ -6,7 +6,7 @@ use netsuke::ast::{
 use netsuke::ir::{BuildEdge, DependencyOrder as IrDependencyOrder};
 use std::collections::HashMap;
 
-/// Construct a public build edge that opts into Ninja's console pool.
+/// Construct a public build edge that requests immediate output visibility.
 #[must_use]
 pub fn console_edge() -> BuildEdge {
     BuildEdge {
@@ -20,7 +20,7 @@ pub fn console_edge() -> BuildEdge {
         progress_label: None,
         phony: false,
         always: false,
-        console: true,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::Immediate,
     }
 }
 

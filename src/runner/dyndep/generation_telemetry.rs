@@ -32,7 +32,10 @@ pub(in crate::runner) fn instrument_bundle_generation<T>(
     // Count logical build operations once; `output_count` measures aliases and
     // would inflate this span for a single multi-output edge.
     let canonical_target_count = graph.edge_count();
-    let console_edge_count = graph.edges().filter(|edge| edge.console).count();
+    let console_edge_count = graph
+        .edges()
+        .filter(|edge| edge.output_visibility == crate::ir::EdgeOutputVisibility::Immediate)
+        .count();
     let console_scheduling = crate::runner::console_telemetry::scheduling_label(console_edge_count);
     let span = tracing::trace_span!(
         "runner.ninja.dyndep_bundle.generate",
@@ -248,7 +251,11 @@ mod tests {
                     progress_label: None,
                     phony: false,
                     always: false,
-                    console: index < console_edges,
+                    output_visibility: if index < console_edges {
+                        crate::ir::EdgeOutputVisibility::Immediate
+                    } else {
+                        crate::ir::EdgeOutputVisibility::Buffered
+                    },
                 })
                 .expect("fixture aliases must be distinct");
         }

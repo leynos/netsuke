@@ -1,8 +1,8 @@
 //! Intermediate Representation structures.
 //!
 //! This module defines the validated build graph Netsuke passes to Ninja
-//! generation. Recipe and command data contain no Ninja syntax; the deliberate
-//! [`BuildEdge::console`] annotation selects Ninja's console pool per edge.
+//! generation. Recipe and command data contain no Ninja syntax;
+//! [`EdgeOutputVisibility`] carries an edge's backend-neutral output request.
 //!
 //! # Examples
 //!
@@ -35,5 +35,7 @@ mod from_manifest;
 mod graph;
 
 pub use cmd_interpolate::{INS_TOKEN, OUTS_TOKEN};
-pub(crate) use graph::manifest_recipe_validation_message;
-pub use graph::{Action, BuildEdge, BuildGraph, DependencyOrder, EdgeArena, EdgeId, IrGenError};
+pub use graph::{
+    Action, BuildEdge, BuildGraph, DependencyOrder, EdgeArena, EdgeId, EdgeOutputVisibility,
+    IrGenError,
+};

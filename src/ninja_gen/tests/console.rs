@@ -2,7 +2,7 @@
 
 use super::command_action;
 use super::{NinjaGenError, generate, generate_bundle, generate_posix};
-use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
+use crate::ir::{BuildEdge, BuildGraph, DependencyOrder, EdgeOutputVisibility};
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
 use rstest::{fixture, rstest};
@@ -23,7 +23,11 @@ fn edge_factory() -> EdgeFactory {
         progress_label: None,
         phony: false,
         always: false,
-        console,
+        output_visibility: if console {
+            EdgeOutputVisibility::Immediate
+        } else {
+            EdgeOutputVisibility::Buffered
+        },
     }
 }
 

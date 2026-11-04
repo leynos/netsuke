@@ -7,7 +7,7 @@
 //! inherit console scheduling.
 
 use super::{aggregate_gates, generate_bundle, serial_graph};
-use crate::ir::{BuildGraph, DependencyOrder};
+use crate::ir::{BuildGraph, DependencyOrder, EdgeOutputVisibility};
 use camino::{Utf8Path, Utf8PathBuf};
 use proptest::prelude::*;
 use test_support::ninja_edge::edge_pool_bindings;
@@ -55,7 +55,11 @@ fn generate_console_bundle(
         .target_for_output(Utf8Path::new("aggregate"))
         .map(|(_, edge)| edge.clone())
         .ok_or_else(|| TestCaseError::fail("serial parent must exist"))?;
-    parent.console = parent_console;
+    parent.output_visibility = if parent_console {
+        EdgeOutputVisibility::Immediate
+    } else {
+        EdgeOutputVisibility::Buffered
+    };
     if !graph.replace_edge_for_output(Utf8Path::new("aggregate"), parent.clone()) {
         return Err(TestCaseError::fail("serial parent must be replaceable"));
     }
@@ -65,7 +69,11 @@ fn generate_console_bundle(
         edge.explicit_outputs = vec![output.clone()];
         edge.implicit_deps.clear();
         edge.dependency_order = DependencyOrder::Parallel;
-        edge.console = *selected;
+        edge.output_visibility = if *selected {
+            EdgeOutputVisibility::Immediate
+        } else {
+            EdgeOutputVisibility::Buffered
+        };
         graph
             .insert_edge(edge)
             .map_err(|error| TestCaseError::fail(error.to_string()))?;

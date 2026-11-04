@@ -22,7 +22,7 @@ fn build_edge(inputs: &[&str], implicit_deps: &[&str], output: &str) -> BuildEdg
         progress_label: None,
         phony: false,
         always: false,
-        console: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::default(),
     }
 }
 struct MissingDepsCase<'a> {

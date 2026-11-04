@@ -2366,12 +2366,12 @@ logic untouched.
 
 The IR keeps recipe and command data free of Ninja-specific syntax. Netsuke
 markers such as `{{ ins }}` and `{{ outs }}` are resolved to plain lists of
-file paths, and command strings are expanded before hashing. The
-`BuildEdge.console` scheduling flag described in §5.5 is a deliberate
-Ninja-specific exception: it records a Boolean choice without storing a pool
-name or placeholder. Recipe and command data therefore provide a stable
-contract that future back-ends--distributed builders, remote executors, or
-otherwise--can consume without modification.
+file paths, and command strings are expanded before hashing.
+`EdgeOutputVisibility` carries an edge's request for immediate or normally
+buffered output without naming a backend mechanism. Each backend maps that
+request to its own scheduling and forwarding behaviour. Recipe and command data
+therefore provide a stable contract that future back-ends--distributed
+builders, remote executors, or otherwise--can consume without modification.
 
 Furthermore, the IR is the ideal stage at which to perform graph-level analysis
 and optimizations, such as detecting circular dependencies, pruning unused
@@ -2446,11 +2446,16 @@ pub enum EnvBinding {
     Unset,
 }
 
+/// Desired output visibility, translated by each backend.
+pub enum EdgeOutputVisibility {
+    Buffered,
+    Immediate,
+}
+
 /// Represents a single build statement, analogous to a Ninja 'build' edge.
 /// It connects a set of inputs to a set of outputs via an Action. The `phony`
 /// and `always` flags control execution when outputs already exist or when
-/// timestamps would normally skip the step. `console` selects Ninja's special
-/// console pool for this edge without changing the referenced Action.
+/// timestamps would normally skip the step.
 pub struct BuildEdge {
     /// The unique identifier of the Action used for this edge.
     pub action_id: String,
@@ -2482,8 +2487,8 @@ pub struct BuildEdge {
     /// Run this edge on every invocation regardless of timestamps.
     pub always: bool,
 
-    /// Run this edge in Ninja's special console pool.
-    pub console: bool,
+    /// Backend-neutral request for immediate or buffered output.
+    pub output_visibility: EdgeOutputVisibility,
 }
 ```
 
@@ -2519,7 +2524,7 @@ classDiagram
         +Vec<Utf8PathBuf> order_only_deps
         +bool phony
         +bool always
-        +bool console
+        +EdgeOutputVisibility output_visibility
     }
     class EdgeId {
         +usize index
@@ -2579,17 +2584,17 @@ This transformation involves several steps:
    fully resolved recipe and file set, so identical rule templates yield
    distinct actions when their paths differ. Create a corresponding
    `ir::BuildEdge` linking the target to the action identifier and transfer the
-   `phony`, `always`, and `console` flags. Console remains edge-level
-   scheduling metadata, so it does not change action hashing or rule sharing.
-   `sources` are lowered into the edge's explicit input list so recipe
-   interpolation and Ninja `$in` see only material inputs. `deps` are lowered
-   into a separate `implicit_deps` list, which maps to Ninja's implicit
-   dependency syntax (`|`) so Ninja orders and rebuilds them without exposing
-   them as recipe arguments; `order_only_deps` remains separate and maps to
-   Ninja's `||` class. The edge enters the arena once; every explicit output is
-   then indexed to its stable `EdgeId`. Duplicate outputs are rejected before
-   this mutation, so each alias resolves to one canonical edge without copying
-   its output vector.
+   `phony` and `always` flags. Lower the manifest `console` option to
+   `EdgeOutputVisibility::Immediate` or `Buffered`; this edge-level request
+   does not change action hashing or rule sharing. `sources` are lowered into
+   the edge's explicit input list so recipe interpolation and Ninja `$in` see
+   only material inputs. `deps` are lowered into a separate `implicit_deps`
+   list, which maps to Ninja's implicit dependency syntax (`|`) so Ninja orders
+   and rebuilds them without exposing them as recipe arguments;
+   `order_only_deps` remains separate and maps to Ninja's `||` class. The edge
+   enters the arena once; every explicit output is then indexed to its stable
+   `EdgeId`. Duplicate outputs are rejected before this mutation, so each alias
+   resolves to one canonical edge without copying its output vector.
 
    FUTURE:
 
@@ -2935,9 +2940,10 @@ conceptual model while keeping most scheduling data backend-agnostic.
 insertion-ordered arena, and a map from `Utf8PathBuf` to `EdgeId` for output
 aliases. Actions hold the parsed `Recipe` and optional execution metadata.
 `BuildEdge` connects inputs to outputs using an action identifier and carries
-the `phony`, `always`, and `console` flags verbatim from the manifest. The
-`console` flag is a deliberate Ninja-specific edge annotation; the IR stores a
-Boolean scheduling choice, not a pool name or placeholder. It does not affect
+the `phony` and `always` flags from the manifest. Its `EdgeOutputVisibility`
+field expresses the desired output behaviour without exposing a Ninja pool
+name. The Ninja adapter maps `Immediate` to its console pool and leaves
+`Buffered` edges in the normal pool. This edge-level choice does not affect
 action identity.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON

@@ -6907,29 +6907,35 @@ variants, and `parallel` remains the default. The ordering policy applies only
 to a manifest `deps` list; never infer it from the number or shape of graph
 edges, and do not apply it to inputs or order-only dependencies.
 
-The manifest `console` Boolean lowers to `BuildEdge.console`. It is scheduling
-metadata owned by the edge because two targets can share one action and rule
-while only one target needs streamed output. `Action.pool` remains unchanged,
-so console selection does not alter action identity or action deduplication.
-`src/ninja_gen/display_edge.rs` emits `pool = console` on that edge. If a
-shared action rule already declares `pool = console`, ordinary edges get an
-empty edge-level `pool =` binding to clear that inherited selection. Shared
-console-scheduling validation runs before both direct Ninja generation and
-dyndep-bundle generation. That validation rejects dependency-only edges and
-custom action pools that conflict with `console`; it accepts an existing
-`Action.pool` value of `console`. Synthetic serial gates and dyndep sidecars
-never inherit either binding.
+The manifest `console` Boolean lowers to `BuildEdge.output_visibility`, using
+`EdgeOutputVisibility::Immediate` for `true` and `Buffered` for `false`. This
+backend-neutral request belongs to the edge because two targets can share one
+action and rule while only one target needs streamed output. `Action.pool`
+remains unchanged, so console selection does not alter action identity or
+action deduplication. `src/ninja_gen/display_edge.rs` emits `pool = console` on
+that edge. If a shared action rule already declares `pool = console`, ordinary
+edges get an empty edge-level `pool =` binding to clear that inherited
+selection. Shared console-scheduling validation runs before both direct Ninja
+generation and dyndep-bundle generation. That validation rejects
+dependency-only edges and custom action pools that conflict with `console`; it
+accepts an existing `Action.pool` value of `console`. Synthetic serial gates
+and dyndep sidecars never inherit either binding.
 
 The emitted `pool = console` binding requires Ninja 1.5 or newer. This minimum
 is separate from the conditional Ninja 1.10 requirement for staged serial
 dependency bundles described below.
 
-AST validation keeps stable diagnostic details separate from localized display
-text. `src/ir/graph/error.rs::manifest_recipe_validation_message` maps a
-recognized manifest detail to the same user-facing message for parsing and
-direct IR lowering. Ninja generator errors use a separate message when an
-output edge is available; the build-script localization slice does not depend
-on this library-only mapping.
+`IrGenError::InvalidManifest` retains its stable English schema diagnostic when
+formatted. Manifest loading localizes that diagnostic at the parsing boundary;
+IR error formatting must not resolve the process-wide active locale.
+
+Manifest validation keeps stable diagnostic details separate from localized
+display text. `src/manifest/mod.rs` maps a recognized detail to the localized
+parse message. Direct IR lowering retains the stable detail in
+`IrGenError::InvalidManifest`, whose formatting does not consult global locale
+state. Ninja generator errors use an output-specific message when an edge is
+available; the build-script localization slice does not depend on either
+library-side path.
 
 `src/ir/cycle/detector.rs::CycleDetector::visit_known_edge` traverses `inputs`,
 `implicit_deps`, and `order_only_deps` when detecting cycles. Order-only
@@ -7784,6 +7790,12 @@ this shared helper, so their assertions agree about which edge owns an indented
 generated text used by these tests and does not parse general Ninja syntax.
 Permitted call sites are test-support and test code only; production code must
 not depend on `test_support`.
+
+`test_support::ninja_edge::edge_pool_bindings` returns the named edge's exact
+`pool =` bindings. It distinguishes `pool = console` for an opted-in edge, an
+empty `pool =` binding that clears an inherited console pool, and no binding
+for an ordinary edge. Keep this helper within test-support and test code; it
+does not parse general Ninja syntax.
 
 The local `edge_factory` fixture in `src/ninja_gen/tests/console.rs` constructs
 parallel, single-output edges for console generator tests. Keep it within that

@@ -13,7 +13,10 @@ use crate::localization::{self, keys};
 /// Returns an error when a console edge uses a dependency-only recipe or
 /// conflicts with an action's custom pool.
 pub(super) fn validate_console_scheduling(graph: &BuildGraph) -> Result<(), NinjaGenError> {
-    for edge in graph.edges().filter(|edge| edge.console) {
+    for edge in graph
+        .edges()
+        .filter(|edge| edge.output_visibility == crate::ir::EdgeOutputVisibility::Immediate)
+    {
         if let Some(action) = graph.actions.get(&edge.action_id) {
             validate_console_edge(edge, action)?;
         }
@@ -201,7 +204,7 @@ mod tests {
                 progress_label: None,
                 phony: false,
                 always: false,
-                console: true,
+                output_visibility: crate::ir::EdgeOutputVisibility::Immediate,
             })
             .expect("test graph output aliases must be unique");
         graph

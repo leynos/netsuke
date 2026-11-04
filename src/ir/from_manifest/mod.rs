@@ -16,7 +16,7 @@ use crate::recipe_shell::RecipeShell;
 
 use super::{
     cycle::{self, CycleDetectionReport},
-    graph::{BuildEdge, BuildGraph, DependencyOrder, IrGenError, IrHashMap},
+    graph::{BuildEdge, BuildGraph, DependencyOrder, EdgeOutputVisibility, IrGenError, IrHashMap},
 };
 
 mod support;
@@ -172,7 +172,11 @@ impl BuildGraph {
                 order_only_deps: to_paths(&target.order_only_deps),
                 phony: target.phony,
                 always: target.always,
-                console: target.console,
+                output_visibility: if target.console {
+                    EdgeOutputVisibility::Immediate
+                } else {
+                    EdgeOutputVisibility::Buffered
+                },
             };
 
             #[cfg(not(kani))]
