@@ -139,6 +139,19 @@ def _run_verifier(
             0,
             "PASS: Debian package netsuke declares ninja-build",
         ),
+        (
+            {
+                **PASSING_STUBS,
+                "dpkg-query": _deb_stub("libc6, ninja-build:any (>= 1.10)"),
+            },
+            0,
+            "PASS: Debian package netsuke declares ninja-build",
+        ),
+        (
+            {**PASSING_STUBS, "dpkg-query": _deb_stub("ninja-build-extra")},
+            1,
+            "FAIL: Debian package netsuke does not declare ninja-build",
+        ),
     ],
 )
 def test_verification_script_enforces_the_declared_checks(

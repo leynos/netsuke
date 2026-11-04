@@ -545,18 +545,30 @@ jobs:
           PACKAGE_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          # nfpm parses the Cargo version as SemVer, so a prerelease loses its
-          # hyphen separator: `0.1.0-beta4` is recorded and named
-          # `0.1.0~beta4` in both package formats. The validator compares that
-          # spelling against the metadata and also uses it to glob the package
-          # filename, so the Cargo spelling would find nothing.
+          # nfpm parses the version as SemVer, so a prerelease loses its hyphen
+          # separator: `0.1.0-beta4` is recorded as `0.1.0~beta4`. RPM then
+          # replaces every hyphen left in that prerelease with an underscore,
+          # so `1.0.0-alpha-1` is named `1.0.0~alpha_1` there while the Debian
+          # package keeps `1.0.0~alpha-1`. The validator compares the spelling
+          # it is given against the package metadata and globs the filename
+          # with it, so each format needs its own and the Cargo spelling would
+          # find nothing.
           version="${PACKAGE_VERSION#v}"
-          if [[ "$version" == *-* ]]; then
-            version="${version%%-*}~${version#*-}"
+          metadata=""
+          if [[ "$version" == *+* ]]; then
+            metadata="+${version#*+}"
+            version="${version%%+*}"
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          deb_version="$version"
+          rpm_version="$version"
+          if [[ "$version" == *-* ]]; then
+            deb_version="${version%%-*}~${version#*-}"
+            rpm_version="${deb_version//-/_}"
+          fi
+          echo "deb_version=$deb_version$metadata" >> "$GITHUB_OUTPUT"
+          echo "rpm_version=$rpm_version$metadata" >> "$GITHUB_OUTPUT"
 
-      - name: Validate Linux packages
+      - name: Validate Debian package
         if: inputs.platform == 'linux'
         uses: leynos/shared-actions/.github/actions/validate-linux-packages@7d751eded578e48dacf43ab173d5820e6437c474
         with:
@@ -564,8 +576,8 @@ jobs:
           package-name: ${{ inputs['bin-name'] }}
           bin-name: ${{ inputs['bin-name'] }}
           target: ${{ inputs.target }}
-          version: ${{ steps.validation_version.outputs.version }}
-          formats: deb,rpm
+          version: ${{ steps.validation_version.outputs.deb_version }}
+          formats: deb
           packages-dir: dist
           expected-paths: /usr/share/man/man1/netsuke.1.gz
           verify-command: /usr/local/bin/verify-installed-package ${{ inputs['bin-name'] }}
@@ -575,6 +587,23 @@ jobs:
           # probe, so it would treat `localhost/...` as a registry host and fail.
           # This repository-owned PEP 723 wrapper pins the revision that probes
           # the local Podman store first.
+          polythene-path: ${{ github.workspace }}/.github/package-validation/polythene_cli.py
+
+      - name: Validate RPM package
+        if: inputs.platform == 'linux'
+        uses: leynos/shared-actions/.github/actions/validate-linux-packages@7d751eded578e48dacf43ab173d5820e6437c474
+        with:
+          project-dir: .
+          package-name: ${{ inputs['bin-name'] }}
+          bin-name: ${{ inputs['bin-name'] }}
+          target: ${{ inputs.target }}
+          version: ${{ steps.validation_version.outputs.rpm_version }}
+          formats: rpm
+          packages-dir: dist
+          expected-paths: /usr/share/man/man1/netsuke.1.gz
+          verify-command: /usr/local/bin/verify-installed-package ${{ inputs['bin-name'] }}
+          deb-base-image: ${{ steps.validation_deb_image.outputs.image }}
+          rpm-base-image: ${{ steps.validation_rpm_image.outputs.image }}
           polythene-path: ${{ github.workspace }}/.github/package-validation/polythene_cli.py
 
       - name: Install packages under emulation

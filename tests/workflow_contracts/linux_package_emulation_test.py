@@ -9,7 +9,9 @@ action would have skipped.
 These tests hold that pair to the job: require both package formats before
 installing anything, choose the install command from the package format, run
 it in the architecture-tagged image that was built for the package, and fail
-loudly rather than passing vacuously. Run via `make test-workflow-contracts`.
+loudly rather than passing vacuously. A failing install must also stop the
+verifier from running, so a broken package cannot be reported as verified.
+Run via `make test-workflow-contracts`.
 """
 
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the script under test is checked in.
@@ -36,6 +38,38 @@ DEB_IMAGE = "localhost/netsuke-package-validation-deb:arm64"
 RPM_IMAGE = "localhost/netsuke-package-validation-rpm:arm64"
 
 
+#: A Podman stub that runs the container command instead of recording it. The
+#: script hands it ``/packages/<name>`` and the image's verifier path, so the
+#: stub rewrites both onto this host before executing the command; the install
+#: and verifier it then invokes are stubs that record and report a status.
+_PODMAN_EXEC_STUB = """\
+#!/bin/sh
+printf '%s\\n' "$*" >> "@LOG@"
+command=${10}
+command=$(printf '%s' "$command" | sed \\
+  -e "s#/packages/#@PACKAGES@/#g" \\
+  -e "s#/usr/local/bin/verify-installed-package#@VERIFIER@#g")
+exec /bin/sh -c "${command}" "${11}" "${12}" "${13}"
+"""
+
+_INSTALL_STUB = """\
+#!/bin/sh
+printf '@NAME@ %s\\n' "$*" >> "@LOG@"
+exit @STATUS@
+"""
+
+_VERIFIER_STUB = """\
+#!/bin/sh
+printf 'verify %s\\n' "$*" >> "@LOG@"
+"""
+
+
+def _write_stub(path: Path, content: str) -> None:
+    """Write an executable stub script to ``path``."""
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o755)
+
+
 def _step_script() -> str:
     """Return the Linux packaging job's emulation step script."""
     steps = job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build")
@@ -59,12 +93,10 @@ def _run_script(
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     log = tmp_path / "podman.log"
-    stub = bin_dir / "podman"
-    stub.write_text(
+    _write_stub(
+        bin_dir / "podman",
         f'#!/bin/sh\nprintf "%s\\n" "$*" >> "{log}"\n',
-        encoding="utf-8",
     )
-    stub.chmod(0o755)
     result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the script under test is checked in.
         ["/bin/sh", str(SCRIPT), *args],
         check=False,
@@ -124,6 +156,100 @@ def test_installs_each_format_in_the_architecture_image(
     verifier = "/usr/local/bin/verify-installed-package"
     assert call.index(install) < call.index(verifier), (
         f"the package must be installed before the verifier runs, got {call!r}"
+    )
+
+
+def _run_executing_container(
+    tmp_path: Path, suffix: str, install_status: int
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+    """Run the script with a Podman stub that executes the container command.
+
+    The recording stub in :func:`_run_script` cannot show whether a failed
+    install stops the verifier, because it runs neither command. This stub
+    rewrites the container paths onto ``tmp_path`` and executes the chain with
+    ``dpkg``/``rpm`` and the verifier replaced by recording stubs, so the
+    script's ``&&`` is exercised rather than merely inspected.
+
+    Returns
+    -------
+    tuple[subprocess.CompletedProcess[str], list[str]]
+        The completed process and the install and verifier calls it made.
+    """
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    log = tmp_path / "container.log"
+    verifier = bin_dir / "verify-installed-package"
+    _write_stub(
+        bin_dir / "podman",
+        _PODMAN_EXEC_STUB
+        .replace("@LOG@", str(log))
+        .replace("@PACKAGES@", str(tmp_path))
+        .replace("@VERIFIER@", str(verifier)),
+    )
+    install_name = "dpkg" if suffix == ".deb" else "rpm"
+    _write_stub(
+        bin_dir / install_name,
+        _INSTALL_STUB
+        .replace("@LOG@", str(log))
+        .replace("@NAME@", install_name)
+        .replace("@STATUS@", str(install_status)),
+    )
+    _write_stub(verifier, _VERIFIER_STUB.replace("@LOG@", str(log)))
+    package = tmp_path / f"netsuke_0.1.0-1_arm64{suffix}"
+    package.write_bytes(b"")
+    result = subprocess.run(  # ruff: ignore[subprocess-without-shell-equals-true] - the script under test is checked in.
+        [
+            "/bin/sh",
+            str(SCRIPT),
+            "localhost/image:arm64",
+            "arm64",
+            str(package),
+            "netsuke",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        env={"PATH": f"{bin_dir}:/usr/bin:/bin"},
+    )
+    calls = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
+    return result, calls
+
+
+@pytest.mark.parametrize(
+    ("suffix", "install_name"),
+    [(".deb", "dpkg"), (".rpm", "rpm")],
+)
+@pytest.mark.parametrize(
+    "install_status",
+    [0, 1],
+    ids=["success", "failure"],
+)
+def test_install_status_controls_whether_the_verifier_runs(
+    tmp_path: Path,
+    suffix: str,
+    install_name: str,
+    install_status: int,
+) -> None:
+    """Install, then verify only when the install succeeded.
+
+    The recording stub proves the command text; this proves the chain it
+    describes actually runs once the container executes it. A verifier that
+    ran after a failed install could report success for a package that was
+    never installed, which is the one outcome this lane exists to prevent, so
+    a failed install must also fail the script.
+    """
+    result, calls = _run_executing_container(tmp_path, suffix, install_status)
+    installed = install_status == 0
+    expected = ["run", install_name, *(["verify"] if installed else [])]
+    verbs = [line.split(maxsplit=1)[0] for line in calls]
+    assert verbs == expected, (
+        f"a {install_name} install returning {install_status} must run "
+        f"{expected!r}, got {calls!r}"
+    )
+    assert (result.returncode == 0) is installed, (
+        f"install status {install_status} must make the script "
+        f"{'pass' if installed else 'fail'}, got {result.returncode}: "
+        f"{result.stdout}{result.stderr}"
     )
 
 

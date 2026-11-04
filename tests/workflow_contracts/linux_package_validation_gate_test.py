@@ -11,8 +11,9 @@ locally built image and running the repository's verification script. These
 tests hold the parts that make it a gate rather than a suggestion: the action
 is pinned to the revision the packaging action uses, the validation runs
 between packaging and upload, the sandbox image carries what the checks need
-and withholds what they must prove, the version handed to the validator is the
-one nfpm writes, and the whole lane runs in the release dry run.
+and withholds what they must prove, each validator is handed the version
+spelling nfpm writes for its own format, and the whole lane runs in the
+release dry run.
 
 The sandbox contents and the verification script are covered by
 ``linux_package_validation_sandbox_test.py``. The split keeps each module
@@ -49,7 +50,8 @@ SANDBOX_STEP = "Prepare Linux package validation sandbox"
 DEB_IMAGE_STEP = "Build Debian validation image"
 RPM_IMAGE_STEP = "Build RPM validation image"
 VERSION_STEP = "Normalise Linux package validation version"
-VALIDATION_STEP = "Validate Linux packages"
+DEB_VALIDATION_STEP = "Validate Debian package"
+RPM_VALIDATION_STEP = "Validate RPM package"
 EMULATION_STEP = "Install packages under emulation"
 UPLOAD_STEP = "Upload Linux artefacts"
 
@@ -61,7 +63,8 @@ GATE_ORDER = (
     DEB_IMAGE_STEP,
     RPM_IMAGE_STEP,
     VERSION_STEP,
-    VALIDATION_STEP,
+    DEB_VALIDATION_STEP,
+    RPM_VALIDATION_STEP,
     EMULATION_STEP,
     UPLOAD_STEP,
 )
@@ -76,7 +79,8 @@ GATE_CONDITIONS = {
     DEB_IMAGE_STEP: LINUX_ONLY,
     RPM_IMAGE_STEP: LINUX_ONLY,
     VERSION_STEP: LINUX_ONLY,
-    VALIDATION_STEP: LINUX_ONLY,
+    DEB_VALIDATION_STEP: LINUX_ONLY,
+    RPM_VALIDATION_STEP: LINUX_ONLY,
     EMULATION_STEP: CROSS_ARCH_ONLY,
 }
 #: The steps this issue adds, each of which must be Linux-only and unskippable.
@@ -135,28 +139,42 @@ def test_validation_uses_the_release_packaging_revision() -> None:
         PACKAGING_ACTION,
         "the release lane's Linux packaging",
     )
-    validation_sha = require_external_action_sha(
-        named_step(steps, VALIDATION_STEP).get("uses"),
-        VALIDATION_ACTION,
-        "the Linux package validation gate",
-    )
-    assert validation_sha == packaging_sha, (
-        "package validation must use the same shared-actions revision as "
-        f"packaging, got {validation_sha!r} against {packaging_sha!r}"
-    )
+    for step_name in (DEB_VALIDATION_STEP, RPM_VALIDATION_STEP):
+        validation_sha = require_external_action_sha(
+            named_step(steps, step_name).get("uses"),
+            VALIDATION_ACTION,
+            f"the {step_name!r} gate",
+        )
+        assert validation_sha == packaging_sha, (
+            "package validation must use the same shared-actions revision as "
+            f"packaging, got {validation_sha!r} against {packaging_sha!r}"
+        )
 
 
-def test_validation_installs_the_packages_the_lane_built() -> None:
+@pytest.mark.parametrize(
+    ("step_name", "package_format", "version_output"),
+    [
+        (DEB_VALIDATION_STEP, "deb", "deb_version"),
+        (RPM_VALIDATION_STEP, "rpm", "rpm_version"),
+    ],
+)
+def test_validation_installs_the_packages_the_lane_built(
+    step_name: str, package_format: str, version_output: str
+) -> None:
     """Feed the validator the artefacts, images, and names packaging produced.
 
     Every value here is read from the packaging step or from an earlier gate
     step rather than repeated, so a rename or a changed output cannot leave
-    the validator looking at a package the lane never built.
+    the validator looking at a package the lane never built. Each format has
+    its own validation step because nfpm spells a prerelease differently in
+    the two, so each must be handed the normalised spelling for its own
+    format.
     """
     packaging = _inputs(PACKAGING_STEP)
-    validation = _inputs(VALIDATION_STEP)
-    assert validation["formats"] == "deb,rpm", (
-        f"both package formats must be installed, got {validation['formats']!r}"
+    validation = _inputs(step_name)
+    assert validation["formats"] == package_format, (
+        f"{step_name!r} must validate only the {package_format} package, got "
+        f"{validation['formats']!r}"
     )
     assert validation["packages-dir"] == packaging["outdir"], (
         "validation must read the directory packaging wrote"
@@ -166,8 +184,10 @@ def test_validation_installs_the_packages_the_lane_built() -> None:
             f"validation must reuse the packaging step's {key!r}, got "
             f"{validation[key]!r} against {packaging[key]!r}"
         )
-    assert validation["version"] == "${{ steps.validation_version.outputs.version }}", (
-        "validation must use the nfpm-normalised version, not the Cargo spelling"
+    expected_version = f"${{{{ steps.validation_version.outputs.{version_output} }}}}"
+    assert validation["version"] == expected_version, (
+        f"{step_name!r} must use the {package_format}-normalised version, not "
+        "the Cargo spelling"
     )
     assert validation["deb-base-image"] == (
         "${{ steps.validation_deb_image.outputs.image }}"
@@ -220,23 +240,27 @@ def test_cross_architecture_packages_are_installed_under_emulation() -> None:
 
 
 @pytest.mark.parametrize(
-    ("cargo_version", "expected_version"),
+    ("cargo_version", "expected_deb", "expected_rpm"),
     [
-        ("0.1.0-beta4", "0.1.0~beta4"),
-        ("0.1.0", "0.1.0"),
-        ("v0.1.0-beta4", "0.1.0~beta4"),
+        ("0.1.0", "0.1.0", "0.1.0"),
+        ("0.1.0-beta4", "0.1.0~beta4", "0.1.0~beta4"),
+        ("v0.1.0-beta4", "0.1.0~beta4", "0.1.0~beta4"),
+        # RPM replaces the remaining hyphen in the prerelease with an
+        # underscore, so a single shared version would fail the RPM package.
+        ("1.0.0-alpha-1", "1.0.0~alpha-1", "1.0.0~alpha_1"),
+        ("v1.0.0-alpha-1+build.2", "1.0.0~alpha-1+build.2", "1.0.0~alpha_1+build.2"),
     ],
 )
 def test_validation_version_matches_what_nfpm_writes(
-    tmp_path: Path, cargo_version: str, expected_version: str
+    tmp_path: Path, cargo_version: str, expected_deb: str, expected_rpm: str
 ) -> None:
-    """Hand the validator the version spelling nfpm puts in the packages.
+    """Hand each validator the version spelling nfpm writes for its format.
 
-    nfpm rewrites a hyphen in the version to ``~`` for both formats; the
-    validator compares that metadata against the version it was given, so a
-    prerelease tag validated with the Cargo spelling fails on every package
-    even when the package is correct. A leading ``v`` from a Git tag is
-    stripped for the same reason.
+    nfpm moves a prerelease behind ``~`` in both formats and RPM then replaces
+    each hyphen inside it with an underscore. The validator compares that
+    metadata against the version it was given and globs the filename with it,
+    so a shared version fails one format whenever the two spellings differ. A
+    leading ``v`` from a Git tag is stripped for the same reason.
     """
     script = str(named_step(_linux_steps(), VERSION_STEP)["run"])
     output = tmp_path / "github-output"
@@ -252,9 +276,11 @@ def test_validation_version_matches_what_nfpm_writes(
             "GITHUB_OUTPUT": str(output),
         },
     )
-    assert output.read_text(encoding="utf-8") == f"version={expected_version}\n", (
-        f"{cargo_version!r} must be handed to the validator as "
-        f"{expected_version!r}, the spelling nfpm records"
+    assert output.read_text(encoding="utf-8") == (
+        f"deb_version={expected_deb}\nrpm_version={expected_rpm}\n"
+    ), (
+        f"{cargo_version!r} must be handed to the validators as {expected_deb!r} "
+        f"and {expected_rpm!r}, the spellings nfpm records"
     )
 
 

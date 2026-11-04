@@ -1485,6 +1485,15 @@ instead of being published. The action is pinned to the same shared-actions
 revision as `linux-packages`, and the gate is unconditional: it runs on tags
 and in the release dry run.
 
+The validator compares a package's recorded version against the version it was
+given, so the lane derives that spelling for each format separately. nfpm moves
+a prerelease behind `~` in both formats, and RPM additionally replaces each
+hyphen left inside it with an underscore: `1.0.0-alpha-1` becomes
+`1.0.0~alpha-1` in the `.deb` and `1.0.0~alpha_1` in the `.rpm`. The workflow
+therefore runs the action once per format, each with its own version spelling
+and format selection, because one shared spelling would fail the package whose
+name differed.
+
 The action installs each package in a sandbox built from a repository-owned
 image. `.github/package-validation/deb.Containerfile` starts from digest-pinned
 Debian trixie and `.github/package-validation/rpm.Containerfile` from

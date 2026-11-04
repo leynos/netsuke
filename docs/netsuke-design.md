@@ -4059,8 +4059,10 @@ revision, and it runs against two repository-owned validation images built from
 `.github/package-validation/deb.Containerfile` and `rpm.Containerfile`. Each
 image is tagged with the package architecture, so the target-to-image mapping
 is explicit: `x86_64-unknown-linux-gnu` selects `amd64` and
-`aarch64-unknown-linux-gnu` selects `arm64`. The action installs the package,
-checks the expected manual-page path, and runs
+`aarch64-unknown-linux-gnu` selects `arm64`. The job runs the action once per
+format, because nfpm spells a prerelease differently in each: RPM replaces the
+hyphens inside it with underscores while Debian keeps them. The action installs
+the package, checks the expected manual-page path, and runs
 `.github/package-validation/verify-installed-package.sh`, which proves the
 binary answers `--version`, that `man -w` resolves a page, and that the package
 metadata declares the `ninja-build` dependency. A missing inspection tool fails

@@ -3,9 +3,9 @@
 #
 # The shared validate-linux-packages action runs this command inside its
 # sandbox after installing the package, so it sees the same files an end user
-# would receive. It checks the three promises that package metadata alone
-# cannot prove: the binary starts, the manual page resolves, and the
-# `ninja-build` dependency is declared.
+# would receive. It checks two runtime promises that package metadata alone
+# cannot prove: the binary starts and the manual page resolves. It also checks
+# that the package declares the `ninja-build` dependency.
 #
 # Usage: verify-installed-package.sh PACKAGE-NAME
 set -eu
