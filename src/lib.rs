@@ -26,6 +26,7 @@ pub mod ninja_gen;
 mod output;
 pub use output::{mode as output_mode, prefs as output_prefs};
 mod power_shell_location;
+pub use output::{mode as output_mode, plan as display_plan, prefs as output_prefs};
 pub mod recipe_shell;
 mod result_json;
 pub mod runner;
@@ -39,3 +40,4 @@ mod terminal_text;
 #[cfg(test)]
 pub(crate) mod test_tracing_capture;
 pub mod theme;
+// weave: run 'weave explain src/lib.rs' for per-hunk detail, 'weave check' to verify your resolution
