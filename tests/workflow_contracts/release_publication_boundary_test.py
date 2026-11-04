@@ -20,6 +20,7 @@ from release_publication_modules import (
     NETWORK_FREE_MODULES,
     POLICY_MODULES,
     SOURCE_MODULES,
+    TRANSPORT_MODULES,
 )
 from workflow_loading import REPO_ROOT
 
@@ -35,14 +36,7 @@ def test_release_sources_import_no_network_client(module: str) -> None:
     )
 
 
-@pytest.mark.parametrize(
-    "module",
-    [
-        "scripts/crates_io_transport_cli.py",
-        "scripts/crates_io_registry_http.py",
-        "scripts/crates_io_transport_http.py",
-    ],
-)
+@pytest.mark.parametrize("module", TRANSPORT_MODULES)
 def test_transport_sources_are_the_only_network_sources(module: str) -> None:
     """Keep urllib within the bounded registry transport boundary."""
     source = (REPO_ROOT / module).read_text(encoding="utf-8")

@@ -406,9 +406,11 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
 		scripts/tests/test_crates_io_candidate_cli.py \
+		scripts/tests/test_crates_io_candidate_guards.py \
 		scripts/tests/test_crates_io_transport_cli.py \
 		scripts/tests/test_crates_io_transport_upload.py \
 		scripts/tests/test_crates_io_transport_properties.py \
+		scripts/tests/test_crates_io_transport_retry.py \
 		scripts/tests/test_crates_io_publish_sequence.py \
 		scripts/tests/test_release_candidate.py \
 		scripts/tests/test_release_candidate_cli.py \

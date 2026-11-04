@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
-"""Write release operation summaries and JSONL from GitHub step outcomes."""
+"""Write release operation summaries and JSONL from GitHub step outcomes.
+
+This module is the CLI boundary for release observability. It reads GitHub
+workflow facts and publisher step outputs, builds the ``OperationObservation``
+and ``StepState`` values those surfaces describe, and asks
+``release_operation_telemetry`` to render the bounded summary and JSONL
+records. Keeping the parsing and file I/O here leaves the telemetry module a
+pure formatter that the release jobs can unit test without GitHub inputs.
+"""
 
 import json
 import os

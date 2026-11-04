@@ -1,4 +1,9 @@
-"""Provide deterministic HTTP responses for registry transport tests."""
+"""Provide deterministic HTTP responses and CLI arguments for transport tests.
+
+Both transport test modules drive the same command-line surface, so the
+argument builders live here rather than beside either module's assertions. A
+flag change then reaches every caller at once instead of drifting apart.
+"""
 
 import http.client
 import io
@@ -7,7 +12,50 @@ import typing as typ
 import urllib.error
 import urllib.request
 
+if typ.TYPE_CHECKING:
+    import pathlib
+
 TEST_CREDENTIAL = "short-lived-test-value"
+CRATE_NAME = "netsuke-build"
+VERSION = "1.2.3"
+
+
+def registry_args(operation: str, paths: dict[str, pathlib.Path]) -> list[str]:
+    """Build registry identity arguments followed by ordered path options."""
+    arguments = [operation, "--crate", CRATE_NAME, "--version", VERSION]
+    for option, path in paths.items():
+        arguments.extend((option, str(path)))
+    return arguments
+
+
+def probe_args(status_path: pathlib.Path, body_path: pathlib.Path) -> list[str]:
+    """Build one registry probe invocation."""
+    return registry_args(
+        "probe", {"--status-file": status_path, "--body-file": body_path}
+    )
+
+
+def download_args(
+    archive_path: pathlib.Path,
+    status_path: pathlib.Path,
+    report_path: pathlib.Path | None = None,
+) -> list[str]:
+    """Build one bounded archive-download invocation."""
+    paths = {"--archive": archive_path, "--status-file": status_path}
+    if report_path is not None:
+        paths["--report-file"] = report_path
+    return registry_args("download", paths)
+
+
+def upload_args(metadata_path: pathlib.Path, archive_path: pathlib.Path) -> list[str]:
+    """Build one one-shot upload invocation."""
+    return [
+        "upload",
+        "--metadata",
+        str(metadata_path),
+        "--archive",
+        str(archive_path),
+    ]
 
 
 class HandlerListOwner(typ.Protocol):

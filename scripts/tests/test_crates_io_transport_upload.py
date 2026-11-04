@@ -4,29 +4,104 @@ import http.client
 import json
 import typing as typ
 
+import crates_io_transport_cli
 import pytest
-from crates_io_transport_cli import EXIT_OK, EXIT_UPLOAD_FAILED, main
+from crates_io_transport_cli import (
+    EXIT_OK,
+    EXIT_UPLOAD_FAILED,
+    UploadFrameError,
+    _upload_frame,
+    main,
+)
 from crates_io_transport_support import (
     TEST_CREDENTIAL,
     FakeOpener,
     FakeResponse,
     assert_upload_frame_matches,
     http_error_response,
+    upload_args,
 )
 
 if typ.TYPE_CHECKING:
     import pathlib
 
 
-def _upload_args(metadata_path: pathlib.Path, archive_path: pathlib.Path) -> list[str]:
-    """Build one reusable one-shot upload invocation."""
-    return [
-        "upload",
-        "--metadata",
-        str(metadata_path),
-        "--archive",
-        str(archive_path),
-    ]
+def test_upload_without_a_token_sends_no_request(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse an unauthenticated upload before it reaches the registry."""
+    metadata = tmp_path / "metadata.json"
+    archive = tmp_path / "candidate.crate"
+    _ = metadata.write_text("{}", encoding="utf-8")
+    _ = archive.write_bytes(b"bytes")
+    opener = FakeOpener(FakeResponse(200, b"{}"))
+
+    result = main(upload_args(metadata, archive), opener=opener, environment={})
+
+    assert result == EXIT_UPLOAD_FAILED, "a missing token must fail the upload"
+    assert not opener.requests, "never send an unauthenticated registry upload"
+    assert "no short-lived token" in capsys.readouterr().err, (
+        "name the missing credential in the diagnostic"
+    )
+
+
+def test_upload_rejects_metadata_that_is_not_a_json_object(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse a metadata array before framing it for the registry."""
+    metadata = tmp_path / "metadata.json"
+    archive = tmp_path / "candidate.crate"
+    _ = metadata.write_text("[]", encoding="utf-8")
+    _ = archive.write_bytes(b"bytes")
+    opener = FakeOpener(FakeResponse(200, b"{}"))
+
+    result = main(
+        upload_args(metadata, archive),
+        opener=opener,
+        environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
+    )
+
+    assert result == EXIT_UPLOAD_FAILED, "non-object metadata must fail the upload"
+    assert not opener.requests, "refuse the frame before the one-shot PUT"
+    assert "metadata must be a JSON object" in capsys.readouterr().err, (
+        "state which part of the frame was invalid"
+    )
+
+
+@pytest.mark.parametrize(
+    ("metadata_size", "archive_size", "is_rejected"),
+    [
+        pytest.param(0, 0, False, id="empty-fields-fit"),
+        pytest.param(8, 0, False, id="metadata-at-the-limit"),
+        pytest.param(0, 8, False, id="archive-at-the-limit"),
+        pytest.param(9, 0, True, id="metadata-past-the-limit"),
+        pytest.param(0, 9, True, id="archive-past-the-limit"),
+    ],
+)
+def test_upload_frame_bounds_each_field_at_the_addressable_length(
+    monkeypatch: pytest.MonkeyPatch,
+    metadata_size: int,
+    archive_size: int,
+    *,
+    is_rejected: bool,
+) -> None:
+    """Reject either field once it exceeds the unsigned 32-bit length.
+
+    The real limit is 4 GiB minus one, so allocating at it would exhaust the
+    machine. The comparison is exercised against a shrunk limit instead: it is
+    the same expression, and the boundary cases stay cheap.
+    """
+    monkeypatch.setattr(crates_io_transport_cli, "MAX_FRAME_LENGTH", 8)
+
+    if is_rejected:
+        with pytest.raises(UploadFrameError):
+            _upload_frame(bytes(metadata_size), bytes(archive_size))
+        return
+
+    frame = _upload_frame(bytes(metadata_size), bytes(archive_size))
+    assert len(frame) == 8 + metadata_size + archive_size, (
+        "encode both length prefixes without padding"
+    )
 
 
 def test_upload_frames_metadata_and_exact_archive_bytes(
@@ -42,7 +117,7 @@ def test_upload_frames_metadata_and_exact_archive_bytes(
     opener = FakeOpener(FakeResponse(200, b'{"warnings":{"other":["accepted"]}}'))
 
     result = main(
-        _upload_args(metadata, archive),
+        upload_args(metadata, archive),
         opener=opener,
         environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
     )
@@ -79,7 +154,7 @@ def test_upload_fails_on_registry_errors_and_never_retries(
     opener = FakeOpener(FakeResponse(201, b'{"errors":[{"detail":"rejected"}]}'))
 
     result = main(
-        _upload_args(metadata, archive),
+        upload_args(metadata, archive),
         opener=opener,
         environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
     )
@@ -123,7 +198,7 @@ def test_upload_reports_registry_error_details_safely(
     error = http_error_response("https://crates.io/api/v1/crates/new", 422, body)
 
     result = main(
-        _upload_args(metadata, archive),
+        upload_args(metadata, archive),
         opener=FakeOpener(error),
         environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
     )
@@ -149,7 +224,7 @@ def test_upload_redacts_token_from_ambiguous_network_error(
     opener = FakeOpener(OSError(f"connection closed after receiving {TEST_CREDENTIAL}"))
 
     result = main(
-        _upload_args(metadata, archive),
+        upload_args(metadata, archive),
         opener=opener,
         environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
     )
@@ -173,7 +248,7 @@ def test_upload_treats_an_incomplete_http_response_as_ambiguous(
     opener = FakeOpener(http.client.IncompleteRead(TEST_CREDENTIAL.encode(), 1))
 
     result = main(
-        _upload_args(metadata, archive),
+        upload_args(metadata, archive),
         opener=opener,
         environment={"CRATES_IO_TOKEN": TEST_CREDENTIAL},
     )

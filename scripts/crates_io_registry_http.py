@@ -37,14 +37,38 @@ class RegistryUrlError(OSError):
 
 
 def _is_allowed_url(url: str, allowed_hosts: frozenset[str]) -> bool:
-    """Check an HTTPS URL against a request handler's host policy."""
-    parsed = urllib.parse.urlsplit(url)
+    """Check an HTTPS URL against a request handler's host policy.
+
+    A malformed URL is outside the allowlist rather than an error: ``urlsplit``
+    and the ``port`` property both raise ``ValueError`` for inputs such as an
+    unbracketed IPv6 host or a non-numeric port, and a redirect ``Location``
+    arrives here unvalidated. Returning ``False`` keeps every rejection on the
+    same classified path as an ordinary disallowed host.
+
+    Returns
+    -------
+    bool
+        Whether the URL is HTTPS, on an allowed host, and carries no
+        userinfo, explicit port, or fragment.
+
+    Examples
+    --------
+    >>> _is_allowed_url("https://crates.io/api", frozenset({"crates.io"}))
+    True
+    >>> _is_allowed_url("https://crates.io:abc/api", frozenset({"crates.io"}))
+    False
+    """
+    try:
+        parsed = urllib.parse.urlsplit(url)
+        port = parsed.port
+    except ValueError:
+        return False
     return (
         parsed.scheme == "https"
         and parsed.hostname in allowed_hosts
         and parsed.username is None
         and parsed.password is None
-        and parsed.port is None
+        and port is None
         and not parsed.fragment
     )
 
@@ -174,4 +198,11 @@ def default_opener(request: urllib.request.Request, *, timeout: float) -> HttpRe
     """
     if not is_registry_url(request.full_url):
         raise RegistryUrlError
-    return _HTTP_OPENER.open(request, timeout=timeout)
+    try:
+        return _HTTP_OPENER.open(request, timeout=timeout)
+    except ValueError as error:
+        # urllib's redirect handling resolves the Location header with
+        # ``urljoin`` before this handler sees the target, so a malformed
+        # Location raises here rather than in the allowlist check. Classify it
+        # as a rejected destination so the transport reports one error type.
+        raise RegistryUrlError from error

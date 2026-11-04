@@ -20,7 +20,7 @@ from crates_io_transport_cli import (
     _upload_frame,
     main,
 )
-from crates_io_transport_support import FakeOpener
+from crates_io_transport_support import FakeOpener, download_args, probe_args
 from crates_io_upload_metadata import MetadataError, MetadataIssue
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -28,8 +28,6 @@ from hypothesis import strategies as st
 if typ.TYPE_CHECKING:
     import pathlib
 
-CRATE = "netsuke-build"
-VERSION = "1.2.3"
 IDENTIFIER = st.text(
     alphabet=string.ascii_letters + string.digits + "_-.", min_size=1, max_size=16
 )
@@ -75,41 +73,6 @@ DEPENDENCY_PROPERTIES = st.builds(
 )
 
 
-def _probe_args(status: pathlib.Path, body: pathlib.Path) -> list[str]:
-    """Build a single-response registry probe invocation."""
-    return [
-        "probe",
-        "--crate",
-        CRATE,
-        "--version",
-        VERSION,
-        "--status-file",
-        str(status),
-        "--body-file",
-        str(body),
-    ]
-
-
-def _download_args(
-    archive: pathlib.Path, status: pathlib.Path, report: pathlib.Path | None = None
-) -> list[str]:
-    """Build a bounded archive polling invocation."""
-    arguments = [
-        "download",
-        "--crate",
-        CRATE,
-        "--version",
-        VERSION,
-        "--archive",
-        str(archive),
-        "--status-file",
-        str(status),
-    ]
-    if report is not None:
-        arguments.extend(("--report-file", str(report)))
-    return arguments
-
-
 @pytest.mark.parametrize(
     ("url", "hook"),
     [
@@ -138,7 +101,7 @@ def test_rejected_redirect_fails_closed(tmp_path: pathlib.Path) -> None:
     """Treat rejected redirect targets as an unavailable registry observation."""
     opener = FakeOpener(RegistryUrlError())
 
-    result = main(_probe_args(tmp_path / "status", tmp_path / "body"), opener=opener)
+    result = main(probe_args(tmp_path / "status", tmp_path / "body"), opener=opener)
 
     assert result == EXIT_TRANSPORT_ERROR, "reject a forged registry probe"
     assert len(opener.requests) == 1, "do not retry a rejected probe redirect"
@@ -150,7 +113,7 @@ def test_probe_fails_closed_when_no_http_status_exists(tmp_path: pathlib.Path) -
     body = tmp_path / "body.json"
     opener = FakeOpener(urllib.error.URLError("offline"))
 
-    result = main(_probe_args(status, body), opener=opener)
+    result = main(probe_args(status, body), opener=opener)
 
     assert result == EXIT_TRANSPORT_ERROR, "a probe without status must fail closed"
     assert len(opener.requests) == 1, "the failed probe must not retry"
@@ -163,7 +126,7 @@ def test_incomplete_probe_fails_closed(tmp_path: pathlib.Path) -> None:
     body = tmp_path / "body"
     opener = FakeOpener(http.client.IncompleteRead(b"", 1))
 
-    result = main(_probe_args(status, body), opener=opener)
+    result = main(probe_args(status, body), opener=opener)
 
     assert result == EXIT_TRANSPORT_ERROR, "an incomplete probe has no usable status"
     assert len(opener.requests) == 1, "a registry probe is single-shot"
@@ -183,7 +146,7 @@ def test_download_retries_incomplete_http_responses_to_its_budget(
     ])
 
     result = main(
-        _download_args(archive, status, report),
+        download_args(archive, status, report),
         opener=opener,
         timing=TransportTiming(sleeper=delays.append),
     )

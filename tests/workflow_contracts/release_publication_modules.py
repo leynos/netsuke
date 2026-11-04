@@ -9,9 +9,11 @@ explicit decision about which side owns its effects.
 #: Test suites collected by ``make test-release-publication``.
 SECTION_MODULES = (
     "scripts/tests/test_crates_io_candidate_cli.py",
+    "scripts/tests/test_crates_io_candidate_guards.py",
     "scripts/tests/test_crates_io_transport_cli.py",
     "scripts/tests/test_crates_io_transport_upload.py",
     "scripts/tests/test_crates_io_transport_properties.py",
+    "scripts/tests/test_crates_io_transport_retry.py",
     "scripts/tests/test_crates_io_publish_sequence.py",
     "scripts/tests/test_release_candidate.py",
     "scripts/tests/test_release_candidate_cli.py",
@@ -110,17 +112,19 @@ ADAPTER_MODULES = (
     "scripts/release_staged_digests.py",
 )
 
+#: Sources that own the network boundary. The boundary test uses this same
+#: tuple for its positive control, so a module cannot be excluded from the
+#: network-free check without also being asserted as a transport owner.
+TRANSPORT_MODULES = (
+    "scripts/crates_io_transport_cli.py",
+    "scripts/crates_io_registry_http.py",
+    "scripts/crates_io_transport_http.py",
+)
+
 #: Sources whose imports must remain free of network clients. The transport
 #: CLI and HTTP adapters own the network boundary; policy tests inject fakes.
 NETWORK_FREE_MODULES = tuple(
-    module
-    for module in SOURCE_MODULES
-    if module
-    not in {
-        "scripts/crates_io_transport_cli.py",
-        "scripts/crates_io_registry_http.py",
-        "scripts/crates_io_transport_http.py",
-    }
+    module for module in SOURCE_MODULES if module not in TRANSPORT_MODULES
 )
 
 
@@ -130,4 +134,5 @@ __all__ = [
     "POLICY_MODULES",
     "SECTION_MODULES",
     "SOURCE_MODULES",
+    "TRANSPORT_MODULES",
 ]

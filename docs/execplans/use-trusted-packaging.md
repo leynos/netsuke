@@ -4304,3 +4304,13 @@ dependency overview, AXIOM-1, and dependency summary to match the action at
 and action-local timing boundary in response to pre-merge review, and
 normalized variable snapshot fields while retaining exact semantic assertions.
 Stage C remains partial; no live exchange or release has been exercised.
+
+Draft 24, 2026-11-04: completed the second pre-merge review follow-up. The
+publisher transport now treats a malformed redirect target as a classified
+registry-URL rejection instead of an uncaught `ValueError`, and the transport
+CLI's argument builders live once in `crates_io_transport_support.py` rather
+than beside each suite's assertions. The candidate guards and the polling
+schedule moved into their own modules so every publisher suite stays under the
+repository's file-length cap; the release-publication registry, the Makefile
+recipe, and the developers' guide now agree on thirty-two modules. Stage C
+remains partial; no live exchange or release has been exercised.

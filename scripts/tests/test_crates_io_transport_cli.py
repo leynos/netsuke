@@ -18,19 +18,21 @@ from crates_io_transport_cli import (
     main,
 )
 from crates_io_transport_support import (
+    CRATE_NAME,
+    VERSION,
     FakeOpener,
     FakeResponse,
     HandlerListOwner,
     ResponseWithMessage,
+    download_args,
     http_error_response,
     missing_response,
+    probe_args,
 )
 
 if typ.TYPE_CHECKING:
     import pathlib
 
-CRATE_NAME = "netsuke-build"
-VERSION = "1.2.3"
 REGISTRY_PREFIX = "https://crates.io/api/v1/crates/"
 
 
@@ -42,10 +44,8 @@ def test_build_request_rejects_an_unallowlisted_initial_url() -> None:
         )
 
 
-def test_default_opener_rejects_an_unallowlisted_redirect_target(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Apply the installed request handler to a real urllib redirect chain."""
+def _install_redirect(monkeypatch: pytest.MonkeyPatch, location: str) -> None:
+    """Make the shared opener answer every HTTPS request with one redirect."""
     opener = typ.cast("HandlerListOwner", crates_io_registry_http._HTTP_OPENER)
     https_handler = next(
         handler
@@ -56,7 +56,7 @@ def test_default_opener_rejects_an_unallowlisted_redirect_target(
     def redirect_response(
         request: urllib.request.Request,
     ) -> urllib.response.addinfourl:
-        """Return a redirect response aimed at an unallowlisted host.
+        """Return a 302 response to the configured ``Location`` value.
 
         Parameters
         ----------
@@ -66,7 +66,7 @@ def test_default_opener_rejects_an_unallowlisted_redirect_target(
         Returns
         -------
         urllib.response.addinfourl
-            A redirect to the attacker-controlled test host.
+            A redirect to the supplied test location.
 
         Examples
         --------
@@ -74,7 +74,7 @@ def test_default_opener_rejects_an_unallowlisted_redirect_target(
         302
         """
         headers = Message()
-        headers["Location"] = "https://attacker.example/forged-response"
+        headers["Location"] = location
         response = urllib.response.addinfourl(
             io.BytesIO(), headers, request.full_url, code=302
         )
@@ -82,6 +82,22 @@ def test_default_opener_rejects_an_unallowlisted_redirect_target(
         return response
 
     monkeypatch.setattr(https_handler, "https_open", redirect_response)
+
+
+@pytest.mark.parametrize(
+    "location",
+    [
+        pytest.param("https://attacker.example/forged-response", id="unallowlisted"),
+        pytest.param("https://crates.io:abc/forged", id="non-numeric-port"),
+        pytest.param("https://crates.io:99999/forged", id="out-of-range-port"),
+        pytest.param("https://[::1/forged", id="unbracketed-ipv6"),
+    ],
+)
+def test_default_opener_rejects_every_bad_redirect_target(
+    monkeypatch: pytest.MonkeyPatch, location: str
+) -> None:
+    """Classify every rejected redirect target as a registry URL error."""
+    _install_redirect(monkeypatch, location)
     request = crates_io_registry_http.build_request(
         f"{REGISTRY_PREFIX}{CRATE_NAME}/{VERSION}", headers={}
     )
@@ -90,37 +106,28 @@ def test_default_opener_rejects_an_unallowlisted_redirect_target(
         crates_io_registry_http.default_opener(request, timeout=1.0)
 
 
-def _registry_args(operation: str, paths: dict[str, pathlib.Path]) -> list[str]:
-    """Build registry identity arguments followed by ordered path options."""
-    arguments = [
-        operation,
-        "--crate",
-        CRATE_NAME,
-        "--version",
-        VERSION,
-    ]
-    for option, path in paths.items():
-        arguments.extend((option, str(path)))
-    return arguments
+@pytest.mark.parametrize(
+    "url",
+    [
+        pytest.param("https://attacker.example/api/v1", id="unallowlisted-host"),
+        pytest.param("http://crates.io/api/v1", id="plain-http"),
+        pytest.param("https://user@crates.io/api/v1", id="userinfo"),
+        pytest.param("https://crates.io:443/api/v1", id="explicit-port"),
+        pytest.param("https://crates.io/api/v1#fragment", id="fragment"),
+        pytest.param("https://crates.io:abc/api/v1", id="non-numeric-port"),
+        pytest.param("https://crates.io:99999/api/v1", id="out-of-range-port"),
+        pytest.param("https://[::1/api/v1", id="unbracketed-ipv6"),
+    ],
+)
+def test_is_registry_url_rejects_out_of_policy_and_malformed_urls(url: str) -> None:
+    """Answer ``False`` for every URL outside the registry policy.
 
-
-def _probe_args(status_path: pathlib.Path, body_path: pathlib.Path) -> list[str]:
-    """Build one reusable registry probe invocation."""
-    return _registry_args(
-        "probe", {"--status-file": status_path, "--body-file": body_path}
+    The malformed cases matter because urllib raises ``ValueError`` from
+    ``urlsplit`` and from the ``port`` property rather than rejecting them.
+    """
+    assert not crates_io_registry_http.is_registry_url(url), (
+        f"{url!r} must not be treated as an allowlisted registry URL"
     )
-
-
-def _download_args(
-    archive_path: pathlib.Path,
-    status_path: pathlib.Path,
-    report_path: pathlib.Path | None = None,
-) -> list[str]:
-    """Build one reusable archive-download invocation."""
-    paths = {"--archive": archive_path, "--status-file": status_path}
-    if report_path is not None:
-        paths["--report-file"] = report_path
-    return _registry_args("download", paths)
 
 
 def test_probe_saves_http_status_and_body_without_retry(
@@ -136,7 +143,7 @@ def test_probe_saves_http_status_and_body_without_retry(
         )
     )
 
-    result = main(_probe_args(status, body), opener=opener)
+    result = main(probe_args(status, body), opener=opener)
 
     assert result == EXIT_OK, "a recorded HTTP response should complete the probe"
     assert len(opener.requests) == 1, "the registry probe must not retry"
@@ -151,7 +158,7 @@ def test_probe_uses_the_adapter_user_agent_and_bounded_timeout(
 ) -> None:
     """Keep registry identity and the request timeout at the adapter boundary."""
     opener = FakeOpener(FakeResponse(200, b'{"version":{}}'))
-    result = main(_probe_args(tmp_path / "status", tmp_path / "body"), opener=opener)
+    result = main(probe_args(tmp_path / "status", tmp_path / "body"), opener=opener)
 
     assert result == EXIT_OK, "a successful probe should record its response"
     request, timeout = opener.requests[0]
@@ -182,7 +189,7 @@ def test_download_retries_transient_responses_then_stops_after_success(
     clock_samples = iter((1_000_000_000, 21_123_000_000))
 
     result = main(
-        _download_args(archive, status, report),
+        download_args(archive, status, report),
         opener=opener,
         timing=TransportTiming(
             sleeper=delays.append,
@@ -223,7 +230,7 @@ def test_download_retries_absence_only_to_its_fixed_attempt_budget(
     clock_samples = iter((4_000_000_000, 11_000_000_000))
 
     result = main(
-        _download_args(archive, status, report),
+        download_args(archive, status, report),
         opener=opener,
         timing=TransportTiming(
             sleeper=delays.append,
@@ -254,7 +261,7 @@ def test_download_report_clamps_a_backwards_clock_to_zero(
     opener = FakeOpener(FakeResponse(200, b"archive"))
 
     result = main(
-        _download_args(archive, status, report),
+        download_args(archive, status, report),
         opener=opener,
         timing=TransportTiming(monotonic_clock_ns=lambda: next(clock_samples)),
     )
@@ -274,7 +281,7 @@ def test_download_records_no_status_after_transient_network_exhaustion(
     status = tmp_path / "status.txt"
 
     result = main(
-        _download_args(archive, status),
+        download_args(archive, status),
         opener=opener,
         timing=TransportTiming(sleeper=lambda _delay: None),
     )

@@ -2734,14 +2734,23 @@ probe and upload retain their single-shot request behaviour. The transport CLI
 remains responsible for writing archive/status files and the bounded retry
 report.
 
-Four focused test modules cover this new publisher path:
-`test_crates_io_candidate_cli.py`, `test_crates_io_transport_cli.py`,
-`test_crates_io_transport_properties.py`, and
-`test_crates_io_publish_sequence.py`. The source boundary includes
-`crates_io_candidate_cli.py`, `crates_io_upload_metadata.py`,
-`crates_io_transport_cli.py`, `crates_io_registry_http.py`, and
-`crates_io_transport_http.py`; the shared crates.io API policy remains in
-`release_crates_io_adapter.py` under `scripts/`.
+Seven focused test modules cover this new publisher path:
+`test_crates_io_candidate_cli.py`, `test_crates_io_candidate_guards.py`,
+`test_crates_io_transport_cli.py`, `test_crates_io_transport_upload.py`,
+`test_crates_io_transport_properties.py`, `test_crates_io_transport_retry.py`,
+and `test_crates_io_publish_sequence.py`. The candidate guards module pins the
+archive file-kind checks, the damaged identity-record and recorded-digest
+rejections, and the three packaged-README selection outcomes; the upload module
+pins the little-endian metadata and archive framing, the missing-token and
+non-object-metadata refusals, the redacted credential diagnostics, and the exit
+statuses a rejected upload reports. The retry module pins the polling budget,
+the delay between retries, and the status window that ends a poll early; the
+shared argument builders both transport suites drive live in
+`crates_io_transport_support.py` so a flag change reaches them together. The
+source boundary includes `crates_io_candidate_cli.py`,
+`crates_io_upload_metadata.py`, `crates_io_transport_cli.py`,
+`crates_io_registry_http.py`, and `crates_io_transport_http.py`; the shared
+crates.io API policy remains in `release_crates_io_adapter.py` under `scripts/`.
 
 For an absent version, the action reads the packaged `Cargo.toml` and README in
 memory from the `.crate`, derives the registry metadata (including normal,
@@ -3037,7 +3046,7 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the twenty-nine `scripts/tests/test_*.py`
+`make test-release-publication` runs the thirty-two `scripts/tests/test_*.py`
 modules for the release-policy CLIs and their library modules, then runs the
 same source modules under `--doctest-modules`, so the examples in their
 docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,

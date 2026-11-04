@@ -116,7 +116,7 @@ def _publisher_context_lines(
     # ruff: ignore[quoted-annotation] - Python 3.12 evaluates annotations eagerly.
     context: "cabc.Mapping[str, str]",
 ) -> list[str]:
-    """Format only the fixed, sanitised publisher context fields.
+    """Format only the fixed, sanitized publisher context fields.
 
     Parameters
     ----------
@@ -148,7 +148,7 @@ def _publisher_context_lines(
 
 
 def _render_summary(observation: OperationObservation, error_category: str) -> str:
-    """Render the bounded Markdown summary for one sanitised observation.
+    """Render the bounded Markdown summary for one sanitized observation.
 
     Returns
     -------

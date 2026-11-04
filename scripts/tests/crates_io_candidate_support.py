@@ -59,8 +59,18 @@ def archive_bytes(
     version: str = VERSION,
     manifest_version: str | None = None,
     manifests: tuple[str, ...] | None = None,
+    readme: bytes | None = b"# Netsuke\n\nPackaged documentation.\n",
 ) -> bytes:
-    """Return a gzip tar archive with configurable packaged manifests."""
+    """Return a gzip tar archive with configurable manifests and README.
+
+    Passing ``readme=None`` omits the README member entirely, which lets a
+    caller exercise the metadata module's fallback and absence paths.
+
+    Returns
+    -------
+    bytes
+        The gzip-compressed tar archive a caller can write as a ``.crate``.
+    """
     root = f"{name}-{version}"
     packaged_version = manifest_version if manifest_version is not None else version
     packaged_manifests = (
@@ -77,7 +87,8 @@ def archive_bytes(
             )
             for index, content in enumerate(packaged_manifests)
         ]
-        members.append(("README.md", b"# Netsuke\n\nPackaged documentation.\n"))
+        if readme is not None:
+            members.append(("README.md", readme))
         for filename, content in members:
             encoded = io.BytesIO(content)
             info = tarfile.TarInfo(f"{root}/{filename}")
@@ -92,8 +103,19 @@ def write_candidate(
     identity: dict[str, object] | None = None,
     crate_name: str | None = None,
     crate_bytes: bytes | None = None,
+    sha256: object = None,
 ) -> tuple[pathlib.Path, pathlib.Path]:
-    """Write one packaged identity record and its candidate archive."""
+    """Write one packaged identity record and its candidate archive.
+
+    ``sha256`` overrides the digest recorded for the archive. It defaults to
+    the true archive digest; pass a ``str`` for a malformed digest or ``None``
+    to omit the field, so the caller can exercise the record's digest guards.
+
+    Returns
+    -------
+    tuple[pathlib.Path, pathlib.Path]
+        The written identity record and the candidate archive beside it.
+    """
     selected_name = crate_name or f"{PACKAGE_NAME}-{VERSION}.crate"
     actual_name = (
         selected_name
@@ -112,12 +134,12 @@ def write_candidate(
     archive = directory / actual_name
     _ = archive.write_bytes(body)
     record = directory / "identity.json"
-    _ = record.write_text(
-        json.dumps({
-            "crate": selected_name,
-            "identity": selected_identity,
-            "sha256": hashlib.sha256(body).hexdigest(),
-        }),
-        encoding="utf-8",
-    )
+    recorded = {
+        "crate": selected_name,
+        "identity": selected_identity,
+        "sha256": hashlib.sha256(body).hexdigest(),
+    }
+    if sha256 is not None:
+        recorded["sha256"] = sha256
+    _ = record.write_text(json.dumps(recorded), encoding="utf-8")
     return record, archive
