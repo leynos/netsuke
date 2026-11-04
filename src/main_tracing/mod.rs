@@ -4,7 +4,6 @@
 //! diagnostic mode, then changes the subscriber's filter without installing a
 //! second global subscriber.
 
-use std::io::{self, IsTerminal};
 use std::sync::OnceLock;
 use tracing_subscriber::filter::LevelFilter;
 use tracing_subscriber::prelude::*;
@@ -28,9 +27,9 @@ static TRACING_FILTER: OnceLock<TracingFilterHandle> = OnceLock::new();
 /// # Examples
 ///
 /// ```text
-/// init_tracing(LevelFilter::WARN, StartupWriter::buffering());
+/// init_tracing(LevelFilter::WARN, StartupWriter::buffering(), false);
 /// ```
-pub(super) fn init_tracing(initial: LevelFilter, writer: StartupWriter) {
+pub(super) fn init_tracing(initial: LevelFilter, writer: StartupWriter, stderr_is_terminal: bool) {
     let (filter, handle) = reload::Layer::new(initial);
     if Registry::default()
         .with(filter)
@@ -39,7 +38,7 @@ pub(super) fn init_tracing(initial: LevelFilter, writer: StartupWriter) {
                 .with_writer(writer)
                 // Colour only a terminal; piped or redirected logs stay plain
                 // so they remain greppable and free of escape sequences.
-                .with_ansi(io::stderr().is_terminal()),
+                .with_ansi(stderr_is_terminal),
         )
         .try_init()
         .is_ok()

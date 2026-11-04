@@ -11,7 +11,7 @@ use metrics_util::{
     debugging::{DebugValue, DebuggingRecorder},
 };
 use netsuke::cli::{Cli, Commands};
-use netsuke::output_prefs;
+use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::runner::{
     LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL, run_with_ninja_program,
 };
@@ -43,7 +43,11 @@ fn capture_operation(cli: &Cli, ninja_program: &Path) -> (Result<()>, Snapshot) 
     let snapshotter = recorder.snapshotter();
     let result = utf8_path(ninja_program).and_then(|utf8_program| {
         metrics::with_local_recorder(&recorder, || {
-            run_with_ninja_program(cli, output_prefs::resolve(None), utf8_program)
+            run_with_ninja_program(
+                cli,
+                resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+                utf8_program,
+            )
         })
     });
     (result, snapshotter.snapshot().into_vec())

@@ -22,9 +22,13 @@ fn check_bypasses_ninja_program_and_recipe_shell_resolution() -> Result<()> {
         })),
         ..Cli::default()
     };
+    let plan = crate::display_plan::resolve_display_plan(
+        cli.display_policies(),
+        crate::display_plan::TerminalFacts::default(),
+    );
     let resolver_called = Cell::new(false);
 
-    run_with_ninja_program_resolver(&cli, crate::output_prefs::resolve(None), None, || {
+    run_with_ninja_program_resolver(&cli, plan, None, || {
         resolver_called.set(true);
         Utf8PathBuf::from("ninja")
     })?;

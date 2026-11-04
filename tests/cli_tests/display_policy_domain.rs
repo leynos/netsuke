@@ -1,8 +1,9 @@
-//! Single-policy CLI accessors independent of the consolidated plan.
+//! Single-policy accessors and CLI collection for the display plan.
 
 use anyhow::{Result, ensure};
 use netsuke::cli::Cli;
-use netsuke::cli::config::{AccessibilityPolicy, EmojiPolicy, ProgressPolicy};
+use netsuke::cli::config::{AccessibilityPolicy, ColourPolicy, EmojiPolicy, ProgressPolicy};
+use netsuke::display_plan::DisplayPolicies;
 use netsuke::theme::ThemePreference;
 use rstest::rstest;
 
@@ -64,4 +65,27 @@ fn progress_policy_enables_progress(
         cli.progress_enabled()
     );
     Ok(())
+}
+
+#[test]
+fn cli_collects_all_display_policies() {
+    let cli = Cli {
+        color: ColourPolicy::Never,
+        emoji: EmojiPolicy::Always,
+        progress: ProgressPolicy::Never,
+        accessibility: AccessibilityPolicy::Off,
+        json: true,
+        ..Cli::default()
+    };
+
+    assert_eq!(
+        cli.display_policies(),
+        DisplayPolicies {
+            colour: ColourPolicy::Never,
+            emoji: EmojiPolicy::Always,
+            progress: ProgressPolicy::Never,
+            accessibility: AccessibilityPolicy::Off,
+            json: true,
+        }
+    );
 }

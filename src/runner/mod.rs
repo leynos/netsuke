@@ -3,6 +3,7 @@
 //! Provides execution orchestration; build work streams through Ninja (default
 //! `ninja`, overridable with `NETSUKE_NINJA`).
 
+mod build_targets;
 #[cfg(test)]
 mod callsite_interest_reproduction;
 #[cfg(feature = "lint")]
@@ -13,11 +14,10 @@ mod error;
 mod manifest_structure_telemetry;
 mod reporter;
 use crate::cli::{BuildArgs, Cli, Commands};
+use crate::display_plan::DisplayPlan;
 use crate::localization::keys;
 use crate::manifest;
 use crate::ninja_gen::command_list::COMMAND_LIST_FAILURE_PREFIX;
-use crate::output_mode;
-use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use anyhow::{Context, Result};
 pub use camino::{Utf8Path, Utf8PathBuf};
@@ -28,7 +28,6 @@ pub use check::diagnostics as check_diagnostics;
 pub use check::diagnostics::FindingDiagnostic;
 pub use error::RunnerError;
 use monotony::StdMonotonicClock;
-use std::io::IsTerminal;
 use tracing::info;
 
 /// Default Ninja executable to invoke.
@@ -53,6 +52,7 @@ mod ninja;
 mod path_helpers;
 mod process;
 mod recipe_shell;
+pub use build_targets::BuildTargets;
 #[cfg(feature = "lint")]
 pub use check::telemetry::{CHECK_DURATION, CHECK_TOTAL};
 pub use ninja::{NinjaContent, run_ninja, run_ninja_tool};
@@ -75,6 +75,8 @@ use recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_op
 
 /// Runtime dependencies shared by command dispatch handlers.
 struct ExecutionContext<'a> {
+    /// Resolved presentation choices shared by output adapters.
+    display_plan: DisplayPlan,
     /// Status reporter shared by every stage of command dispatch.
     reporter: &'a dyn StatusReporter,
     /// Whether the command may stream task-progress updates.
@@ -85,75 +87,67 @@ struct ExecutionContext<'a> {
     graph_generation: GraphGenerationContext<'a>,
 }
 
-/// Target list passed through to Ninja; an empty slice uses IR defaults.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BuildTargets<'a>(&'a [String]);
-impl<'a> BuildTargets<'a> {
-    /// Wrap a borrowed list of command-line target names.
-    #[must_use]
-    pub const fn new(targets: &'a [String]) -> Self {
-        Self(targets)
-    }
-    /// Return the underlying slice of target names.
-    #[must_use]
-    pub const fn as_slice(&self) -> &'a [String] {
-        self.0
-    }
-}
-
-#[expect(
-    clippy::derivable_impls,
-    reason = "Default derive requires 'static lifetime; manual impl returns empty slice."
-)]
-impl Default for BuildTargets<'_> {
-    fn default() -> Self {
-        Self(&[])
-    }
-}
-
-/// Execute the parsed [`Cli`] commands with the given output preferences.
+/// Execute parsed [`Cli`] commands with their resolved display plan.
+///
+/// # Examples
+///
+/// ```no_run
+/// use netsuke::cli::Cli;
+/// use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
+/// use netsuke::runner;
+///
+/// let cli = Cli::default();
+/// let plan = resolve_display_plan(cli.display_policies(), TerminalFacts::default());
+/// runner::run(&cli, plan)?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
 ///
 /// # Errors
 ///
 /// Returns an error if manifest generation or the Ninja process fails.
-pub fn run(cli: &Cli, prefs: OutputPrefs) -> Result<()> {
-    run_with_ninja_program_resolver(cli, prefs, None, process::resolve_ninja_program)
+pub fn run(cli: &Cli, plan: DisplayPlan) -> Result<()> {
+    run_with_ninja_program_resolver(cli, plan, None, process::resolve_ninja_program)
         .map_err(error::promote_manifest_budget)
 }
 
 /// Execute parsed commands with a Ninja executable selected by the caller.
 ///
+/// # Examples
+///
+/// ```no_run
+/// use camino::Utf8Path;
+/// use netsuke::cli::Cli;
+/// use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
+/// use netsuke::runner;
+///
+/// let cli = Cli::default();
+/// let plan = resolve_display_plan(cli.display_policies(), TerminalFacts::default());
+/// runner::run_with_ninja_program(&cli, plan, Utf8Path::new("ninja"))?;
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+///
 /// # Errors
 ///
 /// Returns an error if manifest generation or the selected Ninja process fails.
-pub fn run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Utf8Path) -> Result<()> {
-    run_with_ninja_program_resolver(cli, prefs, Some(program), || program.to_owned())
+pub fn run_with_ninja_program(cli: &Cli, plan: DisplayPlan, program: &Utf8Path) -> Result<()> {
+    run_with_ninja_program_resolver(cli, plan, Some(program), || program.to_owned())
         .map_err(error::promote_manifest_budget)
 }
 
 /// Dispatch a command after resolving Ninja only for commands that require it.
 fn run_with_ninja_program_resolver(
     cli: &Cli,
-    prefs: OutputPrefs,
+    plan: DisplayPlan,
     configured_program: Option<&Utf8Path>,
     resolve_program: impl FnOnce() -> Utf8PathBuf,
 ) -> Result<()> {
-    let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
-    let progress_enabled = cli.progress_enabled() && !cli.json;
-    let stdout_is_tty = std::io::stdout().is_terminal();
-    let reporter = reporter::make_reporter(reporter::ReporterOptions {
-        mode,
-        progress_enabled,
-        verbose: cli.verbose && !cli.json,
-        prefs,
-        stdout_is_tty,
-    });
+    let reporter = reporter::make_reporter(plan, cli.verbose && !cli.json);
 
     let command = cli.command.clone().unwrap_or(Commands::Build(BuildArgs {
         targets: Vec::new(),
     }));
     if let Commands::Help(args) = &command {
-        return dispatch::execute_help(cli, args, reporter.as_ref());
+        return dispatch::execute_help(cli, args, plan, reporter.as_ref());
     }
     let clock = StdMonotonicClock;
     // `check` analyses the manifest without building it, so it is routed
@@ -165,8 +159,9 @@ fn run_with_ninja_program_resolver(
     let ninja_program = configured_program.map_or_else(resolve_program, Utf8Path::to_owned);
     let recipe_shell = recipe_shell::resolve_recipe_shell()?;
     let context = ExecutionContext {
+        display_plan: plan,
         reporter: reporter.as_ref(),
-        progress_enabled,
+        progress_enabled: plan.progress_enabled(),
         ninja_program: &ninja_program,
         graph_generation: GraphGenerationContext {
             recipe_shell,

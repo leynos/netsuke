@@ -8,7 +8,7 @@
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use netsuke::cli::{Cli, Commands, GraphArgs};
-use netsuke::output_prefs;
+use netsuke::display_plan::{TerminalFacts, resolve_display_plan};
 use netsuke::runner::run;
 use rstest::rstest;
 use serde_json::Value;
@@ -29,7 +29,11 @@ fn run_graph(cli: &Cli) -> Result<()> {
         .map_err(|e| anyhow::anyhow!("{e}"))
         .context("localizer test lock poisoned")?;
     let _guard = set_en_localizer();
-    run(cli, output_prefs::resolve(None)).context("running graph subcommand")
+    run(
+        cli,
+        resolve_display_plan(cli.display_policies(), TerminalFacts::default()),
+    )
+    .context("running graph subcommand")
 }
 
 #[rstest]

@@ -371,12 +371,15 @@ fn help_targets_bypasses_ninja_program_resolution(#[case] edges: bool) -> Result
         ..Cli::default()
     };
     let resolver_called = Cell::new(false);
+    let plan = crate::display_plan::resolve_display_plan(
+        cli.display_policies(),
+        crate::display_plan::TerminalFacts::default(),
+    );
 
-    let result =
-        run_with_ninja_program_resolver(&cli, crate::output_prefs::resolve(None), None, || {
-            resolver_called.set(true);
-            Utf8PathBuf::from("ninja")
-        });
+    let result = run_with_ninja_program_resolver(&cli, plan, None, || {
+        resolver_called.set(true);
+        Utf8PathBuf::from("ninja")
+    });
 
     ensure!(result.is_err(), "missing help manifest should fail");
     ensure!(

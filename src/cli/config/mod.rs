@@ -341,7 +341,6 @@ impl Default for CliConfig {
             fetch_block_host: Vec::new(),
             fetch_default_deny: false,
             trust_project_fetch_policy: false,
-
             manifest_evaluation_fuel: DEFAULT_MANIFEST_EVALUATION_FUEL,
             manifest_fuel: DEFAULT_MANIFEST_FUEL,
             manifest_rendered_value_bytes: DEFAULT_MANIFEST_RENDERED_VALUE_BYTES,

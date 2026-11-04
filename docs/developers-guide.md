@@ -120,8 +120,12 @@ The public runner signatures preserve that path vocabulary:
   invokes a build with the CLI's process options.
 - `run_ninja_tool(program: &Utf8Path, cli: &Cli, build_file: &Utf8Path, tool: &str)`
   invokes a Ninja tool with the CLI's process options.
-- `run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Utf8Path)`
+- `run_with_ninja_program(cli: &Cli, plan: DisplayPlan, program: &Utf8Path)`
   runs the selected command with a caller-supplied Ninja executable.
+
+The application composition root builds the `DisplayPlan` once from
+`Cli::display_policies()` and captured environment and terminal facts. Runner
+adapters consume the plan instead of resolving output preferences themselves.
 
 The process boundary is parser-independent; callers without CLI state construct
 `NinjaProcessOptions` directly.
@@ -702,12 +706,13 @@ warning can be emitted before the effective diagnostic mode — human or JSON �
 is known, yet the JSON diagnostic document is also written to stderr: an
 eagerly emitted warning could corrupt it. `StartupWriter` in
 `src/startup_tracing/mod.rs` closes that window. It implements
-`tracing_subscriber`'s `MakeWriter` and is installed by `init_tracing` in
-`src/main.rs` before locale resolution runs, so every startup event is held
-rather than written. The buffer is bounded at `MAX_BUFFERED_BYTES` (64 KiB): it
-keeps the earliest bytes, appends a truncation marker once if the bound is
-reached, and drops the remainder, so its size never depends on how much a run
-emits.
+`tracing_subscriber`'s `MakeWriter` and is installed by the `main` entrypoint
+through `main_tracing::init_tracing` in `src/main_tracing/mod.rs`, after `main`
+captures stderr's terminal status and before locale resolution runs. Every
+startup event is held rather than written. The buffer is bounded at
+`MAX_BUFFERED_BYTES` (64 KiB): it keeps the earliest bytes, appends a
+truncation marker once if the bound is reached, and drops the remainder, so its
+size never depends on how much a run emits.
 
 `settle_startup_diagnostics` in `src/main.rs` decides where the buffer goes
 once the effective mode is known: human mode releases it to stderr, JSON mode
@@ -8607,16 +8612,18 @@ is confined to the child.
 
 ### `tracing_capture`
 
-Production tracing has one process-wide subscriber, installed by `init_tracing`
-in `src/main.rs` with a reloadable filter starting at `WARN`. Events are
-written through `StartupWriter`, which buffers startup tracing until the
-effective diagnostic mode is known — no startup tracing reaches stdout. The
-buffer is bounded (64 KiB), with a truncation policy documented in the "Startup
-diagnostics buffering" subsection above. `settle_startup_diagnostics` then
-releases the buffer to stderr in human mode, or discards it in JSON mode. Once
-the mode is resolved, `set_tracing_filter` adjusts the level to the one
-`startup_filter` chooses for the mode, with a fallback filter on the paths
-where resolution itself fails. No library module installs a global subscriber.
+Production tracing has one process-wide subscriber, installed by the `main`
+entrypoint through `main_tracing::init_tracing` in `src/main_tracing/mod.rs`,
+with a reloadable filter starting at `WARN`. The entrypoint passes the captured
+stderr-terminal fact into that setup. Events are written through
+`StartupWriter`, which buffers startup tracing until the effective diagnostic
+mode is known — no startup tracing reaches stdout. The buffer is bounded (64
+KiB), with a truncation policy documented in the "Startup diagnostics
+buffering" subsection above. `settle_startup_diagnostics` then releases the
+buffer to stderr in human mode, or discards it in JSON mode. Once the mode is
+resolved, `set_tracing_filter` adjusts the level to the one `startup_filter`
+chooses for the mode, with a fallback filter on the paths where resolution
+itself fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 
@@ -10574,12 +10581,12 @@ choosing status-aware or plain child-output draining, and its callers select
 either the terminal or a JSON-mode sink.
 
 `ExecutionContext` is the private dispatch context shared by build and clean
-handlers. `run_with_ninja_program` constructs it after resolving output mode
-and reporter settings, then passes the reporter, progress decision, and
-selected Ninja program through `dispatch::execute`. Handlers consume the
-context rather than resolving output or process configuration again; tests
-should inject the program through `run_with_ninja_program` when they need a
-deterministic child executable.
+handlers. `run_with_ninja_program` constructs it from the resolved
+`DisplayPlan`, reporter, progress decision, and selected Ninja program, then
+passes it through `dispatch::execute`. Handlers consume the context rather than
+resolving output or process configuration again; tests should inject the
+program through `run_with_ninja_program` when they need a deterministic child
+executable.
 
 ### Module: `runner::generation`
 
@@ -10684,15 +10691,11 @@ free of runner telemetry.
 
 ### Module: `runner::reporter`
 
-`src/runner/reporter.rs` owns construction of the run's `StatusReporter` from
-resolved output settings. `ReporterOptions` bundles the resolved output mode,
-progress preference, verbose preference, output preferences, and whether
-standard output is a TTY. `make_reporter(options)` selects the base reporter,
-`AccessibleReporter` or `IndicatifReporter` when progress is enabled and
-`SilentReporter` otherwise, then wraps it in `VerboseTimingReporter` when
-verbose mode is active. `should_force_text_task_updates` decides whether the
-indicatif reporter emits textual task updates, forcing them for accessible mode
-or non-TTY standard output.
+`src/runner/reporter.rs` constructs the run's `StatusReporter` from a resolved
+`DisplayPlan`. `make_reporter(plan, verbose)` selects the reporter named by the
+plan, then wraps it in `VerboseTimingReporter` when verbose mode is active.
+`IndicatifReporter` receives a hidden draw target when the plan disallows live
+progress, and uses the plan's task-update preference for plain-text fallback.
 
 `AccessibleReporter` and `VerboseTimingReporter` are each generic over a
 `Write + Send` output sink that defaults to `io::Stderr`; tests inject a
@@ -10713,8 +10716,8 @@ retain their rendered order, write errors remain ignored as they are for
 draining. The deterministic clock constructor is private and test-only.
 
 `run_with_ninja_program` (in `src/runner/mod.rs`) constructs the run's
-`StatusReporter` through `reporter::make_reporter` after resolving output mode
-and reporter settings, then shares it via the `ExecutionContext` it passes to
+`StatusReporter` through `reporter::make_reporter` from the resolved
+`DisplayPlan`, then shares it via the `ExecutionContext` it passes to
 `dispatch::execute`.
 
 `StatusReporter` is a `Send + Sync` contract. The runner constructs one
@@ -10749,10 +10752,9 @@ disabled, so this event cannot corrupt its diagnostic output.
   `runner::process`, dispatch handlers, and external embedders never construct
   reporters; handlers consume the already-built reporter through the
   `ExecutionContext`/`&dyn StatusReporter` only.
-- **Composition rules:** the caller must resolve all `ReporterOptions` inputs
-  (output mode, progress, verbose, output prefs, stdout TTY) from
-  CLI/environment state before calling `make_reporter`; the module performs no
-  such resolution itself. The reporter is composed once per run and shared
+- **Composition rules:** the caller passes the resolved `DisplayPlan` and
+  verbose flag to `make_reporter`; the module does not read CLI, environment,
+  or terminal state. The reporter is composed once per run and shared
   immutably. New reporter kinds or selection policies belong in this module
   beside the mode-selection logic, colocated with the output-mode policy.
 

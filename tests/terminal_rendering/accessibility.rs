@@ -1,6 +1,9 @@
 //! Check accessible mode decisions with piped output.
 
-use super::support::{STAGE_LABELS, TerminalWorkspace, stage_labels_in_output_order, visible_text};
+use super::support::{
+    STAGE_LABELS, TerminalWorkspace, display_plan_for_args, stage_labels_in_output_order,
+    visible_text,
+};
 use anyhow::{Context, Result, ensure};
 use googletest::prelude::*;
 use pretty_assertions::assert_eq;
@@ -24,16 +27,24 @@ fn piped_accessibility_auto_reports_static_stage_summaries(
     }
     args.push("generate");
 
+    let plan = display_plan_for_args(&args, extra_env, false, false)?;
     let output = workspace
         .run_piped(&args, extra_env)
         .context("run piped accessibility-policy case")?;
     ensure!(output.status.success(), "generate should succeed");
 
     let stderr = visible_text(&output.stderr);
+    ensure!(
+        plan.output_mode().is_accessible(),
+        "case should resolve to accessible output"
+    );
     assert_eq!(
         stage_labels_in_output_order(&stderr).as_slice(),
         STAGE_LABELS.as_slice(),
     );
-    expect_that!(classify(&output.stderr).has_redraw, eq(false));
+    expect_that!(
+        classify(&output.stderr).has_redraw,
+        eq(plan.live_progress())
+    );
     Ok(())
 }
