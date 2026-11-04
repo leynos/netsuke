@@ -628,9 +628,7 @@ A target supports these fields:
 - `always`: forces the recipe to run whenever the target is requested.
 - `console`: selects Ninja's serial console pool for this executable action or
   target. It defaults to `false` and is unavailable to dependency-only
-  aggregates. Netsuke rejects a conflicting custom action pool; an action pool
-  already named `console` is accepted for a console edge. Other edges sharing
-  that rule have the inherited console pool cleared.
+  aggregates.
 - `description`: an optional human-readable summary of the public operation
   the target performs. It is discovery metadata shown by
   `netsuke help targets`; it never replaces a referenced rule's `description`
