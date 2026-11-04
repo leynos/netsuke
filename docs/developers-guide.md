@@ -7646,6 +7646,20 @@ Ninja process fixture, and builds child commands with a cleared environment and
 an explicit allowlist. Do not reuse it for unrelated integration tests; those
 tests should compose their own workspace and environment needs.
 
+### Command-list failure diagnostic projections
+
+`tests/logging_stderr/support.rs::CommandListDiagnostics` owns selection of the
+human-readable command-list failure, JSON failure marker, and tracing action
+field from captured stderr. It also replaces volatile fingerprints in the
+corresponding snapshot fragments.
+
+Keep this wrapper local to `tests/logging_stderr/command_list_failure.rs` and
+use it only for command-list failure output. It accepts the captured text once
+and exposes these fixed semantic projections; do not add arbitrary marker
+strings or generalize it into a repository-wide stderr parser. Other diagnostic
+tests should define projections for their own output contract. Production code
+must not depend on this test helper.
+
 ### `test_support::ninja_semantics`
 
 `test_support::ninja_semantics` (`test_support/src/ninja_semantics.rs`) is the
