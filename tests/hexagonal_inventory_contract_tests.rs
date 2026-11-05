@@ -35,7 +35,6 @@ fn repo_root() -> Result<Dir> {
         .with_context(|| format!("open repository root {path}"))
 }
 
-/// Confirm the real inventory is populated and consistent with the roadmap.
 #[test]
 fn real_inventory_is_consistent() -> Result<()> {
     let root = repo_root()?;

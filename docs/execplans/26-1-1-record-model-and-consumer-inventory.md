@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 36. See `Revision note` at the foot of this document. This plan was
+Revision 37. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -623,6 +623,25 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   no code read, and the plan's OB-INTEGRITY has always required it, so the
   source was implemented rather than the promise withdrawn. The split leaves
   the crate root at 55 lines and every module under 400.
+- [x] (2026-11-05) Dispositioned the sixth milestone CodeRabbit review's single
+  finding (D-19). The scope accounting named three private modules after D-18
+  had made it four; the count is now measured against the merge base rather
+  than derived, so it names sixteen files.
+- [x] (2026-11-05) Ran the complete sequential eleven-gate set at `7b9e12d1a`.
+  The candidate was frozen for the batch. Ten gates exited 0; `markdownlint`
+  exited 143 because another session's host-wide `pkill` terminated it, which
+  the owning session confirmed. The candidate was byte-identical at start and
+  end (`git rev-parse HEAD` unchanged, `git status --porcelain` empty), so the
+  killed gate was re-run alone against the same revision and exited 0. Recorded
+  figures: doc-comment coverage 6663/6778 = 98.30%; 5,106 Nextest cases passed
+  with 7 skipped and every doctest passed; 1,756 workflow-contract tests plus
+  28 workflow-script tests; 217 Markdown files linted with 0 issues; every
+  Mermaid diagram validated.
+- [x] (2026-11-05) Dispositioned the seventh milestone CodeRabbit review's
+  single finding (D-20): removed the `///` comment from
+  `real_inventory_is_consistent`, and measured with
+  `cargo clippy --test hexagonal_inventory_contract_tests -- -D warnings` that
+  the denied documentation lints accept a `#[test]` function without one.
 - [ ] (2026-11-05) Finish the current-head PR assessment: re-run the gates,
   publish, and take the PR to equilibrium.
 - [ ] EP-M4: rerun the gates and assess the PR.
@@ -927,6 +946,19 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   wrong from the moment `tests.rs` was created; the arithmetic in D-14 was
   internally consistent but named the wrong number of modules. Date/Author:
   2026-11-05, implementing agent, after the sixth milestone CodeRabbit review.
+- Decision D-20 (2026-11-05): removed the `///` doc comment from
+  `real_inventory_is_consistent`. The repository rule that exempts `#[test]`
+  functions from the coverage metric also forbids documenting them. The comment
+  asserted nothing the function body does not: it reads both documents, holds
+  the roadmap closure to 25 tasks, and calls `validate_populated` before
+  `validate_inventory`. The workspace denies `missing_docs` and
+  `missing_docs_in_private_items`, so the removal was measured rather than
+  assumed: clippy over the test target with `-D warnings` and all features
+  exits 0 without the comment, which shows the lints exempt a `#[test]`
+  function. Many existing test functions in `tests/` still carry `///`
+  comments; this decision removes the one in the changed file and does not
+  widen to a sweep of files this branch does not touch. Date/Author:
+  2026-11-05, implementing agent, after the seventh milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1875,6 +1907,12 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   The split added a path the plan's own accounting had not counted, so the
   Constraints, the Scope tolerance, D-14, and Revision 30 now state the
   measured figure. Final gate run and PR assessment follow.
+- Revision 37 (2026-11-05): dispositioned the seventh milestone CodeRabbit
+  review's single finding (D-20). Removed the `///` comment from
+  `real_inventory_is_consistent`, the repository rule forbids documenting
+  `#[test]` functions, and measured that the two denied documentation lints
+  accept the removal rather than assuming they would. Final gate run and PR
+  assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
