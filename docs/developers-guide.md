@@ -2758,18 +2758,19 @@ probe and upload retain their single-shot request behaviour. The transport CLI
 remains responsible for writing archive/status files and the bounded retry
 report.
 
-Eight focused test modules cover this new publisher path:
+Nine focused test modules cover this new publisher path:
 `test_crates_io_candidate_cli.py`, `test_crates_io_candidate_guards.py`,
-`test_crates_io_candidate_metadata.py`, `test_crates_io_transport_cli.py`,
-`test_crates_io_transport_upload.py`, `test_crates_io_transport_properties.py`,
-`test_crates_io_transport_retry.py`, and `test_crates_io_publish_sequence.py`.
-The candidate metadata module holds the metadata-mode tests that the check-mode
-module would otherwise carry. The candidate policy module names each acceptance
-rule's accept and reject outcome directly, so a changed rule fails there rather
-than only through a whole-command rejection. The candidate guards module pins
-the archive file-kind checks, the damaged identity-record and recorded-digest
-rejections, and the three packaged-README selection outcomes; the upload module
-pins the little-endian metadata and archive framing, the missing-token and
+`test_crates_io_candidate_metadata.py`, `test_crates_io_candidate_policy.py`,
+`test_crates_io_transport_cli.py`, `test_crates_io_transport_upload.py`,
+`test_crates_io_transport_properties.py`, `test_crates_io_transport_retry.py`,
+and `test_crates_io_publish_sequence.py`. The candidate metadata module holds
+the metadata-mode tests that the check-mode module would otherwise carry. The
+candidate policy module names each acceptance rule's accept and reject outcome
+directly, so a changed rule fails there rather than only through a
+whole-command rejection. The candidate guards module pins the archive file-kind
+checks, the damaged identity-record and recorded-digest rejections, and the
+three packaged-README selection outcomes; the upload module pins the
+little-endian metadata and archive framing, the missing-token and
 non-object-metadata refusals, the redacted credential diagnostics, and the exit
 statuses a rejected upload reports. The retry module pins the polling budget,
 the delay between retries, and the status window that ends a poll early; the
