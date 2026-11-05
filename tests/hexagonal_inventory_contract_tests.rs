@@ -80,6 +80,15 @@ mod tests {
         "    Continued prose includes 27.1.1.\n",
         "  - Acceptance: this is not a dependency; 27.3.2.\n",
     );
+    const HEADING_BLEED_ROADMAP: &str = concat!(
+        "- [ ] 26.3.2. Refactor the boundary.\n",
+        "  - Dependencies: 26.3.1 and 26.2.3.\n",
+        "## 27. Application and diagnostic ownership\n",
+        "\n",
+        "Entry: accepted RFC 0026 scope and the current inventory from 26.1.1.\n",
+        "- [ ] 27.1.1. Own the diagnostics.\n",
+        "  - Dependencies: 26.3.2.\n",
+    );
     const VALID_SKELETON: &str = concat!(
         "# Hexagonal hardening model and consumer inventory\n",
         "\nPin: 0123456789abcdef0123456789abcdef01234567\n\n",
@@ -186,6 +195,20 @@ mod tests {
         assert_eq!(
             dependents_of(&tasks, "26.1.1"),
             BTreeSet::from(["26.1.2".to_owned(), "26.1.3".to_owned()])
+        );
+    }
+
+    #[test]
+    fn dependency_continuations_stop_at_headings_and_unindented_prose() {
+        let tasks = roadmap_tasks(HEADING_BLEED_ROADMAP);
+        let boundary: BTreeSet<String> = ["26.2.3", "26.3.1"]
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        assert_eq!(tasks.get("26.3.2"), Some(&boundary));
+        assert_eq!(
+            tasks.get("27.1.1"),
+            Some(&BTreeSet::from(["26.3.2".to_owned()]))
         );
     }
 

@@ -51,7 +51,7 @@ fn task_dependencies(
         let Some(mut dependency_text) = dependency_text(consumed_line) else {
             continue;
         };
-        append_dependency_continuations(lines, task_pattern, &mut dependency_text);
+        append_dependency_continuations(lines, &mut dependency_text);
         dependencies.extend(
             dependency_pattern
                 .find_iter(&dependency_text)
@@ -73,11 +73,10 @@ fn dependency_text(line: &str) -> Option<String> {
 /// Append indented continuation prose without consuming the next list item.
 fn append_dependency_continuations(
     lines: &mut std::iter::Peekable<std::str::Lines<'_>>,
-    task_pattern: &Regex,
     dependency_text: &mut String,
 ) {
     while let Some(next_line) = lines.peek().copied() {
-        if task_pattern.is_match(next_line) || starts_sibling_bullet(next_line) {
+        if ends_dependency_continuation(next_line) {
             break;
         }
         let Some(consumed_line) = lines.next() else {
@@ -87,10 +86,16 @@ fn append_dependency_continuations(
     }
 }
 
-/// Identify a sibling bullet that terminates a dependency continuation.
-fn starts_sibling_bullet(line: &str) -> bool {
-    let indentation = line.len() - line.trim_start().len();
-    indentation <= 2 && line.trim_start().starts_with("- ")
+/// Identify a line that ends a dependency continuation because it is neither
+/// blank nor indented continuation prose.
+///
+/// Roadmap bullets sit at two spaces and their continuations at four, so any
+/// non-blank line indented by two spaces or fewer starts new content. Stopping
+/// there keeps a heading, a sibling bullet, or unindented prose from donating
+/// its task identifiers to the preceding `Dependencies:` value.
+fn ends_dependency_continuation(line: &str) -> bool {
+    let content = line.trim_start();
+    !content.is_empty() && line.len() - content.len() <= 2
 }
 
 /// Append nonblank continuation text to its inline dependency value.
