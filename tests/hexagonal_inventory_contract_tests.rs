@@ -24,6 +24,14 @@ use validation::{validate_inventory, validate_populated};
 const INVENTORY_PATH: &str = "docs/hexagonal-hardening-inventory.md";
 const ROADMAP_PATH: &str = "docs/roadmap-hexagonal-hardening.md";
 
+/// Number of roadmap tasks that transitively depend on 26.1.1.
+///
+/// This guards the roadmap parser against silently dropping dependents, which
+/// would leave trace coverage with nothing to check and let it pass vacuously.
+/// The roadmap is read live, not at the inventory's pin, so adding a dependent
+/// task requires extending the trace matrix and this count together.
+const EXPECTED_DEPENDENT_COUNT: usize = 25;
+
 /// Open the checkout root as a capability-scoped directory.
 ///
 /// # Errors
@@ -45,9 +53,12 @@ fn real_inventory_is_consistent() -> Result<()> {
         .read_to_string(ROADMAP_PATH)
         .with_context(|| format!("read {ROADMAP_PATH}"))?;
     let tasks = roadmap_tasks(&roadmap);
+    let dependents = dependents_of(&tasks, "26.1.1");
     ensure!(
-        dependents_of(&tasks, "26.1.1").len() == 25,
-        "the pinned roadmap dependency closure should contain 25 tasks"
+        dependents.len() == EXPECTED_DEPENDENT_COUNT,
+        "roadmap should list {EXPECTED_DEPENDENT_COUNT} tasks depending on 26.1.1, found {}; \
+         update the inventory trace matrix and this count together",
+        dependents.len()
     );
     validate_populated(&inventory)?;
     validate_inventory(&inventory, &roadmap)

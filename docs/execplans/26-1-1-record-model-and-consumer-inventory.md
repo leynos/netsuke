@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 38. See `Revision note` at the foot of this document. This plan was
+Revision 39. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -647,6 +647,11 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   list is a claim about the tree, so the three contract commits since its last
   regeneration made it stale; it now names all 34 in-scope commits, verified as
   a set in both directions against live Git.
+- [x] (2026-11-05) Dispositioned the eighth milestone CodeRabbit review's single
+  finding (D-22): named `EXPECTED_DEPENDENT_COUNT`, stated what it guards,
+  corrected the message's false "pinned roadmap" claim, and reported the
+  observed count. Probed live by lowering the constant, which produced the new
+  message; the focused suite is 35/35.
 - [ ] (2026-11-05) Finish the current-head PR assessment: re-run the gates,
   publish, and take the PR to equilibrium.
 - [ ] EP-M4: rerun the gates and assess the PR.
@@ -976,6 +981,18 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   Revision 33 keep the 31 figure because it was true at that rebase; they now
   say so. Date/Author: 2026-11-05, implementing agent, after the seventh
   milestone CodeRabbit review.
+- Decision D-22 (2026-11-05): named the roadmap closure count and reported the
+  observed value. The test held `dependents_of(&tasks, "26.1.1").len()` against
+  a bare `25` with a message calling the roadmap "pinned", which it is not: the
+  test reads the live `docs/roadmap-hexagonal-hardening.md`, while the pin
+  governs the inventory snapshot. The count is now `EXPECTED_DEPENDENT_COUNT`
+  with a comment stating what it guards — a parser that dropped dependents
+  would leave trace coverage with nothing to check — and the failure names both
+  the expected and the observed count and asks the maintainer to update the
+  trace matrix and the constant together. Probed by lowering the constant to
+  24: the test fails with "roadmap should list 24 tasks depending on 26.1.1,
+  found 25", so the message reaches the reader. Date/Author: 2026-11-05,
+  implementing agent, after the eighth milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1935,6 +1952,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   (D-21). Three contract commits had landed since it was regenerated, so the
   list said 31 where live Git reported 34; the set now matches in both
   directions. Final gate run and PR assessment follow.
+- Revision 39 (2026-11-05): dispositioned the eighth milestone CodeRabbit
+  review's single finding (D-22). The roadmap closure count is a named constant
+  that states what it guards, and its failure now reports the observed count
+  instead of asserting an unexplained number against a roadmap it wrongly
+  called pinned. Final gate run and PR assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
