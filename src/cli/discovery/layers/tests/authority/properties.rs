@@ -181,12 +181,23 @@ proptest! {
     }
 
     /// An unauthorized `shells` declaration always fails the merge.
+    ///
+    /// M2 admits a well-formed declaration from an operator root, so the rule
+    /// this property states is authority-relative: a declaration whose
+    /// provenance is untrusted is rejected, and one from a trusted root is not.
     #[test]
-    fn any_shells_declaration_fails_closed(
+    fn untrusted_shells_declaration_fails_closed(
         entries in prop::collection::vec((any::<bool>(), 0..3u8, any::<bool>()), 0..8),
     ) {
         let (_temp, fixture) = fixture();
-        let declares_shells = entries.iter().any(|(_, _, shells)| *shells);
+        let untrusted_declaration =
+            entries
+                .iter()
+                .any(|(is_trusted_root, selector, shells)| {
+                    *shells
+                        && spec_authority(*is_trusted_root, location(*selector))
+                            == RootAuthority::Untrusted
+                });
         let layers = entries
             .iter()
             .map(|(is_trusted_root, selector, shells)| {
@@ -196,8 +207,8 @@ proptest! {
         let resolved = retain_layers_and_resolve_json(layers);
         prop_assert_eq!(
             !resolved.errors.is_empty(),
-            declares_shells,
-            "rejection must happen exactly when a declaration is present"
+            untrusted_declaration,
+            "rejection must happen exactly when an untrusted declaration is present"
         );
     }
 }
@@ -217,5 +228,30 @@ fn trusted_unrelated_occurrence_is_the_witness() {
         authority,
         RootAuthority::Operator,
         "a trusted root's unrelated occurrence must keep operator authority"
+    );
+}
+
+/// The witness for the authority-relative rejection rule.
+///
+/// One declaration value is exercised twice: an untrusted occurrence is
+/// rejected and an operator occurrence of the same value is admitted. Without
+/// this, the property could pass because no generated entry ever declared
+/// `shells`, or because both authorities were rejected.
+#[test]
+fn untrusted_declaration_is_the_fail_closed_witness() {
+    let (_temp, fixture) = fixture();
+
+    let rejected = retain_layers_and_resolve_json(vec![classify(false, 1, true, &fixture).1]);
+    assert_eq!(
+        rejected.errors.len(),
+        1,
+        "an untrusted declaration must produce exactly one error"
+    );
+
+    let admitted = retain_layers_and_resolve_json(vec![classify(true, 1, true, &fixture).1]);
+    assert!(
+        admitted.errors.is_empty(),
+        "an operator declaration must be admitted, got: {:?}",
+        admitted.errors
     );
 }
