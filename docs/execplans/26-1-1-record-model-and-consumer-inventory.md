@@ -6,9 +6,9 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Conformance basis`, and `Verification plan` must be kept up to date as work
 proceeds.
 
-Status: BLOCKED
+Status: IN PROGRESS
 
-Revision 24. See `Revision note` at the foot of this document. This plan was
+Revision 28. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -21,11 +21,11 @@ must account for changes since the inventory baseline.
 ## Purpose / big picture
 
 Netsuke compiles a YAML manifest (a `Netsukefile`) into a Ninja build file and
-then runs Ninja. [RFC 0026][rfc-0026] and [ADR-0035][adr-0035] propose
-hardening the semantic core of that compiler: successful lowering should yield
-resolved operations that cannot contain unresolved rule references (finding
-H1), a lowered recipe should carry the interpreter that gives its quoting
-meaning (H2), the runner should stop orchestrating Ninja through the
+then runs Ninja. [RFC 0026][rfc-0026] specifies and [ADR-0035][adr-0035]
+accepts hardening the semantic core of that compiler: successful lowering
+should yield resolved operations that cannot contain unresolved rule references
+(finding H1), a lowered recipe should carry the interpreter that gives its
+quoting meaning (H2), the runner should stop orchestrating Ninja through the
 command-line type `Cli` (H3), and compiler errors should be typed facts rather
 than values paired with independently supplied localized messages (H4).
 
@@ -62,8 +62,8 @@ After this change:
   roadmap's dependency closure of 26.1.1 either traced or excluded with a
   reason, and every finding owned by an existing task. It never reads Rust
   source, so it cannot fail because later work legitimately changes the code.
-- Roadmap entry 26.1.1 is marked done and links to the inventory (subject to
-  the entry-gate option chosen in D-6).
+- Roadmap entry 26.1.1 is marked done and links to the inventory after the
+  accepted scope in ADR-0035 is recorded.
 
 A reviewer observes success by running
 `cargo nextest run --test hexagonal_inventory_contract_tests` and seeing it
@@ -278,7 +278,7 @@ Upstream artefacts at planning time (`ebcedaef`):
 Trace chains:
 
 ```plaintext
-RM-26.1.1-D -> D-6 option -> EP-M0 (Option A) or EP-M4 (Option B) -> EV-ENTRY
+RM-26.1.1-D -> D-6 (historical Option B) -> D-13 -> accepted ADR-0035 -> EP-M4 -> EV-ENTRY
 RM-26.1.1-S1 -> RFC26-CM1 -> EP-M2 -> inventory Register A1..A7 -> EV-ORACLE, EV-SWEEP, EV-REVERSE
 RM-26.1.1-A2 -> EP-M2 -> inventory Method + Register -> EV-ORACLE, EV-SEEDED
 RM-26.1.1-S2 -> RFC26-H1..H4 -> EP-M3 -> inventory Landed work + Findings -> EV-FINDINGS
@@ -377,11 +377,10 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - Risk: `mdtablefix --wrap --renumber` refills or renumbers the new document
   (a wrapped `72.` can become a list item). Severity: low. Likelihood: medium.
   Mitigation: run `make fmt` after every edit and reread the diff.
-- Risk: the roadmap dependency on "acceptance of RFC 0026" is never met,
-  because no RFC in `docs/rfcs/` has ever left `Proposed` (including RFCs whose
-  roadmap work is complete) and the house convention is ADR acceptance.
-  Severity: high. Likelihood: high. Mitigation: D-6 asks the approver to choose
-  the gate explicitly.
+- Resolved risk (2026-11-03): the roadmap dependency on "acceptance of RFC
+  0026" had no explicit gate because RFCs remain `Proposed` under the house
+  convention. D-6 selected Option B; D-13 records the user's direction to
+  accept ADR-0035 in this candidate before completing the roadmap item.
 
 ## Progress
 
@@ -504,9 +503,52 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   doctests passed. Markdown lint covered 199 files with 0 issues; all Mermaid
   diagrams validated. An initial gate attempt hit `ENOSPC`; with 278 GB free
   and 15% inode use, the complete rerun finished without a storage failure.
-- [ ] EP-M4: documentation integration, roadmap update, gates green. ADR-0035
-  remains Proposed on live `origin/main`, so do not tick the roadmap item
-  unless its acceptance condition is met.
+- [x] (2026-11-03) Rebased the branch onto PR target `main` at
+  `e5d57c58352b51473de4170f86e34fdc9db3ece6`. Resolved the replay stop after
+  inspecting all five paths: retained `main`'s revised timed-test policy and
+  deletion of its obsolete timeout contract, while preserving the historical
+  timeout and gate evidence in this plan. `range-diff` found no dropped branch
+  commits; target-only paths are byte-identical.
+- [x] (2026-11-03) Refreshed the rebase onto the newly advanced PR target
+  `main` at `5ee56f7ec4263adca487fee987f0781023f70d09`. All nine replayed
+  commits applied without conflict. Restored the accepted ADR and M4 edits from
+  a named stash, then confirmed that the main-branch documentation changes
+  remain intact.
+- [x] (2026-11-04) Rebased onto current `main` at
+  `b99c9c92b554263eea78bba429cd4c57d6b80ce0`. `range-diff` maps all nine branch
+  commits one-to-one. Rechecked the edited design, contents index, and
+  test-suite map against main's cycle-participation and release-help updates;
+  added its three new source/test commits to the inventory drift list. Final
+  gates must run on this base.
+- [x] (2026-11-03) The user explicitly instructed acceptance of ADR-0035 and
+  completion of this approved plan. Recorded the decision in D-13; it
+  supersedes D-6's former wait for the accepted ADR to appear on `origin/main`.
+  ADR-0035 now states the accepted direction and leaves implementation details
+  assigned to their roadmap tasks. EP-M4 documentation is prepared; final
+  candidate gates and hosted PR assessments remain.
+- [x] (2026-11-03) Applied the local CodeScene review fixes: shared heading
+  extraction, smaller register-ID and finding predicates, one paired-input
+  validation context, and a parameterized malformed/duplicate-row test.
+  `cs delta origin/main` reports `no-issues-found`; the four string-heavy
+  reports are exact-path exceptions for test-only Markdown fixtures and
+  parsers, with their scope recorded beside the rules.
+  `cs rules-config validate` accepts all eight rule sets.
+- [x] (2026-11-03) Recorded the preliminary post-ADR run as stale evidence:
+  `make check-fmt` and `make typecheck` passed on the pre-refresh candidate;
+  `make lint` was interrupted with exit 143 while waiting in the compile queue,
+  and the `make doc-coverage` log ended before Rust results. Neither is final
+  candidate evidence; revision 28 supersedes this preliminary run.
+- [x] (2026-11-05) Ran the final gates sequentially on the rebased candidate.
+  `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
+  `make test`, `make test-workflow-contracts`, `make markdownlint`, and
+  `make nixie` passed; doc coverage is 98.30%, Nextest passed 5,094 tests
+  (seven skipped), and workflow contracts passed 1,666 pytest plus 28 script
+  tests. The focused inventory contract passed 23/23. The source and test
+  refactors are committed as `c5afe7988`; this inventory now includes that
+  in-scope commit. Final documentation checks and PR assessment remain.
+- [ ] EP-M4: rerun the complete sequential gate set on the final rebased
+  candidate, validate and commit the refreshed documentation, and finish PR
+  assessment.
 
 ## Surprises & discoveries
 
@@ -668,8 +710,17 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `Accepted`, and the plan is `BLOCKED` at that point if it is not. Option B
   respects the roadmap's dependency for *completion* while letting the evidence
   inform acceptance. Either way, RFC 0026's own status line is not the gate,
-  because no RFC in this repository has ever been moved out of `Proposed`.
-  Date/Author: 2026-09-27, planning agent; resolved by the user on 2026-10-23.
+  because no RFC in this repository has ever been moved out of `Proposed`. D-13
+  later supersedes Option B's external-readback condition by explicit user
+  direction to accept ADR-0035 in this candidate. Date/Author: 2026-09-27,
+  planning agent; resolved by the user on 2026-10-23.
+- Decision D-13 (2026-11-03, directed by the user): accept the existing
+  ADR-0035 in this candidate and complete EP-M4 without waiting for that
+  acceptance to land on `origin/main`. This satisfies `RM-26.1.1-D` and
+  supersedes only D-6 Option B's external-readback condition; it does not
+  complete any later migration task. Keep unresolved rule/declaration,
+  shell-bound representation, and lease-ownership choices assigned to roadmap
+  tasks 26.1.2, 26.3.1, and 27.2.2. Date/Author: 2026-11-03, user.
 - Decision D-7: the compiler is the primary site oracle; a text sweep covers
   only what the build does not compile. Rationale: marking each inventoried
   field, variant, and inherent function `#[deprecated]` in a disposable export
@@ -726,12 +777,13 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 
 ## Outcomes & retrospective
 
-EP-M1 is complete and committed. EP-M2's corrected primary oracle, text sweeps,
-seeded controls, register, and reverse-anchor audit are complete. EP-M3's
-landed work, findings, obligations, and all 25 trace rows are complete. The
-candidate passed the full sequential gate set. EP-M4 remains blocked because
-ADR-0035 is still `Proposed` on live `origin/main`; D-6 Option B requires its
-acceptance before the roadmap entry can be checked or the inventory integrated.
+EP-M1 to EP-M3 are complete. On 2026-11-03, the user directed acceptance of
+ADR-0035, satisfying the remaining entry condition for EP-M4. The ADR now
+records the accepted direction and keeps detailed migration choices with their
+owning tasks. The inventory is indexed, linked from the roadmap, and records
+the in-scope commits since its unchanged pin. The full local gate set passed on
+the rebased candidate; EP-M4 remains in progress through the final
+documentation checks and current-head PR assessment.
 
 ## Verification plan
 
@@ -1109,14 +1161,17 @@ top-level test files automatically; confirm it passes.
     inventory's H1 finding.
   - `docs/developers-guide.md`: a "Test suite map" entry for
     `tests/hexagonal_inventory_contract_tests.rs`.
+  - `docs/adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md`:
+    accept the existing decision with a date and summary, and assign remaining
+    implementation gates to their owning roadmap tasks.
   - The inventory: the "commits since the pin" list, using short SHAs only so
     that the one-pin check still holds.
   - This plan: `Status: COMPLETE`; `Outcomes & retrospective`.
 - Acceptance evidence: EV-GATES on the final tree.
-- Conformance check: `docs/users-guide.md` unchanged; no ADR added; under D-6
-  Option B, ADR-0035 reads `Accepted` in
-  `git fetch origin && git show origin/main:docs/adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md`
-  before the checkbox is ticked, otherwise set `Status: BLOCKED` and stop.
+- Conformance check: `docs/users-guide.md` remains unchanged because user
+  behaviour did not change. The existing ADR is accepted with the user's
+  explicit direction; this does not mark any migration task complete. The
+  roadmap checkbox links to the inventory, whose snapshot pin is unchanged.
 - Recovery: revert the integration commit.
 - Remaining gaps: none; 26.1.2 starts from the inventory.
 - Compatibility decision: none.
@@ -1265,7 +1320,8 @@ subject, for example `Record the pinned semantic-boundary register (26.1.1)`.
   sets and a seeded-fault result of eleven plants found and one correctly
   classified as test.
 - `#652` / `#714` appear only under "Landed work" and in `CO-14`.
-- Roadmap item 26.1.1 is checked (subject to D-6) and links to the inventory.
+- Roadmap item 26.1.1 is checked and links to the inventory after ADR-0035's
+  accepted scope is recorded.
 
 Red-Green-Refactor applies to the contract test (EV-RED, then EV-CONTRACT, then
 refactor with the test re-run). For the inventory itself, the seeded controls
@@ -1591,6 +1647,22 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   sequential gates passed. Set the plan status to `BLOCKED` because ADR-0035
   remains `Proposed`; left EP-M4 and the roadmap checkbox pending its
   acceptance.
+- Revision 26 (2026-11-03): recorded the user's direction to accept ADR-0035,
+  superseding D-6's wait-for-main condition. Rebased onto refreshed PR target
+  `main` at `5ee56f7ec`, preserved both branches' documentation, and included
+  that target's source changes in the inventory drift list. Applied the
+  actionable CodeScene fixes and verified the exact-path exceptions with a
+  clean local delta; final gates and PR assessments remain.
+- Revision 27 (2026-11-04): rebased all nine branch commits onto current
+  `main` at `b99c9c92b`, rechecked the overlapping documentation sections, and
+  recorded the three additional in-scope source/test commits since the pin. The
+  final sequential gate set and PR assessment remain pending.
+- Revision 28 (2026-11-05): recorded the final sequential gate pass on the
+  rebased candidate, including 98.30% documentation coverage, 5,094 passing
+  Nextest cases, 1,666 passing workflow-contract tests, and 23 focused
+  inventory-contract cases. Committed the test-only CodeScene refactors as
+  `c5afe7988` and added that source/test commit to the inventory's post-pin
+  list. Final documentation checks and live PR assessment remain.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
