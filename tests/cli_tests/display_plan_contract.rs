@@ -45,29 +45,7 @@ struct ContractRow {
 fn display_plan_contract_colour() {
     assert_yaml_snapshot!(
         "display_plan_contract_colour",
-        rows_for_policy([
-            (
-                "auto",
-                DisplayPolicies {
-                    colour: ColourPolicy::Auto,
-                    ..policies()
-                },
-            ),
-            (
-                "always",
-                DisplayPolicies {
-                    colour: ColourPolicy::Always,
-                    ..policies()
-                },
-            ),
-            (
-                "never",
-                DisplayPolicies {
-                    colour: ColourPolicy::Never,
-                    ..policies()
-                },
-            ),
-        ])
+        rows_for_policy(colour_cases())
     );
 }
 
@@ -75,29 +53,7 @@ fn display_plan_contract_colour() {
 fn display_plan_contract_emoji() {
     assert_yaml_snapshot!(
         "display_plan_contract_emoji",
-        rows_for_policy([
-            (
-                "auto",
-                DisplayPolicies {
-                    emoji: EmojiPolicy::Auto,
-                    ..policies()
-                },
-            ),
-            (
-                "always",
-                DisplayPolicies {
-                    emoji: EmojiPolicy::Always,
-                    ..policies()
-                },
-            ),
-            (
-                "never",
-                DisplayPolicies {
-                    emoji: EmojiPolicy::Never,
-                    ..policies()
-                },
-            ),
-        ])
+        rows_for_policy(emoji_cases())
     );
 }
 
@@ -105,29 +61,7 @@ fn display_plan_contract_emoji() {
 fn display_plan_contract_progress() {
     assert_yaml_snapshot!(
         "display_plan_contract_progress",
-        rows_for_policy([
-            (
-                "auto",
-                DisplayPolicies {
-                    progress: ProgressPolicy::Auto,
-                    ..policies()
-                },
-            ),
-            (
-                "always",
-                DisplayPolicies {
-                    progress: ProgressPolicy::Always,
-                    ..policies()
-                },
-            ),
-            (
-                "never",
-                DisplayPolicies {
-                    progress: ProgressPolicy::Never,
-                    ..policies()
-                },
-            ),
-        ])
+        rows_for_policy(progress_cases())
     );
 }
 
@@ -135,30 +69,76 @@ fn display_plan_contract_progress() {
 fn display_plan_contract_accessibility() {
     assert_yaml_snapshot!(
         "display_plan_contract_accessibility",
-        rows_for_policy([
-            (
-                "auto",
-                DisplayPolicies {
-                    accessibility: AccessibilityPolicy::Auto,
-                    ..policies()
-                },
-            ),
-            (
-                "on",
-                DisplayPolicies {
-                    accessibility: AccessibilityPolicy::On,
-                    ..policies()
-                },
-            ),
-            (
-                "off",
-                DisplayPolicies {
-                    accessibility: AccessibilityPolicy::Off,
-                    ..policies()
-                },
-            ),
-        ])
+        rows_for_policy(accessibility_cases())
     );
+}
+
+/// Build the colour policy rows, one per accepted value.
+fn colour_cases() -> [(&'static str, DisplayPolicies); 3] {
+    [
+        ("auto", with_colour(ColourPolicy::Auto)),
+        ("always", with_colour(ColourPolicy::Always)),
+        ("never", with_colour(ColourPolicy::Never)),
+    ]
+}
+
+/// Build the emoji policy rows, one per accepted value.
+fn emoji_cases() -> [(&'static str, DisplayPolicies); 3] {
+    [
+        ("auto", with_emoji(EmojiPolicy::Auto)),
+        ("always", with_emoji(EmojiPolicy::Always)),
+        ("never", with_emoji(EmojiPolicy::Never)),
+    ]
+}
+
+/// Build the progress policy rows, one per accepted value.
+fn progress_cases() -> [(&'static str, DisplayPolicies); 3] {
+    [
+        ("auto", with_progress(ProgressPolicy::Auto)),
+        ("always", with_progress(ProgressPolicy::Always)),
+        ("never", with_progress(ProgressPolicy::Never)),
+    ]
+}
+
+/// Build the accessibility policy rows, one per accepted value.
+fn accessibility_cases() -> [(&'static str, DisplayPolicies); 3] {
+    [
+        ("auto", with_accessibility(AccessibilityPolicy::Auto)),
+        ("on", with_accessibility(AccessibilityPolicy::On)),
+        ("off", with_accessibility(AccessibilityPolicy::Off)),
+    ]
+}
+
+/// Return the baseline policies with only the colour replaced.
+const fn with_colour(colour: ColourPolicy) -> DisplayPolicies {
+    DisplayPolicies {
+        colour,
+        ..policies()
+    }
+}
+
+/// Return the baseline policies with only the emoji setting replaced.
+const fn with_emoji(emoji: EmojiPolicy) -> DisplayPolicies {
+    DisplayPolicies {
+        emoji,
+        ..policies()
+    }
+}
+
+/// Return the baseline policies with only the progress setting replaced.
+const fn with_progress(progress: ProgressPolicy) -> DisplayPolicies {
+    DisplayPolicies {
+        progress,
+        ..policies()
+    }
+}
+
+/// Return the baseline policies with only the accessibility setting replaced.
+const fn with_accessibility(accessibility: AccessibilityPolicy) -> DisplayPolicies {
+    DisplayPolicies {
+        accessibility,
+        ..policies()
+    }
 }
 
 /// Build deterministic projections for each policy against representative facts.

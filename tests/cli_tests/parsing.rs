@@ -225,38 +225,7 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         cli.env_block_var == case.block_var,
         "block-var flags should match input"
     );
-    ensure!(
-        cli.fetch_allow_scheme == case.allow_scheme,
-        "allow-scheme flags should match input",
-    );
-    let expected_allow_host = case
-        .allow_host
-        .iter()
-        .map(|pattern| {
-            HostPattern::parse(pattern)
-                .with_context(|| format!("parse expected allow host '{pattern}'"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    ensure!(
-        cli.fetch_allow_host == expected_allow_host,
-        "allow-host flags should match input",
-    );
-    let expected_block_host = case
-        .block_host
-        .iter()
-        .map(|pattern| {
-            HostPattern::parse(pattern)
-                .with_context(|| format!("parse expected block host '{pattern}'"))
-        })
-        .collect::<Result<Vec<_>>>()?;
-    ensure!(
-        cli.fetch_block_host == expected_block_host,
-        "block-host flags should match input",
-    );
-    ensure!(
-        cli.fetch_default_deny == case.default_deny,
-        "default-deny flag should match input",
-    );
+    assert_fetch_policy(&cli, &case)?;
     ensure!(cli.color == case.color, "color policy should match input");
     ensure!(cli.emoji == case.emoji, "emoji policy should match input");
     ensure!(
@@ -278,6 +247,43 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
         case.expected_cmd
     );
     Ok(())
+}
+
+/// Assert that every parsed fetch-policy field matches the expected case.
+///
+/// Kept out of [`parse_cli`] so the case assertion body stays a readable
+/// sequence of one-line checks. The two host lists are parsed with the same
+/// `HostPattern::parse` the CLI uses, so a change to what parsing accepts
+/// fails here rather than silently exempting the case.
+fn assert_fetch_policy(cli: &Cli, case: &CliCase) -> Result<()> {
+    ensure!(
+        cli.fetch_allow_scheme == case.allow_scheme,
+        "allow-scheme flags should match input",
+    );
+    ensure!(
+        cli.fetch_allow_host == expected_hosts(&case.allow_host, "allow")?,
+        "allow-host flags should match input",
+    );
+    ensure!(
+        cli.fetch_block_host == expected_hosts(&case.block_host, "block")?,
+        "block-host flags should match input",
+    );
+    ensure!(
+        cli.fetch_default_deny == case.default_deny,
+        "default-deny flag should match input",
+    );
+    Ok(())
+}
+
+/// Parse a case's host patterns for comparison with the parsed CLI.
+fn expected_hosts(patterns: &[&str], verb: &str) -> Result<Vec<HostPattern>> {
+    patterns
+        .iter()
+        .map(|pattern| {
+            HostPattern::parse(pattern)
+                .with_context(|| format!("parse expected {verb} host '{pattern}'"))
+        })
+        .collect()
 }
 
 #[rstest]
@@ -356,21 +362,24 @@ fn non_utf8_ninja_paths_fail_early(
     );
     Ok(())
 }
-#[test]
-fn emoji_never_forces_ascii_output() -> Result<()> {
+/// Resolve output preferences for one emoji policy in standard mode.
+fn emoji_allowed_for(policy: EmojiPolicy) -> bool {
     let cli = Cli {
-        emoji: EmojiPolicy::Never,
+        emoji: policy,
         ..Cli::default()
     };
-
-    let prefs = output_prefs::resolve_from_theme_with(
+    output_prefs::resolve_from_theme_with(
         cli.theme_preference(),
         ThemeContext::new(None, Some(cli.color), OutputMode::Standard),
         |_| None,
-    );
+    )
+    .emoji_allowed()
+}
 
+#[test]
+fn emoji_never_forces_ascii_output() -> Result<()> {
     ensure!(
-        !prefs.emoji_allowed(),
+        !emoji_allowed_for(EmojiPolicy::Never),
         "emoji = never should force ASCII output",
     );
     Ok(())
@@ -378,19 +387,8 @@ fn emoji_never_forces_ascii_output() -> Result<()> {
 
 #[test]
 fn emoji_always_forces_unicode_output() -> Result<()> {
-    let cli = Cli {
-        emoji: EmojiPolicy::Always,
-        ..Cli::default()
-    };
-
-    let prefs = output_prefs::resolve_from_theme_with(
-        cli.theme_preference(),
-        ThemeContext::new(None, Some(cli.color), OutputMode::Standard),
-        |_| None,
-    );
-
     ensure!(
-        prefs.emoji_allowed(),
+        emoji_allowed_for(EmojiPolicy::Always),
         "emoji = always should force Unicode output",
     );
     Ok(())

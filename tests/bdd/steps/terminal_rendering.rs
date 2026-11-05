@@ -41,32 +41,96 @@ fn run_netsuke_on_terminal(world: &TestWorld, args: &str) -> Result<()> {
     Ok(())
 }
 
+/// Which captured stream a classifier assertion reads.
+#[derive(Clone, Copy)]
+enum Stream {
+    /// The captured stderr of a piped run.
+    Stderr,
+    /// The captured output of a pseudo-terminal run.
+    Terminal,
+}
+
+/// One classifier fact an assertion asserts and the message describing it.
+struct ClassifierFact {
+    /// The classifier predicate the captured bytes are tested with.
+    observed: fn(&[u8]) -> bool,
+    /// The expectation, phrased so it reads after "expected {subject} to".
+    expectation: &'static str,
+}
+
+/// Return whether the bytes contain a Select Graphic Rendition sequence.
+fn has_sgr(bytes: &[u8]) -> bool {
+    classify(bytes).has_sgr
+}
+
+/// Return whether the bytes contain no Select Graphic Rendition sequence.
+fn has_no_sgr(bytes: &[u8]) -> bool {
+    !has_sgr(bytes)
+}
+
+/// Return whether the bytes contain a redraw sequence.
+fn has_redraw(bytes: &[u8]) -> bool {
+    classify(bytes).has_redraw
+}
+
+/// Return whether the bytes contain no redraw sequence.
+fn has_no_redraw(bytes: &[u8]) -> bool {
+    !has_redraw(bytes)
+}
+
+/// The SGR fact, asserted present or absent.
+const SGR: [ClassifierFact; 2] = [
+    ClassifierFact {
+        observed: has_sgr,
+        expectation: "contain an SGR sequence",
+    },
+    ClassifierFact {
+        observed: has_no_sgr,
+        expectation: "contain no SGR sequence",
+    },
+];
+
+/// The redraw fact, asserted present or absent.
+const REDRAW: [ClassifierFact; 2] = [
+    ClassifierFact {
+        observed: has_redraw,
+        expectation: "contain a redraw sequence",
+    },
+    ClassifierFact {
+        observed: has_no_redraw,
+        expectation: "contain no redraw sequence",
+    },
+];
+
+/// Assert a classifier fact over one captured stream.
+///
+/// Every absence assertion is paired with a positive text fragment in the
+/// scenario that uses it: a stream that produced nothing at all also contains
+/// no SGR sequence, and only the fragment distinguishes "plain" from "silent".
+fn assert_classifier_fact(world: &TestWorld, stream: Stream, fact: &ClassifierFact) -> Result<()> {
+    let (subject, captured) = match stream {
+        Stream::Stderr => ("stderr", world.command_stderr.get()),
+        Stream::Terminal => ("terminal output", world.command_terminal.get()),
+    };
+    let output = captured.with_context(|| format!("{subject} should be captured"))?;
+    ensure!(
+        (fact.observed)(output.as_bytes()),
+        "expected {subject} to {}, got:\n{output}",
+        fact.expectation
+    );
+    Ok(())
+}
+
 /// Assert that captured stderr contains a Select Graphic Rendition sequence.
 #[then("stderr should contain an SGR sequence")]
 fn stderr_contains_sgr(world: &TestWorld) -> Result<()> {
-    let stderr = world
-        .command_stderr
-        .get()
-        .context("stderr output should be captured")?;
-    ensure!(
-        classify(stderr.as_bytes()).has_sgr,
-        "expected stderr to contain an SGR sequence, got:\n{stderr}"
-    );
-    Ok(())
+    assert_classifier_fact(world, Stream::Stderr, &SGR[0])
 }
 
 /// Assert that captured stderr contains no Select Graphic Rendition sequence.
 #[then("stderr should contain no SGR sequence")]
 fn stderr_contains_no_sgr(world: &TestWorld) -> Result<()> {
-    let stderr = world
-        .command_stderr
-        .get()
-        .context("stderr output should be captured")?;
-    ensure!(
-        !classify(stderr.as_bytes()).has_sgr,
-        "expected stderr to contain no SGR sequence, got:\n{stderr}"
-    );
-    Ok(())
+    assert_classifier_fact(world, Stream::Stderr, &SGR[1])
 }
 
 /// Assert that status glyphs use the selected ASCII or Unicode set.
@@ -114,61 +178,25 @@ fn stderr_status_lines_have_text_labels(world: &TestWorld) -> Result<()> {
 /// Assert that captured pseudo-terminal output contains an SGR sequence.
 #[then("the terminal output should contain an SGR sequence")]
 fn terminal_output_contains_sgr(world: &TestWorld) -> Result<()> {
-    let output = world
-        .command_terminal
-        .get()
-        .context("terminal output should be captured")?;
-    ensure!(
-        classify(output.as_bytes()).has_sgr,
-        "expected terminal output to contain an SGR sequence, got:\n{output}"
-    );
-    Ok(())
+    assert_classifier_fact(world, Stream::Terminal, &SGR[0])
 }
 
 /// Assert that captured pseudo-terminal output contains no SGR sequence.
-///
-/// Paired with a positive text fragment in every scenario that uses it: a
-/// terminal that produced nothing at all also contains no SGR, and only the
-/// fragment distinguishes "plain" from "silent".
 #[then("the terminal output should contain no SGR sequence")]
 fn terminal_output_contains_no_sgr(world: &TestWorld) -> Result<()> {
-    let output = world
-        .command_terminal
-        .get()
-        .context("terminal output should be captured")?;
-    ensure!(
-        !classify(output.as_bytes()).has_sgr,
-        "expected no SGR sequence in terminal output, got:\n{output}"
-    );
-    Ok(())
+    assert_classifier_fact(world, Stream::Terminal, &SGR[1])
 }
 
 /// Assert that captured pseudo-terminal output contains a redraw sequence.
 #[then("the terminal output should contain a redraw sequence")]
 fn terminal_output_contains_redraw(world: &TestWorld) -> Result<()> {
-    let output = world
-        .command_terminal
-        .get()
-        .context("terminal output should be captured")?;
-    ensure!(
-        classify(output.as_bytes()).has_redraw,
-        "expected terminal output to contain a redraw sequence, got:\n{output}"
-    );
-    Ok(())
+    assert_classifier_fact(world, Stream::Terminal, &REDRAW[0])
 }
 
 /// Assert that captured pseudo-terminal output contains no redraw controls.
 #[then("the terminal output should contain no redraw sequence")]
 fn terminal_output_contains_no_redraw(world: &TestWorld) -> Result<()> {
-    let output = world
-        .command_terminal
-        .get()
-        .context("terminal output should be captured")?;
-    ensure!(
-        !classify(output.as_bytes()).has_redraw,
-        "expected no terminal redraw sequence, got:\n{output}"
-    );
-    Ok(())
+    assert_classifier_fact(world, Stream::Terminal, &REDRAW[1])
 }
 
 /// Assert that captured pseudo-terminal output contains the requested text.
