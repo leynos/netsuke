@@ -6540,7 +6540,11 @@ Netsuke uses a mixed strategy:
   and roadmap inputs for cross-document checks; keep its methods in that
   validator rather than using it as a shared parsing API. The contract-local
   `HeadingLevel` selects headings for the private body parser; do not treat it
-  as a general Markdown API.
+  as a general Markdown API. `validate_inventory` must accept the skeleton
+  fixture's empty sections, so `validate_populated` carries the separate
+  requirement that the real document populate the register, obligations, and
+  findings; without it a renamed table header or a changed identifier format
+  would leave every per-entry check with nothing to visit and pass silently.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.

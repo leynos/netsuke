@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 31. See `Revision note` at the foot of this document. This plan was
+Revision 32. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -583,6 +583,15 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   the log writer's status. Each contract fix has a regression case that fails
   against the previous parser (three red, then green, measured directly); the
   recipe now sets `set -euo pipefail` and names all eleven decomposed gates.
+- [x] (2026-11-05) Dispositioned the third milestone CodeRabbit finding (D-16).
+  The contract's per-entry checks are all loops, so an inventory that parsed to
+  nothing passed every one of them. Added `validate_populated`, which holds the
+  real document — not the skeleton fixture — to at least one register row, one
+  compatibility obligation, and one finding, plus four `#[cfg(test)]` cases
+  beside it. Probed against the real file by renaming the register's `ID`
+  header: the previous test passed silently, the guarded test fails with the
+  intended message. The eleven gates passed at `9fadde36f`, the last revision
+  whose parser the finding addresses.
 - [ ] (2026-11-05) Re-run the complete sequential gate set on the revised
   candidate and finish current-head PR assessment.
 - [ ] EP-M4: rerun the gates and assess the PR.
@@ -838,6 +847,18 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   ExecPlan's own gate recipe gained `set -euo pipefail` for the same reason: a
   piped `make` gate reports `tee`'s status, not its own. Date/Author:
   2026-11-05, implementing agent, after the second milestone CodeRabbit review.
+- Decision D-16 (2026-11-05): split the contract's emptiness policy in two.
+  `validate_inventory` stays permissive so the skeleton fixture's empty
+  sections still validate, and the new `validate_populated` holds the real
+  document to at least one register row, one compatibility obligation, and one
+  finding. Rationale: every per-entry check in the contract is a loop, so a
+  document that parses to nothing satisfies all of them. Measured directly:
+  renaming the register's `ID` header in the real inventory leaves the previous
+  `real_inventory_is_consistent` test green — a silent pass — and the guard
+  makes it fail with `the real inventory should register at least one item`.
+  The fine-grained cases live in a `#[cfg(test)]` module beside the guard, in
+  `tests/hexagonal_inventory_contract/validation.rs`. Date/Author: 2026-11-05,
+  implementing agent, after the third milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1761,6 +1782,12 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   tokens — each with a regression case measured red against the previous
   parser, and gave the plan's gate recipe `set -euo pipefail` plus the full
   eleven-gate decomposition. Final gate run and PR assessment follow.
+- Revision 32 (2026-11-05): dispositioned the third milestone CodeRabbit
+  finding (D-16). Split the contract's emptiness policy: `validate_inventory`
+  stays permissive for the skeleton fixture, and the new `validate_populated`
+  requires the real document to populate the register, obligations, and
+  findings, so the per-entry loops cannot pass vacuously. Final gate run and PR
+  assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
