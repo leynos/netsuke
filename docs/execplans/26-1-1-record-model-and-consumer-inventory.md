@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 37. See `Revision note` at the foot of this document. This plan was
+Revision 38. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -599,7 +599,8 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `main` target, one adds the contract test, and five refactor or tighten it.
   The set is verified by token comparison against
   `git log 8a961000..HEAD -- src build.rs tests test_support benches`, not by
-  counting prose.
+  counting prose. That figure is a snapshot of the rebase itself; each later
+  contract commit appends to the list, and D-21 records the re-measurement.
 - [x] (2026-11-05) Dispositioned the fourth milestone CodeRabbit review's two
   findings (D-17). Finding 1: `validate_obligations` searched the whole
   `## Trace matrix` section, so an obligation named only in the introduction
@@ -642,6 +643,10 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `real_inventory_is_consistent`, and measured with
   `cargo clippy --test hexagonal_inventory_contract_tests -- -D warnings` that
   the denied documentation lints accept a `#[test]` function without one.
+- [x] (2026-11-05) Re-measured the inventory's post-pin commit list (D-21). The
+  list is a claim about the tree, so the three contract commits since its last
+  regeneration made it stale; it now names all 34 in-scope commits, verified as
+  a set in both directions against live Git.
 - [ ] (2026-11-05) Finish the current-head PR assessment: re-run the gates,
   publish, and take the PR to equilibrium.
 - [ ] EP-M4: rerun the gates and assess the PR.
@@ -959,6 +964,18 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   comments; this decision removes the one in the changed file and does not
   widen to a sweep of files this branch does not touch. Date/Author:
   2026-11-05, implementing agent, after the seventh milestone CodeRabbit review.
+- Decision D-21 (2026-11-05): re-measured the inventory's post-pin commit list,
+  which had drifted to 31 while live Git reported 34. The list is a claim about
+  the tree, so it must be regenerated whenever a commit touches an in-scope
+  path; D-17's, D-18's, and D-20's commits all did. The list now names
+  `e679d4308`, `b51702ce3`, and `7d8c7b6c7` as well, and the set was verified
+  by token comparison in both directions against
+  `git log 8a961000..HEAD -- src build.rs tests test_support benches`: 34
+  identifiers, no difference either way. The classification is 25 in `main`,
+  one adding the contract, and eight refinements. Earlier progress notes and
+  Revision 33 keep the 31 figure because it was true at that rebase; they now
+  say so. Date/Author: 2026-11-05, implementing agent, after the seventh
+  milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1891,8 +1908,9 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
 - Revision 33 (2026-11-05): rebased onto `origin/main` at `c82189bf4` (#1047).
   The rebase rewrote the branch commits the drift list cites, and #1047 is
   itself in scope, so the list is regenerated from live Git and verified as a
-  set: 31 commits, 25 `main` + 1 contract test + 5 contract refinements. Final
-  gate run and PR assessment follow.
+  set: 31 commits, 25 `main` + 1 contract test + 5 contract refinements, the
+  count as of that rebase; D-21 records the later re-measurement. Final gate
+  run and PR assessment follow.
 - Revision 34 (2026-11-05): dispositioned the fourth milestone CodeRabbit
   review's two findings (D-17). Obligation coverage now reads only the two
   trace tables, with a regression case measured red against the previous
@@ -1913,6 +1931,10 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   `#[test]` functions, and measured that the two denied documentation lints
   accept the removal rather than assuming they would. Final gate run and PR
   assessment follow.
+- Revision 38 (2026-11-05): re-measured the inventory's post-pin commit list
+  (D-21). Three contract commits had landed since it was regenerated, so the
+  list said 31 where live Git reported 34; the set now matches in both
+  directions. Final gate run and PR assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
