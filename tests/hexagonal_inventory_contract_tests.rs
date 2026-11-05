@@ -225,17 +225,25 @@ mod tests {
     }
 
     #[rstest]
-    #[case::area_only("A1")]
-    #[case::unknown_area("A8/ast::Rule")]
-    #[case::unsupported_site_kind("A1/ast::Rule@Recipe::new#builder")]
-    fn rejects_malformed_register_identifiers(#[case] identifier: &str) -> Result<()> {
+    #[case::area_only("| A1 | Rule | -- | -- | -- |", "is malformed")]
+    #[case::unknown_area("| A8/ast::Rule | Rule | -- | -- | -- |", "is malformed")]
+    #[case::unsupported_site_kind(
+        "| A1/ast::Rule@Recipe::new#builder | Rule | -- | -- | -- |",
+        "is malformed"
+    )]
+    #[case::duplicate_identifier(
+        "| A1/ast::Rule | Rule | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |",
+        "should be unique"
+    )]
+    fn rejects_malformed_or_duplicate_register_rows(
+        #[case] rows: &str,
+        #[case] expected_error: &str,
+    ) -> Result<()> {
         let inventory = VALID_SKELETON.replace(
             "| -- | -- | -- | -- | -- |\n\n### Site rows",
-            &format!(
-                "| -- | -- | -- | -- | -- |\n| {identifier} | Rule | -- | -- | -- |\n\n### Site rows"
-            ),
+            &format!("| -- | -- | -- | -- | -- |\n{rows}\n\n### Site rows"),
         );
-        expect_validation_error(&inventory, SIMPLE_ROADMAP, "is malformed")?;
+        expect_validation_error(&inventory, SIMPLE_ROADMAP, expected_error)?;
         Ok(())
     }
 
@@ -285,16 +293,6 @@ mod tests {
                 "## Purpose\n26.1.3 appears only outside the trace matrix.\n\n## Scope and definitions",
             );
         expect_validation_error(&inventory, TRANSITIVE_ROADMAP, "missing: {\"26.1.3\"}")?;
-        Ok(())
-    }
-
-    #[test]
-    fn rejects_duplicate_register_identifiers() -> Result<()> {
-        let inventory = VALID_SKELETON.replace(
-            "| -- | -- | -- | -- | -- |\n\n### Site rows",
-            "| -- | -- | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n\n### Site rows",
-        );
-        expect_validation_error(&inventory, SIMPLE_ROADMAP, "should be unique")?;
         Ok(())
     }
 

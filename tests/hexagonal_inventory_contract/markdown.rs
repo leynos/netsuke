@@ -4,14 +4,25 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use regex::Regex;
 
+/// Return a second-level section body.
 pub(super) fn section<'text>(text: &'text str, heading: &str) -> Option<&'text str> {
+    heading_body(text, "## ", heading)
+}
+
+/// Return a third-level subsection body.
+pub(super) fn subsection<'text>(text: &'text str, heading: &str) -> Option<&'text str> {
+    heading_body(text, "### ", heading)
+}
+
+/// Extract a heading's body up to the next heading at the same level.
+fn heading_body<'text>(text: &'text str, marker: &str, heading: &str) -> Option<&'text str> {
     let mut offset = 0;
     let mut body_start = None;
 
     for line in text.split_inclusive('\n') {
         let title = line
             .trim_end_matches(['\r', '\n'])
-            .strip_prefix("## ")
+            .strip_prefix(marker)
             .map(strip_heading_number);
 
         if body_start.is_some() && title.is_some() {
@@ -32,29 +43,6 @@ fn strip_heading_number(title: &str) -> &str {
         Some((number, rest)) if number.chars().all(|character| character.is_ascii_digit()) => rest,
         _ => title,
     }
-}
-
-/// Return a third-level subsection body.
-pub(super) fn subsection<'text>(text: &'text str, heading: &str) -> Option<&'text str> {
-    let mut offset = 0;
-    let mut body_start = None;
-
-    for line in text.split_inclusive('\n') {
-        let title = line
-            .trim_end_matches(['\r', '\n'])
-            .strip_prefix("### ")
-            .map(strip_heading_number);
-
-        if body_start.is_some() && title.is_some() {
-            return text.get(body_start?..offset);
-        }
-        if title == Some(heading) {
-            body_start = Some(offset + line.len());
-        }
-        offset += line.len();
-    }
-
-    body_start.and_then(|start| text.get(start..))
 }
 
 /// Collect every lowercase, 40-character hexadecimal token in the text.
@@ -135,33 +123,59 @@ pub(super) fn is_well_formed_register_id(identifier: &str) -> bool {
     let Some((area, body)) = identifier.split_once('/') else {
         return false;
     };
-    if !has_valid_area_and_body(area, body) {
-        return false;
-    }
+    has_valid_area_and_body(area, body) && has_valid_register_body(body)
+}
+
+/// Check whether the register body uses either a type or a site identifier.
+fn has_valid_register_body(body: &str) -> bool {
     let Some((item, site)) = body.split_once('@') else {
         return !body.contains('#');
     };
+    has_valid_item(item) && has_valid_site(site)
+}
+
+/// Check whether the item before the site marker is non-empty and unambiguous.
+fn has_valid_item(item: &str) -> bool {
+    !item.is_empty() && !item.contains('#')
+}
+
+/// Check whether a site has a symbol and a supported kind.
+fn has_valid_site(site: &str) -> bool {
     let Some((symbol, kind)) = site.split_once('#') else {
         return false;
     };
-    !item.is_empty()
-        && !item.contains('#')
-        && !symbol.is_empty()
-        && !symbol
-            .chars()
-            .any(|character| matches!(character, '@' | '#'))
-        && !kind.chars().any(|character| matches!(character, '@' | '#'))
-        && ["constructor", "mutator", "consumer", "api-reachable"]
-            .iter()
-            .any(|known_kind| {
-                kind == *known_kind
-                    || kind.strip_prefix(known_kind).is_some_and(|suffix| {
-                        suffix.strip_prefix('-').is_some_and(|number| {
-                            !number.is_empty()
-                                && number.chars().all(|character| character.is_ascii_digit())
-                        })
-                    })
-            })
+    !symbol.is_empty()
+        && !has_site_delimiter(symbol)
+        && !has_site_delimiter(kind)
+        && has_supported_site_kind(kind)
+}
+
+/// Reject separators that would make a site split ambiguous.
+fn has_site_delimiter(value: &str) -> bool {
+    value
+        .chars()
+        .any(|character| matches!(character, '@' | '#'))
+}
+
+/// Check the closed set of site kinds and their numbered variants.
+fn has_supported_site_kind(kind: &str) -> bool {
+    ["constructor", "mutator", "consumer", "api-reachable"]
+        .iter()
+        .any(|known_kind| matches_site_kind(kind, known_kind))
+}
+
+/// Match a site kind or its numbered suffix.
+fn matches_site_kind(kind: &str, known_kind: &str) -> bool {
+    kind == known_kind
+        || kind
+            .strip_prefix(known_kind)
+            .and_then(|suffix| suffix.strip_prefix('-'))
+            .is_some_and(is_ascii_number)
+}
+
+/// Check that a numbered site-kind suffix contains only decimal digits.
+fn is_ascii_number(number: &str) -> bool {
+    !number.is_empty() && number.chars().all(|character| character.is_ascii_digit())
 }
 
 /// Check the register area's closed set and its non-empty, whitespace-free body.
@@ -239,27 +253,36 @@ pub(super) fn finding_entries(findings: &str) -> Vec<String> {
     let mut entries = Vec::new();
     let mut current = None::<String>;
     for line in findings.lines() {
-        let content = line.trim_start();
-        let starts_finding = content.starts_with("- H1:")
-            || content.starts_with("- H2:")
-            || content.starts_with("- H3:")
-            || content.starts_with("- H4:")
-            || content.starts_with("- OBS-");
-        if starts_finding {
-            if let Some(entry) = current.replace(line.to_owned()) {
-                entries.push(entry);
-            }
-        } else if content.starts_with("- ") || content.starts_with("## ") {
-            if let Some(entry) = current.take() {
-                entries.push(entry);
-            }
+        if is_finding_start(line) {
+            finish_finding(&mut current, &mut entries);
+            current = Some(line.to_owned());
+        } else if is_finding_boundary(line) {
+            finish_finding(&mut current, &mut entries);
         } else if let Some(entry) = current.as_mut() {
             entry.push('\n');
             entry.push_str(line);
         }
     }
-    if let Some(entry) = current {
+    finish_finding(&mut current, &mut entries);
+    entries
+}
+
+/// Identify a heading that starts an owned finding.
+fn is_finding_start(line: &str) -> bool {
+    ["- H1:", "- H2:", "- H3:", "- H4:", "- OBS-"]
+        .iter()
+        .any(|prefix| line.trim_start().starts_with(prefix))
+}
+
+/// Identify a list item or section heading that ends a finding entry.
+fn is_finding_boundary(line: &str) -> bool {
+    let content = line.trim_start();
+    content.starts_with("- ") || content.starts_with("## ")
+}
+
+/// Move a completed finding into the result list.
+fn finish_finding(current: &mut Option<String>, entries: &mut Vec<String>) {
+    if let Some(entry) = current.take() {
         entries.push(entry);
     }
-    entries
 }
