@@ -249,11 +249,43 @@ fn exclusion_identifier(line: &str) -> Option<&str> {
 /// `Consumes` subsections count. Their absence yields no references at all;
 /// dropping the introduction by splitting at the first `### ` would hand the
 /// `Excluded` and `Unchanged` prose the same power the introduction had.
+/// `Unchanged` entries reach register coverage through `unchanged_ids`, which
+/// accepts only the bullet form.
 pub(super) fn trace_rows(trace: &str) -> String {
     ["Changes", "Consumes"]
         .iter()
         .filter_map(|heading| heading_body(trace, heading, HeadingLevel::Subsection))
         .collect()
+}
+
+/// Collect register identifiers from the trace matrix's `Unchanged` bullets.
+///
+/// A register item no task changes is listed as `- A1/ast::Rule: reason`, so
+/// only an identifier that opens a bullet counts. A sentence that merely names
+/// an identifier would let prose satisfy coverage, the same fail-open that
+/// `trace_rows` closes for the introduction and the exclusions. Only exact
+/// identifiers count; an unchanged entry names one item, so the wildcard forms
+/// `reference_covers` accepts would be ambiguous here.
+///
+/// The identifier is the bullet's first word, not its text up to the first
+/// colon: register identifiers themselves contain `::`, so splitting on a colon
+/// would truncate `A1/ast::Rule` to `A1/ast` and reject every real entry.
+pub(super) fn unchanged_ids(trace: &str) -> BTreeSet<String> {
+    let Some(unchanged) = heading_body(trace, "Unchanged", HeadingLevel::Subsection) else {
+        return BTreeSet::new();
+    };
+    unchanged
+        .lines()
+        .filter_map(unchanged_identifier)
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Return the register identifier that opens an unchanged bullet.
+fn unchanged_identifier(line: &str) -> Option<&str> {
+    let bullet = line.trim_start().strip_prefix("- ")?;
+    let candidate = bullet.split_whitespace().next()?.trim_end_matches(':');
+    is_well_formed_register_id(candidate).then_some(candidate)
 }
 
 /// Return the prose that follows an excluded task identifier.

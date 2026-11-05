@@ -6546,8 +6546,10 @@ Netsuke uses a mixed strategy:
   findings; without it a renamed table header or a changed identifier format
   would leave every per-entry check with nothing to visit and pass silently.
   Register and obligation coverage both derive from `trace_rows`, the `Changes`
-  and `Consumes` tables alone, so a mention in the trace introduction, an
-  exclusion reason, or the `Unchanged` prose cannot satisfy either.
+  and `Consumes` tables alone, so a mention in the trace introduction or an
+  exclusion reason cannot satisfy either. A register item may instead be listed
+  by an `Unchanged` bullet that opens with the identifier; a sentence that
+  merely names one does not count.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.
