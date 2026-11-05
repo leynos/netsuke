@@ -251,10 +251,10 @@ helper functions; their sum is the compiler message count.
 
 ### In-scope commits since the pin
 
-The snapshot remains pinned to the commit above. These are the 29 commits
+The snapshot remains pinned to the commit above. These are the 30 commits
 between that pin and the branch's 2026-11-05 head that changed `src/`,
 `build.rs`, `tests/`, `test_support/`, or `benches/`: 25 in the current `main`
-target, one adding this inventory's contract test, and four refactoring or
+target, one adding this inventory's contract test, and five refactoring or
 tightening that contract. This list is re-sweep context for later consumers; it
 does not move the inventory pin.
 
@@ -295,6 +295,7 @@ does not move the inventory pin.
 - `f4a0c0e46` Replace heading wrappers with a level-typed parser
 - `a6c1abb5c` Stop dependency continuations at unindented lines
 - `ac34b55b3` Tighten inventory contract checks against silent passes
+- `d5ae385ea` Require the real inventory to populate its iterated sections
 
 Three corrected text sweeps cover compiler blind spots. The Rust source list
 contains 936 files across `src/`, `build.rs`, `tests/`, `test_support/`,
