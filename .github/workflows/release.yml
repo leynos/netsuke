@@ -111,7 +111,7 @@ jobs:
       - id: release_modes
         name: Determine release modes
         uses: >-
-          leynos/shared-actions/.github/actions/determine-release-modes@2f58fab140cc8dfe69756aaa6a3bbb987c426023
+          leynos/shared-actions/.github/actions/determine-release-modes@872f59f53717b5bebe8e24b2f4a7496b089a939a
       - id: validate_publish_ref
         name: Validate publishing ref
         if: steps.release_modes.outputs['should-publish'] == 'true'
@@ -131,7 +131,7 @@ jobs:
       - id: ensure_version
         name: Read package version from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/ensure-cargo-version@ff1dd759dfffc0db3459e30e833f52437ee62b57
+          leynos/shared-actions/.github/actions/ensure-cargo-version@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           check-tag: ${{ fromJSON(steps.release_modes.outputs['should-publish']) }}
       - id: wix_extension_version
@@ -165,7 +165,7 @@ jobs:
       - id: bin_name
         name: Extract binary name from Cargo.toml
         uses: >-
-          leynos/shared-actions/.github/actions/export-cargo-metadata@a5765019912a8ab6882b12db049c7cde635f3a85
+          leynos/shared-actions/.github/actions/export-cargo-metadata@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           manifest-path: Cargo.toml
           fields: bin-name
@@ -329,7 +329,7 @@ jobs:
           fallback: none
       - name: Setup Rust
         uses: >-
-          leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+          leynos/shared-actions/.github/actions/setup-rust@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           rustflags: -D warnings
@@ -445,7 +445,7 @@ jobs:
         run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - name: Install Rust
         uses: >-
-          leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+          leynos/shared-actions/.github/actions/setup-rust@872f59f53717b5bebe8e24b2f4a7496b089a939a
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
@@ -616,7 +616,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@a5765019912a8ab6882b12db049c7cde635f3a85
+          leynos/shared-actions/.github/actions/upload-release-assets@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           release-tag: ${{ needs.metadata.outputs.release_tag || github.ref_name }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
@@ -757,7 +757,7 @@ jobs:
       - id: upload_assets
         name: Upload artefacts to release
         uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@0606ca899ce2995a0c4bc78e660e80832e6e8855
+          leynos/shared-actions/.github/actions/upload-release-assets@872f59f53717b5bebe8e24b2f4a7496b089a939a
         with:
           release-tag: ${{ needs.metadata.outputs.release_tag }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
