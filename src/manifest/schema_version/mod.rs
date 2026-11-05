@@ -38,6 +38,9 @@ pub(super) enum SchemaVersionRejection {
         /// Minor component, safe to render without retaining user text.
         minor: u64,
     },
+    /// The version falls inside the supported range but is not exactly
+    /// `MAJOR.MINOR.0`, so it is not a schema release at all.
+    NotCanonical,
 }
 
 /// Check whether `version` is an exact release understood by this reader.
@@ -53,26 +56,28 @@ pub(super) enum SchemaVersionRejection {
 ///
 /// # Errors
 ///
-/// Returns [`SchemaVersionRejection::Unsupported`] when any version component
-/// falls outside the exact supported release boundary.
+/// Returns [`SchemaVersionRejection::Unsupported`] when the major or minor is
+/// outside the reader's supported releases, and
+/// [`SchemaVersionRejection::NotCanonical`] when the version is inside that
+/// range but carries a non-zero patch, a prerelease, or build metadata.
+///
+/// The two rejections are distinct on purpose. A version inside the range is
+/// not an "unsupported schema" the reader could ever admit by upgrading, so
+/// reporting it that way would name the declared and supported schema as the
+/// same value and hide the canonical-form rule that actually failed.
 pub(super) fn admit(version: &Version) -> Result<(), SchemaVersionRejection> {
-    let is_supported_release = [
-        version.major == SUPPORTED.major,
-        (0..=SUPPORTED.max_minor).contains(&version.minor),
-        version.patch == 0,
-        version.pre.is_empty(),
-        version.build.is_empty(),
-    ]
-    .into_iter()
-    .all(std::convert::identity);
-    if is_supported_release {
-        Ok(())
-    } else {
-        Err(SchemaVersionRejection::Unsupported {
+    if version.major != SUPPORTED.major
+        || !(0..=SUPPORTED.max_minor).contains(&version.minor)
+    {
+        return Err(SchemaVersionRejection::Unsupported {
             major: version.major,
             minor: version.minor,
-        })
+        });
     }
+    if version.patch != 0 || !version.pre.is_empty() || !version.build.is_empty() {
+        return Err(SchemaVersionRejection::NotCanonical);
+    }
+    Ok(())
 }
 
 /// Admit a parsed document's literal schema declaration when its root is a map.

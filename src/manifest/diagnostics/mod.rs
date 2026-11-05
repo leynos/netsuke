@@ -212,7 +212,9 @@ pub(super) fn map_schema_version_error(
         SchemaVersionRejection::Missing => {
             localization::message(keys::MANIFEST_SCHEMA_VERSION_MISSING)
         }
-        SchemaVersionRejection::NotAString | SchemaVersionRejection::Invalid => {
+        SchemaVersionRejection::NotAString
+        | SchemaVersionRejection::Invalid
+        | SchemaVersionRejection::NotCanonical => {
             localization::message(keys::MANIFEST_SCHEMA_VERSION_INVALID)
         }
         SchemaVersionRejection::Unsupported { major, minor } => {
