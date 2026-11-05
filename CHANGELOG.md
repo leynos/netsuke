@@ -54,9 +54,6 @@
   literal backslash sequence supplied through a placeholder, `env()`, or
   `shell_quote` cannot be reconstructed as shell syntax
   ([#967](https://github.com/leynos/netsuke/issues/967))
-
-### Security
-
 - Bind Windows recipe interpreters to a trusted absolute path. PowerShell
   recipes now invoke `<System>\WindowsPowerShell\v1.0\powershell.exe` resolved
   through the Known Folder API, in both the inline and response-file

@@ -291,7 +291,8 @@ shebang nor changes a script item's interpreter.
 
 ## Implementation references
 
-- Legacy recipe shell value: [`src/recipe_shell.rs`](../../src/recipe_shell.rs)
+- Legacy recipe shell value:
+  [`src/recipe_shell/mod.rs`](../../src/recipe_shell/mod.rs)
 - CLI configuration: [`src/cli/config/mod.rs`](../../src/cli/config/mod.rs)
 - Executable lookup: [`src/stdlib/which/`](../../src/stdlib/which/)
 - Structured command contract:
