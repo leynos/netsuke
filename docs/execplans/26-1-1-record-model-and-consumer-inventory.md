@@ -549,12 +549,14 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   below and is not final evidence for the revised parser.
 - [x] (2026-11-05) The hosted CodeScene review approved head `03eb4da90` but
   identified the `section` and `subsection` wrappers as duplicated structure.
-  Replace them with one heading-body parser selected by a contract-local
-  `HeadingLevel`; rerun the complete local gate sequence on the revised
-  candidate before publication.
+  Replaced them with one heading-body parser selected by a contract-local
+  `HeadingLevel` and documented that scope in the developers' guide.
+- [x] (2026-11-05) Rebased all twelve branch commits onto `main` at
+  `ce15e026d`. `range-diff` reports every branch commit as `=`, and the
+  crates.io Trusted Publishing commit joins the inventory's post-pin list.
+  `cs delta origin/main` reports `no-issues-found` on the revised parser.
 - [ ] EP-M4: rerun the complete sequential gate set on the final rebased
-  candidate, record the new post-pin commit, and finish current-head PR
-  assessment.
+  candidate and finish current-head PR assessment.
 
 ## Surprises & discoveries
 

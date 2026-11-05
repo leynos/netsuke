@@ -251,10 +251,10 @@ helper functions; their sum is the compiler message count.
 
 ### In-scope commits since the pin
 
-The snapshot remains pinned to the commit above. These are the 25 commits
+The snapshot remains pinned to the commit above. These are the 27 commits
 between that pin and the branch's 2026-11-05 head that changed `src/`,
-`build.rs`, `tests/`, `test_support/`, or `benches/`: 23 in the current `main`
-target, one adding this inventory's contract test, and one refactoring that
+`build.rs`, `tests/`, `test_support/`, or `benches/`: 24 in the current `main`
+target, one adding this inventory's contract test, and two refactoring that
 contract. This list is re-sweep context for later consumers; it does not move
 the inventory pin.
 
@@ -288,8 +288,11 @@ the inventory pin.
   (4.4.2) (#806)
 - `01c7190e1` Reconcile release help with the runtime parser (#1044)
 - `a74320e86` Preserve script bytes through the printf transport (#967) (#1049)
-- `d8100cf39` Add the pinned inventory contract (26.1.1)
-- `c5afe7988` Refactor inventory contract validation
+- `ce15e026d` Implement crates.io Trusted Publishing and registry byte
+  verification (#1064) (#1077)
+- `095fe55c5` Add the pinned inventory contract (26.1.1)
+- `8dee3c48e` Refactor inventory contract validation
+- `f4a0c0e46` Replace heading wrappers with a level-typed parser
 
 Three corrected text sweeps cover compiler blind spots. The Rust source list
 contains 936 files across `src/`, `build.rs`, `tests/`, `test_support/`,
