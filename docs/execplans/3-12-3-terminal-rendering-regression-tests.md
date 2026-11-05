@@ -803,6 +803,33 @@ adding no behaviour, so it was inlined instead. `cs delta` then measured 9.57 �
 10.00 with no new issue, confirming the blocking gate clears before the push
 rather than one CI round trip later.
 
+The blocking gate did clear on the hosted run for `867e7d8bf`, and `main.rs`
+left the report entirely. The *advisory* gate still failed, on four findings
+that reproduce against the merge base and are this branch's own:
+
+- `tests/cli_tests/display_plan_contract.rs` — four snapshot tests identical
+  apart from which field they replace.
+- `tests/bdd/steps/terminal_rendering.rs` — six step functions identical apart
+  from which classifier predicate they assert.
+- `tests/workflow_contracts/nextest_budgets.py::largest_test_allowance` —
+  cyclomatic complexity 9, from inlining profile inheritance, override
+  collection and budget folding in one function.
+- `tests/cli_tests/parsing.rs::parse_cli` — grown 83 → 87 lines by this
+  branch's colour-choice argument, a *degraded* pre-existing finding rather
+  than a new one.
+
+Each got the extraction its rule names, and `cs delta` then reported no new
+issues at all. Repairing `parse_cli` also exposed two pre-existing emoji tests
+as duplicated, so they now share one resolver call. The Rust files both read
+10.00. Confirming the fix by measurement rather than by inference is the
+practice the local CLI exists for: a push is a slow, shared-resource round trip
+and an advisory failure there costs a full CI cycle to learn.
+
+The advisory gate is not a required check — the branch ruleset requires
+`build-test`, `kani-smoke`, `netsukefile`, and `release / metadata` — but every
+recent merged pull request on this repository had it green, and a red check on
+a head is worth clearing when the findings are genuinely this branch's.
+
 ### A near miss on the gate-exclusivity rule
 
 While this was in flight a targeted `cargo nextest` run was started alongside
