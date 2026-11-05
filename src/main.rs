@@ -8,8 +8,8 @@ use clap::error::ErrorKind;
 use miette::Report;
 use netsuke::theme::ThemeContext;
 use netsuke::{
-    cli, cli_localization, diagnostic_json, ir::IrGenError, locale_resolution, localization,
-    manifest, output_mode, output_prefs, runner,
+    cli, cli_localization, diagnostic_json, locale_resolution, localization, manifest, output_mode,
+    output_prefs, runner,
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
@@ -50,6 +50,9 @@ mod startup_tracing;
 pub mod test_tracing_capture;
 
 mod config_load;
+
+mod human_diagnostics;
+
 use startup_tracing::StartupWriter;
 
 /// Injectable dependencies for one invocation of the startup composition root.
@@ -175,7 +178,7 @@ where
     );
     let exit_code = match runner::run(&merged_cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, prefs, runtime_mode),
+        Err(err) => handle_runner_error(&err, prefs, runtime_mode),
     };
     finish_run(exit_code, merged_verbose)
 }
@@ -215,7 +218,7 @@ fn run_cli(
     );
     match runner::run(cli, prefs) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, prefs, runtime_mode),
+        Err(err) => handle_runner_error(&err, prefs, runtime_mode),
     }
 }
 
@@ -341,42 +344,18 @@ fn configure_runtime(
 /// Render a runner failure according to the selected human or JSON mode.
 ///
 /// JSON output uses the stable diagnostic serializer and fallback payload to
-/// remain valid JSON; human output writes a formatted error to stderr. Both
-/// paths return failure.
+/// remain valid JSON; human output writes a localized prefix followed by the
+/// failure's rendered diagnostic, or by its context line when it carries none.
+/// Both paths return failure.
 fn handle_runner_error(
-    err: anyhow::Error,
+    err: &anyhow::Error,
     prefs: output_prefs::OutputPrefs,
     mode: DiagMode,
 ) -> ExitCode {
     if mode.is_json() {
-        return diagnostic_json::emit_or_fallback(render_runtime_error_json(&err));
+        return diagnostic_json::emit_or_fallback(render_runtime_error_json(err));
     }
-    let prefix = prefs.error_prefix();
-    if let Some(cycle_error) = circular_dependency_cause(&err) {
-        tracing::error!(error_kind = "circular_dependency", "runner failed");
-        drop(writeln!(io::stderr(), "{prefix} {cycle_error}"));
-        return ExitCode::FAILURE;
-    }
-    match err.downcast::<runner::RunnerError>() {
-        Ok(runner_err) => {
-            let report = Report::new(runner_err);
-            drop(writeln!(io::stderr(), "{prefix} {report:?}"));
-        }
-        Err(other_err) => {
-            tracing::error!(error = %other_err, "runner failed");
-            drop(writeln!(io::stderr(), "{prefix} {other_err}"));
-        }
-    }
-    ExitCode::FAILURE
-}
-
-/// Find a circular-dependency error inside a contextual runner failure.
-fn circular_dependency_cause(error: &anyhow::Error) -> Option<&IrGenError> {
-    error.chain().find_map(|cause| {
-        cause
-            .downcast_ref::<IrGenError>()
-            .filter(|ir_error| matches!(ir_error, IrGenError::CircularDependency { .. }))
-    })
+    human_diagnostics::handle_failure(err, &prefs)
 }
 
 /// Select the most specific JSON-safe diagnostic representation for a failure.

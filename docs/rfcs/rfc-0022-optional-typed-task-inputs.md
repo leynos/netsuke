@@ -7,6 +7,7 @@
 - **Created:** 2026-09-19
 - **Scope:** Public task configuration with gradual adoption
 - **Implementation:** [Progressive-enhancement roadmap, phase 21][roadmap]
+- **Governing decisions:** [ADR-0062][d62] and [ADR-0064][d64]
 
 ## 1. Summary
 
@@ -192,7 +193,8 @@ resource limits, or capability checks for an opted-in declaration.
 
 ## 8. Compatibility, tests, and rollout
 
-Allocate the manifest version with the shared schema acceptance work. Older
+[ADR-0061][d61] governs manifest schema-version allocation at feature
+admission, while [ADR-0043][d43] governs persisted action-plan versions. Older
 readers must reject new syntax with a useful version remedy rather than ignore
 it. Existing untyped manifests keep their parse, execution, and diagnostic
 behaviour under the default policy. No release should force a broad migration
@@ -231,5 +233,9 @@ explicit promotion, deterministic source selection, and default redaction. Keep
 internal variables untyped unless their author chooses otherwise.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#21-typed-inputs-with-one-parameter-contract
+[d61]: ../adrs/adr-0061-manifest-schema-versions-and-admission.md
+[d43]: ../adrs/adr-0043-consolidated-structured-command-execution-contract.md
+[d62]: ../adrs/adr-0062-progressive-enhancement-contract-boundaries.md
+[d64]: ../adrs/adr-0064-typed-task-input-schema.md
 [bundles]: rfc-0003-versioned-local-manifest-bundles.md#6-parameter-model
 [maturity]: rfc-0025-progressive-enhancement-and-maturity-policies.md

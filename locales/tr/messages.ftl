@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = { $path } konumundaki oluşturulan dyndep dosyası 
 
 # Bildirim tanılaması.
 manifest.parse = Bildirimin ayrıştırılması başarısız oldu.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Bildirim 'netsuke_version' değerini belirtmelidir.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version', MAJOR.MINOR.0 biçiminde bir anlamsal sürüm yayını olmalıdır.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name }, bildirim şemasını { $declared } olarak belirtiyor; ancak Netsuke { $supported } şemasını destekliyor.
+manifest.schema_version.help = Ön sürüm veya derleme meta verisi olmadan, desteklenen şema yayınını MAJOR.MINOR.0 biçiminde tam olarak belirtin.
 manifest.structure_error = { $name } konumunda bildirim yapısı hatası: { $details }
 manifest.yaml.parse = { $line }. satır, { $column }. sütunda YAML ayrıştırma hatası: { $details }
 manifest.yaml.label = geçersiz YAML

@@ -70,7 +70,7 @@ use netsuke::ir::BuildGraph;       // assumed IR data structure
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Example Netsuke manifest in YAML (string literal for test)
     let manifest_yaml = r#"
-        netsuke_version: "0.1"
+        netsuke_version: "1.0.0"
         rules:
           - name: "compile"
             command: "gcc -c $in -o $out"
@@ -160,7 +160,7 @@ use netsuke::ninja_gen;          // module for Ninja file generation
 # fn main() -> Result<(), Box<dyn std::error::Error>> {
     // (Re-use the same manifest YAML as before)
     let manifest_yaml = r#"
-        netsuke_version: "0.1"
+        netsuke_version: "1.0.0"
         rules:
           - name: "compile"
             command: "gcc -c $in -o $out"

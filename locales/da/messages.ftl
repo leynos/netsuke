@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Den genererede dyndep-fil på { $path } overskrider
 
 # Manifestdiagnostik.
 manifest.parse = Parsingen af manifestet mislykkedes.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Manifestet skal angive 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' skal være en semantisk versionsudgivelse på formen MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } angiver manifestskema { $declared }, men Netsuke understøtter skema { $supported }.
+manifest.schema_version.help = Angiv den præcist understøttede skemaversion på formen MAJOR.MINOR.0 uden prerelease- eller buildmetadata.
 manifest.structure_error = Strukturfejl i manifestet ved { $name }: { $details }
 manifest.yaml.parse = YAML-fejl i linje { $line }, kolonne { $column }: { $details }
 manifest.yaml.label = ugyldig YAML

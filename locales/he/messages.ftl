@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = ‏קובץ dyndep שנוצר ב־‏{ $path } חו
 
 # אבחון המניפסט.
 manifest.parse = ניתוח המניפסט נכשל.
+manifest.schema_version.missing = ‏ [netsuke::manifest::schema_version] המניפסט חייב להצהיר על 'netsuke_version'.
+manifest.schema_version.invalid = ‏ [netsuke::manifest::schema_version] 'netsuke_version' חייבת להיות גרסת הפצה סמנטית בתבנית MAJOR.MINOR.0.
+manifest.schema_version.unsupported = ‏ [netsuke::manifest::schema_version] { $name } מצהיר על סכמת מניפסט { $declared }, אך Netsuke תומכת בסכמה { $supported }.
+manifest.schema_version.help = יש להצהיר על גרסת הסכמה נתמכת מדויקת בתבנית MAJOR.MINOR.0, ללא מטא-נתונים של קדם-הפצה או בנייה.
 manifest.structure_error = שגיאת מבנה במניפסט ב‑{ $name }: { $details }
 manifest.yaml.parse = שגיאת ניתוח YAML בשורה { $line }, בעמודה { $column }: { $details }
 manifest.yaml.label = ‏YAML לא תקין

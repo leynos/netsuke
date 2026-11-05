@@ -38,6 +38,8 @@ mod path_loaders;
 mod query;
 mod registration;
 mod render;
+mod schema_admission_telemetry;
+mod schema_version;
 mod str_loaders;
 mod test_surface;
 /// JSON representation of a manifest node after YAML and Jinja evaluation.
@@ -100,6 +102,48 @@ struct ManifestParse<'a, 'name> {
     on_stage: Option<&'a mut dyn FnMut(ManifestLoadStage)>,
 }
 
+/// Parse YAML and reject schema versions this reader cannot interpret.
+///
+/// The gate runs before Jinja setup so unsupported manifests cannot evaluate
+/// environment helpers, filesystem helpers, or manifest control expressions.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::manifest::from_str;
+///
+/// let error = from_str(concat!(
+///     "netsuke_version: '1.1.0'\n",
+///     "targets:\n",
+///     "  - name: hello\n",
+///     "    command: echo hello\n",
+/// ))
+/// .expect_err("the reader does not support schema 1.1.0");
+/// assert!(format!("{error:#}").contains("netsuke::manifest::schema_version"));
+/// ```
+///
+/// # Errors
+///
+/// Returns a parse diagnostic when YAML is invalid or the literal schema
+/// declaration is missing, malformed, or unsupported.
+fn parse_admitted_document(yaml: &str, name: &ManifestName) -> Result<ManifestValue> {
+    let document: ManifestValue =
+        serde_saphyr::from_str(yaml).map_err(|error| ManifestError::Parse {
+            source: map_yaml_error(&error, &ManifestSource::from(yaml), name),
+            message: localization::message(keys::MANIFEST_PARSE),
+        })?;
+    // The decision is recorded before it is turned into a diagnostic, so the
+    // counter sees every rejection exactly once and the mapping below stays a
+    // pure translation step.
+    let admission =
+        schema_admission_telemetry::record_admission(schema_version::admit_document(&document));
+    admission.map_err(|rejection| ManifestError::Parse {
+        source: diagnostics::map_schema_version_error(rejection, name),
+        message: localization::message(keys::MANIFEST_PARSE),
+    })?;
+    Ok(document)
+}
+
 /// Decisions the render and expansion halves need from the registration.
 #[derive(Clone, Copy, Debug)]
 struct RenderDecisions {
@@ -156,7 +200,7 @@ struct ExpansionRequest<'name, 'a, 'stage> {
 /// Parse, render, and validate a manifest with injected loading boundaries.
 ///
 /// Render Jinja values, anchor relative `glob()` patterns at `manifest_root`,
-/// record telemetry for full loads, and validate rendered recipes.
+/// notify the optional expansion observer, and validate rendered recipes.
 fn evaluate_manifest(yaml: &str, parse: ManifestParse<'_, '_>) -> Result<NetsukeManifest> {
     let ManifestParse {
         name,
@@ -207,10 +251,7 @@ fn build_template_environment(
     budget
         .charge_source(yaml.len(), budget::ManifestBudgetStage::Source)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
-    let doc: ManifestValue = serde_saphyr::from_str(yaml).map_err(|e| ManifestError::Parse {
-        source: map_yaml_error(&e, &ManifestSource::from(yaml), name),
-        message: localization::message(keys::MANIFEST_PARSE),
-    })?;
+    let doc = parse_admitted_document(yaml, name)?;
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.
@@ -272,6 +313,7 @@ fn expand_and_render(request: ExpansionRequest<'_, '_, '_>) -> Result<NetsukeMan
 }
 mod env;
 pub use env::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
+pub use schema_admission_telemetry::{SCHEMA_ADMISSION_OUTCOME_VALUES, SCHEMA_ADMISSION_TOTAL};
 #[cfg(test)]
 mod tests;
 mod workspace;

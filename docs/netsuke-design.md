@@ -212,6 +212,9 @@ level keys.
   Netsuke schema the manifest conforms to (e.g., `"1.0.0"`). This allows for
   future evolution of the schema while maintaining backward compatibility. This
   version string should be parsed and validated using the `semver` crate.[^4]
+  See
+  [Schema versions and feature admission](#schema-versions-and-feature-admission)
+  for the registry and allocation rules.
 
 - `vars`: A mapping of global key-value pairs. Keys must be strings. Values may
   be strings, numbers, booleans, or sequences. These variables seed the Jinja
@@ -241,6 +244,54 @@ level keys.
 - `defaults`: An optional list of target names to be built when Netsuke is
   invoked without any specific targets on the command line. This maps directly
   to Ninja's `default` target statement.[^3]
+
+#### Schema versions and feature admission
+
+The manifest schema version is separate from the Netsuke release version. Its
+canonical spelling is `MAJOR.MINOR.0`. The registry reserves syntax names
+before implementation and records which feature owns them. A `reserved` row
+does not make syntax admissible; an `admitted` row is available to the current
+reader but has not shipped in a tag; a `released` row has shipped. The first
+tag column identifies the first tag containing the registered schema feature.
+An em dash means that no tag has shipped it.
+
+<!-- schema-registry:start -->
+| Feature identifier    | Owning RFC and roadmap task           | Reserved keys                                                                  | Reserved fields                                                                                                                                       | Reserved discriminators and closed vocabularies                                                                                              | Status   | Schema minor | First tag                 |
+| --------------------- | ------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ | ------------------------- |
+| `core`                | Existing schema; ADR-0045             | `netsuke_version`, `vars`, `macros`, `rules`, `targets`, `actions`, `defaults` | `command_isolation`                                                                                                                                   | `command_isolation`: `shared`, `isolated`                                                                                                    | released | 1.0          | `vTEST`[^schema-core-tag] |
+| `structured-commands` | RFCs 0001, 0009, 0010; 12.1.1, 12.1.2 | `command` (structured mapping and sequence forms)                              | Structured command fields, including `invoke`, `env`, `cwd`, `stdin`, `stdout`, `stderr`, `tee`, `pipe`, `capture_stdout`, and `temp_dir`             | Command discriminators: `invoke`, `rule`, `script`                                                                                           | reserved | 1.1          | —                         |
+| `named-shells`        | RFC 0011; 12.1.1, 12.2.4              | `command`                                                                      | `shell`                                                                                                                                               | Built-in shell names `sh`, `bash`, `pwsh`, `powershell`; configured names come from trusted configuration                                    | reserved | 1.1          | —                         |
+| `includes`            | RFC 0002; 16.1.1                      | `includes`                                                                     | To be fixed by 16.1.1                                                                                                                                 | —                                                                                                                                            | reserved | —            | —                         |
+| `bundles`             | RFCs 0003, 0004; 17.1.1               | `bundles`                                                                      | To be fixed by 17.1.1                                                                                                                                 | —                                                                                                                                            | reserved | —            | —                         |
+| `host-facts`          | RFC 0029; 30.1.1                      | `host_facts`                                                                   | To be fixed by 30.1.1                                                                                                                                 | —                                                                                                                                            | reserved | —            | —                         |
+| `inputs`              | RFC 0022; 21.1.2                      | `inputs`                                                                       | `type`, `default`, `description`, `expose`, `minimum`, `maximum`, `choices`                                                                           | `type`: `string`, `bool`, `integer`, `path`, `sequence<string>`, `sequence<path>`, `mapping<string, string>`; `expose`: `non-secret`         | reserved | —            | —                         |
+| `contention`          | RFC 0024; 22.1.1                      | `contention_classes`                                                           | `capacity`, action/target `contention` (rule annotations are unsupported)                                                                             | `capacity`: integer from 1 through 1024                                                                                                      | reserved | —            | —                         |
+| `states`              | RFC 0021; 23.1.1                      | `states`                                                                       | `kind`, `path`, `identity.files`, `prepare`, `probe.external`, `probe.protocol`, `probe.timeout_seconds`, `probe.max_output_bytes`, `accept_degraded` | `require_state`, `ensure_state`, `prepare_state`; `kind`: `directory`, `file`, `python-venv`, `custom`; `probe.protocol`: `nagios`           | reserved | —            | —                         |
+| `artefacts`           | RFC 0023; 24.1.1                      | `artefacts`                                                                    | `path`, `kind`, `role`, `create_parent`, producer `produces`                                                                                          | `clean_owned`; `kind`: `file`, `directory`; `role`: `generated`, `report`, `cache`, `environment`                                            | reserved | —            | —                         |
+| `maturity`            | RFC 0025; 25.1.1                      | `maturity`                                                                     | `rules`, `id`, `severity`, `select`, optional `subjects`                                                                                              | Rule IDs: `structured-commands`, `typed-inputs`, `owned-cleanup`, `verified-states`, `contention-declared`; severity: `off`, `warn`, `error` | reserved | —            | —                         |
+<!-- schema-registry:end -->
+
+*Table 2: Schema features and their allocation status.*
+
+The `1.1` reservation is the consolidated structured-command surface in
+[ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md);
+`structured-commands` and `named-shells` share it. Later minors are allocated
+by the change that admits a feature on `main`. The first such admission after
+the latest published tag raises the maximum minor by one; later admissions
+before the next tag reuse it. A tag freezes its feature set, and the maximum
+must not skip a reserved minor. See
+[ADR-0061](adrs/adr-0061-manifest-schema-versions-and-admission.md) for the
+full lifecycle and the rejection rules.
+
+RFC 0029's `host_facts.schema` is an additional nested schema version, not a
+replacement for the manifest version. RFCs 0002 and 0003 own the exact version
+relationship between a document and its included or bundled documents.
+
+[^schema-core-tag]: `vTEST` is the first tagged tree containing the schema 1.0
+    core; it is an unversioned test tag. `v0.1.0-beta1` is the first versioned
+    release tag containing that schema. The optional `command_isolation` field
+    was added later by ADR-0045, before the admission gate existed, so it
+    remains part of the 1.0 core row; no release tag contains it yet.
 
 The E-R diagram below summarizes the structure of a `Netsukefile` and the
 relationships between its components.
@@ -889,6 +940,21 @@ sequenceDiagram
 
 Figure: External Git bundle verification and cache-backed lock resolution.
 
+### 2.9 Progressive-enhancement contracts
+
+This table records proposed resolutions for the outstanding decisions in RFCs
+0021 to 0025. ADRs 0061 to 0067 remain Proposed until explicit acceptance at
+EP-M5; references to earlier ADRs identify existing contracts. Each deferred
+decision has an owning roadmap task and the D-17 merge gate.
+
+| RFC / item              | Proposed resolution or deferral                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Governing ADR                                                                                                                                                                                                                                                                     | Owning task(s)                                | D-17 gate                                                  |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- | ---------------------------------------------------------- |
+| RFC 0021 §10, OD-21     | ADR-0063 proposes distinct readiness, preparation, and record semantics. ADR-0061 governs manifest schema admission; ADR-0043 governs persisted action-plan versions. Probe limits use `probe_timeout_ceiling_seconds`, `probe_output_ceiling_bytes`, and `probe_external_deny` through the shared configuration owner. Defer the exact `python-venv` inspection contract to 23.1.2; lease identity and acquisition to 20.2.1/20.2.3; record retention and interrupted recovery to 23.2.2; and external-probe executable identity restrictions to 23.3.2. A uv integrity probe is outside this feature and has no owner until a separate proposal establishes demand. | [ADR-0062](adrs/adr-0062-progressive-enhancement-contract-boundaries.md), [ADR-0063](adrs/adr-0063-managed-state-schema.md), [ADR-0061](adrs/adr-0061-manifest-schema-versions-and-admission.md), [ADR-0043](adrs/adr-0043-consolidated-structured-command-execution-contract.md) | 20.2.1; 23.1.2; 20.2.1/20.2.3; 23.2.2; 23.3.2 | ADR amendment merged before the owning task's code merges. |
+| RFC 0022 §9, OD-22      | ADR-0064 proposes typed root inputs, shared bundle-value types, and `--input` registered once in ADR-0016's canonical command metadata. Shared integer and path validation belongs to 20.2.1 with 17.1.3; profile overlay order belongs to 5.3.1. Dependent defaults and custom validators require canary evidence and a separate accepted decision before implementation.                                                                                                                                                                                                                                                                                            | [ADR-0062](adrs/adr-0062-progressive-enhancement-contract-boundaries.md), [ADR-0064](adrs/adr-0064-typed-task-input-schema.md)                                                                                                                                                    | 20.2.1/17.1.3; 5.3.1; 21.3.1                  | ADR amendment merged before the owning task's code merges. |
+| RFC 0023 §9, OD-23      | ADR-0065 proposes exact-path ownership, producer/source conflict rules, and bounded selection through `clean_owned`. Defer platform deletion primitives to 24.2.1, resource-lease identity to 20.2.1, and initial numeric limits to 24.1.2. Trash-and-rename, adoption receipts, wildcard collections, role selectors, and remote delivery require a separate RFC and have no implementation owner here.                                                                                                                                                                                                                                                              | [ADR-0062](adrs/adr-0062-progressive-enhancement-contract-boundaries.md), [ADR-0065](adrs/adr-0065-artefact-ownership-schema.md)                                                                                                                                                  | 24.2.1; 20.2.1; 24.1.2                        | ADR amendment merged before the owning task's code merges. |
+| RFC 0024 §9, OD-24      | ADR-0062 and ADR-0066 propose the `contention_capacity_ceiling`, reject a `console`-pool conflict, and reject rule defaults in the initial grammar. The concrete injective class-name encoding and its tests belong to 22.1.2. Multi-resource and cross-host scheduling require separate proposals.                                                                                                                                                                                                                                                                                                                                                                   | [ADR-0062](adrs/adr-0062-progressive-enhancement-contract-boundaries.md), [ADR-0066](adrs/adr-0066-contention-class-schema.md)                                                                                                                                                    | 22.1.1; 22.1.2                                | ADR amendment merged before the owning task's code merges. |
+| RFC 0025 §§10–11, OD-25 | ADR-0062 proposes the shallow-end compatibility contract. ADR-0067 proposes opt-in, explicitly scoped rules over ADR-0056's typed inventory, with monotone composition against trusted policy. Defer operator policy placement and floor configuration to 25.2.1, selected-closure metadata to 25.2.2, and the reusable inventory boundary to 25.1.1. Exceptions, presets, patterns, and context coverage need a separate accepted proposal before an owner is assigned.                                                                                                                                                                                              | [ADR-0062](adrs/adr-0062-progressive-enhancement-contract-boundaries.md), [ADR-0067](adrs/adr-0067-maturity-policy-schema.md), [ADR-0056](adrs/adr-0056-manifest-linting-under-netsuke-check.md)                                                                                  | 25.2.1; 25.2.2; 25.1.1                        | ADR amendment merged before the owning task's code merges. |
+
 ## Section 3: Parsing and Deserialization Strategy
 
 Once the Jinja evaluation stage has produced a pure YAML string, the next
@@ -1169,14 +1235,19 @@ first load it into a `serde_json::Value` tree.
 
 Once parsed, Netsuke performs a series of transformation stages:
 
-1. **Template Expansion:** The `foreach` and optional `when` keys in the raw
+1. **Schema admission:** For a mapping root, the literal `netsuke_version` is
+   checked immediately after YAML parsing. The reader rejects missing,
+   non-string, malformed, or unsupported versions before registering variables
+   or macros, expanding control keys, or evaluating templates. A non-mapping
+   root retains its structural diagnostic.
+2. **Template Expansion:** The `foreach` and optional `when` keys in the raw
    YAML are evaluated to generate additional target and action entries. Each
    iteration layers the `item` and `index` variables over the manifest's
    globals and any entry-local variables. This is the only stage that owns
    manifest-time condition semantics.
-2. **Deserialization:** The expanded document is deserialized into the typed
+3. **Deserialization:** The expanded document is deserialized into the typed
    [`NetsukeManifest`] AST.
-3. **Final Rendering:** Remaining string fields are rendered using Jinja,
+4. **Final Rendering:** Remaining string fields are rendered using Jinja,
    resolving expressions such as `{{ glob('src/*.c') }}`.
 
 This data-first approach avoids a lossy text-rendering pre-pass and keeps YAML
@@ -3358,11 +3429,31 @@ enrichment:
    convert a `miette::Diagnostic` into a plain `anyhow::Error`--doing so would
    discard spans and help text.
 
-5. Finally, the `main` function receives the `Err` result. It prints the entire
-   error chain provided by `anyhow`, which displays the highest-level context
-   first, followed by a list of underlying "Caused by:" messages. This provides
-   the user with a rich, layered explanation of the failure, from the general
-   to the specific.
+5. Finally, the `main` function receives the `Err` result and hands it to
+   `human_diagnostics::handle_failure`, which is the single human-mode
+   reporting boundary. It selects the most specific diagnostic the chain
+   contains — a `RunnerError`, then the first `ManifestError`, then a
+   `miette::Report` — and renders that one with `miette`'s graphical handler:
+   the diagnostic's own message, code, cause chain, help text, and — where it
+   supplies one — its rule-reference URL. A rendered diagnostic replaces the
+   contextual summary rather than following it, because the diagnostic already
+   names the artefact and printing both repeats it. A failure carrying no
+   diagnostic keeps its `anyhow` context line, which is the whole report
+   available for errors such as a missing manifest. A circular-dependency
+   failure keeps a separate branch that prints the bounded cycle rendering and
+   logs a fixed `error_kind` category, so manifest target names stay out of
+   tracing events.
+
+   Links are disabled in the graphical handler even though every
+   `netsuke check` finding supplies a URL: `miette` emits OSC 8 hyperlinks
+   whenever a diagnostic supplies one, and that happens under a monochrome
+   theme too, which would put terminal control sequences into redirected
+   `stderr`. The URL is still printed as plain text after the code.
+
+   The glyph theme is derived from the already-resolved `OutputPrefs` rather
+   than read from the process environment, so the human path selects the same
+   Unicode or ASCII glyph set as the rest of the CLI and stays callable from an
+   in-process test.
 
 For automation use cases, Netsuke supports a root `--json` flag layered through
 OrthoConfig as `--json`, `NETSUKE_JSON`, and `json = true`. When enabled, every

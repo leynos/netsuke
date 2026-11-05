@@ -161,9 +161,10 @@ Table 3: Message key domains and their purposes
 
 The corresponding Rust constants are defined in `src/localization/keys.rs`,
 with the `netsuke check` keys in `src/localization/check_keys.rs`, the clap
-error keys in `src/localization/clap_error_keys.rs`, and the manifest-loading
-keys in `src/localization/manifest_keys.rs`, using UPPER_SNAKE_CASE (e.g.,
-`CLI_FLAG_FILE_HELP` maps to `cli.flag.file.help`).
+error keys in `src/localization/clap_error_keys.rs`, and the manifest keys,
+including the schema-version keys, in `src/localization/manifest_keys.rs`,
+using UPPER_SNAKE_CASE (e.g., `CLI_FLAG_FILE_HELP` maps to
+`cli.flag.file.help`).
 
 ## 5. Variable usage
 

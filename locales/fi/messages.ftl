@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Luotu dyndep-tiedosto polussa { $path } ylittää {
 
 # Manifestin diagnostiikka.
 manifest.parse = Manifestin jäsentäminen epäonnistui.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Manifestissa on ilmoitettava 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version'-arvon on oltava semanttinen julkaisuversio muodossa MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } ilmoittaa manifestin skeemaksi { $declared }, mutta Netsuke tukee skeemaa { $supported }.
+manifest.schema_version.help = Ilmoita täsmälleen tuettu skeemajulkaisu muodossa MAJOR.MINOR.0 ilman esijulkaisu- tai koontiversion metatietoja.
 manifest.structure_error = Manifestin rakennevirhe kohdassa { $name }: { $details }
 manifest.yaml.parse = YAML-jäsennysvirhe rivillä { $line }, sarakkeessa { $column }: { $details }
 manifest.yaml.label = virheellinen YAML

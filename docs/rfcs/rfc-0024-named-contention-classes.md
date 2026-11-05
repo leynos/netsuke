@@ -7,6 +7,7 @@
 - **Created:** 2026-09-19
 - **Scope:** Optional concurrency limits lowered to Ninja pools
 - **Implementation:** [Progressive-enhancement roadmap, phase 22][roadmap]
+- **Governing decisions:** [ADR-0062][d62] and [ADR-0066][d66]
 
 ## 1. Summary
 
@@ -190,6 +191,8 @@ class per executable edge and explicit scope. Keep dependencies, internal
 worker counts, and cross-invocation integrity locks separate.
 
 [roadmap]: ../roadmap-progressive-enhancement.md#22-named-contention-without-a-second-scheduler
+[d62]: ../adrs/adr-0062-progressive-enhancement-contract-boundaries.md
+[d66]: ../adrs/adr-0066-contention-class-schema.md
 [inputs]: rfc-0022-optional-typed-task-inputs.md
 [states]: rfc-0021-managed-states-and-functional-probes.md
 [maturity]: rfc-0025-progressive-enhancement-and-maturity-policies.md

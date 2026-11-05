@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = ‏ يتجاوز ملف dyndep المُنشأ في 
 
 # تشخيصات ملف البيانات.
 manifest.parse = فشل تحليل ملف البيانات.
+manifest.schema_version.missing = ‏ [netsuke::manifest::schema_version] يجب أن يعلن ملف البيانات عن 'netsuke_version'.
+manifest.schema_version.invalid = ‏ [netsuke::manifest::schema_version] يجب أن تكون 'netsuke_version' إصدارًا دلاليًا بصيغة MAJOR.MINOR.0.
+manifest.schema_version.unsupported = ‏ [netsuke::manifest::schema_version] يعلن { $name } عن مخطط البيان بالإصدار { $declared }، لكن Netsuke يدعم المخطط بالإصدار { $supported }.
+manifest.schema_version.help = أعلن إصدار المخطط المدعوم كما هو تمامًا بصيغة MAJOR.MINOR.0، من دون بيانات إصدار تمهيدي أو بيانات بناء.
 manifest.structure_error = خطأ في بنية ملف البيانات عند { $name }: { $details }
 manifest.yaml.parse = خطأ في تحليل YAML في السطر { $line } والعمود { $column }: { $details }
 manifest.yaml.label = ‏YAML غير صالح

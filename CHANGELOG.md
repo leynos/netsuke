@@ -34,6 +34,11 @@
   targets not requested by Ninja. The crate-private `missing_dependencies`
   report also includes unresolved order-only paths
   ([ADR-0068](docs/adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md)).
+- **Breaking:** require `netsuke_version` to declare a manifest schema this
+  reader supports. The current reader accepts only `1.0.0`, and reports an
+  actionable diagnostic before any template evaluation when the declaration is
+  missing, malformed, or outside that range
+  ([ADR-0061](docs/adrs/adr-0061-manifest-schema-versions-and-admission.md)).
 
 ### Fixed
 

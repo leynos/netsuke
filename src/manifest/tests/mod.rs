@@ -12,5 +12,6 @@ mod expansion_telemetry;
 mod glob;
 mod loader_options;
 mod overlays;
+mod schema_admission_telemetry;
 mod test_mode;
 mod wrapper_equivalence;

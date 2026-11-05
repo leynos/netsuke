@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = A létrehozott dyndep fájl ({ $path }) meghaladja 
 
 # Jegyzékdiagnosztika.
 manifest.parse = A jegyzék feldolgozása sikertelen.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] A jegyzéknek deklarálnia kell a 'netsuke_version' értékét.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] A 'netsuke_version' értékének MAJOR.MINOR.0 alakú szemantikus verziójú kiadásnak kell lennie.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] A(z) { $name } a(z) { $declared } jegyzéksémát deklarálja, a Netsuke viszont a(z) { $supported } sémát támogatja.
+manifest.schema_version.help = Pontosan a támogatott sémakiadást deklarálja MAJOR.MINOR.0 alakban, előzetes kiadásra vagy buildre vonatkozó metaadatok nélkül.
 manifest.structure_error = Szerkezeti hiba a jegyzékben itt: { $name }: { $details }
 manifest.yaml.parse = YAML-feldolgozási hiba a(z) { $line }. sorban, { $column }. oszlopban: { $details }
 manifest.yaml.label = érvénytelen YAML
