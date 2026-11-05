@@ -323,8 +323,16 @@ decision D-15.
   exits 1 reporting the code twice and the supported `1.0`; the `1.0.0` control
   generates; a missing manifest keeps its single context line. `make fmt` and a
   focused Clippy pass are green.
-- [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
-- [ ] EP-M4: developers' guide and documentation clean-up.
+- [x] EP-M3: reader-side schema version gate, users' guide, CHANGELOG. OBL-1 to
+  OBL-5 are discharged by the artefacts listed in the verification plan; the
+  gate sequence this milestone names passed at `bd7e6f123`, and the later
+  commits touch only this plan and a test-helper extraction that keeps the same
+  assertions.
+- [x] EP-M4: developers' guide and documentation clean-up. The developers'
+  guide gained "Manifest schema versioning and feature admission" (reservation,
+  admission, allocation, the registry contract, and the rejection ladder) and
+  "Rendering failures in human mode"; the snapshot-testing guide's examples
+  declare `1.0.0`.
 - [x] (2026-11-05) Rebased onto `origin/main` at `c82189bf4` (PR #1047, the
   `.deb`/`.rpm` install-before-publish change, 12 files). `main` had edited
   `docs/developers-guide.md` and `docs/netsuke-design.md`, which this branch
