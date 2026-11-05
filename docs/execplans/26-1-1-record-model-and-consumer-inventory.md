@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 34. See `Revision note` at the foot of this document. This plan was
+Revision 35. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -609,8 +609,22 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   case fails with a fixture error under the old parser and passes under the new
   one. Finding 2: the three rejection cases are now one three-case `#[rstest]`;
   32 cases pass on the target, including the real-inventory check.
-- [ ] (2026-11-05) Re-run the complete sequential gate set on the revised
-  candidate and finish current-head PR assessment.
+- [x] (2026-11-05) Ran the complete sequential eleven-gate set at
+  `e679d4308`. Every gate exited 0: `check-fmt`, `typecheck`, `lint-clippy`,
+  `lint-whitaker`, `lint-python`, `github-actions-lint`, `doc-coverage`, `test`,
+  `test-workflow-contracts`, `markdownlint`, and `nixie`. Doc-comment coverage
+  6663/6778 = 98.30% against the 80% threshold; 5,103 Nextest cases passed with
+  7 skipped; 1,756 workflow-contract tests and 28 workflow-script tests passed;
+  217 Markdown files linted with 0 issues; every Mermaid diagram validated. The
+  working tree was clean before and after the batch.
+- [x] (2026-11-05) Dispositioned the fifth milestone CodeRabbit review's three
+  findings (D-18) and confirmed the focused suite at 35/35. Finding 3 was the
+  substantive one: the register diagnostic promised an `Unchanged` source that
+  no code read, and the plan's OB-INTEGRITY has always required it, so the
+  source was implemented rather than the promise withdrawn. The split leaves
+  the crate root at 55 lines and every module under 400.
+- [ ] (2026-11-05) Finish the current-head PR assessment: re-run the gates,
+  publish, and take the PR to equilibrium.
 - [ ] EP-M4: rerun the gates and assess the PR.
 
 ## Surprises & discoveries
@@ -886,6 +900,23 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `#[rstest]` with three named cases, which removes the duplication the second
   finding named without losing a case. Date/Author: 2026-11-05, implementing
   agent, after the fourth milestone CodeRabbit review.
+- Decision D-18 (2026-11-05): dispositioned the fifth milestone CodeRabbit
+  review's three findings. (1) The pin-rejection tests became one `#[rstest]`
+  with three named cases. (2) `tests/hexagonal_inventory_contract_tests.rs` had
+  reached 415 lines, so its `tests` module moved intact to
+  `tests/hexagonal_inventory_contract/tests.rs`, loaded through a `#[path]`
+  module like its siblings; the crate root is 55 lines and every module is
+  under 400. (3) The register diagnostic promised "listed unchanged" while no
+  code read the `## Trace matrix` → `### Unchanged` subsection, so the promise
+  was false; OB-INTEGRITY in this plan has always required that source. The
+  remedy CodeRabbit proposed — reword the message to drop the promise — was
+  incomplete for that reason, so the source was implemented instead:
+  `unchanged_ids` accepts only bullets that open with a well-formed register
+  identifier, and the identifier is the bullet's first word because register
+  identifiers contain `::`. Probed by deleting `unchanged.contains(identifier)`:
+  `accepts_a_register_item_listed_as_unchanged` then fails, so the new source
+  is live rather than decorative. Date/Author: 2026-11-05, implementing agent,
+  after the fifth milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1825,6 +1856,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   trace tables, with a regression case measured red against the previous
   parser, and the three rejection cases are one three-case `#[rstest]`. Final
   gate run and PR assessment follow.
+- Revision 35 (2026-11-05): dispositioned the fifth milestone CodeRabbit
+  review's three findings (D-18). Implemented the `Unchanged` coverage source
+  the register diagnostic already promised and proved it live by deleting the
+  lookup, merged the three pin-rejection tests, and split the test module out
+  of the 415-line crate root. Final gate run and PR assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

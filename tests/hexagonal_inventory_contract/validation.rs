@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use super::markdown::{
     HeadingLevel, declared_pin, excluded_tasks, finding_entries, heading_body,
     is_well_formed_register_id, pins, reference_covers, regex_values, register_ids, task_ids,
-    trace_rows, trace_table_tasks,
+    trace_rows, trace_table_tasks, unchanged_ids,
 };
 use super::roadmap::{dependents_of, roadmap_tasks};
 
@@ -216,6 +216,12 @@ fn validate_exclusions(trace: &str, tasks: &BTreeMap<String, BTreeSet<String>>) 
 /// # Errors
 ///
 /// Returns an error when identifiers are duplicated, malformed, or untraced.
+///
+/// A register item is covered by a `Changes` or `Consumes` row, or by an
+/// `Unchanged` bullet that opens with the identifier. Requiring the bullet
+/// form, rather than searching the subsection, keeps the two sources
+/// symmetrical: neither the trace introduction nor a sentence in `Unchanged`
+/// can satisfy coverage by merely mentioning an identifier.
 fn validate_register(inventory: &str) -> Result<()> {
     let register = heading_body(inventory, "Register", HeadingLevel::Section).unwrap_or_default();
     let register_document = format!("## Register\n{register}");
@@ -225,15 +231,16 @@ fn validate_register(inventory: &str) -> Result<()> {
         unique.len() == register_identifiers.len(),
         "register identifiers should be unique"
     );
-    let trace = heading_body(inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
+    let trace = section(inventory, "Trace matrix");
     let references = trace_rows(trace);
+    let unchanged = unchanged_ids(trace);
     for identifier in &register_identifiers {
         ensure!(
             is_well_formed_register_id(identifier),
             "register identifier {identifier:?} is malformed"
         );
         ensure!(
-            reference_covers(identifier, &references),
+            reference_covers(identifier, &references) || unchanged.contains(identifier),
             "register identifier {identifier} is neither traced nor listed unchanged"
         );
     }
