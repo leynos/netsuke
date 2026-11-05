@@ -135,6 +135,94 @@ def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
     ]
 
 
+def _profile_budget_table(
+    profiles: dict[str, object], profile: str
+) -> tuple[str, dict[str, object]] | None:
+    """Return the table one profile's own per-test budget comes from.
+
+    A profile inherits the default table unless it declares its own
+    ``slow-timeout``, so a profile that declares none is read through
+    ``default``. Reading it any other way would report a budget the
+    runner never applies to that profile.
+
+    Parameters
+    ----------
+    profiles : dict[str, object]
+        The parsed ``[profile]`` table.
+    profile : str
+        The profile whose own budget is read.
+
+    Returns
+    -------
+    tuple or None
+        The dotted path and the table, or None when neither declares one.
+    """
+    selected = _table(profiles.get(profile))
+    if "slow-timeout" in selected:
+        return f"profile.{profile}", selected
+    default = _table(profiles.get("default"))
+    if profile != "default" and "slow-timeout" in default:
+        return "profile.default", default
+    return None
+
+
+def _numbered_overrides(
+    table_path: str, table: dict[str, object]
+) -> list[tuple[str, dict[str, object]]]:
+    """Return one table's ``[[overrides]]`` entries with their dotted paths.
+
+    Parameters
+    ----------
+    table_path : str
+        The dotted path of the declaring table.
+    table : dict[str, object]
+        The parsed table.
+
+    Returns
+    -------
+    list of tuple
+        The entry paths and tables, in file order.
+    """
+    entries = table.get("overrides")
+    if not isinstance(entries, list):
+        return []
+    return [
+        (f"{table_path}.overrides[{index}]", _table(entry))
+        for index, entry in enumerate(entries)
+    ]
+
+
+def _override_tables(
+    profiles: dict[str, object], profile: str
+) -> list[tuple[str, dict[str, object]]]:
+    """Return the ``[[overrides]]`` tables a profile is read through.
+
+    An override's ``slow-timeout`` bounds the tests its filter matches, so
+    it declares a tier those tests run under in this profile. The entries
+    come from the profile's own table when it declares any, and from
+    ``default`` otherwise, following the same inheritance as every other
+    setting.
+
+    Parameters
+    ----------
+    profiles : dict[str, object]
+        The parsed ``[profile]`` table.
+    profile : str
+        The profile whose overrides are read.
+
+    Returns
+    -------
+    list of tuple
+        The entry paths and tables, in file order.
+    """
+    selected = _table(profiles.get(profile))
+    if "overrides" in selected:
+        return _numbered_overrides(f"profile.{profile}", selected)
+    if profile == "default":
+        return []
+    return _numbered_overrides("profile.default", _table(profiles.get("default")))
+
+
 def largest_test_allowance(
     config_text: str, profile: str = "default"
 ) -> fractions.Fraction:
@@ -163,24 +251,9 @@ def largest_test_allowance(
         If the profile declares no effective slow-timeout.
     """
     profiles = _table(_parsed(config_text).get("profile"))
-    default = _table(profiles.get("default"))
-    selected = _table(profiles.get(profile))
-    tables: list[tuple[str, dict[str, object]]] = []
-
-    if "slow-timeout" in selected:
-        tables.append((f"profile.{profile}", selected))
-    elif profile != "default" and "slow-timeout" in default:
-        tables.append(("profile.default", default))
-
-    source = selected if "overrides" in selected else default
-    entries = source.get("overrides")
-    if isinstance(entries, list):
-        table_path = f"profile.{profile}" if source is selected else "profile.default"
-        tables.extend(
-            (f"{table_path}.overrides[{index}]", _table(entry))
-            for index, entry in enumerate(entries)
-        )
-
+    own = _profile_budget_table(profiles, profile)
+    tables = [] if own is None else [own]
+    tables.extend(_override_tables(profiles, profile))
     budgets = [
         budget_of(path, table["slow-timeout"])
         for path, table in tables
