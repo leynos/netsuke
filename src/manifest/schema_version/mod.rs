@@ -66,9 +66,7 @@ pub(super) enum SchemaVersionRejection {
 /// reporting it that way would name the declared and supported schema as the
 /// same value and hide the canonical-form rule that actually failed.
 pub(super) fn admit(version: &Version) -> Result<(), SchemaVersionRejection> {
-    if version.major != SUPPORTED.major
-        || !(0..=SUPPORTED.max_minor).contains(&version.minor)
-    {
+    if version.major != SUPPORTED.major || !(0..=SUPPORTED.max_minor).contains(&version.minor) {
         return Err(SchemaVersionRejection::Unsupported {
             major: version.major,
             minor: version.minor,
