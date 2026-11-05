@@ -66,16 +66,31 @@ pub(super) enum SchemaVersionRejection {
 /// reporting it that way would name the declared and supported schema as the
 /// same value and hide the canonical-form rule that actually failed.
 pub(super) fn admit(version: &Version) -> Result<(), SchemaVersionRejection> {
-    if version.major != SUPPORTED.major || !(0..=SUPPORTED.max_minor).contains(&version.minor) {
+    if !within_supported_range(version) {
         return Err(SchemaVersionRejection::Unsupported {
             major: version.major,
             minor: version.minor,
         });
     }
-    if version.patch != 0 || !version.pre.is_empty() || !version.build.is_empty() {
+    if !is_canonical_release(version) {
         return Err(SchemaVersionRejection::NotCanonical);
     }
     Ok(())
+}
+
+/// Check whether the major and minor name a release this reader supports.
+///
+/// The patch, prerelease, and build components are deliberately ignored here;
+/// [`is_canonical_release`] judges those, so a supported family with a
+/// malformed release reports [`SchemaVersionRejection::NotCanonical`] rather
+/// than the self-contradictory "declares 1.0, supports 1.0" rejection.
+fn within_supported_range(version: &Version) -> bool {
+    version.major == SUPPORTED.major && (0..=SUPPORTED.max_minor).contains(&version.minor)
+}
+
+/// Check whether `version` is exactly `MAJOR.MINOR.0` with no extras.
+fn is_canonical_release(version: &Version) -> bool {
+    version.patch == 0 && version.pre.is_empty() && version.build.is_empty()
 }
 
 /// Admit a parsed document's literal schema declaration when its root is a map.
