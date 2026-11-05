@@ -223,6 +223,14 @@ explicit and exercise the actual adapters in tests.
     commit that only a local recovery ref reaches, the decision-log entry
     named the wrong file for the `[[shells]]` fence, and two near-identical
     quarantine tests were not parameterized.
+  - [x] 2026-11-05: Rebase the branch onto `origin/main` at `ce15e026`, the
+    crates.io Trusted Publishing merge. All 15 commits replayed with an
+    identical patch (`range-diff` reports `=` for every pair), and the only
+    file both sides touched was `docs/developers-guide.md`, where the
+    publishing section and the configured-shells section are disjoint. That
+    upstream work adds no shell-selection helper, pattern, or convention this
+    plan should adopt, so no design or decision entry changes; the rebase is
+    recorded here instead.
   - [ ] 2026-11-05: Publish the repaired candidate and hand delivery to
     `pr-babysitting`.
 
