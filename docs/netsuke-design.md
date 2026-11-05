@@ -4125,13 +4125,42 @@ Debian tar-member reader is also private to this copyright check. The coverage
 ZIP validator enforces a different archive contract, so the two readers do not
 form a shared archive API. The shared-action follow-up
 [#542](https://github.com/leynos/shared-actions/issues/542) tracks exposing a
-Debian `License` control field. Windows and macOS builds use the same staging
-composite from `leynos/shared-actions`; Windows staging also carries the
-PowerShell help files as release artefacts alongside the MSI package. Every
-standalone release archive also carries the generated shell completion sidecars
-under `completions/<shell>/`. The composite shells out to a Cyclopts-driven
-script that reads the `.github/release-staging.toml` configuration (Tom's
-Obvious, Minimal Language (TOML)), merges the `[common]` configuration with the
+Debian `License` control field.
+
+Metadata inspection alone cannot prove a package installs, so the Linux job
+also installs each built `.deb` and `.rpm` before any artefact is uploaded. The
+gate is the shared `validate-linux-packages` action pinned to an explicit
+revision, and it runs against two repository-owned validation images built from
+`.github/package-validation/deb.Containerfile` and `rpm.Containerfile`. Each
+image is tagged with the package architecture, so the target-to-image mapping
+is explicit: `x86_64-unknown-linux-gnu` selects `amd64` and
+`aarch64-unknown-linux-gnu` selects `arm64`. The job runs the action once per
+format, because nfpm spells a prerelease differently in each: RPM replaces the
+hyphens inside it with underscores while Debian keeps them. The action installs
+the package, checks the expected manual-page path, and runs
+`.github/package-validation/verify-installed-package.sh`, which proves the
+binary answers `--version`, that `man -w` resolves a page, and that the package
+metadata declares the `ninja-build` dependency. A missing inspection tool fails
+the gate rather than passing vacuously. The action's own Polythene revision
+predates its local-image probe, so the job passes a repository-owned PEP 723
+wrapper that probes the local Podman store before any registry.
+
+Cross-architecture lanes need a second path. The shared action skips its
+sandbox whenever the package architecture differs from the runner's, which is
+exactly the `arm64` lane on an `x64` runner, so the job registers QEMU binfmt
+handlers and then runs `.github/package-validation/install-emulated-package.sh`
+under `podman run --arch` for each format. That step is the only install those
+packages get, so it fails the lane when either format is missing rather than
+publishing the other having never run. Validation therefore precedes upload in
+both the native and emulated cases.
+
+Windows and macOS builds use the same staging composite from
+`leynos/shared-actions`; Windows staging also carries the PowerShell help files
+as release artefacts alongside the MSI package. Every standalone release
+archive also carries the generated shell completion sidecars under
+`completions/<shell>/`. The composite shells out to a Cyclopts-driven script
+that reads the `.github/release-staging.toml` configuration (Tom's Obvious,
+Minimal Language (TOML)), merges the `[common]` configuration with the
 target-specific overrides, and copies the configured artefacts into a fresh
 `dist/{bin}_{platform}_{arch}` directory. It installs Astral's Python package
 manager (uv) with `astral-sh/setup-uv`, double-checks the tool is present, and
