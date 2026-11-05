@@ -6,11 +6,20 @@
 
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext,
-    command_substitution::contains_case_keyword,
     find_script_substitution, find_substitution, invalid_command_error,
-    posix_lexical::{
-        EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
+    posix_lexical::{,
+    EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
+    command_substitution::{SubstitutionBoundary, reject_ambiguous_case_comment},
     },
+};
+
+
+//! Interpolate POSIX and Bash script placeholders with script-specific context.
+//!
+//! Keeps multi-line script syntax, comments, and heredoc bodies intact while
+//! lowering Netsuke-owned placeholders where shell quoting can preserve their
+//! path semantics. PowerShell scripts use `SubstitutionTraversal` instead.
+    posix_lexical::{
 };
 
 /// Track quote context while interpolating one POSIX or Bash script.
@@ -316,41 +325,22 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
                     return Ok(None);
                 };
                 if is_closed {
-                    self.finish_command_substitution(pos, closed_start)?;
+                    let is_unquoted = self.active_quote_context() == ShellQuoteContext::Unquoted;
+                    reject_ambiguous_case_comment(
+                        self.chars,
+                        self.template,
+                        &SubstitutionBoundary {
+                            pos,
+                            start: closed_start,
+                            is_unquoted,
+                        },
+                    )?;
+                    self.closed_command_substitution = Some(pos);
                 }
                 self.output.push(ch);
                 Ok(Some(pos + 1))
             }
         }
-    }
-
-    /// Record a completed substitution and reject an ambiguous `case` boundary.
-    fn finish_command_substitution(
-        &mut self,
-        pos: usize,
-        substitution_start: Option<usize>,
-    ) -> Result<(), IrGenError> {
-        if let Some(start) = substitution_start {
-            self.reject_ambiguous_case_comment(pos, start)?;
-        }
-        self.closed_command_substitution = Some(pos);
-        Ok(())
-    }
-
-    /// Reject a `)#` boundary whose `)` may terminate a `case` pattern.
-    ///
-    /// A `)` that closes `$()` is part of the surrounding word, so `#` after it
-    /// is word data. A `)` that terminates a `case` pattern is an operator, so
-    /// `#` after it starts a comment. The two are lexically identical without
-    /// the `case` grammar, so a substitution containing `case` fails closed
-    /// rather than guessing and encoding a later marker for the wrong context.
-    fn reject_ambiguous_case_comment(&self, pos: usize, start: usize) -> Result<(), IrGenError> {
-        let is_comment_boundary = self.chars.get(pos + 1) == Some(&'#')
-            && self.active_quote_context() == ShellQuoteContext::Unquoted;
-        if is_comment_boundary && contains_case_keyword(self.chars, start, pos) {
-            return Err(invalid_command_error(self.template.to_owned()));
-        }
-        Ok(())
     }
 
     /// Classify a character that delimits an active script command substitution.

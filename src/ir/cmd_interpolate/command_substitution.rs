@@ -4,8 +4,8 @@
 //! prevents their contents from changing the context of surrounding recipe
 //! markers.
 
-use super::QuoteContext;
 use super::posix_lexical::is_word_terminator;
+use super::{IrGenError, QuoteContext, invalid_command_error};
 
 /// Identify one command-substitution delimiter recognised during traversal.
 pub(super) enum CommandSubstitutionDelimiter {
@@ -36,6 +36,42 @@ impl CommandSubstitution {
             start,
         }
     }
+}
+
+/// Describe the `)` that closed a command substitution.
+pub(super) struct SubstitutionBoundary {
+    /// Position of the closing `)`.
+    pub(super) pos: usize,
+    /// The `$` that opened the substitution, when this `)` closed it.
+    pub(super) start: Option<usize>,
+    /// Whether the closing `)` sits outside shell quotes.
+    pub(super) is_unquoted: bool,
+}
+
+/// Reject a `)#` boundary whose `)` may terminate a `case` pattern.
+///
+/// A `)` that closes `$()` is part of the surrounding word, so `#` after it is
+/// word data. A `)` that terminates a `case` pattern is an operator, so `#`
+/// after it starts a comment. The two are lexically identical without the
+/// `case` grammar, so a substitution containing `case` fails closed rather than
+/// guessing and encoding a later marker for the wrong context.
+///
+/// # Errors
+///
+/// Returns [`IrGenError::InvalidCommand`] when the boundary is ambiguous.
+pub(super) fn reject_ambiguous_case_comment(
+    chars: &[char],
+    template: &str,
+    boundary: &SubstitutionBoundary,
+) -> Result<(), IrGenError> {
+    let Some(start) = boundary.start else {
+        return Ok(());
+    };
+    let is_comment_boundary = boundary.is_unquoted && chars.get(boundary.pos + 1) == Some(&'#');
+    if is_comment_boundary && contains_case_keyword(chars, start, boundary.pos) {
+        return Err(invalid_command_error(template.to_owned()));
+    }
+    Ok(())
 }
 
 /// Report whether `chars[start..end]` contains the `case` reserved word.
