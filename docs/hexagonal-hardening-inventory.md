@@ -249,6 +249,48 @@ helper functions; their sum is the compiler message count.
 | `write_action_rules`                               | 8                |
 | **Total**                                          | **11197**        |
 
+### In-scope commits since the pin
+
+The snapshot remains pinned to the commit above. These are the 25 commits
+between that pin and the branch's 2026-11-05 head that changed `src/`,
+`build.rs`, `tests/`, `test_support/`, or `benches/`: 23 in the current `main`
+target, one adding this inventory's contract test, and one refactoring that
+contract. This list is re-sweep context for later consumers; it does not move
+the inventory pin.
+
+- `5ee56f7ec` Introduce the options-carrying manifest loader entry point
+  (7.1.2) (#807)
+- `596cf74c2` Place Dependabot pull requests on GitHub-hosted runners (#932)
+- `018b81b43` Reject quoted PowerShell script placeholders (#846) (#924)
+- `f8df5d808` Bump the toolchain to nightly-2026-10-22 (#947)
+- `ac826aa97` Disable incremental compilation and dev debug data (#948)
+- `0a7a0d58d` Place default-features Dependabot on hosted runners (#949)
+- `88f20d588` Keep compile-time contracts out of timed tests (#942)
+- `de81d5c34` Move ci.yml's inline shell into Cyclopts scripts under scripts/ci
+  (#708)
+- `0a28fee38` Prevent lost manifest structure telemetry (#927) (#943)
+- `49f8fb3d6` Plan: Record CI test-speed evidence and adoption gates (#894)
+  (#918)
+- `9edf13cdc` Migrate from ortho_config v0.9.0 to v0.10.0 (#951) (#953)
+- `1abfd22d3` Name the failing action in command-list failure diagnostics
+  (#945) (#954)
+- `e52d3ef49` Show readable inline-recipe progress (#944) (#956)
+- `7929a3fc2` Repin install-whitaker to 0.2.11 (#1042)
+- `0a3104d44` Publish netsuke-build through crates.io (#903)
+- `08d0a918d` Add Proptest coverage for deterministic Ninja emission (4.3.1)
+  (#700)
+- `5c2e5734f` Localize Clap TooManyValues (#957) (#965)
+- `2da4eb673` Restore the man page SYNOPSIS fallback suppressed by ortho_config
+  0.10.0 (#959) (#1043)
+- `da06ffb11` Attach Clap error context (#961) (#1045)
+- `5f0a4d123` Declare CLI value names for generated help (#958)
+- `a6009675e` Document which dependency kinds participate in cycle detection
+  (4.4.2) (#806)
+- `01c7190e1` Reconcile release help with the runtime parser (#1044)
+- `a74320e86` Preserve script bytes through the printf transport (#967) (#1049)
+- `d8100cf39` Add the pinned inventory contract (26.1.1)
+- `c5afe7988` Refactor inventory contract validation
+
 Three corrected text sweeps cover compiler blind spots. The Rust source list
 contains 936 files across `src/`, `build.rs`, `tests/`, `test_support/`,
 `benches/`, and the two-file `build_slice_fixture` compile contract. The

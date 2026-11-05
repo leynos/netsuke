@@ -72,7 +72,8 @@ unrepresentable or rejected, and compatibility/canonical-edge evidence passes.
 
 ### 26.1. Characterize the semantic boundary
 
-- [ ] 26.1.1. Record a revision-pinned model and consumer inventory.
+- [x] 26.1.1. Record a revision-pinned model and consumer inventory
+  ([inventory](hexagonal-hardening-inventory.md)).
   - Identify authored types, lowering, graph storage, backend consumers, CLI
     orchestration, diagnostics, and existing seams at the implementation head.
   - Record landed work and remaining H1 to H4 findings without repeating `#652`.
