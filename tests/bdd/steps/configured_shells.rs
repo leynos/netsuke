@@ -191,14 +191,14 @@ fn netsuke_loads_configuration(world: &TestWorld) -> Result<()> {
 
 #[when("that file is selected with --config")]
 fn that_file_is_selected(world: &TestWorld) -> Result<()> {
-    let path = world
+    let recorded = world
         .shell_untrusted_file
         .get()
         .context("the untrusted file should be recorded")?;
-    let path = path.to_string_lossy().into_owned();
+    let selected = recorded.to_string_lossy().into_owned();
     run_netsuke_and_store(
         world,
-        &["--config", &path, "generate", "--output", SENTINEL],
+        &["--config", &selected, "generate", "--output", SENTINEL],
     )
 }
 
