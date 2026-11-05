@@ -9296,18 +9296,19 @@ Proof scope: `verus/configured_shells/main.rs` proves that the production
 traversal accepts exactly the pairwise specification — no reserved name and no
 two positions equal — at every sequence length. The model abstracts a name as
 its UTF-8 bytes and models "already seen" as membership in the accepted prefix,
-so it does not prove the production `HashSet`'s internals. Proof/runtime
-correspondence is closed by `src/cli/config/shells/tests/oracle.rs`, an
-independent quadratic Rust oracle that checks `validate_composition` against
-the same pairwise statement over generated sequences of validated names. The
-proof carries non-vacuity witnesses: the empty registry, two distinct names, a
-reserved name, and a duplicate in the last position.
+so it does not prove the production `HashMap` seen-set's internals.
+Proof/runtime correspondence is closed by
+`src/cli/config/shells/tests/oracle.rs`, an independent quadratic Rust oracle
+that checks `validate_composition` against the same pairwise statement over
+generated sequences of validated names. The proof carries non-vacuity
+witnesses: the empty registry, two distinct names, a reserved name, and a
+duplicate in the last position.
 
 Test commands:
 
 - `make test` runs the unit, property, and behavioural suites, including
-  `tests/cli_tests/shells_authority.rs`, `tests/cli_tests/shells_startup.rs`,
-  and the `configured_shells` feature.
+  `tests/cli_tests/shells_authority.rs`, the `tests/cli_tests/shells_startup/`
+  module, and the `configured_shells` feature.
 - `make verus` rechecks the refinement proof.
 - `make test` runs
   `configured_shell_example_is_accepted_from_an_operator_root`, which loads the

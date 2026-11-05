@@ -2,9 +2,10 @@
 //!
 //! The authority tests prove which sources may declare `shells`. These tests
 //! prove what startup does with the decision: a rejection stops the process
-//! before a manifest is compiled, a later `json = true` still selects JSON
-//! diagnostics, and no diagnostic prints an argument vector, an offending value
-//! in full, or an ambient environment value.
+//! before a manifest is compiled, and a later `json = true` still selects JSON
+//! diagnostics. The bounded-diagnostic tests live in [`diagnostics`], and the
+//! acceptance tests that a trusted definition does not block a build live in
+//! [`success`].
 
 use anyhow::{Context, Result, ensure};
 use assert_cmd::cargo::cargo_bin_cmd;
@@ -17,9 +18,6 @@ use test_support::fs as test_fs;
 
 /// Name the file `generate` writes only when manifest compilation succeeds.
 const SENTINEL: &str = "sentinel.ninja";
-
-/// Mark a value that is visible only to the child process's environment.
-const AMBIENT_MARKER: &str = "ambient-marker-value-that-must-not-be-printed";
 
 /// Render one definition whose fixed arguments never reach a diagnostic.
 fn definition_body(name: &str) -> String {
@@ -345,111 +343,5 @@ fn environment_aliases_are_denied(#[case] variable: &str) -> Result<()> {
     Ok(())
 }
 
-#[rstest]
-#[case::non_string_argument(
-    "[[shells]]\nname = \"dash\"\nexecutable = \"dash\"\nargs = [\"super-secret-token\", 42]\n",
-    "shells[0].args",
-    "argument 1 must be a string",
-    "super-secret-token"
-)]
-#[case::oversized_name(
-    "[[shells]]\nname = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\nexecutable = \"dash\"\nargs = [\"-c\"]\n",
-    "shells[0].name",
-    "at most 63 bytes",
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-)]
-#[case::control_character_name(
-    "[[shells]]\nname = \"dash\\u0007\"\nexecutable = \"dash\"\nargs = [\"-c\"]\n",
-    "shells[0].name",
-    "invalid shell name character",
-    "\u{7}"
-)]
-fn diagnostics_are_bounded_and_never_echo_argument_vectors(
-    #[case] definition: &str,
-    #[case] key: &str,
-    #[case] expected: &str,
-    #[case] forbidden: &str,
-) -> Result<()> {
-    let startup = Startup::new()?;
-    startup.write("user/netsuke/config.toml", definition)?;
-
-    // An ambient value must never be echoed either. It is set only for the
-    // child, so the assertion cannot be satisfied by the parent's environment.
-    let output = startup
-        .command(&["generate", "--output", SENTINEL])
-        .env("AMBIENT_TEST_MARKER", AMBIENT_MARKER)
-        .output()
-        .context("run netsuke with an ambient marker")?;
-
-    ensure_rejected_before_compilation(&startup, &output, key)?;
-    let stderr = stderr_of(&output);
-    ensure!(
-        stderr.contains(expected),
-        "diagnostic should contain {expected:?}, got: {stderr}"
-    );
-    ensure!(
-        !stderr.contains(forbidden),
-        "diagnostic should not echo {forbidden:?}, got: {stderr}"
-    );
-    ensure!(
-        !stderr.contains(AMBIENT_MARKER),
-        "diagnostic should not echo an ambient value, got: {stderr}"
-    );
-    Ok(())
-}
-
-/// Prove a trusted definition does not block a build driven by a stub Ninja.
-///
-/// `NETSUKE_NINJA` names the program `build` launches, so a stub script
-/// records the invocation without needing Ninja, a recipe shell, or any
-/// configured executable to exist. The test is Unix-only because the stub is a
-/// script; the existing `FakeNinjaFixture` tests take the same approach.
-#[cfg(unix)]
-#[test]
-fn trusted_definition_builds_through_a_controlled_ninja() -> Result<()> {
-    let startup = Startup::new()?;
-    startup.write("user/netsuke/config.toml", &definition_body("dash"))?;
-    let marker = startup.path().join("ninja-ran");
-    let stub = startup.write(
-        "stub/ninja",
-        &format!("#!/bin/sh\n: > \"{}\"\nexit 0\n", marker.display()),
-    )?;
-    test_fs::set_mode(&stub, 0o755).context("make the stub Ninja executable")?;
-
-    let output = startup
-        .command(&["build", "hello"])
-        .env("NETSUKE_NINJA", &stub)
-        .output()
-        .context("run netsuke build with a stub Ninja")?;
-
-    ensure!(
-        output.status.success(),
-        "a trusted definition should not block a build, got: {}",
-        stderr_of(&output)
-    );
-    ensure!(
-        marker.exists(),
-        "the stub Ninja should have been launched at {}",
-        marker.display()
-    );
-    Ok(())
-}
-
-#[test]
-fn trusted_definition_loads_without_the_named_program() -> Result<()> {
-    let startup = Startup::new()?;
-    startup.write("user/netsuke/config.toml", &definition_body("dash"))?;
-
-    let output = startup.generate()?;
-
-    ensure!(
-        output.status.success(),
-        "a trusted definition should not require the named program at load time, got: {}",
-        stderr_of(&output)
-    );
-    ensure!(
-        startup.sentinel_exists(),
-        "a trusted definition should allow the manifest to compile"
-    );
-    Ok(())
-}
+mod diagnostics;
+mod success;
