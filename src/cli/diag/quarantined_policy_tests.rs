@@ -116,20 +116,51 @@ fn has_validation_key(error: Option<&OrthoError>, key: &str) -> bool {
     }
 }
 
-#[test]
-fn project_shell_definition_defers_to_later_json_preference() -> Result<()> {
+/// Verify one rejected shell declaration still defers to a later `json = true`.
+///
+/// The two cases exercise different authority classes: an untrusted project
+/// source is rejected at the bare `shells` key, while a trusted operator source
+/// is rejected at the malformed field's key. They share every other step, so
+/// keeping them in step matters if the resolution API changes.
+#[rstest]
+#[case::project_source_is_untrusted(
+    ".netsuke.toml",
+    concat!(
+        "json = true\n",
+        "[[shells]]\n",
+        "name = \"dash\"\n",
+        "executable = \"dash\"\n",
+        "args = [\"-c\"]\n"
+    ),
+    "shells",
+    "an untrusted project definition"
+)]
+#[case::operator_definition_is_malformed(
+    "user/netsuke/config.toml",
+    concat!(
+        "json = true\n",
+        "[[shells]]\n",
+        "name = \"dash\"\n",
+        "executable = \"bin/dash\"\n",
+        "args = [\"-c\"]\n"
+    ),
+    "shells[0].executable",
+    "a malformed operator definition"
+)]
+fn shell_fault_still_honours_later_json_preference(
+    #[case] relative: &str,
+    #[case] body: &str,
+    #[case] key: &str,
+    #[case] authority: &str,
+) -> Result<()> {
     let project = tempdir()?;
     let config_dir = Dir::open_ambient_dir(project.path(), ambient_authority())?;
-    config_dir.write(
-        ".netsuke.toml",
-        concat!(
-            "json = true\n",
-            "[[shells]]\n",
-            "name = \"dash\"\n",
-            "executable = \"dash\"\n",
-            "args = [\"-c\"]\n"
-        ),
-    )?;
+    // Only the operator file sits in a subdirectory; creating the root on the
+    // project file's behalf would be an unnecessary capability request.
+    if let Some((parent, _)) = relative.rsplit_once('/') {
+        config_dir.create_dir_all(parent)?;
+    }
+    config_dir.write(relative, body)?;
     let project_path = project.path().to_str().context("project path is UTF-8")?;
     let args = vec!["netsuke", "--directory", project_path];
     let cli = Cli::parse_from(&args);
@@ -140,64 +171,16 @@ fn project_shell_definition_defers_to_later_json_preference() -> Result<()> {
         .with_var("XDG_CONFIG_DIRS", project.path().join("system"));
 
     let (json, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
+    ensure!(json?, "{authority} should still honour `json = true`");
     ensure!(
-        json?,
-        "an untrusted project definition should still honour `json = true`"
-    );
-    ensure!(
-        has_validation_key(outcome.first_error().map(AsRef::as_ref), "shells"),
-        "discovery must retain the untrusted-source error"
+        has_validation_key(outcome.first_error().map(AsRef::as_ref), key),
+        "discovery must retain the validation error for {key}"
     );
     let error = merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
-        .expect_err("cached merge must reject the project definition");
+        .expect_err("cached merge must reject the rejected shells declaration");
     ensure!(
-        has_validation_key(Some(error.as_ref()), "shells"),
-        "merge must return the untrusted-source error: {error:?}"
-    );
-    Ok(())
-}
-
-#[test]
-fn malformed_operator_shell_definition_honours_json_preference() -> Result<()> {
-    let project = tempdir()?;
-    let config_dir = Dir::open_ambient_dir(project.path(), ambient_authority())?;
-    config_dir.create_dir_all("user/netsuke")?;
-    config_dir.write(
-        "user/netsuke/config.toml",
-        concat!(
-            "json = true\n",
-            "[[shells]]\n",
-            "name = \"dash\"\n",
-            "executable = \"bin/dash\"\n",
-            "args = [\"-c\"]\n"
-        ),
-    )?;
-    let project_path = project.path().to_str().context("project path is UTF-8")?;
-    let args = vec!["netsuke", "--directory", project_path];
-    let cli = Cli::parse_from(&args);
-    let matches = Cli::command().get_matches_from(&args);
-    let env = TestEnv::default()
-        .with_var("HOME", project.path())
-        .with_var("XDG_CONFIG_HOME", project.path().join("user"))
-        .with_var("XDG_CONFIG_DIRS", project.path().join("system"));
-
-    let (json, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
-    ensure!(
-        json?,
-        "a malformed operator definition should still honour `json = true`"
-    );
-    ensure!(
-        has_validation_key(
-            outcome.first_error().map(AsRef::as_ref),
-            "shells[0].executable"
-        ),
-        "discovery must retain the malformed executable's key"
-    );
-    let error = merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
-        .expect_err("cached merge must reject the malformed definition");
-    ensure!(
-        has_validation_key(Some(error.as_ref()), "shells[0].executable"),
-        "merge must retain the malformed executable's key: {error:?}"
+        has_validation_key(Some(error.as_ref()), key),
+        "merge must retain the validation error for {key}: {error:?}"
     );
     Ok(())
 }
