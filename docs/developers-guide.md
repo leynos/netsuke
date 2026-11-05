@@ -11448,6 +11448,58 @@ from `discovery::event_assertions` rather than duplicating them. The `insta`
 snapshot calls themselves stay in the test modules because snapshot names bind
 to the test module's path, not to a shared helper module.
 
+### Configured shell definitions
+
+`src/cli/config/shells/` owns the trusted `shells` schema. `ShellDefinition`
+groups a `ShellName`, a `ShellExecutable`, and `ShellArguments`, and
+`validate_composition` applies the two registry rules. Field types validate as
+they deserialize, so a `ShellDefinition` that exists is already locally valid.
+That is what lets the same deserializers check a single occurrence during
+discovery and the merged vector after merging, without duplicating a rule.
+
+Ownership boundary: `src/shell_selection/` supplies the `ShellName`,
+`BuiltInShell`, and `HostFamily` vocabulary and must not depend on CLI
+configuration; the schema depends on it, not the reverse. `SHELLS_KEY` lives in
+the schema module rather than `cli::constants` so the build script's compiled
+slice can carry the key without pulling in the modules that share the constants
+file.
+
+Source-label handling: discovery records the root that loaded each occurrence
+before merging. `src/cli/discovery/shell_definitions.rs` checks `shells`
+presence before any typed merge and reports either an untrusted-source error
+for a project, explicit, or unproven root, or `shells[index].field` errors for
+an operator root. That check runs in `retain_layers_and_resolve_json` before
+the JSON preference is read, so a malformed declaration still lets a later
+`json = true` select JSON diagnostics. The environment layer rejects the key
+outright rather than stripping it.
+
+Proof scope: `verus/configured_shells/main.rs` proves that the production
+traversal accepts exactly the pairwise specification — no reserved name and no
+two positions equal — at every sequence length. The model abstracts a name as
+its UTF-8 bytes and models "already seen" as membership in the accepted prefix,
+so it does not prove the production `HashSet`'s internals. Proof/runtime
+correspondence is closed by `src/cli/config/shells/tests/oracle.rs`, an
+independent quadratic Rust oracle that checks `validate_composition` against
+the same pairwise statement over generated sequences of validated names. The
+proof carries non-vacuity witnesses: the empty registry, two distinct names, a
+reserved name, and a duplicate in the last position.
+
+Test commands:
+
+- `make test` runs the unit, property, and behavioural suites, including
+  `tests/cli_tests/shells_authority.rs`, `tests/cli_tests/shells_startup.rs`,
+  and the `configured_shells` feature.
+- `make verus` rechecks the refinement proof.
+- `make test` runs
+  `configured_shell_example_is_accepted_from_an_operator_root`, which loads the
+  users' guide example from an operator configuration root, and
+  `every_documented_fence_has_a_known_unique_identifier`, which pins the
+  example's registry entry.
+- `make test-documentation-contracts` validates the loader and the exact
+  example registry.
+- Focused run:
+  `cargo nextest run --workspace --all-targets --all-features -E 'test(configured_shell)'`.
+
 ### Configuration-load observability
 
 Startup configuration loading is instrumented through the
