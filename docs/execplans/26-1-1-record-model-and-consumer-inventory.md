@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 39. See `Revision note` at the foot of this document. This plan was
+Revision 40. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -652,9 +652,15 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   corrected the message's false "pinned roadmap" claim, and reported the
   observed count. Probed live by lowering the constant, which produced the new
   message; the focused suite is 35/35.
-- [ ] (2026-11-05) Finish the current-head PR assessment: re-run the gates,
-  publish, and take the PR to equilibrium.
-- [ ] EP-M4: rerun the gates and assess the PR.
+- [x] (2026-11-05) Ran the complete sequential eleven-gate set at `10e1f9ce4`,
+  the ninth-review candidate: every gate exited 0 with an unchanged HEAD and an
+  empty working tree at both ends of the batch.
+- [x] (2026-11-05) Dispositioned the ninth milestone CodeRabbit review's single
+  finding (D-23): `Outcomes & retrospective` now separates the completed
+  heading-parser replacement and gate rerun from the publication and hosted
+  assessment that remain.
+- [ ] EP-M4: publish the verified revision, apply the PR body, and take the
+  pull request through hosted review to equilibrium.
 
 ## Surprises & discoveries
 
@@ -993,6 +999,17 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   24: the test fails with "roadmap should list 24 tasks depending on 26.1.1,
   found 25", so the message reaches the reader. Date/Author: 2026-11-05,
   implementing agent, after the eighth milestone CodeRabbit review.
+- Decision D-23 (2026-11-05): rewrote `Outcomes & retrospective`, which still
+  reported the `7a48c76a5` heading-parser replacement and its gate rerun as
+  outstanding work. Both had completed: the parser is recorded in
+  `docs/developers-guide.md`, and the full eleven-gate set passed on
+  `10e1f9ce4`. The section now separates what is finished from what is not —
+  publication and the hosted PR assessment. Its first draft also claimed the
+  branch was unpublished, which `git ls-remote` contradicted: the remote head is
+  `03eb4da90`, so the branch is published and merely behind. The ungated
+  figure "seventeen commits" was likewise replaced by the command that yields
+  the count, since the number moves with every commit. Date/Author: 2026-11-05,
+  implementing agent, after the ninth milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1000,11 +1017,21 @@ EP-M1 to EP-M3 are complete. On 2026-11-03, the user directed acceptance of
 ADR-0035, satisfying the remaining entry condition for EP-M4. The ADR now
 records the accepted direction and keeps detailed migration choices with their
 owning tasks. The inventory is indexed, linked from the roadmap, and records
-the in-scope commits since its unchanged pin. The full local gate set passed on
-the rebased candidate at `03eb4da90`; hosted CodeScene re-review identified
-duplicate heading wrappers, so those parser fixes and their complete gate rerun
-remain. EP-M4 also requires final documentation checks and current-head PR
-assessment.
+the in-scope commits since its unchanged pin.
+
+The hosted CodeScene re-review of `03eb4da90` reported duplicate heading
+wrappers; `7a48c76a5` replaced them with one contract-local `HeadingLevel`
+parser, and `docs/developers-guide.md` states that parser's scope. Every
+CodeRabbit finding raised on this branch is dispositioned in the decision log,
+and the complete sequential eleven-gate set passed on `10e1f9ce4` with an
+unchanged HEAD and an empty working tree at both ends of the batch.
+
+What remains is not implementation. The pull request is open and still a draft,
+its published head is the earlier `03eb4da90`, and the branch has advanced well
+past it — `git rev-list --count 03eb4da90..HEAD` is the count, and it changes
+with every commit. EP-M4's current-head PR assessment — publishing the verified
+revision, applying the PR body, and taking the pull request through hosted
+review to equilibrium — is still open.
 
 ## Verification plan
 
@@ -1957,6 +1984,14 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   that states what it guards, and its failure now reports the observed count
   instead of asserting an unexplained number against a roadmap it wrongly
   called pinned. Final gate run and PR assessment follow.
+- Revision 40 (2026-11-05): dispositioned the ninth milestone CodeRabbit
+  review's single finding (D-23). `Outcomes & retrospective` had gone stale: it
+  still listed the heading-parser replacement and its gate rerun as pending
+  when both were complete. It now names `7a48c76a5`, the developer-guide entry,
+  and the clean `10e1f9ce4` batch as done, and limits what remains to
+  publishing the verified revision and the hosted PR assessment. Recording it
+  moved HEAD to a prose-only delta in this one file; the eleven-gate pass above
+  binds `10e1f9ce4`.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
