@@ -551,7 +551,8 @@ makes at approval.
   8. The supported range stays contiguous: the reader's maximum may not rise
      past a reserved minor that has not been admitted. While ADR-0043's `1.1`
      is unadmitted, a later feature's admission change waits for 12.1.2 to
-     admit `1.1`, then takes the next minor under rule 2.
+     admit `1.1`, then reuses `1.1` until the next tag. `1.2` is allocated
+     only after a tag freezes `1.1`.
   RFC 0001 section 19.2's `1.1.0` is therefore binding through ADR-0043. RFC
   0003's `manifest: ">=1.1.0, <2.0.0"` descriptor example is illustrative of
   syntax, not an allocation for bundles. The registry records, per feature, its

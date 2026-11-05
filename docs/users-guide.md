@@ -359,8 +359,11 @@ after checking that the manifest uses only that schema's features.
 
 The rejection names the schema the manifest declares and the schema the
 installed Netsuke supports, and reports the `netsuke::manifest::schema_version`
-diagnostic code, so a failure can be recognized without reading the message
-text. Passing `--json` reports the same fault as a structured diagnostic.
+diagnostic code. In human output the diagnostic header shows that code, so a
+failure can be recognized without reading the message text. In `--json` output
+the top-level `code` is `netsuke::manifest::parse`; the schema-specific code
+appears as text within an entry in the `causes` array, so match that text to
+identify a schema failure.
 
 ### Rules and recipes
 

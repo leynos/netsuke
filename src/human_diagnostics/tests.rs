@@ -28,10 +28,12 @@ fn cycle_error(private_target: &str) -> anyhow::Error {
 /// Build a manifest failure wrapped in the same contextual layer the runner
 /// adds, so the test exercises the chain rather than a bare diagnostic.
 fn manifest_failure() -> anyhow::Error {
+    // The code is set as a field, not baked into the message text, so a
+    // renderer that drops the nested code cannot pass on the text alone.
     let inner = MietteDiagnostic::new(
-        "[netsuke::manifest::schema_version] declares manifest schema 1.1, \
-         but this Netsuke supports schema 1.0.",
-    );
+        "declares manifest schema 1.1, but this Netsuke supports schema 1.0.",
+    )
+    .with_code("netsuke::manifest::schema_version");
     let error = manifest::ManifestError::Parse {
         source: Box::new(inner),
         message: localization::message(keys::MANIFEST_PARSE),
@@ -50,6 +52,32 @@ fn manifest_failures_render_their_inner_diagnostic() -> Result<()> {
     ensure!(
         rendered.contains("this Netsuke supports schema 1.0"),
         "the rendered diagnostic must carry the actionable message: {rendered}"
+    );
+    Ok(())
+}
+
+/// A diagnostic that supplies a URL, as every `netsuke check` finding does.
+fn linked_diagnostic() -> MietteDiagnostic {
+    MietteDiagnostic::new("a finding with a rule reference")
+        .with_code("netsuke::lint::example")
+        .with_url("https://example.invalid/rule")
+}
+
+#[test]
+fn rendered_diagnostics_emit_no_terminal_hyperlinks() -> Result<()> {
+    let error = anyhow::Error::new(manifest::ManifestError::Parse {
+        source: Box::new(linked_diagnostic()),
+        message: localization::message(keys::MANIFEST_PARSE),
+    });
+    let rendered = render_failure(&error, &theme_for(theme_prefs()))
+        .context("a diagnostic carrying a URL should still render")?;
+    ensure!(
+        !rendered.contains('\u{1b}'),
+        "plain diagnostic output must contain no escape sequences: {rendered:?}"
+    );
+    ensure!(
+        rendered.contains("https://example.invalid/rule"),
+        "the rule reference must survive as plain text: {rendered}"
     );
     Ok(())
 }
