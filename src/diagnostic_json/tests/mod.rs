@@ -141,3 +141,49 @@ fn render_manifest_parse_diagnostic_matches_snapshot(en_localizer: EnLocalizer) 
     });
     Ok(())
 }
+
+/// Snapshots the coded diagnostic emitted for an unsupported schema version.
+#[rstest]
+fn render_schema_version_diagnostic_matches_snapshot(en_localizer: EnLocalizer) -> Result<()> {
+    let _en_localizer = en_localizer;
+    let err = manifest::from_str(concat!(
+        "netsuke_version: '1.1.0'\n",
+        "targets:\n",
+        "  - name: hello\n",
+        "    command: echo hello\n",
+    ))
+    .expect_err("unsupported schema version should fail to parse");
+    let manifest_err = err
+        .downcast_ref::<manifest::ManifestError>()
+        .context("expected ManifestError")?;
+    let document = render_diagnostic_json(manifest_err)?;
+    let value = parse_json_value(&document)?;
+    let diagnostic = value
+        .pointer("/diagnostics/0")
+        .context("JSON should include the schema diagnostic")?;
+    let code = diagnostic
+        .get("code")
+        .and_then(Value::as_str)
+        .context("top-level parse diagnostic should include its code")?;
+    let causes = diagnostic
+        .get("causes")
+        .and_then(Value::as_array)
+        .context("JSON should include diagnostic causes")?;
+    anyhow::ensure!(
+        code == "netsuke::manifest::parse",
+        "unexpected top-level diagnostic code: {code}"
+    );
+    anyhow::ensure!(
+        causes.iter().any(|cause| cause
+            .as_str()
+            .is_some_and(|text| text.contains("netsuke::manifest::schema_version"))),
+        "schema diagnostic code should be present in the cause chain: {causes:?}"
+    );
+    let rendered =
+        serde_json::to_string_pretty(&value).context("render schema diagnostic snapshot")?;
+
+    snapshot_settings().bind(|| {
+        assert_snapshot!("schema_version_error", rendered);
+    });
+    Ok(())
+}

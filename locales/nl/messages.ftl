@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Het gegenereerde dyndep-bestand op { $path } oversc
 
 # Manifestdiagnostiek.
 manifest.parse = Het inlezen van het manifest is mislukt.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Het manifest moet 'netsuke_version' vermelden.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' moet een semantische versie-uitgave zijn in de vorm MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } verklaart manifestschema { $declared }, maar Netsuke ondersteunt schema { $supported }.
+manifest.schema_version.help = Vermeld exact de ondersteunde schema-uitgave in de vorm MAJOR.MINOR.0, zonder pre-release- of buildmetadata.
 manifest.structure_error = Structuurfout in het manifest bij { $name }: { $details }
 manifest.yaml.parse = YAML-fout op regel { $line }, kolom { $column }: { $details }
 manifest.yaml.label = ongeldige YAML

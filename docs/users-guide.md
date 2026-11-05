@@ -462,6 +462,14 @@ built-in template helpers (see
 shadowing the helper, the manifest fails to parse and the error names the
 offending key.
 
+### Declare the schema version
+
+Set `netsuke_version` to the schema version the manifest uses. The current
+reader accepts exactly `1.0.0`; it rejects missing, malformed, and unsupported
+versions before evaluating Jinja. When a manifest declares an unsupported
+version, update it to a version supported by the installed Netsuke release
+after checking that the manifest uses only that schema's features.
+
 ### Rules and recipes
 
 Rules must provide exactly one executable recipe. Actions and targets that

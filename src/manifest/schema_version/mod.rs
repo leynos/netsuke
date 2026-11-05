@@ -1,0 +1,109 @@
+//! Admit only manifest schema releases the reader can interpret.
+//!
+//! This module owns the pure schema-version predicate and the extraction of
+//! the literal version field from the initially parsed YAML value. It does not
+//! read the environment or filesystem, and non-mapping roots remain available
+//! to the existing structural deserializer.
+
+use semver::Version;
+use serde_json::Value;
+
+/// Schema family and greatest minor understood by this reader.
+pub(super) struct SupportedSchema {
+    /// Major schema version accepted by this reader.
+    pub(super) major: u64,
+    /// Greatest admitted minor within [`Self::major`].
+    pub(super) max_minor: u64,
+}
+
+/// Supported schema release boundary for the current reader.
+pub(super) const SUPPORTED: SupportedSchema = SupportedSchema {
+    major: 1,
+    max_minor: 0,
+};
+
+/// A safe, typed reason why a manifest schema declaration cannot be admitted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum SchemaVersionRejection {
+    /// A mapping-rooted manifest omitted `netsuke_version`.
+    Missing,
+    /// The `netsuke_version` value is not a YAML string.
+    NotAString,
+    /// The string is not valid semantic-version syntax.
+    Invalid,
+    /// The valid semantic version is outside the reader's supported releases.
+    Unsupported {
+        /// Major component, safe to render without retaining user text.
+        major: u64,
+        /// Minor component, safe to render without retaining user text.
+        minor: u64,
+    },
+}
+
+/// Check whether `version` is an exact release understood by this reader.
+///
+/// # Examples
+///
+/// ```ignore
+/// let supported = Version::parse("1.0.0").expect("valid semantic version");
+/// let reserved = Version::parse("1.1.0").expect("valid semantic version");
+/// assert!(admit(&supported).is_ok());
+/// assert!(matches!(admit(&reserved), Err(SchemaVersionRejection::Unsupported { .. })));
+/// ```
+///
+/// # Errors
+///
+/// Returns [`SchemaVersionRejection::Unsupported`] when any version component
+/// falls outside the exact supported release boundary.
+pub(super) fn admit(version: &Version) -> Result<(), SchemaVersionRejection> {
+    let is_supported_release = [
+        version.major == SUPPORTED.major,
+        (0..=SUPPORTED.max_minor).contains(&version.minor),
+        version.patch == 0,
+        version.pre.is_empty(),
+        version.build.is_empty(),
+    ]
+    .into_iter()
+    .all(std::convert::identity);
+    if is_supported_release {
+        Ok(())
+    } else {
+        Err(SchemaVersionRejection::Unsupported {
+            major: version.major,
+            minor: version.minor,
+        })
+    }
+}
+
+/// Admit a parsed document's literal schema declaration when its root is a map.
+///
+/// # Examples
+///
+/// ```ignore
+/// let document = serde_saphyr::from_str::<Value>(
+///     "netsuke_version: '1.0.0'\n",
+/// )
+/// .expect("valid YAML");
+/// assert_eq!(admit_document(&document), Ok(()));
+/// ```
+///
+/// # Errors
+///
+/// Returns a typed rejection when a mapping root omits the version, declares a
+/// non-string or malformed value, or names a release this reader cannot load.
+pub(super) fn admit_document(document: &Value) -> Result<(), SchemaVersionRejection> {
+    if document.as_object().is_none() {
+        return Ok(());
+    }
+    let version_value = document
+        .get("netsuke_version")
+        .ok_or(SchemaVersionRejection::Missing)?;
+    let raw_version = version_value
+        .as_str()
+        .ok_or(SchemaVersionRejection::NotAString)?;
+    let version = Version::parse(raw_version).map_err(|_| SchemaVersionRejection::Invalid)?;
+    admit(&version)
+}
+
+#[cfg(test)]
+mod tests;

@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Vygenerovaný soubor dyndep (cesta: { $path }) pře
 
 # Diagnostika manifestu.
 manifest.parse = Zpracování manifestu selhalo.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Manifest musí deklarovat 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' musí být vydání sémantické verze ve tvaru MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } deklaruje schéma manifestu { $declared }, ale Netsuke podporuje schéma { $supported }.
+manifest.schema_version.help = Deklarujte přesně podporované vydání schématu ve tvaru MAJOR.MINOR.0, bez předběžné verze a metadat sestavení.
 manifest.structure_error = Chyba struktury manifestu u { $name }: { $details }
 manifest.yaml.parse = Chyba zpracování YAML na řádku { $line }, sloupci { $column }: { $details }
 manifest.yaml.label = neplatný YAML

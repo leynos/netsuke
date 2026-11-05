@@ -255,6 +255,7 @@ reader but has not shipped in a tag; a `released` row has shipped. The first
 tag column identifies the first tag containing the registered schema feature.
 An em dash means that no tag has shipped it.
 
+<!-- schema-registry:start -->
 | Feature identifier    | Owning RFC and roadmap task           | Reserved keys                                                                  | Reserved fields                                                                                                                                       | Reserved discriminators and closed vocabularies                                                                                              | Status   | Schema minor | First tag                 |
 | --------------------- | ------------------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------------ | ------------------------- |
 | `core`                | Existing schema; ADR-0045             | `netsuke_version`, `vars`, `macros`, `rules`, `targets`, `actions`, `defaults` | `command_isolation`                                                                                                                                   | `command_isolation`: `shared`, `isolated`                                                                                                    | released | 1.0          | `vTEST`[^schema-core-tag] |
@@ -268,6 +269,7 @@ An em dash means that no tag has shipped it.
 | `states`              | RFC 0021; 23.1.1                      | `states`                                                                       | `kind`, `path`, `identity.files`, `prepare`, `probe.external`, `probe.protocol`, `probe.timeout_seconds`, `probe.max_output_bytes`, `accept_degraded` | `require_state`, `ensure_state`, `prepare_state`; `kind`: `directory`, `file`, `python-venv`, `custom`; `probe.protocol`: `nagios`           | reserved | —            | —                         |
 | `artefacts`           | RFC 0023; 24.1.1                      | `artefacts`                                                                    | `path`, `kind`, `role`, `create_parent`, producer `produces`                                                                                          | `clean_owned`; `kind`: `file`, `directory`; `role`: `generated`, `report`, `cache`, `environment`                                            | reserved | —            | —                         |
 | `maturity`            | RFC 0025; 25.1.1                      | `maturity`                                                                     | `rules`, `id`, `severity`, `select`, optional `subjects`                                                                                              | Rule IDs: `structured-commands`, `typed-inputs`, `owned-cleanup`, `verified-states`, `contention-declared`; severity: `off`, `warn`, `error` | reserved | —            | —                         |
+<!-- schema-registry:end -->
 
 *Table 2: Schema features and their allocation status.*
 
@@ -1256,14 +1258,19 @@ first load it into a `serde_json::Value` tree.
 
 Once parsed, Netsuke performs a series of transformation stages:
 
-1. **Template Expansion:** The `foreach` and optional `when` keys in the raw
+1. **Schema admission:** For a mapping root, the literal `netsuke_version` is
+   checked immediately after YAML parsing. The reader rejects missing,
+   non-string, malformed, or unsupported versions before registering variables
+   or macros, expanding control keys, or evaluating templates. A non-mapping
+   root retains its structural diagnostic.
+2. **Template Expansion:** The `foreach` and optional `when` keys in the raw
    YAML are evaluated to generate additional target and action entries. Each
    iteration layers the `item` and `index` variables over the manifest's
    globals and any entry-local variables. This is the only stage that owns
    manifest-time condition semantics.
-2. **Deserialization:** The expanded document is deserialized into the typed
+3. **Deserialization:** The expanded document is deserialized into the typed
    [`NetsukeManifest`] AST.
-3. **Final Rendering:** Remaining string fields are rendered using Jinja,
+4. **Final Rendering:** Remaining string fields are rendered using Jinja,
    resolving expressions such as `{{ glob('src/*.c') }}`.
 
 This data-first approach avoids a lossy text-rendering pre-pass and keeps YAML

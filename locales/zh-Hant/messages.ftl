@@ -130,6 +130,10 @@ runner.io.dyndep.too_large = { $path } 處產生的 dyndep 檔案超過 { $limit
 
 # 資訊清單診斷。
 manifest.parse = 資訊清單剖析失敗。
+manifest.schema_version.missing = [netsuke::manifest::schema_version] 資訊清單必須宣告 'netsuke_version'。
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' 必須是 MAJOR.MINOR.0 格式的語意版本正式版。
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } 宣告的資訊清單結構描述為 { $declared }，但 Netsuke 支援的結構描述為 { $supported }。
+manifest.schema_version.help = 請以 MAJOR.MINOR.0 格式準確宣告支援的結構描述正式版，不得包含預發布或建置中繼資料。
 manifest.structure_error = 資訊清單在 { $name } 處有結構錯誤：{ $details }
 manifest.yaml.parse = 第 { $line } 行第 { $column } 列發生 YAML 剖析錯誤：{ $details }
 manifest.yaml.label = 無效的 YAML

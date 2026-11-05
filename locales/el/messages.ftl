@@ -132,6 +132,10 @@ runner.io.dyndep.too_large = Το παραγόμενο αρχείο dyndep στ�
 
 # Διαγνωστικά δηλωτικού.
 manifest.parse = Η ανάλυση του δηλωτικού απέτυχε.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Το δηλωτικό πρέπει να δηλώνει το 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] Το 'netsuke_version' πρέπει να είναι έκδοση σημασιολογικής έκδοσης στη μορφή MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] Το { $name } δηλώνει σχήμα δηλωτικού { $declared }, αλλά το Netsuke υποστηρίζει το σχήμα { $supported }.
+manifest.schema_version.help = Δηλώστε την ακριβή υποστηριζόμενη έκδοση σχήματος στη μορφή MAJOR.MINOR.0, χωρίς μεταδεδομένα προέκδοσης ή μεταδεδομένα build.
 manifest.structure_error = Σφάλμα δομής του δηλωτικού στο { $name }: { $details }
 manifest.yaml.parse = Σφάλμα ανάλυσης YAML στη γραμμή { $line }, στήλη { $column }: { $details }
 manifest.yaml.label = μη έγκυρο YAML

@@ -387,6 +387,62 @@ capture helper. They assert the counter, duration sample, and completion event
 for a successful fixture query, a missing-manifest failure, and an invalid
 manifest failure classified as the non-`RunnerError` `other` category.
 
+## Manifest schema versioning and feature admission
+
+`netsuke_version` names the manifest schema, not the Netsuke release. Use its
+canonical `MAJOR.MINOR.0` form without prerelease or build identifiers. The
+[schema registry](netsuke-design.md#schema-versions-and-feature-admission) is
+the source of truth for feature identifiers, syntax reservations, owning RFCs
+and roadmap tasks, admission status, and the first release tag containing a
+feature. ADR-0061 defines the
+[admission policy](adrs/adr-0061-manifest-schema-versions-and-admission.md).
+
+### Reserve syntax before implementation
+
+Before implementing an optional key, field, command discriminator, template
+vocabulary, or closed-set value, add a registry row for its owning feature.
+Record the exact syntax names and its roadmap owner. A `reserved` row prevents
+another feature from claiming those names; it does not make them acceptable to
+the reader. Keep the row `reserved` until an admission change makes the feature
+available.
+
+The registry contract in
+[`tests/schema_version_registry_tests.rs`](../tests/schema_version_registry_tests.rs)
+independently pins each row and checks the reader's supported range. Update it
+with deliberate registry changes; deriving the expected rows from the registry
+would make the test confirm itself.
+
+### Allocate schema minors on `main`
+
+Only `main` allocates a new schema minor. The first admission after the latest
+published tag, including a beta tag, raises the reader's maximum minor in the
+same change that admits the feature. Later admissions before the next tag use
+that minor. A tag freezes the feature set for every minor it contains. Keep the
+supported range contiguous, do not skip an unadmitted reservation, and do not
+backport admissions to release or hotfix branches. Reverting the only admission
+of an unpublished minor also reverts its maximum-minor increase.
+
+ADR-0043 reserves `1.1.0` for the structured-command and named-shells surface.
+Keep the current supported range at `1.0.0` until the owning admission change
+is ready; a reservation is not a feature opt-in.
+
+### Implement the admission ladder with the feature
+
+The reader checks a mapping's literal `netsuke_version` immediately after YAML
+parsing and before variables or macros are registered, expansion runs, or
+templates are evaluated. The current gate implements the first rejection rung:
+it rejects a missing, malformed, or unsupported schema version. It does not yet
+inspect raw documents for syntax ownership.
+
+Before a feature's syntax is admitted, implement the applicable raw-document
+checks for syntax that requires a later minor and syntax that is reserved but
+not admitted. Those checks run before template evaluation and report the
+feature identifier and minimum schema version or reservation, respectively.
+Unknown syntax must retain the existing unknown-field diagnostic, and known
+syntax used in an unsupported context must receive a feature-specific error.
+Roadmap item 12.1.2 or the first feature it admits owns the later-minor and
+reserved-syntax rungs; RFCs 0021 to 0025 remain reservations until then.
+
 ## Unstable Rust API for embedders
 
 The [users' guide](users-guide.md) documents Netsuke's user interface: the
