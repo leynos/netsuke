@@ -395,7 +395,7 @@ build script's `cfg(test)` modules, because the slice compiles
   and nothing else. C5 names those two formats as the observable surface, so
   they are the only outputs whose exact spelling is contractual; every other
   test asserts typed values or collections, which leaves the snapshots narrow.
-  The snapshot normalises the temporary workspace, the tracing timestamp, and
+  The snapshot normalizes the temporary workspace, the tracing timestamp, and
   the crate version, because none of those is part of the diagnostic.
 - 2026-11-05: Leave the `[[shells]]` fence in
   `docs/ortho-config-users-guide.md` without a `tested-example` marker. The
