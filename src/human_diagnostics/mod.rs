@@ -88,12 +88,67 @@ pub fn handle_failure(err: &Error, prefs: &OutputPrefs) -> ExitCode {
         drop(writeln!(io::stderr(), "{prefix} {cycle_error}"));
         return ExitCode::FAILURE;
     }
-    tracing::error!(error_kind = "runner", "runner failed");
+    tracing::error!(error_kind = failure_kind(err), "runner failed");
     match render_failure(err, &theme_for(*prefs)) {
         Some(rendered) => drop(writeln!(io::stderr(), "{prefix} {rendered}")),
         None => drop(writeln!(io::stderr(), "{prefix} {err}")),
     }
     ExitCode::FAILURE
+}
+
+/// Classify a runner failure into the fixed category logged at this boundary.
+///
+/// A schema rejection is distinguished from every other runner failure because
+/// it is the only one an operator can fix by editing the manifest's version
+/// declaration rather than its build description. The rendering is unchanged;
+/// only the logged category differs, and the diagnostic it accompanies still
+/// carries the full explanation.
+fn failure_kind(err: &Error) -> &'static str {
+    let is_schema_rejection = err.chain().any(|cause| {
+        cause
+            .downcast_ref::<manifest::ManifestError>()
+            .is_some_and(|manifest_error| {
+                ManifestFailure::of(manifest_error).is_schema_version_rejection()
+            })
+    });
+    if is_schema_rejection {
+        "manifest_schema_version"
+    } else {
+        "runner"
+    }
+}
+
+/// Fixed classification of a manifest failure for the human boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ManifestFailure {
+    /// The failure carries the schema-version diagnostic code.
+    SchemaVersionRejection,
+    /// The failure is any other manifest fault.
+    Other,
+}
+
+impl ManifestFailure {
+    /// Classify a manifest error by its diagnostic source's stable code.
+    ///
+    /// The code is read rather than the message, because the message is
+    /// localized and one option carries the declared version text.
+    fn of(error: &manifest::ManifestError) -> Self {
+        match error {
+            manifest::ManifestError::Parse { source, .. }
+                if source.code().is_some_and(|code| {
+                    code.to_string() == "netsuke::manifest::schema_version"
+                }) =>
+            {
+                Self::SchemaVersionRejection
+            }
+            manifest::ManifestError::Parse { .. } => Self::Other,
+        }
+    }
+
+    /// Report whether this is a schema-version rejection.
+    const fn is_schema_version_rejection(self) -> bool {
+        matches!(self, Self::SchemaVersionRejection)
+    }
 }
 
 /// Render one diagnostic with `miette`'s graphical layout.
