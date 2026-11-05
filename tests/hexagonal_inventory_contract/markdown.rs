@@ -4,18 +4,25 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use regex::Regex;
 
-/// Return a second-level section body.
-pub(super) fn section<'text>(text: &'text str, heading: &str) -> Option<&'text str> {
-    heading_body(text, "## ", heading)
-}
-
-/// Return a third-level subsection body.
-pub(super) fn subsection<'text>(text: &'text str, heading: &str) -> Option<&'text str> {
-    heading_body(text, "### ", heading)
+/// Select a heading depth supported by the inventory contract parser.
+#[derive(Clone, Copy)]
+pub(super) enum HeadingLevel {
+    /// Match a second-level Markdown heading.
+    Section,
+    /// Match a third-level Markdown heading.
+    Subsection,
 }
 
 /// Extract a heading's body up to the next heading at the same level.
-fn heading_body<'text>(text: &'text str, marker: &str, heading: &str) -> Option<&'text str> {
+pub(super) fn heading_body<'text>(
+    text: &'text str,
+    heading: &str,
+    level: HeadingLevel,
+) -> Option<&'text str> {
+    let marker = match level {
+        HeadingLevel::Section => "## ",
+        HeadingLevel::Subsection => "### ",
+    };
     let mut offset = 0;
     let mut body_start = None;
 
@@ -78,7 +85,7 @@ pub(super) fn regex_values(pattern: &str, text: &str) -> BTreeSet<String> {
 
 /// Return first-column identifiers from the inventory's register tables.
 pub(super) fn register_ids(text: &str) -> Vec<String> {
-    let Some(register) = section(text, "Register") else {
+    let Some(register) = heading_body(text, "Register", HeadingLevel::Section) else {
         return Vec::new();
     };
     let mut reading_table = false;
@@ -205,7 +212,7 @@ pub(super) fn trace_table_tasks(trace: &str) -> BTreeSet<String> {
 
 /// Collect excluded tasks and the reason text following each identifier.
 pub(super) fn excluded_tasks(trace: &str) -> BTreeMap<String, String> {
-    let Some(excluded) = subsection(trace, "Excluded") else {
+    let Some(excluded) = heading_body(trace, "Excluded", HeadingLevel::Subsection) else {
         return BTreeMap::new();
     };
     let mut tasks = BTreeMap::new();
