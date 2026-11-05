@@ -777,6 +777,41 @@ Three repository targets were not applicable and were not run:
 `scripts/` changed), and the coverage-artefact validator itself, which is
 operator-run against a downloaded artefact directory.
 
+### CodeScene's blocking gate, and the extraction it asked for
+
+The hosted CodeScene review failed one *blocking* gate, "Prevent hotspot
+decline", against `src/main.rs`: `run_with_args` had crossed the threshold for
+lines of code and the hotspot's health fell 10.00 → 9.57. The rest of its
+report — five advisory findings, including two duplication notices and a
+complexity note on `nextest_budgets.py` — is advisory only and was not treated
+as a failure.
+
+The function genuinely was a Large Method, 84 lines doing four separable
+things, so the remedy is the extraction the rule asks for rather than a
+suppression. `resolve_startup_signals` now owns everything that depends only on
+raw argv and the environment — the JSON hint, the terminal facts, and Clap's
+help colour choice — and returns them as a `StartupSignals` value.
+`run_configured_command` owns resolving the runtime display plan, configuring
+the process, and dispatching the runner. `run_with_args` keeps the sequence
+between them and is now 69 lines.
+
+`make lint`'s Clippy pass accepts that; CodeScene did not, on the first
+attempt: extracting the configuration load gave `load_merged_cli` five
+parameters and the delta report flagged "Excess Number of Function Arguments".
+That wrapper was a pure pass-through of `config_load::resolve_configuration`
+adding no behaviour, so it was inlined instead. `cs delta` then measured 9.57 →
+10.00 with no new issue, confirming the blocking gate clears before the push
+rather than one CI round trip later.
+
+### A near miss on the gate-exclusivity rule
+
+While this was in flight a targeted `cargo nextest` run was started alongside
+the still-running mutation gate. Two Rust test suites on one candidate is the
+arrangement the repository's gate rules forbid, so it was stopped immediately
+rather than left to finish. Nothing had reached a verdict, so no gate result
+was contaminated; the mutation gate kept exclusive use of the candidate for the
+remainder of its run.
+
 ## Context and orientation
 
 Netsuke is a Rust command-line build tool: it reads a YAML-and-Jinja manifest
