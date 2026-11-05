@@ -39,8 +39,10 @@ pub use recipe_text::{DIALECT_SOURCE_VALUES, DIALECT_VALUES, SHELL_QUOTE_DIALECT
 pub(crate) use register::register_manifest_query;
 pub use register::{register, register_with_config, value_from_bytes};
 pub use resource_bounds::{
-    AdmittedCount, CardinalityError, CardinalityRequest, OUTPUT_TUPLE_CEILING,
-    PERMUTATION_TUPLE_CEILING,
+    AdmittedCount, CardinalityError, CardinalityRequest, DepthExceeded, INPUT_LENGTH_CEILING,
+    InputLengthExceeded, MATCH_COUNT_CEILING, NESTING_DEPTH_CEILING, NestingDepth,
+    OUTPUT_BYTES_CEILING, OUTPUT_TUPLE_CEILING, PERMUTATION_TUPLE_CEILING, RunningTotal,
+    StreamKind, StreamLimitExceeded, admit_input, collect_matches, try_collect_matches,
 };
 pub use restricted_helpers::TestModeRefusal;
 pub(crate) use restricted_helpers::{

@@ -125,6 +125,15 @@ pub(super) fn checked_falling_factorial(n: u64, r: u64) -> Option<u64> {
     Some(product)
 }
 
+/// Return the new running total when `amount` keeps it within `limit`.
+///
+/// A checked addition that overflows is also a refusal: the true total is then
+/// certainly above the ceiling, and the only alternative would be to wrap or
+/// saturate, both of which would misreport how much was admitted.
+pub(super) fn admit_total(limit: u64, total: u64, amount: u64) -> Option<u64> {
+    total.checked_add(amount).filter(|sum| *sum <= limit)
+}
+
 /// Classify an exact cardinality against the ceiling for its request kind.
 ///
 /// Overflow takes precedence: an unrepresentable cardinality is refused as

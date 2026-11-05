@@ -313,8 +313,56 @@ conflict in `Decision log`, and escalate.
     short-circuits the make target, so the Whitaker, Python and
     GitHub-Actions stages were run individually afterwards and each passed,
     which is why their status here is observed rather than assumed.
-- [ ] EP-M3: input length, nesting depth, running totals, and refusal
+- [x] EP-M3: input length, nesting depth, running totals, and refusal
   rendering.
+  - Red observation (2026-11-01). `limits.rs`, `streams.rs`, and the new
+    `admit_total` kernel were written first with real signatures and wrong
+    bodies — an always-`Ok` length check, an always-admitting descent, a
+    saturating addition, and a collector that never refused — so the skeleton
+    compiled and failed for the expected reason.
+    `cargo nextest run --lib --all-features resource_bounds::tests::limits`
+    selected 19 tests and failed 11: the four out-of-ceiling length cases at
+    `limits.rs:292` (`left: true, right: false`), the byte-versus-character
+    witness at `limits.rs:327` ("the byte length exceeds the ceiling: ()"), the
+    past-ceiling descent case, the three running-total witnesses, and the depth
+    property. One deliberate correction during the red phase: the first
+    collector skeleton body was `items.into_iter().collect()`, which never
+    terminates against `std::iter::repeat`; nextest reported
+    `SLOW [> 60.000s]` and the run was stopped. The skeleton then took exactly
+    the ceiling with `take`, which restored a terminating red run, and the real
+    collecting loop replaced it. No red form was committed.
+  - Green (2026-11-01).
+    `cargo nextest run --lib --all-features resource_bounds::tests::limits`
+    19/19 passed; `cargo nextest run --test bdd_tests resource_bounds` 5/5
+    passed, covering all five scenarios in `resource_bounds.feature`;
+    `cargo test --doc --all-features resource_bounds` passed 15 doctests (the
+    five from EP-M2 plus ten new). Each filter selected a nonzero number of
+    tests.
+  - Refusal rendering (2026-11-01). Six `insta` snapshots were generated under
+    `src/snapshots/resource_bounds/`: `cardinality_exceeded`,
+    `cardinality_overflow`, `input_length_exceeded`, `depth_exceeded`,
+    `stream_match_count`, and `stream_output_bytes`. Each snapshot is paired
+    with `googletest` field assertions on the refusal it renders, so a wording
+    change and a field change are both caught. The first draft of the
+    match-count message named the ceiling twice ("more than 100000 matches; the
+    ceiling is 100000 matches"); a stream stops at the first excess item, so
+    there is no observed total to report, and the message now states the
+    ceiling once.
+  - Conformance (2026-11-01). `grep` over the module finds no Fluent key and no
+    `netsuke::` diagnostic code; `RunningTotal` derives only `Debug`, so it is
+    neither `Copy` nor `Clone`. Every file in the module is under 400 lines
+    (largest: `tests/properties.rs` at 361).
+  - Gates (2026-11-03). All eight EP-M3 gates passed on the uncommitted
+    candidate, run sequentially by the scrutineer against one frozen worktree:
+    `make check-fmt`, `make lint`, `make typecheck`, `make test`,
+    `make doc-coverage` (98.26%, 6486/6601, with its 65-test pytest
+    prerequisite), `make test-workflow-contracts` (1666 passed, 3 skipped, plus
+    28 Python tests), `make markdownlint` (212 files, 0 issues), and
+    `make nixie` (213 files). The `doc-coverage` run took 108 minutes because
+    the host's compile-admission pool was saturated by four other worktrees;
+    `build-limits-status` reported `capacity 4, held 4, healthy` throughout and
+    the gate's own `cargo` child was continuously compiling, so the duration
+    was queueing rather than a hang.
 - [ ] EP-M4: Verus proof and Kani harnesses.
 - [ ] EP-M5: documentation, ADR, roadmap, and final gates.
 

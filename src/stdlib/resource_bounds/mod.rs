@@ -9,12 +9,20 @@
 //!
 //! # What is bounded
 //!
-//! The combinatorial ceilings are in scope:
+//! Six ceilings are in scope. Four are the families roadmap 6.1.3 names, and
+//! the last two are the output-content bound six child RFCs require (D-12):
 //!
+//! - [`INPUT_LENGTH_CEILING`], checked by [`admit_input`] before parsing;
+//! - [`NESTING_DEPTH_CEILING`], checked one container at a time by
+//!   [`NestingDepth`];
 //! - [`OUTPUT_TUPLE_CEILING`], checked by [`CardinalityRequest::admit`] for
 //!   `product` and `combinations`;
 //! - [`PERMUTATION_TUPLE_CEILING`], the lower ceiling the same call applies to
-//!   `permutations`, selected by the request kind.
+//!   `permutations`, selected by the request kind;
+//! - [`MATCH_COUNT_CEILING`], counted as a match stream grows by
+//!   [`collect_matches`] and [`RunningTotal`];
+//! - [`OUTPUT_BYTES_CEILING`], counted the same way under
+//!   [`StreamKind::OutputBytes`].
 //!
 //! # Exactness and precedence
 //!
@@ -41,7 +49,9 @@
 //! # Example
 //!
 //! ```
-//! use netsuke::stdlib::CardinalityRequest;
+//! use netsuke::stdlib::{CardinalityRequest, admit_input};
+//!
+//! admit_input(b"a small manifest").expect("sixteen bytes are within the ceiling");
 //!
 //! let admitted = CardinalityRequest::Product {
 //!     lengths: &[100, 200],
@@ -64,11 +74,31 @@
 
 mod cardinality;
 mod kernel;
+mod limits;
+mod streams;
 
 #[cfg(test)]
 mod tests;
 
 pub use self::cardinality::{AdmittedCount, CardinalityError, CardinalityRequest};
+pub use self::limits::{DepthExceeded, InputLengthExceeded, NestingDepth, admit_input};
+pub use self::streams::{
+    RunningTotal, StreamKind, StreamLimitExceeded, collect_matches, try_collect_matches,
+};
+
+/// Largest input, in bytes, that a parsing helper admits.
+///
+/// The ceiling is checked before the text is parsed, so a manifest cannot make
+/// a parser scan an unreasonable amount of input. It is a compile-time
+/// constant rather than configuration: RFC 0006 §6.8 defers configurability
+/// until a consumer needs it.
+pub const INPUT_LENGTH_CEILING: u64 = 8 * 1024 * 1024;
+
+/// Largest number of enclosing containers a recursive helper admits.
+///
+/// A root value sits at depth zero, so depths one to this value are admitted
+/// and the attempt to enter the next level is refused. See [`NestingDepth`].
+pub const NESTING_DEPTH_CEILING: u32 = 128;
 
 /// Largest number of tuples `product` and `combinations` may produce.
 pub const OUTPUT_TUPLE_CEILING: u64 = 100_000;
@@ -79,3 +109,12 @@ pub const OUTPUT_TUPLE_CEILING: u64 = 100_000;
 /// lower ceiling for them; [`CardinalityRequest::ceiling`] selects it from the
 /// request kind, and no caller chooses a ceiling for itself.
 pub const PERMUTATION_TUPLE_CEILING: u64 = 10_000;
+
+/// Largest number of matches a materializing helper may collect.
+pub const MATCH_COUNT_CEILING: u64 = 100_000;
+
+/// Largest output content, in bytes, that a materializing helper may build.
+///
+/// A tuple count does not bound the content those tuples hold, so a helper
+/// that materializes values runs this check after cardinality admission.
+pub const OUTPUT_BYTES_CEILING: u64 = 8 * 1024 * 1024;
