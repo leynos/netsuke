@@ -7072,32 +7072,32 @@ template; that parity is pinned by
 decode to one escaped backslash before the marker, single-quoted backslashes
 are literal, and a backslash-newline continuation is unaffected. The property
 generators do not emit backslashes, so the independent interpolation oracle is
-unchanged. End-to-end coverage runs a generated command recipe through Ninja and
-`/bin/sh` on Unix, and is skipped when `ninja_integration_workspace` reports
-Ninja is unavailable. Script recipes are covered at the interpolation layer
-only: Ninja wraps a script in a `printf %b` pipeline, and that wrapper already
-collapses a backslash run before the script runs, independently of this
-contract. POSIX and Bash `script:` recipes use the POSIX-aware scanner;
-PowerShell `command:` and `script:` recipes share the PowerShell-aware scanner
-and reject markers in quoted strings, here-strings, `$()`, or immediately after
-a backtick. Typographic PowerShell quote characters also make later markers
-fail closed. PowerShell rejects markers in the raw native-command region after
-an unquoted `--%` stop-parsing token. That region ends at a newline or pipeline
-character; a semicolon does not end it, and scanning resumes after the
-boundary. The path text otherwise reaches the native command literally instead
-of being interpreted as Netsuke's quoted path literal. PowerShell scripts have
-no inert comment regions: plain line-comment text leaves later markers eligible
-for interpolation, while scanner-sensitive syntax after a comment boundary or
-any mid-token `#` can make later markers fail closed. This includes a
-block-comment opener, quotes, backticks, or substitution syntax. In particular,
-an apostrophe in a comment can make a later marker fail closed. For POSIX and
-Bash `command:` recipes, the scanner then validates the substituted text: odd
-backticks reject the command, and the `shlex` guard also evaluates that
-substituted text. `script:` recipes skip both checks, because a script may
-legitimately contain heredocs and other syntax `shlex` cannot model. The
-odd-backtick and guard properties are complementary: one proves rejection of
-odd substituted backtick counts, while the other proves that the guard's
-success or failure and returned command agree with the substituted command.
+unchanged. End-to-end coverage runs a generated command, rule-command, and
+script recipe through Ninja and `/bin/sh` on Unix, asserting the argument count
+and first argument so a split path fails the test, and is skipped when
+`ninja_integration_workspace` reports Ninja is unavailable. The script case
+depends on the layered `printf %b` transport preserving script bytes. POSIX and
+Bash `script:` recipes use the POSIX-aware scanner; PowerShell `command:` and
+`script:` recipes share the PowerShell-aware scanner and reject markers in
+quoted strings, here-strings, `$()`, or immediately after a backtick.
+Typographic PowerShell quote characters also make later markers fail closed.
+PowerShell rejects markers in the raw native-command region after an unquoted
+`--%` stop-parsing token. That region ends at a newline or pipeline character;
+a semicolon does not end it, and scanning resumes after the boundary. The path
+text otherwise reaches the native command literally instead of being
+interpreted as Netsuke's quoted path literal. PowerShell scripts have no inert
+comment regions: plain line-comment text leaves later markers eligible for
+interpolation, while scanner-sensitive syntax after a comment boundary or any
+mid-token `#` can make later markers fail closed. This includes a block-comment
+opener, quotes, backticks, or substitution syntax. In particular, an apostrophe
+in a comment can make a later marker fail closed. For POSIX and Bash `command:`
+recipes, the scanner then validates the substituted text: odd backticks reject
+the command, and the `shlex` guard also evaluates that substituted text.
+`script:` recipes skip both checks, because a script may legitimately contain
+heredocs and other syntax `shlex` cannot model. The odd-backtick and guard
+properties are complementary: one proves rejection of odd substituted backtick
+counts, while the other proves that the guard's success or failure and returned
+command agree with the substituted command.
 
 Generated strategies that are reusable across crate boundaries belong in
 `test_support`. Because `test_support` is compiled as a library, dependencies

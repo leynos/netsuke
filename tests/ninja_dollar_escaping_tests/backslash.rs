@@ -74,9 +74,9 @@ fn markers_after_an_active_backslash_are_rejected(#[case] recipe: &str, #[case] 
 /// because `printf %s` concatenates its arguments: identical output bytes
 /// alone cannot show that the path stayed a single shell word.
 ///
-/// Script recipes are covered at the interpolation layer instead: Ninja wraps
-/// a script in a `printf %b` pipeline, and that wrapper already collapses a
-/// backslash run before the script runs, independently of this contract.
+/// Script recipes run the same oracle through Ninja's `printf %b` transport,
+/// which preserves script bytes as of the layered encoder, so the path binding
+/// is exercised end to end there too.
 #[cfg(unix)]
 #[rstest]
 #[case::scalar_command(
@@ -89,6 +89,10 @@ fn markers_after_an_active_backslash_are_rejected(#[case] recipe: &str, #[case] 
         "rules:\n  - name: build\n    command:\n",
         "      - '/bin/sh -c ''printf \"%s\\n\" \"$#\"; printf \"%s\" \"$1\"'' _ \\\\{{ outs }}'\n"
     )
+)]
+#[case::script(
+    "    script: |\n      /bin/sh -c 'printf \"%s\\n\" \"$#\"; printf \"%s\" \"$1\"' _ \\\\{{ outs }}\n",
+    ""
 )]
 fn paired_backslashes_keep_the_path_as_one_argument(
     #[case] recipe: &str,
