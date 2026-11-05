@@ -4,11 +4,8 @@ import dataclasses
 import hashlib
 import io
 import json
+import pathlib
 import tarfile
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    import pathlib
 
 COMMIT = "a" * 40
 TAG = "v1.2.3"
@@ -57,8 +54,13 @@ windows-sys = {{ version = "^0.59", features = ["Win32_Foundation"] }}
 def tar_bytes(members: tuple[tuple[str, bytes | None], ...]) -> bytes:
     """Return a gzip tar archive holding the named members in order.
 
-    A ``None`` content records a directory entry rather than a regular file, so
-    a caller can exercise the archive reader's non-regular-member guard.
+    Parameters
+    ----------
+    members : tuple of tuple of (str, bytes or None)
+        The member names and contents, in the order the archive should hold
+        them. A ``None`` content records a directory entry rather than a
+        regular file, so a caller can exercise the archive reader's
+        non-regular-member guard.
 
     Returns
     -------
@@ -88,13 +90,22 @@ def archive_bytes(
 ) -> bytes:
     """Return a gzip tar archive of the package with the chosen contents.
 
-    ``manifest_version`` rewrites the version the manifest states while leaving
-    the archive's own name alone, so a caller can make the two disagree.
-    Passing ``readme=None`` omits the README member entirely, which lets a
-    caller exercise the metadata module's fallback and absence paths. ``root``
-    overrides the single top-level directory, so a caller can place the
-    manifest outside the ``<package>-<version>`` root the candidate check
-    requires.
+    Parameters
+    ----------
+    manifest_version : str or None, optional
+        The version to write into the manifest. The archive's own name keeps
+        the default version, so a caller can make the two disagree.
+    manifests : tuple of str or None, optional
+        The manifest texts to package. The first becomes ``Cargo.toml`` and
+        each later one becomes ``duplicate-<index>/Cargo.toml``.
+    readme : bytes or None, optional
+        The README member's content. ``None`` omits the member entirely, which
+        lets a caller exercise the metadata module's fallback and absence
+        paths.
+    root : str or None, optional
+        The single top-level directory. ``None`` uses ``<package>-<version>``;
+        any other value places the manifest outside the root the candidate
+        check requires.
 
     Returns
     -------
@@ -118,7 +129,10 @@ def archive_bytes(
     if readme is not None:
         members.append(("README.md", readme))
     return tar_bytes(
-        tuple((f"{archive_root}/{filename}", content) for filename, content in members)
+        tuple(
+            (str(pathlib.PurePosixPath(archive_root, filename)), content)
+            for filename, content in members
+        )
     )
 
 
