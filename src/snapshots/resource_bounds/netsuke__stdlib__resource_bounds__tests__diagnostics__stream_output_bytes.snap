@@ -1,0 +1,5 @@
+---
+source: src/stdlib/resource_bounds/tests/diagnostics.rs
+expression: rendered
+---
+the output exceeds the ceiling of 8388608 bytes
