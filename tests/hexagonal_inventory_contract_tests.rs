@@ -331,6 +331,21 @@ mod tests {
     }
 
     #[test]
+    fn rejects_an_obligation_claimed_only_by_the_trace_introduction() -> Result<()> {
+        let inventory = VALID_SKELETON
+            .replace(
+                "## Compatibility obligations\n\nPending EP-M3.",
+                "## Compatibility obligations\n\n- CO-1: Preserve an obligation.",
+            )
+            .replace(
+                "## Trace matrix\n\n",
+                "## Trace matrix\n\nEvery task honours `CO-1`.\n\n",
+            );
+        expect_validation_error(&inventory, SIMPLE_ROADMAP, "CO-1 has no trace-matrix")?;
+        Ok(())
+    }
+
+    #[test]
     fn rejects_a_finding_without_an_owner() -> Result<()> {
         let inventory = VALID_SKELETON.replace(
             "## Findings\n\nPending EP-M3.",

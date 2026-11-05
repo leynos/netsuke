@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 33. See `Revision note` at the foot of this document. This plan was
+Revision 34. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -600,6 +600,15 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   The set is verified by token comparison against
   `git log 8a961000..HEAD -- src build.rs tests test_support benches`, not by
   counting prose.
+- [x] (2026-11-05) Dispositioned the fourth milestone CodeRabbit review's two
+  findings (D-17). Finding 1: `validate_obligations` searched the whole
+  `## Trace matrix` section, so an obligation named only in the introduction
+  satisfied it; it now reads `trace_rows`, the two `Changes`/`Consumes` tables,
+  as register coverage does. Probed by restoring the old one-line search and
+  running `rejects_an_obligation_claimed_only_by_the_trace_introduction`: the
+  case fails with a fixture error under the old parser and passes under the new
+  one. Finding 2: the three rejection cases are now one three-case `#[rstest]`;
+  32 cases pass on the target, including the real-inventory check.
 - [ ] (2026-11-05) Re-run the complete sequential gate set on the revised
   candidate and finish current-head PR assessment.
 - [ ] EP-M4: rerun the gates and assess the PR.
@@ -867,6 +876,16 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   The fine-grained cases live in a `#[cfg(test)]` module beside the guard, in
   `tests/hexagonal_inventory_contract/validation.rs`. Date/Author: 2026-11-05,
   implementing agent, after the third milestone CodeRabbit review.
+- Decision D-17 (2026-11-05): dispositioned the fourth milestone CodeRabbit
+  review's two findings. Obligation coverage now searches only the `Changes` and
+  `Consumes` tables, matching register coverage, so naming `CO-n` in the trace
+  matrix's introduction can no longer satisfy it; a new regression case
+  `rejects_an_obligation_claimed_only_by_the_trace_introduction` was measured
+  red against the previous whole-section search and green with the fix. The
+  three separate rejection cases in `validation.rs` collapsed into one
+  `#[rstest]` with three named cases, which removes the duplication the second
+  finding named without losing a case. Date/Author: 2026-11-05, implementing
+  agent, after the fourth milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1800,6 +1819,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   The rebase rewrote the branch commits the drift list cites, and #1047 is
   itself in scope, so the list is regenerated from live Git and verified as a
   set: 31 commits, 25 `main` + 1 contract test + 5 contract refinements. Final
+  gate run and PR assessment follow.
+- Revision 34 (2026-11-05): dispositioned the fourth milestone CodeRabbit
+  review's two findings (D-17). Obligation coverage now reads only the two
+  trace tables, with a regression case measured red against the previous
+  parser, and the three rejection cases are one three-case `#[rstest]`. Final
   gate run and PR assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
