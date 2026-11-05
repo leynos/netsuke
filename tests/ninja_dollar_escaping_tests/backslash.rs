@@ -70,15 +70,25 @@ fn markers_after_an_active_backslash_are_rejected(#[case] recipe: &str, #[case] 
 /// is reached, so the ordinary unquoted encoding applies and the path text
 /// keeps its literal backslash prefix instead of becoming shell syntax.
 ///
+/// The recipe reports the argument count and the first argument separately
+/// because `printf %s` concatenates its arguments: identical output bytes
+/// alone cannot show that the path stayed a single shell word.
+///
 /// Script recipes are covered at the interpolation layer instead: Ninja wraps
 /// a script in a `printf %b` pipeline, and that wrapper already collapses a
 /// backslash run before the script runs, independently of this contract.
 #[cfg(unix)]
 #[rstest]
-#[case::scalar_command("    command: 'printf %s \\\\{{ outs }}'\n", "")]
+#[case::scalar_command(
+    "    command: '/bin/sh -c ''printf \"%s\\n\" \"$#\"; printf \"%s\" \"$1\"'' _ \\\\{{ outs }}'\n",
+    ""
+)]
 #[case::rule_command_list(
     "    rule: build\n",
-    "rules:\n  - name: build\n    command:\n      - 'printf %s \\\\{{ outs }}'\n"
+    concat!(
+        "rules:\n  - name: build\n    command:\n",
+        "      - '/bin/sh -c ''printf \"%s\\n\" \"$#\"; printf \"%s\" \"$1\"'' _ \\\\{{ outs }}'\n"
+    )
 )]
 fn paired_backslashes_keep_the_path_as_one_argument(
     #[case] recipe: &str,
@@ -111,8 +121,8 @@ fn paired_backslashes_keep_the_path_as_one_argument(
         String::from_utf8_lossy(&output.stderr)
     );
     ensure!(
-        output.stdout == format!("\\{INJECTING_PATH}").as_bytes(),
-        "the path must stay one argument with its literal backslash, got: {}",
+        output.stdout == format!("1\n\\{INJECTING_PATH}").as_bytes(),
+        "the path must stay exactly one argument with its literal backslash, got: {}",
         String::from_utf8_lossy(&output.stdout)
     );
     ensure!(
