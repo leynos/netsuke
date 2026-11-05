@@ -120,21 +120,54 @@ fn generate_writes_file() -> Result<()> {
     Ok(())
 }
 
+/// Write the minimal hello manifest declaring `version` as its schema.
+fn write_schema_manifest(directory: &Path, version: &str) -> Result<()> {
+    fs::write(
+        directory.join("Netsukefile"),
+        format!(
+            concat!(
+                "netsuke_version: '{version}'\n",
+                "targets:\n",
+                "  - name: hello\n",
+                "    command: echo hello\n",
+            ),
+            version = version
+        ),
+    )
+    .context("write schema-version manifest")
+}
+
+/// Assert a JSON-mode rejection carries the parse code and the schema cause.
+fn assert_schema_rejection_json(stderr: &[u8], command: &str) -> Result<()> {
+    let rendered = String::from_utf8_lossy(stderr);
+    let diagnostics: serde_json::Value = serde_json::from_str(&rendered)
+        .with_context(|| format!("parse {command} diagnostics JSON"))?;
+    let diagnostic = diagnostics
+        .pointer("/diagnostics/0")
+        .with_context(|| format!("{command} should report a diagnostic"))?;
+    ensure!(
+        diagnostic.get("code").and_then(serde_json::Value::as_str)
+            == Some("netsuke::manifest::parse"),
+        "{command} should preserve the parse diagnostic code: {diagnostic}"
+    );
+    let causes = diagnostic
+        .get("causes")
+        .and_then(serde_json::Value::as_array)
+        .with_context(|| format!("{command} diagnostic should include causes"))?;
+    ensure!(
+        causes.iter().any(|cause| cause
+            .as_str()
+            .is_some_and(|text| text.contains("netsuke::manifest::schema_version"))),
+        "{command} should expose the schema diagnostic code: {causes:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn generate_rejects_unsupported_schema_before_creating_output() -> Result<()> {
     let temp = tempdir().context("create schema-version generation workspace")?;
-    let manifest_path = temp.path().join("Netsukefile");
     let output_path = temp.path().join("out.ninja");
-    fs::write(
-        &manifest_path,
-        concat!(
-            "netsuke_version: '1.1.0'\n",
-            "targets:\n",
-            "  - name: hello\n",
-            "    command: echo hello\n",
-        ),
-    )
-    .context("write unsupported schema-version manifest")?;
+    write_schema_manifest(temp.path(), "1.1.0")?;
 
     let unsupported = create_netsuke_command(temp.path())
         .args(["--json", "generate", "--output", "out.ninja"])
@@ -148,39 +181,9 @@ fn generate_rejects_unsupported_schema_before_creating_output() -> Result<()> {
         !output_path.exists(),
         "generate must not create output for a rejected manifest"
     );
-    let stderr =
-        String::from_utf8(unsupported.stderr).context("JSON diagnostics should be valid UTF-8")?;
-    let diagnostics: serde_json::Value =
-        serde_json::from_str(&stderr).context("parse generate diagnostics JSON")?;
-    let diagnostic = diagnostics
-        .pointer("/diagnostics/0")
-        .context("generate should report a diagnostic")?;
-    ensure!(
-        diagnostic.get("code").and_then(serde_json::Value::as_str)
-            == Some("netsuke::manifest::parse"),
-        "top-level parse diagnostic should keep its stable code: {diagnostic}"
-    );
-    let causes = diagnostic
-        .get("causes")
-        .and_then(serde_json::Value::as_array)
-        .context("parse diagnostic should include causes")?;
-    ensure!(
-        causes.iter().any(|cause| cause
-            .as_str()
-            .is_some_and(|text| text.contains("netsuke::manifest::schema_version"))),
-        "cause should identify schema-version rejection: {causes:?}"
-    );
+    assert_schema_rejection_json(&unsupported.stderr, "generate")?;
 
-    fs::write(
-        &manifest_path,
-        concat!(
-            "netsuke_version: '1.0.0'\n",
-            "targets:\n",
-            "  - name: hello\n",
-            "    command: echo hello\n",
-        ),
-    )
-    .context("write supported schema-version manifest")?;
+    write_schema_manifest(temp.path(), "1.0.0")?;
     create_netsuke_command(temp.path())
         .args(["generate", "--output", "out.ninja"])
         .assert()
@@ -195,16 +198,7 @@ fn generate_rejects_unsupported_schema_before_creating_output() -> Result<()> {
 #[rstest]
 fn human_output_renders_the_schema_version_rejection() -> Result<()> {
     let temp = tempdir().context("create human diagnostics schema workspace")?;
-    fs::write(
-        temp.path().join("Netsukefile"),
-        concat!(
-            "netsuke_version: '1.1.0'\n",
-            "targets:\n",
-            "  - name: hello\n",
-            "    command: echo hello\n",
-        ),
-    )
-    .context("write unsupported schema-version manifest")?;
+    write_schema_manifest(temp.path(), "1.1.0")?;
 
     let output = create_netsuke_command(temp.path())
         .args(["generate", "--output", "out.ninja"])
@@ -234,17 +228,7 @@ fn human_output_renders_the_schema_version_rejection() -> Result<()> {
 #[rstest]
 fn check_rejects_unsupported_schema_and_accepts_supported_schema() -> Result<()> {
     let temp = tempdir().context("create schema-version check workspace")?;
-    let manifest_path = temp.path().join("Netsukefile");
-    fs::write(
-        &manifest_path,
-        concat!(
-            "netsuke_version: '1.1.0'\n",
-            "targets:\n",
-            "  - name: hello\n",
-            "    command: echo hello\n",
-        ),
-    )
-    .context("write unsupported schema-version manifest")?;
+    write_schema_manifest(temp.path(), "1.1.0")?;
     let unsupported = create_netsuke_command(temp.path())
         .args(["--json", "check"])
         .output()
@@ -253,39 +237,9 @@ fn check_rejects_unsupported_schema_and_accepts_supported_schema() -> Result<()>
         !unsupported.status.success(),
         "check must reject schema version 1.1.0"
     );
-    let stderr =
-        String::from_utf8(unsupported.stderr).context("check diagnostics should be valid UTF-8")?;
-    let diagnostics: serde_json::Value =
-        serde_json::from_str(&stderr).context("parse check diagnostics JSON")?;
-    let diagnostic = diagnostics
-        .pointer("/diagnostics/0")
-        .context("check should report a diagnostic")?;
-    ensure!(
-        diagnostic.get("code").and_then(serde_json::Value::as_str)
-            == Some("netsuke::manifest::parse"),
-        "check should preserve the parse diagnostic code: {diagnostic}"
-    );
-    let causes = diagnostic
-        .get("causes")
-        .and_then(serde_json::Value::as_array)
-        .context("check diagnostic should include causes")?;
-    ensure!(
-        causes.iter().any(|cause| cause
-            .as_str()
-            .is_some_and(|text| text.contains("netsuke::manifest::schema_version"))),
-        "check should expose the schema diagnostic code: {causes:?}"
-    );
+    assert_schema_rejection_json(&unsupported.stderr, "check")?;
 
-    fs::write(
-        &manifest_path,
-        concat!(
-            "netsuke_version: '1.0.0'\n",
-            "targets:\n",
-            "  - name: hello\n",
-            "    command: echo hello\n",
-        ),
-    )
-    .context("write supported schema-version manifest")?;
+    write_schema_manifest(temp.path(), "1.0.0")?;
     create_netsuke_command(temp.path())
         .args(["check"])
         .assert()
