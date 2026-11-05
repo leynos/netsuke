@@ -291,14 +291,25 @@ decision D-15.
   s; 24 tests were not run. This prompted D-21's scoped test budget.
 - [x] (2026-11-05) EP-M4's developer guidance now documents schema reservation,
   admission, allocation, the registry contract, and the rejection ladder. The
-  snapshot guide examples now declare `1.0.0`. A targeted 900 s allowance for
-  the timed-out workspace Cargo check is covered by the Nextest workflow
-  contracts; fresh gates remain pending.
-- [x] (2026-11-05) EP-M3's expected 26-file set plus the three D-21 Nextest
-  policy and contract-test files totals 29 counted paths, below its 32-file
+  snapshot guide examples now declare `1.0.0`. The CLI configuration fixture
+  that D-21 widened was deleted on `main` by ADR-0059, so D-21 is superseded
+  and its override dropped; see the decision log. Fresh gates remain pending.
+- [x] (2026-11-05) EP-M3's expected 26-file set plus the three Nextest policy
+  and contract-test files totals 29 counted paths, below its 32-file
   tolerance. EP-M4's snapshot-guide correction is a separate documentation
-  path. The D-21 900 s allowance has not yet been exercised by a fresh full
-  suite; its ordered validation is pending.
+  path. The Nextest policy and contract-test files reverted to `main`'s
+  versions on rebase, so the counted set for this milestone is 26.
+- [x] (2026-11-05) Rebased onto `origin/main` at `ce15e026d` (27 commits). One
+  conflict region was semantic rather than textual: `main` split
+  `evaluate_manifest` into `build_template_environment` and
+  `expand_and_render`, so `parse_admitted_document` is now called from
+  `build_template_environment`; `main` also moved `from_str` into
+  `str_loaders.rs`, so the branch's copy is dropped in favour of the
+  re-export. `main`'s ADR-0069 split the key tables by audience and added
+  `manifest_keys.rs`, so the branch's planned third table
+  `src/localization/schema_keys.rs` is deleted and its four keys live in
+  `manifest_keys.rs`. Tracked sources that differ from `main`:
+  `git diff --stat origin/main...HEAD` after the replay.
 - [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
 - [ ] EP-M4: developers' guide and documentation clean-up.
 - [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
@@ -402,7 +413,10 @@ decision D-15.
   key file, `src/localization/schema_keys.rs`, wired through `build.rs`,
   `build_l10n_audit/mod.rs` (`KEY_SOURCES`), `src/localization/mod.rs`, the
   localization audit tests, the packaging smoke test, and both guides,
-  following the `check_keys.rs` precedent.
+  following the `check_keys.rs` precedent. Superseded on the 2026-11-05 rebase:
+  `main`'s ADR-0069 had already split the tables by audience and introduced
+  `src/localization/manifest_keys.rs`, so the four schema-version keys join that
+  existing manifest table and no `schema_keys.rs` is created.
 
 - Observation: the Rust module-layout contract
   (`tests/workflow_contracts/rust_module_layout_test.py`) rejects sibling files
@@ -743,13 +757,25 @@ makes at approval.
   limit. The current implementation is within both Rust limits. Date/Author:
   2026-11-03, user.
 
-- Decision D-21 (test budget): give
+- Decision D-21 (test budget, superseded): give
   `cli_configuration_fixture_compiles` a test-specific 900 s allowance after
   the full suite timed out at its 300 s default while the workspace
-  `cargo check` was active. The override is bounded below CI's 960 s whole-run
-  cap, keeps the child-Cargo serialization policy, and adds no retry. The
-  workflow contracts pin the exact filter and allowance. Date/Author:
+  `cargo check` was active. The override was bounded below CI's 960 s whole-run
+  cap, kept the child-Cargo serialization policy, and added no retry. The
+  workflow contracts pinned the exact filter and allowance. Date/Author:
   2026-11-05, implementation evidence.
+
+- Decision D-21 superseded on rebase: `origin/main` commit `88f20d588` ("Keep
+  compile-time contracts out of timed tests", ADR-0059) deleted the CLI
+  configuration fixture and every other in-suite child-Cargo build, so the test
+  D-21 widened no longer exists. Main's Nextest contracts now fail a filter
+  that names a test the suite does not declare, which makes the D-21 override
+  an active defect rather than a stale entry. The rebase therefore takes
+  `.config/nextest.toml` and `tests/workflow_contracts/` from main verbatim and
+  drops D-21's override. The 300 s cap that produced D-21 was a symptom of
+  running compiler work inside a timed test; main fixed the cause, which is the
+  response this plan prefers to widening a budget. Date/Author: 2026-11-05,
+  rebase evidence.
 
 - Approval: the user approved this plan on 2026-10-24 and selected the
   recommended D-19 Option A. The plan honours ADR-0043's `1.1.0` reservation.
@@ -758,11 +784,16 @@ makes at approval.
 ## Outcomes & retrospective
 
 The first complete local gate sequence passed six gates and exposed one timeout
-in the CLI configuration fixture; the evidence and bounded D-21 response are
-recorded in `Progress` and the decision log. EP-M3 and EP-M4 implementation
-edits are in the working tree, but final gates, the main-branch rebase,
-exact-head PR review, and EP-M5's explicit ADR acceptance remain outstanding.
-Reconcile these outcomes again after each delivery boundary.
+in the CLI configuration fixture. That budget question is closed, not carried:
+`origin/main`'s ADR-0059 work deleted the fixture, so the rebase drops D-21's
+override rather than maintaining a filter that now names no declared test.
+
+EP-M3 and EP-M4 are implemented and rebased onto `main`, and their conflicts
+were resolved semantically rather than by taking one side wholesale; the
+rebase's own discoveries are recorded in `Progress`. Final gates on this exact
+head, the exact-head CodeRabbit review, and EP-M5's explicit ADR acceptance
+remain outstanding. Reconcile these outcomes again after each delivery
+boundary.
 
 ## Context and orientation
 
@@ -1098,15 +1129,15 @@ roadmap item done, and completes this plan.
   rejection facts, with its unit tests in
   `src/manifest/schema_version/tests.rs`; `parse_admitted_document` in
   `src/manifest/mod.rs` parses and admits; rejections render through four new
-  Fluent keys, declared in a new `src/localization/schema_keys.rs` and present
-  in all 35 catalogues; two fixtures declare `1.0.0`;
+  Fluent keys, declared in `src/localization/manifest_keys.rs` and present in
+  all 35 catalogues; two fixtures declare `1.0.0`;
   `src/manifest/tests/stages.rs`'s final-rendering test uses an unknown-field
   trigger; the users' guide gains `### Declare the schema version` under
   "Author a manifest", using inline code only because every fence there needs a
   tested-example marker; the CHANGELOG's `Unreleased` section gains a
-  `### Changed` heading with a `- **Breaking:**` entry; design section 3.3
-  lists admission as the first ingestion stage; the developers' and
-  translators' guides name the third key file.
+  `- **Breaking:**` entry in the `### Changed` section `main` already carries;
+  design section 3.3 lists admission as the first ingestion stage; the
+  developers' and translators' guides name the manifest key file.
 - Requirements: OLD-READER, D-1, D-2, D-4 rung 1, D-15, D-18.
 - Acceptance evidence: OBL-1 to OBL-5 discharged; the BDD scenario passes;
   `make check-fmt`, `make typecheck`, `make lint`, `make doc-coverage`,
@@ -1289,14 +1320,14 @@ EP-M3, green:
    `MANIFEST_SCHEMA_VERSION_UNSUPPORTED` with `$declared` rendered as
    `major.minor` and `$supported` as `1.0`; and the help text to
    `MANIFEST_SCHEMA_VERSION_HELP`. Every variant field is read by this mapping.
-3. Declare the four keys in a new `src/localization/schema_keys.rs`, because
-   `src/localization/keys.rs` is at the 400-line cap. Follow the
-   `src/localization/check_keys.rs` precedent exactly: re-export it from
-   `keys.rs`, register it in `src/localization/mod.rs`, add it to `build.rs`
-   and to `KEY_SOURCES` in `build_l10n_audit/mod.rs` (raising the array
-   length), and extend `tests/build_l10n_audit_tests.rs`,
-   `tests/build_l10n_keys_tests.rs`, and `tests/packaging_smoke_tests.rs` where
-   they enumerate key sources. Then add messages to every
+3. Declare the four keys in `src/localization/manifest_keys.rs`, the table
+   ADR-0069 already created for manifest loading and validation. Following
+   `src/localization/check_keys.rs`'s precedent, that file publishes its own
+   `TABLE_KEYS`, and `src/localization/mod.rs` unions every published table into
+   `ALL_KEYS`; appending a constant to the existing `define_keys!` body is the
+   whole wiring change. Extend `tests/build_l10n_keys_tests.rs`'s
+   `#[case::manifest]` minimum and the catalogue audit picks the keys up from
+   `ALL_KEYS`. Then add messages to every
    `locales/*/messages.ftl`, following `docs/translators-guide.md`, with
    `[netsuke::manifest::schema_version]` inside each message's text and
    identifiers and numbers untranslated. The `en-US` unsupported message,
@@ -1336,10 +1367,9 @@ Expected file set for EP-M3, excluding the 35 catalogues and new snapshots:
 - gate and diagnostics: `src/manifest/schema_version/mod.rs`,
   `src/manifest/schema_version/tests.rs`, `src/manifest/mod.rs`, and
   `src/manifest/diagnostics/mod.rs`;
-- localization wiring: `src/localization/schema_keys.rs`,
-  `src/localization/keys.rs`, `src/localization/mod.rs`, `build.rs`,
-  `build_l10n_audit/mod.rs`, `tests/build_l10n_audit_tests.rs`,
-  `tests/build_l10n_keys_tests.rs`, and `tests/packaging_smoke_tests.rs`;
+- localization wiring: `src/localization/manifest_keys.rs`,
+  `tests/build_l10n_keys_tests.rs`, and `tests/packaging_smoke_tests.rs` where
+  it enumerates the packaged key tables;
 - tests and fixtures: `src/manifest/tests/stages.rs`,
   `src/diagnostic_json/tests/mod.rs`, `tests/schema_version_gate_tests.rs`,
   `tests/schema_version_registry_tests.rs`, `tests/assert_cmd_tests.rs`,
@@ -1350,7 +1380,7 @@ Expected file set for EP-M3, excluding the 35 catalogues and new snapshots:
   `docs/netsuke-design.md`, `docs/developers-guide.md`, and
   `docs/translators-guide.md`.
 
-That is twenty-six files. Top-level `tests/*.rs` files are auto-discovered (see
+That is twenty-one files. Top-level `tests/*.rs` files are auto-discovered (see
 the integration-test wiring contract in `docs/developers-guide.md`), so the new
 test files need no `Cargo.toml` entry. The existing consumers of
 `tests/data/invalid_version.yml` (`tests/runner_tests.rs`,
@@ -1573,11 +1603,13 @@ invalidated several premises. What changed:
   cover it; ADR-0045's version-free `command_isolation` key is recorded as part
   of the `1.0` core.
 - EP-M3 now places the gate in `src/manifest/schema_version/` to satisfy the
-  module-layout contract, adds `src/localization/schema_keys.rs` because
-  `keys.rs` is at the 400-line cap (raising the file set to twenty-six and the
-  tolerance to thirty-two), expects `[ManifestIngestion, InitialYamlParsing]`
-  from path-based loads, keeps fences out of the users' guide section, adds a
-  `### Changed` CHANGELOG heading, and uses `TestRunner::deterministic()`.
+  module-layout contract, declares its four keys in
+  `src/localization/manifest_keys.rs` (ADR-0069's manifest table, superseding
+  the earlier `schema_keys.rs` design at rebase), expects
+  `[ManifestIngestion, InitialYamlParsing]` from path-based loads, keeps fences
+  out of the users' guide section, folds the CHANGELOG entry into the
+  `### Changed` section `main` already carries, and uses
+  `TestRunner::deterministic()`.
 - Paths moved by the module regrouping are updated, and
   `docs/terms-of-reference.md` joins the conformance basis.
 

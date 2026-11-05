@@ -55,6 +55,11 @@
   double-quoted string and inject shell syntax. Write `\\{{ outs }}` for a
   literal backslash, or place the marker inside single quotes
   ([#984](https://github.com/leynos/netsuke/issues/984))
+- **Breaking:** require `netsuke_version` to declare a manifest schema this
+  reader supports. The current reader accepts only `1.0.0`, and reports an
+  actionable diagnostic before any template evaluation when the declaration is
+  missing, malformed, or outside that range
+  ([ADR-0061](docs/adrs/adr-0061-manifest-schema-versions-and-admission.md)).
 
 ### Security
 
