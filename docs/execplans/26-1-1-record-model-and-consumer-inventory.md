@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 35. See `Revision note` at the foot of this document. This plan was
+Revision 36. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -292,7 +292,7 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
 - Change no production Rust source, build script, Cargo manifest,
   `Cargo.lock`, Makefile, workflow, Fluent catalogue, or existing test or
   snapshot. The Rust added is the integration test
-  `tests/hexagonal_inventory_contract_tests.rs` and its three private modules
+  `tests/hexagonal_inventory_contract_tests.rs` and its four private modules
   under `tests/hexagonal_inventory_contract/`, which read Markdown only. Those
   modules are a split of the single test file forced by the 400-line file cap:
   together they add no reader beyond the declared one.
@@ -338,7 +338,7 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   parser modules under `tests/hexagonal_inventory_contract/`, the exact-path
   CodeScene exemptions those parsers need, and (only if the spelling gate
   requires it) `typos.local.toml` and its generated `typos.toml`. The measured
-  range `origin/main...HEAD` is fifteen files, so this tolerance fired during
+  range `origin/main...HEAD` is sixteen files, so this tolerance fired during
   the task; the expansion is recorded in D-14 rather than applied silently.
 - Drift: if the pin differs from `ebcedaef` and any commit between them
   touches `src/`, `build.rs`, `tests/`, `test_support/`, or `benches/`, re-run
@@ -799,10 +799,10 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   shell-bound representation, and lease-ownership choices assigned to roadmap
   tasks 26.1.2, 26.3.1, and 27.2.2. Date/Author: 2026-11-03, user.
 - Decision D-14 (2026-11-05, on the user's standing instruction to continue
-  until the task is complete): accept the measured fifteen-file scope and
+  until the task is complete): accept the measured sixteen-file scope and
   restate the Scope tolerance accordingly. The plan allowed ten files and one
   Rust path; the branch carries eight Markdown files, the integration test,
-  three private modules split from it to stay under the 400-line cap, and three
+  four private modules split from it to stay under the 400-line cap, and three
   rule files. Each addition is forced by a repository rule rather than by new
   scope: `mdtablefix` and the 400-line cap force the module split, `cs delta`
   forces the exact-path exemptions for test-only parsers, and the spelling gate
@@ -917,6 +917,16 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `accepts_a_register_item_listed_as_unchanged` then fails, so the new source
   is live rather than decorative. Date/Author: 2026-11-05, implementing agent,
   after the fifth milestone CodeRabbit review.
+- Decision D-19 (2026-11-05): corrected the scope count from fifteen files to
+  sixteen. D-18's split added a fifth path under
+  `tests/hexagonal_inventory_contract/`, and the plan's own accounting — eight
+  Markdown files, the integration test, its private modules, and three rule
+  files — still said three modules. Measured against the merge base
+  `c82189bf4`: 8 `docs/` paths, 5 `tests/` paths (the crate root plus four
+  modules), and the three rule files, so 16. Counting the modules as three was
+  wrong from the moment `tests.rs` was created; the arithmetic in D-14 was
+  internally consistent but named the wrong number of modules. Date/Author:
+  2026-11-05, implementing agent, after the sixth milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1832,7 +1842,7 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   Fixed the dependency-continuation bleed with the
   `ends_dependency_continuation` predicate and a regression fixture, and
   replaced the single-Rust-file constraint and Scope tolerance with the
-  measured fifteen-file inventory in D-14. Gate evidence and current-head PR
+  measured sixteen-file inventory in D-14. Gate evidence and current-head PR
   assessment follow.
 - Revision 31 (2026-11-05): dispositioned all five findings from the second
   milestone CodeRabbit review (D-15). Tightened four fail-open contract checks
@@ -1861,6 +1871,10 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   the register diagnostic already promised and proved it live by deleting the
   lookup, merged the three pin-rejection tests, and split the test module out
   of the 415-line crate root. Final gate run and PR assessment follow.
+- Revision 36 (2026-11-05): corrected the scope count to sixteen files (D-19).
+  The split added a path the plan's own accounting had not counted, so the
+  Constraints, the Scope tolerance, D-14, and Revision 30 now state the
+  measured figure. Final gate run and PR assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
