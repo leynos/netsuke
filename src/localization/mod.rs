@@ -105,16 +105,6 @@ const fn append_keys(
 /// Compile-time assertion that the aggregate keeps its published slice type.
 const _: &[&str] = ALL_KEYS;
 
-/// The locale registry, which lives at the crate root so that it depends on
-/// nothing: this module reaches `cli_localization` to build the default
-/// localizer, and `cli_localization` reads the registry. Keeping the registry
-/// here would close that loop into a cycle.
-pub use crate::locale_catalogues as locales;
-
-use ortho_config::{LocalizationArgs, Localizer};
-use std::fmt;
-use std::sync::{Arc, OnceLock, RwLock};
-
 /// Process-global localizer storage, initialized on first use.
 static LOCALIZER: OnceLock<RwLock<Arc<dyn Localizer>>> = OnceLock::new();
 
@@ -124,8 +114,8 @@ fn localizer_storage() -> &'static RwLock<Arc<dyn Localizer>> {
     // Keep the key registry referenced so dead-code lints do not discard it.
     let _ = keys::ALL_KEYS;
     let _ = clap_error_keys::TABLE_KEYS;
-    let _ = manifest_keys::TABLE_KEYS;
     let _ = check_keys::TABLE_KEYS;
+    let _ = manifest_keys::TABLE_KEYS;
     LOCALIZER.get_or_init(|| {
         let default = crate::cli_localization::build_localizer(None);
         RwLock::new(Arc::from(default))
@@ -172,14 +162,11 @@ pub fn set_localizer_for_tests(new_localizer: Arc<dyn Localizer>) -> LocalizerGu
 }
 
 // Compile-time assertions that the public setters keep their signatures.
-
-// Compile-time assertions that the public setters keep their signatures.
 /// Compile-time assertion that `set_localizer` keeps its signature.
 const _: fn(Arc<dyn Localizer>) = set_localizer;
 
 /// Compile-time assertion that `set_localizer_for_tests` keeps its signature.
 const _: fn(Arc<dyn Localizer>) -> LocalizerGuard = set_localizer_for_tests;
-
 
 /// Render a Fluent message key with optional arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
