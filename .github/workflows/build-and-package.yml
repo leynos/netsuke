@@ -19,6 +19,13 @@ name: Build and Package
         description: Rust target triple to compile for
         required: true
         type: string
+      commit:
+        description: >-
+          Full commit the producer must check out and build. The lane refuses
+          to run when the checkout's HEAD differs, so an artefact cannot be
+          attributed to a candidate it was not built from.
+        required: true
+        type: string
       bin-name:
         description: Name of the binary to build
         required: true
@@ -141,10 +148,30 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          # The candidate is named by the caller, not inferred from the ref that
+          # happened to trigger the run, so every producer builds the commit the
+          # release declaration will be bound to.
+          ref: ${{ inputs.commit }}
           # The packaging lane hands the workspace to third-party build actions;
           # keeping the token out of .git/config denies them a reusable push
           # credential.
           persist-credentials: false
+
+      - name: Verify the checkout is the release candidate
+        shell: bash
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.commit }}
+        # `actions/checkout` accepts a branch or tag for `ref`, and a moving
+        # name can resolve elsewhere by the time the build starts. Comparing
+        # HEAD pins the claim to the commit that is actually on disk.
+        run: |
+          set -euo pipefail
+          actual_commit="$(git rev-parse HEAD)"
+          if [[ "$actual_commit" != "$CANDIDATE_COMMIT" ]]; then
+            printf 'checkout is %s but the release candidate is %s\n' \
+              "$actual_commit" "$CANDIDATE_COMMIT" >&2
+            exit 1
+          fi
 
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
