@@ -2713,12 +2713,11 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   manifest sits anywhere but `<package>-<version>`, even when the manifest
   declares the expected identity, so an archive carrying only
   `other/Cargo.toml` can no longer be approved. `pathlib` is now a runtime
-  import in the adapter,
-  satisfying the Unit Architecture note. New guard tests cover the foreign
-  root, a second packaged manifest, and a directory named `Cargo.toml`; the
-  adapter gained a behavioural root/manifest test in place of the callable-only
-  assertion. Both guides were updated, and the candidate suite plus adapter
-  doctests pass at 50 tests.
+  import in the adapter, satisfying the Unit Architecture note. New guard tests
+  cover the foreign root, a second packaged manifest, and a directory named
+  `Cargo.toml`; the adapter gained a behavioural root/manifest test in place of
+  the callable-only assertion. Both guides were updated, and the candidate
+  suite plus adapter doctests pass at 50 tests.
 
 ## Surprises & discoveries
 

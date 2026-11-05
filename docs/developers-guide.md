@@ -2525,13 +2525,12 @@ workflow expectation, requires the recorded release mode to agree with it,
 compares the identity record against it, and requires the packaged manifest to
 sit at the `<package>-<version>` root and name the same package and version.
 The command-line module composes those readers with the policy and its own
-digest check.
-`scripts/crates_io_candidate_errors.py` holds the shared `CandidateIssue` and
-`CandidateError` vocabulary, so every rejection carries one stable category
-rather than a format-specific exception. Metadata-manifest parsing applies the
-sole-manifest and README rules. Workflow reachability helpers stay within their
-contract module, and the common transport argument builder stays in its test
-module. The environment normalizers in
+digest check. `scripts/crates_io_candidate_errors.py` holds the shared
+`CandidateIssue` and `CandidateError` vocabulary, so every rejection carries
+one stable category rather than a format-specific exception. Metadata-manifest
+parsing applies the sole-manifest and README rules. Workflow reachability
+helpers stay within their contract module, and the common transport argument
+builder stays in its test module. The environment normalizers in
 `scripts/release_operation_observability.py` also remain private to that entry
 point; other release scripts consume its typed `OperationObservation` rather
 than parsing workflow keys themselves.
