@@ -245,10 +245,14 @@ fn validate_register(inventory: &str) -> Result<()> {
 /// # Errors
 ///
 /// Returns an error when an obligation identifier is missing from the trace.
+///
+/// Only the `Changes` and `Consumes` tables count, exactly as for register
+/// coverage: the introduction, the exclusion reasons, and the `Unchanged` prose
+/// would otherwise satisfy an obligation without any row having to reference it.
 fn validate_obligations(inventory: &str) -> Result<()> {
     let obligations = section(inventory, "Compatibility obligations");
-    let trace = section(inventory, "Trace matrix");
-    let traced = regex_values(OBLIGATION_PATTERN, trace);
+    let trace = trace_rows(section(inventory, "Trace matrix"));
+    let traced = regex_values(OBLIGATION_PATTERN, &trace);
     for obligation in regex_values(OBLIGATION_PATTERN, obligations) {
         ensure!(
             traced.contains(&obligation),
@@ -263,6 +267,7 @@ mod tests {
     //! Pin the vacuous-pass guard against inventories that omit each section.
 
     use anyhow::{Result, bail, ensure};
+    use rstest::rstest;
 
     use super::validate_populated;
 
@@ -296,22 +301,17 @@ mod tests {
         validate_populated(POPULATED)
     }
 
-    #[test]
-    fn rejects_an_inventory_without_register_rows() -> Result<()> {
-        let inventory = POPULATED.replace("| A1/ast::Rule | Rule |\n", "");
-        expect_rejection(&inventory, "should register at least one item")
-    }
-
-    #[test]
-    fn rejects_an_inventory_without_compatibility_obligations() -> Result<()> {
-        let inventory = POPULATED.replace("- CO-1: Preserve the public surface.\n", "Pending.\n");
-        expect_rejection(&inventory, "at least one compatibility obligation")
-    }
-
-    #[test]
-    fn rejects_an_inventory_without_findings() -> Result<()> {
-        let inventory =
-            POPULATED.replace("- H1: An observed finding owned by 26.1.1.\n", "Pending.\n");
-        expect_rejection(&inventory, "at least one finding")
+    #[rstest]
+    #[case::no_register_rows("| A1/ast::Rule | Rule |\n", "should register at least one item")]
+    #[case::no_obligations(
+        "- CO-1: Preserve the public surface.\n",
+        "at least one compatibility obligation"
+    )]
+    #[case::no_findings("- H1: An observed finding owned by 26.1.1.\n", "at least one finding")]
+    fn rejects_an_inventory_missing_an_iterated_section(
+        #[case] removed: &str,
+        #[case] expected: &str,
+    ) -> Result<()> {
+        expect_rejection(&POPULATED.replace(removed, "Pending.\n"), expected)
     }
 }
