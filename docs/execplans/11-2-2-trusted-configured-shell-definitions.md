@@ -6,12 +6,12 @@ This ExecPlan is a living document. Keep `Constraints`,
 `Conformance basis`, and `Verification plan` current at each milestone and
 whenever evidence changes the design.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-The maintainer approved implementation on 2026-11-01. Approval authorizes the
-milestones in this document; it does not itself complete roadmap 11.2.2. M1 and
-M2 are committed and gated; M3's remaining step is the final gate set, the M3
-CLI review, and publication.
+The maintainer approved implementation on 2026-11-01. All three milestones are
+implemented, gated, and reviewed, and roadmap 11.2.2 is checked. Publication
+and the hosted review cycle are owned by `pr-babysitting`; this plan records
+the implementation evidence, not the hosted outcome.
 
 ## Purpose and observable outcome
 
@@ -110,7 +110,7 @@ explicit and exercise the actual adapters in tests.
   `origin/main` (`da06ffb11`) before implementation.
 - [x] 2026-11-01: Re-rebase onto the advanced `origin/main` (`5f0a4d123`) after
   PR #958 landed, and revalidate the full gate set on the rebased candidate.
-- [ ] M1: Establish definition authority and reject unauthorized sources.
+- [x] M1: Establish definition authority and reject unauthorized sources.
   - [x] 2026-11-01: Confirm the Red stage on the prebuilt binary: a project
     `[[shells]]` entry reaches `manifest_not_found`, while a malformed `jobs`
     value in the same file fails configuration merging, proving the fixture
@@ -142,7 +142,7 @@ explicit and exercise the actual adapters in tests.
     M2 replaces the placeholder authority assertion, the schema-less
     rejection, and the whole authority suite, so a review of M1 alone would
     have assessed code that no longer exists.
-- [ ] M2: Add validated definitions, append merging, and collision proof.
+- [x] M2: Add validated definitions, append merging, and collision proof.
   - [x] 2026-11-01: Add the `shells` field with `skip_cli`, append merging, and
     an empty default, so neither the command line nor the environment can
     declare a definition.
@@ -188,7 +188,7 @@ explicit and exercise the actual adapters in tests.
     cited a rooted path as the drive-relative example, and the `arguments`
     deserializer appended a bounded preview of the offending element to the
     diagnostic, contradicting C5 and the type's own documentation.
-- [ ] M3: Complete behavioural evidence, documentation, and delivery.
+- [x] M3: Complete behavioural evidence, documentation, and delivery.
   - [x] 2026-11-05: Add the `configured_shells` feature with four scenarios:
     operator layers append in order, a project file cannot define a shell, an
     explicit `--config` selection does not grant authority, and layered names
@@ -231,6 +231,15 @@ explicit and exercise the actual adapters in tests.
     upstream work adds no shell-selection helper, pattern, or convention this
     plan should adopt, so no design or decision entry changes; the rebase is
     recorded here instead.
+  - [x] 2026-11-05: Run the full gate set at the rebased candidate
+    `205873fc5`, adding `typecheck` to the batch because the rebase hook names
+    it. All eleven gates passed in one batch: `check-fmt` (3 s), `lint`
+    (208 s), `typecheck` (44 s), `doc-coverage` (77 s, 98.32 %), `test`
+    (187 s), `test-workflow-contracts` (258 s), `test-package-verify` (29 s),
+    `test-documentation-contracts` (21 s), `verus` (2 s, 9 verified and 0
+    errors), `markdownlint` (35 s), and `nixie` (1 s); the batch finished
+    `failed=0`. Every verdict recorded before the rebase is superseded by this
+    run, because a rebase creates a new candidate.
   - [ ] 2026-11-05: Publish the repaired candidate and hand delivery to
     `pr-babysitting`.
 
@@ -441,11 +450,32 @@ build script's `cfg(test)` modules, because the slice compiles
 
 ## Outcomes & retrospective
 
-The draft has completed Wyvern reconnaissance and community review. No feature
-implementation, proof, or feature-test result is claimed. Maintainer approval
-was granted on 2026-11-01 and the branch was rebased onto `origin/main`, most
-recently `5f0a4d123`, before implementation; implementation and roadmap closure
-remain open.
+Roadmap 11.2.2 is implemented. An operator can declare additional
+structured-command shells in trusted system and user configuration, and no
+untrusted source can: project files, `--config`, and `NETSUKE_CONFIG` are
+rejected at discovery time, before generic merging, so a rejected request never
+becomes a silent success. Accepted definitions append in layer order, and
+reserved built-in names and duplicates are rejected in `PostMergeHook` with
+both colliding positions named. Diagnostics stay bounded: a rejection names the
+configuration key but never echoes an argument vector, an offending value in
+full, or an ambient environment value.
+
+The evidence is a Verus refinement proof over the composition rule, an
+independent quadratic Rust oracle that ties the proof to the runtime, four
+`rstest-bdd` scenarios, and an `assert_cmd` startup suite that drives the real
+binary. The full gate set passed at the rebased candidate `205873fc5`, and the
+milestone CLI review over `1139f31df..f03faf7b0` covered all 24 changed files
+and left no valid concern unresolved.
+
+Two lessons are worth carrying forward. First, a gate batch binds to a
+candidate, not to a branch: the rebase onto `ce15e026` invalidated every
+earlier verdict, so the whole set was rerun rather than reasoned about. Second,
+a plan edit is not a docs-only delta, because
+`tests/execplan_status_contract_tests.rs` reads every plan from disk; the
+plan's own prose therefore has to clear the same gates as the code it describes.
+
+Executable resolution is 11.2.3 and structured-command integration is 12.3.1;
+neither is claimed here. The wider issue #593 stays open.
 
 ## Conformance basis
 
