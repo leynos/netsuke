@@ -73,6 +73,8 @@ fn jinja_glob_rejects_a_command_injecting_filename() -> Result<()> {
 #[case::comment("comment#file.txt")]
 #[case::redirection("redirect>file.txt")]
 #[case::shell_punctuation("shell;pipe|ampersand&.txt")]
+#[case::backslash_separator(r"nested\leaf.txt")]
+#[case::backslash_parent(r"part\..\other.txt")]
 fn jinja_glob_rejects_every_representative_shell_requiring_filename(
     #[case] filename: &str,
 ) -> Result<()> {
@@ -84,23 +86,36 @@ fn jinja_glob_rejects_every_representative_shell_requiring_filename(
     Ok(())
 }
 
+/// One unsafe match fails the whole expansion, whether the offending byte is
+/// shell punctuation or a literal Unix backslash that must stay part of the
+/// filename rather than being rewritten into an accepted separator.
 #[cfg(unix)]
 #[rstest]
-fn jinja_glob_rejects_a_match_set_containing_safe_and_unsafe_paths() -> Result<()> {
+#[case::shell_punctuation(
+    "unsafe;file.txt",
+    "one unsafe match must stop the complete glob expansion"
+)]
+#[case::literal_backslash(
+    r"nested\leaf.txt",
+    "a preserved backslash must stop the complete glob expansion"
+)]
+fn jinja_glob_rejects_a_match_set_containing_safe_and_unsafe_paths(
+    #[case] unsafe_filename: &str,
+    #[case] expectation: &str,
+) -> Result<()> {
     let temp = tempdir()?;
     test_fs::write(temp.path().join("safe-file_1.txt"), "ordinary filename")?;
     test_fs::write(
-        temp.path().join("unsafe;file.txt"),
+        temp.path().join(unsafe_filename),
         "attacker-controlled filename",
     )?;
     let pattern = format!("{}/*.txt", temp.path().display());
 
-    let error = from_str(&glob_manifest(&pattern))
-        .expect_err("one unsafe match must stop the complete glob expansion");
+    let error = from_str(&glob_manifest(&pattern)).expect_err(expectation);
     let diagnostic = format!("{error:#}");
     ensure!(
         diagnostic.contains("characters that require shell quoting"),
-        "unexpected diagnostic: {diagnostic}"
+        "unexpected diagnostic for {unsafe_filename:?}: {diagnostic}"
     );
     Ok(())
 }
