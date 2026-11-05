@@ -14,3 +14,13 @@ Feature: Bounded materialization for standard-library helpers
     Given a permutations request choosing 8 of 8 items
     When the request is admitted
     Then admission is refused with cardinality 40320 and ceiling 10000
+
+  Scenario: Nesting one level past the ceiling is refused
+    Given a nesting depth at the ceiling
+    When the depth descends one more level
+    Then descent is refused with depth 129 and ceiling 128
+
+  Scenario: A match stream stops one item past the ceiling
+    Given an unbounded stream of matches
+    When the stream is collected under the match ceiling
+    Then collection is refused after pulling 100001 items

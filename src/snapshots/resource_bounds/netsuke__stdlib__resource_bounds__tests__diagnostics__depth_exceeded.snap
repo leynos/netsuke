@@ -1,0 +1,5 @@
+---
+source: src/stdlib/resource_bounds/tests/diagnostics.rs
+expression: rendered
+---
+nesting depth 129 exceeds the ceiling of 128 levels
