@@ -6538,7 +6538,9 @@ Netsuke uses a mixed strategy:
   inventory's register, findings, and roadmap trace without reading Rust
   source. Its private `InventoryValidation` context owns the paired inventory
   and roadmap inputs for cross-document checks; keep its methods in that
-  validator rather than using it as a shared parsing API.
+  validator rather than using it as a shared parsing API. The contract-local
+  `HeadingLevel` selects headings for the private body parser; do not treat it
+  as a general Markdown API.
 - Behavioural tests use Gherkin feature files in `tests/features/` and
   `tests/features_unix/`.
 - Behavioural step definitions and fixtures live in `tests/bdd/`.

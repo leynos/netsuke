@@ -545,9 +545,15 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   (seven skipped), and workflow contracts passed 1,666 pytest plus 28 script
   tests. The focused inventory contract passed 23/23. The source and test
   refactors are committed as `c5afe7988`; this inventory now includes that
-  in-scope commit. Final documentation checks and PR assessment remain.
+  in-scope commit. This gate result predates the hosted CodeScene follow-up
+  below and is not final evidence for the revised parser.
+- [x] (2026-11-05) The hosted CodeScene review approved head `03eb4da90` but
+  identified the `section` and `subsection` wrappers as duplicated structure.
+  Replace them with one heading-body parser selected by a contract-local
+  `HeadingLevel`; rerun the complete local gate sequence on the revised
+  candidate before publication.
 - [ ] EP-M4: rerun the complete sequential gate set on the final rebased
-  candidate, validate and commit the refreshed documentation, and finish PR
+  candidate, record the new post-pin commit, and finish current-head PR
   assessment.
 
 ## Surprises & discoveries
@@ -782,8 +788,10 @@ ADR-0035, satisfying the remaining entry condition for EP-M4. The ADR now
 records the accepted direction and keeps detailed migration choices with their
 owning tasks. The inventory is indexed, linked from the roadmap, and records
 the in-scope commits since its unchanged pin. The full local gate set passed on
-the rebased candidate; EP-M4 remains in progress through the final
-documentation checks and current-head PR assessment.
+the rebased candidate at `03eb4da90`; hosted CodeScene re-review identified
+duplicate heading wrappers, so those parser fixes and their complete gate rerun
+remain. EP-M4 also requires final documentation checks and current-head PR
+assessment.
 
 ## Verification plan
 
@@ -1663,6 +1671,10 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   inventory-contract cases. Committed the test-only CodeScene refactors as
   `c5afe7988` and added that source/test commit to the inventory's post-pin
   list. Final documentation checks and live PR assessment remain.
+- Revision 29 (2026-11-05): recorded the hosted CodeScene approval at head
+  `03eb4da90` and its remaining duplication finding on the heading wrappers.
+  Replace the two wrappers with one contract-local `HeadingLevel` parser,
+  document its scope, and rerun the full local gates before publishing.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

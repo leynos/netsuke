@@ -5,8 +5,9 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, Result, ensure};
 
 use super::markdown::{
-    declared_pin, excluded_tasks, finding_entries, is_well_formed_register_id, pins,
-    reference_covers, regex_values, register_ids, section, task_ids, trace_table_tasks,
+    HeadingLevel, declared_pin, excluded_tasks, finding_entries, heading_body,
+    is_well_formed_register_id, pins, reference_covers, regex_values, register_ids, task_ids,
+    trace_table_tasks,
 };
 use super::roadmap::{dependents_of, roadmap_tasks};
 
@@ -45,7 +46,8 @@ impl InventoryValidation<'_> {
             tasks.contains_key("26.1.1"),
             "roadmap should contain task 26.1.1"
         );
-        let trace = section(self.inventory, "Trace matrix").unwrap_or_default();
+        let trace =
+            heading_body(self.inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
         validate_known_trace_tasks(trace, &tasks)?;
         validate_exclusions(trace, &tasks)?;
 
@@ -69,7 +71,8 @@ impl InventoryValidation<'_> {
     /// Returns an error when a finding has no owner or names an unknown task.
     fn validate_findings(&self) -> Result<()> {
         let tasks = roadmap_tasks(self.roadmap);
-        let findings = section(self.inventory, "Findings").unwrap_or_default();
+        let findings =
+            heading_body(self.inventory, "Findings", HeadingLevel::Section).unwrap_or_default();
         for entry in finding_entries(findings) {
             let owners = task_ids(&entry);
             ensure!(
@@ -128,7 +131,7 @@ fn validate_required_sections(inventory: &str) -> Result<()> {
         "Refreshing this inventory",
     ] {
         ensure!(
-            section(inventory, heading).is_some(),
+            heading_body(inventory, heading, HeadingLevel::Section).is_some(),
             "inventory should contain the `## {heading}` section"
         );
     }
@@ -178,7 +181,7 @@ fn validate_exclusions(trace: &str, tasks: &BTreeMap<String, BTreeSet<String>>) 
 ///
 /// Returns an error when identifiers are duplicated, malformed, or untraced.
 fn validate_register(inventory: &str) -> Result<()> {
-    let register = section(inventory, "Register").unwrap_or_default();
+    let register = heading_body(inventory, "Register", HeadingLevel::Section).unwrap_or_default();
     let register_document = format!("## Register\n{register}");
     let register_identifiers = register_ids(&register_document);
     let unique: BTreeSet<&str> = register_identifiers.iter().map(String::as_str).collect();
@@ -186,7 +189,7 @@ fn validate_register(inventory: &str) -> Result<()> {
         unique.len() == register_identifiers.len(),
         "register identifiers should be unique"
     );
-    let trace = section(inventory, "Trace matrix").unwrap_or_default();
+    let trace = heading_body(inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
     for identifier in &register_identifiers {
         ensure!(
             is_well_formed_register_id(identifier),
@@ -206,8 +209,13 @@ fn validate_register(inventory: &str) -> Result<()> {
 ///
 /// Returns an error when an obligation identifier is missing from the trace.
 fn validate_obligations(inventory: &str) -> Result<()> {
-    let obligations = section(inventory, "Compatibility obligations").unwrap_or_default();
-    let trace = section(inventory, "Trace matrix").unwrap_or_default();
+    let obligations = heading_body(
+        inventory,
+        "Compatibility obligations",
+        HeadingLevel::Section,
+    )
+    .unwrap_or_default();
+    let trace = heading_body(inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
     for obligation in regex_values(r"\bCO-\d+\b", obligations) {
         ensure!(
             trace.contains(&obligation),

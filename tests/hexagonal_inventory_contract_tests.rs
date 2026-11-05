@@ -61,7 +61,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
-    use crate::markdown::{pins, register_ids, section, task_ids};
+    use crate::markdown::{HeadingLevel, heading_body, pins, register_ids, task_ids};
 
     const PIN: &str = "0123456789abcdef0123456789abcdef01234567";
     const SIMPLE_ROADMAP: &str = concat!(
@@ -138,7 +138,7 @@ mod tests {
         #[case] expected: &str,
     ) -> Result<()> {
         ensure!(
-            section(source, heading) == Some(expected),
+            heading_body(source, heading, HeadingLevel::Section) == Some(expected),
             "section body differs"
         );
         Ok(())
