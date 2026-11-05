@@ -182,9 +182,15 @@ occurrence.
 
 Analysis source MUST be accompanied by a neutralization map that records, per
 occurrence, its authored span, its analysis span, its placeholder identity, and
-the role the parser assigned. Authored and analysis spans are equal by
-construction outside neutralized occurrences, so a parser coordinate converts
-to an authored coordinate by identity there and through the map inside one.
+the role the parser assigned. Neutral spellings MUST be equal in length to the
+markers they replace, which keeps the two coordinate spaces aligned and lets a
+parser coordinate convert to an authored coordinate by identity. Any
+neutralization that changes length MUST instead supply a cumulative
+length-difference table, and a conversion MUST apply it in addition to the
+per-occurrence map. Identity mapping is valid only for equal-length
+neutralizations; an offset after a length-changing occurrence would otherwise
+select the wrong authored span and reject or corrupt the recipe.
+
 Coordinates MUST be converted from the parser's own unit before any slice is
 taken, and the converted extent MUST be validated against the authored source.
 
