@@ -33,8 +33,11 @@ because its escape character is the backtick. The decision is recorded in
 ### Before
 
 ```yaml
-recipe:
-  command: printf %s \{{ outs }}
+netsuke_version: "1.0.0"
+
+targets:
+  - name: greeting.txt
+    command: printf 'Hello from %s\n' \{{ outs }} > greeting.txt
 ```
 
 ### After
@@ -42,15 +45,21 @@ recipe:
 Write a pair when the recipe needs a literal backslash:
 
 ```yaml
-recipe:
-  command: printf %s \\{{ outs }}
+netsuke_version: "1.0.0"
+
+targets:
+  - name: greeting.txt
+    command: printf 'Hello from %s\n' \\{{ outs }} > greeting.txt
 ```
 
 Or place the marker inside single quotes, where backslashes are literal:
 
 ```yaml
-recipe:
-  command: printf %s '{{ outs }}'
+netsuke_version: "1.0.0"
+
+targets:
+  - name: greeting.txt
+    command: printf 'Hello from %s\n' '{{ outs }}' > greeting.txt
 ```
 
 ## 2. Adopt `netsuke check`
@@ -86,9 +95,11 @@ output contract are in the
 
 ## Migration checklist
 
-- [ ] Search POSIX and Bash recipes for `\{{ ins }}` and `\{{ outs }}`.
-- [ ] Rewrite each match as `\\{{ ins }}` or `'{{ ins }}'`, and likewise for
-      `outs`.
+- [ ] In POSIX and Bash recipes, inspect the backslashes immediately before
+      every `{{ ins }}` and `{{ outs }}` marker.
+- [ ] Rewrite only a marker whose preceding run of backslashes has odd length,
+      as `\\{{ ins }}` or `'{{ ins }}'`, and likewise for `outs`. An even run is
+      already valid; leave it unchanged.
 - [ ] Run `netsuke check` and resolve any findings worth adopting.
 
 ## Common errors and fixes

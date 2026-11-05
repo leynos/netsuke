@@ -426,9 +426,10 @@ these sites.
 The rejection is deliberately broader than the demonstrated exploit: a marker
 after any unpaired backslash fails closed even when the source backslash looks
 inert, because the binding's first character may be escapable. Backslash pairs
-are still consumed as one escaped backslash before the marker, markers inside
-single quotes remain ordinary text, and a backslash-newline continuation does
-not count. Heredoc bodies remain inert.
+are still consumed as one escaped backslash before the marker, and a
+backslash-newline continuation does not count. Inside single quotes a backslash
+is literal and escapes nothing, so a marker there remains eligible for
+interpolation and is not rejected. Heredoc bodies remain inert.
 
 Command, script, and delimiter traversal share the predicate
 `backslash_escapes_marker` in `src/ir/cmd_interpolate/posix_lexical/mod.rs`.
