@@ -2,11 +2,15 @@
 
 ## Status
 
-Proposed.
+Accepted. 2026-11-03. Adopt model-owned resolved operations, interpreter-bound
+recipes, application-owned build requests, and typed semantic diagnostics while
+preserving the compatibility constraints below. The pinned 26.1.1 inventory
+records the implementation baseline; acceptance does not complete migration
+tasks.
 
 ## Date
 
-2026-09-19
+2026-11-03
 
 ## Context and problem statement
 
@@ -30,7 +34,7 @@ leases, environment seams, and deterministic generation are assets to preserve.
 - Semantic error facts must remain independent of their rendered wording.
 - New abstractions must preserve authority and reuse existing contracts.
 
-## Proposed direction
+## Decision outcome
 
 Adopt model-owned resolved operations, explicit dependency-only semantics, and
 an enforced shell-bound recipe or plan. Keep AST-to-model conversion in the
@@ -73,7 +77,7 @@ provides a no-new-violations policy during migration.
 
 Provenance and resource-fetching extensions retain the existing composition,
 linter, and URL-provider owners; they are conditional rather than immediate
-port-extraction mandates. The proposal adds no v0.1.0 release gate and no
+port-extraction mandates. This decision adds no v0.1.0 release gate and no
 Netsukefile annotations. Legacy simple manifests remain supported.
 
 ## Known risks and limitations
@@ -83,9 +87,12 @@ need characterization before refactoring. A source-compatible-looking type move
 can still change emitted output or rebuild behaviour. No static dependency rule
 proves correct quoting, successful publication, or subprocess behaviour.
 
-## Outstanding decisions
+## Implementation gates
 
-Settle the characterized rule/declaration policy and smallest shell-bound
-representation before their implementation. Review execution/preparation lease
-ownership against the existing dyndep contract. Acceptance of this record does
-not mark any migration task complete.
+The [26.1.1 inventory](../hexagonal-hardening-inventory.md) records current
+behaviour and assigns remaining implementation details to their owning roadmap
+tasks. Before changing those areas, task 26.1.2 must settle the characterized
+rule and declaration policy, task 26.3.1 must select the smallest shell-bound
+representation, and task 27.2.2 must review execution and preparation lease
+ownership against the existing dyndep contract. Acceptance approves the
+direction and scope; it does not mark any migration task complete.
