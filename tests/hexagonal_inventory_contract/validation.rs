@@ -7,7 +7,7 @@ use anyhow::{Context, Result, ensure};
 use super::markdown::{
     HeadingLevel, declared_pin, excluded_tasks, finding_entries, heading_body,
     is_well_formed_register_id, pins, reference_covers, regex_values, register_ids, task_ids,
-    trace_table_tasks,
+    trace_rows, trace_table_tasks,
 };
 use super::roadmap::{dependents_of, roadmap_tasks};
 
@@ -190,13 +190,14 @@ fn validate_register(inventory: &str) -> Result<()> {
         "register identifiers should be unique"
     );
     let trace = heading_body(inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
+    let references = trace_rows(trace);
     for identifier in &register_identifiers {
         ensure!(
             is_well_formed_register_id(identifier),
             "register identifier {identifier:?} is malformed"
         );
         ensure!(
-            reference_covers(identifier, trace),
+            reference_covers(identifier, &references),
             "register identifier {identifier} is neither traced nor listed unchanged"
         );
     }
@@ -216,9 +217,10 @@ fn validate_obligations(inventory: &str) -> Result<()> {
     )
     .unwrap_or_default();
     let trace = heading_body(inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
+    let traced = regex_values(r"\bCO-\d+\b", trace);
     for obligation in regex_values(r"\bCO-\d+\b", obligations) {
         ensure!(
-            trace.contains(&obligation),
+            traced.contains(&obligation),
             "compatibility obligation {obligation} has no trace-matrix reference"
         );
     }

@@ -71,16 +71,18 @@ pub(super) fn task_ids(text: &str) -> BTreeSet<String> {
 }
 
 /// Collect all matches from a constant regular-expression pattern.
+///
+/// # Panics
+///
+/// Panics when `pattern` does not compile. Every caller passes a compile-time
+/// constant, so a failure is a programming error; returning an empty set would
+/// turn a check such as obligation coverage into a silent, vacuous pass.
 pub(super) fn regex_values(pattern: &str, text: &str) -> BTreeSet<String> {
-    Regex::new(pattern).map_or_else(
-        |_| BTreeSet::new(),
-        |regex| {
-            regex
-                .find_iter(text)
-                .map(|matched| matched.as_str().to_owned())
-                .collect()
-        },
-    )
+    Regex::new(pattern)
+        .expect("inventory contract regular expression should compile")
+        .find_iter(text)
+        .map(|matched| matched.as_str().to_owned())
+        .collect()
 }
 
 /// Return first-column identifiers from the inventory's register tables.
@@ -217,11 +219,41 @@ pub(super) fn excluded_tasks(trace: &str) -> BTreeMap<String, String> {
     };
     let mut tasks = BTreeMap::new();
     for line in excluded.lines() {
-        for task in task_ids(line) {
-            tasks.insert(task.clone(), exclusion_reason(line, &task));
-        }
+        let Some(identifier) = exclusion_identifier(line) else {
+            continue;
+        };
+        tasks.insert(identifier.to_owned(), exclusion_reason(line, identifier));
     }
     tasks
+}
+
+/// Extract the single task identifier that opens an exclusion bullet.
+///
+/// An exclusion is a `- 26.1.2: reason` bullet. Scanning the whole line would
+/// also register any task named in the reason, which can silently mark a
+/// dependent that has no trace row as covered, so only the identifier before
+/// the first colon counts.
+fn exclusion_identifier(line: &str) -> Option<&str> {
+    let bullet = line.trim_start().strip_prefix("- ")?;
+    let (leading, _) = bullet.split_once(':')?;
+    let candidate = leading.trim();
+    let identifiers = task_ids(candidate);
+    (identifiers.len() == 1 && identifiers.contains(candidate)).then_some(candidate)
+}
+
+/// Return the trace matrix's table rows, dropping its introductory prose.
+///
+/// The introduction explains wildcard semantics and names an area wildcard as
+/// an example. Letting that prose satisfy coverage would mark an area as traced
+/// even after every row naming it was deleted, so only the `Changes` and
+/// `Consumes` subsections count. Their absence yields no references at all;
+/// dropping the introduction by splitting at the first `### ` would hand the
+/// `Excluded` and `Unchanged` prose the same power the introduction had.
+pub(super) fn trace_rows(trace: &str) -> String {
+    ["Changes", "Consumes"]
+        .iter()
+        .filter_map(|heading| heading_body(trace, heading, HeadingLevel::Subsection))
+        .collect()
 }
 
 /// Return the prose that follows an excluded task identifier.

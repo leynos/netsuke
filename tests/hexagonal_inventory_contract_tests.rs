@@ -340,6 +340,50 @@ mod tests {
     }
 
     #[test]
+    fn rejects_coverage_claimed_only_by_the_trace_introduction() -> Result<()> {
+        let inventory = VALID_SKELETON
+            .replace(
+                "| -- | -- | -- | -- | -- |\n\n### Site rows",
+                "| -- | -- | -- | -- | -- |\n| A1/ast::Rule | Rule | -- | -- | -- |\n\n### Site rows",
+            )
+            .replace(
+                "## Trace matrix\n\n",
+                "## Trace matrix\n\nA wildcard such as `A1/*` covers the area.\n\n",
+            );
+        expect_validation_error(
+            &inventory,
+            SIMPLE_ROADMAP,
+            "neither traced nor listed unchanged",
+        )?;
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_an_exclusion_bullet_naming_a_task_only_in_its_reason() -> Result<()> {
+        let inventory = VALID_SKELETON.replace(
+            "- 26.1.2: pending EP-M3.\n",
+            "- 26.1.1: pending EP-M3 and blocked-by-26.1.2.\n",
+        );
+        expect_validation_error(&inventory, SIMPLE_ROADMAP, "missing: {\"26.1.2\"}")?;
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_an_obligation_matched_only_by_a_longer_identifier() -> Result<()> {
+        let inventory = VALID_SKELETON
+            .replace(
+                "## Compatibility obligations\n\nPending EP-M3.",
+                "## Compatibility obligations\n\n- CO-1: Preserve one.\n- CO-10: Preserve ten.",
+            )
+            .replace(
+                "| -- | -- | -- | -- |\n\n### Excluded",
+                "| -- | -- | -- | -- |\n| 26.1.2 | -- | -- | CO-10 |\n\n### Excluded",
+            );
+        expect_validation_error(&inventory, SIMPLE_ROADMAP, "CO-1 has no trace-matrix")?;
+        Ok(())
+    }
+
+    #[test]
     fn rejects_a_register_item_without_a_trace_or_unchanged_entry() -> Result<()> {
         let inventory = VALID_SKELETON.replace(
             "| -- | -- | -- | -- | -- |\n\n### Site rows",
