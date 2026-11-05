@@ -8,11 +8,10 @@
 //! harness and the patch contributes no mutation evidence while still looking
 //! healthy to `git apply --check`.
 //!
-//! This module closes that gap by applying each patch, compiling the patched
-//! tree under `-D warnings`, and reverting. It is expensive — one Kani codegen
-//! per patch — so the test is `#[ignore]`-gated and runs from its own Make
-//! target on a shared `CARGO_TARGET_DIR`, which keeps successive patches
-//! incremental.
+//! This module closes that gap by compiling and reverting each patch under
+//! `-D warnings`. Its ignored test shares a target for incremental Kani
+//! frontend compiles. Incremental package compilation is enabled, but Kani's
+//! build script fails with incrementality, so its override remains disabled.
 //!
 //! # The tree it patches is a sandbox, not the checkout
 //!
@@ -35,11 +34,10 @@
 //! failure this module exists to catch, so the gate compiles the tree the way
 //! the harnesses are verified — through the Kani frontend.
 //!
-//! `--only-codegen` is a full compile under `cfg(kani)` with verification
-//! skipped, so it subsumes the check it replaces rather than joining it: it
-//! catches both the dead-code faults that motivated this gate and the
-//! `cfg(kani)`-gated ones `cargo check` cannot see. Both were measured, in
-//! both directions, before the swap.
+//! `--no-codegen` asks Kani to compile the crate under `cfg(kani)` but skips
+//! translation to its model-checking backend. It catches the dead-code faults
+//! that motivated this gate and the `cfg(kani)`-gated ones `cargo check` cannot
+//! see. `make kani-full` remains responsible for model codegen and proofs.
 
 use std::process::Command;
 
@@ -50,12 +48,12 @@ use cap_std::{ambient_authority, fs_utf8::Dir};
 use super::discovery::{MUTATIONS_DIR, is_git_work_tree, manifest_dir};
 use super::sandbox::Sandbox;
 
-/// Target directory shared by every patched build in one run.
+/// Target directory shared by the prewarm and every patched build.
 ///
-/// Reused across patches on purpose: each patch touches one file, so only that
-/// file recompiles and the run costs roughly one cold build plus a handful of
-/// incremental ones. A per-patch directory would pay the cold cost each time.
-const SHARED_TARGET_DIR: &str = "target/kani-mutation-compile";
+/// Reused across prewarm and patches: one-file changes let incremental package
+/// compilation reuse the cold dependency graph and previous patched builds.
+/// Per-patch directories would pay the cold cost each time.
+pub(super) const SHARED_TARGET_DIR: &str = "target/kani-mutation-compile";
 
 /// The warning policy each patched tree is compiled under.
 ///
@@ -178,26 +176,38 @@ fn run_git_apply<const N: usize>(
     Ok(())
 }
 
-/// Compile the patched tree under `-D warnings`, returning its failure output.
+/// Compile a sandbox tree with Kani under `-D warnings`.
 ///
-/// `Ok(None)` means the tree compiled; `Ok(Some(stderr))` means it did not.
+/// Return `None` on success or stderr on failure; both ignored tests share it.
 ///
 /// Invoked through the Kani frontend rather than `cargo check`, for the reason
 /// the module docs give: only Kani parses `#[cfg(kani)]` code, so only Kani can
-/// reject a patch that seeds its fault inside a Kani-gated item. `--only-codegen`
-/// compiles without verifying, which is all this gate needs — the harnesses
-/// themselves are run by `make kani-full`, not here.
+/// reject a patch that seeds its fault inside a Kani-gated item. `--no-codegen`
+/// compiles without translating to Kani's model-checking backend, which is all
+/// this gate needs — model codegen and proofs run in `make kani-full`.
 ///
 /// The build runs in the sandbox, so the ceiling travels with it: `cargo kani`
 /// shells out to `git` for workspace metadata, and an unceiled invocation
 /// would find the real checkout instead of the copy it is compiling.
-fn compile_patched_tree(sandbox: &Sandbox, target_dir: &Utf8Path) -> Result<Option<String>> {
+/// # Errors
+///
+/// Returns an error if Cargo cannot start or its output cannot be collected.
+pub(super) fn compile_kani_tree(tree: &Sandbox, target: &Utf8Path) -> Result<Option<String>> {
     let output = Command::new(env!("CARGO"))
-        .args(["kani", "--only-codegen", "--lib", "--all-features"])
-        .current_dir(sandbox.tree())
-        .envs(sandbox.isolation_env())
+        .args([
+            "kani",
+            "--no-codegen",
+            "-Z",
+            "unstable-options",
+            "--lib",
+            "--all-features",
+        ])
+        .current_dir(tree.tree())
+        .envs(tree.isolation_env())
         .env("RUSTFLAGS", DENY_WARNINGS)
-        .env("CARGO_TARGET_DIR", target_dir)
+        .env("CARGO_PROFILE_DEV_INCREMENTAL", "true")
+        .env("CARGO_PROFILE_DEV_BUILD_OVERRIDE_INCREMENTAL", "false")
+        .env("CARGO_TARGET_DIR", target)
         // The dependencies are fetched before the tests start, so this build
         // needs no network and must not wait on the index. Set last so it is
         // the latest operation on the variable.
@@ -262,7 +272,7 @@ fn patch_paths(sandbox: &Sandbox) -> Result<Vec<Utf8PathBuf>> {
 ///
 /// `git rev-parse --is-inside-work-tree` exits 128 when no repository is
 /// found, which is the expected outcome here rather than an error.
-fn ensure_sandbox_is_isolated(sandbox: &Sandbox) -> Result<()> {
+pub(super) fn ensure_sandbox_is_isolated(sandbox: &Sandbox) -> Result<()> {
     let probe = Command::new("git")
         .args(["rev-parse", "--is-inside-work-tree"])
         .current_dir(sandbox.tree())
@@ -357,7 +367,7 @@ fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
     let mut unreverted = Vec::new();
     for patch in patch_paths(&sandbox)? {
         let applied = AppliedPatch::apply(&patch, &sandbox)?;
-        if let Some(stderr) = compile_patched_tree(&sandbox, &target_dir)? {
+        if let Some(stderr) = compile_kani_tree(&sandbox, &target_dir)? {
             broken.push(format!("{patch}: {stderr}"));
         }
         // Reverted through the fallible path, not left to `Drop`: a reverse
@@ -392,3 +402,4 @@ fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
     );
     Ok(())
 }
+// weave: run 'weave explain tests/kani_mutation_evidence_tests/compile_guard.rs' for per-hunk detail, 'weave check' to verify your resolution

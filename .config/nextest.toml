@@ -122,12 +122,41 @@ global-timeout = "16m"
 # separate from the shared coverage profile and ordinary local test profile.
 # The 42-minute run cap contains the 40-minute per-test allowance, nextest's
 # 70-second termination window, and a 50-second reporting margin.
+#
+# The gate runs two invocations. The first warms the shared target with the
+# cold dependency build and proves the compile check still rejects a tree that
+# does not compile; the second compiles the patched trees against that warm
+# target. Each invocation is a nextest run of its own, so the 42-minute cap
+# bounds each of them rather than both together.
 inherits = "default"
 global-timeout = "42m"
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [[profile.kani.overrides]]
+# The prewarm pays the cold dependency build in its own invocation, so the
+# sweep starts against a target that already exists. `kani-cache` restores the
+# Kani payloads under `.kani-rustup` and `.kani-home`, not a build tree, so this
+# invocation builds the whole dependency graph as well as compiling the target.
+# Fifteen warning periods: measured at 762.60 s on a local host that was
+# carrying 149+ queued `rustc` requests at load 22 on 6 cores.
+filter = 'test(/^prewarm::prewarm_kani_mutation_target($|::)/)'
+test-group = "nested-cargo-builds"
+success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 15 }
+
+[[profile.kani.overrides]]
+# Compiles one patched tree per mutation patch, so it belongs in the
+# serialized child-Cargo group.
 filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
+# Forty warning periods, the largest allowance the 42-minute cap contains.
+#
+# Measured: 151.5 s on a local host, and 257.7 s and 261.5 s on CI in two runs
+# that both passed, against the profile's ordinary 300 s. A third CI run hit
+# 300.008 s and failed, and after rebasing, run 41826968891 reached the 600 s
+# cap that stood at the time. Child compiler output is captured, so those give
+# a lower bound and no per-patch timing. The prewarm now pays the cold
+# dependency build in a separate invocation, so this allowance covers the
+# patch sweep alone and 2,400 s is headroom rather than an estimate.
 slow-timeout = { period = "60s", terminate-after = 40 }

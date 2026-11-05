@@ -234,13 +234,17 @@ def test_only_the_kani_profile_has_an_extended_mutation_budget() -> None:
         if "slow-timeout" in override
     }
     expected = {
+        "test(/^prewarm::prewarm_kani_mutation_target($|::)/)": {
+            "period": "60s",
+            "terminate-after": 15,
+        },
         (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
         ): {"period": "60s", "terminate-after": 40},
     }
     assert configured == expected, (
-        "only the mutation compile gate may carry the extended Kani allowance"
+        "only the Kani prewarm and the patch sweep may carry extended allowances"
     )
 
 

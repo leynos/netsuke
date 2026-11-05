@@ -15,8 +15,9 @@
 //! `ir__cycle__verification__self_dependency_reports_cycle.patch`.
 //!
 //! A patch that applies is not yet trustworthy: the tree it produces must also
-//! compile, or `cargo kani` never reaches the harness it targets. That second
-//! half lives in [`compile_guard`], which is expensive enough to be gated.
+//! compile, or `cargo kani` never reaches the harness it targets. The gated
+//! [`compile_guard`] sweep and its [`prewarm`] share the same sandbox and target
+//! so the cold build does not consume the patch sweep's timeout.
 
 // This target is a crate root, so `mod child;` would resolve against
 // `tests/`; the children live beside this file. That is why each is spelled
@@ -30,5 +31,7 @@ mod compile_guard;
 mod contracts;
 #[path = "kani_mutation_evidence_tests/discovery.rs"]
 mod discovery;
+#[path = "kani_mutation_evidence_tests/prewarm.rs"]
+mod prewarm;
 #[path = "kani_mutation_evidence_tests/sandbox.rs"]
 mod sandbox;

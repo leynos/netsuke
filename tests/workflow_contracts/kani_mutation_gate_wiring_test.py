@@ -1,7 +1,8 @@
 """Hold the Kani lane's mutation compile gate to the workflow that runs it.
 
-`make test-kani-mutations` compiles each mutation patch's patched tree through
-the Kani frontend under denied warnings. The Make target is not enough on its
+`make test-kani-mutations` first warms the Kani target in one Nextest invocation,
+then compiles each mutation patch's patched tree in a second invocation. The
+Make target is not enough on its
 own: it can be perfectly written and never invoked, and
 `tests/makefile_test_target.rs` pins its recipe without pinning the CI wiring.
 
@@ -93,6 +94,17 @@ def test_the_gate_target_denies_warnings_through_the_kani_frontend() -> None:
         assert fragment in recipe, (
             f"the gate target must pass {fragment!r}; got {recipe!r}"
         )
+    commands = [line for line in recipe.splitlines() if "nextest run" in line]
+    assert len(commands) == 2, (
+        f"the cold prewarm and patch sweep need separate Nextest budgets: {commands!r}"
+    )
+    assert "prewarm::prewarm_kani_mutation_target" in commands[0], (
+        "the cold Kani compile must warm the shared target first"
+    )
+    assert (
+        "compile_guard::every_patched_tree_compiles_under_denied_warnings"
+        in commands[1]
+    ), "the timed patch sweep must run after the target is warm"
 
 
 def test_the_kani_profile_covers_the_cold_compile_budget() -> None:
@@ -107,12 +119,28 @@ def test_the_kani_profile_covers_the_cold_compile_budget() -> None:
     whole_run = global_timeout(config_text, profile="kani")
     assert whole_run == 42 * 60, f"the Kani run budget changed: {whole_run}"
 
-    (override,) = profile["overrides"]
+    # Select the sweep's own override rather than the first declared one. The
+    # profile carries several by design — the prewarm, the negative control and
+    # the sweep each widen one allowance — so positional unpacking would compare
+    # the whole-run cap against whichever happened to be written first.
+    sweep = next(
+        (
+            override
+            for override in profile["overrides"]
+            if "compile_guard::every_patched_tree_compiles_under_denied_warnings"
+            in str(override.get("filter", ""))
+        ),
+        None,
+    )
+    assert sweep is not None, (
+        "the patch sweep must carry its own allowance under the Kani profile: "
+        f"{profile['overrides']!r}"
+    )
     # Read the period through the shared duration reader; stripping a trailing
     # "s" by hand turns a future "1m" into a bare ValueError that names no
     # contract.
-    period_seconds = seconds(override["slow-timeout"]["period"])
-    test_budget = period_seconds * override["slow-timeout"]["terminate-after"]
+    period_seconds = seconds(sweep["slow-timeout"]["period"])
+    test_budget = period_seconds * sweep["slow-timeout"]["terminate-after"]
     assert test_budget == 40 * 60, f"the mutation test allowance changed: {test_budget}"
     assert whole_run > test_budget, (
         "the Kani whole-run budget must exceed the test allowance"
