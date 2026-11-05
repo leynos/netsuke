@@ -153,6 +153,33 @@ def _retryable_download_status(status: int) -> bool:
     )
 
 
+def _retryable_transport_error(
+    error: OSError | http.client.HTTPException | None,
+) -> bool:
+    """Identify transport errors that another poll may settle.
+
+    A rejected redirect target is deterministic: the allowlist decision cannot
+    change between attempts, so retrying it only delays the same failure. Every
+    other transport error stays retryable.
+
+    Returns
+    -------
+    bool
+        Whether another bounded archive poll may produce a usable response.
+
+    Examples
+    --------
+    >>> _retryable_transport_error(urllib.error.URLError("offline"))
+    True
+    >>> _retryable_transport_error(
+    ...     crates_io_registry_http.RegistryUrlError()
+    ... )
+    False
+
+    """
+    return not isinstance(error, crates_io_registry_http.RegistryUrlError)
+
+
 def poll_archive(
     opener: Opener,
     request: urllib.request.Request,
@@ -204,6 +231,8 @@ def poll_archive(
         )
         if last_response is None:
             status_class = "unknown"
+            if not _retryable_transport_error(last_error):
+                break
             if attempt + 1 < policy.attempts:
                 sleeper(policy.delay_seconds)
             continue

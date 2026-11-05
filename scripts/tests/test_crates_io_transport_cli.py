@@ -306,3 +306,30 @@ def test_download_records_no_status_after_transient_network_exhaustion(
         "record missing HTTP status as indeterminate"
     )
     assert archive.read_bytes() == b"", "do not invent a response body"
+
+
+def test_download_stops_after_a_rejected_redirect_target(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Do not retry an allowlist rejection that cannot change between attempts."""
+    delays: list[float] = []
+    opener = FakeOpener(RegistryUrlError())
+    archive = tmp_path / "candidate.crate"
+    status = tmp_path / "status.txt"
+    report = tmp_path / "download-report.json"
+
+    result = main(
+        download_args(archive, status, report),
+        opener=opener,
+        timing=TransportTiming(sleeper=delays.append),
+    )
+
+    assert result == EXIT_OK, "the rejected download still records a sentinel"
+    assert len(opener.requests) == 1, "do not retry a deterministic rejection"
+    assert not delays, "do not delay when the rejection cannot settle"
+    assert status.read_text(encoding="ascii").strip() == "0", (
+        "record the rejected download as indeterminate"
+    )
+    assert archive.read_bytes() == b"", "do not invent a response body"
+    diagnostics = json.loads(report.read_text(encoding="ascii"))
+    assert diagnostics["attempts"] == 1, "report the single attempt"

@@ -135,8 +135,9 @@ def download(request_data: DownloadRequest) -> int:
 
     Notes
     -----
-    If all attempts lack a response, write status ``0`` and empty bytes for the
-    offline verifier to reject.
+    If every attempt lacks a response, write status ``0`` and empty bytes for
+    the offline verifier to reject. A deterministic transport failure, such as
+    a rejected redirect target, ends the budget after its first attempt.
     """
     request = crates_io_registry_http.build_request(
         release_crates_io_adapter.download_url(
@@ -159,7 +160,7 @@ def download(request_data: DownloadRequest) -> int:
             ),
             request_data.sleeper,
         )
-        if result.last_error is not None and result.attempts == DOWNLOAD_ATTEMPTS:
+        if result.last_error is not None and result.response is None:
             print(
                 f"crates.io archive download remained unavailable: {result.last_error}",
                 file=sys.stderr,
