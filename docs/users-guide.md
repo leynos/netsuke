@@ -357,6 +357,11 @@ versions before evaluating Jinja. When a manifest declares an unsupported
 version, update it to a version supported by the installed Netsuke release
 after checking that the manifest uses only that schema's features.
 
+The rejection names the schema the manifest declares and the schema the
+installed Netsuke supports, and reports the `netsuke::manifest::schema_version`
+diagnostic code, so a failure can be recognised without reading the message
+text. Passing `--json` reports the same fault as a structured diagnostic.
+
 ### Rules and recipes
 
 Rules must provide exactly one executable recipe. Actions and targets that

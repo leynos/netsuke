@@ -784,6 +784,29 @@ before returning to `run_with_args`.
 **Cross-references:** `docs/netsuke-design.md` §8.4, for the rationale behind
 buffering rather than gating output on the resolved mode.
 
+### Rendering failures in human mode
+
+`handle_runner_error` in `src/main.rs` sends JSON mode to
+`render_runtime_error_json`, which picks the most specific diagnostic out of
+the failure chain: a `RunnerError`, else a `ManifestError`, else a
+`miette::Report`. Human mode goes to `human_diagnostics::handle_failure`, which
+makes the same selection and renders the diagnostic with `miette`'s graphical
+handler. Both modes therefore report the same fault at the same depth, and a
+new diagnostic type has to be added to both or the modes disagree.
+
+A failure carrying none of those diagnostics keeps its context line, which is
+the whole report for errors such as a missing manifest. A failure that does
+carry one prints the rendered diagnostic instead of the context line, because
+the diagnostic already names the path the context line repeats. Circular
+dependencies keep a separate branch: its bounded rendering is what keeps
+manifest target names out of the tracing event.
+
+The glyph theme comes from `human_diagnostics::theme_for`, which derives it
+from the resolved `OutputPrefs` rather than reading `NO_COLOR` itself, so the
+renderer stays callable in-process. `human_diagnostics::render_failure` returns
+the text without writing it, which is what the unit tests in
+`src/human_diagnostics/tests.rs` assert on.
+
 ### Adding or changing messages
 
 Every user-facing string is a Fluent message keyed from
