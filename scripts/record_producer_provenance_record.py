@@ -5,24 +5,25 @@ it alone holds the archive, its sidecar, and the operating-system packages it
 just built, and it is the only process that can say which commit produced
 them. This module turns that into a small JSON record: the candidate commit,
 the run identity, the configured target and platform, and the SHA-256 digest
-of every artefact, keyed by the name the release will publish.
+of every artefact, keyed by the name the release will publish. "Publish" is
+GitHub's spelling, not the staged one, and :mod:`release_github_assets_adapter`
+owns that translation: a record keyed by the staged spelling would name an
+asset the declaration never declares whenever a prerelease package has ``~``.
 
-Only files named explicitly are hashed. A tree walk here would put retained
+Only files named explicitly are hashed. A tree walk would put retained
 workspace material and unrelated files into the record, which is the opposite
-of what the record exists to prove: this producer is answerable for these
-bytes and nothing else.
+of what it exists to prove: this producer answers for these bytes and no more.
 
-The record is written beside the artefacts and travels to publication as part
-of the same GitHub artefact. Publication compares the downloaded bytes against
-it, so a substituted package, a replaced archive, or an artefact from an older
-commit is visible even when a matching replacement sidecar was supplied.
+The record is written beside the artefacts and travels to publication in the
+same GitHub artefact. Publication compares the downloaded bytes against it, so
+a substituted package, a replaced archive, or an artefact from an older commit
+is visible even when a matching replacement sidecar was supplied.
 
-This module owns the reading and writing. Parsing arguments and choosing exit
-codes belong to :mod:`record_producer_provenance_cli`, kept apart so each file
-stays under the repository's 400-line cap.
+Parsing arguments and choosing exit codes belong to
+:mod:`record_producer_provenance_cli`.
 
-Run via ``.github/actions/upload-declared-assets``'s producers; behavioural
-coverage lives in ``scripts/tests/test_record_producer_provenance_cli.py``.
+Run by the build workflow's producer step; behavioural coverage lives in
+``scripts/tests/test_record_producer_provenance_cli.py``.
 """
 
 import dataclasses
@@ -34,6 +35,7 @@ import typing as typ
 
 import release_asset_names
 import release_digest_files
+import release_github_assets_adapter
 import release_package_formats
 import release_producer_provenance
 from record_producer_provenance_errors import (
@@ -63,7 +65,7 @@ __all__ = [
 RECORD_NAME = "producer-provenance.json"
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ProducerIdentity:
     """Name the candidate, run, target, and platform a producer claims.
 
@@ -207,30 +209,40 @@ def recorded_assets(
 def _published_name(path: pathlib.Path) -> str:
     """Return the name an artefact publishes under, refusing an unsafe one.
 
+    The name is translated the way the release declaration translates it, so
+    the record and the declaration key the same bytes under one name. A
+    prerelease RPM staged as ``netsuke-1.0.0~beta4-1.x86_64.rpm`` publishes as
+    ``netsuke-1.0.0.beta4-1.x86_64.rpm``; a record holding the staged spelling
+    would describe an asset the release never declares.
+
     Returns
     -------
     str
-        The bare file name the artefact publishes as.
+        The bare published name of the artefact.
 
     Raises
     ------
     UnsafePublishedNameError
-        If the name is not one bare file name under either path flavour.
+        If the staged name is not one bare file name under either path flavour.
 
     Examples
     --------
     >>> _published_name(pathlib.Path("/tmp/netsuke.tar.gz"))
     'netsuke.tar.gz'
+    >>> _published_name(pathlib.Path("/tmp/netsuke-1~beta-1.x86_64.rpm"))
+    'netsuke-1.beta-1.x86_64.rpm'
     >>> try:
     ...     _published_name(pathlib.Path(".."))
     ... except UnsafePublishedNameError as refusal:
     ...     print("unsafe" in str(refusal))
     True
     """
-    name = path.name
-    if not release_asset_names.is_bare_file_name(name):
-        raise UnsafePublishedNameError(name)
-    return name
+    staged = path.name
+    # Safety is judged on the staged spelling: the translation only rewrites
+    # characters, so a name that was one bare component stays one.
+    if not release_asset_names.is_bare_file_name(staged):
+        raise UnsafePublishedNameError(staged)
+    return release_github_assets_adapter.published_asset_name(staged)
 
 
 def _digest(path: pathlib.Path) -> str:

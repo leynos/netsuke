@@ -8,6 +8,7 @@ a missing package, or a clobbered output is the thing actually being tested.
 Run via ``make test-release-publication``.
 """
 
+import dataclasses
 import hashlib
 import json
 import os
@@ -29,33 +30,44 @@ if typ.TYPE_CHECKING:
 COMMIT = "0123456789abcdef0123456789abcdef01234567"
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class _Claim:
+    """Hold the identity a test asks the recorder to claim."""
+
+    commit: str = COMMIT
+    run_id: str = "1234"
+    run_attempt: str = "1"
+    target: str = "linux-x86_64"
+    platform: str = "linux"
+
+    def argv(self, destination: pathlib.Path, assets: list[pathlib.Path]) -> list[str]:
+        """Return a complete argument list naming ``assets``."""
+        argv = [
+            "--commit",
+            self.commit,
+            "--run-id",
+            self.run_id,
+            "--run-attempt",
+            self.run_attempt,
+            "--target",
+            self.target,
+            "--platform",
+            self.platform,
+        ]
+        for asset in assets:
+            argv.extend(["--asset", str(asset)])
+        argv.extend(["--output", str(destination)])
+        return argv
+
+
 def _argv(
     destination: pathlib.Path,
     assets: list[pathlib.Path],
     *,
-    commit: str = COMMIT,
-    run_id: str = "1234",
-    run_attempt: str = "1",
-    target: str = "linux-x86_64",
-    platform: str = "linux",
+    claim: _Claim | None = None,
 ) -> list[str]:
-    """Return a complete argument list naming ``assets``."""
-    argv = [
-        "--commit",
-        commit,
-        "--run-id",
-        run_id,
-        "--run-attempt",
-        run_attempt,
-        "--target",
-        target,
-        "--platform",
-        platform,
-    ]
-    for asset in assets:
-        argv.extend(["--asset", str(asset)])
-    argv.extend(["--output", str(destination)])
-    return argv
+    """Return the default claim's argument list naming ``assets``."""
+    return (claim or _Claim()).argv(destination, assets)
 
 
 def _staged_linux(directory: pathlib.Path) -> list[pathlib.Path]:
@@ -98,6 +110,27 @@ def test_the_cli_records_the_candidate_and_every_staged_digest(
     assert assets[deb.name] != assets[rpm.name], (
         "each artefact must carry its own digest"
     )
+
+
+def test_a_prerelease_package_is_recorded_under_its_published_name(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Key the record by GitHub's spelling, so it names a declared asset."""
+    destination = tmp_path / "provenance.json"
+    deb = tmp_path / "netsuke_1.2.3~beta4-1_amd64.deb"
+    rpm = tmp_path / "netsuke-1.2.3~beta4-1.x86_64.rpm"
+    _ = deb.write_bytes(b"deb bytes")
+    _ = rpm.write_bytes(b"rpm bytes")
+
+    status = main(_argv(destination, [deb, rpm]))
+
+    assert status == EXIT_OK, f"the record must be written, got {status}"
+    assets = _record(destination)["assets"]
+    assert isinstance(assets, dict), "the record must carry a digest table"
+    assert set(assets) == {
+        "netsuke_1.2.3.beta4-1_amd64.deb",
+        "netsuke-1.2.3.beta4-1.x86_64.rpm",
+    }, "the record must key assets by the name GitHub publishes"
 
 
 def test_the_recorded_digest_is_the_digest_of_the_bytes(
@@ -155,7 +188,11 @@ def test_a_macos_producer_records_its_package(tmp_path: pathlib.Path) -> None:
     package = tmp_path / "netsuke-1.2.3.pkg"
     _ = package.write_bytes(b"pkg bytes")
 
-    status = main(_argv(destination, [package], target="macos-arm64", platform="macos"))
+    status = main(
+        _argv(
+            destination, [package], claim=_Claim(target="macos-arm64", platform="macos")
+        )
+    )
 
     assert status == EXIT_OK, f"a macos package must be recorded, got {status}"
     assets = _record(destination)["assets"]
@@ -170,7 +207,11 @@ def test_a_windows_producer_records_its_installer(tmp_path: pathlib.Path) -> Non
     _ = installer.write_bytes(b"msi bytes")
 
     status = main(
-        _argv(destination, [installer], target="windows-x86_64", platform="windows")
+        _argv(
+            destination,
+            [installer],
+            claim=_Claim(target="windows-x86_64", platform="windows"),
+        )
     )
 
     assert status == EXIT_OK, f"an msi must be recorded, got {status}"
@@ -237,7 +278,7 @@ def test_a_short_commit_is_refused(tmp_path: pathlib.Path) -> None:
     destination = tmp_path / "provenance.json"
     deb, rpm = _staged_linux(tmp_path)
 
-    status = main(_argv(destination, [deb, rpm], commit=COMMIT[:12]))
+    status = main(_argv(destination, [deb, rpm], claim=_Claim(commit=COMMIT[:12])))
 
     assert status == EXIT_UNUSABLE_INPUT, (
         f"a short commit must be refused, got {status}"
@@ -251,7 +292,7 @@ def test_an_unpackageable_platform_is_refused(tmp_path: pathlib.Path) -> None:
     package = tmp_path / "netsuke-1.2.3.pkg"
     _ = package.write_bytes(b"pkg bytes")
 
-    status = main(_argv(destination, [package], platform="solaris"))
+    status = main(_argv(destination, [package], claim=_Claim(platform="solaris")))
 
     assert status == EXIT_UNUSABLE_INPUT, (
         f"an unknown platform must be refused, got {status}"
@@ -298,7 +339,7 @@ def test_a_previous_record_survives_a_refused_run(tmp_path: pathlib.Path) -> Non
     required = main(_argv(destination, [deb, rpm]))
     original = destination.read_bytes()
 
-    status = main(_argv(destination, [deb], run_attempt="2"))
+    status = main(_argv(destination, [deb], claim=_Claim(run_attempt="2")))
 
     assert required == EXIT_OK, "the fixture must start from a written record"
     assert status == EXIT_UNUSABLE_INPUT, (

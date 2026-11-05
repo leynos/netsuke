@@ -94,7 +94,7 @@ _RUN_IDENTITY = re.compile(r"\A[1-9][0-9]*\Z")
 _DIGEST = re.compile(rf"\A[0-9a-f]{{{release_digest.DIGEST_HEX_LENGTH}}}\Z")
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class ProducerProvenance:
     """One producer's claim about the artefacts it built.
 

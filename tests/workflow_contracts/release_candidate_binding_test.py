@@ -29,6 +29,15 @@ CANDIDATE_OUTPUT_EXPRESSION = "${{ steps.candidate_commit.outputs.value }}"
 CANDIDATE_FORWARD = "${{ needs.metadata.outputs.candidate_commit }}"
 PRODUCER_JOBS = ("build-linux", "build-windows", "build-macos")
 
+#: What the HEAD comparison must contain, paired with why each fragment
+#: matters. One parametrized row per fragment names the part that was lost,
+#: where three inline probes in one body would report only the last.
+HEAD_CHECK_FRAGMENTS = (
+    ("git rev-parse HEAD", "the check must read the real HEAD"),
+    ('"$CANDIDATE_COMMIT"', "the check must compare against the input"),
+    ("exit 1", "a mismatched checkout must fail the producer"),
+)
+
 #: Matches the character class and the length check the step runs, so a
 #: mutation to either half fails here rather than in a release run.
 _FORBIDDEN_CHARACTER_CHECK = re.compile(r"\*\[!0-9a-f\]\*")
@@ -109,10 +118,16 @@ def test_producer_checkout_and_head_check_bind_the_candidate() -> None:
     assert env.get("CANDIDATE_COMMIT") == "${{ inputs.commit }}", (
         "the HEAD check must compare against the requested candidate"
     )
+
+
+@pytest.mark.parametrize(("fragment", "reason"), HEAD_CHECK_FRAGMENTS)
+def test_the_head_check_compares_the_checkout(fragment: str, reason: str) -> None:
+    """Every part of the HEAD comparison must survive an edit."""
+    check = named_step(
+        job_steps(load_workflow(PACKAGE_WORKFLOW_PATH), "build"), CHECKOUT_STEP
+    )
     run = str(check.get("run", ""))
-    assert "git rev-parse HEAD" in run, "the check must read the real HEAD"
-    assert '"$CANDIDATE_COMMIT"' in run, "the check must compare against the input"
-    assert "exit 1" in run, "a mismatched checkout must fail the producer"
+    assert fragment in run, reason
 
 
 @pytest.mark.parametrize("job_name", PRODUCER_JOBS)
