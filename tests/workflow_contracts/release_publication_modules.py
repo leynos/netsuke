@@ -45,6 +45,8 @@ SECTION_MODULES = (
     "scripts/tests/test_release_digest_record.py",
     "scripts/tests/test_release_digest_record_files.py",
     "scripts/tests/test_release_staged_digests.py",
+    "scripts/tests/test_release_producer_provenance.py",
+    "scripts/tests/test_record_producer_provenance_cli.py",
 )
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
@@ -81,6 +83,12 @@ SOURCE_MODULES = (
     "scripts/release_digest_record.py",
     "scripts/release_digest_record_files.py",
     "scripts/release_staged_digests.py",
+    "scripts/release_producer_provenance.py",
+    "scripts/release_producer_provenance_checks.py",
+    "scripts/release_producer_provenance_errors.py",
+    "scripts/record_producer_provenance_cli.py",
+    "scripts/record_producer_provenance_errors.py",
+    "scripts/record_producer_provenance_record.py",
 )
 
 #: Sources that decide from already parsed, in-memory values.
@@ -98,6 +106,9 @@ POLICY_MODULES = (
     "scripts/release_reconcile_crates.py",
     "scripts/release_reconcile_github.py",
     "scripts/verify_crates_io_bytes.py",
+    "scripts/release_producer_provenance.py",
+    "scripts/release_producer_provenance_checks.py",
+    "scripts/release_producer_provenance_errors.py",
 )
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
@@ -121,6 +132,9 @@ ADAPTER_MODULES = (
     "scripts/release_github_assets_adapter.py",
     "scripts/release_digest_record_files.py",
     "scripts/release_staged_digests.py",
+    "scripts/record_producer_provenance_cli.py",
+    "scripts/record_producer_provenance_errors.py",
+    "scripts/record_producer_provenance_record.py",
 )
 
 #: Sources that own the network boundary. The boundary test uses this same

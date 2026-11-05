@@ -491,6 +491,8 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_digest_record.py \
 		scripts/tests/test_release_digest_record_files.py \
 		scripts/tests/test_release_staged_digests.py \
+		scripts/tests/test_release_producer_provenance.py \
+		scripts/tests/test_record_producer_provenance_cli.py \
 		scripts/crates_io_candidate_cli.py \
 		scripts/crates_io_candidate_archive.py \
 		scripts/crates_io_candidate_errors.py \
@@ -517,6 +519,12 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_declaration.py scripts/release_declaration_cli.py \
 		scripts/release_digest_record.py scripts/release_digest_record_files.py \
 		scripts/release_staged_digests.py \
+		scripts/release_producer_provenance.py \
+		scripts/release_producer_provenance_checks.py \
+		scripts/release_producer_provenance_errors.py \
+		scripts/record_producer_provenance_cli.py \
+		scripts/record_producer_provenance_errors.py \
+		scripts/record_producer_provenance_record.py \
 		-c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules
 
