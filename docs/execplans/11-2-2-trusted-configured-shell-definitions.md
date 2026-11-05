@@ -127,8 +127,48 @@ explicit and exercise the actual adapters in tests.
     the two authority suites into an `authority/` directory module after
     `make test-workflow-contracts` rejected both the uncovered proof input and
     the unrecorded `authority` prefix group.
-  - [ ] 2026-11-01: Run the M1 gate set and the milestone CLI review.
+  - [x] 2026-11-01: Run the M1 gate set at `0df3dff18`. Eight of the eleven
+    gates passed: `check-fmt` (6 s), `markdownlint` (34 s), `nixie` (3 s),
+    `doc-coverage` (980 s, 98.23 %), `typecheck` (307 s), `test` (1086 s,
+    4964 passed), `test-workflow-contracts` (346 s), and `lint-clippy`
+    (980 s). `make lint-whitaker` then failed on seven
+    `no_std_fs_operations` findings in `tests/cli_tests/shells_authority.rs`,
+    so `lint-python` and `github-actions-lint` did not run. The authority
+    suite is rewritten for M2, so the capability-handle repair lands with the
+    M2 candidate instead of as a separate commit.
+  - [x] 2026-11-01: Fold the M1 milestone CLI review into the M2 review.
+    M2 replaces the placeholder authority assertion, the schema-less
+    rejection, and the whole authority suite, so a review of M1 alone would
+    have assessed code that no longer exists.
 - [ ] M2: Add validated definitions, append merging, and collision proof.
+  - [x] 2026-11-01: Add the `shells` field with `skip_cli`, append merging, and
+    an empty default, so neither the command line nor the environment can
+    declare a definition.
+  - [x] 2026-11-01: Add the `src/cli/config/shells/` schema: `ShellDefinition`,
+    `ShellExecutable`, `ShellArguments`, the name/executable/argument
+    deserializers, and the bounded diagnostic preview.
+  - [x] 2026-11-01: Validate each trusted occurrence field by field during
+    discovery, so a fault names `shells[index].name|executable|args` before any
+    typed merge runs.
+  - [x] 2026-11-01: Validate the merged registry in `PostMergeHook`, rejecting
+    built-in and repeated names before manifest compilation.
+  - [x] 2026-11-01: Extend the build-script slice and its contract test with
+    the new modules. The slice now mirrors `src/lib.rs`'s public module tree
+    (`pub mod cli`, `pub mod shell_selection`) instead of carrying a
+    `#[expect(dead_code)]`: with the tree public, every re-export is reachable
+    and the expectation no longer fires.
+  - [x] 2026-11-01: Add the Verus refinement proof at
+    `verus/configured_shells/main.rs` and the quadratic Rust oracle beside the
+    composition tests. `make verus VERUS_FLAGS='--proof-file
+    verus/configured_shells/main.rs'` reports `9 verified, 0 errors`.
+  - [x] 2026-11-01: Restate the M1 property
+        `any_shells_declaration_fails_closed`
+    as `untrusted_shells_declaration_fails_closed`. The M1 form asserted that
+    *any* `shells` declaration fails, which M2 deliberately relaxes for an
+    operator root, so the property now compares the resolver's errors against
+    the C1 authority of the declaring occurrences and carries its own witness.
+  - [ ] 2026-11-01: Run the M2 gate set, the selected proof, and the combined
+    M1–M2 milestone CLI review.
 - [ ] M3: Complete behavioural evidence, documentation, and delivery.
 
 ## Surprises & discoveries
@@ -216,6 +256,21 @@ even though `make test` was green and the code ran correctly. The repair records
 Cargo, so a green `make test` is not evidence that the source-tree contracts
 hold.
 
+The build-script slice analyses visibility as a binary crate does, and a
+`pub use` re-export inside a private module is unreachable there even though
+the library crate consumes it. Declaring the slice's `cli` and
+`shell_selection` modules `pub`, exactly as `src/lib.rs` does, keeps rustc's
+unused-item analysis about the slice's real reachability. The consequence is
+that the vocabulary's `#[expect(dead_code)]` became an unfulfilled expectation,
+which `-D warnings` turns into a hard error, so the slice now carries no lint
+suppression at all.
+
+`prop::sample::select` takes `impl Into<Cow<'static, [T]>>`, which a
+`const NAME_POOL: [&str; 7]` does not satisfy. The oracle declares the pool as
+`&[&str]` instead. The failure surfaced only when `make typecheck` compiled the
+build script's `cfg(test)` modules, because the slice compiles
+`src/cli/config/shells/tests/` too.
+
 ## Decision log
 
 - 2026-10-20: Keep the plan approval-gated and the roadmap entry unchecked.
@@ -278,6 +333,15 @@ hold.
   property asserts rejection happens exactly when a declaration is present, and
   a fixed witness proves the generator reaches an operator-authorized
   occurrence so the properties cannot pass vacuously.
+- 2026-11-01: Make the rejection property authority-relative once the schema
+  exists. M2 admits a well-formed declaration from an operator root, so the
+  property now expects rejection exactly when an untrusted occurrence declares
+  `shells`. The superseded M1 entry above described the schema-less stage.
+- 2026-11-01: Declare the build slice's `cli` and `shell_selection` modules
+  `pub` rather than suppress the resulting reachability warnings. The slice is
+  a binary crate, so a re-export inside a private module is unreachable and
+  reports as an unused import; mirroring `src/lib.rs`'s public tree removes the
+  warning and the need for any `#[expect]` in the slice.
 
 ## Outcomes & retrospective
 
@@ -302,14 +366,15 @@ commit identifies its revision.
   M1 establishes source authority, M2 establishes validation and merge rules,
   and M3 supplies user evidence and documentation. 11.2.3 and 11.3 remain out
   of scope; the wider issue is #593, which this task does not close.
-- [ADR-019](../adr-019-structured-command-shell-selection.md), including all
-  addenda, and
+- [ADR-019](../adrs/adr-0019-select-allow-listed-structured-command-shells.md),
+  including all addenda, and
   [RFC 0011](../rfcs/0011-allow-listed-structured-command-shells.md) sections 5
   and 11: contracts C1–C5 below.
-- [RFC 0001](../rfcs/0001-structured-command-blocks.md), shell mode and
-  execution boundaries: preserve existing command behaviour throughout.
-- [ADR-008](../adr-008-environment-seam-taxonomy.md): injected environment and
-  child-process isolation for M1 and M3.
+- [RFC 0001](../rfcs/rfc-0001-structured-command-blocks-and-argv-templates.md),
+  shell mode and execution boundaries: preserve existing command behaviour
+  throughout.
+- [ADR-008](../adrs/adr-0008-environment-seam-taxonomy.md): injected
+  environment and child-process isolation for M1 and M3.
 
 Read [documentation contents](../contents.md) and
 [repository layout](../repository-layout.md) first. Use the `codegraph-mcp`,

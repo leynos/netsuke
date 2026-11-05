@@ -6,16 +6,28 @@
 //! including a project chain reached through `extends` and environment
 //! variables that would inject the key indirectly.
 
-use super::merge_probe::{isolated_environment, merge_in_child_error};
+use super::merge_probe::{isolated_environment, merge_in_child, merge_in_child_error};
 use anyhow::{Context, Result, ensure};
+use cap_std::{ambient_authority, fs::Dir};
 use rstest::rstest;
 use std::ffi::OsString;
-use std::fs;
 use std::path::Path;
 use tempfile::tempdir;
 
 /// The smallest definition body accepted by the eventual schema.
 const SHELLS_TOML: &str = "[[shells]]\nname = \"dash\"\nexecutable = \"dash\"\nargs = [\"-c\"]\n";
+
+/// Write `content` into `directory` as `name` through a capability handle.
+///
+/// The tests construct each configuration root themselves, so the ambient
+/// authority is deliberate: the directory being opened is the fixture's own
+/// temporary root, not a path supplied by a configuration file.
+fn write_file(directory: &Path, name: &str, content: &str) -> Result<()> {
+    let root = Dir::open_ambient_dir(directory, ambient_authority())
+        .with_context(|| format!("open {} to write {name}", directory.display()))?;
+    root.write(name, content.as_bytes())
+        .with_context(|| format!("write {name} in {}", directory.display()))
+}
 
 /// Run a merge probe that must fail and return its reported message.
 fn rejected_in_child(
@@ -45,8 +57,7 @@ fn ensure_authority_rejection(message: &str) -> Result<()> {
 fn project_shells_key_is_rejected() -> Result<()> {
     let project = tempdir().context("create temporary project directory")?;
     let home = tempdir().context("create temporary home directory")?;
-    fs::write(project.path().join(".netsuke.toml"), SHELLS_TOML)
-        .context("write project .netsuke.toml")?;
+    write_file(project.path(), ".netsuke.toml", SHELLS_TOML)?;
 
     let message = rejected_in_child(&["netsuke"], project.path(), home.path(), &[])?;
 
@@ -58,7 +69,7 @@ fn explicit_shells_file_is_rejected() -> Result<()> {
     let project = tempdir().context("create temporary project directory")?;
     let home = tempdir().context("create temporary home directory")?;
     let explicit_path = project.path().join("operator-lookalike.toml");
-    fs::write(&explicit_path, SHELLS_TOML).context("write explicit configuration file")?;
+    write_file(project.path(), "operator-lookalike.toml", SHELLS_TOML)?;
     let explicit = explicit_path.to_string_lossy().into_owned();
 
     let message = rejected_in_child(
@@ -75,18 +86,17 @@ fn explicit_shells_file_is_rejected() -> Result<()> {
 fn project_parent_shells_is_rejected() -> Result<()> {
     let project = tempdir().context("create temporary project directory")?;
     let home = tempdir().context("create temporary home directory")?;
-    fs::write(
-        project.path().join("inherited.toml"),
-        format!("extends = \"base.toml\"\n{SHELLS_TOML}"),
-    )
-    .context("write inheriting project configuration")?;
-    fs::write(project.path().join("base.toml"), "jobs = 4\n")
-        .context("write inherited base configuration")?;
-    fs::write(
-        project.path().join(".netsuke.toml"),
+    write_file(
+        project.path(),
+        "inherited.toml",
+        &format!("extends = \"base.toml\"\n{SHELLS_TOML}"),
+    )?;
+    write_file(project.path(), "base.toml", "jobs = 4\n")?;
+    write_file(
+        project.path(),
+        ".netsuke.toml",
         "extends = \"inherited.toml\"\n",
-    )
-    .context("write project .netsuke.toml")?;
+    )?;
 
     let message = rejected_in_child(&["netsuke"], project.path(), home.path(), &[])?;
 
@@ -111,23 +121,91 @@ fn environment_shells_is_rejected(#[case] variable: &str) -> Result<()> {
     Ok(())
 }
 
-/// An operator root may not declare definitions until the schema exists.
+/// Write an operator configuration file and return the failure it causes.
 ///
-/// Weakens nothing: M1 must not silently accept a key it cannot validate, so
-/// the operator case fails closed as well.
+/// The operator root keeps definition authority, so a failure here is a
+/// validation fault rather than an authority fault.
 #[cfg(unix)]
-#[rstest]
-fn operator_shells_key_is_not_yet_supported() -> Result<()> {
+fn operator_rejection(config: &str) -> Result<String> {
     let project = tempdir().context("create temporary project directory")?;
     let home = tempdir().context("create temporary home directory")?;
-    fs::write(home.path().join(".netsuke.toml"), SHELLS_TOML)
-        .context("write operator .netsuke.toml")?;
+    write_file(home.path(), ".netsuke.toml", config)?;
+    rejected_in_child(&["netsuke"], project.path(), home.path(), &[])
+}
+
+/// A valid definition declared by an operator root is accepted.
+#[cfg(unix)]
+#[rstest]
+fn operator_shells_key_is_accepted() -> Result<()> {
+    let project = tempdir().context("create temporary project directory")?;
+    let home = tempdir().context("create temporary home directory")?;
+    write_file(home.path(), ".netsuke.toml", SHELLS_TOML)?;
+    let (_xdg_config_dirs, environment) = isolated_environment(home.path(), &[])?;
+
+    merge_in_child(&["netsuke"], project.path(), &environment)?;
+
+    Ok(())
+}
+
+/// A field fault is reported against the position and field that caused it.
+#[cfg(unix)]
+#[rstest]
+#[case::built_in_name(
+    "[[shells]]\nname = \"bash\"\nexecutable = \"bash\"\nargs = [\"-c\"]\n",
+    "shells[0]",
+    "built-in"
+)]
+#[case::relative_executable(
+    "[[shells]]\nname = \"dash\"\nexecutable = \"bin/dash\"\nargs = [\"-c\"]\n",
+    "shells[0].executable",
+    "absolute"
+)]
+#[case::missing_arguments(
+    "[[shells]]\nname = \"dash\"\nexecutable = \"dash\"\n",
+    "shells[0].args",
+    "required"
+)]
+#[case::empty_arguments(
+    "[[shells]]\nname = \"dash\"\nexecutable = \"dash\"\nargs = []\n",
+    "shells[0].args",
+    "at least one"
+)]
+fn operator_shells_field_faults_name_their_position(
+    #[case] config: &str,
+    #[case] key: &str,
+    #[case] phrase: &str,
+) -> Result<()> {
+    let message = operator_rejection(config)?;
+
+    ensure!(
+        message.contains(key),
+        "rejection should name {key}, got: {message}"
+    );
+    ensure!(
+        message.contains(phrase),
+        "rejection should explain the rule in {phrase:?}, got: {message}"
+    );
+    Ok(())
+}
+
+/// Two operator layers declaring one name are rejected as a collision.
+#[cfg(unix)]
+#[rstest]
+fn operator_layers_declaring_one_name_are_rejected() -> Result<()> {
+    let project = tempdir().context("create temporary project directory")?;
+    let home = tempdir().context("create temporary home directory")?;
+    write_file(home.path(), "layer.toml", SHELLS_TOML)?;
+    write_file(
+        home.path(),
+        ".netsuke.toml",
+        &format!("extends = \"layer.toml\"\n{SHELLS_TOML}"),
+    )?;
 
     let message = rejected_in_child(&["netsuke"], project.path(), home.path(), &[])?;
 
     ensure!(
-        message.contains("shells"),
-        "operator rejection should name the key, got: {message}"
+        message.contains("shells[1]") && message.contains("shells[0]"),
+        "collision should name both positions, got: {message}"
     );
     Ok(())
 }
