@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 30. See `Revision note` at the foot of this document. This plan was
+Revision 31. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -573,10 +573,19 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   `dependency_continuations_stop_at_headings_and_unindented_prose` case pins
   the behaviour. Finding 1 recorded the exceeded Scope tolerance; D-14 and the
   restated tolerance record the acceptance.
-- [ ] (2026-11-05) Refresh the revision header and the inventory drift list for
-  the parser fix, re-run the complete sequential gate set on the revised
-  candidate, and finish current-head PR assessment.
-- [ ] EP-M4: refresh the drift list, rerun the gates, and assess the PR.
+- [x] (2026-11-05) Dispositioned all five findings from the second milestone
+  CodeRabbit review (D-15). Four were fail-open checks in the contract test:
+  `regex_values` swallowed a regex compile failure, `excluded_tasks` accepted a
+  task named only in an exclusion reason, register coverage could be satisfied
+  by the trace matrix's introductory prose, and obligation coverage was a
+  substring test that let `CO-10` stand in for `CO-1`. The fifth was the plan's
+  own gate recipe, where piping `make` into `tee` without `pipefail` reports
+  the log writer's status. Each contract fix has a regression case that fails
+  against the previous parser (three red, then green, measured directly); the
+  recipe now sets `set -euo pipefail` and names all eleven decomposed gates.
+- [ ] (2026-11-05) Re-run the complete sequential gate set on the revised
+  candidate and finish current-head PR assessment.
+- [ ] EP-M4: rerun the gates and assess the PR.
 
 ## Surprises & discoveries
 
@@ -815,6 +824,20 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   list that is four weeks stale would mislead the classifier. This changes no
   approved design element, method, or milestone. Date/Author: 2026-10-23,
   implementing agent.
+- Decision D-15 (2026-11-05): tighten the contract test's four fail-open
+  checks rather than record them as accepted debt. `regex_values` now panics on
+  a non-compiling constant pattern instead of returning an empty set;
+  `excluded_tasks` accepts only `- <task>: reason` bullets so a task named in a
+  reason cannot mark a dependent as covered; register coverage is matched
+  against the `Changes` and `Consumes` subsections, not the trace matrix's
+  introductory prose; and obligation coverage compares token sets rather than
+  substring containment, so `CO-1` is no longer satisfied by `CO-10`. Each
+  check is red against the previous parser and green against the current one.
+  Rationale: all four are latent rather than observed, but each is one edit
+  away from a silent pass in a contract whose only job is to fail loudly. The
+  ExecPlan's own gate recipe gained `set -euo pipefail` for the same reason: a
+  piped `make` gate reports `tee`'s status, not its own. Date/Author:
+  2026-11-05, implementing agent, after the second milestone CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1241,6 +1264,7 @@ Option B. Record `PIN` in `Decision log`.
 EP-M1, red:
 
 ```bash
+set -o pipefail
 cargo nextest run --test hexagonal_inventory_contract_tests 2>&1 \
   | tee /tmp/red-netsuke-26-1-1-record-model-and-consumer-inventory.out
 ```
@@ -1333,6 +1357,7 @@ record "N rows checked, 0 misses", and confirm a fictitious row is reported.
 After every Markdown edit:
 
 ```bash
+set -euo pipefail
 make fmt 2>&1 | tee /tmp/fmt-netsuke-26-1-1-record-model-and-consumer-inventory.out
 git --no-pager diff --no-ext-diff --stat
 ```
@@ -1340,16 +1365,30 @@ git --no-pager diff --no-ext-diff --stat
 Gates, through `scrutineer`, sequentially, after each milestone:
 
 ```bash
+set -euo pipefail
 make check-fmt 2>&1 | tee /tmp/check-fmt-netsuke-26-1-1-record-model-and-consumer-inventory.out
 make typecheck 2>&1 | tee /tmp/typecheck-netsuke-26-1-1-record-model-and-consumer-inventory.out
-make lint 2>&1 | tee /tmp/lint-netsuke-26-1-1-record-model-and-consumer-inventory.out
+make lint-clippy 2>&1 | tee /tmp/lint-clippy-netsuke-26-1-1-record-model-and-consumer-inventory.out
+make lint-whitaker 2>&1 | tee /tmp/lint-whitaker-netsuke-26-1-1-record-model-and-consumer-inventory.out
+make lint-python 2>&1 | tee /tmp/lint-python-netsuke-26-1-1-record-model-and-consumer-inventory.out
+make github-actions-lint 2>&1 | tee /tmp/github-actions-lint-netsuke-26-1-1-record-model-and-consumer-inventory.out
+make doc-coverage 2>&1 | tee /tmp/doc-coverage-netsuke-26-1-1-record-model-and-consumer-inventory.out
 make test 2>&1 | tee /tmp/test-netsuke-26-1-1-record-model-and-consumer-inventory.out
+make test-workflow-contracts 2>&1 | tee /tmp/test-workflow-contracts-netsuke-26-1-1-record-model-and-consumer-inventory.out
 make markdownlint 2>&1 | tee /tmp/markdownlint-netsuke-26-1-1-record-model-and-consumer-inventory.out
 make nixie 2>&1 | tee /tmp/nixie-netsuke-26-1-1-record-model-and-consumer-inventory.out
 ```
 
-Expected: each exits `0`. Commit after each milestone with an imperative
-subject, for example `Record the pinned semantic-boundary register (26.1.1)`.
+`set -euo pipefail` is required, not decorative: without `pipefail` the exit
+status of a pipeline is `tee`'s, so a failing `make` would still look green.
+`make lint` is split into its four components because the aggregate exceeds the
+two-hour cap on a detached run; the four together cover the same checks. The
+blocks above and below are documentation of the procedure; the batch itself is
+run by `scrutineer`, which already sets `pipefail`.
+
+Expected: each exits `0` and the sequence stops at the first failure. Commit
+after each milestone with an imperative subject, for example
+`Record the pinned semantic-boundary register (26.1.1)`.
 
 ## Validation and acceptance
 
@@ -1716,6 +1755,12 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   replaced the single-Rust-file constraint and Scope tolerance with the
   measured fifteen-file inventory in D-14. Gate evidence and current-head PR
   assessment follow.
+- Revision 31 (2026-11-05): dispositioned all five findings from the second
+  milestone CodeRabbit review (D-15). Tightened four fail-open contract checks
+  — regex compilation, exclusion bullets, register coverage, and obligation
+  tokens — each with a regression case measured red against the previous
+  parser, and gave the plan's gate recipe `set -euo pipefail` plus the full
+  eleven-gate decomposition. Final gate run and PR assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md
