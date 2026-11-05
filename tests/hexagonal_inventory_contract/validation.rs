@@ -17,12 +17,74 @@ use super::roadmap::{dependents_of, roadmap_tasks};
 /// Returns an error when the inventory disagrees with its roadmap or omits a
 /// required structural relationship.
 pub(super) fn validate_inventory(inventory: &str, roadmap: &str) -> Result<()> {
+    let validation = InventoryValidation { inventory, roadmap };
     validate_pin(inventory)?;
     validate_required_sections(inventory)?;
-    validate_trace_coverage(inventory, roadmap)?;
+    validation.validate_trace_coverage()?;
     validate_register(inventory)?;
     validate_obligations(inventory)?;
-    validate_findings(inventory, roadmap)
+    validation.validate_findings()
+}
+
+/// Carry the two documents whose claims must be checked together.
+struct InventoryValidation<'text> {
+    inventory: &'text str,
+    roadmap: &'text str,
+}
+
+impl InventoryValidation<'_> {
+    /// Check that the trace covers every roadmap task that depends on the inventory.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for unknown roadmap tasks, reasonless exclusions, or a
+    /// missing transitive dependent.
+    fn validate_trace_coverage(&self) -> Result<()> {
+        let tasks = roadmap_tasks(self.roadmap);
+        ensure!(
+            tasks.contains_key("26.1.1"),
+            "roadmap should contain task 26.1.1"
+        );
+        let trace = section(self.inventory, "Trace matrix").unwrap_or_default();
+        validate_known_trace_tasks(trace, &tasks)?;
+        validate_exclusions(trace, &tasks)?;
+
+        let mut covered = trace_table_tasks(trace);
+        covered.extend(excluded_tasks(trace).keys().cloned());
+        let missing: BTreeSet<String> = dependents_of(&tasks, "26.1.1")
+            .difference(&covered)
+            .cloned()
+            .collect();
+        ensure!(
+            missing.is_empty(),
+            "trace matrix should cover every dependent task; missing: {missing:?}"
+        );
+        Ok(())
+    }
+
+    /// Check that every finding names an existing owning roadmap task.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error when a finding has no owner or names an unknown task.
+    fn validate_findings(&self) -> Result<()> {
+        let tasks = roadmap_tasks(self.roadmap);
+        let findings = section(self.inventory, "Findings").unwrap_or_default();
+        for entry in finding_entries(findings) {
+            let owners = task_ids(&entry);
+            ensure!(
+                !owners.is_empty(),
+                "finding should name an owning roadmap task: {entry}"
+            );
+            for owner in owners {
+                ensure!(
+                    tasks.contains_key(&owner),
+                    "finding owner {owner} is absent from the roadmap"
+                );
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Confirm the inventory declares exactly one valid revision pin.
@@ -70,35 +132,6 @@ fn validate_required_sections(inventory: &str) -> Result<()> {
             "inventory should contain the `## {heading}` section"
         );
     }
-    Ok(())
-}
-
-/// Ensure the trace covers every roadmap task that depends on the inventory task.
-///
-/// # Errors
-///
-/// Returns an error for unknown roadmap tasks, reasonless exclusions, or a
-/// missing transitive dependent.
-fn validate_trace_coverage(inventory: &str, roadmap: &str) -> Result<()> {
-    let tasks = roadmap_tasks(roadmap);
-    ensure!(
-        tasks.contains_key("26.1.1"),
-        "roadmap should contain task 26.1.1"
-    );
-    let trace = section(inventory, "Trace matrix").unwrap_or_default();
-    validate_known_trace_tasks(trace, &tasks)?;
-    validate_exclusions(trace, &tasks)?;
-
-    let mut covered = trace_table_tasks(trace);
-    covered.extend(excluded_tasks(trace).keys().cloned());
-    let missing: BTreeSet<String> = dependents_of(&tasks, "26.1.1")
-        .difference(&covered)
-        .cloned()
-        .collect();
-    ensure!(
-        missing.is_empty(),
-        "trace matrix should cover every dependent task; missing: {missing:?}"
-    );
     Ok(())
 }
 
@@ -180,30 +213,6 @@ fn validate_obligations(inventory: &str) -> Result<()> {
             trace.contains(&obligation),
             "compatibility obligation {obligation} has no trace-matrix reference"
         );
-    }
-    Ok(())
-}
-
-/// Check that every finding names an existing owning roadmap task.
-///
-/// # Errors
-///
-/// Returns an error when a finding has no owner or names an unknown task.
-fn validate_findings(inventory: &str, roadmap: &str) -> Result<()> {
-    let tasks = roadmap_tasks(roadmap);
-    let findings = section(inventory, "Findings").unwrap_or_default();
-    for entry in finding_entries(findings) {
-        let owners = task_ids(&entry);
-        ensure!(
-            !owners.is_empty(),
-            "finding should name an owning roadmap task: {entry}"
-        );
-        for owner in owners {
-            ensure!(
-                tasks.contains_key(&owner),
-                "finding owner {owner} is absent from the roadmap"
-            );
-        }
     }
     Ok(())
 }
