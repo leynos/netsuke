@@ -526,6 +526,87 @@ jobs:
           name: release-operation-observability-${{ github.job }}
           path: ${{ runner.temp }}/release-operation-observability.jsonl
 
+  publish-crates-io:
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.package-crate.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-windows.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.windows-native-recipe-smoke.result == 'success' &&
+      needs.release-admission-canaries.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    needs:
+      - metadata
+      - package-crate
+      - build-linux
+      - build-windows
+      - build-macos
+      - windows-native-recipe-smoke
+      - release-admission-canaries
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          enable-cache: false
+      - name: Download the package-crate candidate
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1
+        with:
+          name: release-crate-package
+          path: release-crate-package
+      - id: crates_io_operation_start
+        name: Start crates.io publication timing
+        if: always()
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - id: publish_crates_io
+        name: Publish and verify the crates.io version
+        uses: ./.github/actions/publish-crates-io
+        with:
+          identity-path: release-crate-package/artifacts/package/identity.json
+          archive-directory: release-crate-package/target/package
+          tag: ${{ needs.metadata.outputs.release_tag }}
+          commit: ${{ github.sha }}
+          package-name: ${{ needs.metadata.outputs.package_name }}
+          version: ${{ needs.metadata.outputs.version }}
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: publish_crates_io
+          RELEASE_DRY_RUN: ${{ needs.metadata.outputs.should_publish != 'true' }}
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.crates_io_operation_start.outputs.started_ns }}
+          PUBLISHER_OUTPUTS: ${{ toJSON(steps.publish_crates_io.outputs) }}
+          UPLOAD_ERROR_PRESENT: 'false'
+          OBSERVABILITY_PATH: >-
+            ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+      - name: Upload release operation observability
+        if: always()
+        uses: >-
+          actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-operation-observability-${{ github.job }}
+          path: ${{ runner.temp }}/release-operation-observability.jsonl
+
   release:
     if: >-
       !cancelled() &&

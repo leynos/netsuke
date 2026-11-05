@@ -160,3 +160,22 @@ particular, `release_reconcile_crates` receives typed registry observations,
 `release_reconcile_github` receives bare digest strings. Those modules reach
 neither the network nor filesystem or provider formats; workflow steps make the
 network requests, and the adapters translate their results.
+
+## Addendum (2026-11-02): first publisher stage implemented
+
+The 2026-10-24 decision is implemented for its first publisher stage.
+`release.yml` declares `publish-crates-io`, which consumes the retained
+`package-crate` archive, probes the registry before mutation, publishes only an
+absent version, skips an identical version, and verifies downloaded bytes
+against the candidate digest. It uses the `crates-io` environment and a
+short-lived Trusted Publishing exchange; no long-lived registry secret is
+required. The publisher also records bounded phase outcomes and timings, plus
+download retry count, status class, and elapsed time, in an always-run job
+summary and JSONL artefact. These diagnostics do not constitute a live
+publishing exercise.
+
+No live exchange or release has exercised this workflow. The inventory
+verifier, GitHub release finalizer, and consumer smoke test remain open in the
+trusted-packaging ExecPlan, and `publish-release` is not yet gated on the
+crates.io job. Until those stages land, this addendum records a partially
+implemented mechanism rather than an end-to-end release path.

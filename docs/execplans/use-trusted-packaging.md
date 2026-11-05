@@ -7,24 +7,24 @@ be kept up to date as work proceeds.
 
 Status: IN PROGRESS
 
-The plan is approved and implementation has begun: EP-M1 (the plan) and EP-M2
-(Stage B) are complete, with Stages C and D open. No release, tag, registry
-publication, GitHub Release, credential, or account setting has been changed by
-this work.
+The plan is approved and implementation has begun. EP-M1 and EP-M2 are
+complete. Issue #1064 delivers the first crates.io publisher and its workflow
+contracts; Stage C remains partial because inventory verification, GitHub
+finalization, and consumer smoke are still open. Stage D is in progress. No
+release, tag, registry publication, live credential exchange, GitHub Release,
+or account setting has been changed by this work.
 
 ## Purpose / big picture
 
-Netsuke currently ships a binary on six platform targets through
+Netsuke ships a binary on six platform targets through
 `.github/workflows/release.yml`, which stages a **draft** GitHub Release and
-leaves a human to publish it. Nothing in that path touches a registry, so a
-user who runs `cargo install netsuke-build` today gets whatever bytes a
-maintainer uploaded by hand, with no release job able to say which commit they
-came from. After this change, a single tagged run resolves one candidate
-commit, builds and verifies the platform artefacts and the Cargo package from
-it, publishes the package to crates.io through Trusted Publishing, verifies the
-registry bytes, and only then publishes the GitHub Release. A user can
-`cargo install netsuke-build --version 0.1.0-beta4` and get a crate the release
-run can account for.
+leaves a human to publish it. The final design in this plan resolves one
+candidate commit, builds and verifies the platform artefacts and Cargo package,
+publishes the package through crates.io Trusted Publishing, verifies the
+registry bytes, and then finalizes the GitHub Release. Issue #1064 adds the
+candidate-backed crates.io publisher, but the GitHub writer is not yet gated on
+it; inventory verification, finalization, and consumer smoke remain open before
+the full release path can make that end-to-end claim.
 
 The registry upload itself stops depending on a long-lived secret. GitHub mints
 a short-lived, repository-scoped token from an OIDC identity; the token exists
@@ -232,7 +232,7 @@ action now carries two pins on `main`, because `release` and the new
 invokes to the newer of the two:
 
 ```plaintext
-rust-lang/crates-io-auth-action  c6f97d42243bad5fab37ca0427f495c86d5b1a18  (v1.0.5)
+rust-lang/crates-io-auth-action  3268eb413133e2960fa4ae0e963ca76380c54cd9
 leynos/shared-actions (release job)         a5765019912a8ab6882b12db049c7cde635f3a85
 leynos/shared-actions (publish-release job) 0606ca899ce2995a0c4bc78e660e80832e6e8855
 ```
@@ -528,7 +528,7 @@ release, uploads no asset, and requires no environment approval.
   one job must still run, or the assertion is vacuous.
 
 **AXIOM-1.** The `crates-io-auth-action` at pin
-`c6f97d42243bad5fab37ca0427f495c86d5b1a18` exchanges an OIDC token for a
+`3268eb413133e2960fa4ae0e963ca76380c54cd9` exchanges an OIDC token for a
 registry token on `steps.<id>.outputs.token` and revokes it in a post step.
 Verified by reading its `action.yml`. Its internals are not verified here.
 
@@ -639,13 +639,20 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 
 ### Stage C — implementation
 
-`.github/actions/` contains the delivered `package-crate` action. Four more
-job-matched actions remain to be added, one per extracted body:
+`.github/actions/` contains the delivered `package-crate` and
+`publish-crates-io` actions. The publisher consumes the exact
+`release-crate-package` artefact, validates the candidate, probes the version,
+publishes only an absent version, skips an identical version, fails closed for
+other states, and verifies the downloaded registry bytes against the candidate
+digest. It is declared in `release.yml` with the seven successful validation
+dependencies, the `crates-io` environment, and only `contents: read` plus
+`id-token: write`. The credential is exchanged for the publish decision only;
+no live exchange has exercised it.
 
-- `package-crate/` — resolve and record the identity (delivered).
-- `publish-crates-io/` — probe, decide, upload, verify registry bytes.
+Three job-matched actions remain open:
+
 - `verify-release-inventory/` — compare the whole release against the
-  identity record.
+  identity record and gate GitHub publication on the registry outcome.
 - `finalize-github-release/` — reconcile the draft, then un-draft.
 - `consumer-smoke/` — download, verify, extract and run the published bytes.
 
@@ -705,8 +712,8 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
 
 The intended end-state in `.github/workflows/release.yml` adds the sequence
 below after the existing `metadata`, `build-*`, `windows-native-recipe-smoke`,
-and `release-admission-canaries` jobs. The `package-crate` job has landed; the
-other four jobs remain:
+and `release-admission-canaries` jobs. `package-crate` and `publish-crates-io`
+are delivered; inventory verification, finalization, and consumer smoke remain:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
@@ -718,7 +725,8 @@ other four jobs remain:
    needs: [metadata, package-crate, build-linux, build-windows,
            build-macos, windows-native-recipe-smoke,
            release-admission-canaries]
-   if: needs.metadata.outputs.should_publish == 'true'
+   if: !cancelled(), every listed need succeeded, and
+       needs.metadata.outputs.should_publish == 'true'
    environment: crates-io
    permissions: {contents: read, id-token: write}
    ```
@@ -762,8 +770,10 @@ other four jobs remain:
 
 `publish-release` — not `release` — is the job holding `contents: write` and
 running the draft-creation steps; `release` holds `contents: read` and runs the
-dry-run rehearsal. `publish-release`'s `needs` grows `package-crate`, so the
-draft is not created before a package exists. Stage C as first drafted
+dry-run rehearsal. Issue #1064 leaves `publish-release` unchanged, with its
+existing five-job dependency list. `publish-crates-io` and `publish-release`
+are currently independent; the later inventory and finalizer work must define
+how their outcomes gate the completed release path. Stage C as first drafted
 attributed the write permission to `release`; that predates PR #834, which
 split rehearsal from publication.
 
@@ -842,12 +852,16 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Requirements: LEM-1, LEM-2, LEM-3, LEM-4 discharged.
 - Acceptance evidence: `make test-release-publication` passes; each module's
   reject rows fail before the module exists.
-- Conformance check: no module exceeds 400 lines; no source imports a network
-  client, asserted by `test_release_sources_import_no_network_client` in
-  `release_publication_boundary_test.py` over `SOURCE_MODULES`. The
-  `POLICY_MODULES` contract also rejects file IO, JSON/TOML parsing, HTTP
-  status codes, and GitHub digest syntax in policy code. Both boundaries have
-  positive controls; Ruff, Pylint, Interrogate, and ty pass.
+- Conformance check: no module exceeds 400 lines; modules outside the
+  transport boundary import no network client, as asserted by
+  `test_release_sources_import_no_network_client` in
+  `release_publication_boundary_test.py` over `NETWORK_FREE_MODULES`. The only
+  network sources are `scripts/crates_io_transport_cli.py` and
+  `scripts/crates_io_transport_http.py`, covered by
+  `test_transport_sources_are_the_only_network_sources`. The `POLICY_MODULES`
+  contract also rejects file IO, JSON/TOML parsing, HTTP status codes, and
+  GitHub digest syntax in policy code. Both boundaries have positive controls;
+  Ruff, Pylint, Interrogate, and ty pass.
 - Recovery: the modules are additive; revert the commit.
 - Remaining gaps: the remaining publication workflow jobs and stages are open.
 - Compatibility decision: none; these are new private modules.
@@ -860,44 +874,48 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   already 688 lines on `main`. The extraction follows the repository's
   documented composite-action convention
   ([cache ownership and bounded CI resources](../developers-guide.md#cache-ownership-and-bounded-ci-resources)).)
-- Requirements: INV-1, LEM-5, and LEM-6 are assigned here; the workflow and
-  permission-separation portions remain open.
-- Acceptance evidence: the target is `make test-workflow-contracts` passing
-  with the permission and mode-matrix tests. The LEM-5 permission suite and the
-  remaining publication jobs have not landed.
+- Requirements: INV-1, LEM-5, and LEM-6 are assigned here. The
+  `publish-crates-io` job and its permission, prerequisite-reachability, and
+  dry-run contracts have landed; the remaining workflow sequence and the
+  separately planned LEM-5 suite remain open.
+- Acceptance evidence: `make test-workflow-contracts` covers the delivered
+  publisher permission, reachability, and mode-matrix contracts. The separate
+  LEM-5 permission suite and remaining publication jobs have not landed.
 - Conformance check: the six existing outputs are unchanged; the three
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
-- Remaining gaps: only `package-crate` is in the new workflow graph. Four
-  job-matched actions and jobs, `upload-declared-assets`, and the LEM-5 suite
-  remain. No crate is published by any run; after the workflow lands, trusted
-  publisher registration and account settings remain maintainer actions. The
-  package already exists on crates.io (`0.1.0-beta1` through `beta4`), so no
-  initial publication is outstanding.
+- Remaining gaps: `package-crate` and `publish-crates-io` are in the workflow
+  graph. Three job-matched actions and jobs remain (`verify-release-inventory`,
+  `finalize-github-release`, and `consumer-smoke`), together with
+  `upload-declared-assets` and the separate LEM-5 suite. No live exchange or
+  release has exercised the publisher, and trusted-publisher registration and
+  account settings remain maintainer actions. The package already exists on
+  crates.io (`0.1.0-beta1` through `beta4`), so no initial publication is
+  outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
 **EP-M4 — the crate package and the registry publisher.**
 
-- Outcome (target): `package-crate` and `publish-crates-io` exist, with the
-  ephemeral token confined to one step. The `package-crate` action and job are
-  delivered; the registry publisher is not.
+- Outcome: `package-crate` and `publish-crates-io` exist, with the ephemeral
+  token confined to the upload step. The publisher is declared in `release.yml`
+  and cannot run in pull-request or dry-run lanes.
 - Requirements: AXIOM-1, AXIOM-2, and INV-1 are assigned here; registry
-  publication remains open.
-- Acceptance evidence: the target dry run produces a `.crate`, its digest, and
-  its file list, and reaches no network write. The delivered packaging record
-  contains the archive name, candidate identity, and digest, but not the
-  required archive file list.
-- Conformance check: no long-lived token anywhere; `persist-credentials: false`
-  on the publisher's checkout; no cache restore in the publisher.
-- Recovery: the new publisher will be gated on `should_publish`;
-  `package-crate` also runs in rehearsal mode but only builds the archive and
-  identity record. Reverting the publication additions restores the current
-  release path.
-- Remaining gaps: the `publish-crates-io` action/job and archive file-list
-  evidence are missing. The live exchange will remain unvalidated by
-  construction.
+  publication remains open until a live release has exercised the path.
+- Acceptance evidence: candidate and transport suites cover identity, archive
+  digest, metadata normalization, request framing, response failures, retry
+  bounds, token redaction, and downloaded-byte mismatch. Workflow contracts
+  cover the seven dependencies, credential separation, artefact selection,
+  action ordering, and all five registry decisions.
+- Conformance check: no long-lived token; checkout uses
+  `persist-credentials: false`; only the upload step receives the exchanged
+  token; no package rebuild occurs in the publisher.
+- Recovery: rerun the failed publisher job in the same workflow run. It reuses
+  `release-crate-package` and probes again before deciding whether to upload.
+- Remaining gaps: no live exchange or release has exercised the action; the
+  package archive file list, inventory verifier, release finalizer, and
+  consumer smoke remain open.
 - Compatibility decision: none.
 
 **EP-M5 — recoverability and reconciliation.**
@@ -1007,8 +1025,9 @@ A reviewer accepts this change when all of the following hold.
    `publish-release` bodies. See `Decision log`; the criterion is retained
    unedited so the deviation stays visible rather than being redefined away.
 6. `make lint` and `make test` pass unchanged.
-7. A dry-run rehearsal on a pull request runs `package-crate` to completion
-   and skips every publishing job, with no environment approval requested.
+7. A pull-request rehearsal runs `package-crate` to completion and skips both
+   publishing jobs before environment approval or credential exchange. A tagged
+   run gates `publish-crates-io` on the seven required successful jobs.
 
 Red-Green-Refactor evidence: each Stage B module is committed with its test
 failing; each Stage C implementation is committed with that test passing; each
@@ -1118,7 +1137,7 @@ def plan_asset_actions(
 ```
 
 Dependencies: none new. `rust-lang/crates-io-auth-action` at
-`c6f97d42243bad5fab37ca0427f495c86d5b1a18` is the only new external action.
+`3268eb413133e2960fa4ae0e963ca76380c54cd9` is the only new external action.
 
 ## Progress
 
@@ -1582,12 +1601,15 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - [ ] Stage C: publication sequence in `release.yml` (EP-M3, EP-M4, EP-M5).
   The scope correction from recon at `c1f3f2ed` established that this is not an
   extraction of existing bodies: only `release` and `publish-release` carry the
-  existing upload sequence. Since that reconnaissance, the `package-crate`
-  action and job have landed. Four job-matched actions and jobs remain
-  (`publish-crates-io`, `verify-release-inventory`, `finalize-github-release`
-  and `consumer-smoke`), together with the planned `upload-declared-assets`
-  helper for `publish-release`. No crates.io workflow step exists yet, so Stage
-  C remains open.
+  existing upload sequence. Since that reconnaissance, the `package-crate` and
+  `publish-crates-io` actions and jobs have landed, with workflow contracts for
+  publisher permissions, prerequisite reachability, artefact use, action order,
+  and dry-run isolation. Three job-matched actions and jobs remain
+  (`verify-release-inventory`, `finalize-github-release`, and
+  `consumer-smoke`), together with the planned `upload-declared-assets` helper
+  for `publish-release`. No live exchange or release has exercised the
+  publisher; the external GitHub `crates-io` environment and crates.io
+  publisher registration remain unverified, so Stage C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
   change and committed it as `d604b0cd`. Nine targets pass outright:
@@ -2581,8 +2603,73 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   artefacts by target, exclude retained or unrelated files, and hash the staged
   set. Negative stale, missing-target, and duplicate-target artefact cases are
   required. This is not implemented or verified; it remains Stage C/D work.
+- [x] (2026-11-01) Implemented the candidate-backed crates.io publisher from
+  issue #1064. The action validates the `release-crate-package` identity and
+  retained archive, probes once, composes the existing registry policy, and
+  exchanges a short-lived token only for an absent-version upload. It skips an
+  identical version, fails closed for conflict, yanked, malformed, or
+  indeterminate observations, and verifies downloaded registry bytes against
+  the packaged digest. The workflow job requires metadata, package-crate, all
+  three platform builds, Windows native smoke, and release-admission-canaries;
+  it holds `contents: read` and `id-token: write` in environment `crates-io`.
+  The HTTP adapter checks every request and redirect against HTTPS hosts
+  `crates.io` and `static.crates.io`, keeping registry observations inside the
+  trusted host boundary. Review follow-up removed a self-referential step
+  assertion and made the workflow sequence contract evaluate the composite
+  action's actual guards, including GitHub's implicit `success()` behaviour.
+  The workflow contract suite passed with 1,691 tests and 3 skips, plus its 28
+  script checks; `make test-release-publication` passed with 495 tests. The
+  full nine-gate sequence passed on the current candidate: `check-fmt`, `lint`,
+  `typecheck`, `doc-coverage` (98.23%), `test` (4,943 nextest tests and
+  doctests), `test-workflow-contracts`, `test-release-publication`,
+  `markdownlint` (zero issues), and `nixie`. No live exchange or release was
+  performed; inventory verification, finalization, and consumer smoke remain
+  open, and `publish-release` is not gated on this publisher yet.
+- [x] (2026-11-03) Completed the bounded publisher telemetry and transport
+  review follow-up. The always-run summary and JSONL artefact include sanitized
+  crate/version, registry state/action, verification verdict, phase timings,
+  and bounded download retry facts. Redirects outside the registry host
+  allowlist are rejected, and incomplete HTTP responses retain the probe,
+  retry, and ambiguous-upload behaviour. All nine ordered local gates passed on
+  the candidate: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.23%),
+  `test` (4,943 nextest tests and doctests), `test-workflow-contracts` (1,696
+  passed, 3 skipped, plus 28 script checks), `test-release-publication` (514
+  passed), `markdownlint` (zero issues), and `nixie`. No live exchange or
+  release was performed; inventory verification, finalization, and consumer
+  smoke remain open, and `publish-release` is not gated on this publisher yet.
+- [x] (2026-11-04) Addressed the current-head CodeRabbit pre-merge findings
+  within the publisher telemetry scope. The transport CLI now injects the
+  monotonic clock used for elapsed download reporting; the composite action
+  routes phase timing through its action-owned helper; and the summary snapshot
+  normalizes version and timing fields while retaining exact semantic metric
+  assertions. The action's auth pin is
+  `3268eb413133e2960fa4ae0e963ca76380c54cd9`, matching the plan's dependency,
+  AXIOM-1, and dependency-summary references. Before a CodeScene-driven test
+  decomposition, the full nine-gate sequence passed: doc coverage was 98.30%,
+  nextest passed 5,026 tests with 7 skipped and 2 leaky, workflow contracts
+  passed 1,709 tests with 3 skipped, and release-publication tests passed 530.
+  Markdown lint reported zero issues across 215 files; Mermaid validation
+  passed. The observability test's focused CodeScene delta is now clean. The
+  final ordered gate run follows this progress entry. These changes do not
+  alter registry decisions or complete the still-open finalization,
+  inventory-verification, or consumer-smoke stages.
 
 ## Surprises & discoveries
+
+- Observation: **Cargo has no command mode that uploads an existing `.crate`
+  archive.** `cargo publish` prepares the package archive itself, so invoking
+  it in the privileged publishing job would rebuild rather than publish the
+  candidate already produced by `package-crate`. The publisher therefore
+  derives metadata from the retained archive in memory with `tarfile` and
+  `tomllib`, then sends the unchanged archive through the documented crates.io
+  Web API framing: little-endian metadata length, metadata JSON, little-endian
+  archive length, and archive bytes. The focused tests pin this framing and
+  byte identity; the workflow contract forbids Cargo package, publish, and
+  build commands in the publisher. See
+  [Cargo publish](https://doc.rust-lang.org/cargo/commands/cargo-publish.html)
+  and the
+  [crates.io Registry Web API](https://doc.rust-lang.org/cargo/reference/registry-web-api.html).
+  Date/Author: 2026-11-01, implementation agent.
 
 - Observation: **`cargo package --target-dir` nests its output one level down,
   so the packager's directory assumption was wrong and every packaging run
@@ -3979,6 +4066,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   provider-specific release seam, not a general filename-normalization API.
   Date/Author: 2026-10-24, implementation agent.
 
+- Decision: upload the retained `.crate` through the crates.io Registry Web
+  API instead of invoking `cargo publish`. Rationale: Cargo has no mode that
+  accepts an already-built archive, and `cargo publish` prepares package bytes
+  itself. Rebuilding in the credentialed job would break the candidate-byte
+  identity contract. The transport adapter therefore implements the documented
+  little-endian length framing and the action sends the archive from
+  `release-crate-package` unchanged. The upload is single-shot; a rerun probes
+  fresh registry state to resolve an ambiguous response. Date/Author:
+  2026-11-01, implementation agent.
+
+- Decision: derive crates.io metadata from the validated archive in memory.
+  Rationale: `tarfile` and `tomllib` read the packaged manifest and README
+  without extracting files, and metadata then describes the same retained
+  candidate that the upload sends. Normalize normal, development, build, and
+  target-specific dependencies at this CLI boundary; do not reparse the
+  checkout's manifest or rewrite the archive. Date/Author: 2026-11-01,
+  implementation agent.
+
 ## Outcomes & retrospective
 
 Not yet applicable. To be completed at EP-M6, at which point every discovery
@@ -4165,3 +4270,63 @@ formatting, typecheck, Clippy, Whitaker, Python and GitHub Actions lint,
 Markdown lint and spelling, and Mermaid validation. The release-publication and
 release-admission suites also passed, with 457 and 118 tests. Stage C remains
 partial and Stage D remains open; no release or registry setting changed.
+
+Draft 20, 2026-11-01: issue #1064 adds candidate validation, in-memory upload
+metadata, bounded crates.io transport, the `publish-crates-io` composite action
+and workflow job, and workflow contracts for permissions, reachability,
+artefact use, step order, dry-run isolation, and registry decisions. The
+focused release-publication suite passed with 495 tests; workflow contracts
+passed with 1,691 tests and 3 skips, plus 28 script checks. All nine ordered
+gates passed: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.23%), `test`
+(4,943 nextest tests and doctests), `test-workflow-contracts`,
+`test-release-publication`, `markdownlint` (zero issues), and `nixie`. The
+runbook, plan, and ADR now record the delivered publisher and its recovery
+behaviour; Stage C remains partial, and no live exchange, release, or registry
+account change has occurred.
+
+Draft 21, 2026-11-02: review follow-up adds bounded crates.io publisher phase
+telemetry and download retry diagnostics to the first publisher stage. The
+summary and JSONL artefact run after failures. This is operational evidence
+only: Stage C remains partial, the GitHub release finalizer and consumer smoke
+remain open, and no live exchange or release has been exercised.
+
+Draft 22, 2026-11-03: completed the telemetry and transport review follow-up.
+Bounded publisher context now survives sanitization into the summary and JSONL
+records; the release-publication snapshot and transport boundary tests verify
+it. All nine local gates passed, including 4,943 nextest tests, 1,696 workflow
+contracts, 514 release-publication tests, 98.23% documentation coverage, zero
+Markdown lint issues, and Mermaid validation. Stage C remains partial; no live
+exchange or release has been exercised.
+
+Draft 23, 2026-11-04: corrected the current crates.io authentication pin in the
+dependency overview, AXIOM-1, and dependency summary to match the action at
+`3268eb413133e2960fa4ae0e963ca76380c54cd9`. Added an injected monotonic clock
+and action-local timing boundary in response to pre-merge review, and
+normalized variable snapshot fields while retaining exact semantic assertions.
+Stage C remains partial; no live exchange or release has been exercised.
+
+Draft 24, 2026-11-04: completed the second pre-merge review follow-up. The
+publisher transport now treats a malformed redirect target as a classified
+registry-URL rejection instead of an uncaught `ValueError`, and the transport
+CLI's argument builders live once in `crates_io_transport_support.py` rather
+than beside each suite's assertions. The candidate guards and the polling
+schedule moved into their own modules so every publisher suite stays under the
+repository's file-length cap; the release-publication registry, the Makefile
+recipe, and the developers' guide now agree on thirty-two modules. Stage C
+remains partial; no live exchange or release has been exercised.
+
+Draft 25, 2026-11-04: expanded the publisher validation coverage from the
+remaining pre-merge findings. Initial requests and redirects exercise every
+rejected registry-URL policy, upload tests prove that missing or empty tokens
+and oversized frames stop before a request, and the polling property checks the
+exact stop point, final outcome, and delay schedule. The property uses the same
+named delay and timeout values to construct its policy and verify the observed
+schedule. The current authentication references use the implemented pin
+`3268eb413133e2960fa4ae0e963ca76380c54cd9`.
+
+The nine local gates passed sequentially on the final candidate: formatting,
+lint, typecheck, documentation coverage (98.30%, 6,657/6,772), Rust tests
+(5,026 passed, 7 skipped, plus doctests), workflow contracts (1,713 passed, 3
+skipped, plus 28 script-helper checks), release-publication tests (592 passed),
+Markdown lint (0 issues), and Mermaid validation (all diagrams valid). Stage C
+remains partial; no live exchange or release has been exercised.

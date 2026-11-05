@@ -2,6 +2,13 @@
 
 import dataclasses
 
+from action_run_sources import action_sources
+from release_publish_crates_io_contracts import (
+    ACTION_PATH as CRATES_IO_ACTION_PATH,
+)
+from release_publish_crates_io_contracts import (
+    check_crates_io_action_contract,
+)
 from release_publish_path_artifacts import (
     MISSING,
     FieldEvaluation,
@@ -14,6 +21,7 @@ from release_publish_path_artifacts import (
 from release_publish_path_publication import (
     PublicationCheck,
     UploadPlanCheck,
+    check_crates_io_publication,
     check_publication_path,
     check_upload_plan,
     step_runs,
@@ -107,16 +115,18 @@ def _metadata_outputs(
 def _needs_context(
     release_job: dict[str, object], scenario: Scenario, outputs: dict[str, str]
 ) -> dict[str, object]:
-    """Build only the needs context the release job actually declares."""
+    """Build declared needs, defaulting unknown prerequisites to skipped."""
     declared = release_job.get("needs", [])
     names = [declared] if isinstance(declared, str) else declared
     if not isinstance(names, list):
         return {}
     needs: dict[str, object] = {}
     for name in names:
-        if not isinstance(name, str) or name not in scenario.needs_results:
+        if not isinstance(name, str):
             continue
-        dependency: dict[str, object] = {"result": scenario.needs_results[name]}
+        dependency: dict[str, object] = {
+            "result": scenario.needs_results.get(name, "skipped")
+        }
         if name == "metadata":
             dependency["outputs"] = outputs
         needs[name] = dependency
@@ -151,7 +161,8 @@ def _check_smoke_job(
             job_level=True,
         ),
     )
-    should_run = (
+    metadata_succeeded = scenario.needs_results["metadata"] == "success"
+    should_run = metadata_succeeded and (
         scenario.mode != "dry-run" or scenario.event_action == "ready_for_review"
     )
     if value is MISSING or bool(value) != should_run:
@@ -298,31 +309,59 @@ def _check_scenario(check: ScenarioCheck) -> None:
         )
     if release_runs and scenario.release_runs:
         _check_release_staging(check.release, scenario, contexts, check.violations)
-    check_publication_path(
-        PublicationCheck(
-            release=check.release,
-            scenario=scenario,
-            outputs=outputs,
-            violations=check.violations,
-        )
+    publication_check = PublicationCheck(
+        release=check.release,
+        scenario=scenario,
+        outputs=outputs,
+        violations=check.violations,
     )
+    check_publication_path(publication_check)
+    publisher_job = workflow_job(check.release, "publish-crates-io")
+    publisher_contexts: dict[str, object] = {
+        "needs": _needs_context(publisher_job, scenario, outputs),
+        "status": {"cancelled": scenario.cancelled},
+        "github": {"event": {"action": scenario.event_action}},
+    }
+    check_crates_io_publication(publisher_job, publication_check, publisher_contexts)
+
+
+def _check_publisher_action(
+    release: dict[str, object],
+    publisher_action: dict[str, object] | None,
+    violations: list[str],
+) -> None:
+    """Load an omitted publisher manifest and check the action's wiring."""
+    action = (
+        publisher_action
+        if publisher_action is not None
+        else action_sources().get(CRATES_IO_ACTION_PATH)
+    )
+    if action is None:
+        violations.append("publish-crates-io.action: composite manifest is missing")
+    else:
+        check_crates_io_action_contract(release, action, violations)
 
 
 def check_release_publish_path(
     release: dict[str, object],
     caller: dict[str, object],
     build: dict[str, object],
+    publisher_action: dict[str, object] | None = None,
 ) -> list[str]:
     """Return violations in the dry-run and tag-publish reachability contract.
 
-    The checker is pure with respect to its inputs: it evaluates the parsed
-    workflows against a finite scenario table and performs no filesystem or
-    network access.
+    Parameters
+    ----------
+    release, caller, build : dict[str, object]
+        Parsed workflow documents for the release, caller, and build workflows.
+    publisher_action : dict[str, object] | None, optional
+        Parsed publisher action manifest. When ``None``, read it from the
+        repository.
 
     Returns
     -------
     list[str]
-        One entry for every missing or incorrectly wired release-path invariant.
+        Missing or incorrectly wired release-path invariants.
     """
     violations: list[str] = []
     _check_caller(release, caller, violations)
@@ -342,6 +381,7 @@ def check_release_publish_path(
     )
     _check_release_needs(release, violations)
     _check_release_step_order(release, violations)
+    _check_publisher_action(release, publisher_action, violations)
     for scenario in SCENARIOS:
         _check_scenario(
             ScenarioCheck(
