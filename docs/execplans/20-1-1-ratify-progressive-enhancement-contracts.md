@@ -368,11 +368,26 @@ decision D-15.
   `String Heavy Function Arguments` biomarker is a *file-level* ratio, not a
   per-function verdict, so splitting the file is the remedy; the ratio is
   computed over every function the file declares.
-- [x] (2026-11-05) `mdtablefix` must canonicalise Markdown before `check-fmt`
+- [x] (2026-11-05) `mdtablefix` must canonicalize Markdown before `check-fmt`
   will pass, and it reflows prose as well as tables. An interrupted gate batch
   exposed this: the first run failed at gate 1 on four files this branch had
   edited. Run `make fmt` (or the `--in-place` form) after any documentation
   edit rather than assuming the hand-wrapping survives.
+- [x] (2026-11-05) The nine-gate batch at `f61cbe0b0` came back red on three
+  gates, all real. `make lint` rejected `unreachable!` (a workspace-wide
+  `clippy::unreachable = "deny"`); `make markdownlint` rejected the en-GB
+  `canonicalise` this plan itself had just written; and
+  `make test-workflow-contracts` failed twice on the same cause, because
+  `src/manifest/schema_admission_telemetry.rs` sat beside the `schema_version/`
+  directory it belongs to. The telemetry observes only that gate's decision, so
+  it moved into the module as `src/manifest/schema_version/telemetry.rs` with
+  its tests inline, matching the existing `src/cli/discovery/telemetry.rs`
+  precedent rather than recording a false "coincidental prefix" exception.
+  `record_admission`'s visibility became `pub(in crate::manifest)` to match its
+  one call site, and `tools/kani/proof-scope.toml` gained the new path the
+  harness closure reaches. The string-keyed fixture `match` that needed
+  `unreachable!` became a closed `FIXTURES` table, which removed the panic
+  rather than suppressing the lint.
 - [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
 
 ## Surprises & discoveries

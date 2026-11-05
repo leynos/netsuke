@@ -38,7 +38,6 @@ mod path_loaders;
 mod query;
 mod registration;
 mod render;
-mod schema_admission_telemetry;
 mod schema_version;
 mod str_loaders;
 mod test_surface;
@@ -135,8 +134,7 @@ fn parse_admitted_document(yaml: &str, name: &ManifestName) -> Result<ManifestVa
     // The decision is recorded before it is turned into a diagnostic, so the
     // counter sees every rejection exactly once and the mapping below stays a
     // pure translation step.
-    let admission =
-        schema_admission_telemetry::record_admission(schema_version::admit_document(&document));
+    let admission = schema_version::record_admission(schema_version::admit_document(&document));
     admission.map_err(|rejection| ManifestError::Parse {
         source: diagnostics::map_schema_version_error(rejection, name),
         message: localization::message(keys::MANIFEST_PARSE),
@@ -318,7 +316,7 @@ fn expand_and_render(request: ExpansionRequest<'_, '_, '_>) -> Result<NetsukeMan
 }
 mod env;
 pub use env::{ENV_LOOKUP_OUTCOME_VALUES, ENV_LOOKUP_TOTAL};
-pub use schema_admission_telemetry::{SCHEMA_ADMISSION_OUTCOME_VALUES, SCHEMA_ADMISSION_TOTAL};
+pub use schema_version::{SCHEMA_ADMISSION_OUTCOME_VALUES, SCHEMA_ADMISSION_TOTAL};
 #[cfg(test)]
 mod tests;
 mod workspace;

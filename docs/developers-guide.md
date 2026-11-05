@@ -11927,7 +11927,7 @@ composing label shapes never widens the accepted vocabulary.
 
 ### Manifest schema-admission telemetry
 
-`src/manifest/schema_admission_telemetry.rs` owns telemetry for the
+`src/manifest/schema_version/telemetry.rs` owns telemetry for the
 schema-version gate. `parse_admitted_document` in `src/manifest/mod.rs` is the
 only caller: it records the decision returned by
 `schema_version::admit_document` and then maps a rejection into a
@@ -11966,10 +11966,10 @@ noop handle, while any other label name, label count, or out-of-vocabulary
 value is rejected.
 
 Tests sit on both sides of the boundary.
-`src/manifest/tests/schema_admission_telemetry.rs` drives the real loader under
-a local debugging recorder, asserting that each of the six outcomes reaches
-exactly one bounded series and that a sentinel carried in a declaration's build
-metadata never reaches a label, an event, or a span field.
+`src/manifest/schema_version/telemetry.rs`'s inline `tests` module drives the
+real loader under a local debugging recorder, asserting that each of the six
+outcomes reaches exactly one bounded series and that a sentinel carried in a
+declaration's build metadata never reaches a label, an event, or a span field.
 `recorder_retains_bounded_schema_admission_series` in
 `src/observability/recorder/tests/schema_admission_tests.rs` proves the
 production recorder retains the six bounded series and rejects an

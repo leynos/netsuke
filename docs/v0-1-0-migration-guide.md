@@ -266,6 +266,10 @@ inside an entry of the `causes` array. See
 [Declare the schema version](users-guide.md#declare-the-schema-version) for the
 full behaviour and the diagnostic shape.
 
+Before changing `netsuke_version`, verify that the reader supports the schema
+features used by the manifest. Changing the declaration alone does not migrate
+unsupported syntax.
+
 ## Nothing to change for existing callers
 
 The convenience wrappers keep their child-process behaviour: the child inherits
