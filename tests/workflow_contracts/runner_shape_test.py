@@ -159,27 +159,35 @@ def test_every_ubicloud_job_declares_a_timeout(
 
 
 def test_kani_smoke_job_contains_its_measured_mutation_budget() -> None:
-    """Keep the Kani job above setup, the whole run, and finalisation."""
+    """Keep the Kani job above setup, both whole runs, and finalisation.
+
+    The mutation gate launches two Nextest invocations — the cold prewarm and
+    the patch sweep — and the profile's whole-run cap bounds each of them
+    separately. The ceiling must therefore contain two caps. Sizing it from one
+    would cancel the job while the second invocation was still reporting, and a
+    cancellation discards the log that explains the overrun.
+    """
     job = workflow_job(load_workflow(WORKFLOW_DIR / "ci.yml"), "kani-smoke")
     timeout = job.get("timeout-minutes")
     # Measured on hosted run 41840367244: the whole job spent this long before
     # and after nextest itself, so the ceiling has to cover both.
     setup_seconds = 824
     finalisation_seconds = 7
+    invocations = 2
     whole_run = global_timeout(
         NEXTEST_CONFIG.read_text(encoding="utf-8"), profile="kani"
     )
     assert whole_run is not None, "the kani profile must set a whole-run budget"
     # Derived rather than restated: a change to the profile's budget must move
     # this ceiling with it instead of leaving a green test over a job too
-    # short to finish the run.
-    required_seconds = setup_seconds + whole_run + finalisation_seconds
+    # short to finish the runs.
+    required_seconds = setup_seconds + invocations * whole_run + finalisation_seconds
     assert isinstance(timeout, int), (
         f"ci.yml job kani-smoke must set timeout-minutes, got {timeout!r}"
     )
     assert timeout * 60 >= required_seconds, (
         f"ci.yml job kani-smoke must cover {setup_seconds} seconds of measured "
-        f"setup, the {whole_run}-second Kani run cap, and "
+        f"setup, {invocations} {whole_run}-second Kani run caps, and "
         f"{finalisation_seconds} seconds of finalization; needs at least "
         f"{required_seconds} seconds, got {timeout!r} minutes"
     )
