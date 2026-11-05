@@ -13,8 +13,8 @@
 //! as membership in the accepted prefix rather than as a set: the
 //! representation relationship the walk needs is `seen` ranges exactly over
 //! `D[0..processed)`, which [`walk_prefix`] states directly. The production
-//! `HashSet` is not modelled here, so nothing below proves its internals; the
-//! independent quadratic Rust oracle in
+//! `HashMap` used as a seen-set is not modelled here, so nothing below proves
+//! its internals; the independent quadratic Rust oracle in
 //! `src/cli/config/shells/tests/oracle.rs` checks the production function
 //! against [`accept`] on real validated names.
 //!
