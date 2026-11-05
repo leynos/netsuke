@@ -265,11 +265,10 @@ decision D-15.
   focused schema policy, reader, snapshot, and BDD selection passed 17 tests;
   the CLI and registry selection passed 5. The JSON snapshot was reviewed and
   accepted. `make fmt` passed. The CHANGELOG entry initially added a second
-  `### Changed` under `Unreleased`; the repository's own convention is a
-  scoped `<!-- markdownlint-disable-next-line MD024 -->` comment, and a global
-  `MD024` relaxation was rejected as scope-widening, so the entry is folded
-  into the section `main` already carries. Full candidate gates remain
-  pending.
+  `### Changed` under `Unreleased`; the repository's own convention is a scoped
+  `<!-- markdownlint-disable-next-line MD024 -->` comment, and a global `MD024`
+  relaxation was rejected as scope-widening, so the entry is folded into the
+  section `main` already carries. Full candidate gates remain pending.
 - [x] (2026-11-03) The user raised the EP-M3 scope ceiling to 2,000 net Rust
   lines overall and 800 net non-test `src/` lines. The current diff measures
   975 net Rust lines overall and 339 net non-test `src/` lines.
@@ -295,17 +294,17 @@ decision D-15.
   that D-21 widened was deleted on `main` by ADR-0059, so D-21 is superseded
   and its override dropped; see the decision log. Fresh gates remain pending.
 - [x] (2026-11-05) EP-M3's expected 26-file set plus the three Nextest policy
-  and contract-test files totals 29 counted paths, below its 32-file
-  tolerance. EP-M4's snapshot-guide correction is a separate documentation
-  path. The Nextest policy and contract-test files reverted to `main`'s
-  versions on rebase, so the counted set for this milestone is 26.
+  and contract-test files totals 29 counted paths, below its 32-file tolerance.
+  EP-M4's snapshot-guide correction is a separate documentation path. The
+  Nextest policy and contract-test files reverted to `main`'s versions on
+  rebase, so the counted set for this milestone is 26.
 - [x] (2026-11-05) Rebased onto `origin/main` at `ce15e026d` (27 commits). One
   conflict region was semantic rather than textual: `main` split
   `evaluate_manifest` into `build_template_environment` and
   `expand_and_render`, so `parse_admitted_document` is now called from
   `build_template_environment`; `main` also moved `from_str` into
-  `str_loaders.rs`, so the branch's copy is dropped in favour of the
-  re-export. `main`'s ADR-0069 split the key tables by audience and added
+  `str_loaders.rs`, so the branch's copy is dropped in favour of the re-export.
+  `main`'s ADR-0069 split the key tables by audience and added
   `manifest_keys.rs`, so the branch's planned third table
   `src/localization/schema_keys.rs` is deleted and its four keys live in
   `manifest_keys.rs`. Tracked sources that differ from `main`:
@@ -415,8 +414,8 @@ decision D-15.
   localization audit tests, the packaging smoke test, and both guides,
   following the `check_keys.rs` precedent. Superseded on the 2026-11-05 rebase:
   `main`'s ADR-0069 had already split the tables by audience and introduced
-  `src/localization/manifest_keys.rs`, so the four schema-version keys join that
-  existing manifest table and no `schema_keys.rs` is created.
+  `src/localization/manifest_keys.rs`, so the four schema-version keys join
+  that existing manifest table and no `schema_keys.rs` is created.
 
 - Observation: the Rust module-layout contract
   (`tests/workflow_contracts/rust_module_layout_test.py`) rejects sibling files
@@ -792,8 +791,7 @@ EP-M3 and EP-M4 are implemented and rebased onto `main`, and their conflicts
 were resolved semantically rather than by taking one side wholesale; the
 rebase's own discoveries are recorded in `Progress`. Final gates on this exact
 head, the exact-head CodeRabbit review, and EP-M5's explicit ADR acceptance
-remain outstanding. Reconcile these outcomes again after each delivery
-boundary.
+remain outstanding. Reconcile these outcomes again after each delivery boundary.
 
 ## Context and orientation
 
@@ -1327,11 +1325,11 @@ EP-M3, green:
    `ALL_KEYS`; appending a constant to the existing `define_keys!` body is the
    whole wiring change. Extend `tests/build_l10n_keys_tests.rs`'s
    `#[case::manifest]` minimum and the catalogue audit picks the keys up from
-   `ALL_KEYS`. Then add messages to every
-   `locales/*/messages.ftl`, following `docs/translators-guide.md`, with
-   `[netsuke::manifest::schema_version]` inside each message's text and
-   identifiers and numbers untranslated. The `en-US` unsupported message,
-   wrapped here for width but one line in the catalogue:
+   `ALL_KEYS`. Then add messages to every `locales/*/messages.ftl`, following
+   `docs/translators-guide.md`, with `[netsuke::manifest::schema_version]`
+   inside each message's text and identifiers and numbers untranslated. The
+   `en-US` unsupported message, wrapped here for width but one line in the
+   catalogue:
 
    ```plaintext
    [netsuke::manifest::schema_version] { $name } declares manifest schema
