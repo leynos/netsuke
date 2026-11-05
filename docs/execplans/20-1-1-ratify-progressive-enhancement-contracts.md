@@ -325,6 +325,20 @@ decision D-15.
   focused Clippy pass are green.
 - [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
 - [ ] EP-M4: developers' guide and documentation clean-up.
+- [x] (2026-11-05) Rebased onto `origin/main` at `c82189bf4` (PR #1047, the
+  `.deb`/`.rpm` install-before-publish change, 12 files). `main` had edited
+  `docs/developers-guide.md` and `docs/netsuke-design.md`, which this branch
+  also edits, so the PR had gone `CONFLICTING`; the replay was conflict-free and
+  `git diff backup/pre-rebase-808 HEAD` showed only `main`'s 12 files, so the
+  branch's own tree is byte-identical to the pre-rebase candidate.
+- [x] (2026-11-05) All nine gates passed at `bd7e6f123` against base
+  `c82189bf4`: `check-fmt`, `typecheck`, `lint` (168 s, cargo doc + Clippy +
+  both Whitaker packages + the Python cascade), `doc-coverage` (98.31%),
+  `markdownlint` (spelling prerequisite clean and `markdownlint-cli2` itself
+  ran over 223 files with 0 issues), `nixie`, `test-documentation-contracts`
+  (15/15), `test-workflow-contracts` (1,756 + 28), and `test` (5,100 nextest
+  cases passed, 7 skipped, 7 doctest suites ok). Logs:
+  `/tmp/postrebase-gate-*-20-1-1-ratify-progressive-enhancement-contracts.out`.
 - [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
 
 ## Surprises & discoveries
