@@ -23,7 +23,8 @@ impl cli::ConfigEnvProvider for FixtureEnvProvider {
 /// Compose diagnostic discovery and cached-layer merging as an external caller.
 pub fn compose_cached_configuration_flow() {
     let localizer = Arc::from(cli_localization::build_localizer(None));
-    let Ok((parsed, matches)) = cli::parse_with_localizer_from(["netsuke", "generate"], &localizer)
+    let Ok((parsed, matches)) =
+        cli::parse_with_localizer_from(["netsuke", "generate"], &localizer, cli::ColorChoice::Auto)
     else {
         return;
     };

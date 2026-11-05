@@ -1982,10 +1982,10 @@ netsuke generate > build.ninja
 
 ### Accessible output
 
-Accessible mode uses static, labelled status lines instead of animated
-progress. It is enabled automatically when `TERM=dumb` or `NO_COLOR` is
-present. Select it explicitly with `--accessibility on`, or force standard
-output with `--accessibility off`.
+Accessible mode uses static, labelled status lines instead of animated progress.
+`--accessibility auto` selects it when `TERM=dumb`, when `NO_COLOR` has a
+non-empty value, or when `--color never` is selected. Select it explicitly with
+`--accessibility on`, or force standard output with `--accessibility off`.
 
 A typical accessible build reports:
 
@@ -2023,9 +2023,32 @@ colour alone. Emoji policy values are:
 - `never`: ASCII-safe prefixes.
 - `auto`: Unicode in standard output and ASCII in accessible output.
 
-The colour policy is separate. Colour rendering is not implemented in beta4, so
-`color` currently affects mode selection but does not add coloured terminal
-text.
+### Colour
+
+`--color` controls ANSI styling in Netsuke's own tracing messages on stderr,
+Miette diagnostics on stderr, and Clap help and version output on stdout. It
+does not recolour generated artefacts or output forwarded from Ninja or another
+subprocess.
+
+- `auto` styles a stream only when that stream is a terminal, `TERM` is not
+  `dumb`, and `NO_COLOR` is absent or empty.
+- `always` styles Netsuke-controlled output even when its stream is a pipe.
+- `never` disables ANSI styling and acts like an internal `NO_COLOR` for
+  automatic accessibility selection.
+
+Help and version output use the last `--color` value on the command line, then
+`NETSUKE_COLOR`, then `auto`; configuration files are not read to choose help
+colour. Other usage errors and diagnostics emitted before configuration is
+merged remain plain text. An explicit `--color always` can override the
+automatic colour suppression from `NO_COLOR` and `TERM=dumb`.
+
+### Progress policy
+
+`--progress auto` and `--progress always` both request stage reporting.
+`always` does not force animation into a pipe or a dumb terminal, and it does
+not override accessible mode. Live redraws require standard output mode, a
+terminal on stderr, and a redraw-capable `TERM`; otherwise progress is static
+text. Task updates use plain text when stdout is not a terminal.
 
 Verbose mode adds per-stage timing after a successful command. Failed commands
 do not print a timing summary.

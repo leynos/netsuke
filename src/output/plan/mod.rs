@@ -189,8 +189,12 @@ pub fn resolve_display_plan(policies: DisplayPolicies, facts: TerminalFacts) -> 
     let prefs = output_prefs::resolve_from_theme_with(
         theme_preference(policies.emoji),
         ThemeContext::new(None, Some(policies.colour), output_mode),
+        // The theme layer re-reduces whatever this closure returns through
+        // `EnvSignals::read`, which treats an empty `NO_COLOR` as unset. The
+        // sentinel must therefore be non-empty for an already-reduced
+        // `no_color_set` to survive the second reading.
         |key| match (key, facts.env.no_color_set) {
-            ("NO_COLOR", true) => Some(String::new()),
+            ("NO_COLOR", true) => Some(String::from("1")),
             _ => None,
         },
     );

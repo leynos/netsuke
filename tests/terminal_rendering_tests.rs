@@ -5,6 +5,12 @@ mod accessibility;
 #[cfg(unix)]
 #[path = "terminal_rendering/accessibility_pty.rs"]
 mod accessibility_pty;
+#[cfg(unix)]
+#[path = "terminal_rendering/clap.rs"]
+mod clap;
+#[cfg(unix)]
+#[path = "terminal_rendering/diagnostic.rs"]
+mod diagnostic;
 #[path = "terminal_rendering/emoji.rs"]
 mod emoji;
 #[cfg(unix)]
@@ -22,3 +28,5 @@ mod progress;
 mod progress_pty;
 #[path = "terminal_rendering/support.rs"]
 mod support;
+#[path = "terminal_rendering/tracing.rs"]
+mod tracing;

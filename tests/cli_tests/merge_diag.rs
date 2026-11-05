@@ -20,9 +20,12 @@ fn resolve_merged_json_honours_injected_env() -> Result<()> {
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let config_arg = config_path.to_string_lossy().into_owned();
-    let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke", "--config", &config_arg], &localizer)
-            .context("parse CLI args for injected JSON env")?;
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(
+        ["netsuke", "--config", &config_arg],
+        &localizer,
+        clap::ColorChoice::Auto,
+    )
+    .context("parse CLI args for injected JSON env")?;
     let env = TestEnv::default().with_var("NETSUKE_JSON", "1");
 
     ensure!(
@@ -53,6 +56,7 @@ fn standalone_merge_does_not_record_discovery_telemetry() -> Result<()> {
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(
         ["netsuke", "--config", config_arg.as_str()],
         &localizer,
+        clap::ColorChoice::Auto,
     )
     .context("parse CLI args for standalone merge")?;
     let env = TestEnv::default();
@@ -90,6 +94,7 @@ fn cached_merge_does_not_reload_discovered_config() -> Result<()> {
     let (cli, matches) = netsuke::cli::parse_with_localizer_from(
         ["netsuke", "--config", config_arg.as_str()],
         &localizer,
+        clap::ColorChoice::Auto,
     )
     .context("parse CLI args for cached merge")?;
     let env = TestEnv::default();
@@ -127,7 +132,8 @@ fn diag_then_cached_merge_reads_config_selector_once() -> Result<()> {
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer).context("parse CLI")?;
+        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI")?;
     let selector = config_path.as_os_str().to_owned();
     let env = CountingConfigEnv::default().with_var("NETSUKE_CONFIG", selector);
 

@@ -46,17 +46,18 @@ fn write_config(world: &TestWorld, contents: &str) -> Result<()> {
 fn merge_cli(world: &TestWorld, args: &str) {
     let tokens = build_tokens(args);
     let localizer = Arc::from(cli_localization::build_localizer(None));
-    let outcome = netsuke::cli::parse_with_localizer_from(tokens, &localizer)
-        .and_then(|(cli, matches)| {
-            merge_with_world_env(world, &cli, &matches).map_err(|err| {
-                clap::Error::raw(
-                    clap::error::ErrorKind::InvalidValue,
-                    display_error_chain(err.as_ref()),
-                )
+    let outcome =
+        netsuke::cli::parse_with_localizer_from(tokens, &localizer, clap::ColorChoice::Auto)
+            .and_then(|(cli, matches)| {
+                merge_with_world_env(world, &cli, &matches).map_err(|err| {
+                    clap::Error::raw(
+                        clap::error::ErrorKind::InvalidValue,
+                        display_error_chain(err.as_ref()),
+                    )
+                })
             })
-        })
-        .map(Cli::with_default_command)
-        .map_err(|err| err.to_string());
+            .map(Cli::with_default_command)
+            .map_err(|err| err.to_string());
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 

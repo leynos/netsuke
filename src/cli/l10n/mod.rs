@@ -1,9 +1,11 @@
 //! Keep Clap localization logic separate from core CLI definitions.
 
+use crate::cli::config::ColourPolicy;
 use crate::localization::keys;
 use clap::{Arg, Command};
 use ortho_config::{LocalizationArgs, Localizer};
 use std::ffi::OsString;
+use std::str::FromStr;
 
 mod flag_keys;
 pub(crate) use flag_keys::top_level_flag_help_key;
@@ -367,6 +369,15 @@ pub fn json_hint_from_args(args: &[OsString]) -> Option<bool> {
         }
     }
     None
+}
+
+/// Inspect raw arguments and extract a valid `--color` policy when present.
+///
+/// When multiple `--color` flags are provided, the last value is used. Values
+/// after `--` are ignored, matching Clap's option parsing.
+#[must_use]
+pub fn colour_hint_from_args(args: &[OsString]) -> Option<ColourPolicy> {
+    find_option_value(args, "--color").and_then(|value| ColourPolicy::from_str(&value).ok())
 }
 
 #[cfg(test)]

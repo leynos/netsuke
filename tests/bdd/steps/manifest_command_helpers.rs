@@ -144,9 +144,19 @@ pub(super) fn build_netsuke_command(
     world: &TestWorld,
     args: &[&str],
 ) -> Result<assert_cmd::Command> {
+    Ok(assert_cmd::Command::from_std(build_netsuke_process(
+        world, args,
+    )?))
+}
+
+/// Build the isolated child process before choosing pipe or pseudo-terminal routing.
+pub(in crate::bdd::steps) fn build_netsuke_process(
+    world: &TestWorld,
+    args: &[&str],
+) -> Result<std::process::Command> {
     let temp_path = get_temp_path(world)?;
 
-    let mut cmd = assert_cmd::Command::new(netsuke_executable()?);
+    let mut cmd = std::process::Command::new(netsuke_executable()?);
     cmd.current_dir(&temp_path).env_clear().args(args);
 
     let process_env = DefaultEnv;

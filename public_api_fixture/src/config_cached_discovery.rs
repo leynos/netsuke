@@ -69,8 +69,11 @@ impl MergeObserver for EmbeddedObserver {
 /// Run discovery once, then merge and replay from the cached outcome.
 pub fn replay_cached_discovery() {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
-    let Ok((cli, matches)) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-    else {
+    let Ok((cli, matches)) = netsuke::cli::parse_with_localizer_from(
+        ["netsuke"],
+        &localizer,
+        netsuke::cli::ColorChoice::Auto,
+    ) else {
         return;
     };
     let env = EmbeddedConfigEnv;

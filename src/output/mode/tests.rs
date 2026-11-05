@@ -19,7 +19,7 @@ fn fake_env<'a>(
 
 #[rstest]
 #[case::absent(None, None, false, false)]
-#[case::empty_no_color(Some(""), None, true, false)]
+#[case::empty_no_color(Some(""), None, false, false)]
 #[case::empty_term(None, Some(""), false, false)]
 #[case::no_color_zero(Some("0"), Some("xterm-256color"), true, false)]
 #[case::term_dumb(None, Some("dumb"), false, true)]
@@ -58,32 +58,34 @@ fn expected_redraw_capable(term: Option<&str>) -> bool {
     }
 }
 
-/// Preserve the previous `NO_COLOR` rule for the resolver property test.
+/// Reference the policy that treats only non-empty `NO_COLOR` as active.
 ///
 /// # Examples
 ///
 /// ```text
 /// previous_no_color_active(None, &env_with_no_color) -> true
 /// ```
-fn previous_no_color_active<F>(colour_policy: Option<ColourPolicy>, read_env: &F) -> bool
+fn expected_no_color_active<F>(colour_policy: Option<ColourPolicy>, read_env: &F) -> bool
 where
     F: Fn(&str) -> Option<String>,
 {
     match colour_policy {
         Some(ColourPolicy::Always) => false,
         Some(ColourPolicy::Never) => true,
-        Some(ColourPolicy::Auto) | None => read_env("NO_COLOR").is_some(),
+        Some(ColourPolicy::Auto) | None => {
+            read_env("NO_COLOR").is_some_and(|value| !value.is_empty())
+        }
     }
 }
 
-/// Preserve the previous output-mode resolver for the environment property.
+/// Reference output-mode precedence for the environment property.
 ///
 /// # Examples
 ///
 /// ```text
 /// previous_resolve_with(None, None, &env_with_no_color) -> Accessible
 /// ```
-fn previous_resolve_with<F>(
+fn expected_resolve_with<F>(
     explicit: Option<bool>,
     colour_policy: Option<ColourPolicy>,
     read_env: &F,
@@ -99,7 +101,7 @@ where
         };
     }
 
-    if previous_no_color_active(colour_policy, read_env) {
+    if expected_no_color_active(colour_policy, read_env) {
         return OutputMode::Accessible;
     }
 
@@ -110,14 +112,14 @@ where
     OutputMode::Standard
 }
 
-/// Preserve the previous theme resolver's Unicode choice for comparison.
+/// Reference the theme resolver's Unicode choice for comparison.
 ///
 /// # Examples
 ///
 /// ```text
 /// previous_theme_uses_unicode(None, context, &empty_env) -> true
 /// ```
-fn previous_theme_uses_unicode<F>(
+fn expected_theme_uses_unicode<F>(
     theme: Option<ThemePreference>,
     context: ThemeContext,
     read_env: &F,
@@ -125,7 +127,7 @@ fn previous_theme_uses_unicode<F>(
 where
     F: Fn(&str) -> Option<String>,
 {
-    let no_color = previous_no_color_active(context.colour_policy, read_env);
+    let no_color = expected_no_color_active(context.colour_policy, read_env);
     match theme {
         Some(ThemePreference::Unicode) => true,
         Some(ThemePreference::Ascii) => false,
@@ -143,7 +145,7 @@ where
 
 proptest! {
     #[test]
-    fn environment_signal_refactor_preserves_resolver_results(
+    fn environment_signal_resolver_matches_reference_policy(
         no_color in prop::option::of(any::<String>()),
         term in prop::option::of(any::<String>()),
         explicit in prop::option::of(any::<bool>()),
@@ -173,14 +175,14 @@ proptest! {
             _ => None,
         };
         let context = ThemeContext::new(no_emoji, colour_policy, mode);
-        let previous_mode = previous_resolve_with(explicit, colour_policy, &read_env);
+        let expected_mode = expected_resolve_with(explicit, colour_policy, &read_env);
         let resolved_mode = resolve_with(explicit, colour_policy, read_env);
 
-        prop_assert_eq!(resolved_mode, previous_mode);
+        prop_assert_eq!(resolved_mode, expected_mode);
 
-        let previous_emoji_allowed = previous_theme_uses_unicode(theme, context, &read_env);
+        let expected_emoji_allowed = expected_theme_uses_unicode(theme, context, &read_env);
         let resolved_emoji_allowed = resolve_theme(theme, context, read_env).tokens.emoji_allowed;
-        prop_assert_eq!(resolved_emoji_allowed, previous_emoji_allowed);
+        prop_assert_eq!(resolved_emoji_allowed, expected_emoji_allowed);
     }
 }
 
@@ -221,11 +223,11 @@ proptest! {
     (None, None),
     OutputMode::Standard
 )]
-#[case::empty_no_color_triggers_accessible(
+#[case::empty_no_color_is_unset(
     None,
     None,
     (Some(""), None),
-    OutputMode::Accessible
+    OutputMode::Standard
 )]
 #[case::no_color_takes_precedence_over_term(
     None,

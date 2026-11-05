@@ -22,7 +22,8 @@ fn omitted_subcommand_selects_the_default_build_command(
     localizer: Arc<dyn Localizer>,
 ) -> Result<()> {
     let (parsed, _) =
-        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer).context("parse CLI")?;
+        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI")?;
     let command = parsed
         .with_default_command()
         .command
@@ -73,8 +74,9 @@ fn supported_commands_parse_to_their_schema_variants(
     #[case] argv: Vec<&str>,
     #[case] expected: Commands,
 ) -> Result<()> {
-    let (parsed, _) = netsuke::cli::parse_with_localizer_from(argv.clone(), &localizer)
-        .with_context(|| format!("parse command schema for {argv:?}"))?;
+    let (parsed, _) =
+        netsuke::cli::parse_with_localizer_from(argv.clone(), &localizer, clap::ColorChoice::Auto)
+            .with_context(|| format!("parse command schema for {argv:?}"))?;
     let command = parsed
         .with_default_command()
         .command

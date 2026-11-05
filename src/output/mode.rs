@@ -33,7 +33,7 @@ impl OutputMode {
 /// resolvers can make consistent decisions without reading environment strings.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub struct EnvSignals {
-    /// Whether `NO_COLOR` is set, including when its value is empty.
+    /// Whether `NO_COLOR` is set to a non-empty value.
     pub no_color_set: bool,
     /// Whether `TERM` is exactly `dumb`.
     pub term_dumb: bool,
@@ -62,7 +62,7 @@ impl EnvSignals {
     /// ```
     #[must_use]
     pub fn read(read_env: impl Fn(&str) -> Option<String>) -> Self {
-        let no_color_set = read_env("NO_COLOR").is_some();
+        let no_color_set = read_env("NO_COLOR").is_some_and(|value| !value.is_empty());
         let term = read_env("TERM");
         let term_dumb = term.as_deref() == Some("dumb");
         #[cfg(unix)]

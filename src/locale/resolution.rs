@@ -1,11 +1,8 @@
-//! Locale resolution helpers for CLI parsing and runtime diagnostics.
-//!
-//! These helpers centralize locale precedence rules and normalization so both
-//! clap help and runtime diagnostics resolve the same locale.
+//! Resolve locale, JSON, and display hints before configuration is available.
 
 use crate::cli;
-use crate::cli::Cli;
 use crate::cli::l10n::parse_bool_hint;
+use crate::cli::{Cli, config::ColourPolicy};
 use ortho_config::LanguageIdentifier;
 use std::ffi::OsString;
 use std::str::FromStr;
@@ -14,6 +11,8 @@ use std::str::FromStr;
 pub const NETSUKE_LOCALE_ENV: &str = "NETSUKE_LOCALE";
 /// Environment variable name used to request JSON output.
 pub const NETSUKE_JSON_ENV: &str = "NETSUKE_JSON";
+/// Environment variable name used to select terminal colour policy.
+pub const NETSUKE_COLOR_ENV: &str = "NETSUKE_COLOR";
 
 /// Read-only environment access used for locale resolution.
 ///
@@ -166,6 +165,40 @@ pub fn resolve_startup_json(args: &[OsString], env: &impl LocaleEnvProvider) -> 
             .and_then(parse_bool_hint)
             .unwrap_or(false)
     })
+}
+
+/// Resolve the startup colour policy from the command line and environment.
+///
+/// The command line takes precedence over `NETSUKE_COLOR`; an invalid
+/// environment value falls back to `auto`. Configuration files are not read
+/// because this resolver supplies Clap's help and version renderer.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::cli::config::ColourPolicy;
+/// use netsuke::locale_resolution::{LocaleEnvProvider, resolve_startup_colour};
+/// use std::ffi::OsString;
+///
+/// struct ColourEnv;
+/// impl LocaleEnvProvider for ColourEnv {
+///     fn var(&self, key: &str) -> Option<String> {
+///         (key == "NETSUKE_COLOR").then(|| String::from("always"))
+///     }
+/// }
+///
+/// let args = [OsString::from("--color"), OsString::from("never")];
+/// assert_eq!(resolve_startup_colour(&args, &ColourEnv), ColourPolicy::Never);
+/// ```
+#[must_use]
+pub fn resolve_startup_colour(args: &[OsString], env: &impl LocaleEnvProvider) -> ColourPolicy {
+    cli::colour_hint_from_args(args)
+        .or_else(|| {
+            env.var(NETSUKE_COLOR_ENV)
+                .as_deref()
+                .and_then(|value| ColourPolicy::from_str(value).ok())
+        })
+        .unwrap_or_default()
 }
 
 /// Resolve the locale used for runtime diagnostics.

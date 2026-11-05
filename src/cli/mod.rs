@@ -31,6 +31,9 @@ pub(crate) mod test_support;
 mod validation;
 mod value_parser;
 
+/// Clap's help-colour selection, re-exported so callers of
+/// [`parse_with_localizer_from`] need not depend on Clap directly.
+pub use clap::ColorChoice;
 pub use command::{BuildArgs, Cli, Commands, GraphArgs};
 #[cfg(feature = "lint")]
 pub use command::{CheckArgs, DEFAULT_FAIL_ON, DEFAULT_FINDING_LIMIT};
@@ -61,7 +64,9 @@ pub use merge::{
     merge_with_config_and_env,
 };
 pub(crate) use parser::configured_command;
-pub use parser::{json_hint_from_args, locale_hint_from_args, parse_with_localizer_from};
+pub use parser::{
+    colour_hint_from_args, json_hint_from_args, locale_hint_from_args, parse_with_localizer_from,
+};
 pub use release_help::ReleaseHelpCli;
 
 /// Counter recording configuration discovery passes by bounded outcome.
