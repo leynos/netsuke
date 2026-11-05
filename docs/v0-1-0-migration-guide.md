@@ -38,9 +38,9 @@ allow and block lists, and bounded file-reading filters. It also contains
 breaking changes: default executable discovery searches only `PATH`, `$in` and
 `$out` in `script:` recipes are shell variables, the primary project
 configuration can no longer widen the operator's fetch policy, every fetch
-redirect is revalidated against that policy, mapping-root manifests must
-declare `netsuke_version: "1.0.0"`, and checkout builds on Linux link with
-`mold` by default.
+redirect is revalidated against that policy, mapping-root manifests must declare
+`netsuke_version: "1.0.0"`, and checkout builds on Linux link with `mold` by
+default.
 
 The schema declaration is checked before any Jinja evaluation, so a missing,
 malformed, or unsupported version fails the load rather than reaching a
