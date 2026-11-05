@@ -213,9 +213,9 @@ explicit and exercise the actual adapters in tests.
     `test` (59 s), `test-workflow-contracts` (213 s), `test-package-verify`
     (63 s), `test-documentation-contracts` (2 s), `verus` (2 s, 9 verified and
     0 errors), `markdownlint` (27 s), and `nixie` (3 s); the batch finished
-    `failed=0`. An earlier batch failed `markdownlint` on the spelling of
-    "normalises" in this plan, so the word was corrected and the whole set was
-    rerun rather than resumed.
+    `failed=0`. An earlier batch failed `markdownlint` on an -ise spelling in
+    this plan, so the word was corrected and the whole set was rerun rather
+    than resumed.
   - [x] 2026-11-05: Run the M3 milestone CLI review with CodeRabbit CLI 0.9.2
     over `1139f31df..f03faf7b0` (`--committed --fresh --base-commit`), which
     reviewed exactly the 24 changed files and completed in 443 s with exit 0.
