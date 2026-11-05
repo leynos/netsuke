@@ -97,9 +97,16 @@ pub fn handle_failure(err: &Error, prefs: &OutputPrefs) -> ExitCode {
 }
 
 /// Render one diagnostic with `miette`'s graphical layout.
+///
+/// Links are disabled because `miette` emits OSC 8 hyperlinks whenever a
+/// diagnostic supplies a [`Diagnostic::url`], and that happens even under a
+/// monochrome theme. A `netsuke check` finding always supplies one, so leaving
+/// links on would put terminal control sequences into redirected stderr. The
+/// URL is still printed as plain text after the code, so nothing is lost from
+/// a transcript.
 fn render_diagnostic(diagnostic: &dyn Diagnostic, theme: &GraphicalTheme) -> String {
     let mut rendered = String::new();
-    let handler = GraphicalReportHandler::new_themed(theme.clone());
+    let handler = GraphicalReportHandler::new_themed(theme.clone()).with_links(false);
     // Rendering into a `String` cannot fail, so this would be a bug in `miette`
     // rather than a fault worth reporting. The diagnostic's own summary is the
     // fallback, and it still names the problem.

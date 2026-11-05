@@ -3,7 +3,7 @@
 use anyhow::{Context, Result, ensure};
 use assert_cmd::Command;
 use predicates::prelude::*;
-use rstest::rstest;
+use rstest::{fixture, rstest};
 use std::fs;
 use std::path::{Path, PathBuf};
 use tempfile::{TempDir, tempdir};
@@ -137,6 +137,14 @@ fn write_schema_manifest(directory: &Path, version: &str) -> Result<()> {
     .context("write schema-version manifest")
 }
 
+/// Create a workspace whose manifest declares an unsupported schema version.
+#[fixture]
+fn unsupported_schema_workspace() -> Result<TempDir> {
+    let temp = tempdir().context("create schema-version workspace")?;
+    write_schema_manifest(temp.path(), "1.1.0")?;
+    Ok(temp)
+}
+
 /// Assert a JSON-mode rejection carries the parse code and the schema cause.
 fn assert_schema_rejection_json(stderr: &[u8], command: &str) -> Result<()> {
     let rendered = String::from_utf8_lossy(stderr);
@@ -164,10 +172,11 @@ fn assert_schema_rejection_json(stderr: &[u8], command: &str) -> Result<()> {
 }
 
 #[rstest]
-fn generate_rejects_unsupported_schema_before_creating_output() -> Result<()> {
-    let temp = tempdir().context("create schema-version generation workspace")?;
+fn generate_rejects_unsupported_schema_before_creating_output(
+    unsupported_schema_workspace: Result<TempDir>,
+) -> Result<()> {
+    let temp = unsupported_schema_workspace?;
     let output_path = temp.path().join("out.ninja");
-    write_schema_manifest(temp.path(), "1.1.0")?;
 
     let unsupported = create_netsuke_command(temp.path())
         .args(["--json", "generate", "--output", "out.ninja"])
@@ -196,9 +205,10 @@ fn generate_rejects_unsupported_schema_before_creating_output() -> Result<()> {
 }
 
 #[rstest]
-fn human_output_renders_the_schema_version_rejection() -> Result<()> {
-    let temp = tempdir().context("create human diagnostics schema workspace")?;
-    write_schema_manifest(temp.path(), "1.1.0")?;
+fn human_output_renders_the_schema_version_rejection(
+    unsupported_schema_workspace: Result<TempDir>,
+) -> Result<()> {
+    let temp = unsupported_schema_workspace?;
 
     let output = create_netsuke_command(temp.path())
         .args(["generate", "--output", "out.ninja"])
@@ -226,9 +236,10 @@ fn human_output_renders_the_schema_version_rejection() -> Result<()> {
 
 #[cfg(feature = "lint")]
 #[rstest]
-fn check_rejects_unsupported_schema_and_accepts_supported_schema() -> Result<()> {
-    let temp = tempdir().context("create schema-version check workspace")?;
-    write_schema_manifest(temp.path(), "1.1.0")?;
+fn check_rejects_unsupported_schema_and_accepts_supported_schema(
+    unsupported_schema_workspace: Result<TempDir>,
+) -> Result<()> {
+    let temp = unsupported_schema_workspace?;
     let unsupported = create_netsuke_command(temp.path())
         .args(["--json", "check"])
         .output()
