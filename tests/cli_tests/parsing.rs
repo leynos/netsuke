@@ -194,8 +194,12 @@ impl Default for CliCase {
 })]
 fn parse_cli(#[case] case: CliCase) -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (parsed_cli, _) = netsuke::cli::parse_with_localizer_from(case.argv.clone(), &localizer)
-        .context("parse CLI arguments")?;
+    let (parsed_cli, _) = netsuke::cli::parse_with_localizer_from(
+        case.argv.clone(),
+        &localizer,
+        clap::ColorChoice::Auto,
+    )
+    .context("parse CLI arguments")?;
     let cli = parsed_cli.with_default_command();
     ensure!(cli.file == case.file, "parsed file should match input");
     ensure!(
@@ -302,7 +306,7 @@ fn parse_cli(#[case] case: CliCase) -> Result<()> {
 #[case(vec!["netsuke", "manifest", "-"], ErrorKind::InvalidSubcommand)]
 fn parse_cli_errors(#[case] argv: Vec<&str>, #[case] expected_error: ErrorKind) -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(None));
-    let err = netsuke::cli::parse_with_localizer_from(argv, &localizer)
+    let err = netsuke::cli::parse_with_localizer_from(argv, &localizer, clap::ColorChoice::Auto)
         .err()
         .context("parser should reject invalid arguments")?;
     ensure!(
@@ -335,6 +339,7 @@ fn non_utf8_ninja_paths_fail_early(
             OsString::from_vec(b"manifest-\xff".to_vec()),
         ],
         &localizer,
+        clap::ColorChoice::Auto,
     )
     .expect_err("non-UTF-8 Ninja path should fail during CLI parsing");
 

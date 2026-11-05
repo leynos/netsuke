@@ -180,7 +180,7 @@ where
 ///
 /// Precedence:
 /// 1. Explicit `Some(true)` forces emoji off unconditionally.
-/// 2. `NO_COLOR` environment variable (any value, including empty):
+/// 2. A non-empty `NO_COLOR` environment variable:
 ///    emoji off.
 /// 3. Default: emoji allowed.
 ///

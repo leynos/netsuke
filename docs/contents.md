@@ -327,6 +327,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md):
   Deny-by-default stdlib surface for `netsuke test`, typed refusal stubs, and
   template overlays that replace withheld functions by name.
+- [ADR-0072](adrs/adr-0072-display-policy-contract-and-terminal-verification.md):
+  One resolved terminal display plan shared by status, tracing, diagnostics,
+  and help, with policy snapshots and terminal-rendering tests.
 
 ## Proposals
 

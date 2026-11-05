@@ -7,6 +7,7 @@ mod config_discovery;
 #[cfg(unix)]
 mod config_precedence_ladder;
 mod config_selection;
+mod display_plan_contract;
 mod display_plan_domain;
 mod display_policy_domain;
 mod display_policy_truth;

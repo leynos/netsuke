@@ -45,15 +45,28 @@ pub(super) fn display_plan_for_args(
 ) -> Result<DisplayPlan> {
     let cli = Cli::try_parse_from(std::iter::once("netsuke").chain(args.iter().copied()))
         .context("parse display-policy arguments")?;
-    let env = |key: &str| {
-        extra_env
+    let extra_environment = ExtraLocaleEnv(extra_env);
+    let signals = EnvSignals::read(|key| {
+        extra_environment
+            .var(key)
+            .or_else(|| (key == "TERM").then(|| String::from("xterm-256color")))
+    });
+    let facts = TerminalFacts::from_signals(signals, stdout_is_terminal, stderr_is_terminal);
+    let os_args = args.iter().map(|arg| (*arg).into()).collect::<Vec<_>>();
+    let mut policies = cli.display_policies();
+    policies.colour =
+        netsuke::locale_resolution::resolve_startup_colour(&os_args, &extra_environment);
+    Ok(resolve_display_plan(policies, facts))
+}
+
+struct ExtraLocaleEnv<'a>(&'a [(&'a str, &'a str)]);
+
+impl LocaleEnvProvider for ExtraLocaleEnv<'_> {
+    fn var(&self, key: &str) -> Option<String> {
+        self.0
             .iter()
             .find_map(|(name, value)| (*name == key).then(|| String::from(*value)))
-            .or_else(|| (key == "TERM").then(|| String::from("xterm-256color")))
-    };
-    let signals = EnvSignals::read(env);
-    let facts = TerminalFacts::from_signals(signals, stdout_is_terminal, stderr_is_terminal);
-    Ok(resolve_display_plan(cli.display_policies(), facts))
+    }
 }
 
 /// Keep a temporary Netsukefile workspace and a deterministic fake Ninja alive.

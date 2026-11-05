@@ -8,7 +8,8 @@ use test_support::tracing_capture::with_test_subscriber;
 use tracing_subscriber::filter::LevelFilter;
 
 use crate::cli_tests::helpers::os_args;
-use netsuke::cli::{json_hint_from_args, locale_hint_from_args};
+use netsuke::cli::ColourPolicy;
+use netsuke::cli::{colour_hint_from_args, json_hint_from_args, locale_hint_from_args};
 use netsuke::cli_localization;
 use std::sync::Arc;
 
@@ -102,12 +103,35 @@ fn json_hint_from_args_detects_bare_flag_after_ignored_equals_form() -> Result<(
     Ok(())
 }
 
+/// The startup colour hint follows Clap's valued-option precedence.
+#[rstest]
+#[case::equals_form(&["netsuke", "--color=never"], Some(ColourPolicy::Never))]
+#[case::space_uppercase(&["netsuke", "--color", "NEVER"], Some(ColourPolicy::Never))]
+#[case::last_value_wins(
+    &["netsuke", "--color", "never", "--color", "ALWAYS"],
+    Some(ColourPolicy::Always)
+)]
+#[case::stop_after_double_dash(&["netsuke", "--", "--color", "always"], None)]
+fn colour_hint_from_args_matches_clap_value_semantics(
+    #[case] argv: &[&str],
+    #[case] expected: Option<ColourPolicy>,
+) -> Result<()> {
+    let args = os_args(argv);
+    let actual = colour_hint_from_args(&args);
+    ensure!(
+        actual == expected,
+        "expected {expected:?} from {argv:?}, got {actual:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn cli_localises_invalid_subcommand_in_spanish() -> Result<()> {
     let localizer = Arc::from(cli_localization::build_localizer(Some("es-ES")));
     let err = netsuke::cli::parse_with_localizer_from(
         ["netsuke", "--locale", "es-ES", "unknown"],
         &localizer,
+        clap::ColorChoice::Auto,
     )
     .err()
     .context("parser should reject invalid subcommand")?;
@@ -121,9 +145,13 @@ fn cli_localises_invalid_subcommand_in_spanish() -> Result<()> {
 /// Parse `argv` with a localizer for `locale` and return the rejection.
 fn parse_rejection(argv: &[&str], locale: &str) -> Result<clap::Error> {
     let localizer = Arc::from(cli_localization::build_localizer(Some(locale)));
-    netsuke::cli::parse_with_localizer_from(argv.iter().copied(), &localizer)
-        .err()
-        .with_context(|| format!("parser should reject {argv:?}"))
+    netsuke::cli::parse_with_localizer_from(
+        argv.iter().copied(),
+        &localizer,
+        clap::ColorChoice::Auto,
+    )
+    .err()
+    .with_context(|| format!("parser should reject {argv:?}"))
 }
 
 /// A `ValueValidation` error from a custom parser must carry enough clap
@@ -256,6 +284,7 @@ fn non_utf8_value_validation_renders_localized_utf8_message() -> Result<()> {
                 OsString::from_vec(b"\xff".to_vec()),
             ],
             &localizer,
+            clap::ColorChoice::Auto,
         );
         (outcome, captured.snapshot())
     });

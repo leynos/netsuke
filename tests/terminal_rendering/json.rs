@@ -7,7 +7,7 @@ use test_support::{fs, terminal::classify};
 
 #[googletest::gtest]
 #[test]
-fn configuration_load_failure_under_color_always_stays_plain() -> Result<()> {
+fn configuration_failure_logs_follow_color_always_policy() -> Result<()> {
     let workspace = TerminalWorkspace::new()?;
     fs::write(workspace.root_path().join("broken.toml"), "not = [valid\n")
         .context("write malformed configuration")?;
@@ -26,6 +26,6 @@ fn configuration_load_failure_under_color_always_stays_plain() -> Result<()> {
         contains_substring("broken.toml"),
     );
     expect_that!(classify(&output.stdout).has_any_escape, eq(false));
-    expect_that!(classify(&output.stderr).has_any_escape, eq(false));
+    expect_that!(classify(&output.stderr).has_sgr, eq(true));
     Ok(())
 }

@@ -45,6 +45,7 @@ mod process;
 mod progress_output;
 mod shell_selection;
 mod stdlib;
+mod terminal_rendering;
 
 // Step functions are registered via macros, so we don't need to re-export
 // them explicitly. The macros generate global step registrations.

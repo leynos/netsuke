@@ -184,8 +184,9 @@ fn merge_probe_worker() -> Result<()> {
     let args: Vec<String> =
         serde_json::from_str(&encoded_args).context("decode probe arguments")?;
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(args, &localizer)
-        .context("parse CLI in merge probe")?;
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(args, &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI in merge probe")?;
     let mut merged = netsuke::cli::merge_with_config(&cli, &matches)
         .context("merge configuration in probe")?
         .with_default_command();

@@ -88,6 +88,8 @@ pub struct TestWorld {
     pub command_stdout: Slot<String>,
     /// Captured stderr from the last `netsuke` CLI process invocation.
     pub command_stderr: Slot<String>,
+    /// Captured pseudo-terminal bytes from the last CLI process invocation.
+    pub command_terminal: Slot<String>,
     /// Temporary directory handle for test isolation (non-Clone).
     pub temp_dir: RefCell<Option<tempfile::TempDir>>,
     /// Explicit workspace path created by `empty_workspace_at_path` for `-C` flag tests.

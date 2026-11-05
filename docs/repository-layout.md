@@ -43,6 +43,7 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── shell_word.rs
 │   └── stdlib/
 ├── test_support/
+│   └── src/terminal/
 ├── tests/
 │   ├── bdd/
 │   ├── cli_tests/
@@ -50,7 +51,9 @@ output and some leaf files so the long-lived structure remains visible.
 │   ├── features/
 │   ├── features_unix/
 │   ├── fixtures/
-│   └── snapshots/
+│   ├── snapshots/
+│   ├── terminal_rendering/
+│   └── terminal_rendering_tests.rs
 └── tools/
     ├── kani/
     └── mold/
@@ -172,11 +175,16 @@ output and some leaf files so the long-lived structure remains visible.
   and resolves the dialect; the encoding itself is `src/shell_word.rs`.
 - `test_support/`: Shared Rust test-support crate used by integration and
   behavioural tests.
+- `test_support/src/terminal/`: Child-process and Unix PTY helpers plus the
+  output classifier shared by terminal-rendering tests.
 - `tests/`: Integration tests, behavioural tests, test data, fixtures, and
   snapshots.
 - `tests/bdd/`: `rstest-bdd` step definitions, fixtures, and behavioural-test
   support code.
 - `tests/cli_tests/`: Command-line interface integration test modules.
+- `tests/terminal_rendering_tests.rs` and `tests/terminal_rendering/`:
+  plan-derived tests of colour, glyphs, progress, accessibility, diagnostics,
+  tracing, and help output.
 - `tests/data/`: Manifest fixtures and other structured test inputs.
 - `tests/features/`: Cross-platform behavioural feature files.
 - `tests/features_unix/`: Unix-specific behavioural feature files.

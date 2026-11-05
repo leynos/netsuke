@@ -168,7 +168,8 @@ fn cached_merge_replay_matches_project_chain_merge() -> Result<()> {
         "SAFE",
     ];
     let localizer = Arc::from(cli_localization::build_localizer(None));
-    let (parsed, matches) = cli::parse_with_localizer_from(args, &localizer)?;
+    let (parsed, matches) =
+        cli::parse_with_localizer_from(args, &localizer, clap::ColorChoice::Auto)?;
     let environment = ConfigEnvironment(sandbox.environment.clone());
     let (json, outcome) =
         cli::resolve_json_and_layers_outcome_with_env(&parsed, &matches, &environment);

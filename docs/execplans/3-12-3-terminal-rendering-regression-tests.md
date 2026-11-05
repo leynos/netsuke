@@ -368,13 +368,41 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `make test` (5,114 passed, 7 skipped; doctests passed), `make markdownlint`
   (217 files, zero issues), `make nixie`, and `make test-workflow-contracts`
   (1,666 passed, 3 skipped, plus 28 passed). No snapshots changed.
+- [x] (2026-11-05) Isolate the mutation compile allowance in a dedicated Kani
+  Nextest profile. The mutation test timed out at 600 s on hosted run
+  41840367244 and at 900.093 s in a warm local gate; neither produced a
+  compiler diagnostic. The ordinary and coverage profiles stay at 300 s per
+  test and the CI coverage run at 960 s, while the Kani profile grants 2,400 s
+  to the mutation test and 2,520 s to the full Nextest run. Hosted run
+  41840367244 spent 824 s before Nextest began the test and 7 s finalizing, so
+  the 60-minute `kani-smoke` job leaves 249 s beyond setup, the run cap, and
+  finalization. Profile selection and effective override binding are now
+  observed rather than assumed: the local gate re-ran under `--profile kani`
+  and was terminated by nextest at 2,400.056 s, which is the profile's own
+  allowance and not the 300 s default, so the override reached the test.
+  `test_execution_coverage_test.py` and `timeout_budget_properties_test.py`
+  hold that wiring and passed. Budget adequacy is settled by measurement rather
+  than by raising the number again: see D17. The local timeout is the shared
+  `build-limits` pool saturating, and the hosted gate each patch waits for is
+  green on `main`, so a successful local Kani run is not achievable while
+  several hundred foreign compile requests are queued.
+- [x] (2026-11-05) EP-M3 tracing red-green: the new terminal policy tests first
+  failed for `--color always` on a pipe and `NO_COLOR=1` on a PTY, while the
+  `never` pipe and `auto` PTY controls passed. A reloadable formatting layer
+  now starts without ANSI, receives the CLI startup policy before configuration
+  discovery, and receives the merged `DisplayPlan` before runtime logging. The
+  old configuration-failure test now checks that `--color always` styles its
+  tracing events, as D11 requires. The terminal-rendering suite passed 35/35,
+  the BDD suite passed 309/309, and the non-RunnerError failure pair passed
+  2/2. The new `kani-smoke` timeout contract still needs the final full gate
+  sequence.
 - [x] EP-M0: terminal test harness.
 - [x] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; hosted
   Windows build and lint lanes passed on the rebased candidate.
 - [x] EP-M2: display-plan core and single resolution.
-- [ ] EP-M3: bind colour and glyph decisions to the emitters.
-- [ ] EP-M4: contract snapshots, pinning scenarios, documentation, ADR,
+- [x] EP-M3: bind colour and glyph decisions to the emitters.
+- [x] EP-M4: contract snapshots, pinning scenarios, documentation, ADR,
   roadmap.
 
 ## Surprises & discoveries
@@ -439,7 +467,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `src/locale/resolution.rs`, `src/startup_tracing/mod.rs`; ADRs now live in
   `docs/adrs/adr-nnnn-*.md`, where the agent-consistent CLI record is ADR-0046
   and ADR-0041 is the canonical recipe shell quoting surface. Impact: paths,
-  ADR citations, and the planned ADR serial (now ADR-0060) were remapped. Code
+  ADR citations, and the planned ADR serial (then ADR-0060) were remapped. Code
   inspection of the merged tree on 2026-10-23 shows the defects the plan
   targets are still present: `src/main.rs` still calls
   `with_ansi(io::stderr().is_terminal())`; `src/` still has no `set_hook` or
@@ -470,6 +498,18 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   Evidence: the first Windows-lint fix attempt failed during Rust parsing on
   Linux at `#[cfg_attr(not(unix), const)]`. Impact: define the Unix fallible
   helper and non-Unix `const` no-op as separate target-gated functions.
+- Observation: the Kani mutation compile gate produces no per-patch progress,
+  so a timeout on it cannot be attributed. Evidence: `compile_patched_tree` runs
+  `cargo kani` through `.output()`, which captures and discards both streams,
+  and the loop applies the next patch only after the previous build finishes. A
+  run terminated at the allowance therefore leaves one
+  `Compiling netsuke-build` line for the whole gate and no indication of which
+  of the 30 patches it reached. Determining how far the timed-out run got
+  required reading artefact timestamps in the shared target directory by hand.
+  Impact: record it as a diagnostic gap rather than repairing it here. The fix
+  is to report the patch name and its elapsed time per iteration through
+  `tracing`, which the gate's own module documentation already claims it does
+  for reverts. Out of scope for 3.12.3; note it for the Kani gate's owner.
 
 ## Decision log
 
@@ -580,17 +620,16 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   adopt the startup hint. Outcome: accepted as recommended. Date/Author:
   2026-10-23, user.
 - Decision D10: record the display-policy contract and verification
-  strategy as ADR-0060, status `Proposed` while implementation runs and
+  strategy as ADR-0072, status `Proposed` while implementation runs and
   `Accepted` (with date and summary) at EP-M4. ADRs now live in
   `docs/adrs/adr-nnnn-title-slug.md` with four-digit serials. The 2026-09-26
   draft named ADR-041, which `main` has since given to the canonical recipe
-  shell quoting surface. A sweep of every remote branch on 2026-10-23 found
-  ADR-0059 as the highest serial minted (`module-slice-timeout-audit`) and no
-  branch reserving an `ADR-006x` number in prose, so ADR-0060 is the
-  provisional serial. Re-sweep every remote branch, in both the old
-  `docs/adr-NNN-` and new `docs/adrs/adr-nnnn-` layouts, immediately before
-  committing the ADR, and renumber on a clash. Date/Author: 2026-09-26,
-  planning agent; serial revised 2026-10-23.
+  shell quoting surface. An all-branch sweep on 2026-11-04 found ADR-0060
+  already used and ADR-0071 reserved, while ADR-0072 had no filename or prose
+  reservation. Re-sweep every remote branch, in both the old `docs/adr-NNN-`
+  and new `docs/adrs/adr-nnnn-` layouts, immediately before committing the ADR,
+  and renumber on a clash. Date/Author: 2026-09-26, planning agent; serial
+  revised 2026-10-23.
 - Decision D11 (accepted): `--color always` forces ANSI
   styling on a non-terminal stream for every emitter Netsuke controls
   (`tracing` logs and `miette` diagnostics on stderr, `clap` help on stdout),
@@ -636,6 +675,37 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   2026-10-24, planning agent. Superseded on 2026-10-30: ADR-0059 removed
   `split_build_fixture_compiles_through_the_direct_rustc_harness` from the
   timed suite, so this allowance no longer exists.
+- Decision D15: superseded by D16 on 2026-11-05. The 900-second mutation
+  allowance still timed out locally without a diagnostic, and a one-patch cold
+  compile took 1,864 seconds under heavy compiler admission.
+- Decision D16: isolate the mutation compile allowance in a dedicated Kani
+  Nextest profile. Keep the default and coverage profiles at 300 seconds per
+  test and the CI coverage run at 960 seconds; give only the Kani mutation test
+  2,400 seconds and the Kani run 2,520 seconds. Set `kani-smoke` to 60 minutes:
+  the measured 824-second setup plus the run cap and 7-second finalization
+  totals 3,351 seconds, leaving 249 seconds for runner variance and reporting.
+  The 1,864-second one-patch result was observed under heavy shared admission,
+  so it is evidence for the allowance rather than a predictable build time.
+  Date/Author: 2026-11-05, implementation agent.
+- Decision D17: keep D16's 2,400-second allowance and read the local timeout as
+  local capacity rather than an undersized budget. Measured on 2026-11-05 in
+  this worktree: a cold `cargo kani --only-codegen` over the sandbox took 342 s
+  from an empty shared target directory; six seconds later the same command
+  re-ran in 11 s; one patched tree took 57 s. Thirty patches therefore cost
+  roughly 342 + 29 x 57 = 1,995 s of compilation on an idle host, so a single
+  2,400-second cap clears it by about 400 s and a cold start plus contention
+  does not. The budget is not the defect: the hosted `kani-smoke` job on `main`
+  run 42058628930 spent 665 s on the whole mutation compile gate (15:58:35 to
+  16:09:40) and passed, while this branch's hosted run 41840367244 failed at
+  the 600-second allowance this change replaces. The local failures are the
+  shared `build-limits` pool: capacity 4 with several hundred requests queued
+  throughout, so each of the 30 sequential patches waits behind other agents'
+  compiles inside the test's own wall clock. A re-run confirmed it: with the
+  target directory fully warm the gate still compiled nothing in fourteen
+  minutes while 189 requests were queued, because every patch re-enters the
+  same queue. Do not raise the allowance again on local evidence; measure on
+  CI. The gate is validated by its hosted result, and the local re-run is not
+  evidence of a defect. Date/Author: 2026-11-05, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -1174,16 +1244,22 @@ Feature: Terminal colour policy on a pseudo-terminal
     When netsuke is run on a terminal with arguments "--color never generate"
     Then the command should fail
     And the terminal output should contain no SGR sequence
-    And the terminal output should contain "manifest_not_found"
+    And the terminal output should contain "Manifest 'Netsukefile' not found"
 
   Scenario: NO_COLOR removes colour from terminal logs
     Given a minimal Netsuke workspace
     And the "NO_COLOR" environment variable is "1"
-    When netsuke is run on a terminal with arguments "--verbose generate"
+    When netsuke is run on a terminal with arguments "--color auto --verbose generate"
     Then the command should succeed
     And the terminal output should contain no SGR sequence
     And the terminal output should contain "Stage 6/6"
 ```
+
+The positive fragment is the human diagnostic text, not the JSON code: a
+pseudo-terminal run renders the human report, so `manifest_not_found` never
+appears on that stream. The `NO_COLOR` row states `--color auto` rather than
+relying on an omitted flag, so the scenario pins the interaction of the two
+inputs instead of depending on the default.
 
 The first feature lives in `tests/features/terminal_colour.feature` and the
 second in `tests/features_unix/terminal_colour_pty.feature`, with steps in
@@ -1216,21 +1292,35 @@ red-green; they document the contract in executable form), in
 `tests/features/terminal_rendering.feature`:
 
 ```gherkin
-Feature: Terminal rendering policies
+Feature: Terminal rendering policy contracts
 
-  Scenario Outline: Emoji policy selects the status glyph set
+  Scenario: Emoji never keeps status glyphs ASCII
     Given a minimal Netsuke workspace
-    When netsuke is run with arguments "--emoji <emoji> --accessibility <access> --progress always generate"
+    When netsuke is run with arguments "--emoji never --accessibility off --progress always generate"
     Then the command should succeed
-    And stderr status glyphs should be <glyphs>
+    And stderr status glyphs should be ASCII
     And every stderr status line should carry a text label
 
-    Examples:
-      | emoji  | access | glyphs  |
-      | never  | off    | ASCII   |
-      | always | on     | Unicode |
-      | auto   | off    | Unicode |
-      | auto   | on     | ASCII   |
+  Scenario: Emoji always selects Unicode status glyphs
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--emoji always --accessibility on --progress always generate"
+    Then the command should succeed
+    And stderr status glyphs should be Unicode
+    And every stderr status line should carry a text label
+
+  Scenario: Emoji auto on a piped run selects Unicode glyphs
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--emoji auto --accessibility off --progress always generate"
+    Then the command should succeed
+    And stderr status glyphs should be Unicode
+    And every stderr status line should carry a text label
+
+  Scenario: Accessibility mode keeps status glyphs ASCII under emoji auto
+    Given a minimal Netsuke workspace
+    When netsuke is run with arguments "--emoji auto --accessibility on --progress always generate"
+    Then the command should succeed
+    And stderr status glyphs should be ASCII
+    And every stderr status line should carry a text label
 
   Scenario: Progress never suppresses stage reporting
     Given a minimal Netsuke workspace
@@ -1239,6 +1329,16 @@ Feature: Terminal rendering policies
     And stderr should not contain "Stage 1/6"
     And stdout should contain "rule"
 ```
+
+The four emoji rows are written out rather than kept as a Scenario Outline.
+`rstest-bdd` 0.6.0's outline codegen inserts a hidden
+`#[case] __rstest_bdd_case_idx: usize` parameter ahead of the outline columns,
+so a three-column outline expands to a five-parameter test function and trips
+`clippy::too_many_arguments` under `-D warnings`. The `glyphs` column was also
+redundant: glyph family is a function of the two policy columns, so naming it
+invited the outline to disagree with the policies it claimed to test. Writing
+the rows out keeps one source of truth per scenario and left the lint truthful
+instead of suppressed.
 
 and in `tests/features_unix/terminal_rendering_pty.feature`:
 
@@ -1273,13 +1373,13 @@ Documentation:
   errors are plain; subprocess output is forwarded unchanged). State the `D3`
   wording, the `D4` outcome, and that `TERM=dumb` keeps standard mode static.
 - `docs/netsuke-design.md`: extend "Theme resolution for CLI output" with the
-  display-plan core, its facts, its four adapters, and a link to ADR-0060;
+  display-plan core, its facts, its four adapters, and a link to ADR-0072;
   update the "guarded by `insta` snapshots" sentence to name the PTY suite and
   the contract snapshots.
 - `docs/netsuke-cli-design-document.md`: document `DisplayPlan`,
   `TerminalFacts`, and the adapters as the component's internal interface, and
   correct the `NO_COLOR` statement to match `D4`.
-- `docs/adrs/adr-0060-display-policy-contract-and-terminal-verification.md`:
+- `docs/adrs/adr-0072-display-policy-contract-and-terminal-verification.md`:
   context, the contract table, `D2`, `D3`, `D4`, `D6` to `D9`, `D11`, `D12`,
   and known limitations (no `FORCE_COLOR` input, no ConPTY coverage). Status
   `Accepted` with the date and a one-sentence summary. Add it to the ADR list in
@@ -1413,6 +1513,18 @@ help-colnever-tty                  sgr=113  cursor=0
 help-nocolor-tty                   sgr=0    cursor=0
 ```
 
+EP-M3 tracing red-green evidence, 2026-11-05: the focused red run
+(`/tmp/terminal-tracing-red-3-12-3.out`) failed the piped `always` case because
+no SGR was emitted and the PTY `NO_COLOR=1` case because SGR was emitted. Its
+`never` pipe and `auto` PTY controls passed. After adding a reloadable tracing
+ANSI setting and applying it from startup and merged display policies,
+`/tmp/terminal-tracing-green-3-12-3.out` reports 35/35 terminal-rendering
+tests, including the update to the configuration-failure `always` contract.
+`/tmp/terminal-colour-bdd-3-12-3.out` reports 309/309 behavioural tests,
+including both new pipe scenarios, and
+`/tmp/terminal-tracing-error-green-3-12-3.out` reports 2/2 for the
+non-`RunnerError` failure's `never` and `always` cases.
+
 EP-M2 commit 3 red-green evidence, 2026-11-04: the focused command
 `cargo nextest run --test cli_tests -E 'test(display_plan)'` passed 1/1 on the
 clean candidate
@@ -1443,7 +1555,7 @@ Libraries, all already in the dependency graph: `nix` 0.31.3 (`term`, `fs`, and
 `FORCE_COLOR`, `CLICOLOR`, and `CLICOLOR_FORCE` are not Netsuke inputs. The
 `CLICOLOR` page now describes itself as deprecated in favour of `NO_COLOR` and
 `FORCE_COLOR`, and adopting `FORCE_COLOR` is a feature, not a verification
-task. ADR-0060 lists it under known limitations.
+task. ADR-0072 lists it under known limitations.
 
 In `src/output/mode.rs` (existing public functions keep their signatures):
 
@@ -1524,7 +1636,7 @@ compiles `cli/config/mod.rs` as a schema-only slice, where the unused policy
 methods trigger denied dead-code warnings. `Cli::theme_preference` converts the
 emoji projection to `ThemePreference`. Clippy also required
 `main_tracing::init_tracing` to consume the stderr-terminal fact captured by
-`main`, rather than make its own terminal query. ADR-0060 records these enums
+`main`, rather than make its own terminal query. ADR-0072 records these enums
 as approved value dependencies of the core (an open item in RFC 0027).
 
 Changed public signatures: `runner::run(cli: &Cli, plan: DisplayPlan)`,
