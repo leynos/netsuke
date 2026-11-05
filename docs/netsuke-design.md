@@ -325,7 +325,10 @@ Each entry in the `rules` list is a mapping that defines a reusable action.
   `;`, `&`, `|`, `(`, `)`, `<`, and `>`; non-ASCII whitespace before `#` is
   word data and does not start a comment. A `)` that closes a command or
   arithmetic expansion also stays in the surrounding word, so `#` immediately
-  after it does not start a comment. PowerShell permits markers only at
+  after it does not start a comment. A `)` that terminates a `case` pattern is
+  an operator instead, and the two are lexically identical without the `case`
+  grammar, so a substitution whose source contains `case` is rejected when a
+  `)` is immediately followed by `#`. PowerShell permits markers only at
   unquoted sites and rejects other shell-sensitive contexts. Longer identifiers
   such as `$input` and `$output`, and non-placeholder text inside backticks,
   remain unchanged. A scalar command is emitted unchanged, but still undergoes

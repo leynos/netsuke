@@ -270,6 +270,27 @@ fn inner_group_close_inside_substitution_starts_inert_comment() {
     );
 }
 
+/// Verify a `case` pattern terminator before `#` fails closed.
+///
+/// A `)` that ends a `case` pattern is an operator, so `#` after it starts a
+/// comment; a `)` that closes `$()` is word data, so `#` after it does not.
+/// The scanner cannot tell them apart without the `case` grammar, so it must
+/// reject the script rather than encode a later marker for the wrong context.
+#[test]
+fn case_pattern_close_before_hash_fails_closed() {
+    let (template, _) = inert_comment_case("echo $(case x in\nx)", Some("esac)"));
+    let bindings = hostile_posix_bindings();
+    for interpolate in [
+        interpolate_command_with_bindings,
+        interpolate_script_with_bindings,
+    ] {
+        assert!(
+            interpolate(&template, &bindings).is_err(),
+            "a case pattern terminator before '#' must fail closed"
+        );
+    }
+}
+
 /// Verify a non-ASCII character keeps a heredoc delimiter word intact.
 ///
 /// The delimiter is `EOF` followed by a no-break space and `X`, so the body

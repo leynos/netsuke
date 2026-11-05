@@ -149,6 +149,15 @@ prevents a false comment from skipping a real quote transition, which would
 otherwise select an unquoted path encoding for a marker that the shell reads
 inside quotes.
 
+The two kinds of `)` are lexically identical without the `case` grammar: a `)`
+that terminates a `case` pattern is an operator, while a `)` that closes a
+substitution is word data. When a `)` is immediately followed by `#` and the
+substitution's source contains the `case` reserved word, the scanner therefore
+rejects the recipe instead of guessing. The check deliberately
+over-approximates by scanning the raw source, so a `case` inside quotes or a
+comment also triggers the rejection; re-lexing the substitution to narrow it
+would repeat the ambiguity the check exists to avoid.
+
 ### Backtick handling is two mechanisms at two different strengths
 
 The mechanisms are not the same kind of thing and are not promised equally.

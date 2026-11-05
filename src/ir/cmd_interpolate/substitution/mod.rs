@@ -2,7 +2,9 @@
 
 use super::{
     CommandBindings, IrGenError, QuoteContext,
-    command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
+    command_substitution::{
+        CommandSubstitution, CommandSubstitutionDelimiter, contains_case_keyword,
+    },
     find_substitution, invalid_command_error,
     posix_lexical::{
         EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
@@ -175,7 +177,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         ch: char,
         marker_protection: fn(&Self, usize) -> MarkerProtection,
     ) -> Result<usize, IrGenError> {
-        if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
+        if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(next);
         }
         self.update_quote_context(ch);
@@ -213,26 +215,68 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Track `$()` nesting and preserve its delimiters before marker handling.
-    fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
-        match self.classify_command_substitution_delimiter(pos, ch)? {
+    fn append_command_substitution_delimiter(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
+        let Some(delimiter) = self.classify_command_substitution_delimiter(pos, ch) else {
+            return Ok(None);
+        };
+        match delimiter {
             CommandSubstitutionDelimiter::Start => {
-                self.command_substitutions.push(CommandSubstitution::new());
+                self.command_substitutions
+                    .push(CommandSubstitution::new(pos));
                 self.output.push_str("$(");
-                Some(pos + 2)
+                Ok(Some(pos + 2))
             }
             CommandSubstitutionDelimiter::NestedOpen => {
                 self.increment_command_substitution_parenthesis_depth();
                 self.output.push(ch);
-                Some(pos + 1)
+                Ok(Some(pos + 1))
             }
             CommandSubstitutionDelimiter::Close => {
+                let closed_start = self
+                    .command_substitutions
+                    .last()
+                    .filter(|substitution| substitution.parenthesis_depth == 1)
+                    .map(|substitution| substitution.start);
                 if self.decrement_command_substitution_parenthesis_depth() {
-                    self.closed_command_substitution = Some(pos);
+                    self.finish_command_substitution(pos, closed_start)?;
                 }
                 self.output.push(ch);
-                Some(pos + 1)
+                Ok(Some(pos + 1))
             }
         }
+    }
+
+    /// Record a completed substitution and reject an ambiguous `case` boundary.
+    fn finish_command_substitution(
+        &mut self,
+        pos: usize,
+        substitution_start: Option<usize>,
+    ) -> Result<(), IrGenError> {
+        if let Some(start) = substitution_start {
+            self.reject_ambiguous_case_comment(pos, start)?;
+        }
+        self.closed_command_substitution = Some(pos);
+        Ok(())
+    }
+
+    /// Reject a `)#` boundary whose `)` may terminate a `case` pattern.
+    ///
+    /// A `)` that closes `$()` is part of the surrounding word, so `#` after it
+    /// is word data. A `)` that terminates a `case` pattern is an operator, so
+    /// `#` after it starts a comment. The two are lexically identical without
+    /// the `case` grammar, so a substitution containing `case` fails closed
+    /// rather than guessing and encoding a later marker for the wrong context.
+    fn reject_ambiguous_case_comment(&self, pos: usize, start: usize) -> Result<(), IrGenError> {
+        let is_comment_boundary =
+            self.chars.get(pos + 1) == Some(&'#') && self.matches_unquoted_quote_context();
+        if is_comment_boundary && contains_case_keyword(self.chars, start, pos) {
+            return Err(invalid_command_error(self.template.to_owned()));
+        }
+        Ok(())
     }
 
     /// Classify a character that delimits an active command substitution.
