@@ -130,31 +130,20 @@ where
     C: MonotonicClock,
     E: cli::ConfigEnvProvider,
 {
-    let json_hint = locale_resolution::resolve_startup_json(&args, dependencies.locale_env);
-    let terminal_facts = TerminalFacts::from_signals(
-        EnvSignals::read(|key| dependencies.locale_env.var(key)),
-        dependencies.stdout_is_terminal,
-        dependencies.stderr_is_terminal,
-    );
-    let colour_hint = locale_resolution::resolve_startup_colour(&args, dependencies.locale_env);
-    let colour_for_help = netsuke::display_plan::startup_colour(colour_hint, terminal_facts);
-    let parser_color = if requests_help_or_version(&args) && colour_for_help {
-        ColorChoice::Always
-    } else {
-        ColorChoice::Never
-    };
-    // Recorded at `WARN` but written to a buffer, not to stderr. `json_hint` is
-    // only a hint — configuration can still turn JSON on — and the JSON
+    let startup_signals = resolve_startup_signals(&args, dependencies);
+    let terminal_facts = startup_signals.terminal_facts;
+    // Recorded at `WARN` but written to a buffer, not to stderr. The JSON hint
+    // is only a hint — configuration can still turn JSON on — and the JSON
     // diagnostic goes to stderr, so an event emitted now could corrupt it.
     // Buffering keeps the locale fallback report without taking that risk.
-    let startup_mode = DiagMode::from_json_enabled(json_hint);
+    let startup_mode = DiagMode::from_json_enabled(startup_signals.json_hint);
     observability::init_metrics();
     let localizer = startup_localizer(&args, dependencies.locale_env, dependencies.system_locale);
     let startup_parse = StartupParse {
         args,
         localizer: &localizer,
         mode: startup_mode,
-        color_choice: parser_color,
+        color_choice: startup_signals.parser_color,
         startup_writer,
     };
     let (parsed_cli, matches) = match parse_cli_or_exit(startup_parse) {
@@ -195,13 +184,81 @@ where
     let merged_verbose = merged_cli.verbose;
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
 
+    let exit_code = run_configured_command(
+        &merged_cli,
+        dependencies.system_locale,
+        runtime_mode,
+        terminal_facts,
+    );
+    finish_run(exit_code, merged_verbose)
+}
+
+/// Signals resolved from raw argv and the environment before configuration loads.
+struct StartupSignals {
+    /// Whether raw argv already asks for JSON, before configuration is merged.
+    json_hint: bool,
+    /// The terminal facts shared by the startup and runtime display plans.
+    terminal_facts: TerminalFacts,
+    /// Colour choice for Clap's own help and version renderers.
+    parser_color: ColorChoice,
+}
+
+/// Resolve the terminal facts, JSON hint, and help colour from startup inputs.
+///
+/// All three depend only on raw argv and the environment, so none of them may
+/// wait for configuration to load: Clap's help renderer needs its colour choice
+/// before the parser runs, and the JSON hint decides how diagnostics recorded
+/// during that same window are buffered.
+fn resolve_startup_signals<L, S, C, E>(
+    args: &[OsString],
+    dependencies: &RunWithArgsDependencies<'_, L, S, C, E>,
+) -> StartupSignals
+where
+    L: locale_resolution::LocaleEnvProvider,
+    S: locale_resolution::SystemLocale,
+    C: MonotonicClock,
+    E: cli::ConfigEnvProvider,
+{
+    let json_hint = locale_resolution::resolve_startup_json(args, dependencies.locale_env);
+    let terminal_facts = TerminalFacts::from_signals(
+        EnvSignals::read(|key| dependencies.locale_env.var(key)),
+        dependencies.stdout_is_terminal,
+        dependencies.stderr_is_terminal,
+    );
+    let colour_hint = locale_resolution::resolve_startup_colour(args, dependencies.locale_env);
+    let colour_for_help = netsuke::display_plan::startup_colour(colour_hint, terminal_facts);
+    let parser_color = if requests_help_or_version(args) && colour_for_help {
+        ColorChoice::Always
+    } else {
+        ColorChoice::Never
+    };
+    StartupSignals {
+        json_hint,
+        terminal_facts,
+        parser_color,
+    }
+}
+
+/// Resolve the runtime display plan, configure the process, and run the command.
+///
+/// Resolution happens once here so the tracing formatter, the status reporter,
+/// the diagnostic hook, and the runner all act on the same plan rather than
+/// each deriving colour and glyph decisions from ambient state.
+fn run_configured_command<S>(
+    merged_cli: &cli::Cli,
+    system_locale: &S,
+    runtime_mode: DiagMode,
+    terminal_facts: TerminalFacts,
+) -> ExitCode
+where
+    S: locale_resolution::SystemLocale,
+{
     let plan = resolve_display_plan(merged_cli.display_policies(), terminal_facts);
-    configure_runtime(&merged_cli, dependencies.system_locale, runtime_mode, plan);
-    let exit_code = match runner::run(&merged_cli, plan) {
+    configure_runtime(merged_cli, system_locale, runtime_mode, plan);
+    match runner::run(merged_cli, plan) {
         Ok(()) => ExitCode::SUCCESS,
         Err(err) => handle_runner_error(err, plan.prefs(), runtime_mode),
-    };
-    finish_run(exit_code, merged_verbose)
+    }
 }
 
 /// Emit a development snapshot after the command has completed when requested.
