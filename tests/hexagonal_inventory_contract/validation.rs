@@ -11,6 +11,45 @@ use super::markdown::{
 };
 use super::roadmap::{dependents_of, roadmap_tasks};
 
+/// The identifier form the compatibility obligations and trace matrix share.
+const OBLIGATION_PATTERN: &str = r"\bCO-\d+\b";
+
+/// Require the real inventory to populate the sections whose checks iterate.
+///
+/// # Errors
+///
+/// Returns an error when the register, obligations, or findings section parses
+/// to no entries.
+///
+/// `validate_inventory` must accept the skeleton fixture's empty sections, so a
+/// renamed table header or a changed identifier format would leave its loops
+/// with nothing to visit and turn every check into a silent pass. Holding the
+/// real document to non-emptiness is what keeps those loops live.
+pub(super) fn validate_populated(inventory: &str) -> Result<()> {
+    ensure!(
+        !register_ids(inventory).is_empty(),
+        "the real inventory should register at least one item"
+    );
+    ensure!(
+        !regex_values(
+            OBLIGATION_PATTERN,
+            section(inventory, "Compatibility obligations")
+        )
+        .is_empty(),
+        "the real inventory should record at least one compatibility obligation"
+    );
+    ensure!(
+        !finding_entries(section(inventory, "Findings")).is_empty(),
+        "the real inventory should record at least one finding"
+    );
+    Ok(())
+}
+
+/// Return a required second-level section body, or an empty string.
+fn section<'text>(inventory: &'text str, heading: &str) -> &'text str {
+    heading_body(inventory, heading, HeadingLevel::Section).unwrap_or_default()
+}
+
 /// Validate the inventory's pin, register, trace matrix, and finding owners.
 ///
 /// # Errors
@@ -46,8 +85,7 @@ impl InventoryValidation<'_> {
             tasks.contains_key("26.1.1"),
             "roadmap should contain task 26.1.1"
         );
-        let trace =
-            heading_body(self.inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
+        let trace = section(self.inventory, "Trace matrix");
         validate_known_trace_tasks(trace, &tasks)?;
         validate_exclusions(trace, &tasks)?;
 
@@ -71,9 +109,7 @@ impl InventoryValidation<'_> {
     /// Returns an error when a finding has no owner or names an unknown task.
     fn validate_findings(&self) -> Result<()> {
         let tasks = roadmap_tasks(self.roadmap);
-        let findings =
-            heading_body(self.inventory, "Findings", HeadingLevel::Section).unwrap_or_default();
-        for entry in finding_entries(findings) {
+        for entry in finding_entries(section(self.inventory, "Findings")) {
             let owners = task_ids(&entry);
             ensure!(
                 !owners.is_empty(),
@@ -210,19 +246,72 @@ fn validate_register(inventory: &str) -> Result<()> {
 ///
 /// Returns an error when an obligation identifier is missing from the trace.
 fn validate_obligations(inventory: &str) -> Result<()> {
-    let obligations = heading_body(
-        inventory,
-        "Compatibility obligations",
-        HeadingLevel::Section,
-    )
-    .unwrap_or_default();
-    let trace = heading_body(inventory, "Trace matrix", HeadingLevel::Section).unwrap_or_default();
-    let traced = regex_values(r"\bCO-\d+\b", trace);
-    for obligation in regex_values(r"\bCO-\d+\b", obligations) {
+    let obligations = section(inventory, "Compatibility obligations");
+    let trace = section(inventory, "Trace matrix");
+    let traced = regex_values(OBLIGATION_PATTERN, trace);
+    for obligation in regex_values(OBLIGATION_PATTERN, obligations) {
         ensure!(
             traced.contains(&obligation),
             "compatibility obligation {obligation} has no trace-matrix reference"
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Pin the vacuous-pass guard against inventories that omit each section.
+
+    use anyhow::{Result, bail, ensure};
+
+    use super::validate_populated;
+
+    const POPULATED: &str = concat!(
+        "# Inventory\n\n",
+        "## Register\n\n",
+        "### Type rows\n\n",
+        "| ID | Item |\n",
+        "| -- | -- |\n",
+        "| A1/ast::Rule | Rule |\n\n",
+        "## Findings\n\n",
+        "- H1: An observed finding owned by 26.1.1.\n\n",
+        "## Compatibility obligations\n\n",
+        "- CO-1: Preserve the public surface.\n",
+    );
+
+    /// Return a fixture error when the guard accepts the inventory.
+    fn expect_rejection(inventory: &str, expected: &str) -> Result<()> {
+        match validate_populated(inventory) {
+            Ok(()) => bail!("fixture should have been rejected for {expected:?}"),
+            Err(error) => ensure!(
+                format!("{error:#}").contains(expected),
+                "expected error containing {expected:?}, found {error:#}"
+            ),
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn accepts_an_inventory_populating_every_iterated_section() -> Result<()> {
+        validate_populated(POPULATED)
+    }
+
+    #[test]
+    fn rejects_an_inventory_without_register_rows() -> Result<()> {
+        let inventory = POPULATED.replace("| A1/ast::Rule | Rule |\n", "");
+        expect_rejection(&inventory, "should register at least one item")
+    }
+
+    #[test]
+    fn rejects_an_inventory_without_compatibility_obligations() -> Result<()> {
+        let inventory = POPULATED.replace("- CO-1: Preserve the public surface.\n", "Pending.\n");
+        expect_rejection(&inventory, "at least one compatibility obligation")
+    }
+
+    #[test]
+    fn rejects_an_inventory_without_findings() -> Result<()> {
+        let inventory =
+            POPULATED.replace("- H1: An observed finding owned by 26.1.1.\n", "Pending.\n");
+        expect_rejection(&inventory, "at least one finding")
+    }
 }

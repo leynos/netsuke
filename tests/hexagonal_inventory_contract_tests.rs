@@ -16,7 +16,7 @@ mod roadmap;
 mod validation;
 
 use roadmap::{dependents_of, roadmap_tasks};
-use validation::validate_inventory;
+use validation::{validate_inventory, validate_populated};
 
 const INVENTORY_PATH: &str = "docs/hexagonal-hardening-inventory.md";
 const ROADMAP_PATH: &str = "docs/roadmap-hexagonal-hardening.md";
@@ -32,7 +32,7 @@ fn repo_root() -> Result<Dir> {
         .with_context(|| format!("open repository root {path}"))
 }
 
-/// Confirm the real inventory is structurally consistent with the roadmap.
+/// Confirm the real inventory is populated and consistent with the roadmap.
 #[test]
 fn real_inventory_is_consistent() -> Result<()> {
     let root = repo_root()?;
@@ -47,6 +47,7 @@ fn real_inventory_is_consistent() -> Result<()> {
         dependents_of(&tasks, "26.1.1").len() == 25,
         "the pinned roadmap dependency closure should contain 25 tasks"
     );
+    validate_populated(&inventory)?;
     validate_inventory(&inventory, &roadmap)
 }
 
