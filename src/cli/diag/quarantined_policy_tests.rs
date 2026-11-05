@@ -100,3 +100,104 @@ fn malformed_project_policy_preserves_json_and_validation_error(#[case] field: &
     }
     Ok(())
 }
+
+/// Report whether `error`, or any error it aggregates, is a validation fault.
+///
+/// Discovery and merge can each report the same rejected field, and
+/// `LayerComposition::into_merge_result` aggregates them rather than choosing
+/// one, so a direct `matches!` would miss the discovery error.
+fn has_validation_key(error: Option<&OrthoError>, key: &str) -> bool {
+    match error {
+        Some(OrthoError::Validation { key: actual, .. }) => actual == key,
+        Some(OrthoError::Aggregate(aggregated)) => aggregated
+            .iter()
+            .any(|inner| has_validation_key(Some(inner), key)),
+        _ => false,
+    }
+}
+
+#[test]
+fn project_shell_definition_defers_to_later_json_preference() -> Result<()> {
+    let project = tempdir()?;
+    let config_dir = Dir::open_ambient_dir(project.path(), ambient_authority())?;
+    config_dir.write(
+        ".netsuke.toml",
+        concat!(
+            "json = true\n",
+            "[[shells]]\n",
+            "name = \"dash\"\n",
+            "executable = \"dash\"\n",
+            "args = [\"-c\"]\n"
+        ),
+    )?;
+    let project_path = project.path().to_str().context("project path is UTF-8")?;
+    let args = vec!["netsuke", "--directory", project_path];
+    let cli = Cli::parse_from(&args);
+    let matches = Cli::command().get_matches_from(&args);
+    let env = TestEnv::default()
+        .with_var("HOME", project.path())
+        .with_var("XDG_CONFIG_HOME", project.path().join("user"))
+        .with_var("XDG_CONFIG_DIRS", project.path().join("system"));
+
+    let (json, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
+    ensure!(
+        json?,
+        "an untrusted project definition should still honour `json = true`"
+    );
+    ensure!(
+        has_validation_key(outcome.first_error().map(AsRef::as_ref), "shells"),
+        "discovery must retain the untrusted-source error"
+    );
+    let error = merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
+        .expect_err("cached merge must reject the project definition");
+    ensure!(
+        has_validation_key(Some(error.as_ref()), "shells"),
+        "merge must return the untrusted-source error: {error:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn malformed_operator_shell_definition_honours_json_preference() -> Result<()> {
+    let project = tempdir()?;
+    let config_dir = Dir::open_ambient_dir(project.path(), ambient_authority())?;
+    config_dir.create_dir_all("user/netsuke")?;
+    config_dir.write(
+        "user/netsuke/config.toml",
+        concat!(
+            "json = true\n",
+            "[[shells]]\n",
+            "name = \"dash\"\n",
+            "executable = \"bin/dash\"\n",
+            "args = [\"-c\"]\n"
+        ),
+    )?;
+    let project_path = project.path().to_str().context("project path is UTF-8")?;
+    let args = vec!["netsuke", "--directory", project_path];
+    let cli = Cli::parse_from(&args);
+    let matches = Cli::command().get_matches_from(&args);
+    let env = TestEnv::default()
+        .with_var("HOME", project.path())
+        .with_var("XDG_CONFIG_HOME", project.path().join("user"))
+        .with_var("XDG_CONFIG_DIRS", project.path().join("system"));
+
+    let (json, outcome) = resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
+    ensure!(
+        json?,
+        "a malformed operator definition should still honour `json = true`"
+    );
+    ensure!(
+        has_validation_key(
+            outcome.first_error().map(AsRef::as_ref),
+            "shells[0].executable"
+        ),
+        "discovery must retain the malformed executable's key"
+    );
+    let error = merge_with_cached_file_layers(&cli, &matches, &env, outcome.into_layers())
+        .expect_err("cached merge must reject the malformed definition");
+    ensure!(
+        has_validation_key(Some(error.as_ref()), "shells[0].executable"),
+        "merge must retain the malformed executable's key: {error:?}"
+    );
+    Ok(())
+}

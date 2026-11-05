@@ -216,3 +216,29 @@ fn help_targets_edges_example_matches_live_schema() -> Result<()> {
     );
     Ok(())
 }
+
+#[test]
+fn configured_shell_example_is_accepted_from_an_operator_root() -> Result<()> {
+    let example = documented_example("guide-configured-shell-definition")?;
+    let workspace = manifest_workspace("guide-first-build-manifest")?;
+    let user_root = workspace.path().join("user");
+    let home_root = workspace.path().join("home");
+    let config_dir = user_root.join("netsuke");
+    test_fs::create_dir_all(&config_dir).with_context(|| {
+        format!(
+            "create operator configuration directory {}",
+            config_dir.display()
+        )
+    })?;
+    test_fs::write(config_dir.join("config.toml"), example.body)
+        .context("write the documented shell definition")?;
+    let home = home_root.to_str().context("home root should be UTF-8")?;
+    let user = user_root.to_str().context("user root should be UTF-8")?;
+    let run = run_netsuke_in_with_env(
+        workspace.path(),
+        &["--progress", "never", "generate"],
+        &[("HOME", home), ("XDG_CONFIG_HOME", user)],
+    )?;
+
+    assert_generates_valid_ninja(&run, "guide-configured-shell-definition")
+}

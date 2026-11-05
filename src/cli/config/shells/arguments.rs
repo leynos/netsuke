@@ -10,7 +10,6 @@
 //! overflow, and a saturating sum would silently accept an oversized vector,
 //! whereas a budget that runs out fails exactly once and reports the limit.
 
-use super::preview::preview;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
 use thiserror::Error;
@@ -82,21 +81,8 @@ impl Serialize for ShellArguments {
 impl<'de> Deserialize<'de> for ShellArguments {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let arguments = Vec::<String>::deserialize(deserializer)?;
-        Self::parse(&arguments)
-            .map_err(|error| serde::de::Error::custom(describe(&error, &arguments)))
+        Self::parse(&arguments).map_err(serde::de::Error::custom)
     }
-}
-
-/// Render `error`, quoting the element it names as a bounded preview.
-fn describe(error: &ArgumentsError, arguments: &[String]) -> String {
-    let offending = match error {
-        ArgumentsError::Nul { index } => arguments.get(*index),
-        ArgumentsError::Empty | ArgumentsError::TooMany { .. } | ArgumentsError::TooLong => None,
-    };
-    offending.map_or_else(
-        || error.to_string(),
-        |text| format!("{error}; element is {}", preview(text)),
-    )
 }
 
 /// Reject an element containing NUL, then reject a vector over the byte budget.

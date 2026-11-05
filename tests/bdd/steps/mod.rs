@@ -30,6 +30,7 @@ mod cli_parsing;
 mod conditional_manifest;
 mod configuration_discovery;
 mod configuration_preferences;
+mod configured_shells;
 mod documentation_examples;
 #[cfg(unix)]
 mod fs;
