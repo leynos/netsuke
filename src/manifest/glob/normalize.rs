@@ -1,4 +1,4 @@
-//! Separator and escape normalisation for glob patterns and matched paths.
+//! Separator and escape normalization for glob patterns and matched paths.
 
 use camino::Utf8Path;
 
@@ -168,7 +168,7 @@ fn is_wildcard_continuation_char(ch: char) -> bool {
 /// match starts with it and the lexical strip cannot drop real matches. The
 /// fallback returns the path unchanged.
 ///
-/// Separator normalisation is platform-aware, like the pattern side above. On
+/// Separator normalization is platform-aware, like the pattern side above. On
 /// Windows a backslash is a directory separator, so it is rendered as `/` for
 /// the portable spelling callers expect. On Unix a backslash is an ordinary
 /// filename character: rewriting it would report a different file from the one
