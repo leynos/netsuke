@@ -15,6 +15,7 @@ enum StepField {
 }
 
 const INSTALL_NIXIE_ACTION: &str = "leynos/shared-actions/.github/actions/install-nixie";
+
 const INSTALL_WHITAKER_ACTION: &str = "leynos/shared-actions/.github/actions/install-whitaker";
 
 impl StepField {
@@ -503,19 +504,20 @@ fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
         "Kani smoke job should set up uv before installing Kani"
     );
     ensure_kani_install_uses_shared_tool(install_kani)?;
-    // Thirty, not twenty. The job includes a mutation compile gate, which
+    // Sixty, not thirty. The job includes a mutation compile gate, which
     // builds the whole dependency graph through the Kani frontend into a cold
     // `CARGO_TARGET_DIR`; the ceiling has to contain that on top of the harness
-    // run and retained-metrics finalization. The measured warm gate took
-    // 152.952s over all 18 tracked patches, plus 158s of wall clock for the
-    // recipe. The cold case is now measured too: run 35796798133 passed the
-    // gate at 257.703s, and run 35800582469 at 261.514s, so a cold CI run
-    // costs about 105s more than the warm local one rather than the multiple
-    // the headroom was sized for. The margin is kept because a failing host is
-    // what the ceiling is for, not a median one.
+    // run and retained-metrics finalization. The earlier warm measurements
+    // (152.952s warm over all 18 tracked patches; runs 35796798133 at 257.703s
+    // and 35800582469 at 261.514s cold) sized the former thirty minutes, but
+    // run 41840367244 spent 824s before nextest even started the mutation test,
+    // and that test then hit its former 600s cap. The Kani nextest profile now
+    // allows 2,400s for the test and 2,520s for the run, which with the 824s
+    // setup and a few seconds of finalisation totals about 3,351s; sixty
+    // minutes leaves roughly 249s for runner variance and post-step reporting.
     ensure!(
-        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(30),
-        "Kani smoke job should enforce the 30-minute cold-run ceiling"
+        mapping_get(kani_job, YamlKey("timeout-minutes")).and_then(Value::as_u64) == Some(60),
+        "Kani smoke job should enforce the 60-minute cold-run ceiling"
     );
     Ok(())
 }

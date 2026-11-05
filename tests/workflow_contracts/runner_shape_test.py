@@ -156,6 +156,21 @@ def test_every_ubicloud_job_declares_a_timeout(
     )
 
 
+def test_kani_smoke_job_contains_its_measured_mutation_budget() -> None:
+    """Keep the Kani job above setup, the whole run, and finalisation."""
+    job = workflow_job(load_workflow(WORKFLOW_DIR / "ci.yml"), "kani-smoke")
+    timeout = job.get("timeout-minutes")
+    required_seconds = 824 + 42 * 60 + 7
+    assert isinstance(timeout, int), (
+        f"ci.yml job kani-smoke must set timeout-minutes, got {timeout!r}"
+    )
+    assert timeout * 60 >= required_seconds, (
+        "ci.yml job kani-smoke must cover 824 seconds of measured setup, "
+        "the 2,520-second Kani run cap, and 7 seconds of finalization; "
+        f"needs at least {required_seconds} seconds, got {timeout!r} minutes"
+    )
+
+
 def test_release_linux_package_job_declares_a_timeout() -> None:
     """Require the caller-selected Linux package job to bound its runtime.
 

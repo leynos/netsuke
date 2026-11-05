@@ -6285,36 +6285,32 @@ reports the tree healthy while `cargo kani` rejects that same tree with
 `cfg(kani)` with verification skipped, so it subsumes the check it replaced
 rather than joining it.
 
-It carries its own `slow-timeout` in `.config/nextest.toml`, ten 60-second
-periods rather than the profile's five, because the default allowance is too
-small for it rather than merely tight. The test compiles into
-`target/kani-mutation-compile`, which no cache restores — `kani-cache` holds
-the Kani payloads, not a build tree — so every run pays a cold build of the
-whole dependency graph plus 18 incremental recompiles, and how long that takes
-is the host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third
-failed at 300.008 s on a head whose only difference was eight lines of
-Markdown. A 38 s margin is not a budget but the difference between two runners,
-and the failure then names nextest's cap rather than the patch that was slow.
-The widened allowance is bounded from above by the whole-run budget: the
-ordering requires `global-timeout` strictly above the largest per-test
-allowance. The mutation gate's 600 s is now the largest allowance in the file;
-every other test uses the 300 s default because ADR-0059 moved the compiler
-work that once needed 900 s out of the suite. At 60 s periods, 960 s would
-permit at most fifteen periods (900 s) while remaining strictly below the
-whole-run budget. An allowance of 960 s would equal that budget, and the run
-could end before the test used its allowance.
+The mutation compile gate has its own `slow-timeout` in the `kani` profile,
+forty 60-second periods. The test compiles into `target/kani-mutation-compile`,
+which no cache restores — `kani-cache` holds the Kani payloads, not a build
+tree — so every run pays a cold build of the whole dependency graph plus 30
+incremental recompiles. With the original 18 patches, two CI runs passed at
+257.7 s and 261.5 s; a third failed at 300.008 s on a head whose only
+difference was eight lines of Markdown.
 
-That widening was inert when it first landed, which is why the override is
-worth reading as a worked example of the trap above. Its filter named the bare
-test name, and the test is declared in a submodule, so the anchor never matched
-and the override applied to nothing: the 600 s was never in force, and the two
-passing CI runs at 257.7 s and 261.5 s cannot show otherwise, because both sit
-inside the 300 s default an inert override predicts. The filter now carries the
-`compile_guard::` prefix. The general rule is that a filter for a test in a
-submodule must name the module path Nextest prefixes onto the qualified name it
-matches against; `cargo nextest show-config test-groups` is the cheap way to
-see whether an override binds, since a filter selecting nothing leaves its
-override out of that listing entirely.
+The 30-patch candidate timed out at 600 s on hosted run 41840367244 and at
+900.093 s in a warm local run, both while compiling the first sorted patch and
+without a compiler diagnostic. A separate one-patch cold compile completed in
+1,864 s while shared compiler admission was heavily queued. That is evidence
+for allowing more time, not a stable runtime prediction. The Kani profile gives
+the test 2,400 s and the whole run 2,520 s: the latter exceeds the per-test
+allowance by the default 70-second termination window plus a 50-second margin.
+The ordinary and coverage profiles retain their 300 s per-test allowance and
+the coverage CI run remains 960 s.
+
+The hosted run spent 824 s before nextest started the mutation test and 7 s
+finalizing. Setup, the full 2,520 s Kani run allowance, and finalization total
+3,351 s. The 60-minute `kani-smoke` job leaves 249 s for runner variance and
+post-step reporting. The mutation filter uses the anchored `compile_guard::`
+submodule test name, so the Kani-specific timeout is applied to the intended
+test rather than falling through to the 300 s default. A filter selecting
+nothing leaves its override out of the test-groups listing, which makes
+`cargo nextest show-config test-groups --profile kani` a cheap binding check.
 
 Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
 literal rather than deleting a statement or redirecting a call. Deleting the
@@ -6361,7 +6357,7 @@ Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. When the proofs run, the job installs the pinned, checksummed
 `cargo-kani` front-end and Kani release bundle, checks the reported version,
 and then runs the bounded harness suite through `make kani-ir` and the mutation
-compile gate through `make test-kani-mutations`, both under a 30-minute job
+compile gate through `make test-kani-mutations`, both under a 60-minute job
 timeout; it does not run `make verus`, coverage, CodeScene upload, or the
 normal build matrix. Its cache entry owns the job-local Kani Cargo,
 support-file, and Rust toolchain homes separately from ordinary Cargo build
@@ -7552,6 +7548,28 @@ recreate state per test is enforced by the runner as well as by convention.
 
 `rstest-bdd-macros` is configured with `strict-compile-time-validation`, so
 missing or ambiguous step bindings should be treated as compile-time failures.
+
+### Terminal rendering tests
+
+`test_support::terminal` owns the child-process and Unix PTY harness used by
+`tests/terminal_rendering_tests.rs` and the terminal-rendering BDD steps. Reuse
+its output classifier and process setup for terminal-policy tests; keep
+terminal-specific expectations in the owning test module. Each child starts with
+`env_clear()` and receives only the test's explicit environment plus the
+required executable and temporary-directory paths.
+
+PTY tests live under `#[cfg(unix)]` because they use Unix `openpty`; Windows
+uses the pipe tests and the platform-neutral display-plan tests. To investigate
+timing-sensitive PTY behaviour, use a bounded stress run such as
+`cargo nextest run -p test_support --stress-count 20 -E 'test(pty_smoke)'`. Do
+not add retries to the test profile or nextest configuration.
+
+Tests derive expected colour, glyph, progress, and accessibility decisions from
+`resolve_display_plan`, then classify the binary's emitted bytes. Keep the
+truth model independent in the exhaustive domain test and the stable contract
+projections in the four YAML snapshots. `clippy.toml` disallows terminal
+queries outside the process entry point; `main()` captures stdout and stderr
+terminal status once and passes those facts into the plan.
 
 ## rstest-bdd v0.6.0 usage
 
@@ -11630,10 +11648,10 @@ All four tiers are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation compile gate    |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally             |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default and CI; 2,400 s Kani mutation   |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | 960 s CI; 2,520 s Kani; unset locally         |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                         |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m Kani; 100 m coverage                     |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -11647,19 +11665,16 @@ and the watchdog's 1,980 s are the current values.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real maximum is 600 s. Any
+alone would report a 60 s allowance where the real maximum is 2,400 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
 
-There are two distinct per-test allowances and the larger governs.
-`[profile.default]`'s own `slow-timeout` gives five periods — 300 s — to every
-test no override matches, which is almost all of them. The mutation compile
-gate gets ten periods, 600 s; it compiles all 18 patched trees through the Kani
-frontend into a target directory no cache restores, and it runs in its own
-`make test-kani-mutations` invocation rather than in the default suite. A
-whole-run budget has to sit above the largest allowance in the file, so 600 s
-is the figure the ordering below is written against, not the 300 s most tests
-get.
+The default and CI profiles give five periods — 300 s — to every test no
+override matches, which is almost all of them. The mutation compile gate gets
+forty periods, 2,400 s, only in the dedicated `kani` profile. That profile sets
+a 42-minute whole-run cap, and `make test-kani-mutations` selects it
+explicitly. The 2,520 s whole-run cap is above the mutation test's 2,400 s
+allowance; the coverage profile remains at 960 s above its own 300 s maximum.
 
 No test the default suite runs needs an allowance of its own any longer. The
 production module slice, the embedder-facing public API, and the `test_support`
@@ -11762,7 +11777,7 @@ to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-960 s          > 600 s
+960 s          > 300 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,980 s       >= 960 s + 70 s + 600 s + 300 s = 1,930 s
@@ -12252,14 +12267,15 @@ key out or deleting it satisfies each of them by leaving nothing to compare,
 and the watchdog silently resumes doing tier two's job. The presence assertion
 is what a comment defeats and an ordering assertion does not.
 `bounds_a_single_test` is driven the same way and for the same reason, since
-this file bounds its default profile and so cannot tell that reading from one
-accepting an override or a bare duration.
+the synthetic configuration bounds its default profile and cannot tell that
+reading from one accepting an override or a bare duration.
 
-`tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
-well as its place in the order. The ordering holds for everything between the
-600 s largest per-test allowance and the 1,010 s the watchdog can cover, so the
-budget could drift to a value nobody chose with every comparison still passing,
-and the sample above would then describe a figure the file no longer sets.
+`tests/workflow_contracts/whole_run_value_test.py` pins the coverage budget's
+value as well as its place in the order. The coverage ordering holds for
+everything between the 300 s largest CI-profile allowance and the 1,010 s the
+watchdog can cover, so the budget could drift to a value nobody chose with
+every comparison still passing, and the sample above would then describe a
+figure the file no longer sets.
 
 Every one of those assertions reads the budget out of the file, and none of
 them asks whether a run selects the profile it sits in. That is what

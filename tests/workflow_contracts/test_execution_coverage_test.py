@@ -200,37 +200,47 @@ def test_the_local_test_target_still_runs_both_passes() -> None:
         assert "-D warnings" in recipe, f"the local {label} pass must deny warnings"
 
 
-def test_only_the_mutation_gate_has_an_extended_budget() -> None:
-    """Keep every test the default suite runs on the ordinary allowance.
+def test_only_the_kani_profile_has_an_extended_mutation_budget() -> None:
+    """Keep the long allowance scoped to the dedicated Kani profile.
 
-    Extended allowances existed for tests that compiled inside their own time
-    budget. ADR-0059 moved that work out of the suite, so the `#[ignore]`-gated
-    mutation compile gate, which runs in its own invocation, is the one test
-    left with a measured cold-build allowance.
+    Ordinary and coverage profiles retain the five-minute default. Only the
+    profile selected by the mutation gate grants the cold compile allowance.
     """
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
     )
-    profile = config["profile"]["default"]
-    assert profile["slow-timeout"] == {"period": "60s", "terminate-after": 5}, (
-        "ordinary tests must retain their five-minute budget"
+    profiles = config["profile"]
+    ordinary = profiles["default"]
+    ordinary_timeout = ordinary["slow-timeout"]
+    assert ordinary_timeout == {"period": "60s", "terminate-after": 5}, (
+        f"the default profile's slow-timeout changed: {ordinary_timeout}"
+    )
+    assert not any(
+        "slow-timeout" in override for override in ordinary.get("overrides", [])
+    ), "the default profile must not inherit the Kani compile allowance"
+
+    kani = profiles["kani"]
+    kani_whole_run = kani["global-timeout"]
+    assert kani_whole_run == "42m", (
+        f"the Kani whole-run budget changed: {kani_whole_run}"
+    )
+    kani_timeout = kani["slow-timeout"]
+    assert kani_timeout == {"period": "60s", "terminate-after": 5}, (
+        f"the Kani profile's base slow-timeout changed: {kani_timeout}"
     )
     configured = {
         override["filter"]: override["slow-timeout"]
-        for override in profile["overrides"]
+        for override in kani["overrides"]
         if "slow-timeout" in override
     }
     expected = {
         (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
-        ): {
-            "period": "60s",
-            "terminate-after": 10,
-        },
+        ): {"period": "60s", "terminate-after": 40},
     }
     assert configured == expected, (
-        "only the mutation compile gate may carry an extended allowance"
+        "only the mutation compile gate may carry the extended Kani allowance"
     )
 
 
