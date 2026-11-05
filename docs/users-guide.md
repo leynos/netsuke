@@ -2050,6 +2050,25 @@ rate at which the policy is refusing manifest access. Variable names and their
 values never appear in the label, and neither do the contents of a fallback,
 because environment variable names routinely identify credentials.
 
+#### Manifest schema-admission metrics
+
+Every manifest load counts one admission decision against its declared
+`netsuke_version` in a single bounded series:
+
+- `netsuke_manifest_schema_admissions_total` — a counter with a single `outcome`
+  label. `outcome` is `admitted` when the declaration names a supported schema
+  in canonical form, `missing` when the manifest does not declare one,
+  `not_string` when the declaration is not a string, `invalid` when it is not
+  SemVer, `unsupported` when it names a major or minor this Netsuke does not
+  implement, and `not_canonical` when it is a supported version written with a
+  non-zero patch, pre-release, or build metadata.
+
+The six outcomes are the complete vocabulary. The declared version text, the
+manifest path, and the manifest body never appear in the label, so an operator
+can count version faults without collecting the versions themselves. The
+decision is recorded before it becomes a diagnostic, so each load increments
+exactly one series even though the manifest stops loading on a rejection.
+
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:
 
