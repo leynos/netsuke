@@ -961,14 +961,18 @@ The lowering stages have deliberately separate responsibilities:
   markers; POSIX lexical scanning can preserve their internal tokens in
   comments and heredoc bodies rather than resolving them. Comment and heredoc
   recognition ends a word only at the shell's own separators, so a non-ASCII
-  character before `#` cannot hide a later quote transition. Literal `$in`,
-  `$out`, `$ins`, and `$outs` remain shell variables and are escaped for Ninja
-  pass-through. POSIX lowering tracks unquoted, single-quoted, and
-  double-quoted text, and rejects markers within command substitutions because
-  it cannot lower them safely. Script recipes therefore retain heredocs and
-  comments without accepting an unsafe marker context. The resulting action
-  contains lowered command text and no Ninja rule variables; an inert region
-  may still retain an internal Netsuke marker token.
+  character before `#` cannot hide a later quote transition. A `)` that closes
+  a substitution stays in the word, but a `)` that terminates a `case` pattern
+  is an operator; because the two are lexically identical without the `case`
+  grammar, a substitution whose source contains `case` is rejected when a `)`
+  is immediately followed by `#`. Literal `$in`, `$out`, `$ins`, and `$outs`
+  remain shell variables and are escaped for Ninja pass-through. POSIX lowering
+  tracks unquoted, single-quoted, and double-quoted text, and rejects markers
+  within command substitutions because it cannot lower them safely. Script
+  recipes therefore retain heredocs and comments without accepting an unsafe
+  marker context. The resulting action contains lowered command text and no
+  Ninja rule variables; an inert region may still retain an internal Netsuke
+  marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen/recipe_shell/`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each

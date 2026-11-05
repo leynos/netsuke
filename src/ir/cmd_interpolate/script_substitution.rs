@@ -5,8 +5,9 @@
 //! path semantics. PowerShell scripts use `SubstitutionTraversal` instead.
 
 use super::{
-    CommandBindings, IrGenError, Placeholder, QuoteContext, find_script_substitution,
-    invalid_command_error,
+    CommandBindings, IrGenError, Placeholder, QuoteContext,
+    command_substitution::contains_case_keyword,
+    find_script_substitution, find_substitution, invalid_command_error,
     posix_lexical::{
         EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
     },
@@ -53,6 +54,8 @@ struct ScriptCommandSubstitution {
     quote_context: ShellQuoteContext,
     /// Count nested parenthesised groups until the closing delimiter.
     parenthesis_depth: usize,
+    /// Record the `$` that opened this substitution for source-range checks.
+    start: usize,
 }
 
 /// Identify a command-substitution delimiter in a script traversal.
@@ -67,10 +70,11 @@ enum ScriptCommandSubstitutionDelimiter {
 
 impl ScriptCommandSubstitution {
     /// Initialise the outermost group of one command substitution.
-    const fn new() -> Self {
+    const fn new(start: usize) -> Self {
         Self {
             quote_context: ShellQuoteContext::Unquoted,
             parenthesis_depth: 1,
+            start,
         }
     }
 }
@@ -158,7 +162,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.posix_lexical.begin_comment();
             return Ok(Some(pos + 1));
         }
-        if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
+        if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(Some(next));
         }
         if self.update_quote_context(ch) {
@@ -281,27 +285,72 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Preserve `$()` delimiters while rejecting placeholders within their scope.
-    fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
-        match self.classify_command_substitution_delimiter(pos, ch)? {
+    fn append_command_substitution_delimiter(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
+        let Some(delimiter) = self.classify_command_substitution_delimiter(pos, ch) else {
+            return Ok(None);
+        };
+        match delimiter {
             ScriptCommandSubstitutionDelimiter::Start => {
                 self.command_substitutions
-                    .push(ScriptCommandSubstitution::new());
+                    .push(ScriptCommandSubstitution::new(pos));
                 self.output.push_str("$(");
-                Some(pos + 2)
+                Ok(Some(pos + 2))
             }
             ScriptCommandSubstitutionDelimiter::NestedOpen => {
                 self.increment_command_substitution_parenthesis_depth();
                 self.output.push(ch);
-                Some(pos + 1)
+                Ok(Some(pos + 1))
             }
             ScriptCommandSubstitutionDelimiter::Close => {
-                if self.decrement_command_substitution_parenthesis_depth()? {
-                    self.closed_command_substitution = Some(pos);
+                let closed_start = self
+                    .command_substitutions
+                    .last()
+                    .filter(|substitution| substitution.parenthesis_depth == 1)
+                    .map(|substitution| substitution.start);
+                let Some(is_closed) = self.decrement_command_substitution_parenthesis_depth()
+                else {
+                    return Ok(None);
+                };
+                if is_closed {
+                    self.finish_command_substitution(pos, closed_start)?;
                 }
                 self.output.push(ch);
-                Some(pos + 1)
+                Ok(Some(pos + 1))
             }
         }
+    }
+
+    /// Record a completed substitution and reject an ambiguous `case` boundary.
+    fn finish_command_substitution(
+        &mut self,
+        pos: usize,
+        substitution_start: Option<usize>,
+    ) -> Result<(), IrGenError> {
+        if let Some(start) = substitution_start {
+            self.reject_ambiguous_case_comment(pos, start)?;
+        }
+        self.closed_command_substitution = Some(pos);
+        Ok(())
+    }
+
+    /// Reject a `)#` boundary whose `)` may terminate a `case` pattern.
+    ///
+    /// A `)` that closes `$()` is part of the surrounding word, so `#` after it
+    /// is word data. A `)` that terminates a `case` pattern is an operator, so
+    /// `#` after it starts a comment. The two are lexically identical without
+    /// the `case` grammar, so a substitution containing `case` fails closed
+    /// rather than guessing and encoding a later marker for the wrong context.
+    fn reject_ambiguous_case_comment(&self, pos: usize, start: usize) -> Result<(), IrGenError> {
+        let is_comment_boundary = self.chars.get(pos + 1) == Some(&'#')
+            && self.active_quote_context() == ShellQuoteContext::Unquoted;
+        if is_comment_boundary && contains_case_keyword(self.chars, start, pos) {
+            return Err(invalid_command_error(self.template.to_owned()));
+        }
+        Ok(())
     }
 
     /// Classify a character that delimits an active script command substitution.
@@ -384,3 +433,4 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         self.output
     }
 }
+// weave: run 'weave explain src/ir/cmd_interpolate/script_substitution.rs' for per-hunk detail, 'weave check' to verify your resolution

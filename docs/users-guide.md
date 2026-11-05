@@ -2357,7 +2357,10 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   outside quotes, at the beginning of input or after a space, tab, newline, or
   one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`. A `)` that closes `$(...)` or
   `$((...))` stays part of the surrounding word, so `#` immediately after it
-  does not start a comment. A non-breaking space or another non-ASCII space
+  does not start a comment. A `)` that ends a `case` pattern is an operator,
+  and the scanner cannot distinguish it from one that closes a substitution, so
+  a substitution containing the `case` reserved word is rejected when a `)` is
+  immediately followed by `#`. A non-breaking space or another non-ASCII space
   before `#` does not start a comment, so a quote after it still opens or
   closes a quoted region. Netsuke also rejects a marker that directly follows
   an unpaired backslash, because that backslash would escape the first

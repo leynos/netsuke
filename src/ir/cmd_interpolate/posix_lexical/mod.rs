@@ -272,7 +272,7 @@ fn is_unescaped_character(chars: &[char], pos: usize) -> bool {
 /// locale-dependent multibyte blanks, so a no-break space before `#` neither
 /// starts a comment nor ends a heredoc delimiter. The same predicate keeps a
 /// carriage return in a CRLF script as word data, matching those shells.
-const fn is_word_terminator(ch: char) -> bool {
+pub(super) const fn is_word_terminator(ch: char) -> bool {
     matches!(
         ch,
         ' ' | '\t' | '\n' | ';' | '|' | '&' | '(' | ')' | '<' | '>'
