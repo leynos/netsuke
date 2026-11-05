@@ -32,6 +32,9 @@ mod ninja_status_tests;
 /// Cover the bounded manifest environment-lookup counter series separately.
 mod env_lookup_tests;
 
+/// Cover the bounded manifest schema-admission counter series separately.
+mod schema_admission_tests;
+
 /// Cover the bounded `netsuke check` series, which exist only with `lint`.
 #[cfg(feature = "lint")]
 mod check_tests;

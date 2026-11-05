@@ -15,8 +15,14 @@ allow and block lists, and bounded file-reading filters. It also contains
 breaking changes: default executable discovery searches only `PATH`, `$in` and
 `$out` in `script:` recipes are shell variables, the primary project
 configuration can no longer widen the operator's fetch policy, every fetch
-redirect is revalidated against that policy, and checkout builds on Linux link
-with `mold` by default.
+redirect is revalidated against that policy, mapping-root manifests must
+declare `netsuke_version: "1.0.0"`, and checkout builds on Linux link with
+`mold` by default.
+
+The schema declaration is checked before any Jinja evaluation, so a missing,
+malformed, or unsupported version fails the load rather than reaching a
+template helper. See
+[Declare the manifest schema version](#declare-the-manifest-schema-version).
 
 Beta4 also adds the opt-in `netsuke --json help targets --edges` graph export.
 `--edges` requires the root-level `--json` option before `help`. Omitting
@@ -124,6 +130,7 @@ impact
 | Command recipes              | On Windows, legacy scalar commands, lists, and scripts use Windows PowerShell by default; YAML command lists remain opt-in, ordered, and fail-fast.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     | [Windows legacy recipe contract](users-guide.md#windows-legacy-recipe-contract)                                          |
 | Ninja text escaping          | Write shell dollars normally. In `command:` and `script:` recipes, `$in`, `$out`, `$ins`, and `$outs` are shell variables, so Ninja emits their dollars doubled and the selected shell receives their ordinary single-dollar spelling. `{{ ins }}` and `{{ outs }}` are the only Netsuke path markers. A manifest that used script `$in` or `$out` for Netsuke path substitution must use `{{ ins }}` or `{{ outs }}` instead. Spaces in build and default-target paths are escaped for Ninja as a `$` followed by a space, so whitespace-containing outputs remain valid. Paths containing `\|` or control characters remain rejected, as do paths containing `$` or colon, which Ninja can escape but Netsuke does not yet accept. Emitted metadata is escaped separately: a literal dollar in a description, `depfile`, `deps`, or `pool` is doubled, so `depfile: $out.d` is written as `$$out.d` and Ninja reads the literal name. Newline, carriage-return, and NUL metadata values are rejected. | [Users' guide](users-guide.md#review-the-safety-boundary)                                                                |
 | Manifest discovery           | Optional target/action `description` values are shown by the new `netsuke help targets` command. Manifests without them and existing build output are unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | [Users' guide](users-guide.md)                                                                                           |
+| Manifest schema version      | **Breaking:** a mapping-root manifest must declare `netsuke_version: "1.0.0"`. Missing, non-string, malformed, and unsupported declarations fail during parsing, before any Jinja evaluation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Declare the manifest schema version](#declare-the-manifest-schema-version) and [Users' guide](users-guide.md#declare-the-schema-version) |
 | Serial dependencies          | New opt-in `dependency_order: serial` runs an action or target's direct `deps` list in declaration order.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | [Serial dependency ordering](users-guide.md#run-direct-dependencies-serially)                                            |
 | Graph export                 | New opt-in `netsuke --json help targets --edges` output exposes a versioned graph beside the existing catalogue; root-level `--json` must precede `help`; omitting `--edges` preserves current output, and manifests need no changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Graph export reference](users-guide.md#export-dependency-edges-and-raw-recipes)                                         |
 | Fetch redirects              | Every redirect destination is now evaluated against the network policy before it is requested, so a redirect can no longer reach a host, scheme, or address the policy refuses. Chains stop after five redirects, a repeated destination is refused as a loop, and URL credentials are removed when the origin changes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | [Users' guide](users-guide.md#network-fetch-policy) and [ADR-0023](adrs/adr-0023-revalidate-every-fetch-redirect.md)     |
@@ -162,6 +169,38 @@ but cannot widen it. Invalid or non-positive values now fail configuration
 loading. See the [resource budgets](users-guide.md#resource-budgets) section
 for the complete key, environment-variable, and flag reference, along with the
 failure diagnostic.
+
+## Declare the manifest schema version
+
+A manifest whose root is a mapping must now declare the schema it is written
+against. The current reader accepts exactly `1.0.0`:
+
+```yaml
+netsuke_version: "1.0.0"
+targets:
+  - name: hello
+    command: echo hello
+```
+
+The reader rejects a missing declaration, a value that is not a string, a
+string that is not a semantic version, and a version outside the supported
+range. All four rejections happen immediately after the YAML is parsed and
+before any variable, macro, `foreach`, `when`, or template helper runs, so an
+unsupported manifest cannot evaluate `env()`, read a file, or run a shell
+command on the way to its own rejection.
+
+Only the literal schema release is admitted. A version inside the supported
+range that is not `MAJOR.MINOR.0` — `1.0.1`, `1.0.0-rc.1`, or a value carrying
+build metadata — is reported as non-canonical rather than as unsupported,
+because no future reader could start accepting it. The diagnostic names the
+declared and supported schemas, and reports the
+`netsuke::manifest::schema_version` code.
+
+In human output that code appears in the diagnostic header. In `--json` output
+the top-level `code` is `netsuke::manifest::parse` and the schema code appears
+inside an entry of the `causes` array. See
+[Declare the schema version](users-guide.md#declare-the-schema-version) for the
+full behaviour and the diagnostic shape.
 
 ## Nothing to change for existing callers
 

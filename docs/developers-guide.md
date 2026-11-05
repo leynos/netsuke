@@ -10081,6 +10081,65 @@ The recorder keeps exact label-shape matching in
 metric-specific admission rules supply the reviewed names and value sets, so
 composing label shapes never widens the accepted vocabulary.
 
+### Manifest schema-admission telemetry
+
+`src/manifest/schema_admission_telemetry.rs` owns telemetry for the
+schema-version gate. `parse_admitted_document` in `src/manifest/mod.rs` is the
+only caller: it records the decision returned by `schema_version::admit_document`
+and then maps a rejection into a `ManifestError::Parse`. `record_admission`
+returns the decision unchanged, so the gate's control flow is identical with and
+without telemetry and the recording is a boundary observer rather than part of
+the predicate.
+
+Recording before the diagnostic is what keeps the count exact. A rejection
+aborts the load, so a counter placed after the error mapping would never run for
+the cases the series exists to measure. Every load therefore increments exactly
+one series, admitted or not.
+
+The counter is `netsuke_manifest_schema_admissions_total`, with one `outcome`
+label drawn from the closed set `admitted`, `missing`, `not_string`, `invalid`,
+`unsupported`, and `not_canonical`, exposed as the module constant
+`SCHEMA_ADMISSION_OUTCOME_VALUES` and re-exported through `netsuke::manifest`.
+The four rejection categories mirror the diagnostic variants one for one, which
+is why `admitted` and `not_canonical` are in the same vocabulary: the latter is
+a rejection this gate distinguishes from `unsupported`, and collapsing the two
+would hide manifests that declare a supported schema in the wrong form.
+
+Nothing else is recorded. The declared version text, the manifest path, and the
+manifest body are absent by construction: `outcome_label` takes a
+`SchemaVersionRejection` by value and returns a `&'static str`, so no derived
+string can reach a label. The accompanying decision event records the operation
+and the category only. A `debug_assert!` inside `record_admission` fails if an
+outcome outside the exported array is ever produced, keeping the constant and
+the mapping from drifting apart.
+
+The counter description is registered once per process behind a `Once`. The
+application recorder in `src/observability/recorder/mod.rs` admits the series:
+`SCHEMA_ADMISSION_TOTAL` is listed in `accepts_name` and matched in
+`accepts_counter_registration` against exactly that one label set, so the
+counter survives into the process snapshot rather than being discarded as a
+noop handle, while any other label name, label count, or out-of-vocabulary value
+is rejected.
+
+Tests sit on both sides of the boundary.
+`src/manifest/tests/schema_admission_telemetry.rs` drives the real loader under
+a local debugging recorder, asserting that each of the six outcomes reaches
+exactly one bounded series and that a sentinel carried in a declaration's build
+metadata never reaches a label, an event, or a span field.
+`recorder_retains_bounded_schema_admission_series` in
+`src/observability/recorder/tests/schema_admission_tests.rs` proves the
+production recorder retains the six bounded series and rejects an
+out-of-vocabulary outcome, an extra label, and a series missing its label.
+
+The failure boundary classifies these rejections separately. `failure_kind` in
+`src/human_diagnostics/mod.rs` walks the error chain, and
+`ManifestFailure::of` inspects the diagnostic's stable code rather than its
+message — the message is localized, and the `unsupported` text embeds the
+declared version. A schema rejection is therefore logged under
+`error_kind = "manifest_schema_version"` while every other failure keeps
+`error_kind = "runner"`, so an operator can count version faults apart from
+build faults without the log line carrying manifest-controlled text.
+
 ### Recipe-text dialect telemetry
 
 `src/stdlib/recipe_text/dialect_telemetry.rs` owns telemetry for the dialect

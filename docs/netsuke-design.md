@@ -3429,11 +3429,30 @@ enrichment:
    convert a `miette::Diagnostic` into a plain `anyhow::Error`--doing so would
    discard spans and help text.
 
-5. Finally, the `main` function receives the `Err` result. It prints the entire
-   error chain provided by `anyhow`, which displays the highest-level context
-   first, followed by a list of underlying "Caused by:" messages. This provides
-   the user with a rich, layered explanation of the failure, from the general
-   to the specific.
+5. Finally, the `main` function receives the `Err` result and hands it to
+   `human_diagnostics::handle_failure`, which is the single human-mode reporting
+   boundary. It selects the most specific diagnostic the chain contains — a
+   `RunnerError`, then the first `ManifestError`, then a `miette::Report` — and
+   renders that one with `miette`'s graphical handler: the diagnostic's own
+   message, code, cause chain, help text, and — where it supplies one — its
+   rule-reference URL. A rendered diagnostic replaces the contextual summary
+   rather than following it, because the diagnostic already names the artefact
+   and printing both repeats it. A failure carrying no diagnostic keeps its
+   `anyhow` context line, which is the whole report available for errors such as
+   a missing manifest. A circular-dependency failure keeps a separate branch
+   that prints the bounded cycle rendering and logs a fixed `error_kind`
+   category, so manifest target names stay out of tracing events.
+
+   Links are disabled in the graphical handler even though every `netsuke
+   check` finding supplies a URL: `miette` emits OSC 8 hyperlinks whenever a
+   diagnostic supplies one, and that happens under a monochrome theme too, which
+   would put terminal control sequences into redirected `stderr`. The URL is
+   still printed as plain text after the code.
+
+   The glyph theme is derived from the already-resolved `OutputPrefs` rather
+   than read from the process environment, so the human path selects the same
+   Unicode or ASCII glyph set as the rest of the CLI and stays callable from an
+   in-process test.
 
 For automation use cases, Netsuke supports a root `--json` flag layered through
 OrthoConfig as `--json`, `NETSUKE_JSON`, and `json = true`. When enabled, every
