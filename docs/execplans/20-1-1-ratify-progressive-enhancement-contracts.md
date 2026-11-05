@@ -347,6 +347,32 @@ decision D-15.
   (15/15), `test-workflow-contracts` (1,756 + 28), and `test` (5,100 nextest
   cases passed, 7 skipped, 7 doctest suites ok). Logs:
   `/tmp/postrebase-gate-*-20-1-1-ratify-progressive-enhancement-contracts.out`.
+- [x] (2026-11-05) Rebased onto `origin/main` at `bf7f9e8cc` (RFC 0026, two
+  files, neither of which this branch edits). Conflict-free and tree-preserving.
+- [x] (2026-11-05) CodeRabbit's review at `8a56d852e` raised nine inline
+  findings and six pre-merge rows. Fixed across `bf50d6353` (diagnostics, docs,
+  locales), `c356639c3` (`NotCanonical`), and `55a1265b2` (schema-admission
+  telemetry). The emoji-theme row was an over-reach in the fixture's own
+  naming, not only a missing direction: `emoji_disallowed` held the *allowing*
+  preferences. `GraphicalTheme` derives no `PartialEq`, so the direction is
+  asserted on `.characters` against `ThemeCharacters::unicode()` and
+  `ThemeCharacters::ascii()`, which do.
+- [x] (2026-11-05) `cs delta origin/main HEAD` raised two new issues after the
+  telemetry commit. `admit` scored a complex conditional for its three-way
+  disjunction, now split into `within_supported_range` and
+  `is_canonical_release`; `tests/assert_cmd_tests.rs` fell 10.00 → 9.68 because
+  the new helpers pushed its string-argument ratio to 46.2% against a 39%
+  threshold, so the schema CLI cases moved to
+  `tests/assert_cmd_tests/schema_version.rs` following the `tests/ast_tests/`
+  split convention. Both files score 10.00 and the delta is clean. The
+  `String Heavy Function Arguments` biomarker is a *file-level* ratio, not a
+  per-function verdict, so splitting the file is the remedy; the ratio is
+  computed over every function the file declares.
+- [x] (2026-11-05) `mdtablefix` must canonicalise Markdown before `check-fmt`
+  will pass, and it reflows prose as well as tables. An interrupted gate batch
+  exposed this: the first run failed at gate 1 on four files this branch had
+  edited. Run `make fmt` (or the `--in-place` form) after any documentation
+  edit rather than assuming the hand-wrapping survives.
 - [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
 
 ## Surprises & discoveries
