@@ -192,6 +192,44 @@ fn generate_rejects_unsupported_schema_before_creating_output() -> Result<()> {
     Ok(())
 }
 
+#[rstest]
+fn human_output_renders_the_schema_version_rejection() -> Result<()> {
+    let temp = tempdir().context("create human diagnostics schema workspace")?;
+    fs::write(
+        temp.path().join("Netsukefile"),
+        concat!(
+            "netsuke_version: '1.1.0'\n",
+            "targets:\n",
+            "  - name: hello\n",
+            "    command: echo hello\n",
+        ),
+    )
+    .context("write unsupported schema-version manifest")?;
+
+    let output = create_netsuke_command(temp.path())
+        .args(["generate", "--output", "out.ninja"])
+        .output()
+        .context("run generate without JSON diagnostics")?;
+    ensure!(
+        !output.status.success(),
+        "generate must reject schema version 1.1.0 on the human path too"
+    );
+    ensure!(
+        !temp.path().join("out.ninja").exists(),
+        "generate must not create output for a rejected manifest"
+    );
+    let stderr = String::from_utf8(output.stderr).context("human diagnostics should be UTF-8")?;
+    ensure!(
+        stderr.contains("netsuke::manifest::schema_version"),
+        "human output must name the schema-version diagnostic code: {stderr}"
+    );
+    ensure!(
+        stderr.contains("1.0"),
+        "human output must name the schema this Netsuke supports: {stderr}"
+    );
+    Ok(())
+}
+
 #[cfg(feature = "lint")]
 #[rstest]
 fn check_rejects_unsupported_schema_and_accepts_supported_schema() -> Result<()> {

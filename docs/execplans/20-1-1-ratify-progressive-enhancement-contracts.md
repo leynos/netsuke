@@ -309,6 +309,20 @@ decision D-15.
   `src/localization/schema_keys.rs` is deleted and its four keys live in
   `manifest_keys.rs`. Tracked sources that differ from `main`:
   `git diff --stat origin/main...HEAD` after the replay.
+- [x] (2026-11-05) EP-M3 human-path completion. The acceptance criterion names a
+  diagnostic carrying `netsuke::manifest::schema_version` and the supported
+  schema, and only the JSON path met it: `handle_runner_error` special-cased
+  `RunnerError` alone, so a manifest rejection printed its context line and
+  dropped the inner diagnostic. Rendering now lives in
+  `src/human_diagnostics/`, which makes the same selection the JSON path makes
+  and draws it with `miette`'s graphical handler; extracting it took
+  `src/main.rs` from the 400-line wall to
+  379. The glyph theme is derived from the resolved `OutputPrefs` rather than
+  `GraphicalTheme::default()`, which would read `NO_COLOR` from the process
+  environment and break in-process testability. Probes: an unsupported schema
+  exits 1 reporting the code twice and the supported `1.0`; the `1.0.0` control
+  generates; a missing manifest keeps its single context line. `make fmt` and a
+  focused Clippy pass are green.
 - [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
 - [ ] EP-M4: developers' guide and documentation clean-up.
 - [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
