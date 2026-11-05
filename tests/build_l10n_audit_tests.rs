@@ -248,3 +248,4 @@ fn the_build_script_entry_point_passes_from_the_manifest_directory() -> Result<(
     }
     Ok(())
 }
+// weave: run 'weave explain tests/build_l10n_audit_tests.rs' for per-hunk detail, 'weave check' to verify your resolution

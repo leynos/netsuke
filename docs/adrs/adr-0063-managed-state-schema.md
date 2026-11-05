@@ -32,7 +32,7 @@ is sandboxed.
 - Require the `nagios` protocol when an external probe is declared.
 - Keep `require_state`, `ensure_state`, and `prepare_state` as separate
   operations with distinct mutation authority.
-- Prevent an unknown or unaccepted degraded result from authorising repair.
+- Prevent an unknown or unaccepted degraded result from authorizing repair.
 
 ### Technical requirements
 
@@ -74,7 +74,7 @@ observe a service without a path, but this grants no network access or remote
 mutation.
 
 The result algebra is `ready`, `not_ready`, `degraded`, and `unknown`.
-`unknown` never satisfies a required condition or authorises preparation.
+`unknown` never satisfies a required condition or authorizes preparation.
 `degraded` fails by default and does not trigger repair. A state may accept a
 degraded result only within trusted operator policy; the warning remains
 observable. Inspection errors take precedence over a possible repair decision.
@@ -90,7 +90,7 @@ probes and requires no preparation record.
 
 `require_state` verifies readiness and never prepares. `ensure_state` verifies,
 prepares once only after a definite not-ready result when preparation is
-declared and authorised, then verifies again. `prepare_state` explicitly
+declared and authorized, then verifies again. `prepare_state` explicitly
 requests preparation and subsequent verification. All operations are fail-fast;
 there is no retry loop or inferred installer.
 

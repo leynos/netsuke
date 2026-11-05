@@ -132,6 +132,10 @@ runner.io.dyndep.too_large = El archivo dyndep generado en { $path } supera el l
 
 # Diagnósticos del manifiesto.
 manifest.parse = Falló el análisis del manifiesto.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] El manifiesto debe declarar 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' debe ser una versión de lanzamiento semántica con el formato MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } declara el esquema del manifiesto { $declared }, pero Netsuke admite el esquema { $supported }.
+manifest.schema_version.help = Declara la versión de esquema admitida exacta con el formato MAJOR.MINOR.0, sin metadatos de prelanzamiento ni de compilación.
 manifest.structure_error = Error de estructura del manifiesto en { $name }: { $details }
 manifest.yaml.parse = Error de análisis de YAML en la línea { $line }, columna { $column }: { $details }
 manifest.yaml.label = YAML no válido

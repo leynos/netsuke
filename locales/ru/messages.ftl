@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Созданный файл dyndep (путь: { $pa
 
 # Диагностика манифеста.
 manifest.parse = Не удалось разобрать манифест.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] В манифесте необходимо указать 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' должна быть выпускной семантической версией в формате MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] В { $name } указана схема манифеста { $declared }, но Netsuke поддерживает схему { $supported }.
+manifest.schema_version.help = Укажите точную поддерживаемую версию схемы в формате MAJOR.MINOR.0 без метаданных предварительного выпуска или сборки.
 manifest.structure_error = Ошибка структуры манифеста в { $name }: { $details }
 manifest.yaml.parse = Ошибка разбора YAML в строке { $line }, столбце { $column }: { $details }
 manifest.yaml.label = некорректный YAML

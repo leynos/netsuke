@@ -131,11 +131,12 @@ fn stage_callback_stops_after_final_rendering_failure(
     temp_workspace: Result<(tempfile::TempDir, std::path::PathBuf)>,
 ) -> Result<()> {
     let (_dir, manifest_path) = temp_workspace?;
-    // Missing required `netsuke_version` causes a deserialization error during
-    // FinalRendering.
+    // An unknown field survives admission, then fails typed deserialization.
     test_fs::write(
         &manifest_path,
         concat!(
+            "netsuke_version: '1.0.0'\n",
+            "unsupported_field: true\n",
             "rules:\n",
             "  - name: echo\n",
             "    command: \"echo hello\"\n",

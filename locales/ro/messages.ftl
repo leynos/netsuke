@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Fișierul dyndep generat la { $path } depășește 
 
 # Diagnostice ale manifestului.
 manifest.parse = Analiza manifestului a eșuat.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] Manifestul trebuie să declare 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' trebuie să fie o versiune de lansare semantică în formatul MAJOR.MINOR.0.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } declară schema manifestului { $declared }, dar Netsuke acceptă schema { $supported }.
+manifest.schema_version.help = Declarați exact versiunea de schemă acceptată în formatul MAJOR.MINOR.0, fără metadate de pre-lansare sau de compilare.
 manifest.structure_error = Eroare de structură a manifestului la { $name }: { $details }
 manifest.yaml.parse = Eroare de analiză YAML la linia { $line }, coloana { $column }: { $details }
 manifest.yaml.label = YAML nevalid

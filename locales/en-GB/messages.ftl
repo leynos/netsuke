@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = Generated dyndep file at { $path } exceeds the { $l
 
 # Manifest diagnostics.
 manifest.parse = Manifest parse failed.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] The manifest must declare 'netsuke_version'.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' must be a semantic-version release in MAJOR.MINOR.0 form.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } declares manifest schema { $declared }, but this Netsuke supports schema { $supported }.
+manifest.schema_version.help = Declare the exact supported schema release in MAJOR.MINOR.0 form, without prerelease or build metadata.
 manifest.structure_error = Manifest structure error in { $name }: { $details }
 manifest.yaml.parse = YAML parse error at line { $line }, column { $column }: { $details }
 manifest.yaml.label = invalid YAML

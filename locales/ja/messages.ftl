@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = { $path } にある生成済み dyndep ファイル
 
 # マニフェストの診断。
 manifest.parse = マニフェストの解析に失敗しました。
+manifest.schema_version.missing = [netsuke::manifest::schema_version] マニフェストでは 'netsuke_version' を宣言する必要があります。
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version' は MAJOR.MINOR.0 形式のセマンティックバージョンのリリースである必要があります。
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } はマニフェストスキーマ { $declared } を宣言していますが、Netsuke がサポートするスキーマは { $supported } です。
+manifest.schema_version.help = プレリリースまたはビルドのメタデータを付けず、MAJOR.MINOR.0 形式でサポート対象のスキーマリリースを正確に宣言してください。
 manifest.structure_error = { $name } でマニフェストの構造エラー: { $details }
 manifest.yaml.parse = { $line } 行 { $column } 桁で YAML の解析エラー: { $details }
 manifest.yaml.label = 無効な YAML
