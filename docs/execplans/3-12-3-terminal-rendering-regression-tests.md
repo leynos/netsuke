@@ -709,8 +709,73 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 
 ## Outcomes & retrospective
 
-Not started. Complete this section at each milestone boundary and at
-completion, reconciling discoveries with the documents in `Conformance basis`.
+### Milestone EP-M0 to EP-M4: complete
+
+All four milestones are implemented and committed. The observable outcome is
+that the display policies 3.12.3 names are now measured through the real
+`netsuke` binary on a kernel pseudo-terminal and on a pipe, rather than only
+through the pure resolvers. Three defects the plan's baseline probe recorded —
+416 SGR sequences under `--color never --verbose`, coloured Miette diagnostics
+on `--color never`, and unformatted help output — are closed, and each has a
+regression test that fails when the wiring is removed.
+
+The functional core arrived later than the tests: EP-M1 pinned already-correct
+behaviour on the harness before EP-M2 introduced `DisplayPlan`, so the tests
+were a specification the implementation had to satisfy rather than a
+description of it. That ordering paid for itself when EP-M3 moved the emitters
+onto the plan, because the PTY harness could show the pre-plan and post-plan
+bytes were identical for the policies that had already been correct.
+
+### Gates against the delivered candidate
+
+Every applicable repository gate ran sequentially against `09e48138d` after the
+rebase onto `main`, and all thirteen exited `0`: `check-fmt`, `markdownlint`,
+`typecheck`, `lint-clippy`, `lint-whitaker`, `lint-python`,
+`github-actions-lint`, `lint-workflow-scripts`, `doc-coverage` (98.35% against
+the 80% threshold), `nixie`, `test` (5,183 tests across 125 binaries, plus the
+doctest pass), `test-workflow-contracts`, and `test-documentation-contracts`.
+
+`test-kani-mutations` is the exception to reading a local result as evidence
+about the diff, for the reason D17 records: its local cost is the shared
+`build-limits` pool, so a local run measures host capacity. Its adequacy rests
+on the hosted `kani-smoke` job, and the hosted result for this head is the
+authoritative one. Treating a local timeout there as a red gate would be the
+mistake D17 exists to prevent.
+
+It passed locally anyway on the candidate that followed: 625.818 s inside the
+2,400 s allowance, 633 s including nextest's own start and finish. The pool
+happened to be lightly loaded, which is the same explanation as the earlier
+timeouts arrived at from the other side. So both readings agree, and neither
+turns the local number into a claim about the patch set.
+
+### Windows compile gaps the hosted runner found
+
+The hosted `Windows / lint-windows` and `Windows / build-test-windows` jobs
+failed on the same head, each for a reason invisible on Linux, and each is a
+`#[cfg(unix)]` boundary rather than a behavioural defect:
+
+- `tests/terminal_rendering/tracing.rs` was compiled on every platform but
+  imported `Attach` from `test_support::terminal`, which is gated on `unix`.
+  The PTY case moved to `tracing_pty.rs`, matching the `*_pty.rs` convention
+  the rest of that directory already follows, and the module is gated in
+  `tests/terminal_rendering_tests.rs`.
+- `tests/bdd/steps/terminal_rendering.rs` imported the `when` macro
+  unconditionally, but its only `when` step needs the Unix PTY harness. The
+  macro import is now `#[cfg(unix)]`, which is sound because the step's
+  scenarios live in `tests/features_unix`, itself gated at its `scenarios!`
+  declaration.
+
+Neither gap could be caught by a local `cargo check`: cross-compiling to
+`x86_64-pc-windows-msvc` stops in `ring`'s C build, which needs a Windows
+toolchain this host does not have. The audit therefore checks the boundary
+directly — every ungated module is confirmed to name no Unix-only item — and
+the hosted Windows jobs remain the authority.
+
+Three repository targets were not applicable and were not run:
+`test-package-verify` (the package `include` list, `build.rs`, and
+`build_l10n_audit/` are untouched), `test-coverage-artifact` (no validator under
+`scripts/` changed), and the coverage-artefact validator itself, which is
+operator-run against a downloaded artefact directory.
 
 ## Context and orientation
 
