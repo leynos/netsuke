@@ -2705,6 +2705,20 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   policy/adapter partition covers it and its doctests run. This answers the
   CodeRabbit pre-merge Domain Architecture row without changing which
   candidates are accepted.
+- [x] (2026-11-05) Restored the archive-root binding that the policy split had
+  dropped. `read_packaged_manifest` now returns the single directory segment
+  holding the packaged `Cargo.toml` as well as the parsed manifest, selecting
+  members with `pathlib.PurePosixPath` components rather than slash counting.
+  `require_manifest_identity` takes that root and rejects an archive whose
+  manifest sits anywhere but `<package>-<version>`, even when the manifest
+  declares the expected identity, so an archive carrying only
+  `other/Cargo.toml` can no longer be approved. `pathlib` is now a runtime
+  import in the adapter,
+  satisfying the Unit Architecture note. New guard tests cover the foreign
+  root, a second packaged manifest, and a directory named `Cargo.toml`; the
+  adapter gained a behavioural root/manifest test in place of the callable-only
+  assertion. Both guides were updated, and the candidate suite plus adapter
+  doctests pass at 50 tests.
 
 ## Surprises & discoveries
 

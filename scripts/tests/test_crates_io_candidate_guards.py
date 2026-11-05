@@ -21,6 +21,7 @@ from crates_io_candidate_support import (
     CandidateOverrides,
     archive_bytes,
     manifest_text,
+    tar_bytes,
     write_candidate,
 )
 from crates_io_upload_metadata import MetadataError, MetadataIssue, package_metadata
@@ -111,6 +112,52 @@ def test_check_rejects_directory_named_like_the_archive(
 
     _assert_rejected_without_output(
         capsys, _fixture_paths(record, tmp_path), "not a regular file"
+    )
+
+
+def test_check_rejects_a_manifest_outside_the_package_root(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Bind the packaged manifest to the release's own package-version root."""
+    record, _ = write_candidate(
+        tmp_path,
+        overrides=CandidateOverrides(crate_bytes=archive_bytes(root="other")),
+    )
+
+    _assert_rejected_without_output(
+        capsys, _fixture_paths(record, tmp_path), "packaged manifest is rooted at"
+    )
+
+
+def test_check_rejects_multiple_packaged_manifests(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse an archive holding a second manifest outside the release root."""
+    manifest = manifest_text().encode()
+    body = tar_bytes((
+        (f"{PACKAGE_NAME}-{VERSION}/Cargo.toml", manifest),
+        ("other/Cargo.toml", manifest),
+    ))
+    record, _ = write_candidate(
+        tmp_path, overrides=CandidateOverrides(crate_bytes=body)
+    )
+
+    _assert_rejected_without_output(
+        capsys, _fixture_paths(record, tmp_path), "exactly one packaged Cargo.toml"
+    )
+
+
+def test_check_rejects_a_non_regular_manifest_member(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse a manifest member that is a directory rather than a file."""
+    body = tar_bytes(((f"{PACKAGE_NAME}-{VERSION}/Cargo.toml", None),))
+    record, _ = write_candidate(
+        tmp_path, overrides=CandidateOverrides(crate_bytes=body)
+    )
+
+    _assert_rejected_without_output(
+        capsys, _fixture_paths(record, tmp_path), "exactly one packaged Cargo.toml"
     )
 
 

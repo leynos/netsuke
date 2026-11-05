@@ -25,6 +25,18 @@ class CandidateExpectation:
     than a release tag, so a rehearsed candidate records no tag and the check
     binds only the commit, package name, and version. A publishing run supplies
     the tag, and the identity must then record exactly that tag.
+
+    Attributes
+    ----------
+    tag : str | None
+        The release tag the candidate must record. ``None`` selects rehearsal
+        mode.
+    commit : str
+        The commit the candidate must record.
+    package_name : str
+        The package the candidate must package.
+    version : str
+        The version the candidate must package.
     """
 
     tag: str | None
@@ -43,6 +55,13 @@ def require_release_mode(
     expectation: CandidateExpectation,
 ) -> None:
     """Require the recorded tag to agree with the run's release mode.
+
+    Parameters
+    ----------
+    identity : release_candidate.ReleaseIdentity
+        The identity the candidate artifact records.
+    expectation : CandidateExpectation
+        The workflow identity the candidate must match.
 
     Raises
     ------
@@ -82,6 +101,13 @@ def require_identity_matches(
     tag-carrying publication each report their own rejection. The remaining
     fields are compared together, and every disagreement is named in the
     diagnostic so a caller can see all of them at once.
+
+    Parameters
+    ----------
+    identity : release_candidate.ReleaseIdentity
+        The identity the candidate artifact records.
+    expectation : CandidateExpectation
+        The workflow identity the candidate must match.
 
     Raises
     ------
@@ -123,22 +149,43 @@ def require_identity_matches(
 
 
 def require_manifest_identity(
-    manifest: dict[str, object], package_name: str, version: str
+    root: str,
+    manifest: dict[str, object],
+    package_name: str,
+    version: str,
 ) -> None:
     """Require the packaged manifest identity to match the validated workflow.
+
+    Parameters
+    ----------
+    root : str
+        The single directory segment the archive places ``Cargo.toml`` in.
+    manifest : dict[str, object]
+        The parsed packaged manifest.
+    package_name : str
+        The package the validated release must package.
+    version : str
+        The version the validated release must package.
 
     Raises
     ------
     CandidateError
-        If the package table names another package or version, or the manifest
-        has no package table at all.
+        If the archive root is not ``<package>-<version>``, the package table
+        names another package or version, or the manifest has no package table
+        at all.
 
     Examples
     --------
     >>> require_manifest_identity(
-    ...     {"package": {"name": "p", "version": "1.2.3"}}, "p", "1.2.3"
+    ...     "p-1.2.3", {"package": {"name": "p", "version": "1.2.3"}}, "p", "1.2.3"
     ... )
     """
+    # A root that is not the package-version directory means the archive holds
+    # someone else's manifest, even when that manifest declares the expected
+    # identity; checking the root first keeps the more specific diagnosis.
+    expected_root = f"{package_name}-{version}"
+    if root != expected_root:
+        raise CandidateError(CandidateIssue.MANIFEST_ROOT, (root, expected_root))
     # A missing or non-mapping package table is a structural fault, while a
     # mapping that names another package is an identity mismatch; the two
     # issues stay distinct so the workflow can report which one occurred.

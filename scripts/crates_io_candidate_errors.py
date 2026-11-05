@@ -23,6 +23,7 @@ class CandidateIssue(enum.StrEnum):
     ARCHIVE_COUNT = "expected exactly one matching .crate named {!r}, found {!r}"
     ARCHIVE_FILE = "candidate archive is not a regular file: {!r}"
     MANIFEST_MEMBER = "archive must contain exactly one packaged Cargo.toml, found {!r}"
+    MANIFEST_ROOT = "packaged manifest is rooted at {!r}, expected {!r}"
     MANIFEST_READ = "could not read packaged manifest {!r}"
     MANIFEST_PARSE = "could not read packaged Cargo manifest: {}"
     PACKAGE_TABLE = "packaged manifest has no [package] table"
@@ -38,6 +39,13 @@ class CandidateIssue(enum.StrEnum):
 
 class CandidateError(ValueError):
     """Carry a classified candidate error and its display values.
+
+    Parameters
+    ----------
+    issue : CandidateIssue
+        Candidate issue template to render.
+    context : tuple[object, ...], default=()
+        Values passed to the issue template.
 
     Examples
     --------

@@ -2518,13 +2518,14 @@ Private helpers in `scripts/crates_io_candidate_cli.py` and
 `scripts/crates_io_upload_metadata.py` compose only their module's candidate
 validation or metadata operation. `scripts/crates_io_candidate_archive.py` owns
 the tar and TOML boundary: `archive_and_crate` selects the sole recorded
-`.crate`, and `read_packaged_manifest` parses the `Cargo.toml` it packages
-without judging the identity that manifest declares.
+`.crate`, and `read_packaged_manifest` reports the archive root holding the
+`Cargo.toml` and parses that manifest without judging the identity it declares.
 `scripts/crates_io_candidate_policy.py` makes the decisions: it holds the
 workflow expectation, requires the recorded release mode to agree with it,
 compares the identity record against it, and requires the packaged manifest to
-name the same package and version. The command-line module composes those
-readers with the policy and its own digest check.
+sit at the `<package>-<version>` root and name the same package and version.
+The command-line module composes those readers with the policy and its own
+digest check.
 `scripts/crates_io_candidate_errors.py` holds the shared `CandidateIssue` and
 `CandidateError` vocabulary, so every rejection carries one stable category
 rather than a format-specific exception. Metadata-manifest parsing applies the

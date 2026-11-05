@@ -8,7 +8,6 @@ decided.
 
 import dataclasses
 
-import crates_io_candidate_archive
 import pytest
 import release_candidate
 from crates_io_candidate_errors import CandidateError, CandidateIssue
@@ -127,12 +126,28 @@ def test_require_identity_matches_checks_release_mode_first() -> None:
 
 
 def test_require_manifest_identity_accepts_the_packaged_package() -> None:
-    """Accept a manifest that names the validated package and version."""
+    """Accept a manifest rooted at the validated package and version."""
     manifest: dict[str, object] = {
         "package": {"name": PACKAGE_NAME, "version": VERSION}
     }
 
-    require_manifest_identity(manifest, PACKAGE_NAME, VERSION)
+    require_manifest_identity(
+        f"{PACKAGE_NAME}-{VERSION}", manifest, PACKAGE_NAME, VERSION
+    )
+
+
+def test_require_manifest_identity_rejects_a_foreign_archive_root() -> None:
+    """Bind the manifest to the release's own package-version root."""
+    manifest: dict[str, object] = {
+        "package": {"name": PACKAGE_NAME, "version": VERSION}
+    }
+
+    with pytest.raises(CandidateError) as error:
+        require_manifest_identity("other", manifest, PACKAGE_NAME, VERSION)
+
+    assert error.value.issue is CandidateIssue.MANIFEST_ROOT, (
+        "classify a manifest outside the release root"
+    )
 
 
 @pytest.mark.parametrize(
@@ -158,13 +173,8 @@ def test_require_manifest_identity_classifies_rejections(
 ) -> None:
     """Separate a disagreeing identity from a structurally absent package table."""
     with pytest.raises(CandidateError) as error:
-        require_manifest_identity({"package": package}, PACKAGE_NAME, VERSION)
+        require_manifest_identity(
+            f"{PACKAGE_NAME}-{VERSION}", {"package": package}, PACKAGE_NAME, VERSION
+        )
 
     assert error.value.issue is expected, "classify the manifest rejection"
-
-
-def test_archive_adapter_exposes_its_manifest_reader() -> None:
-    """Prove the archive adapter imported and exposes the reader policy composes."""
-    assert callable(crates_io_candidate_archive.read_packaged_manifest), (
-        "the adapter imports and exposes the manifest reader"
-    )

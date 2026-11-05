@@ -5,6 +5,7 @@ import hashlib
 import json
 import typing as typ
 
+import crates_io_candidate_archive
 import pytest
 from crates_io_candidate_cli import EXIT_OK, EXIT_REJECTED, EXIT_USAGE, main
 from crates_io_candidate_support import (
@@ -270,6 +271,21 @@ def test_check_refuses_multiple_crate_archives(tmp_path: pathlib.Path) -> None:
 
     assert main(_check_args(record, tmp_path, output)) == EXIT_REJECTED, (
         "reject a directory with more than one crate archive"
+    )
+
+
+def test_archive_reader_reports_the_root_and_manifest(tmp_path: pathlib.Path) -> None:
+    """Report the packaged root and manifest the policy binds to the release."""
+    archive = tmp_path / f"{PACKAGE_NAME}-{VERSION}.crate"
+    _ = archive.write_bytes(archive_bytes())
+
+    root, manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
+
+    assert root == f"{PACKAGE_NAME}-{VERSION}", "report the archive's own root"
+    package = manifest["package"]
+    assert isinstance(package, dict), "parse the manifest package table"
+    assert (package["name"], package["version"]) == (PACKAGE_NAME, VERSION), (
+        "parse the packaged manifest identity"
     )
 
 

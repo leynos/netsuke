@@ -93,10 +93,11 @@ unexpectedly empty value and values containing carriage returns or line feeds.
 
 Before the `package-crate` job uploads its artefact, the action validates the
 retained candidate offline. It requires the package identity, the single
-recorded `.crate`, its SHA-256 digest, and the `Cargo.toml` inside the archive
-to agree with the run. A pull-request dry run is checked as a rehearsal and
-must record no release tag; a publishing run supplies the tag, and the identity
-must record exactly that tag. This step never contacts the registry.
+recorded `.crate`, its SHA-256 digest, and the `Cargo.toml` at the archive's
+`<package>-<version>` root to agree with the run. A pull-request dry run is
+checked as a rehearsal and must record no release tag; a publishing run
+supplies the tag, and the identity must record exactly that tag. This step
+never contacts the registry.
 
 When a publication is interrupted, rerun the crates.io publisher job. It
 re-probes the registry before any mutation: an absent version is published from

@@ -1,23 +1,24 @@
 """Read the retained crate archive and the manifest it packages.
 
 This adapter owns the tar and TOML boundary of candidate validation. It
-selects the single archived ``.crate`` recorded by the identity artifact and
-parses the ``Cargo.toml`` that archive packages, so the command-line module can
-compare both against the release workflow without opening an archive itself.
-It reports what the archive contains and leaves acceptance to
-:mod:`crates_io_candidate_policy`.
+selects the single archived ``.crate`` recorded by the identity artifact,
+parses the ``Cargo.toml`` that archive packages, and reports the archive root
+holding it, so the command-line module can compare all three against the
+release workflow without opening an archive itself. It reports what the archive
+contains and leaves acceptance to :mod:`crates_io_candidate_policy`.
 """
 
 import io
+import pathlib
 import tarfile
 import tomllib
-import typing as typ
 
 import release_asset_names
 from crates_io_candidate_errors import CandidateError, CandidateIssue
 
-if typ.TYPE_CHECKING:
-    import pathlib
+#: A packaged manifest sits one directory below the archive root, so its POSIX
+#: path has exactly the ``<root>/Cargo.toml`` shape: two components.
+_MANIFEST_DEPTH = 2
 
 
 def _crate_basename(record: dict[str, object]) -> str:
@@ -77,16 +78,21 @@ def archive_and_crate(
     return crate, archive
 
 
+def _is_packaged_manifest(member: tarfile.TarInfo) -> bool:
+    """Whether the member is a Cargo manifest one directory below the root."""
+    parts = pathlib.PurePosixPath(member.name).parts
+    return len(parts) == _MANIFEST_DEPTH and parts[-1] == "Cargo.toml"
+
+
 def _manifest_member(package: tarfile.TarFile) -> tarfile.TarInfo:
     """Require the archive to hold exactly one regular packaged Cargo manifest."""
     # A packaged crate has one top-level ``<package>-<version>`` directory, so
     # its manifest sits exactly one path segment down. Matching the shape rather
     # than a name built from the expected identity keeps this reader free of the
-    # identity comparison the policy module performs.
+    # identity comparison the policy module performs; the root is reported so
+    # the policy can bind it to the release.
     manifests = [
-        member
-        for member in package.getmembers()
-        if member.name.count("/") == 1 and member.name.endswith("/Cargo.toml")
+        member for member in package.getmembers() if _is_packaged_manifest(member)
     ]
     found = [member.name for member in manifests]
     if len(manifests) != 1 or not manifests[0].isfile():
@@ -94,16 +100,17 @@ def _manifest_member(package: tarfile.TarFile) -> tarfile.TarInfo:
     return manifests[0]
 
 
-def _manifest_contents(package: tarfile.TarFile) -> str:
-    """Read the sole packaged manifest member as decoded text."""
+def _packaged_manifest(package: tarfile.TarFile) -> tuple[str, str]:
+    """Read the sole packaged manifest and the directory root holding it."""
     member = _manifest_member(package)
     manifest_file = package.extractfile(member)
     if manifest_file is None:
         raise CandidateError(CandidateIssue.MANIFEST_READ, (member.name,))
-    return manifest_file.read().decode("utf-8")
+    root = pathlib.PurePosixPath(member.name).parent.name
+    return root, manifest_file.read().decode("utf-8")
 
 
-def read_packaged_manifest(archive_path: pathlib.Path) -> dict[str, object]:
+def read_packaged_manifest(archive_path: pathlib.Path) -> tuple[str, dict[str, object]]:
     """Read the Cargo manifest stored in the retained archive.
 
     Parameters
@@ -113,10 +120,10 @@ def read_packaged_manifest(archive_path: pathlib.Path) -> dict[str, object]:
 
     Returns
     -------
-    dict[str, object]
-        The parsed packaged manifest, with its identity as the archive records
-        it. Comparing that identity against the release workflow belongs to
-        :func:`crates_io_candidate_policy.require_manifest_identity`.
+    tuple[str, dict[str, object]]
+        The single directory segment holding the manifest, and the parsed
+        packaged manifest. Comparing both against the release workflow belongs
+        to :func:`crates_io_candidate_policy.require_manifest_identity`.
 
     Raises
     ------
@@ -132,6 +139,7 @@ def read_packaged_manifest(archive_path: pathlib.Path) -> dict[str, object]:
     try:
         archive_bytes = archive_path.read_bytes()
         with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as package:
-            return tomllib.loads(_manifest_contents(package))
+            root, contents = _packaged_manifest(package)
+            return root, tomllib.loads(contents)
     except (OSError, UnicodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
         raise CandidateError(CandidateIssue.MANIFEST_PARSE, (error,)) from error

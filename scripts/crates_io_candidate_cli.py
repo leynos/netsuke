@@ -153,9 +153,9 @@ def validate_candidate(
         record, archive_directory
     )
     observed_digest = _validated_digest(archive, _recorded_digest(record))
-    manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
+    root, manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
     crates_io_candidate_policy.require_manifest_identity(
-        manifest, expectation.package_name, expectation.version
+        root, manifest, expectation.package_name, expectation.version
     )
     return ValidatedCandidate(identity, crate, archive, observed_digest)
 
