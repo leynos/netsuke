@@ -203,9 +203,9 @@ secret material. The accompanying `tracing` event records the same bounded
 
 The manifest schema-version gate now counts every admission decision at the
 gate itself. `parse_admitted_document` in `src/manifest/mod.rs` records the
-decision returned by `schema_version::admit_document` before mapping a rejection
-into `ManifestError::Parse`, so the counter observes the rejections that abort
-the load rather than only the loads that survive.
+decision returned by `schema_version::admit_document` before mapping a
+rejection into `ManifestError::Parse`, so the counter observes the rejections
+that abort the load rather than only the loads that survive.
 
 `src/manifest/schema_admission_telemetry.rs::record_admission` returns the
 decision unchanged and increments `netsuke_manifest_schema_admissions_total`,
