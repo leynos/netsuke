@@ -118,6 +118,22 @@ fn document_admission_reports_typed_rejections_and_preserves_non_mapping_roots()
             serde_json::json!({"netsuke_version": "1.1.0"}),
             SchemaVersionRejection::Unsupported { major: 1, minor: 1 },
         ),
+        (
+            serde_json::json!({"netsuke_version": "2.0.0"}),
+            SchemaVersionRejection::Unsupported { major: 2, minor: 0 },
+        ),
+        (
+            serde_json::json!({"netsuke_version": "1.0.3"}),
+            SchemaVersionRejection::NotCanonical,
+        ),
+        (
+            serde_json::json!({"netsuke_version": "1.0.0-rc.1"}),
+            SchemaVersionRejection::NotCanonical,
+        ),
+        (
+            serde_json::json!({"netsuke_version": "1.0.0+build.5"}),
+            SchemaVersionRejection::NotCanonical,
+        ),
     ];
     for (document, expected) in cases {
         assert_eq!(admit_document(&document), Err(expected));
