@@ -198,3 +198,4 @@ pub(crate) fn audit_localization_keys_in(root: &Path) -> Result<(), Box<dyn Erro
         Err(build_error_message(&findings).into())
     }
 }
+// weave: run 'weave explain build_l10n_audit/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

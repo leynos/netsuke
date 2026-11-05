@@ -131,6 +131,10 @@ runner.io.dyndep.too_large = { $path }의 생성된 dyndep 파일이 { $limit }�
 
 # 매니페스트 진단.
 manifest.parse = 매니페스트 해석에 실패했습니다.
+manifest.schema_version.missing = [netsuke::manifest::schema_version] 매니페스트는 'netsuke_version'을 선언해야 합니다.
+manifest.schema_version.invalid = [netsuke::manifest::schema_version] 'netsuke_version'은 MAJOR.MINOR.0 형식의 시맨틱 버전 릴리스여야 합니다.
+manifest.schema_version.unsupported = [netsuke::manifest::schema_version] { $name } 매니페스트 스키마는 { $declared }이지만 Netsuke가 지원하는 스키마는 { $supported }입니다.
+manifest.schema_version.help = 프리릴리스 또는 빌드 메타데이터 없이 MAJOR.MINOR.0 형식으로 지원되는 스키마 릴리스를 정확히 선언하세요.
 manifest.structure_error = { $name }에서 매니페스트 구조 오류: { $details }
 manifest.yaml.parse = { $line }행 { $column }열에서 YAML 해석 오류: { $details }
 manifest.yaml.label = 잘못된 YAML

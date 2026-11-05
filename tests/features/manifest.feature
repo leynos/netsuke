@@ -36,6 +36,12 @@ Feature: Manifest Parsing
     When the parsing result is checked
     Then parsing the manifest fails
 
+  Scenario: Parsing fails for a manifest declaring an unsupported schema version
+    Given the manifest file "tests/data/unsupported_schema_version.yml" is parsed
+    When the parsing result is checked
+    Then parsing the manifest fails
+    And the error message contains "netsuke::manifest::schema_version"
+
   Scenario: Parsing fails for a target that is missing a recipe
     Given the manifest file "tests/data/missing_recipe.yml" is parsed
     When the parsing result is checked

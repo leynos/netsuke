@@ -119,10 +119,11 @@ decision D-15.
 ## Tolerances (exception triggers)
 
 - Scope: if EP-M3 touches more than 32 files, excluding the 35 locale
-  catalogues and new snapshot files, or more than 700 net lines of Rust, stop
-  and escalate. The expected set is listed under `Concrete steps`; it is large
-  because `src/localization/keys.rs` is at the 400-line cap and the new keys
-  need a third key file wired through the localization audit.
+  catalogues and new snapshot files, or exceeds either 2,000 net lines across
+  Rust files or 800 net lines in non-test `src/` files, stop and escalate. The
+  expected set is listed under `Concrete steps`; it is large because
+  `src/localization/keys.rs` is at the 400-line cap and the new keys need a
+  third key file wired through the localization audit.
 - Interface: if any public function signature or public enum variant must
   change, stop and escalate.
 - Compatibility: if any fixture, example, README fence, or snapshot other than
@@ -250,6 +251,54 @@ decision D-15.
   OD-21 to OD-25 resolution table and amended the RFC and roadmap references.
   `make check-fmt`, `make markdownlint` (including spelling), `make nixie`, and
   both resolution-table review checks passed.
+- [x] (2026-10-24) EP-M3 red observations: the required full-workspace
+  nextest filter compiled 114 binaries, then both named admission tests failed
+  as expected: `1.1.0` loaded, while a missing version reached the old
+  structural-error path. Separate probes showed the CLI, JSON snapshot, and BDD
+  scenario also accepted `1.1.0`; the registry contract failed because the
+  reader accepted its reserved `1.1` minor. Logs are in
+  `/tmp/red-netsuke-20-1-1-ratify-progressive-enhancement-contracts*.out`.
+- [x] (2026-10-24) AXIOM-2 confirmed: the `serde-saphyr` dependency uses its
+  default `serialize` and `deserialize` features; `properties`, `include`, and
+  `include_fs` are disabled.
+- [x] (2026-10-24) EP-M3 implementation is complete in the working tree. The
+  focused schema policy, reader, snapshot, and BDD selection passed 17 tests;
+  the CLI and registry selection passed 5. The JSON snapshot was reviewed and
+  accepted. `make fmt` passed. The CHANGELOG entry initially added a second
+  `### Changed` under `Unreleased`; the repository's own convention is a
+  scoped `<!-- markdownlint-disable-next-line MD024 -->` comment, and a global
+  `MD024` relaxation was rejected as scope-widening, so the entry is folded
+  into the section `main` already carries. Full candidate gates remain
+  pending.
+- [x] (2026-11-03) The user raised the EP-M3 scope ceiling to 2,000 net Rust
+  lines overall and 800 net non-test `src/` lines. The current diff measures
+  975 net Rust lines overall and 339 net non-test `src/` lines.
+- [x] (2026-11-03) Replaced ambient `std::fs` calls in both schema contract
+  tests with capability-scoped filesystem access. The registry parser now
+  rejects malformed rows and pins the complete 11-row inventory, including both
+  ADR-0043 reservations at `1.1`. `make fmt` and `make check-fmt` passed.
+- [x] (2026-11-03) Rustdoc completed the `make lint` documentation phase, but
+  Clippy's full lint command was terminated with exit 143 while queued for
+  compiler admission; no source diagnostic preceded termination. A
+  `make typecheck` attempt was interrupted shortly after Cargo check started
+  and is incomplete. No later gates ran on this intermediate candidate. Full
+  candidate gates remain pending after the registry contract repair.
+- [x] (2026-11-05) A fresh sequential gate run passed `make check-fmt`,
+  `make typecheck`, `make lint`, `make doc-coverage` (98.20%),
+  `make markdownlint`, and `make nixie`. `make test` ran 4,866 of 4,890 cases:
+  4,865 passed, 6 were skipped, and
+  `cli_configuration_fixture_compiles::case_1_public_api` timed out at 300.077
+  s; 24 tests were not run. This prompted D-21's scoped test budget.
+- [x] (2026-11-05) EP-M4's developer guidance now documents schema reservation,
+  admission, allocation, the registry contract, and the rejection ladder. The
+  snapshot guide examples now declare `1.0.0`. A targeted 900 s allowance for
+  the timed-out workspace Cargo check is covered by the Nextest workflow
+  contracts; fresh gates remain pending.
+- [x] (2026-11-05) EP-M3's expected 26-file set plus the three D-21 Nextest
+  policy and contract-test files totals 29 counted paths, below its 32-file
+  tolerance. EP-M4's snapshot-guide correction is a separate documentation
+  path. The D-21 900 s allowance has not yet been exercised by a fresh full
+  suite; its ordered validation is pending.
 - [ ] EP-M3: reader-side schema version gate, users' guide, CHANGELOG.
 - [ ] EP-M4: developers' guide and documentation clean-up.
 - [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
@@ -688,13 +737,32 @@ makes at approval.
   the amendment banner and section to ADR-0043, and rule 8 and the related risk
   are removed. Date/Author: 2026-10-24, planning agent, added on rebase.
 
+- Decision D-20 (scope ceiling, user-approved): EP-M3 may add up to 2,000 net
+  lines across Rust files, or up to 800 net lines in non-test `src/` files.
+  Either limit is an independent stop condition, as is the existing 32-file
+  limit. The current implementation is within both Rust limits. Date/Author:
+  2026-11-03, user.
+
+- Decision D-21 (test budget): give
+  `cli_configuration_fixture_compiles` a test-specific 900 s allowance after
+  the full suite timed out at its 300 s default while the workspace
+  `cargo check` was active. The override is bounded below CI's 960 s whole-run
+  cap, keeps the child-Cargo serialization policy, and adds no retry. The
+  workflow contracts pin the exact filter and allowance. Date/Author:
+  2026-11-05, implementation evidence.
+
 - Approval: the user approved this plan on 2026-10-24 and selected the
   recommended D-19 Option A. The plan honours ADR-0043's `1.1.0` reservation.
+  The user approved D-20's updated scope ceilings on 2026-11-03.
 
 ## Outcomes & retrospective
 
-Not started. Complete at each milestone boundary and at completion, reconciling
-every discovery with the artefacts in `Conformance basis`.
+The first complete local gate sequence passed six gates and exposed one timeout
+in the CLI configuration fixture; the evidence and bounded D-21 response are
+recorded in `Progress` and the decision log. EP-M3 and EP-M4 implementation
+edits are in the working tree, but final gates, the main-branch rebase,
+exact-head PR review, and EP-M5's explicit ADR acceptance remain outstanding.
+Reconcile these outcomes again after each delivery boundary.
 
 ## Context and orientation
 
@@ -914,12 +982,13 @@ Obligations:
   minor exceeds an unadmitted reserved minor (D-3 rule 8). Method: a contract
   test that parses the registry table. Artefact:
   `tests/schema_version_registry_tests.rs`, reading the table between marker
-  comments in `docs/netsuke-design.md`. Evidence: passes with the core `1.0`
-  row admitted, ADR-0043's `1.1` row reserved, and every other row reserved
-  without a minor. Non-vacuity: the parser is exercised on two in-memory
-  tables, one with an admitted `1.1` row (must report a mismatch against a
-  maximum of `0`) and one with an admitted `1.2` row while `1.1` is reserved
-  (must report a contiguity violation).
+  comments in `docs/netsuke-design.md`. Evidence: the test pins all 11 feature,
+  status, and minor entries: core `1.0` released; `structured-commands` and
+  `named-shells` reserved at `1.1`; and the other eight entries reserved with
+  no minor. It rejects malformed rows and checks every versioned entry against
+  the reader. Non-vacuity: in-memory tables verify malformed-row rejection, an
+  admitted `1.1` mismatch against a maximum of `0`, and the contiguity
+  violation when `1.1` is reserved beneath admitted `1.2`.
 
 Residual gaps: rungs 2, 2b, and 4 are not implemented here. General stdlib
 vocabulary is not version-gated (Risks). Library callers that deserialize
