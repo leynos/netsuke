@@ -9,12 +9,12 @@ The reading that matters most is the per-test one. nextest warns once
 per ``period`` and terminates after ``terminate-after`` of them, so the
 budget is their product. Every period in this repository is 60 s, so a
 reader taking the period alone would report a 60 s allowance where the
-real maximum is 600 s: five periods by default and ten for the mutation
-compile gate.
-The contract uses the largest value, because a whole-run cap has to sit
-above it. A
-``slow-timeout`` naming no ``terminate-after`` terminates nothing at
-all, so that form is refused rather than read as a single period.
+real maximum is 2,400 s: five periods by default and forty for the mutation
+compile gate in its dedicated profile.
+The contract uses the largest value in the selected profile, because its
+whole-run cap has to sit above it. A ``slow-timeout`` naming no
+``terminate-after`` terminates nothing at all, so that form is refused rather
+than read as a single period.
 
 Read by ``ty`` and run by pytest; runtime annotation introspection is not
 supported here, because these annotations name ``TYPE_CHECKING``-only imports
@@ -26,7 +26,6 @@ See "Test timeouts: the tiers this repository sets" in
 
 import tomllib
 import typing as typ
-from itertools import starmap
 
 from nextest_durations import NextestConfigurationError, seconds
 from nextest_slow_timeouts import budget_of
@@ -136,44 +135,61 @@ def _slow_timeouts(config_text: str) -> list[tuple[str, object]]:
     ]
 
 
-def largest_test_allowance(config_text: str) -> fractions.Fraction:
-    """Return the longest a single test may run, in seconds.
+def largest_test_allowance(
+    config_text: str, profile: str = "default"
+) -> fractions.Fraction:
+    """Return the longest single-test allowance effective in one profile.
 
-    nextest warns once per ``period`` and terminates after
-    ``terminate-after`` of them, so the budget is their product. This
-    repository sets five 60 s periods on the profile's own allowance, so it
-    gives every test it matches 300 s. The mutation compile gate gets ten
-    periods.
-    The largest allowance in the file is therefore 600 s, and it is that
-    figure, not the profile's own, that a whole-run budget has to stay
-    above. Reading the period alone would understate either by its
-    multiplier.
+    Profiles inherit the default table for settings they do not declare.
+    This reading follows one profile's inheritance rather than comparing
+    timeout entries that cannot be active together. A whole-run limit must
+    sit above the largest effective per-test allowance for that profile.
 
     Parameters
     ----------
     config_text : str
         The nextest configuration file's text.
+    profile : str
+        The profile whose effective test allowances are read.
 
     Returns
     -------
     fractions.Fraction
         The longest per-test budget, exactly.
 
-    A ``slow-timeout`` that names no ``terminate-after`` raises
-    :class:`nextest_durations.UnboundedTestError` from
-    :func:`nextest_slow_timeouts.budget_of` rather than counting as one
-    period, because such a configuration bounds nothing.
-
     Raises
     ------
     NextestConfigurationError
-        If the configuration declares no ``slow-timeout`` at all.
+        If the profile declares no effective slow-timeout.
     """
-    budgets = list(starmap(budget_of, _slow_timeouts(config_text)))
+    profiles = _table(_parsed(config_text).get("profile"))
+    default = _table(profiles.get("default"))
+    selected = _table(profiles.get(profile))
+    tables: list[tuple[str, dict[str, object]]] = []
+
+    if "slow-timeout" in selected:
+        tables.append((f"profile.{profile}", selected))
+    elif profile != "default" and "slow-timeout" in default:
+        tables.append(("profile.default", default))
+
+    source = selected if "overrides" in selected else default
+    entries = source.get("overrides")
+    if isinstance(entries, list):
+        table_path = f"profile.{profile}" if source is selected else "profile.default"
+        tables.extend(
+            (f"{table_path}.overrides[{index}]", _table(entry))
+            for index, entry in enumerate(entries)
+        )
+
+    budgets = [
+        budget_of(path, table["slow-timeout"])
+        for path, table in tables
+        if "slow-timeout" in table
+    ]
     if not budgets:
         message = (
-            "the nextest configuration declares no slow-timeout, so no test "
-            "is bounded and there is no per-test tier to compare against"
+            f"the nextest profile {profile!r} declares no effective slow-timeout, "
+            "so no test is bounded and there is no per-test tier to compare against"
         )
         raise NextestConfigurationError(message)
     return max(budgets)

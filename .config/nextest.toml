@@ -3,8 +3,8 @@
 # Scope: this file governs every `cargo-nextest` invocation, including `cargo
 # llvm-cov nextest`. It covers the non-doctest pass of `make test`. nextest does
 # not execute doctests, so those remain a separate `cargo test --doc` pass (the
-# `doctest` Make target). Mutation testing keeps its own purpose-built runner
-# and is unaffected by this file.
+# `doctest` Make target). `cargo-mutants` keeps its own purpose-built runner;
+# the Kani mutation compile check below runs through nextest.
 #
 # Ownership: this configuration encodes the test-isolation contracts described
 # in "Test execution" and "Test isolation utilities" in
@@ -20,11 +20,8 @@
 # after 60s; terminate a test that has run for five warning periods (300s).
 #
 # This is the profile's own allowance, and it governs every test no override
-# matches. The mutation compile gate widens it to ten periods, which makes 600 s
-# the largest allowance. Apart from that `#[ignore]`d gate, no test in this
-# profile starts a Cargo build: ADR-0059 moved compile-time contracts into the
-# build and doctest passes, and package verification into
-# `make test-package-verify`.
+# matches. The Kani mutation gate has a separate profile so its long compile
+# budget cannot change the ordinary or coverage-suite limits.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -53,32 +50,11 @@ max-threads = 1
 # and a guard reading only the group's filters could not see it.
 [[profile.default.overrides]]
 # Compiles one patched tree per mutation patch, so it belongs in the
-# serialized child-Cargo group, of which it is the only member. It is
-# `#[ignore]`-gated and run by `make test-kani-mutations`, not by the default
-# profile.
+# serialized child-Cargo group. The dedicated Kani profile below carries its
+# longer timeout; this default override only owns serialization and output.
 filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
-# Ten warning periods, not the profile's five. This is the targeted override
-# the policy above asks for: the constraint is real and external, and the
-# default allowance is genuinely too small for this test rather than merely
-# tight. It compiles all 18 patched trees through the Kani frontend into
-# `target/kani-mutation-compile`, which is a cold target directory on every
-# run -- `kani-cache` restores the Kani payloads under `.kani-rustup` and
-# `.kani-home`, not a build tree -- so the cost is a cold build of the whole
-# dependency graph plus 18 incremental recompiles, and it is the host's to
-# decide, not the test's.
-#
-# Measured: 151.5 s on a local host, and 257.7 s and 261.5 s on CI in two
-# runs that both passed, against the 300 s default. A third CI run hit
-# 300.008 s and failed. A margin of 38 s on a 300 s cap is not a budget, it
-# is the difference between one runner and another, and the failure names
-# nextest's cap rather than the patch that was slow. 600 s is a chosen
-# allowance, not the largest the ordering admits: `global-timeout` must stay
-# strictly above the largest per-test allowance, and the 960 s CI budget
-# admits up to fifteen 60 s periods (900 s). This value remains 300 s below
-# that allowance and 360 s below the whole-run cap.
-slow-timeout = { period = "60s", terminate-after = 10 }
 
 [[profile.default.overrides]]
 # The RFC 0006 coverage contract (obligation COV-4 in
@@ -115,16 +91,16 @@ success-output = "immediate"
 # pass the coverage action runs after it is not a nextest run, so nothing in
 # this file bounds it and its own cargo watchdog does.
 #
-# The 16-minute global timeout is above the 600s largest per-test allowance,
-# the mutation compile gate's. Both comparisons hold:
+# The 16-minute global timeout is above the 300s largest per-test allowance in
+# this profile. The Kani profile has its own whole-run and per-test budgets.
+# Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
-#   960 s          > 600 s
+#   960 s          > 300 s
 #
 # The margin is not slack to be spent: a per-test allowance at or above the
 # whole-run budget would make the run end before the test it contains could
-# use its budget, so any targeted allowance must stay strictly below 960s, at
-# most fifteen 60s periods (900s).
+# use its budget, so allowances in this profile must stay strictly below 960s.
 #
 # The 1,980s cargo watchdog covers the full nextest termination, cold-build,
 # and report window with 50s to spare: 960s + 70s + 600s + 300s is 1,930s.
@@ -140,3 +116,18 @@ success-output = "immediate"
 # See "Test timeouts: the tiers this repository sets" in
 # docs/developers-guide.md, which holds the arithmetic and the sample.
 global-timeout = "16m"
+
+[profile.kani]
+# Used only by make test-kani-mutations. Keep this cold Kani compile budget
+# separate from the shared coverage profile and ordinary local test profile.
+# The 42-minute run cap contains the 40-minute per-test allowance, nextest's
+# 70-second termination window, and a 50-second reporting margin.
+inherits = "default"
+global-timeout = "42m"
+slow-timeout = { period = "60s", terminate-after = 5 }
+
+[[profile.kani.overrides]]
+filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'
+test-group = "nested-cargo-builds"
+success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 40 }

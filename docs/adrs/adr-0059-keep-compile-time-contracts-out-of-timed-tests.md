@@ -131,12 +131,36 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   harness tests, and the packaging test leave `nested-cargo-builds`, along with
   the three 900 s allowances they carried. With no build left in the default
   suite, the generated-completion readers leave the group too, and the
-  `#[ignore]`-gated mutation compile gate is its only member. Its 600 s is now
-  the largest per-test allowance.
+  `#[ignore]`-gated mutation compile gate is its only member. Its original
+  allowance of 600 s was then the largest per-test allowance.
 - **Discovery.** The child-Cargo discovery used by the workflow contracts no
   longer treats `cargo package --list` as build-capable, and a contract now
   requires that no test outside the mutation compile gate starts a
   build-capable Cargo command at all.
+
+## Reassessment (2026-11-04)
+
+The terminal-rendering branch adds the display-plan module to Kani's proof
+scope, increasing the mutation patch set to 30 trees. Hosted run 41840367244
+and a local run of the same candidate both reached the previous 600-second
+nextest limit while compiling the first sorted patch, without a compiler
+diagnostic. The preserved local sandbox confirms that this was the first patch,
+not a later patch accumulating slow work.
+
+## Reassessment (2026-11-05)
+
+The targeted 900-second allowance also timed out locally at 900.093 seconds
+without a compiler diagnostic. A separate one-patch cold compile completed in
+1,864 seconds while shared compiler admission was heavily queued; this is
+evidence for a longer allowance but not a stable runtime estimate. Keep the
+300-second default and coverage limits unchanged. Give the mutation test 2,400
+seconds in a dedicated Nextest profile, with a 2,520-second whole-run cap. The
+latter contains the test allowance, Nextest's 70-second termination window, and
+a 50-second margin. Hosted run 41840367244 spent 824 seconds before the test
+and 7 seconds finalizing. A 60-minute Kani job contains that setup, the full
+whole-run allowance, and finalization in 3,351 seconds, with 249 seconds
+remaining. The workflow contracts and a successful Kani run must confirm this
+budget before it is treated as validated.
 
 ## Known risks and limitations
 
