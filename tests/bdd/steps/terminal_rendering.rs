@@ -3,7 +3,12 @@
 use crate::bdd::fixtures::TestWorld;
 use crate::bdd::helpers::assertions::normalize_fluent_isolates;
 use anyhow::{Context, Result, ensure};
-use rstest_bdd_macros::{then, when};
+use rstest_bdd_macros::then;
+// `when` is imported only where it is used: the step it annotates needs the
+// Unix-only PTY harness, so on other platforms the import is dead and
+// `-D warnings` rejects it.
+#[cfg(unix)]
+use rstest_bdd_macros::when;
 #[cfg(unix)]
 use std::time::Duration;
 use test_support::terminal::classify;

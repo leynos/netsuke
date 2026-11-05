@@ -30,3 +30,6 @@ mod progress_pty;
 mod support;
 #[path = "terminal_rendering/tracing.rs"]
 mod tracing;
+#[cfg(unix)]
+#[path = "terminal_rendering/tracing_pty.rs"]
+mod tracing_pty;
