@@ -12,10 +12,10 @@ use std::borrow::Cow;
 use std::path::Path;
 use std::sync::Arc;
 
-use super::super::constants::SHELLS_KEY;
 use super::super::validation::validation_error;
 use super::json::json_from_value;
 use super::paths::{PathNormalizer, comparison_key, project_scope_file};
+use super::shell_definitions::{declares_shells, occurrence_errors, untrusted_shells_error};
 use super::trace::EnvGrantQuarantineTrace;
 use super::{ProjectFetchPolicyRequest, ProjectManifestBudgetRequest};
 
@@ -189,7 +189,7 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
     {
         let path = layer.path().map(ToOwned::to_owned);
         let mut value = layer.into_value();
-        reject_unauthorized_shells(&value, authority, &mut resolved);
+        check_shells_occurrence(&value, authority, &mut resolved);
         if let Some(json) = json_from_value(&value) {
             resolved.json_preference = json;
         }
@@ -209,34 +209,26 @@ pub(super) fn retain_layers_and_resolve_json(layers: Vec<ScopedFileLayer>) -> Re
     resolved
 }
 
-/// Reject a `shells` declaration this occurrence has no authority to make.
+/// Retain an operator `shells` declaration or reject an untrusted one.
 ///
-/// The check runs on key presence alone, before any typed merging, so an empty
-/// or malformed declaration is rejected rather than becoming a schema error
-/// later or being silently ignored. No configured-shell schema exists yet, so
-/// even an operator declaration is rejected: M1 must not accept a definition it
-/// cannot validate.
-fn reject_unauthorized_shells(
+/// Presence is checked before any typed merging, so a project, explicit, or
+/// environment occurrence cannot reach the schema through an empty or malformed
+/// declaration. An operator occurrence is validated field by field in
+/// [`occurrence_errors`], whose diagnosis names `shells[index].name`,
+/// `shells[index].executable`, or `shells[index].args`; the error becomes an
+/// ordinary discovery error, so startup stops before any manifest is read.
+fn check_shells_occurrence(
     value: &serde_json::Value,
     authority: RootAuthority,
     resolved: &mut ResolvedFileLayers,
 ) {
-    if !value
-        .as_object()
-        .is_some_and(|fields| fields.contains_key(SHELLS_KEY))
-    {
+    if !declares_shells(value) {
         return;
     }
-    let message = match authority {
-        RootAuthority::Operator => {
-            "configured `shells` definitions are not supported by this build"
-        }
-        RootAuthority::Untrusted => concat!(
-            "the `shells` key may only be declared in an operator configuration file; ",
-            "project, explicit, and environment sources are not trusted to declare it"
-        ),
-    };
-    resolved.errors.push(validation_error(SHELLS_KEY, message));
+    match authority {
+        RootAuthority::Operator => resolved.errors.extend(occurrence_errors(value)),
+        RootAuthority::Untrusted => resolved.errors.push(untrusted_shells_error()),
+    }
 }
 
 /// Retain a project-chain budget request or its deferred validation error.

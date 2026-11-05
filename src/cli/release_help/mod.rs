@@ -78,6 +78,21 @@ impl OrthoConfigDocs for ReleaseHelpCli {
     }
 }
 
+/// Configuration fields that release help does not describe.
+///
+/// Release help documents the command-line surface, so a field describes a
+/// real option only when the parser declares one. Both entries below lack
+/// that: `cmds` is the structural per-subcommand container, and `shells` is
+/// file-only operator policy declared `skip_cli`, with the environment and
+/// project roots rejected. Rendering either as an option would document a
+/// spelling the binary refuses.
+const UNPUBLISHED_CONFIGURATION_FIELDS: [&str; 2] = ["cmds", "shells"];
+
+/// Report whether release help describes the configuration field `name`.
+fn is_published_configuration_field(name: &str) -> bool {
+    !UNPUBLISHED_CONFIGURATION_FIELDS.contains(&name)
+}
+
 /// Project existing CLI Fluent keys onto release-help configuration fields.
 ///
 /// `CliConfig` remains the source of the fields and their configuration
@@ -88,8 +103,9 @@ impl OrthoConfigDocs for ReleaseHelpCli {
 /// the shape the parser actually accepts, leaving help keys, environment and
 /// file sources, value types and defaults untouched.
 ///
-/// The structural `cmds` container is not a public configuration setting, so
-/// release help omits it rather than inventing a separate model.
+/// Fields without a command-line surface, or that are not a public
+/// configuration setting at all, are omitted rather than documented as
+/// options that do not exist; see [`UNPUBLISHED_CONFIGURATION_FIELDS`].
 ///
 /// # Errors
 ///
@@ -101,7 +117,7 @@ fn localized_config_help(
 ) -> Result<Vec<FieldMetadata>> {
     fields
         .into_iter()
-        .filter(|field| field.name != "cmds")
+        .filter(|field| is_published_configuration_field(&field.name))
         .map(|mut field| {
             let help_key = top_level_flag_help_key(&field.name).with_context(|| {
                 format!(
@@ -290,8 +306,9 @@ mod tests {
 
         for field in metadata.fields {
             ensure!(
-                field.name != "cmds",
-                "release help must not expose the structural cmds container"
+                is_published_configuration_field(&field.name),
+                "release help must not expose the file-only field {}",
+                field.name
             );
             ensure!(
                 field.long_help_id.is_none(),
@@ -317,18 +334,25 @@ mod tests {
             field_names in prop::collection::vec(
                 prop_oneof![
                     3 => prop::sample::select(recognised_configuration_field_names()),
-                    1 => Just("cmds".to_owned()),
+                    1 => prop::sample::select(
+                        UNPUBLISHED_CONFIGURATION_FIELDS
+                            .iter()
+                            .map(|name| (*name).to_owned())
+                            .collect::<Vec<_>>(),
+                    ),
                     1 => "unknown[a-z]{0,12}".prop_map(|suffix| format!("unknown{suffix}")),
                 ],
                 0..64,
             ),
         ) {
-            let contains_unrecognised_field = field_names.iter().any(|name| {
-                name != "cmds" && top_level_flag_help_key(name).is_none()
-            });
+            let is_unrecognised = |name: &String| {
+                is_published_configuration_field(name) && top_level_flag_help_key(name).is_none()
+            };
+            let contains_unrecognised_field = field_names.iter().any(is_unrecognised);
             let expected_recognised_names = field_names
                 .iter()
-                .filter(|name| top_level_flag_help_key(name).is_some())
+                .filter(|name| !is_unrecognised(name))
+                .filter(|name| is_published_configuration_field(name))
                 .cloned()
                 .collect::<Vec<_>>();
             let projection = localized_config_help(
@@ -351,7 +375,7 @@ mod tests {
                     expected_recognised_names,
                 );
                 let has_valid_localized_fields = projected_fields.iter().all(|field| {
-                    field.name != "cmds"
+                    is_published_configuration_field(&field.name)
                         && field.long_help_id.is_none()
                         && top_level_flag_help_key(&field.name) == Some(field.help_id.as_str())
                 });

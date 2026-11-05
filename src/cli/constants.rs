@@ -8,7 +8,8 @@ pub(super) const ENV_PREFIX: &str = "NETSUKE_";
 
 /// Top-level configuration key that declares shell definitions.
 ///
-/// Shell definitions grant executable authority, so discovery treats this key
-/// as a trust boundary rather than an ordinary configuration value: only an
-/// operator-owned root may declare it.
-pub(super) const SHELLS_KEY: &str = "shells";
+/// Re-exported rather than restated: the schema, discovery, and the environment
+/// layer must name the key identically, and the schema owns the spelling
+/// because it also ships in the build script's compiled slice, which does not
+/// compile this module.
+pub(super) use crate::cli::config::shells::SHELLS_KEY;
