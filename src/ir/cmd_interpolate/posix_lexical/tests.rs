@@ -8,6 +8,9 @@ use super::super::{
 use camino::Utf8PathBuf;
 use rstest::rstest;
 
+/// Signature shared by the POSIX command and script interpolators.
+type Interpolator = fn(&str, &CommandBindings) -> Result<String, IrGenError>;
+
 /// Path whose unquoted encoding is executable shell syntax inside double quotes.
 const HOSTILE_PATH: &str = "x\"; touch injected; echo \"y";
 
@@ -83,21 +86,33 @@ fn hostile_posix_bindings() -> CommandBindings {
     )
 }
 
-/// Assert that command and script interpolation both yield the expected text.
+/// Return both POSIX interpolators that share the comment scanner.
 ///
-/// The two traversals share the POSIX comment scanner, so a boundary case that
-/// holds for one should hold for the other.
-fn assert_both_outputs(template: &str, expected: &str, context: &str) {
-    let bindings = hostile_posix_bindings();
-    for interpolate in [
+/// A boundary case that holds for one traversal should hold for the other.
+fn both_interpolators() -> [Interpolator; 2] {
+    [
         interpolate_command_with_bindings,
         interpolate_script_with_bindings,
-    ] {
+    ]
+}
+
+/// Assert that command and script interpolation both yield the expected text.
+fn assert_both_outputs(template: &str, expected: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
         assert_eq!(
             interpolate(template, &bindings).expect(context),
             expected,
             "{context}"
         );
+    }
+}
+
+/// Assert that command and script interpolation both reject the template.
+fn assert_both_reject(template: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
+        assert!(interpolate(template, &bindings).is_err(), "{context}");
     }
 }
 
@@ -279,16 +294,10 @@ fn inner_group_close_inside_substitution_starts_inert_comment() {
 #[test]
 fn case_pattern_close_before_hash_fails_closed() {
     let (template, _) = inert_comment_case("echo $(case x in\nx)", Some("esac)"));
-    let bindings = hostile_posix_bindings();
-    for interpolate in [
-        interpolate_command_with_bindings,
-        interpolate_script_with_bindings,
-    ] {
-        assert!(
-            interpolate(&template, &bindings).is_err(),
-            "a case pattern terminator before '#' must fail closed"
-        );
-    }
+    assert_both_reject(
+        &template,
+        "a case pattern terminator before '#' must fail closed",
+    );
 }
 
 /// Verify a non-ASCII character keeps a heredoc delimiter word intact.
