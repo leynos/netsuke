@@ -2,7 +2,7 @@
 
 The ordering contract compares four numbers, and its assertions over the
 repository's own files are satisfied by several plausibly wrong readings:
-every `terminate-after` here is 5 or 10 and every period is 60 s, so a
+every `terminate-after` here is 5 or 15 and every period is 60 s, so a
 reading that confused the two would still order the tiers correctly. The
 tests below drive the readings with synthetic configurations and
 synthetic workflows instead, where a wrong reading has nowhere to hide.
@@ -81,15 +81,15 @@ def document(*tables: str, profile: str = "default") -> str:
 
 
 def test_the_repository_s_own_per_test_budgets_are_the_documented_ones() -> None:
-    """300 s ordinarily, up to 600 s for the mutation compile gate.
+    """300 s ordinarily, up to 900 s for each Kani mutation test.
 
     Read the checked-in nextest configuration so drift from the documented
     budget is visible; the synthetic profile also keeps the default figure
     covered independently.
     """
     configured = NEXTEST_CONFIG.read_text(encoding="utf-8")
-    assert largest_test_allowance(configured) == pytest.approx(600.0), (
-        "ten warning periods of sixty seconds is a 600s budget"
+    assert largest_test_allowance(configured) == pytest.approx(900.0), (
+        "fifteen warning periods of sixty seconds is a 900s budget"
     )
     base_only = (
         '[profile.default]\nslow-timeout = { period = "60s", terminate-after = 5 }\n'

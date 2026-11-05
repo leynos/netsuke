@@ -1,7 +1,8 @@
 """Hold the Kani lane's mutation compile gate to the workflow that runs it.
 
-`make test-kani-mutations` compiles each mutation patch's patched tree through
-the Kani frontend under denied warnings. The Make target is not enough on its
+`make test-kani-mutations` first warms the Kani target in one Nextest invocation,
+then compiles each mutation patch's patched tree in a second invocation. The
+Make target is not enough on its
 own: it can be perfectly written and never invoked, and
 `tests/makefile_test_target.rs` pins its recipe without pinning the CI wiring.
 
@@ -87,3 +88,14 @@ def test_the_gate_target_denies_warnings_through_the_kani_frontend() -> None:
         assert fragment in recipe, (
             f"the gate target must pass {fragment!r}; got {recipe!r}"
         )
+    commands = [line for line in recipe.splitlines() if "nextest run" in line]
+    assert len(commands) == 2, (
+        f"the cold prewarm and patch sweep need separate Nextest budgets: {commands!r}"
+    )
+    assert "prewarm::prewarm_kani_mutation_target" in commands[0], (
+        "the cold Kani compile must warm the shared target first"
+    )
+    assert (
+        "compile_guard::every_patched_tree_compiles_under_denied_warnings"
+        in commands[1]
+    ), "the timed patch sweep must run after the target is warm"

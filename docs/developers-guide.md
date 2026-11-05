@@ -5864,18 +5864,21 @@ as an opaque read error.
 two module shapes and that diagnostic against a synthetic tree, so the check
 does not depend on this revision happening to contain an absent property.
 
-A fourth check is gated, because it costs one Kani codegen per patch:
+A fourth check is gated, because it costs one Kani frontend compile per patch:
 `compile_guard::every_patched_tree_compiles_under_denied_warnings` applies each
 patch, compiles the patched tree under `-D warnings`, and reverts it through a
 fallible `revert()` whose failure is aggregated and reported, so a failed
 reverse cannot pass quietly as a green run with a mutation still applied. A
 `Drop` guard remains as the unwind fallback for an assertion failure mid-patch.
-Run it with `make test-kani-mutations`, which drives nextest with
-`--run-ignored ignored-only`; `kani-smoke` runs the same target on every pull
-request. Applying cleanly is not enough on its own: `make kani-full` denies
-warnings, so a patch that seeds its fault by leaving a binding or helper unused
-is a hard compile error, `cargo kani` never reaches the harness, and the patch
-contributes no evidence while still looking healthy to `git apply --check`.
+Run it with `make test-kani-mutations`, which first runs the ignored
+`prewarm::prewarm_kani_mutation_target` test and then the patch sweep in a
+separate Nextest invocation. The cold dependency build therefore has its own
+timeout window; both invocations use `--run-ignored ignored-only` and the same
+target directory. `kani-smoke` runs the target on every pull request. Applying
+cleanly is not enough on its own: `make kani-full` denies warnings, so a patch
+that seeds its fault by leaving a binding or helper unused is a hard compile
+error, `cargo kani` never reaches the harness, and the patch contributes no
+evidence while still looking healthy to `git apply --check`.
 
 The tree it patches is not the checkout it runs in. `sandbox.rs` exports the
 current revision with `git archive` into `target/kani-mutation-sandbox/`, and
@@ -5884,10 +5887,14 @@ revert a tidiness step rather than a safety one: nextest terminates a timed-out
 test by signalling its process group, so `Drop` cannot run, and a mutation
 seeded into the working checkout would survive the run as a change nobody made.
 An isolated copy is simply discarded, so termination cannot leave one behind.
-`GIT_CEILING_DIRECTORIES` is pinned to the sandbox root, because the sandbox
-sits inside the checkout and an unceiled `git` would walk up into the real
-repository; the gate asserts that the sandbox resolves no repository before it
-applies anything. The revision is the working tree captured with
+The child Cargo invocation enables incremental compilation for these one-file
+package mutations and keeps the build-script override non-incremental, because
+Kani's build-script compilation fails with incremental enabled. Ordinary
+workspace builds keep incremental compilation disabled to limit their build
+artefacts. `GIT_CEILING_DIRECTORIES` is pinned to the sandbox root, because the
+sandbox sits inside the checkout and an unceiled `git` would walk up into the
+real repository; the gate asserts that the sandbox resolves no repository
+before it applies anything. The revision is the working tree captured with
 `git stash create`, not `HEAD`, so an uncommitted patch edit is what gets
 compiled — compiling `HEAD` would report a committed patch healthy while the
 developer was editing it, the same shape as the dead override below. On CI the
@@ -5900,48 +5907,47 @@ a new patch before running `make test-kani-mutations`. A patch that is both
 untracked and ignored is not reported — an ignored file is not evidence the
 gate was asked to read.
 
-The gate compiles through the Kani frontend (`cargo kani --only-codegen`)
-rather than `cargo check`, and it runs in `kani-smoke` rather than
-`build-test`, for one reason: only Kani parses `#[cfg(kani)]` code.
-`cargo check` leaves that surface unparsed, so a patch that seeds its fault
-inside a Kani-gated item is invisible to it — measured on
-`ir__cycle__verification__self_dependency_reports_cycle`, whose only changed
-line is a `cfg(kani)` match arm, `cargo check --lib --all-features` exits 0 and
-reports the tree healthy while `cargo kani` rejects that same tree with
-`variant Present is never constructed`. `--only-codegen` is a full compile under
-`cfg(kani)` with verification skipped, so it subsumes the check it replaced
-rather than joining it.
+The gate compiles through the Kani frontend
+(`cargo kani --no-codegen -Z unstable-options`) rather than `cargo check`, and
+it runs in `kani-smoke` rather than `build-test`, for one reason: only Kani
+parses `#[cfg(kani)]` code. `cargo check` leaves that surface unparsed, so a
+patch that seeds its fault inside a Kani-gated item is invisible to it —
+measured on `ir__cycle__verification__self_dependency_reports_cycle`, whose
+only changed line is a `cfg(kani)` match arm,
+`cargo check --lib --all-features` exits 0 and reports the tree healthy while
+`cargo kani` rejects that same tree with `variant Present is never constructed`.
+`--no-codegen` checks compilation under `cfg(kani)` and skips translation to
+Kani's model-checking backend. The mutation gate catches frontend and warning
+failures; `make kani-full` performs the model codegen and verification.
 
-It carries its own `slow-timeout` in `.config/nextest.toml`, ten 60-second
-periods rather than the profile's five, because the default allowance is too
-small for it rather than merely tight. The test compiles into
-`target/kani-mutation-compile`, which no cache restores — `kani-cache` holds
-the Kani payloads, not a build tree — so every run pays a cold build of the
-whole dependency graph plus 18 incremental recompiles, and how long that takes
-is the host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third
-failed at 300.008 s on a head whose only difference was eight lines of
-Markdown. A 38 s margin is not a budget but the difference between two runners,
-and the failure then names nextest's cap rather than the patch that was slow.
-The widened allowance is bounded from above by the whole-run budget: the
-ordering requires `global-timeout` strictly above the largest per-test
-allowance. The mutation gate's 600 s is now the largest allowance in the file;
-every other test uses the 300 s default because ADR-0059 moved the compiler
-work that once needed 900 s out of the suite. At 60 s periods, 960 s would
-permit at most fifteen periods (900 s) while remaining strictly below the
-whole-run budget. An allowance of 960 s would equal that budget, and the run
-could end before the test used its allowance.
+Both tests carry a `slow-timeout` in `.config/nextest.toml`, fifteen 60-second
+periods rather than the profile's five. The prewarm pays the cold dependency
+build once; the sweep compiles the patched trees into the same
+`target/kani-mutation-compile` directory, which `kani-cache` does not restore.
+The cold dependency build and the patch sweep together exhausted the cap before
+the sweep finished, so splitting the work gives each invocation its own timer
+while preserving incremental reuse. The older CI measurements still show why a
+larger per-test budget was needed: two runs passed at 257.7 s and 261.5 s, and
+a third failed at 300.008 s. The widened allowance is bounded from above by the
+whole-run budget: the ordering requires `global-timeout` strictly above the
+largest per-test allowance. The Kani prewarm and sweep each get 900 s, the
+largest allowance in the file; every other test uses the 300 s default because
+ADR-0059 moved the compiler work that once needed 900 s out of the suite. At 60
+s periods, 960 s would permit at most fifteen periods (900 s) while remaining
+strictly below the whole-run budget. An allowance of 960 s would equal that
+budget, and the run could end before the test used its allowance.
 
 That widening was inert when it first landed, which is why the override is
 worth reading as a worked example of the trap above. Its filter named the bare
 test name, and the test is declared in a submodule, so the anchor never matched
-and the override applied to nothing: the 600 s was never in force, and the two
-passing CI runs at 257.7 s and 261.5 s cannot show otherwise, because both sit
-inside the 300 s default an inert override predicts. The filter now carries the
-`compile_guard::` prefix. The general rule is that a filter for a test in a
-submodule must name the module path Nextest prefixes onto the qualified name it
-matches against; `cargo nextest show-config test-groups` is the cheap way to
-see whether an override binds, since a filter selecting nothing leaves its
-override out of that listing entirely.
+and the override applied to nothing: the intended 600 s was never in force, and
+the two passing CI runs at 257.7 s and 261.5 s cannot show otherwise, because
+both sit inside the 300 s default an inert override predicts. The filter now
+carries the `compile_guard::` prefix. The general rule is that a filter for a
+test in a submodule must name the module path Nextest prefixes onto the
+qualified name it matches against; `cargo nextest show-config test-groups` is
+the cheap way to see whether an override binds, since a filter selecting
+nothing leaves its override out of that listing entirely.
 
 Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
 literal rather than deleting a statement or redirecting a call. Deleting the
@@ -6246,12 +6252,14 @@ twice and give that baseline two writers.
 `kani-smoke` carries two test sets that share only the lane. `make kani-ir`
 verifies the harnesses under the Kani configuration with warnings allowed;
 `make test-kani-mutations` compiles patched trees through the same frontend
-with warnings denied. They are separate because they answer different
-questions: the first asks whether the harnesses hold, the second whether they
-can still be reached at all. The gate compiles each patch into one shared
-`CARGO_TARGET_DIR`, so successive patches reuse a single compiled dependency
-graph rather than rebuilding it apiece: each patch touches one file, so only
-that crate and its dependants recompile.
+with warnings denied. That target uses two sequential Nextest invocations:
+`prewarm::prewarm_kani_mutation_target` compiles the unpatched tree first, then
+`compile_guard::every_patched_tree_compiles_under_denied_warnings` compiles
+every patch. Both use the same fixed sandbox and `CARGO_TARGET_DIR`, so the
+sweep reuses the prewarm's dependency build. The test sets are separate because
+they answer different questions: the first asks whether the harnesses hold, the
+second whether they can still be reached at all. The two invocations separate
+the cold build from the patch sweep's own timeout window.
 
 `netsukefile` and `kani-smoke` differ in platform or in purpose, so neither is
 a candidate for folding. The Windows gate keeps its own `cargo nextest` pass
@@ -6324,8 +6332,8 @@ governs the non-doctest pass only, and deliberately stays small:
   signalled, so such a grandchild is not itself killed. The module is
   Unix-tested and platform-neutral in use. Mark a new spawn of this kind with
   the helper and a `nested-cargo-allow: timed` comment naming it.
-- **No cold builds inside tests.** Cargo's publish verification build runs as
-  `make test-package-verify` rather than inside
+- **Cold builds stay out of ordinary tests.** Cargo's publish verification
+  build runs as `make test-package-verify` rather than inside
   `packaged_manifest_retains_build_script_sources`, which keeps only the
   `cargo package --list` assertions. Under shared compiler admission that build
   reached a 600s cap, then a 720s one, so no per-test allowance could bound it.
@@ -6336,7 +6344,10 @@ governs the non-doctest pass only, and deliberately stays small:
   `test_support`'s doctest phase. The fixture libraries have no nested Cargo
   invocation or widened timeout; doctests run outside Nextest's per-test
   allowance. The remaining targeted allowances stay below the 960s CI whole-run
-  cap; none adds retries or widens timeouts for unrelated tests.
+  cap; none adds retries or widens timeouts for unrelated tests. The explicit
+  `make test-kani-mutations` target is the bounded exception: its ignored
+  prewarm test pays the cold Kani frontend build, and its separate ignored
+  sweep reuses that target directory.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
@@ -6356,18 +6367,19 @@ governs the non-doctest pass only, and deliberately stays small:
   `test(/^every_patched_tree_compiles_under_denied_warnings($|::)/)` names a
   test whose real name is
   `compile_guard::every_patched_tree_compiles_under_denied_warnings` and
-  selects nothing. The static contracts cannot see this one, because they
-  compare bare names to bare names and the written name resolves; the accepted
-  grammar admits an optional `module::` prefix and captures only the bare name
-  so that comparison stays bare-to-bare, which leaves the prefix itself to be
-  proved at run time. Nextest's `~` substring form is unanchored and
-  over-matches, so it is not used.
-  `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds these
-  contracts, including that every filtered name resolves to a declared test.
-  The rule is applied to every filter, not only this group's, because the same
-  edit that unhooks a test from its policy is invisible until someone adds a
-  `#[case]` attribute. Two test-only modules sit behind that contract, split by
-  what they read.
+  selects nothing. The same module-qualified rule applies to the prewarm
+  selector, `prewarm::prewarm_kani_mutation_target`. The static contracts
+  cannot see the missing module prefix, because they compare bare names to bare
+  names and the written name resolves; the accepted grammar admits an optional
+  `module::` prefix and captures only the bare name so that comparison stays
+  bare-to-bare, which leaves the prefix itself to be proved at run time.
+  Nextest's `~` substring form is unanchored and over-matches, so it is not
+  used. `tests/workflow_contracts/nextest_child_cargo_group_test.py` holds
+  these contracts, including that every filtered name resolves to a declared
+  test. The rule is applied to every filter, not only this group's, because the
+  same edit that unhooks a test from its policy is invisible until someone adds
+  a `#[case]` attribute. Two test-only modules sit behind that contract, split
+  by what they read.
   `tests/workflow_contracts/nextest_child_cargo_group_invariants.py` reads the
   Nextest configuration and constrains the accepted selector grammar;
   `tests/workflow_contracts/nextest_rust_test_discovery.py` classifies the Rust
@@ -11368,7 +11380,7 @@ All four tiers are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation compile gate    |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 900 s Kani prewarm and sweep   |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally             |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step |
 | Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                         |
@@ -11385,19 +11397,19 @@ and the watchdog's 1,980 s are the current values.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real maximum is 600 s. Any
+alone would report a 60 s allowance where the real maximum is 900 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
 
-There are two distinct per-test allowances and the larger governs.
+There are two per-test allowance sizes, and the larger governs.
 `[profile.default]`'s own `slow-timeout` gives five periods — 300 s — to every
-test no override matches, which is almost all of them. The mutation compile
-gate gets ten periods, 600 s; it compiles all 18 patched trees through the Kani
-frontend into a target directory no cache restores, and it runs in its own
-`make test-kani-mutations` invocation rather than in the default suite. A
-whole-run budget has to sit above the largest allowance in the file, so 600 s
-is the figure the ordering below is written against, not the 300 s most tests
-get.
+test no override matches, which is almost all of them. The Kani prewarm and
+mutation sweep each get fifteen periods, 900 s. They run as separate Nextest
+invocations inside `make test-kani-mutations`, outside the default suite, so
+the cold dependency build does not consume the sweep's per-test or whole-run
+window. A whole-run budget has to sit above the largest allowance in the file,
+so 900 s is the figure the ordering below is written against, not the 300 s
+most tests get.
 
 No test the default suite runs needs an allowance of its own any longer. The
 production module slice, the embedder-facing public API, and the `test_support`
@@ -11419,14 +11431,21 @@ reading as the worked example of it. The gate passed twice at 257.7 s and 261.5
 s and then failed at 300.008 s on a head whose only diff was eight lines of
 Markdown. The code was not slow; the cap was too near the cost, and a margin of
 38 s is the difference between one runner and another rather than a budget. The
-packaging smoke test once carried a 900 s override of the same kind: under a
-private-target harness it passed at 145 s and timed out at 300.047 s on heads
-that differed by a word in a plan, and later full-suite runs passed at 208.921
-s and reached the 300.017 s cap during concurrent Cargo work. Its verification
-build has since left the suite, so it no longer needs one. Each override binds
-only because its filter carries the test's module path; earlier passing runs
-did not prove the wider allowance was in force because the test completed
-inside the 300 s default. See "nextest configuration" for the rule.
+gate later passed in 480.264 s on the pre-rebase base and reached its 600.019 s
+cap on the rebased base (CI runs 41782146443 and 41826968891). That cap covered
+a cold dependency build as well as the patch sweep, so the target now runs a
+prewarm and a patch sweep in separate Nextest invocations against the same
+sandbox path and target, so each gets its own 900 s allowance and CI whole-run
+budget. The 900 s allowance is the maximum below the 960 s whole-run cap and
+leaves 60 s for nextest to stop cleanly. The packaging smoke test once carried
+a 900 s override of the same kind: under a private-target harness it passed at
+145 s and timed out at 300.047 s on heads that differed by a word in a plan,
+and later full-suite runs passed at 208.921 s and reached the 300.017 s cap
+during concurrent Cargo work. Its verification build has since left the suite,
+so it no longer needs one. Each override binds only because its filter carries
+the test's module path; earlier passing runs did not prove the wider allowance
+was in force because the test completed inside the 300 s default. See "nextest
+configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at
 
@@ -11500,7 +11519,7 @@ to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-960 s          > 600 s
+960 s          > 900 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,980 s       >= 960 s + 70 s + 600 s + 300 s = 1,930 s
@@ -11995,7 +12014,7 @@ accepting an override or a bare duration.
 
 `tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
 well as its place in the order. The ordering holds for everything between the
-600 s largest per-test allowance and the 1,010 s the watchdog can cover, so the
+900 s largest per-test allowance and the 1,010 s the watchdog can cover, so the
 budget could drift to a value nobody chose with every comparison still passing,
 and the sample above would then describe a figure the file no longer sets.
 

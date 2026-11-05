@@ -20,11 +20,11 @@
 # after 60s; terminate a test that has run for five warning periods (300s).
 #
 # This is the profile's own allowance, and it governs every test no override
-# matches. The mutation compile gate widens it to ten periods, which makes 600 s
-# the largest allowance. Apart from that `#[ignore]`d gate, no test in this
-# profile starts a Cargo build: ADR-0059 moved compile-time contracts into the
-# build and doctest passes, and package verification into
-# `make test-package-verify`.
+# matches. The Kani prewarm and mutation sweep each widen it to fifteen
+# periods, which makes 900 s the largest allowance. Apart from those
+# `#[ignore]`d tests, no test in this profile starts a Cargo build: ADR-0059
+# moved compile-time contracts into the build and doctest passes, and package
+# verification into `make test-package-verify`.
 slow-timeout = { period = "60s", terminate-after = 5 }
 
 [test-groups.nested-cargo-builds]
@@ -51,34 +51,34 @@ max-threads = 1
 # issue 732 removed it, a Windows-only override widened one test's timeout
 # through `filter` and no `test-group`, the same field carrying the same defect,
 # and a guard reading only the group's filters could not see it.
+# The cold Kani frontend compile outlasts the ordinary 300 s allowance. The
+# prewarm runs separately before the sweep, and both use one target directory
+# so the sweep reuses its dependency build.
 [[profile.default.overrides]]
-# Compiles one patched tree per mutation patch, so it belongs in the
-# serialized child-Cargo group, of which it is the only member. It is
-# `#[ignore]`-gated and run by `make test-kani-mutations`, not by the default
-# profile.
+filter = 'test(/^prewarm::prewarm_kani_mutation_target($|::)/)'
+test-group = "nested-cargo-builds"
+success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 15 }
+
+[[profile.default.overrides]]
 filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
-# Ten warning periods, not the profile's five. This is the targeted override
-# the policy above asks for: the constraint is real and external, and the
-# default allowance is genuinely too small for this test rather than merely
-# tight. It compiles all 18 patched trees through the Kani frontend into
-# `target/kani-mutation-compile`, which is a cold target directory on every
-# run -- `kani-cache` restores the Kani payloads under `.kani-rustup` and
-# `.kani-home`, not a build tree -- so the cost is a cold build of the whole
-# dependency graph plus 18 incremental recompiles, and it is the host's to
-# decide, not the test's.
+# Fifteen warning periods, not the profile's five. The cold-build and
+# patch-sweep costs together exhaust one allowance on CI, so the prewarm now
+# pays the cold cost in a separate invocation. The target directory is not
+# restored by `kani-cache`.
 #
 # Measured: 151.5 s on a local host, and 257.7 s and 261.5 s on CI in two
 # runs that both passed, against the 300 s default. A third CI run hit
 # 300.008 s and failed. A margin of 38 s on a 300 s cap is not a budget, it
 # is the difference between one runner and another, and the failure names
-# nextest's cap rather than the patch that was slow. 600 s is a chosen
-# allowance, not the largest the ordering admits: `global-timeout` must stay
-# strictly above the largest per-test allowance, and the 960 s CI budget
-# admits up to fifteen 60 s periods (900 s). This value remains 300 s below
-# that allowance and 360 s below the whole-run cap.
-slow-timeout = { period = "60s", terminate-after = 10 }
+# nextest's cap rather than the patch that was slow. CI run 41782146443 passed
+# in 480.264 s on the previous base; after rebasing, run 41826968891 reached
+# this 600 s cap. Child compiler output is captured, so that establishes a
+# lower bound but gives no per-patch timing. The 900 s allowance is the largest
+# the 960 s whole-run budget admits and leaves 60 s for nextest to stop cleanly.
+slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
 # The RFC 0006 coverage contract (obligation COV-4 in
@@ -115,11 +115,11 @@ success-output = "immediate"
 # pass the coverage action runs after it is not a nextest run, so nothing in
 # this file bounds it and its own cargo watchdog does.
 #
-# The 16-minute global timeout is above the 600s largest per-test allowance,
-# the mutation compile gate's. Both comparisons hold:
+# The 16-minute global timeout is above the 900s per-test allowance used by
+# both Kani mutation tests. Both comparisons hold:
 #
 #   global-timeout > largest per-test allowance
-#   960 s          > 600 s
+#   960 s          > 900 s
 #
 # The margin is not slack to be spent: a per-test allowance at or above the
 # whole-run budget would make the run end before the test it contains could

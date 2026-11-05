@@ -205,8 +205,8 @@ def test_only_the_mutation_gate_has_an_extended_budget() -> None:
 
     Extended allowances existed for tests that compiled inside their own time
     budget. ADR-0059 moved that work out of the suite, so the `#[ignore]`-gated
-    mutation compile gate, which runs in its own invocation, is the one test
-    left with a measured cold-build allowance.
+    prewarm and patch-sweep tests, which run in separate invocations, are the
+    only tests left with extended allowances.
     """
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
@@ -221,16 +221,20 @@ def test_only_the_mutation_gate_has_an_extended_budget() -> None:
         if "slow-timeout" in override
     }
     expected = {
+        "test(/^prewarm::prewarm_kani_mutation_target($|::)/)": {
+            "period": "60s",
+            "terminate-after": 15,
+        },
         (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
         ): {
             "period": "60s",
-            "terminate-after": 10,
+            "terminate-after": 15,
         },
     }
     assert configured == expected, (
-        "only the mutation compile gate may carry an extended allowance"
+        "only the Kani prewarm and patch sweep may carry extended allowances"
     )
 
 
