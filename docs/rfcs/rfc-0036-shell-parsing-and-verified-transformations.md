@@ -160,7 +160,63 @@ invariants, but typestate alone cannot establish an input-dependent quote state.
 
 ## 4. Parser qualification
 
-### 4.1. POSIX and Bash
+### 4.1. Parser input contract
+
+Every qualified parser MUST receive the same declared input stage. That stage
+is marker-neutralized analysis source, not the authored template and not the
+fully substituted result. Three stages are distinguished:
+
+- **Authored source** is recipe text after manifest rendering, with Netsuke's
+  private marker token at each placeholder occurrence.
+- **Analysis source** is authored source with each marker occurrence replaced by
+  a neutral spelling that preserves tokenization; outside those occurrences it
+  is byte-identical to authored source.
+- **Emitted source** is the text produced by binding encoding and source-span
+  replacement.
+
+`brush-parser` and `mvdan/sh` MUST both parse analysis source. Neither MAY be
+given emitted source to classify an insertion role or to determine a source
+extent. Emitted source MAY be reparsed as supplementary post-emission evidence,
+and that reparse MUST NOT create, remove, merge, or reclassify a marker
+occurrence.
+
+Analysis source MUST be accompanied by a neutralization map that records, per
+occurrence, its authored span, its analysis span, its placeholder identity, and
+the role the parser assigned. Authored and analysis spans are equal by
+construction outside neutralized occurrences, so a parser coordinate converts
+to an authored coordinate by identity there and through the map inside one.
+Coordinates MUST be converted from the parser's own unit before any slice is
+taken, and the converted extent MUST be validated against the authored source.
+
+Neutralization MUST be injective and order-preserving, so marker provenance
+survives into admission and replacement. A role whose neutral spelling would
+have to depend on a binding value MUST be rejected rather than parsed: a
+binding that can move a token boundary or a source extent has acquired source
+authority. The qualification ADR MUST record this contract with the evidence
+used to classify each admitted role, and any role it declines MUST be excluded
+from the admitted role set in section 5.1.
+
+### 4.2. Marker-derived heredoc delimiters
+
+A marker in a heredoc delimiter word is the role section 4.1 rejects.
+Substituting the binding first is the only way to make the body extent
+parseable, and the terminator then follows the binding value rather than the
+authored source: a path whose text ends a shell word shortens the delimiter, so
+the body ends on a line the recipe author did not write. The
+[current lowering](../../src/ir/cmd_interpolate/posix_lexical/mod.rs) derives
+the terminator from the rendered binding in exactly that way, which is why the
+[#998](https://github.com/leynos/netsuke/issues/998) failure class survives a
+purely local fix.
+
+The supported role set MUST exclude markers in a heredoc delimiter word, and an
+accepted recipe MUST author that delimiter literally. Migration guidance for an
+affected recipe is to spell the delimiter itself and to place any binding
+outside the delimiter word, in a position the shared admission path admits.
+Until that migration lands, current lowering retains its immediate-fix baseline
+and regression coverage; removing it is a compatibility change requiring the
+decision and user-facing documentation described in section 7.
+
+### 4.3. POSIX and Bash
 
 `brush-parser` is the first production integration candidate because it offers
 a standalone Rust parser and source-bearing word pieces for quotes, escapes,
@@ -188,14 +244,13 @@ insertion-relevant source range. Missing provenance MUST reject the affected
 insertion or require an upstream or parser-selection change. Netsuke MUST NOT
 introduce another shell grammar to reconstruct missing spans.
 
-The [existing heredoc tests](../../src/ir/cmd_interpolate/tests.rs) support
-marker-derived delimiters. A template containing an unexpanded marker may not
-form a complete shell program when its terminator depends on the binding value.
-The qualification ADR MUST either define a justified staged parse and admission
-procedure for that role or explicitly deprecate or reject it with migration
-guidance. Binding data MUST NOT acquire source authority merely to obtain an
-AST. The migration cannot assume that a complete parse of marker-filled source
-succeeds for every currently accepted template.
+The adapter MUST analyse marker-neutralized source under section 4.1. It MUST
+NOT hand a qualified parser marker-filled or fully substituted source to decide
+an insertion role or a source extent. The
+[existing heredoc tests](../../src/ir/cmd_interpolate/tests.rs) support
+marker-derived delimiters, a role section 4.1 rejects; the qualification ADR
+MUST record that rejection and its migration guidance rather than invent a
+staged parse that would give binding data source authority.
 
 Use `mvdan/sh` as an independent syntax comparison implementation in continuous
 integration (CI). Its explicit dialect selection and full-program parser
@@ -212,7 +267,7 @@ against declared budgets. Grammar-affecting shell options and unsupported
 dynamic constructs MUST have an explicit policy; parser acceptance MUST NOT
 imply arbitrary runtime environment equivalence.
 
-### 4.2. PowerShell
+### 4.4. PowerShell
 
 Microsoft's `Parser.ParseInput` returns an abstract syntax tree (AST), tokens,
 and parse errors. The Windows reference helper MUST use the target PowerShell
@@ -240,7 +295,7 @@ Parser output alone MUST NOT establish whether a command resolves to a
 function, cmdlet, alias, or native application. Consumer-specific guarantees
 MUST state and test that resolution assumption.
 
-### 4.3. Alternatives
+### 4.5. Alternatives
 
 Tree-sitter grammars can supply useful syntax structure, but adapters must
 reject error and missing nodes and establish target-dialect coverage before
@@ -278,10 +333,13 @@ tests for prefix and suffix composition. The immediate active-escape rejection
 from #984 MUST remain effective until the new path demonstrably subsumes it.
 
 No accepted path may insert a binding in a protected heredoc body or
-unsupported delimiter position. Unknown roles, parser errors, exhausted
-resource budgets, invalid coordinates, and unsupported syntax MUST stop that
-transformation before it produces an executable plan. Parser failure MUST NOT
-select a more permissive legacy scanner.
+unsupported delimiter position, and the marker-derived heredoc delimiter that
+section 4.2 rejects belongs to neither the admitted nor the preserved set: such
+a template MUST be rejected until it authors the delimiter literally. Unknown
+roles, parser errors, exhausted resource budgets, invalid coordinates, and
+unsupported syntax MUST stop that transformation before it produces an
+executable plan. Parser failure MUST NOT select a more permissive legacy
+scanner.
 
 ### 5.2. Preserve source and values
 
