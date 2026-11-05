@@ -4,9 +4,19 @@
 //! the literal version field from the initially parsed YAML value. It does not
 //! read the environment or filesystem, and non-mapping roots remain available
 //! to the existing structural deserializer.
+//!
+//! [`telemetry`] observes the same single gate. The predicate decides and
+//! stays free of a metrics recorder; the telemetry child records the decision
+//! at the one boundary every loaded document crosses, so the counter's series
+//! count is fixed here rather than by anything a manifest supplies.
 
 use semver::Version;
 use serde_json::Value;
+
+mod telemetry;
+
+pub(in crate::manifest) use telemetry::record_admission;
+pub use telemetry::{SCHEMA_ADMISSION_OUTCOME_VALUES, SCHEMA_ADMISSION_TOTAL};
 
 /// Schema family and greatest minor understood by this reader.
 pub(super) struct SupportedSchema {
