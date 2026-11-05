@@ -169,7 +169,12 @@ explicit and exercise the actual adapters in tests.
     *any* `shells` declaration fails, which M2 deliberately relaxes for an
     operator root, so the property now compares the resolver's errors against
     the C1 authority of the declaring occurrences and carries its own witness.
-  - [x] 2026-11-05: Run the M2 gate set at `0df3dff18`. All ten gates passed:
+  - [x] 2026-11-05: Run the M2 gate set against the M2 working tree, whose
+    `HEAD` was still `0df3dff18` (the M1 repair commit). The gated tree was
+    committed afterwards as `343d10337`, which the later rebase replayed as
+    `1139f31df`; `0df3dff18` itself is reachable only from the local recovery
+    ref `refs/recovery/11-2-2-old-head-11410e7a3`, so a fresh clone cannot
+    resolve it. All ten gates passed:
     `check-fmt` (9 s), `lint` (427 s), `doc-coverage` (373 s), `test` (371 s),
     `test-workflow-contracts` (244 s), `test-package-verify` (213 s),
     `test-documentation-contracts` (55 s), `verus` (6 s), `markdownlint`
@@ -203,8 +208,23 @@ explicit and exercise the actual adapters in tests.
     configuration sample, the developers' guide, the design document, the
     OrthoConfig guide, and the repository layout, with the users' guide example
     registered as an executable documentation contract.
-  - [ ] 2026-11-05: Rerun the full gate set at the M3 candidate and request the
-    M3 CLI review, then publish and hand delivery to `pr-babysitting`.
+  - [x] 2026-11-05: Run the full gate set at `f03faf7b0`. All ten gates passed
+    in one batch: `check-fmt` (4 s), `lint` (103 s), `doc-coverage` (165 s),
+    `test` (59 s), `test-workflow-contracts` (213 s), `test-package-verify`
+    (63 s), `test-documentation-contracts` (2 s), `verus` (2 s, 9 verified and
+    0 errors), `markdownlint` (27 s), and `nixie` (3 s); the batch finished
+    `failed=0`. An earlier batch failed `markdownlint` on the spelling of
+    "normalises" in this plan, so the word was corrected and the whole set was
+    rerun rather than resumed.
+  - [x] 2026-11-05: Run the M3 milestone CLI review with CodeRabbit CLI 0.9.2
+    over `1139f31df..f03faf7b0` (`--committed --fresh --base-commit`), which
+    reviewed exactly the 24 changed files and completed in 443 s with exit 0.
+    Three findings were valid and are repaired: the M2 gate entry named a
+    commit that only a local recovery ref reaches, the decision-log entry
+    named the wrong file for the `[[shells]]` fence, and two near-identical
+    quarantine tests were not parameterized.
+  - [ ] 2026-11-05: Publish the repaired candidate and hand delivery to
+    `pr-babysitting`.
 
 ## Surprises & discoveries
 
@@ -397,9 +417,11 @@ build script's `cfg(test)` modules, because the slice compiles
   test asserts typed values or collections, which leaves the snapshots narrow.
   The snapshot normalizes the temporary workspace, the tracing timestamp, and
   the crate version, because none of those is part of the diagnostic.
-- 2026-11-05: Leave the `[[shells]]` fence in
-  `docs/ortho-config-users-guide.md` without a `tested-example` marker. The
-  executable-documentation loader reads `README.md`, `docs/users-guide.md`, and
+- 2026-11-05: Keep the `guide-configured-shell-definition` marker on the
+  `[[shells]]` fence in `docs/users-guide.md`, and leave the Rust `append` and
+  `PostMergeHook` example added to `docs/ortho-config-users-guide.md` without a
+  `tested-example` marker. The executable-documentation loader reads
+  `README.md`, `docs/users-guide.md`, and
   `docs/stdlib-yaml-and-jinja-guide.md`; a marker in a fourth file would
   register an identifier no loader can find.
 - 2026-11-05: Omit `shells` from release help. The field has no command-line
