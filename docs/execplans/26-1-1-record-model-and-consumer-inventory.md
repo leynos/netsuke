@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 32. See `Revision note` at the foot of this document. This plan was
+Revision 33. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -592,6 +592,14 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   header: the previous test passed silently, the guarded test fails with the
   intended message. The eleven gates passed at `9fadde36f`, the last revision
   whose parser the finding addresses.
+- [x] (2026-11-05) Rebased the branch onto `origin/main` at `c82189bf4`
+  (#1047) so the drift list's arithmetic can be exact. The rebase rewrote the
+  six branch commits the list cites, and #1047 itself touches `tests/`, so the
+  list is now generated from live Git: 31 commits, of which 25 are in the
+  `main` target, one adds the contract test, and five refactor or tighten it.
+  The set is verified by token comparison against
+  `git log 8a961000..HEAD -- src build.rs tests test_support benches`, not by
+  counting prose.
 - [ ] (2026-11-05) Re-run the complete sequential gate set on the revised
   candidate and finish current-head PR assessment.
 - [ ] EP-M4: rerun the gates and assess the PR.
@@ -1788,6 +1796,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   requires the real document to populate the register, obligations, and
   findings, so the per-entry loops cannot pass vacuously. Final gate run and PR
   assessment follow.
+- Revision 33 (2026-11-05): rebased onto `origin/main` at `c82189bf4` (#1047).
+  The rebase rewrote the branch commits the drift list cites, and #1047 is
+  itself in scope, so the list is regenerated from live Git and verified as a
+  set: 31 commits, 25 `main` + 1 contract test + 5 contract refinements. Final
+  gate run and PR assessment follow.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

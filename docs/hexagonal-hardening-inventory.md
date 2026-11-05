@@ -251,13 +251,15 @@ helper functions; their sum is the compiler message count.
 
 ### In-scope commits since the pin
 
-The snapshot remains pinned to the commit above. These are the 30 commits
+The snapshot remains pinned to the commit above. These are the 31 commits
 between that pin and the branch's 2026-11-05 head that changed `src/`,
 `build.rs`, `tests/`, `test_support/`, or `benches/`: 25 in the current `main`
 target, one adding this inventory's contract test, and five refactoring or
 tightening that contract. This list is re-sweep context for later consumers; it
 does not move the inventory pin.
 
+- `c82189bf4` Install the built .deb and .rpm before publishing them (#799)
+  (#1047)
 - `5ee56f7ec` Introduce the options-carrying manifest loader entry point
   (7.1.2) (#807)
 - `596cf74c2` Place Dependabot pull requests on GitHub-hosted runners (#932)
@@ -290,12 +292,12 @@ does not move the inventory pin.
 - `a74320e86` Preserve script bytes through the printf transport (#967) (#1049)
 - `ce15e026d` Implement crates.io Trusted Publishing and registry byte
   verification (#1064) (#1077)
-- `095fe55c5` Add the pinned inventory contract (26.1.1)
-- `8dee3c48e` Refactor inventory contract validation
-- `f4a0c0e46` Replace heading wrappers with a level-typed parser
-- `a6c1abb5c` Stop dependency continuations at unindented lines
-- `ac34b55b3` Tighten inventory contract checks against silent passes
-- `d5ae385ea` Require the real inventory to populate its iterated sections
+- `6af47571d` Add the pinned inventory contract (26.1.1)
+- `70bd5f42a` Refactor inventory contract validation
+- `7a48c76a5` Replace heading wrappers with a level-typed parser
+- `cd939a837` Stop dependency continuations at unindented lines
+- `a3c622631` Tighten inventory contract checks against silent passes
+- `14bba4162` Require the real inventory to populate its iterated sections
 
 Three corrected text sweeps cover compiler blind spots. The Rust source list
 contains 936 files across `src/`, `build.rs`, `tests/`, `test_support/`,
