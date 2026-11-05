@@ -167,9 +167,39 @@ explicit and exercise the actual adapters in tests.
     *any* `shells` declaration fails, which M2 deliberately relaxes for an
     operator root, so the property now compares the resolver's errors against
     the C1 authority of the declaring occurrences and carries its own witness.
-  - [ ] 2026-11-01: Run the M2 gate set, the selected proof, and the combined
-    M1–M2 milestone CLI review.
+  - [x] 2026-11-05: Run the M2 gate set at `0df3dff18`. All ten gates passed:
+    `check-fmt` (9 s), `lint` (427 s), `doc-coverage` (373 s), `test` (371 s),
+    `test-workflow-contracts` (244 s), `test-package-verify` (213 s),
+    `test-documentation-contracts` (55 s), `verus` (6 s), `markdownlint`
+    (73 s), and `nixie` (5 s). An earlier batch failed
+    `test-workflow-contracts` because the new modules were absent from
+    `tools/kani/proof-scope.toml`; recording them fixed it, and the full set
+    was rerun rather than resuming from the failed gate.
+  - [x] 2026-11-05: Run the combined M1–M2 milestone CLI review over
+    `e5d57c58..HEAD` (39 files, exactly the plan, M1, and M2 commits). Two
+    minor findings were valid and are repaired: the `DriveRelative` message
+    cited a rooted path as the drive-relative example, and the `arguments`
+    deserializer appended a bounded preview of the offending element to the
+    diagnostic, contradicting C5 and the type's own documentation.
 - [ ] M3: Complete behavioural evidence, documentation, and delivery.
+  - [x] 2026-11-05: Add the `configured_shells` feature with four scenarios:
+    operator layers append in order, a project file cannot define a shell, an
+    explicit `--config` selection does not grant authority, and layered names
+    must be unique. Each rejection asserts that no manifest is compiled.
+  - [x] 2026-11-05: Add `tests/cli_tests/shells_startup.rs`, which drives the
+    real binary through `assert_cmd`: a rejection stops before compilation,
+    the JSON preference survives a discovery-time rejection, environment
+    aliases are denied, diagnostics stay bounded, and a trusted definition
+    neither requires its program to exist nor blocks a build.
+  - [x] 2026-11-05: Add unit coverage for the diagnostic quarantine predicate,
+    including the aggregate-nested form of the error and both JSON-preference
+    orderings.
+  - [x] 2026-11-05: Document the operator contract in the users' guide, the
+    configuration sample, the developers' guide, the design document, the
+    OrthoConfig guide, and the repository layout, with the users' guide example
+    registered as an executable documentation contract.
+  - [ ] 2026-11-05: Rerun the full gate set at the M3 candidate and request the
+    M3 CLI review, then publish and hand delivery to `pr-babysitting`.
 
 ## Surprises & discoveries
 
@@ -342,6 +372,37 @@ build script's `cfg(test)` modules, because the slice compiles
   a binary crate, so a re-export inside a private module is unreachable and
   reports as an unused import; mirroring `src/lib.rs`'s public tree removes the
   warning and the need for any `#[expect]` in the slice.
+- 2026-11-05: Fix the two valid M1–M2 review findings inside the M3 candidate
+  rather than as separate commits. Any repair after a green batch owes a fresh
+  full batch, and M3 needs one regardless, so folding them in avoids a third
+  gate run whose only subject would be two small edits.
+- 2026-11-05: Observe the first M3 scenario in-process rather than through the
+  binary. No public interface exposes the resolved `shells` registry, and the
+  C4 invocation prefix has no observable effect until command execution exists,
+  so the scenario merges the operator chain through the same public OrthoConfig
+  entry points the application uses and asserts on the typed definitions. The
+  remaining scenarios assert the observable rejection through the real binary.
+- 2026-11-05: Use a sentinel output file, not `generate --output FILE`, to
+  prove that a rejection precedes manifest compilation. A successful run writes
+  the sentinel and a rejected one does not, so the assertion does not depend on
+  a Ninja render succeeding for an unrelated reason.
+- 2026-11-05: Pin the text and JSON diagnostic shapes with `insta` snapshots
+  and nothing else. C5 names those two formats as the observable surface, so
+  they are the only outputs whose exact spelling is contractual; every other
+  test asserts typed values or collections, which leaves the snapshots narrow.
+  The snapshot normalises the temporary workspace, the tracing timestamp, and
+  the crate version, because none of those is part of the diagnostic.
+- 2026-11-05: Leave the `[[shells]]` fence in
+  `docs/ortho-config-users-guide.md` without a `tested-example` marker. The
+  executable-documentation loader reads `README.md`, `docs/users-guide.md`, and
+  `docs/stdlib-yaml-and-jinja-guide.md`; a marker in a fourth file would
+  register an identifier no loader can find.
+- 2026-11-05: Omit `shells` from release help. The field has no command-line
+  surface, so a generated help entry would describe a flag that does not exist.
+- 2026-11-05: Record the new modules in `tools/kani/proof-scope.toml`. The
+  workflow contract requires the declared paths to cover the harness closure
+  exactly, so an unlisted module fails the contract rather than silently
+  skipping a proof input.
 
 ## Outcomes & retrospective
 

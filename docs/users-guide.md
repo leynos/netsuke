@@ -1916,6 +1916,62 @@ Netsuke has no interactive mode. It never prompts, and `no_input = false` is
 rejected. Pass root `--no-input` in automation to state that requirement
 explicitly and make the invocation self-documenting.
 
+### Configure shell definitions
+
+A shell definition names a shell, the program that name would run, and the
+fixed arguments that program receives. Definitions are operator policy, because
+a definition decides what Netsuke would execute. Only a system or user operator
+configuration file may declare them:
+
+<!-- tested-example: guide-configured-shell-definition -->
+
+```toml
+[[shells]]
+name = "dash"
+executable = "/bin/dash"
+args = ["-c"]
+```
+
+A project `.netsuke.toml`, a file selected with `--config` or `NETSUKE_CONFIG`,
+and the environment are all untrusted for this key. Netsuke rejects a `shells`
+declaration from any of them, including one inherited through a project
+`extends` chain, and stops before it compiles a manifest. The environment is
+rejected even when a variable name normalizes to `shells`, such as
+`NETSUKE_SHELLS` or `NETSUKE_SHELLS__0__NAME`.
+
+Definitions merge by concatenation in merge order, so the merged sequence is
+the registry. Nothing is replaced, keyed, or deduplicated, and an empty higher
+layer neither clears nor narrows a lower one. Two rules then apply to the
+merged registry: a definition may not reuse a built-in name (`sh`, `bash`,
+`pwsh`, or `powershell`), and no name may be declared twice, including an
+identical repeat. A violation rejects the whole registry rather than a partial
+one.
+
+Each field is validated as it is read:
+
+- `name` is 1 to 63 bytes and matches `[a-z][a-z0-9_-]{0,62}`.
+- `executable` is a bare program name or an absolute path. A relative path is
+  rejected. Nothing probes the filesystem, so a definition naming a program
+  that is not installed is accepted at configuration time.
+- `args` has 1 to 16 elements and at most 4096 UTF-8 bytes in total, and no
+  element may contain a NUL byte. Empty elements are allowed because some
+  programs treat them as meaningful.
+
+`args` is the fixed prefix of Netsuke's future invocation: the executable, then
+these arguments, then exactly one rendered source argument. Choose a prefix for
+which that invocation reaches the executable's own source evaluator. Netsuke
+checks the structure of a definition only; it cannot establish that semantic
+property for an arbitrary program, so the choice remains the operator's. For
+`dash`, `["-c"]` is such a prefix.
+
+A rejected definition reports the configuration key that failed, such as
+`shells[0].executable`, and a bounded explanation. Diagnostics never print an
+argument vector, an unbounded offending value, or an ambient environment value.
+
+Loading a definition never runs the program it names. Named-command execution
+is a later task; this release only validates and composes the definitions an
+operator declares.
+
 ## Control output and accessibility
 
 Netsuke separates machine-consumable output from status information:

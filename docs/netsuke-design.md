@@ -4060,6 +4060,20 @@ manual flag repetition.
   discovery and manifest lookup. Pass an absolute path when the selector must
   not depend on the invoking directory (see ADR-0048).
 
+#### Trusted shell definitions
+
+A trusted occurrence is validated field by field before merging, so a malformed
+definition is reported as `shells[index].name`, `shells[index].executable`, or
+`shells[index].args` and startup stops before any manifest is read. The merged
+registry is the concatenation of the trusted occurrences in merge order;
+nothing is replaced, keyed, or deduplicated, and an empty higher layer
+contributes nothing. `validate_composition` then rejects a built-in spelling
+and any name declared twice, including an identical repeat, and reports the
+first fault, so a failure yields no partial registry. Field types validate as
+they deserialize, so a definition that exists is already locally valid; the
+same deserializers check a single occurrence and the merged vector. Nothing in
+this path executes a configured program.
+
 ### 8.5 Manual Pages
 
 The CLI definition doubles as the source for user documentation. Release

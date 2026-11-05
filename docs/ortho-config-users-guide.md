@@ -248,6 +248,51 @@ policy deliberately when operators may combine file, environment, and CLI
 values; an unsupported pairing, such as `keyed` on a `Vec`, is a compile-time
 error.
 
+Append order follows precedence: the lowest layer's items come first, and each
+higher layer's items follow, so the merged sequence reads up the precedence
+list. An empty higher layer contributes nothing; it neither clears nor narrows
+a lower layer's items. That is why `append` cannot express "remove everything
+below": use `replace` for that.
+
+`append` does not deduplicate. Two layers that declare the same element produce
+two elements, and the merged collection has no notion of identity beyond
+position. When duplicates are invalid, reject them after merging rather than
+expecting the merge to collapse them. A `PostMergeHook` is the supported place
+for that check, because it sees the fully merged value:
+
+```rust
+use ortho_config::{OrthoConfig, OrthoError, OrthoResult, PostMergeContext, PostMergeHook};
+use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
+use std::sync::Arc;
+
+#[derive(Debug, Default, Deserialize, Serialize, OrthoConfig)]
+#[ortho_config(prefix = "ACME_", merge_strategy = "append", post_merge_hook)]
+struct Config {
+    #[ortho_config(skip_cli, default = Vec::new())]
+    names: Vec<String>,
+}
+
+impl PostMergeHook for Config {
+    fn post_merge(&mut self, _ctx: &PostMergeContext) -> OrthoResult<()> {
+        let mut seen = HashSet::new();
+        for name in &self.names {
+            if !seen.insert(name.as_str()) {
+                return Err(Arc::new(OrthoError::Validation {
+                    key: "names".to_owned(),
+                    message: format!("`{name}` is declared more than once"),
+                }));
+            }
+        }
+        Ok(())
+    }
+}
+```
+
+The hook runs once, after every layer has merged, so it can validate a
+relationship between fields as well as within one collection. A hook that
+returns an error fails the load; it cannot partially accept the merged value.
+
 ## Switch a boolean off from the command line
 
 A boolean field has three meaningful states: absent, explicitly `true`, and

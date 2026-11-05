@@ -177,9 +177,7 @@ pub enum ExecutableError {
     #[error("a shell executable must be a bare name or an absolute path, not a relative path")]
     RelativePath,
     /// Reject a Windows path that names a drive without its root.
-    #[error(
-        "a Windows shell executable must not name a drive without a root, as in `C:\\tools\\shell.exe`"
-    )]
+    #[error("a Windows shell executable must not name a drive without a root, as in `C:tool`")]
     DriveRelative,
     /// Reject a Windows path rooted without a drive letter or share.
     #[error("a Windows shell executable must name a drive or a UNC share")]

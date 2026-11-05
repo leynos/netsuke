@@ -47,6 +47,7 @@ const EXPECTED_EXAMPLE_IDS: &[&str] = &[
     "guide-command-list-failure-unique-diagnostic",
     "guide-complete-manifest",
     "guide-configuration-observability",
+    "guide-configured-shell-definition",
     "guide-crates-io-install",
     "guide-direct-command-list",
     "guide-file-follow-symlinks-expression",

@@ -25,3 +25,4 @@ mod merge_targets_proptests;
 mod parsing;
 mod policy;
 mod shells_authority;
+mod shells_startup;
