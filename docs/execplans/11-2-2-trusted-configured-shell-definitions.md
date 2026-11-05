@@ -6,10 +6,12 @@ This ExecPlan is a living document. Keep `Constraints`,
 `Conformance basis`, and `Verification plan` current at each milestone and
 whenever evidence changes the design.
 
-Status: APPROVED
+Status: IN PROGRESS
 
 The maintainer approved implementation on 2026-11-01. Approval authorizes the
-milestones in this document; it does not itself complete roadmap 11.2.2.
+milestones in this document; it does not itself complete roadmap 11.2.2. M1 and
+M2 are committed and gated; M3's remaining step is the final gate set, the M3
+CLI review, and publication.
 
 ## Purpose and observable outcome
 
@@ -186,11 +188,14 @@ explicit and exercise the actual adapters in tests.
     operator layers append in order, a project file cannot define a shell, an
     explicit `--config` selection does not grant authority, and layered names
     must be unique. Each rejection asserts that no manifest is compiled.
-  - [x] 2026-11-05: Add `tests/cli_tests/shells_startup.rs`, which drives the
-    real binary through `assert_cmd`: a rejection stops before compilation,
-    the JSON preference survives a discovery-time rejection, environment
-    aliases are denied, diagnostics stay bounded, and a trusted definition
-    neither requires its program to exist nor blocks a build.
+  - [x] 2026-11-05: Add the `tests/cli_tests/shells_startup/` module, which
+    drives the real binary through `assert_cmd`: a rejection stops before
+    compilation, the JSON preference survives a discovery-time rejection,
+    environment aliases are denied, diagnostics stay bounded, and a trusted
+    definition neither requires its program to exist nor blocks a build. The
+    module is split into `mod.rs`, `diagnostics.rs`, and `success.rs` so each
+    file stays inside the 400-line ceiling, with the `insta` snapshots moved
+    beside `mod.rs` because `insta` resolves them relative to the source file.
   - [x] 2026-11-05: Add unit coverage for the diagnostic quarantine predicate,
     including the aggregate-nested form of the error and both JSON-preference
     orderings.
