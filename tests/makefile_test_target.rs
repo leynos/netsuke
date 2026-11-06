@@ -291,13 +291,15 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     Ok(())
 }
 
-/// Verify `test-kani-mutations` selects both ignored compile tests.
+/// Verify `test-kani-mutations` selects every ignored compile test.
 ///
 /// Both commands must select the ignored test binary, carry the gate flags, and
 /// keep the cold prewarm before the patch sweep. Otherwise nextest can skip the
-/// actual compile work while the target exits successfully.
+/// actual compile work while the target exits successfully. The prewarm's own
+/// invocation also selects the negative test, which compiles the same sandbox
+/// and so reuses the target the prewarm has just warmed.
 #[test]
-fn behavioural_kani_mutation_target_selects_both_ignored_compile_tests() -> Result<()> {
+fn behavioural_kani_mutation_target_selects_every_ignored_compile_test() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let recipe = target_recipe(&makefile, "test-kani-mutations")
         .context("Makefile should declare a test-kani-mutations target")?;
@@ -324,9 +326,12 @@ fn behavioural_kani_mutation_target_selects_both_ignored_compile_tests() -> Resu
     }
     ensure!(
         prewarm_command.contains("prewarm::prewarm_kani_mutation_target")
+            && prewarm_command
+                .contains("negative::compile_kani_tree_rejects_trees_that_do_not_compile")
             && sweep_command
                 .contains("compile_guard::every_patched_tree_compiles_under_denied_warnings"),
-        "the cold prewarm must precede the filtered patch sweep: {run_commands:?}"
+        "the cold prewarm and its negative check must precede the filtered \
+         patch sweep: {run_commands:?}"
     );
     Ok(())
 }

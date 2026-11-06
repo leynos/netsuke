@@ -314,7 +314,7 @@ lint-default-features: check-build-tools ## Run rustdoc and Clippy with only the
 	$(GATE_RUSTFLAGS) $(CARGO) clippy --workspace --all-targets -- -D warnings
 
 test-kani-mutations: check-build-tools ## Warm Kani's build tree, then compile each mutation patch
-	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only -E 'test(/^prewarm::prewarm_kani_mutation_target($$|::)/)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only -E 'test(/^prewarm::prewarm_kani_mutation_target($$|::)/) or test(/^negative::compile_kani_tree_rejects_trees_that_do_not_compile($$|::)/)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only -E 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($$|::)/)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 # The first uv run mirrors the exact Cuprum/Cyclopts pins in

@@ -74,10 +74,11 @@ def test_no_default_suite_test_starts_a_cargo_build() -> None:
     A child Cargo build inside a test charges Cargo's package lock, dependency
     rebuilds, and compiler-admission waits to that test's time allowance, so it
     times out whenever the host is busy. ADR-0059 moved every such build out of
-    the suite; only the `#[ignore]`-gated Kani prewarm and patch sweep, selected
-    in separate nextest invocations by `make test-kani-mutations`, may still
-    start one. With no other build-capable test beside them, the generated-
-    completion readers no longer need the group's exclusion either.
+    the suite; only the `#[ignore]`-gated Kani prewarm, negative-compile check,
+    and patch sweep, selected in two nextest invocations by
+    `make test-kani-mutations`, may still start one. With no other build-capable
+    test beside them, the generated-completion readers no longer need the
+    group's exclusion either.
     """
     discovered = set().union(
         *(build_capable_test_names(source) for source in rust_test_sources().values())

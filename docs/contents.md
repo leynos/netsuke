@@ -334,6 +334,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md):
   Deny-by-default stdlib surface for `netsuke test`, typed refusal stubs, and
   template overlays that replace withheld functions by name.
+- [ADR-0073](adrs/adr-0073-split-the-kani-mutation-compile-gate.md): Splitting
+  the Kani mutation compile gate into a prewarm, a negative-compile check, and
+  a patch sweep, each with a 900 s allowance.
 
 ## Proposals
 

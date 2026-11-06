@@ -5870,11 +5870,20 @@ patch, compiles the patched tree under `-D warnings`, and reverts it through a
 fallible `revert()` whose failure is aggregated and reported, so a failed
 reverse cannot pass quietly as a green run with a mutation still applied. A
 `Drop` guard remains as the unwind fallback for an assertion failure mid-patch.
-Run it with `make test-kani-mutations`, which first runs the ignored
-`prewarm::prewarm_kani_mutation_target` test and then the patch sweep in a
-separate Nextest invocation. The cold dependency build therefore has its own
-timeout window; both invocations use `--run-ignored ignored-only` and the same
-target directory. `kani-smoke` runs the target on every pull request. Applying
+Run it with `make test-kani-mutations`, whose first Nextest invocation runs the
+ignored `prewarm::prewarm_kani_mutation_target` and
+`negative::compile_kani_tree_rejects_trees_that_do_not_compile` tests, and
+whose second runs the patch sweep. The cold dependency build therefore has its
+own timeout window; both invocations use `--run-ignored ignored-only` and the
+same target directory. The negative test is what keeps the sweep from being
+vacuous: it compiles the unmodified tree, then two deliberately broken ones —
+an ordinary type error and one behind `#[cfg(kani)]` that `cargo check` cannot
+see — and requires the same compile path to reject each, naming the seeded
+marker. `kani-smoke` runs the target on a pull request only when the
+proof-scope step selects that pull request, and unconditionally on a push to
+`main`, the nightly schedule, and a dispatch. A pull request outside the scope
+therefore reports a green job without compiling the patches; that is the
+ADR-0039 behaviour, not evidence that the patches were compiled. Applying
 cleanly is not enough on its own: `make kani-full` denies warnings, so a patch
 that seeds its fault by leaving a binding or helper unused is a hard compile
 error, `cargo kani` never reaches the harness, and the patch contributes no
@@ -6943,7 +6952,10 @@ dependency bundles described below.
 
 `IrGenError::InvalidManifest` retains its stable English schema diagnostic when
 formatted. Manifest loading localizes that diagnostic at the parsing boundary;
-IR error formatting must not resolve the process-wide active locale.
+its formatting must not resolve the process-wide active locale. That
+prohibition is scoped to this variant: every other `IrGenError` variant carries
+a `LocalizedMessage`, whose `Display` resolves the active localizer by design,
+so the localized path stays as it is.
 
 Manifest validation keeps stable diagnostic details separate from localized
 display text. `src/manifest/mod.rs` maps a recognized detail to the localized
@@ -11380,7 +11392,7 @@ All four tiers are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 900 s Kani prewarm and sweep   |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 900 s Kani gate tests          |
 | nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally             |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step |
 | Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                         |
@@ -11403,13 +11415,13 @@ asserts it explicitly rather than leaving it implied.
 
 There are two per-test allowance sizes, and the larger governs.
 `[profile.default]`'s own `slow-timeout` gives five periods — 300 s — to every
-test no override matches, which is almost all of them. The Kani prewarm and
-mutation sweep each get fifteen periods, 900 s. They run as separate Nextest
-invocations inside `make test-kani-mutations`, outside the default suite, so
-the cold dependency build does not consume the sweep's per-test or whole-run
-window. A whole-run budget has to sit above the largest allowance in the file,
-so 900 s is the figure the ordering below is written against, not the 300 s
-most tests get.
+test no override matches, which is almost all of them. The Kani prewarm,
+negative-compile check, and mutation sweep each get fifteen periods, 900 s.
+They run in two Nextest invocations inside `make test-kani-mutations`, outside
+the default suite, so the cold dependency build does not consume the sweep's
+per-test window. A whole-run budget has to sit above the largest allowance in
+the file, so 900 s is the figure the ordering below is written against, not the
+300 s most tests get.
 
 No test the default suite runs needs an allowance of its own any longer. The
 production module slice, the embedder-facing public API, and the `test_support`
@@ -11434,17 +11446,21 @@ Markdown. The code was not slow; the cap was too near the cost, and a margin of
 gate later passed in 480.264 s on the pre-rebase base and reached its 600.019 s
 cap on the rebased base (CI runs 41782146443 and 41826968891). That cap covered
 a cold dependency build as well as the patch sweep, so the target now runs a
-prewarm and a patch sweep in separate Nextest invocations against the same
-sandbox path and target, so each gets its own 900 s allowance and CI whole-run
-budget. The 900 s allowance is the maximum below the 960 s whole-run cap and
-leaves 60 s for nextest to stop cleanly. The packaging smoke test once carried
-a 900 s override of the same kind: under a private-target harness it passed at
-145 s and timed out at 300.047 s on heads that differed by a word in a plan,
-and later full-suite runs passed at 208.921 s and reached the 300.017 s cap
-during concurrent Cargo work. Its verification build has since left the suite,
-so it no longer needs one. Each override binds only because its filter carries
-the test's module path; earlier passing runs did not prove the wider allowance
-was in force because the test completed inside the 300 s default. See "nextest
+prewarm and a negative-compile check in the first Nextest invocation and the
+patch sweep in a second, against the same sandbox path and target. Each test
+gets its own 900 s allowance. Neither invocation receives the 960 s whole-run
+budget: `kani-smoke` does not set `NEXTEST_PROFILE: ci`, so they run under
+`[profile.default]`, which has no whole-run cap, and the job's 30-minute
+`timeout-minutes` is the outermost bound on them. The 900 s allowance is
+written to sit below the 960 s cap that the coverage lanes apply, so one figure
+governs both shapes. The packaging smoke test once carried a 900 s override of
+the same kind: under a private-target harness it passed at 145 s and timed out
+at 300.047 s on heads that differed by a word in a plan, and later full-suite
+runs passed at 208.921 s and reached the 300.017 s cap during concurrent Cargo
+work. Its verification build has since left the suite, so it no longer needs
+one. Each override binds only because its filter carries the test's module
+path; earlier passing runs did not prove the wider allowance was in force
+because the test completed inside the 300 s default. See "nextest
 configuration" for the rule.
 
 ### The whole-run budget, and how 16 minutes was arrived at

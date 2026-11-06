@@ -205,8 +205,8 @@ def test_only_the_mutation_gate_has_an_extended_budget() -> None:
 
     Extended allowances existed for tests that compiled inside their own time
     budget. ADR-0059 moved that work out of the suite, so the `#[ignore]`-gated
-    prewarm and patch-sweep tests, which run in separate invocations, are the
-    only tests left with extended allowances.
+    prewarm, negative-compile, and patch-sweep tests, which run outside the
+    default suite, are the only tests left with extended allowances.
     """
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
@@ -226,6 +226,13 @@ def test_only_the_mutation_gate_has_an_extended_budget() -> None:
             "terminate-after": 15,
         },
         (
+            "test(/^negative::"
+            "compile_kani_tree_rejects_trees_that_do_not_compile($|::)/)"
+        ): {
+            "period": "60s",
+            "terminate-after": 15,
+        },
+        (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
         ): {
@@ -234,7 +241,8 @@ def test_only_the_mutation_gate_has_an_extended_budget() -> None:
         },
     }
     assert configured == expected, (
-        "only the Kani prewarm and patch sweep may carry extended allowances"
+        "only the Kani prewarm, negative-compile, and patch sweep may carry "
+        "extended allowances"
     )
 
 

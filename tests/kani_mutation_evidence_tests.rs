@@ -17,7 +17,9 @@
 //! A patch that applies is not yet trustworthy: the tree it produces must also
 //! compile, or `cargo kani` never reaches the harness it targets. The gated
 //! [`compile_guard`] sweep and its [`prewarm`] share the same sandbox and target
-//! so the cold build does not consume the patch sweep's timeout.
+//! so the cold build does not consume the patch sweep's timeout. The [`negative`]
+//! test proves that same compile path rejects a tree it should reject, so the
+//! sweep's "every patch compiles" result cannot be vacuous.
 
 // This target is a crate root, so `mod child;` would resolve against
 // `tests/`; the children live beside this file. That is why each is spelled
@@ -31,6 +33,8 @@ mod compile_guard;
 mod contracts;
 #[path = "kani_mutation_evidence_tests/discovery.rs"]
 mod discovery;
+#[path = "kani_mutation_evidence_tests/negative.rs"]
+mod negative;
 #[path = "kani_mutation_evidence_tests/prewarm.rs"]
 mod prewarm;
 #[path = "kani_mutation_evidence_tests/sandbox.rs"]
