@@ -4,11 +4,8 @@ import dataclasses
 import hashlib
 import io
 import json
+import pathlib
 import tarfile
-import typing as typ
-
-if typ.TYPE_CHECKING:
-    import pathlib
 
 COMMIT = "a" * 40
 TAG = "v1.2.3"
@@ -54,48 +51,89 @@ windows-sys = {{ version = "^0.59", features = ["Win32_Foundation"] }}
 """
 
 
-def archive_bytes(
-    *,
-    manifest_version: str | None = None,
-    manifests: tuple[str, ...] | None = None,
-    readme: bytes | None = b"# Netsuke\n\nPackaged documentation.\n",
-) -> bytes:
-    """Return a gzip tar archive of the package with the chosen contents.
+def tar_bytes(members: tuple[tuple[str, bytes | None], ...]) -> bytes:
+    """Return a gzip tar archive holding the named members in order.
 
-    ``manifest_version`` rewrites the version the manifest states while leaving
-    the archive's own name alone, so a caller can make the two disagree.
-    Passing ``readme=None`` omits the README member entirely, which lets a
-    caller exercise the metadata module's fallback and absence paths.
+    Parameters
+    ----------
+    members : tuple of tuple of (str, bytes or None)
+        The member names and contents, in the order the archive should hold
+        them. A ``None`` content records a directory entry rather than a
+        regular file, so a caller can exercise the archive reader's
+        non-regular-member guard.
 
     Returns
     -------
     bytes
         The gzip-compressed tar archive a caller can write as a ``.crate``.
     """
-    root = f"{PACKAGE_NAME}-{VERSION}"
+    output = io.BytesIO()
+    with tarfile.open(fileobj=output, mode="w:gz") as archive:
+        for name, content in members:
+            info = tarfile.TarInfo(name)
+            if content is None:
+                info.type = tarfile.DIRTYPE
+                info.size = 0
+                archive.addfile(info)
+                continue
+            info.size = len(content)
+            archive.addfile(info, io.BytesIO(content))
+    return output.getvalue()
+
+
+def archive_bytes(
+    *,
+    manifest_version: str | None = None,
+    manifests: tuple[str, ...] | None = None,
+    readme: bytes | None = b"# Netsuke\n\nPackaged documentation.\n",
+    root: str | None = None,
+) -> bytes:
+    """Return a gzip tar archive of the package with the chosen contents.
+
+    Parameters
+    ----------
+    manifest_version : str or None, optional
+        The version to write into the manifest. The archive's own name keeps
+        the default version, so a caller can make the two disagree.
+    manifests : tuple of str or None, optional
+        The manifest texts to package. The first becomes ``Cargo.toml`` and
+        each later one becomes ``duplicate-<index>/Cargo.toml``.
+    readme : bytes or None, optional
+        The README member's content. ``None`` omits the member entirely, which
+        lets a caller exercise the metadata module's fallback and absence
+        paths.
+    root : str or None, optional
+        The single top-level directory. ``None`` uses ``<package>-<version>``;
+        any other value places the manifest outside the root the candidate
+        check requires.
+
+    Returns
+    -------
+    bytes
+        The gzip-compressed tar archive a caller can write as a ``.crate``.
+    """
+    archive_root = root if root is not None else f"{PACKAGE_NAME}-{VERSION}"
     packaged_version = manifest_version if manifest_version is not None else VERSION
     packaged_manifests = (
         manifests
         if manifests is not None
         else (manifest_text(version=packaged_version),)
     )
-    output = io.BytesIO()
-    with tarfile.open(fileobj=output, mode="w:gz") as archive:
-        members = [
-            (
-                "Cargo.toml" if index == 0 else f"duplicate-{index}/Cargo.toml",
-                content.encode(),
-            )
-            for index, content in enumerate(packaged_manifests)
-        ]
-        if readme is not None:
-            members.append(("README.md", readme))
-        for filename, content in members:
-            encoded = io.BytesIO(content)
-            info = tarfile.TarInfo(f"{root}/{filename}")
-            info.size = len(content)
-            archive.addfile(info, encoded)
-    return output.getvalue()
+    members = [
+        (
+            "Cargo.toml" if index == 0 else f"duplicate-{index}/Cargo.toml",
+            content.encode(),
+        )
+        for index, content in enumerate(packaged_manifests)
+    ]
+    if readme is not None:
+        members.append(("README.md", readme))
+    return tar_bytes(
+        tuple(
+            (str(pathlib.PurePosixPath(archive_root, filename)), content)
+            for filename, content in members
+        )
+    )
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

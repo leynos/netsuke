@@ -179,3 +179,15 @@ verifier, GitHub release finalizer, and consumer smoke test remain open in the
 trusted-packaging ExecPlan, and `publish-release` is not yet gated on the
 crates.io job. Until those stages land, this addendum records a partially
 implemented mechanism rather than an end-to-end release path.
+
+The candidate boundary is also enforced before the artefact hand-off.
+`package-crate` runs `crates_io_candidate_cli.py check` against the local
+identity record and archive, in a required and mutually exclusive release mode:
+`--rehearsal` for a dry run, which accepts only a candidate that records no
+tag, and `--tag` for a publishing run, which requires that exact tag. The
+publisher repeats the check after downloading the artefact, so an interrupted
+publication can be rerun: the second probe observes `identical`, skips the
+upload, and verifies the public bytes. Both the resume sequence and the
+rehearsal boundary are held by tests, the latter as a workflow-contract
+assertion that the offline step's shell text names no credential flag, fetch
+tool, or registry URL.

@@ -270,11 +270,15 @@ This addendum extends the release-operation vocabulary without changing the
 release-admission gate or the release-versus-publication guards.
 
 The `package-crate` job records the `release_package` operation with exactly
-two phases. `crate_packaging` brackets the package action, and
-`artifact_upload` brackets the upload of the `release-crate-package` workflow
-artefact containing the crate archive and identity record. The telemetry
-artefact upload is separate and is not a phase. These same phase boundaries
-apply during rehearsals and tagged release runs.
+three phases. `crate_packaging` and `crate_candidate_validation` time the two
+steps of the package action, and `artifact_upload` brackets the upload of the
+`release-crate-package` workflow artefact containing the crate archive and
+identity record. The action times its own steps because the boundary between
+them is inside it: the candidate check runs after packaging and before the
+artefact upload, so no workflow step bracket can separate a rejected candidate
+from a failed packaging step. The telemetry artefact upload is separate and is
+not a phase. These same phase boundaries apply during rehearsals and tagged
+release runs.
 
 An always-run step writes the bounded operation summary to
 `GITHUB_STEP_SUMMARY` and writes metric and phase-event records to

@@ -404,9 +404,14 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 # modules with doctested sources the same way.
 test-release-publication: ## Test release-candidate identity and staged inventory exactness
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		--with 'pyyaml>=6' python -m pytest \
+		scripts/tests/test_crates_io_candidate_action.py \
+		scripts/tests/test_crates_io_candidate_archive_properties.py \
 		scripts/tests/test_crates_io_candidate_cli.py \
 		scripts/tests/test_crates_io_candidate_guards.py \
+		scripts/tests/test_crates_io_candidate_metadata.py \
+		scripts/tests/test_crates_io_candidate_policy.py \
 		scripts/tests/test_crates_io_transport_cli.py \
 		scripts/tests/test_crates_io_transport_upload.py \
 		scripts/tests/test_crates_io_transport_properties.py \
@@ -437,7 +442,11 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_digest_record.py \
 		scripts/tests/test_release_digest_record_files.py \
 		scripts/tests/test_release_staged_digests.py \
-		scripts/crates_io_candidate_cli.py scripts/crates_io_transport_cli.py \
+		scripts/crates_io_candidate_cli.py \
+		scripts/crates_io_candidate_archive.py \
+		scripts/crates_io_candidate_errors.py \
+		scripts/crates_io_candidate_policy.py \
+		scripts/crates_io_transport_cli.py \
 		scripts/crates_io_registry_http.py \
 		scripts/crates_io_transport_http.py \
 		scripts/crates_io_upload_metadata.py \

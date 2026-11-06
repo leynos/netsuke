@@ -907,12 +907,22 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   digest, metadata normalization, request framing, response failures, retry
   bounds, token redaction, and downloaded-byte mismatch. Workflow contracts
   cover the seven dependencies, credential separation, artefact selection,
-  action ordering, and all five registry decisions.
+  action ordering, and all five registry decisions. The candidate boundary is
+  exercised offline in `package-crate`: a dry run validates only a tagless
+  candidate, a publishing run requires its release tag, and supplying no mode
+  or both modes is a usage error. Interrupted-publication resume is covered at
+  both levels: the sequence tests drive absent→publish then identical→skip then
+  a successful byte verification, and the workflow contracts require the skip
+  resolution to exclude authentication, metadata, and upload.
 - Conformance check: no long-lived token; checkout uses
   `persist-credentials: false`; only the upload step receives the exchanged
-  token; no package rebuild occurs in the publisher.
+  token; no package rebuild occurs in the publisher; the offline rehearsal step
+  holds no credential and its shell text names no credential flag, fetch tool,
+  or registry URL.
 - Recovery: rerun the failed publisher job in the same workflow run. It reuses
-  `release-crate-package` and probes again before deciding whether to upload.
+  `release-crate-package` and probes again before deciding whether to upload; a
+  version that was published before the interruption classifies as `identical`,
+  so the rerun skips the upload and verifies the public bytes.
 - Remaining gaps: no live exchange or release has exercised the action; the
   package archive file list, inventory verifier, release finalizer, and
   consumer smoke remain open.
@@ -2653,9 +2663,94 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   final ordered gate run follows this progress entry. These changes do not
   alter registry decisions or complete the still-open finalization,
   inventory-verification, or consumer-smoke stages.
+- [x] (2026-11-04) Issue #1065 delivered the offline candidate boundary and the
+  interrupted-publication resume path. `crates_io_candidate_cli.py check` now
+  requires exactly one release mode: `--tag` for a publishing run, which must
+  record that tag, and `--rehearsal` for a tagless candidate, which a
+  pull-request lane can exercise without a registry request. Supplying neither
+  mode, or both, is an argument error. Archive and manifest reading moved to
+  `scripts/crates_io_candidate_archive.py`, and the rejection vocabulary to
+  `scripts/crates_io_candidate_errors.py`; both are registered in
+  `SOURCE_MODULES`, the policy/adapter partition, and the
+  `test-release-publication` doctest recipe, so an unwired module fails the
+  suite. The `package-crate` composite action runs the check after packaging
+  and before the artefact upload, selecting the mode from its `dry-run` input,
+  and the workflow contract pins the step's id, ordering, environment, exact
+  command, and offline nature, with a mutation case that proves the contract
+  notices a rehearsal checked as a publishing run. The publish-sequence tests
+  drive an interrupted publication: a first absent probe decides to publish, a
+  second identical probe decides to skip, and a byte verification confirms the
+  served archive, with the contract requiring the skip resolution to exclude
+  the authentication, metadata, and upload steps. All eleven ordered gates
+  passed at `9254093eb`: doc coverage 98.30%, nextest 5,026 passed with 7
+  skipped plus doctests, workflow contracts 28 passed, release-publication 537
+  passed, documentation contracts 15 passed, Markdown lint zero issues across
+  215 files, Mermaid validation, spelling, lint at 10.00/10, and typecheck.
+  CodeRabbit's fourth agent review of the head reported zero findings. No live
+  exchange or release was performed; finalization, inventory verification, and
+  the consumer smoke test remain open, and `publish-release` is still not gated
+  on the crates.io job.
+- [x] (2026-11-04) Separated candidate policy from candidate reading. The
+  archive adapter now reports what the retained `.crate` contains:
+  `read_packaged_manifest` parses the sole packaged `Cargo.toml` and returns it
+  without comparing the identity it declares, and the manifest member is
+  selected by its packaged shape rather than by a name built from the expected
+  package and version. `scripts/crates_io_candidate_policy.py` holds the
+  workflow expectation and the three decisions it drives:
+  `require_release_mode`, `require_identity_matches`, and
+  `require_manifest_identity`. The command-line module composes the readers
+  with that policy and keeps only its digest check. The new source and its
+  suite are registered in `SOURCE_MODULES`, `POLICY_MODULES`,
+  `SECTION_MODULES`, and the `test-release-publication` recipe, so the
+  policy/adapter partition covers it and its doctests run. This answers the
+  CodeRabbit pre-merge Domain Architecture row without changing which
+  candidates are accepted.
+- [x] (2026-11-05) Restored the archive-root binding that the policy split had
+  dropped. `read_packaged_manifest` now returns the single directory segment
+  holding the packaged `Cargo.toml` as well as the parsed manifest, selecting
+  members with `pathlib.PurePosixPath` components rather than slash counting.
+  `require_manifest_identity` takes that root and rejects an archive whose
+  manifest sits anywhere but `<package>-<version>`, even when the manifest
+  declares the expected identity, so an archive carrying only
+  `other/Cargo.toml` can no longer be approved. `pathlib` is now a runtime
+  import in the adapter, satisfying the Unit Architecture note. New guard tests
+  cover the foreign root, a second packaged manifest, and a directory named
+  `Cargo.toml`; the adapter gained a behavioural root/manifest test in place of
+  the callable-only assertion. Both guides were updated, and the candidate
+  suite plus adapter doctests pass at 50 tests.
+- [x] (2026-11-05) Answered the five live CodeRabbit pre-merge rows for the
+  head at `106a7aed7`. The Observability error named a real defect: a member
+  named `Cargo.toml` that is not a regular file produced the manifest-count
+  diagnostic, which describes a valid selection rather than a file-kind
+  rejection. `CandidateIssue.MANIFEST_FILE` now carries that case, so a
+  maintainer can tell the two failures apart. The reader contract also gained a
+  direct assertion that it reports the root the archive holds even when the
+  release identity does not name it; the policy, not the reader, makes that
+  decision, and only a reader-level test distinguishes the two. The two testing
+  rows became two modules: `test_crates_io_candidate_action.py` runs the
+  package action's candidate step body under Bash from a workspace holding the
+  record and archive the packaging step writes, with a `uv` stub naming the
+  test interpreter, and `test_crates_io_candidate_archive_properties.py` states
+  the manifest selection rule over generated member layouts, including member
+  order independence and the policy's exact accept/reject split. Both are
+  registered in `SECTION_MODULES` and the `test-release-publication` recipe,
+  the developers' guide's module inventory was corrected from nine to eleven,
+  and the focused four-module run passed 37 tests.
 
 ## Surprises & discoveries
 
+- Observation: **A policy module may import its annotated type only for type
+  checking, but its doctests then have to import that type themselves.** Ruff's
+  `TC002` (`typing-only-third-party-import`) flags `import release_candidate` in
+  `scripts/crates_io_candidate_policy.py`, because the module only names
+  `release_candidate.ReleaseIdentity` in annotations, and the repository's
+  Python 3.14 baseline evaluates those lazily. Moving the import behind
+  `typing.TYPE_CHECKING` satisfies the rule, but a doctest shares the module's
+  runtime globals, so an example that constructed an identity would then fail
+  with `NameError`. Each policy example therefore begins with its own
+  `>>> import release_candidate`. The alternatives are gate-blocked too:
+  keeping the runtime import is what `TC002` flags, and
+  `from __future__ import annotations` is refused by house lint `C9112`.
 - Observation: **Cargo has no command mode that uploads an existing `.crate`
   archive.** `cargo publish` prepares the package archive itself, so invoking
   it in the privileged publishing job would rebuild rather than publish the
@@ -4330,3 +4425,28 @@ lint, typecheck, documentation coverage (98.30%, 6,657/6,772), Rust tests
 skipped, plus 28 script-helper checks), release-publication tests (592 passed),
 Markdown lint (0 issues), and Mermaid validation (all diagrams valid). Stage C
 remains partial; no live exchange or release has been exercised.
+
+Draft 26, 2026-11-06: split offline candidate validation out of the packaging
+phase. The `release_package` operation now records `crate_packaging`,
+`crate_candidate_validation`, and `artifact_upload`, so a rejected candidate is
+reported against the check that rejected it instead of as a packaging failure.
+Both package-action steps time themselves from an exit trap and report their
+outcome and timestamps as action outputs, because the boundary between them
+falls inside the composite action and no workflow-level step bracket can
+observe it; the workflow reads those outputs rather than the action's own
+outcome. The archive reader gains a metamorphic property: adding members it
+cannot select, at any position, must leave acceptance, rejection category, and
+reported facts unchanged. The hand-off harness gains a whole-job rehearsal
+case, and the action contract gains timing and candidate-output mutations that
+prove the new assertions detect a reverted wiring. Stage C remains partial; no
+live exchange or release has been exercised.
+
+The eleven local gates passed sequentially on the final candidate: formatting,
+lint, documentation coverage (98.30%, 6,663/6,778), typecheck, Rust tests
+(5,071 passed, 7 skipped, plus 46 doctests), release-publication tests (641
+passed), workflow contracts (1,734 passed, 3 skipped, plus 28 script-helper
+checks), documentation contracts (15 passed, 48 skipped), Markdown lint (0
+issues in 215 files), spelling with no generated-configuration drift, and
+Mermaid validation (all diagrams valid). The action's exit-trap timing and its
+six new outputs remain unexercised by a hosted run; the first release workflow
+run on this head is what will exercise them.

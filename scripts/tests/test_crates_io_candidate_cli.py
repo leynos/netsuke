@@ -1,12 +1,13 @@
-"""Specify candidate validation and Cargo registry metadata derivation."""
+"""Specify the offline validation of a retained crate candidate."""
 
 import dataclasses
 import hashlib
 import json
 import typing as typ
 
+import crates_io_candidate_archive
 import pytest
-from crates_io_candidate_cli import EXIT_OK, EXIT_REJECTED, main
+from crates_io_candidate_cli import EXIT_OK, EXIT_REJECTED, EXIT_USAGE, main
 from crates_io_candidate_support import (
     BIN_NAME,
     COMMIT,
@@ -15,10 +16,8 @@ from crates_io_candidate_support import (
     VERSION,
     CandidateOverrides,
     archive_bytes,
-    manifest_text,
     write_candidate,
 )
-from crates_io_upload_metadata import MetadataError, MetadataIssue, package_metadata
 
 EXPECTED_README = "# Netsuke\n\nPackaged documentation.\n"
 
@@ -30,7 +29,7 @@ if typ.TYPE_CHECKING:
 class CheckExpectation:
     """Carry workflow identity values passed to the candidate CLI."""
 
-    tag: str = TAG
+    tag: str | None = TAG
     commit: str = COMMIT
     package: str = PACKAGE_NAME
     version: str = VERSION
@@ -48,6 +47,19 @@ class IdentityMismatch:
 
 
 DEFAULT_EXPECTATION = CheckExpectation()
+REHEARSAL_EXPECTATION = CheckExpectation(tag=None)
+
+
+def _identity(*, tag: str | None = TAG) -> dict[str, object]:
+    """Build one package identity record with the selected release tag."""
+    return {
+        "tag": tag,
+        "commit": COMMIT,
+        "is_prerelease": False,
+        "package_name": PACKAGE_NAME,
+        "version": VERSION,
+        "bin_name": BIN_NAME,
+    }
 
 
 def _check_args(
@@ -56,15 +68,20 @@ def _check_args(
     output: pathlib.Path,
     expectation: CheckExpectation = DEFAULT_EXPECTATION,
 ) -> list[str]:
-    """Build the validated-candidate CLI invocation."""
+    """Build the validated-candidate CLI invocation for the expectation's mode."""
+    # An expectation without a tag rehearses the candidate; one with a tag
+    # publishes it. The mode is derived from the same value the check is
+    # expected to agree with, not supplied separately.
+    release_mode = (
+        ["--rehearsal"] if expectation.tag is None else ["--tag", expectation.tag]
+    )
     return [
         "check",
         "--identity",
         str(record),
         "--archive-directory",
         str(directory),
-        "--tag",
-        expectation.tag,
+        *release_mode,
         "--commit",
         expectation.commit,
         "--package-name",
@@ -92,6 +109,73 @@ def test_check_records_one_matching_unchanged_archive(tmp_path: pathlib.Path) ->
         "record the digest of the retained bytes"
     )
     assert archive.read_bytes() == original, "validation must not rewrite the archive"
+
+
+def test_check_accepts_a_tagless_rehearsal_candidate(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Accept a rehearsal candidate that records no release tag."""
+    record, archive = write_candidate(
+        tmp_path, overrides=CandidateOverrides(identity=_identity(tag=None))
+    )
+    output = tmp_path / "candidate.json"
+
+    status = main(_check_args(record, tmp_path, output, REHEARSAL_EXPECTATION))
+
+    assert status == EXIT_OK, "a tagless rehearsal candidate must validate"
+    candidate = json.loads(output.read_text(encoding="utf-8"))
+    assert candidate["identity"]["tag"] is None, "retain the absent release tag"
+    assert candidate["crate"] == archive.name, "record the selected archive"
+
+
+def test_check_rejects_a_tagged_candidate_during_rehearsal(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse a rehearsal candidate that claims a release tag."""
+    record, _ = write_candidate(tmp_path)
+    output = tmp_path / "candidate.json"
+
+    status = main(_check_args(record, tmp_path, output, REHEARSAL_EXPECTATION))
+
+    assert status == EXIT_REJECTED, "a rehearsal must not accept a tagged candidate"
+    assert "must not record a release tag" in capsys.readouterr().err, (
+        "explain that the rehearsal candidate carries a tag"
+    )
+    assert not output.exists(), "a refused candidate must produce no record"
+
+
+@pytest.mark.parametrize(
+    "release_mode",
+    [
+        pytest.param([], id="neither-mode"),
+        pytest.param(["--tag", TAG, "--rehearsal"], id="both-modes"),
+    ],
+)
+def test_check_requires_exactly_one_release_mode(
+    tmp_path: pathlib.Path, release_mode: list[str]
+) -> None:
+    """Refuse an invocation that does not select exactly one release mode."""
+    record, _ = write_candidate(tmp_path)
+    output = tmp_path / "candidate.json"
+    arguments = [
+        "check",
+        "--identity",
+        str(record),
+        "--archive-directory",
+        str(tmp_path),
+        *release_mode,
+        "--commit",
+        COMMIT,
+        "--package-name",
+        PACKAGE_NAME,
+        "--version",
+        VERSION,
+        "--output",
+        str(output),
+    ]
+
+    assert main(arguments) == EXIT_USAGE, "the release mode must be unambiguous"
+    assert not output.exists(), "a usage error must produce no candidate record"
 
 
 @pytest.mark.parametrize(
@@ -190,6 +274,44 @@ def test_check_refuses_multiple_crate_archives(tmp_path: pathlib.Path) -> None:
     )
 
 
+def test_archive_reader_reports_the_root_and_manifest(tmp_path: pathlib.Path) -> None:
+    """Report the packaged root and manifest the policy binds to the release."""
+    archive = tmp_path / f"{PACKAGE_NAME}-{VERSION}.crate"
+    _ = archive.write_bytes(archive_bytes())
+
+    root, manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
+
+    assert root == f"{PACKAGE_NAME}-{VERSION}", "report the archive's own root"
+    package = manifest["package"]
+    assert isinstance(package, dict), "parse the manifest package table"
+    assert (package["name"], package["version"]) == (PACKAGE_NAME, VERSION), (
+        "parse the packaged manifest identity"
+    )
+
+
+def test_archive_reader_reports_a_root_the_identity_does_not_use(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Report the observed root even when the identity does not name it.
+
+    The reader states what the archive holds; rejecting a root that disagrees
+    with the release is the policy's decision. A reader that silently required
+    the expected root would look identical through the CLI, because the policy
+    rejects the archive either way.
+    """
+    archive = tmp_path / f"{PACKAGE_NAME}-{VERSION}.crate"
+    _ = archive.write_bytes(archive_bytes(root="elsewhere"))
+
+    root, manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
+
+    assert root == "elsewhere", "report the root the archive actually holds"
+    package = manifest["package"]
+    assert isinstance(package, dict), "parse the manifest package table"
+    assert (package["name"], package["version"]) == (PACKAGE_NAME, VERSION), (
+        "parse the packaged manifest identity the policy compares"
+    )
+
+
 def test_check_refuses_digest_and_packaged_manifest_mismatches(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -219,129 +341,3 @@ def test_check_refuses_digest_and_packaged_manifest_mismatches(
     assert main(_check_args(record, tmp_path, output)) == EXIT_REJECTED, (
         "reject a candidate digest that does not match the archive"
     )
-
-
-def test_metadata_normalizes_manifest_and_all_dependency_kinds(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Derive Cargo's publish record in memory without changing archive bytes."""
-    _, archive = write_candidate(tmp_path)
-    original = archive.read_bytes()
-
-    status = main([
-        "metadata",
-        "--archive",
-        str(archive),
-        "--output",
-        str(tmp_path / "metadata.json"),
-    ])
-
-    assert status == EXIT_OK, "metadata must be derived from a valid crate archive"
-    metadata = json.loads((tmp_path / "metadata.json").read_text(encoding="utf-8"))
-    assert metadata["name"] == PACKAGE_NAME, "read the package name from the archive"
-    assert metadata["vers"] == VERSION, "read the package version from the archive"
-    assert metadata["readme"] == EXPECTED_README, "include packaged README contents"
-    assert metadata["readme_file"] == "README.md", "retain the packaged README path"
-    dependencies = metadata["deps"]
-    serde = next(
-        dependency
-        for dependency in dependencies
-        if dependency["name"] == "serde"
-        and dependency["target"] is None
-        and dependency["explicit_name_in_toml"] is None
-    )
-    renamed_serde = next(
-        dependency
-        for dependency in dependencies
-        if dependency["explicit_name_in_toml"] == "renamed-serde"
-    )
-    assert serde["default_features"] is False, "preserve disabled default features"
-    assert serde["features"] == ["derive"], "preserve requested dependency features"
-    assert serde["optional"] is False, "mark required dependencies as non-optional"
-    assert renamed_serde["optional"] is True, "preserve optional renamed dependencies"
-    rstest_dependency = next(
-        dependency for dependency in dependencies if dependency["name"] == "rstest"
-    )
-    assert rstest_dependency["version_req"] == "^0.26", (
-        "preserve development dependency requirements"
-    )
-    cc_dependency = next(
-        dependency for dependency in dependencies if dependency["name"] == "cc"
-    )
-    assert cc_dependency["kind"] == "build", (
-        "mark build dependencies with the correct kind"
-    )
-    assert next(
-        dependency for dependency in dependencies if dependency["name"] == "windows-sys"
-    )["features"] == ["Win32_Foundation"], (
-        "preserve target-specific dependency features"
-    )
-    assert metadata["links"] == "netsuke_native", "preserve the native links field"
-    assert archive.read_bytes() == original, (
-        "metadata derivation must retain exact bytes"
-    )
-
-
-def test_metadata_rejects_missing_archive(tmp_path: pathlib.Path) -> None:
-    """Classify an absent archive as an archive-read failure."""
-    with pytest.raises(MetadataError) as error:
-        package_metadata(tmp_path / "missing.crate")
-
-    assert error.value.issue is MetadataIssue.ARCHIVE_READ, (
-        "classify unreadable candidate archives"
-    )
-
-
-def test_metadata_rejects_invalid_archive(tmp_path: pathlib.Path) -> None:
-    """Classify malformed tar bytes as an archive-read failure."""
-    archive = tmp_path / "invalid.crate"
-    _ = archive.write_bytes(b"not a gzip tar archive")
-
-    with pytest.raises(MetadataError) as error:
-        package_metadata(archive)
-
-    assert error.value.issue is MetadataIssue.ARCHIVE_READ, (
-        "classify archives that cannot be opened"
-    )
-
-
-@pytest.mark.parametrize(
-    ("manifests", "expected_issue"),
-    [
-        pytest.param((), MetadataIssue.MANIFEST_COUNT, id="missing-manifest"),
-        pytest.param(
-            (manifest_text(), manifest_text()),
-            MetadataIssue.MANIFEST_COUNT,
-            id="duplicate-manifest",
-        ),
-        pytest.param(("[package\n",), MetadataIssue.ARCHIVE_READ, id="malformed-toml"),
-        pytest.param(
-            ("[workspace]\nmembers = []\n",),
-            MetadataIssue.PACKAGE_TABLE,
-            id="missing-package-table",
-        ),
-        pytest.param(
-            ("package = 1\n",),
-            MetadataIssue.PACKAGE_TABLE,
-            id="invalid-package-table",
-        ),
-        pytest.param(
-            ("[package]\nname = 1\nversion = '1.0.0'\n",),
-            MetadataIssue.PACKAGE_IDENTITY,
-            id="invalid-package-identity",
-        ),
-    ],
-)
-def test_metadata_rejects_malformed_packaged_manifests(
-    tmp_path: pathlib.Path,
-    manifests: tuple[str, ...],
-    expected_issue: MetadataIssue,
-) -> None:
-    """Report the precise issue for invalid packaged Cargo manifests."""
-    archive = tmp_path / "malformed.crate"
-    _ = archive.write_bytes(archive_bytes(manifests=manifests))
-
-    with pytest.raises(MetadataError) as error:
-        package_metadata(archive)
-
-    assert error.value.issue is expected_issue, "retain the manifest issue category"

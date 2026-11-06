@@ -2667,13 +2667,24 @@ that split as well as the no-network rule.
 
 Private helpers in `scripts/crates_io_candidate_cli.py` and
 `scripts/crates_io_upload_metadata.py` compose only their module's candidate
-validation or metadata operation. Candidate-manifest parsing checks the
-expected member identity; metadata-manifest parsing applies the sole-manifest
-and README rules. Workflow reachability helpers stay within their contract
-module, and the common transport argument builder stays in its test module. The
-environment normalizers in `scripts/release_operation_observability.py` also
-remain private to that entry point; other release scripts consume its typed
-`OperationObservation` rather than parsing workflow keys themselves.
+validation or metadata operation. `scripts/crates_io_candidate_archive.py` owns
+the tar and TOML boundary: `archive_and_crate` selects the sole recorded
+`.crate`, and `read_packaged_manifest` reports the archive root holding the
+`Cargo.toml` and parses that manifest without judging the identity it declares.
+`scripts/crates_io_candidate_policy.py` makes the decisions: it holds the
+workflow expectation, requires the recorded release mode to agree with it,
+compares the identity record against it, and requires the packaged manifest to
+sit at the `<package>-<version>` root and name the same package and version.
+The command-line module composes those readers with the policy and its own
+digest check. `scripts/crates_io_candidate_errors.py` holds the shared
+`CandidateIssue` and `CandidateError` vocabulary, so every rejection carries
+one stable category rather than a format-specific exception. Metadata-manifest
+parsing applies the sole-manifest and README rules. Workflow reachability
+helpers stay within their contract module, and the common transport argument
+builder stays in its test module. The environment normalizers in
+`scripts/release_operation_observability.py` also remain private to that entry
+point; other release scripts consume its typed `OperationObservation` rather
+than parsing workflow keys themselves.
 
 ### The release job graph
 
@@ -2719,11 +2730,16 @@ prerequisite to succeed, the run not to be cancelled, and
 before requesting the `crates-io` environment or exchanging credentials.
 
 `package-crate` packages the crate, records its candidate identity and archive
-digest, and uploads them as the `release-crate-package` artefact. The registry
-job downloads that exact artefact into a dedicated directory and validates the
-identity, flat archive name, package name, version, and digest before it probes
-crates.io. Its action consumes the recorded `.crate` bytes directly. It does
-not call `cargo package`, `cargo publish`, or `cargo build`.
+digest, and uploads them as the `release-crate-package` artefact. Before the
+upload, the action runs the same offline candidate check the publisher later
+repeats, selecting `--rehearsal` in dry-run mode and `--tag` for a publishing
+run. That check reads only the local identity record and archive, so a
+pull-request lane exercises the candidate boundary without a registry request
+or a token. The registry job downloads that exact artefact into a dedicated
+directory and validates the identity, flat archive name, package name, version,
+and digest before it probes crates.io. Its action consumes the recorded
+`.crate` bytes directly. It does not call `cargo package`, `cargo publish`, or
+`cargo build`.
 
 The registry job and `publish-release` are independent siblings. The GitHub
 release job is not yet gated on crates.io publication; until
@@ -2733,11 +2749,15 @@ when crates.io publication fails, leaving the two release surfaces out of sync.
 ### Crate-package operation telemetry
 
 The `package-crate` job records the `release_package` operation through
-`scripts/release_operation_observability.py`. The operation has two phases:
-`crate_packaging` brackets the package action, and `artifact_upload` brackets
-the upload of the `release-crate-package` artefact containing the `.crate` and
-`identity.json`. The same phase set applies to rehearsals and tagged release
-runs. The telemetry upload is separate and is not counted as a third phase.
+`scripts/release_operation_observability.py`. The operation has three phases:
+`crate_packaging` and `crate_candidate_validation` time the two steps of the
+package action, and `artifact_upload` brackets the upload of the
+`release-crate-package` artefact containing the `.crate` and `identity.json`.
+The action times its own steps because the boundary between them falls inside
+it: the candidate check runs after packaging and before the artefact upload, so
+no workflow-level bracket can tell a rejected candidate from a failed packaging
+step. The same phase set applies to rehearsals and tagged release runs. The
+telemetry upload is separate and is not counted as a fourth phase.
 
 An always-run step writes the job and phase outcomes, durations, dry-run mode,
 and fixed error category to `GITHUB_STEP_SUMMARY`. It also writes
@@ -2860,6 +2880,14 @@ identity, its SHA-256 must match the package record, and its packaged manifest
 must name the metadata job's package and version. Candidate rejection stops
 before the probe, credential exchange, or registry mutation.
 
+The `package-crate` action runs the same check offline before it uploads the
+artefact, so the identity and bytes are proved to agree while both are still
+local. That invocation selects `--rehearsal` for a dry run and `--tag` for a
+publishing run: a rehearsal candidate records no tag, and a publishing
+candidate must record exactly the tag being released. Supplying no mode, or
+both modes, is a usage error rather than a check that silently accepts
+whichever identity it was handed.
+
 The action probes the version once and passes the saved status and response
 body to `publish_crates_io_cli classify`, which composes
 `release_registry_response` with `release_reconcile_crates`. The resulting
@@ -2885,23 +2913,40 @@ probe and upload retain their single-shot request behaviour. The transport CLI
 remains responsible for writing archive/status files and the bounded retry
 report.
 
-Seven focused test modules cover this new publisher path:
+Eleven focused test modules cover this new publisher path:
+`test_crates_io_candidate_action.py`,
+`test_crates_io_candidate_archive_properties.py`,
 `test_crates_io_candidate_cli.py`, `test_crates_io_candidate_guards.py`,
+`test_crates_io_candidate_metadata.py`, `test_crates_io_candidate_policy.py`,
 `test_crates_io_transport_cli.py`, `test_crates_io_transport_upload.py`,
 `test_crates_io_transport_properties.py`, `test_crates_io_transport_retry.py`,
-and `test_crates_io_publish_sequence.py`. The candidate guards module pins the
-archive file-kind checks, the damaged identity-record and recorded-digest
-rejections, and the three packaged-README selection outcomes; the upload module
-pins the little-endian metadata and archive framing, the missing-token and
+and `test_crates_io_publish_sequence.py`. The candidate metadata module holds
+the metadata-mode tests that the check-mode module would otherwise carry. The
+candidate policy module names each acceptance rule's accept and reject outcome
+directly, so a changed rule fails there rather than only through a
+whole-command rejection. The candidate action module runs the package action's
+candidate step body under Bash from a workspace holding the record and archive
+the packaging step writes, so the step and the CLI are exercised together
+rather than as step text and an in-process call apart. The candidate
+archive-properties module states the manifest selection rule over generated
+member layouts: exactly one regular `<root>/Cargo.toml` among unrelated entries
+in any order is accepted, a directory carrying that name is a file-kind
+rejection, and the policy accepts the reported root and identity only when both
+agree with the release. The candidate guards module pins the archive file-kind
+checks, the damaged identity-record and recorded-digest rejections, and the
+three packaged-README selection outcomes; the upload module pins the
+little-endian metadata and archive framing, the missing-token and
 non-object-metadata refusals, the redacted credential diagnostics, and the exit
 statuses a rejected upload reports. The retry module pins the polling budget,
 the delay between retries, and the status window that ends a poll early; the
 shared argument builders both transport suites drive live in
 `crates_io_transport_support.py` so a flag change reaches them together. The
 source boundary includes `crates_io_candidate_cli.py`,
-`crates_io_upload_metadata.py`, `crates_io_transport_cli.py`,
-`crates_io_registry_http.py`, and `crates_io_transport_http.py`; the shared
-crates.io API policy remains in `release_crates_io_adapter.py` under `scripts/`.
+`crates_io_candidate_archive.py`, `crates_io_candidate_errors.py`,
+`crates_io_candidate_policy.py`, `crates_io_upload_metadata.py`,
+`crates_io_transport_cli.py`, `crates_io_registry_http.py`, and
+`crates_io_transport_http.py`; the shared crates.io API policy remains in
+`release_crates_io_adapter.py` under `scripts/`.
 
 For an absent version, the action reads the packaged `Cargo.toml` and README in
 memory from the `.crate`, derives the registry metadata (including normal,
@@ -2946,7 +2991,11 @@ again; it does not rebuild the package. If the first upload reached crates.io
 but its response was lost, the fresh probe classifies the version as
 `identical`, skips a second upload, downloads the public archive, and verifies
 its bytes. If the version remains absent, the rerun exchanges a new short-lived
-token and makes one new upload attempt.
+token and makes one new upload attempt. This resume path is pinned twice: the
+publish-sequence tests drive a first absent probe into a publish decision and a
+second identical probe into a skip followed by a successful byte verification,
+and the workflow-contract tests require the skip resolution to exclude the
+authentication, metadata, and upload steps.
 
 A `conflict` or `yanked` result requires operator investigation and a new
 release version. The publisher neither overwrites a conflicting version nor
@@ -3197,7 +3246,7 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the thirty-two `scripts/tests/test_*.py`
+`make test-release-publication` runs the thirty-six `scripts/tests/test_*.py`
 modules for the release-policy CLIs and their library modules, then runs the
 same source modules under `--doctest-modules`, so the examples in their
 docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,

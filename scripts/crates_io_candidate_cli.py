@@ -3,27 +3,28 @@
 This adapter reads the identity artifact and `.crate` bytes produced by
 ``package-crate``. It never invokes Cargo or rewrites the archive. The
 registry policy remains in :mod:`publish_crates_io_cli` and its pure policy
-modules; this module owns JSON, TOML, tar and filesystem boundaries.
+modules; this module owns the JSON and filesystem boundaries, while
+:mod:`crates_io_candidate_archive` reads the archive and the manifest it
+packages and :mod:`crates_io_candidate_policy` decides whether the parsed
+facts describe this release run.
 """
 
 import argparse
 import dataclasses
-import enum
-import io
 import json
 import pathlib
 import sys
-import tarfile
 import tempfile
-import tomllib
-import typing as typ
 
+import crates_io_candidate_archive
+import crates_io_candidate_policy
 import crates_io_upload_metadata
-import release_asset_names
 import release_candidate
 import release_digest
 import release_digest_files
 import release_identity_record
+from crates_io_candidate_errors import CandidateError, CandidateIssue
+from crates_io_candidate_policy import CandidateExpectation
 
 EXIT_OK = 0
 EXIT_REJECTED = 1
@@ -31,56 +32,6 @@ EXIT_OUTPUT_ERROR = 2
 EXIT_USAGE = 64
 
 SHA256_DIGEST_LENGTH = 64
-
-
-class CandidateIssue(enum.StrEnum):
-    """Classify failures while checking the retained release candidate."""
-
-    JSON_READ = "could not read {} {}: {}"
-    JSON_OBJECT = "{} must be a JSON object"
-    REHEARSAL = "a rehearsal identity cannot publish to crates.io"
-    IDENTITY_MISMATCH = "candidate identity mismatch: {}"
-    CRATE_BASENAME = "identity record crate must be a flat archive basename"
-    CRATE_SUFFIX = "identity record crate {!r} must end in .crate"
-    ARCHIVE_COUNT = "expected exactly one matching .crate named {!r}, found {!r}"
-    ARCHIVE_FILE = "candidate archive is not a regular file: {!r}"
-    MANIFEST_MEMBER = "archive must contain exactly one regular {!r}"
-    MANIFEST_READ = "could not read packaged manifest {!r}"
-    MANIFEST_PARSE = "could not read packaged Cargo manifest: {}"
-    PACKAGE_TABLE = "packaged manifest has no [package] table"
-    MANIFEST_IDENTITY = (
-        "packaged manifest identity does not match the validated candidate"
-    )
-    IDENTITY_OBJECT = "package identity record has no identity object"
-    IDENTITY_INVALID = "invalid package identity: {}"
-    DIGEST_MISSING = "package identity record has no SHA-256 digest"
-    DIGEST_FORMAT = "package identity SHA-256 must be lowercase hexadecimal"
-    DIGEST_MISMATCH = "candidate archive digest {} disagrees with identity record {}"
-
-
-class CandidateError(ValueError):
-    """Carry a classified candidate error and its display values."""
-
-    def __init__(self, issue: CandidateIssue, context: tuple[object, ...] = ()) -> None:
-        """Store the candidate issue and values used to render its diagnostic."""
-        self.issue = issue
-        self.context = context
-        super().__init__(str(self))
-
-    @typ.override
-    def __str__(self) -> str:
-        """Render the issue with its associated diagnostic values."""
-        return self.issue.value.format(*self.context)
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class CandidateExpectation:
-    """Carry workflow identity that the package artifact must match."""
-
-    tag: str
-    commit: str
-    package_name: str
-    version: str
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -129,99 +80,6 @@ def _read_json_mapping(path: pathlib.Path, label: str) -> dict[str, object]:
     return parsed
 
 
-def _identity_matches(
-    identity: release_candidate.ReleaseIdentity,
-    expectation: CandidateExpectation,
-) -> None:
-    """Require the artifact identity to match this validated release run."""
-    if identity.tag is None:
-        raise CandidateError(CandidateIssue.REHEARSAL)
-    expected = {
-        "tag": expectation.tag,
-        "commit": expectation.commit,
-        "package_name": expectation.package_name,
-        "version": expectation.version,
-    }
-    actual = {
-        "tag": identity.tag,
-        "commit": identity.commit,
-        "package_name": identity.package_name,
-        "version": identity.version,
-    }
-    mismatches = [
-        f"{field}={actual[field]!r} (expected {value!r})"
-        for field, value in expected.items()
-        if actual[field] != value
-    ]
-    if mismatches:
-        raise CandidateError(CandidateIssue.IDENTITY_MISMATCH, (", ".join(mismatches),))
-
-
-def _crate_basename(record: dict[str, object]) -> str:
-    """Require the recorded crate name to be a flat archive basename."""
-    crate = record.get("crate")
-    if not isinstance(crate, str) or not release_asset_names.is_bare_file_name(crate):
-        raise CandidateError(CandidateIssue.CRATE_BASENAME)
-    if not crate.endswith(".crate"):
-        raise CandidateError(CandidateIssue.CRATE_SUFFIX, (crate,))
-    return crate
-
-
-def _recorded_archive(
-    record: dict[str, object], directory: pathlib.Path
-) -> tuple[str, pathlib.Path]:
-    """Select the sole archive after validating its recorded basename."""
-    crate = _crate_basename(record)
-    archives = sorted(directory.glob("*.crate"))
-    found = [archive.name for archive in archives]
-    if found != [crate]:
-        raise CandidateError(CandidateIssue.ARCHIVE_COUNT, (crate, found))
-    archive = directory / crate
-    if archive.is_symlink() or not archive.is_file():
-        raise CandidateError(CandidateIssue.ARCHIVE_FILE, (crate,))
-    return crate, archive
-
-
-def _manifest_contents(package: tarfile.TarFile, member_name: str) -> str:
-    """Read the one regular manifest member with the expected archive identity."""
-    matches = [member for member in package.getmembers() if member.name == member_name]
-    if len(matches) != 1 or not matches[0].isfile():
-        raise CandidateError(CandidateIssue.MANIFEST_MEMBER, (member_name,))
-    manifest_file = package.extractfile(matches[0])
-    if manifest_file is None:
-        raise CandidateError(CandidateIssue.MANIFEST_READ, (member_name,))
-    return manifest_file.read().decode("utf-8")
-
-
-def _check_manifest_identity(
-    manifest: dict[str, object], package_name: str, version: str
-) -> None:
-    """Require the packaged manifest identity to match the validated workflow."""
-    package_table = manifest.get("package")
-    if not isinstance(package_table, dict):
-        raise CandidateError(CandidateIssue.PACKAGE_TABLE)
-    if (
-        package_table.get("name") != package_name
-        or package_table.get("version") != version
-    ):
-        raise CandidateError(CandidateIssue.MANIFEST_IDENTITY)
-
-
-def _packaged_manifest(
-    archive_path: pathlib.Path, package_name: str, version: str
-) -> dict[str, object]:
-    """Read and validate the Cargo manifest stored in the retained archive."""
-    member_name = f"{package_name}-{version}/Cargo.toml"
-    try:
-        archive_bytes = archive_path.read_bytes()
-        with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as package:
-            manifest = tomllib.loads(_manifest_contents(package, member_name))
-    except (OSError, UnicodeError, tarfile.TarError, tomllib.TOMLDecodeError) as error:
-        raise CandidateError(CandidateIssue.MANIFEST_PARSE, (error,)) from error
-    _check_manifest_identity(manifest, package_name, version)
-    return manifest
-
-
 def _recorded_identity(record: dict[str, object]) -> release_candidate.ReleaseIdentity:
     """Parse the identity object while retaining candidate-specific diagnostics."""
     raw_identity = record.get("identity")
@@ -260,13 +118,28 @@ def validate_candidate(
 ) -> ValidatedCandidate:
     """Validate identity, artifact selection, digest and packaged manifest.
 
+    A publishing expectation requires the identity to record exactly the
+    expected tag. A rehearsal expectation requires the identity to record no
+    tag. Both modes bind the commit, package name, and version. The acceptance
+    rules live in :mod:`crates_io_candidate_policy`; this function reads the
+    boundaries they are applied to, and a rejection from either the policy or a
+    focused reader surfaces as ``CandidateError``, so a mismatched identity,
+    archive, digest, or packaged manifest fails validation rather than
+    returning a partially checked candidate.
+
+    Parameters
+    ----------
+    identity_path : pathlib.Path
+        The package identity record to read.
+    archive_directory : pathlib.Path
+        The directory holding the sole retained ``.crate`` archive.
+    expectation : CandidateExpectation
+        The workflow identity, with ``tag`` set to ``None`` for a rehearsal.
+
     Returns
     -------
     ValidatedCandidate
         The identity and exact archive path and digest after validation.
-
-    A rehearsal or mismatched identity, archive digest or packaged manifest
-    raises ``CandidateError`` through the focused validation helpers below.
 
     Examples
     --------
@@ -275,10 +148,15 @@ def validate_candidate(
     """
     record = _read_json_mapping(identity_path, "package identity")
     identity = _recorded_identity(record)
-    _identity_matches(identity, expectation)
-    crate, archive = _recorded_archive(record, archive_directory)
+    crates_io_candidate_policy.require_identity_matches(identity, expectation)
+    crate, archive = crates_io_candidate_archive.archive_and_crate(
+        record, archive_directory
+    )
     observed_digest = _validated_digest(archive, _recorded_digest(record))
-    _ = _packaged_manifest(archive, expectation.package_name, expectation.version)
+    root, manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
+    crates_io_candidate_policy.require_manifest_identity(
+        root, manifest, expectation.package_name, expectation.version
+    )
     return ValidatedCandidate(identity, crate, archive, observed_digest)
 
 
@@ -313,7 +191,18 @@ def build_parser() -> argparse.ArgumentParser:
     check = commands.add_parser("check", help="validate the packaged candidate")
     check.add_argument("--identity", required=True, type=pathlib.Path)
     check.add_argument("--archive-directory", required=True, type=pathlib.Path)
-    check.add_argument("--tag", required=True)
+    # Exactly one release mode is required, mirroring ``package_crate_cli``.
+    # A caller that supplies neither, or both, reaches an argument error rather
+    # than a check that silently accepts whichever identity it was handed.
+    release_mode = check.add_mutually_exclusive_group(required=True)
+    release_mode.add_argument(
+        "--tag", help="the release tag a publishing candidate must record"
+    )
+    release_mode.add_argument(
+        "--rehearsal",
+        action="store_true",
+        help="accept a candidate that records no release tag",
+    )
     check.add_argument("--commit", required=True)
     check.add_argument("--package-name", required=True)
     check.add_argument("--version", required=True)
@@ -331,7 +220,7 @@ def _record_for_arguments(arguments: argparse.Namespace) -> dict[str, object]:
             arguments.identity,
             arguments.archive_directory,
             CandidateExpectation(
-                arguments.tag,
+                None if arguments.rehearsal else arguments.tag,
                 arguments.commit,
                 arguments.package_name,
                 arguments.version,

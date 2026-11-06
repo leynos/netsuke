@@ -8,8 +8,12 @@ explicit decision about which side owns its effects.
 
 #: Test suites collected by ``make test-release-publication``.
 SECTION_MODULES = (
+    "scripts/tests/test_crates_io_candidate_action.py",
+    "scripts/tests/test_crates_io_candidate_archive_properties.py",
     "scripts/tests/test_crates_io_candidate_cli.py",
     "scripts/tests/test_crates_io_candidate_guards.py",
+    "scripts/tests/test_crates_io_candidate_metadata.py",
+    "scripts/tests/test_crates_io_candidate_policy.py",
     "scripts/tests/test_crates_io_transport_cli.py",
     "scripts/tests/test_crates_io_transport_upload.py",
     "scripts/tests/test_crates_io_transport_properties.py",
@@ -44,7 +48,10 @@ SECTION_MODULES = (
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
 SOURCE_MODULES = (
+    "scripts/crates_io_candidate_archive.py",
     "scripts/crates_io_candidate_cli.py",
+    "scripts/crates_io_candidate_errors.py",
+    "scripts/crates_io_candidate_policy.py",
     "scripts/crates_io_transport_cli.py",
     "scripts/crates_io_registry_http.py",
     "scripts/crates_io_transport_http.py",
@@ -77,6 +84,8 @@ SOURCE_MODULES = (
 
 #: Sources that decide from already parsed, in-memory values.
 POLICY_MODULES = (
+    "scripts/crates_io_candidate_errors.py",
+    "scripts/crates_io_candidate_policy.py",
     "scripts/release_candidate.py",
     "scripts/release_identity_record.py",
     "scripts/release_semver.py",
@@ -93,6 +102,7 @@ POLICY_MODULES = (
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
 ADAPTER_MODULES = (
+    "scripts/crates_io_candidate_archive.py",
     "scripts/crates_io_candidate_cli.py",
     "scripts/crates_io_transport_cli.py",
     "scripts/crates_io_registry_http.py",

@@ -165,7 +165,11 @@ OPERATION_PHASES = {
         "archive_hoist",
         "upload_plan_validation",
     ),
-    "release_package": ("crate_packaging", "artifact_upload"),
+    "release_package": (
+        "crate_packaging",
+        "crate_candidate_validation",
+        "artifact_upload",
+    ),
     "publish_crates_io": (
         "crate_candidate_validation",
         "registry_probe",
