@@ -1443,6 +1443,15 @@ wrapper), so those flags survive rather than being silently discarded.
 `tests/makefile_test_target/rustflags.rs` holds all four to that composition
 and to their individual policies.
 
+The Whitaker route composes none of them. `lint-whitaker` runs Whitaker on its
+installer-managed toolchain, which must not inherit the development flags, so
+each command goes through `env -u CARGO_ENCODED_RUSTFLAGS` and assigns
+`RUSTFLAGS="-D warnings"` as its own value. The assignment matters: with
+`RUSTFLAGS` unset, Cargo still reads the configuration's `rustflags` tables and
+the route would carry the parallel frontend and the `mold` flag. The same test
+module parses the recipe and asserts that the route clears the encoded flags,
+assigns the warning policy alone, and composes no contracted variable.
+
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
 records the policy decision, and the [polonius migration notes](polonius.md)
 track every site whose design depends on the analysis. Sites tagged
