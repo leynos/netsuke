@@ -11,6 +11,8 @@ use std::{
     process::{Command, Output},
 };
 
+use test_support::bounded_process::{COMPILE_DEADLINE, RUN_DEADLINE, output_within};
+
 /// Verify repository policy files used by the `cfg(kani)` compile contract.
 ///
 /// The fixture is compiled with the workspace `rustc` and then executed, so
@@ -33,7 +35,7 @@ fn compiled_fixture_validates_kani_cfg_policy_sources() -> io::Result<()> {
         )));
     }
 
-    let run = Command::new(&binary).output()?;
+    let run = output_within(&mut Command::new(&binary), RUN_DEADLINE)?;
     if !run.status.success() {
         return Err(io::Error::other(format!(
             "policy fixture assertions should pass:\n{}",
@@ -106,7 +108,9 @@ fn compile_ui_fixture(source: &str, output_path: &Path) -> io::Result<Output> {
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let source_path = manifest_dir.join(source);
 
-    Command::new(rustc())
+    // nested-cargo-allow: timed the spawn is bounded by `output_within`'s deadline
+    let mut compile = Command::new(rustc());
+    compile
         .arg("--edition=2024")
         .arg("--crate-type=bin")
         .arg("--cfg=kani")
@@ -114,8 +118,8 @@ fn compile_ui_fixture(source: &str, output_path: &Path) -> io::Result<Output> {
         .arg("-Dunexpected-cfgs")
         .arg(source_path)
         .arg("-o")
-        .arg(output_path)
-        .output()
+        .arg(output_path);
+    output_within(&mut compile, COMPILE_DEADLINE)
 }
 
 #[expect(

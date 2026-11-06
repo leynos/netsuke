@@ -6298,6 +6298,20 @@ governs the non-doctest pass only, and deliberately stays small:
 - **A conservative slow timeout** (warn after 60s, terminate after five
   warning periods) so a hung test surfaces without failing the legitimately
   slow documentation end-to-end suites, which shell out to real Ninja.
+- **Direct compiler spawns carry a deadline.** A test that starts `rustc` for
+  one small file (the helper compile in `test_support::command_helper` and the
+  Kani and Ninja-escape UI suites) runs it through
+  `test_support::bounded_process::output_within`. The helper kills the direct
+  child when it outlives its deadline (120 s to compile, 60 s to run a compiled
+  fixture, both well inside the 300 s terminate-after) and fails with a
+  `TimedOut` error, rather than leaving the runner to terminate a test whose
+  compiler is still running. It drains both pipes on their own threads, so
+  large output cannot stall the child, and the deadline also covers the wait
+  for that output: a grandchild that holds a pipe open past the child's exit
+  ends the call at the deadline instead of hanging. Process groups are not
+  signalled, so such a grandchild is not itself killed. The module is
+  Unix-tested and platform-neutral in use. Mark a new spawn of this kind with
+  the helper and a `nested-cargo-allow: timed` comment naming it.
 - **No cold builds inside tests.** Cargo's publish verification build runs as
   `make test-package-verify` rather than inside
   `packaged_manifest_retains_build_script_sources`, which keeps only the

@@ -1,13 +1,15 @@
 //! Test-support helpers for compiling tiny Rust programmes used by command
 //! filter tests.
 
-use std::{ffi::OsString, process::Command};
+use std::{ffi::OsString, process::Command, time::Duration};
 
 use anyhow::{Context, Result, bail};
 
 use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use mockable::{DefaultEnv, Env};
+
+use crate::bounded_process::{COMPILE_DEADLINE, output_within};
 
 /// A helper `main` that upper-cases stdin to stdout.
 const UPPERCASE_SOURCE: &str = concat!(
@@ -177,6 +179,39 @@ fn compile_rust_helper_with_env(
     root: &Utf8PathBuf,
     helper: RustHelperSource<'_>,
 ) -> Result<Utf8PathBuf> {
+    compile_rust_helper_within(
+        env,
+        dir,
+        root,
+        BoundedHelper {
+            helper,
+            deadline: COMPILE_DEADLINE,
+        },
+    )
+}
+
+/// A helper to compile and the longest the compiler may take.
+#[derive(Clone, Copy)]
+struct BoundedHelper<'a> {
+    /// The helper source to compile.
+    helper: RustHelperSource<'a>,
+    /// How long the compiler may run before the compile fails.
+    deadline: Duration,
+}
+
+/// Compile a [`BoundedHelper`] as [`compile_rust_helper_with_env`] does.
+///
+/// # Errors
+///
+/// As [`compile_rust_helper_with_env`], and when the compiler is still running
+/// at the deadline.
+fn compile_rust_helper_within(
+    env: &impl Env,
+    dir: &Dir,
+    root: &Utf8PathBuf,
+    bounded: BoundedHelper<'_>,
+) -> Result<Utf8PathBuf> {
+    let BoundedHelper { helper, deadline } = bounded;
     let RustHelperSource { name, source } = helper;
     dir.write(format!("{name}.rs"), source.as_bytes())
         .with_context(|| format!("write helper source {name}.rs"))?;
@@ -184,20 +219,25 @@ fn compile_rust_helper_with_env(
     let src_path = root.join(format!("{name}.rs"));
     let exe_path = root.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     let rustc = rust_compiler(env);
-    let status = Command::new(&rustc)
+    // nested-cargo-allow: timed the spawn is bounded by `output_within`'s deadline
+    let mut compile = Command::new(&rustc);
+    compile
         .arg(src_path.as_std_path())
         .arg("-o")
-        .arg(exe_path.as_std_path())
-        .status()
-        .with_context(|| {
-            format!(
-                "invoke {} to compile helper {name}",
-                rustc.to_string_lossy()
-            )
-        })?;
+        .arg(exe_path.as_std_path());
+    let output = output_within(&mut compile, deadline).with_context(|| {
+        format!(
+            "invoke {} to compile helper {name}",
+            rustc.to_string_lossy()
+        )
+    })?;
 
-    if !status.success() {
-        bail!("failed to compile helper {name}: {status:?}");
+    if !output.status.success() {
+        bail!(
+            "failed to compile helper {name}: {:?}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     Ok(exe_path)
 }
@@ -209,109 +249,5 @@ fn rust_compiler(env: &impl Env) -> OsString {
 }
 
 #[cfg(test)]
-mod tests {
-    //! Unit tests for compiler selection and helper compilation.
-
-    use super::rust_compiler;
-    #[cfg(unix)]
-    use super::{RustHelperSource, compile_rust_helper_with_env};
-    #[cfg(unix)]
-    use crate::exec::write_exec_with_content;
-    #[cfg(unix)]
-    use anyhow::{Context, Result, ensure};
-    #[cfg(unix)]
-    use camino::Utf8PathBuf;
-    #[cfg(unix)]
-    use cap_std::{ambient_authority, fs_utf8::Dir};
-    use mockable::MockEnv;
-    use std::ffi::OsString;
-    #[cfg(unix)]
-    use tempfile::tempdir;
-
-    #[test]
-    fn rust_compiler_honours_configured_path() {
-        let configured = OsString::from("/toolchain/bin/rustc");
-        let expected = configured.clone();
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "RUSTC")
-            .once()
-            .return_once(move |_| Some(configured));
-
-        assert_eq!(rust_compiler(&env), expected);
-    }
-
-    #[test]
-    fn rust_compiler_falls_back_to_path_lookup() {
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "RUSTC")
-            .once()
-            .return_once(|_| None);
-
-        assert_eq!(rust_compiler(&env), OsString::from("rustc"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn compile_helper_invokes_configured_absolute_wrapper() -> Result<()> {
-        let temp = tempdir().context("create compiler wrapper directory")?;
-        let root = Utf8PathBuf::from_path_buf(temp.path().to_path_buf())
-            .map_err(|path| anyhow::anyhow!("compiler wrapper path is not UTF-8: {path:?}"))?;
-        let dir = Dir::open_ambient_dir(&root, ambient_authority())
-            .context("open compiler wrapper directory")?;
-        let wrapper = write_exec_with_content(
-            temp.path(),
-            "configured-rustc",
-            concat!(
-                "#!/bin/sh\n",
-                "set -eu\n",
-                "output=\n",
-                "while [ \"$#\" -gt 0 ]; do\n",
-                "    if [ \"$1\" = \"-o\" ]; then\n",
-                "        shift\n",
-                "        output=$1\n",
-                "        break\n",
-                "    fi\n",
-                "    shift\n",
-                "done\n",
-                "test -n \"$output\"\n",
-                ": > \"$output\"\n",
-                "printf invoked > \"$0.invoked\"\n",
-            ),
-        )
-        .context("write configured compiler wrapper")?;
-        // `write_exec_with_content` is a std::path boundary; convert once here so
-        // the sidecar marker stays in camino's UTF-8 domain like the rest of the
-        // helper.
-        let wrapper_path = Utf8PathBuf::from_path_buf(wrapper)
-            .map_err(|path| anyhow::anyhow!("compiler wrapper path is not UTF-8: {path:?}"))?;
-        let marker = Utf8PathBuf::from(format!("{wrapper_path}.invoked"));
-        let configured = OsString::from(wrapper_path.as_str());
-        let mut env = MockEnv::new();
-        env.expect_os_string()
-            .withf(|key| key == "RUSTC")
-            .once()
-            .return_once(move |_| Some(configured));
-
-        let executable = compile_rust_helper_with_env(
-            &env,
-            &dir,
-            &root,
-            RustHelperSource {
-                name: "probe",
-                source: "fn main() {}\n",
-            },
-        )?;
-
-        ensure!(
-            marker.exists(),
-            "configured compiler wrapper was not invoked"
-        );
-        ensure!(
-            executable.as_std_path().exists(),
-            "configured compiler wrapper did not create the requested output"
-        );
-        Ok(())
-    }
-}
+#[path = "command_helper_tests.rs"]
+mod tests;

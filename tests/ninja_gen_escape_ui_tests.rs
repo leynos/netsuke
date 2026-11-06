@@ -6,6 +6,8 @@ use std::{
     process::{Command, Output},
 };
 
+use test_support::bounded_process::{COMPILE_DEADLINE, output_within};
+
 /// Verify the consuming conversion rejects a second escape attempt at compile time.
 #[test]
 fn ninja_value_cannot_cross_the_escape_boundary_twice() -> io::Result<()> {
@@ -31,13 +33,15 @@ fn ninja_value_cannot_cross_the_escape_boundary_twice() -> io::Result<()> {
 
 /// Compile one escaping-boundary fixture with the workspace Rust compiler.
 fn compile_ui_fixture(source: &str, output_path: &Path) -> io::Result<Output> {
-    Command::new(rustc())
+    // nested-cargo-allow: timed the spawn is bounded by `output_within`'s deadline
+    let mut compile = Command::new(rustc());
+    compile
         .arg("--edition=2024")
         .arg("--crate-type=bin")
         .arg(manifest_dir().join(source))
         .arg("-o")
-        .arg(output_path)
-        .output()
+        .arg(output_path);
+    output_within(&mut compile, COMPILE_DEADLINE)
 }
 
 /// Locate the workspace root containing compile-time fixtures.
