@@ -11,7 +11,7 @@ use std::{
     process::{Command, Output},
 };
 
-use test_support::bounded_process::{COMPILE_DEADLINE, output_within};
+use test_support::bounded_process::{COMPILE_DEADLINE, RUN_DEADLINE, output_within};
 
 /// Verify repository policy files used by the `cfg(kani)` compile contract.
 ///
@@ -35,7 +35,7 @@ fn compiled_fixture_validates_kani_cfg_policy_sources() -> io::Result<()> {
         )));
     }
 
-    let run = output_within(&mut Command::new(&binary), COMPILE_DEADLINE)?;
+    let run = output_within(&mut Command::new(&binary), RUN_DEADLINE)?;
     if !run.status.success() {
         return Err(io::Error::other(format!(
             "policy fixture assertions should pass:\n{}",
