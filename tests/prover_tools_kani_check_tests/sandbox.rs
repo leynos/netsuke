@@ -9,6 +9,7 @@
 use super::shell_quote;
 use std::path::Path;
 use std::process::Command;
+use tempfile::tempdir;
 
 /// Environment variable that turns an unavailable isolation sandbox into a
 /// failure instead of a reported skip.
@@ -33,16 +34,21 @@ pub(super) struct SandboxPaths<'a> {
 /// take effect would otherwise make the boundary test pass vacuously. The
 /// chroot's own root is a self-bind remounted read-only, because `/` itself
 /// cannot be remounted from inside a user namespace; everything the query is
-/// allowed to read is then bound read-only on top of that root. Nothing else
-/// exists inside the chroot, so the inherited home directory and the temporary
-/// directories are not merely outside an allowlist but absent.
+/// allowed to read is then bound read-only on top of that root. `/tmp` and the
+/// caller's home directory are created inside the chroot before it is made
+/// read-only, so they exist and are proven unwritable rather than merely
+/// absent; the home directory is created only when the caller has one, and the
+/// probe reports it as absent otherwise.
 pub(super) fn script(paths: &SandboxPaths<'_>) -> String {
     format!(
         r#"set -u
 root={chroot}
 repo={repo}
 fixture={fixture}
-mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root$repo" "$root$fixture" || exit 90
+mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root/tmp" "$root$repo" "$root$fixture" || exit 90
+if [ -n "${{HOME:-}}" ]; then
+  mkdir -p "$root$HOME" || exit 90
+fi
 ln -s usr/bin "$root/bin"
 ln -s usr/sbin "$root/sbin"
 ln -s usr/lib "$root/lib"
@@ -98,7 +104,11 @@ probe rootdir /sandbox-probe
 probe usr /usr/sandbox-probe
 probe etc /etc/sandbox-probe
 probe tmp /tmp/sandbox-probe
-probe home "$HOME/sandbox-probe"
+if [ -n "${HOME:-}" ]; then
+  probe home "$HOME/sandbox-probe"
+else
+  echo "home=absent"
+fi
 echo "ifaces=$(cut -d: -f1 /proc/net/dev | tail -n +3 | tr -d " " | tr "\n" ",")"
 if resolved=$(timeout 5 getent hosts example.com 2>&1); then
   echo "dns=resolved"
@@ -113,16 +123,56 @@ echo "make-exit=$rc"
 exit "$rc"
 "#;
 
+/// The capability probe run inside the namespace before the real sandbox.
+///
+/// Creating the namespaces does not prove the sandbox can build its chroot: a
+/// host may allow `unshare` and still deny a bind mount, a read-only remount, a
+/// procfs mount, or `chroot`. Probing the same sequence on a throwaway
+/// directory turns that into a reported prerequisite skip instead of a failure
+/// inside the real script. Each stage has its own exit status so the reason
+/// names the operation that was refused.
+const PROBE: &str = r#"set -u
+root=$1
+mkdir -p "$root/usr" "$root/proc" || exit 90
+ln -s usr/bin "$root/bin" || exit 90
+ln -s usr/sbin "$root/sbin" || exit 90
+ln -s usr/lib "$root/lib" || exit 90
+ln -s usr/lib64 "$root/lib64" || exit 90
+mount --make-rprivate / || true
+mount --bind "$root" "$root" && mount -o remount,ro,bind "$root" || exit 91
+mount --bind /usr "$root/usr" && mount -o remount,ro,bind "$root/usr" || exit 92
+mount -t proc proc "$root/proc" || exit 93
+chroot "$root" /bin/sh -c 'exit 0' || exit 94
+"#;
+
+/// Name the sandbox operation a probe exit status stands for.
+fn probe_stage(status: Option<i32>) -> &'static str {
+    match status {
+        Some(90) => "create the probe directories",
+        Some(91) => "bind and remount the chroot root read-only",
+        Some(92) => "bind and remount /usr read-only",
+        Some(93) => "mount a fresh procfs",
+        Some(94) => "chroot into the probe root",
+        _ => "run the capability probe",
+    }
+}
+
 /// Report why the isolation sandbox cannot run, if it cannot.
 ///
-/// A host without user namespaces cannot demonstrate the blocked state. The
-/// probe asks for the same namespace set the sandbox uses, including the
-/// process namespace that `mount -t proc` requires, so a host that can create
-/// only some of them is reported as unavailable rather than failing later
-/// inside the script. The case reports that as a skip, which strict mode turns
-/// back into a failure so a lane that requires the boundary test cannot pass
-/// without exercising it.
+/// A host without user namespaces cannot demonstrate the blocked state, and a
+/// host that creates them may still refuse one of the mount operations the
+/// chroot needs. The probe asks for the same namespace set the sandbox uses,
+/// including the process namespace that `mount -t proc` requires, and then
+/// performs the same bind, read-only remount, procfs mount, and `chroot` on a
+/// throwaway directory, so a host that can do only part of it is reported as
+/// unavailable rather than failing later inside the script. The case reports
+/// that as a skip, which strict mode turns back into a failure so a lane that
+/// requires the boundary test cannot pass without exercising it.
 pub(crate) fn unavailable() -> Option<String> {
+    let root = match tempdir() {
+        Ok(root) => root,
+        Err(error) => return Some(format!("cannot create a sandbox probe directory: {error}")),
+    };
     let probe = Command::new("unshare")
         .args([
             "--user",
@@ -132,13 +182,18 @@ pub(crate) fn unavailable() -> Option<String> {
             "--pid",
             "--fork",
             "--",
-            "true",
+            "sh",
+            "-c",
+            PROBE,
+            "sh",
         ])
+        .arg(root.path())
         .output();
     match probe {
         Ok(output) if output.status.success() => None,
         Ok(output) => Some(format!(
-            "unshare could not create an isolation namespace: {}",
+            "the isolation sandbox cannot {}: {}",
+            probe_stage(output.status.code()),
             String::from_utf8_lossy(&output.stderr).trim()
         )),
         Err(error) => Some(format!("unshare is not runnable: {error}")),

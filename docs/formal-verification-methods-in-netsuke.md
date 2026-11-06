@@ -34,9 +34,10 @@ ordinary dependency set.
 
 The `Makefile` now exposes the formal-verification surface the "Repository
 integration plan" below describes: `install-kani`, `kani-check`, `kani-full`,
-`kani-ir`, `test-kani-mutations`, `test-kani-scope-wrapper`, `install-verus`,
-`verus`, and `formal-pr`, alongside the build, test, lint, formatting, Markdown
-lint, and Mermaid validation targets.[^2]
+`kani-ir`, `test-kani-mutations`, `test-kani-scope-wrapper`,
+`test-kani-check-isolation`, `install-verus`, `verus`, and `formal-pr`,
+alongside the build, test, lint, formatting, Markdown lint, and Mermaid
+validation targets.[^2]
 
 The `CI` workflow defines a separate proof job. `kani-smoke` is a dedicated
 required job covering every harness on pushes to `main`, nightly schedules, and

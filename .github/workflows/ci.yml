@@ -557,6 +557,18 @@ jobs:
         # per-user systemd manager into a failure instead of a skip -- a lane
         # that skipped every scenario would otherwise read as green.
         run: make test-kani-scope-wrapper
+      - name: Verify the kani-check isolation boundary
+        if: steps.scope.outputs.run-proofs == 'true'
+        # The `kani-check` query is read-only by construction, and the Rust
+        # suite proves it by running the real recipe inside a read-only chroot
+        # with no network. A host that forbids unprivileged user namespaces
+        # reports that case as a skip, which would read as green without ever
+        # exercising the boundary. The target exports the strict variable, so
+        # such a host fails here and names the sandbox operation it refused.
+        # Another step on this lane rather than a second execution in
+        # `build-test`, which runs its suite once; `kani-smoke` is exempt from
+        # that rule for steps like this and the scope-wrapper step above.
+        run: make test-kani-check-isolation
       - name: Mark proof start
         if: steps.scope.outputs.run-proofs == 'true'
         env:
