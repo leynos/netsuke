@@ -1,4 +1,4 @@
-//! Recognise POSIX heredoc declarations and comments in plain script text.
+//! Recognize POSIX heredoc declarations and comments in plain script text.
 //!
 //! A declaration is copied with its delimiter, so quote removal and any
 //! rejection are decided once, before marker lowering resumes. The body that
@@ -60,7 +60,15 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     }
 
     /// Return whether `ch` begins a POSIX shell comment in ordinary text.
+    ///
+    /// An arithmetic expansion is not ordinary text: `#` there is arithmetic
+    /// syntax, and a comment started inside `$(( ))` would swallow the rest of
+    /// the line the shell still evaluates. The command traversal already
+    /// suspends comment detection inside arithmetic, so this guard keeps both
+    /// traversals on the same contract.
     pub(super) fn starts_comment(&self, pos: usize, ch: char) -> bool {
-        self.is_plain_script_text() && PosixLexicalState::starts_comment(self.chars, pos, ch)
+        self.is_plain_script_text()
+            && !self.is_in_arithmetic_expansion()
+            && PosixLexicalState::starts_comment(self.chars, pos, ch)
     }
 }

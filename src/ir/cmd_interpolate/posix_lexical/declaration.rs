@@ -9,8 +9,8 @@
 use super::super::CommandBindings;
 use super::delimiter::{parse_delimiter, render_delimiter, rendered_terminator};
 use super::{
-    DelimiterRejection, EscapeBeforeMarker, HeredocDeclaration, HeredocDelimiter, PosixCharacter,
-    PosixLexicalState, SourceChar,
+    EscapeBeforeMarker, HeredocDeclaration, HeredocDelimiter, PosixCharacter, PosixLexicalState,
+    SourceChar,
 };
 
 impl PosixLexicalState {
@@ -57,12 +57,16 @@ impl PosixLexicalState {
             Ok(terminator) => terminator,
             Err(reason) => return Ok(HeredocDeclaration::Rejected(reason)),
         };
-        let Some(operator_prefix) = character.chars.get(character.pos..word.start) else {
-            return Ok(HeredocDeclaration::Rejected(
-                DelimiterRejection::RenderedDelimiterInvalid,
-            ));
-        };
-        character.output.extend(operator_prefix.iter());
+        // `heredoc_operator` only advances `word.start` over characters it has
+        // already read, so the prefix length is always non-negative and in
+        // range; skipping and taking keeps that path branch-free.
+        character.output.extend(
+            character
+                .chars
+                .iter()
+                .skip(character.pos)
+                .take(word.start.saturating_sub(character.pos)),
+        );
         character.output.push_str(&rendered);
         self.pending_heredocs.push_back(HeredocDelimiter {
             text: terminator.text,

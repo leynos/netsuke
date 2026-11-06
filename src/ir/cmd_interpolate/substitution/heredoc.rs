@@ -1,4 +1,4 @@
-//! Recognise POSIX heredoc declarations and comments in recipe text.
+//! Recognize POSIX heredoc declarations and comments in recipe text.
 //!
 //! A declaration is copied with its delimiter, so quote removal and any
 //! rejection are decided once, before marker lowering resumes. The body that

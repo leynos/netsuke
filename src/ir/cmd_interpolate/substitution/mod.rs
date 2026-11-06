@@ -4,7 +4,9 @@ use super::{
     CommandBindings, IrGenError, QuoteContext,
     command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
     find_substitution, invalid_command_error,
-    posix_lexical::{PosixCharacter, PosixLexicalState, backslash_escapes_marker},
+    posix_lexical::{
+        PosixCharacter, PosixLexicalState, backslash_escapes_marker, opens_arithmetic_expansion,
+    },
 };
 use crate::recipe_shell::RecipeShell;
 
@@ -178,7 +180,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         match self.classify_command_substitution_delimiter(pos, ch)? {
             CommandSubstitutionDelimiter::Start => {
                 self.command_substitutions.push(CommandSubstitution::new(
-                    self.starts_arithmetic_expansion(pos),
+                    opens_arithmetic_expansion(self.chars, pos),
                 ));
                 self.output.push_str("$(");
                 Some(pos + 2)
@@ -217,11 +219,6 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Report whether `ch` starts a POSIX or PowerShell `$()` expression.
     fn starts_command_substitution(&self, pos: usize, ch: char) -> bool {
         ch == '$' && self.chars.get(pos + 1) == Some(&'(')
-    }
-
-    /// Report whether the `$(` at `pos` opens an arithmetic expansion.
-    fn starts_arithmetic_expansion(&self, pos: usize) -> bool {
-        self.chars.get(pos + 2) == Some(&'(')
     }
 
     /// Report whether the innermost active substitution is arithmetic.

@@ -7,7 +7,9 @@
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, find_script_substitution,
     invalid_command_error,
-    posix_lexical::{PosixCharacter, PosixLexicalState, backslash_escapes_marker},
+    posix_lexical::{
+        PosixCharacter, PosixLexicalState, backslash_escapes_marker, opens_arithmetic_expansion,
+    },
 };
 
 mod heredoc;
@@ -250,9 +252,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         match self.classify_command_substitution_delimiter(pos, ch)? {
             ScriptCommandSubstitutionDelimiter::Start => {
                 self.command_substitutions
-                    .push(ScriptCommandSubstitution::new(
-                        self.starts_arithmetic_expansion(pos),
-                    ));
+                    .push(ScriptCommandSubstitution::new(opens_arithmetic_expansion(
+                        self.chars, pos,
+                    )));
                 self.output.push_str("$(");
                 Some(pos + 2)
             }
@@ -293,11 +295,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             (ch, self.chars.get(pos + 1), self.active_quote_context()),
             ('$', Some('('), context) if context != ShellQuoteContext::SingleQuoted
         )
-    }
-
-    /// Return whether the `$(` at `pos` opens an arithmetic expansion.
-    fn starts_arithmetic_expansion(&self, pos: usize) -> bool {
-        self.chars.get(pos + 2) == Some(&'(')
     }
 
     /// Return whether the innermost active substitution is arithmetic.

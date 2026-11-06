@@ -122,6 +122,16 @@ pub(super) fn backslash_escapes_marker(
     bound.is_none_or(|end| pos + 1 + skip <= end)
 }
 
+/// Report whether the `$(` at `pos` opens a `$(( ))` arithmetic expansion.
+///
+/// Both recipe traversals must agree on this boundary. An arithmetic body
+/// evaluates numbers, so `<<` there is a shift operator rather than a heredoc
+/// declaration and `#` is arithmetic text rather than a comment. Keeping the
+/// test in one place stops the two traversals drifting apart on it.
+pub(super) fn opens_arithmetic_expansion(chars: &[char], pos: usize) -> bool {
+    chars.get(pos + 2) == Some(&'(')
+}
+
 /// Classify one source character with POSIX shell word rules.
 ///
 /// Only ASCII blanks and the shell operator set separate words; Unicode
