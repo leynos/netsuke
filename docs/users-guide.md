@@ -476,6 +476,16 @@ Ninja turns a failed recipe into its own non-zero result, and `netsuke` returns
 failure after forwarding Ninja's output. The CLI contract distinguishes success
 from failure; it does not promise to return the recipe's exact child value.
 
+Library callers that generate plans directly use the same contract. A bound
+interpreter is an `InterpreterExecutable`; passing one to
+`generate_with_interpreter` or `generate_bundle_with_interpreter` renders the
+trusted absolute path in place of the logical name. Generating Bash commands on
+any platform, or PowerShell commands on a non-Windows platform, requires one of
+those bindings and otherwise fails with
+`NinjaGenError::InterpreterBindingRequired`. See the
+[v0.1.0 migration guide](v0-1-0-migration-guide.md#bind-the-interpreter-through-the-rust-api)
+for the call shape.
+
 ### What a static reader may rely on
 
 - Isolated entries start with the action's working directory and environment on

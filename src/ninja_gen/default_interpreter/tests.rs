@@ -7,63 +7,16 @@
 //! shell still refuses to render a command.
 //!
 //! The rendered form of an arbitrary absolute interpreter path is covered by
-//! the sibling `default_interpreter_properties` module.
+//! the sibling `properties` module.
 
-use super::{
+use super::super::{
     NinjaGenError, RecipeShell, generate_with_shell, resolve_default_interpreter_with,
-    test_support::{command_action, power_shell_interpreter},
+    test_support::{command_graph, dependency_only_graph, power_shell_interpreter},
 };
-use crate::ast::StringOrList;
-use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use crate::power_shell_location::WindowsPowerShellLocationError;
 use camino::Utf8PathBuf;
 use rstest::rstest;
-
-/// Build one command action graph that renders an interpreter command.
-fn command_graph() -> BuildGraph {
-    let mut graph = BuildGraph::default();
-    graph
-        .actions
-        .insert("run".into(), command_action("echo hi".into()));
-    graph
-        .insert_edge(BuildEdge {
-            action_id: "run".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            progress_label: None,
-            phony: false,
-            always: false,
-        })
-        .expect("fixture outputs are unique");
-    graph
-}
-
-/// Build one dependency-only graph that renders no interpreter command.
-fn dependency_only_graph() -> BuildGraph {
-    let mut graph = BuildGraph::default();
-    graph
-        .actions
-        .insert("group".into(), command_action(StringOrList::Empty));
-    graph
-        .insert_edge(BuildEdge {
-            action_id: "group".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("group")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            progress_label: None,
-            phony: true,
-            always: false,
-        })
-        .expect("fixture outputs are unique");
-    graph
-}
+use std::io;
 
 /// A locator failure on a rendered recipe is reported, not silently unbound.
 #[test]
@@ -80,6 +33,51 @@ fn default_resolution_reports_a_locator_failure() {
     assert!(
         error.to_string().contains("system directory"),
         "the diagnostic should name the locator failure: {error}"
+    );
+}
+
+/// A missing trusted executable is reported at the generation boundary.
+#[test]
+fn default_resolution_reports_a_missing_executable() {
+    let expected =
+        Utf8PathBuf::from("/fixtures/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
+    let result =
+        resolve_default_interpreter_with(&command_graph(), RecipeShell::PowerShell, true, || {
+            Err(WindowsPowerShellLocationError::Missing {
+                expected: expected.clone(),
+                source: io::Error::new(io::ErrorKind::NotFound, "no such file"),
+            })
+        });
+    let error = result.expect_err("a missing interpreter must not be swallowed");
+    assert!(matches!(
+        error,
+        NinjaGenError::InterpreterResolutionFailed { .. }
+    ));
+    assert!(
+        error.to_string().contains("missing at"),
+        "the diagnostic should name the missing executable: {error}"
+    );
+}
+
+/// An inaccessible trusted executable is reported at the generation boundary.
+#[test]
+fn default_resolution_reports_an_inaccessible_executable() {
+    let expected =
+        Utf8PathBuf::from("/fixtures/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
+    let result =
+        resolve_default_interpreter_with(&command_graph(), RecipeShell::PowerShell, true, || {
+            Err(WindowsPowerShellLocationError::NotRegularFile {
+                expected: expected.clone(),
+            })
+        });
+    let error = result.expect_err("an inaccessible interpreter must not be swallowed");
+    assert!(matches!(
+        error,
+        NinjaGenError::InterpreterResolutionFailed { .. }
+    ));
+    assert!(
+        error.to_string().contains("not a regular file"),
+        "the diagnostic should name the inaccessible executable: {error}"
     );
 }
 

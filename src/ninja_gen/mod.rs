@@ -306,9 +306,7 @@ pub(crate) fn generate_into_with_binding<W: Write>(
 }
 
 #[cfg(test)]
-mod default_interpreter_properties;
-#[cfg(test)]
-mod default_interpreter_tests;
+mod default_interpreter;
 #[cfg(test)]
 mod determinism;
 #[cfg(test)]

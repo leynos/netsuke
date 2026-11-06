@@ -1,18 +1,17 @@
 //! Property coverage for rendered interpreter paths.
 //!
 //! Windows resolves an unqualified executable name through its search order, so
-//! a bound path must survive two independent decoders: Ninja's own variable and
-//! escape expansion, and `CommandLineToArgvW` quote handling. These properties
-//! generate paths with spaces, Unicode, literal dollars and the platform
-//! separator, render them through each transport, and check the bound path with
-//! the independent parser in `test_support::ninja_semantics` and with a real
-//! `ninja` binary.
+//! a bound path must survive three independent decoders: Ninja's own variable
+//! and escape expansion, the `CommandLineToArgvW` argument splitter, and the
+//! recipe transport. These properties generate paths with spaces, Unicode,
+//! literal dollars and the platform separator, render them through each
+//! transport, and check the decoded argument vector with the independent oracle
+//! in `test_support::windows_argv`, the independent parser in
+//! `test_support::ninja_semantics`, and a real `ninja` binary.
 
-use super::{
-    InterpreterExecutable, RecipeShell, generate_with_interpreter, test_support::command_action,
+use super::super::{
+    InterpreterExecutable, RecipeShell, generate_with_interpreter, test_support::command_graph,
 };
-use crate::ast::StringOrList;
-use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use proptest::prelude::*;
@@ -20,30 +19,7 @@ use proptest::test_runner::{TestCaseError, TestRunner};
 use std::process::Command;
 use test_support::ninja::ninja_integration_workspace;
 use test_support::ninja_semantics::{GeneratedNinja, RecipeNeedle, RecipeTransport};
-
-/// Build one command action graph that renders an interpreter command.
-fn command_graph() -> BuildGraph {
-    let mut graph = BuildGraph::default();
-    graph.actions.insert(
-        "run".into(),
-        command_action(StringOrList::String("echo hi".into())),
-    );
-    graph
-        .insert_edge(BuildEdge {
-            action_id: "run".into(),
-            inputs: Vec::new(),
-            implicit_deps: Vec::new(),
-            dependency_order: DependencyOrder::Parallel,
-            explicit_outputs: vec![Utf8PathBuf::from("out")],
-            implicit_outputs: Vec::new(),
-            order_only_deps: Vec::new(),
-            progress_label: None,
-            phony: false,
-            always: false,
-        })
-        .expect("fixture outputs are unique");
-    graph
-}
+use test_support::windows_argv;
 
 /// The separator Windows arguments and the host both accept in a fixture.
 const fn separator() -> char {
@@ -136,11 +112,33 @@ fn bound_power_shell_paths_survive_ninja_parsing() {
                     target_len > 32_000,
                     "a path beyond the command-line limit should select the response file"
                 );
-                let unescaped = first_command(&ninja).replace("$$", "$");
-                prop_assert!(
-                    unescaped.starts_with(&format!("\"{path}\"")),
-                    "Ninja and Windows quoting should preserve the bound path"
+                let arguments = windows_argv::split(&first_command(&ninja).replace("$$", "$"));
+                prop_assert_eq!(
+                    arguments.first().map(String::as_str),
+                    Some(path.as_str()),
+                    "the bound interpreter should decode as the first Windows argument"
                 );
+                if response_file {
+                    prop_assert_eq!(
+                        arguments
+                            .get(arguments.len().saturating_sub(2))
+                            .map(String::as_str),
+                        Some("-File"),
+                        "the large-recipe transport should pass -File"
+                    );
+                    prop_assert_eq!(
+                        arguments.last().map(String::as_str),
+                        Some("$rspfile"),
+                        "the response-file path should stay a Ninja variable reference"
+                    );
+                } else {
+                    prop_assert!(
+                        arguments
+                            .iter()
+                            .any(|argument| argument == "-EncodedCommand"),
+                        "the inline transport should pass -EncodedCommand"
+                    );
+                }
                 Ok(())
             },
         )
@@ -171,10 +169,26 @@ fn bound_bash_paths_survive_ninja_parsing() {
                 parsed.detected_recipe_transports(),
                 vec![RecipeTransport::Plaintext]
             );
-            let unescaped = first_command(&ninja).replace("$$", "$");
-            prop_assert!(
-                unescaped.starts_with(&format!("\"{path}\" -e -c ")),
-                "Ninja and Windows quoting should preserve the bound path"
+            let arguments = windows_argv::split(&first_command(&ninja).replace("$$", "$"));
+            prop_assert_eq!(
+                arguments.first().map(String::as_str),
+                Some(path.as_str()),
+                "the bound interpreter should decode as the first Windows argument"
+            );
+            prop_assert_eq!(
+                arguments.get(1).map(String::as_str),
+                Some("-e"),
+                "the Bash transport should pass -e"
+            );
+            prop_assert_eq!(
+                arguments.get(2).map(String::as_str),
+                Some("-c"),
+                "the Bash transport should pass -c"
+            );
+            prop_assert_eq!(
+                arguments.get(3).map(String::as_str),
+                Some("echo hi"),
+                "the recipe text should decode as one Windows argument"
             );
             Ok(())
         })
@@ -231,6 +245,16 @@ fn bound_paths_survive_real_ninja() {
                 prop_assert!(
                     commands.contains(&path),
                     "Ninja should expand the escaped plan back to the bound path"
+                );
+                let expanded = commands
+                    .lines()
+                    .find(|line| !line.trim().is_empty())
+                    .unwrap_or_default();
+                let arguments = windows_argv::split(expanded);
+                prop_assert_eq!(
+                    arguments.first().map(String::as_str),
+                    Some(path.as_str()),
+                    "the expanded command should decode to the bound path first"
                 );
                 Ok(())
             },

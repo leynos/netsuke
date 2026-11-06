@@ -2,7 +2,7 @@
 
 use crate::{
     ast::{CommandIsolation, Recipe, StringOrList},
-    ir::{Action, BuildGraph},
+    ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
     recipe_shell::InterpreterExecutable,
 };
 use anyhow::{Result, bail, ensure};
@@ -34,6 +34,53 @@ pub(super) const fn command_action(command: StringOrList) -> Action {
         pool: None,
         restat: false,
     }
+}
+
+/// Build one action graph whose single edge renders a command recipe.
+pub(super) fn command_graph() -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "run".into(),
+        command_action(StringOrList::String("echo hi".into())),
+    );
+    graph
+        .insert_edge(BuildEdge {
+            action_id: "run".into(),
+            inputs: Vec::new(),
+            implicit_deps: Vec::new(),
+            dependency_order: DependencyOrder::Parallel,
+            explicit_outputs: vec![Utf8PathBuf::from("out")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            progress_label: None,
+            phony: false,
+            always: false,
+        })
+        .expect("fixture outputs are unique");
+    graph
+}
+
+/// Build one action graph that renders no interpreter command.
+pub(super) fn dependency_only_graph() -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph
+        .actions
+        .insert("group".into(), command_action(StringOrList::Empty));
+    graph
+        .insert_edge(BuildEdge {
+            action_id: "group".into(),
+            inputs: Vec::new(),
+            implicit_deps: Vec::new(),
+            dependency_order: DependencyOrder::Parallel,
+            explicit_outputs: vec![Utf8PathBuf::from("group")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            progress_label: None,
+            phony: true,
+            always: false,
+        })
+        .expect("fixture outputs are unique");
+    graph
 }
 
 /// Build one action graph with the requested metadata field populated.
