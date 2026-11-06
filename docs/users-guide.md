@@ -701,11 +701,12 @@ one at a time in one invocation. While one such edge runs, Ninja buffers
 progress and output from other edges, so enabling the field can reduce parallel
 build throughput.
 
-An action can also name `console` as its own `pool`. Ninja inherits rule
-bindings by edge, so every edge generated from that rule would otherwise join
-the console pool. Netsuke clears the inherited binding on edges that did not
-opt in themselves, so a shared rule does not widen console scheduling: only the
-edges the manifest selected run in the console pool.
+Ninja inherits rule bindings by edge, so a rule that sets `pool = console`
+would otherwise put every edge generated from it in the console pool. Netsuke
+generates the console binding per edge and clears an inherited rule-level
+binding on edges that did not opt in, so a shared rule does not widen console
+scheduling: only the edges the manifest selected with `console: true` run in
+the console pool.
 
 Outside JSON mode, Netsuke forwards Ninja output as it reads it. Netsuke does
 not provide a pseudo-terminal: the recipe sees a pipe, and visibility still
