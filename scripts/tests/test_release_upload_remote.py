@@ -261,7 +261,7 @@ def test_downloaded_digests_of_nothing_launches_nothing() -> None:
     """Establish no digest for no name without paying for a download."""
     runner = RecordingRunner()
     assert downloaded_digests("v1", [], runner=runner) == {}
-    assert runner.calls == []
+    assert not runner.calls
 
 
 def test_a_static_runner_records_what_a_caller_ran() -> None:
@@ -275,7 +275,7 @@ def test_the_static_runner_always_succeeds() -> None:
     """Pin the stub's contract so a case using it is testing what it thinks."""
     completed = StaticRunner('{"assets": []}')(["gh", "release", "view"])
     assert completed.returncode == 0
-    assert completed.stderr == ""
+    assert not completed.stderr
 
 
 def test_the_production_runner_is_subprocess_run() -> None:
