@@ -98,21 +98,27 @@ impl CaseNesting {
     pub(super) fn observe(&mut self, ch: char, next: Option<char>, is_unquoted: bool) {
         if !is_unquoted {
             self.finish_word();
-            return;
+        } else if self.in_comment {
+            self.observe_comment_character(ch);
+        } else {
+            self.observe_word_character(ch, next);
         }
-        if self.in_comment {
-            if ch == '\n' {
-                self.in_comment = false;
-            }
-            return;
+    }
+
+    /// End a comment when the line does, and ignore the rest of its text.
+    fn observe_comment_character(&mut self, ch: char) {
+        if ch == '\n' {
+            self.in_comment = false;
         }
+    }
+
+    /// Accumulate one character of unquoted word data.
+    fn observe_word_character(&mut self, ch: char, next: Option<char>) {
         if ch == '\\' {
-            if let Some(escaped) = next.filter(|escaped| *escaped != '\n') {
-                self.word.push(escaped);
-            }
+            self.word.extend(next.filter(|escaped| *escaped != '\n'));
             return;
         }
-        if is_word_terminator(ch) || matches!(ch, '\'' | '"' | '`') {
+        if ends_word(ch) {
             self.finish_word();
             return;
         }
@@ -137,6 +143,16 @@ impl CaseNesting {
         }
         self.word.clear();
     }
+}
+
+/// Report whether `ch` ends the unquoted word being accumulated.
+///
+/// A quote character ends the word as surely as a separator does: the quoted
+/// text that follows is not word data, so a reserved word cannot continue into
+/// it. Both categories are kept in one predicate because the caller treats them
+/// identically.
+fn ends_word(ch: char) -> bool {
+    is_word_terminator(ch) || matches!(ch, '\'' | '"' | '`')
 }
 
 /// Describe the `)` that closed a command substitution.

@@ -192,10 +192,11 @@ fn case_in_a_comment_does_not_open_a_construct() {
 #[test]
 fn word_containing_case_before_hash_interpolates_normally() {
     let (template, expected) = executable_quote_case("echo $(showcase)");
-    assert_both_outputs(
+    assert_output(
         &template,
         &expected,
         "a word containing 'case' must not trigger the ambiguity guard",
+        Interpolators::Both,
     );
 }
 
@@ -207,10 +208,11 @@ fn word_containing_case_before_hash_interpolates_normally() {
 #[test]
 fn word_starting_with_case_before_hash_interpolates_normally() {
     let (template, expected) = executable_quote_case("echo $(casefile)");
-    assert_both_outputs(
+    assert_output(
         &template,
         &expected,
         "a word starting with 'case' must not trigger the ambiguity guard",
+        Interpolators::Both,
     );
 }
 
