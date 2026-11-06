@@ -3,6 +3,9 @@
 use super::*;
 
 use camino::Utf8PathBuf;
+use rstest::rstest;
+
+mod heredoc_delimiter_tests;
 
 /// Verify POSIX interpolation rejects commands with unbalanced backticks.
 #[test]

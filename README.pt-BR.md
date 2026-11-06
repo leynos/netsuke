@@ -213,7 +213,11 @@ que a forma é reescrita no texto ativo da receita; consulte a nota abaixo).
 
 [^inert]: Nas rotas POSIX e Bash, o Netsuke copia marcadores em comentários e
     no corpo de heredocs como tokens internos, sem expandi-los; marcadores nos
-    delimitadores de heredoc são expandidos. Receitas `command:` e `script:` do
+    delimitadores de heredoc são expandidos. Um `<<` dentro de uma expansão
+    aritmética `$(( ))` é um deslocamento à esquerda, não um heredoc. Consulte a
+    [fronteira de segurança do guia do usuário](docs/users-guide.md#review-the-safety-boundary)
+    para as regras de delimitadores e corpos de heredoc, incluindo as formas
+    rejeitadas. Receitas `command:` e `script:` do
     PowerShell rejeitam marcadores entre aspas simples ou duplas, em here-strings,
     em `$()` e logo após uma crase. Um marcador também é rejeitado quando está
     diretamente junto a qualquer caractere de aspa simples reconhecido pelo

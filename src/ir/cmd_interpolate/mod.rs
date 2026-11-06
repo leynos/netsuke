@@ -21,6 +21,7 @@ mod posix_lexical;
 mod script_substitution;
 mod substitution;
 
+use posix_lexical::DelimiterRejection;
 use script_substitution::ScriptSubstitutionTraversal;
 use substitution::SubstitutionTraversal;
 
@@ -218,6 +219,22 @@ fn invalid_command_error(command: String) -> IrGenError {
     }
 }
 
+/// Builds the diagnostic for a heredoc delimiter the tracker cannot model.
+///
+/// The rejection reason occupies the snippet argument so the existing localized
+/// message names the offending syntax. That keeps the fail-closed path on the
+/// same diagnostic channel as other interpolation rejections without adding a
+/// locale entry per internal variant.
+fn invalid_heredoc_delimiter_error(command: String, reason: DelimiterRejection) -> IrGenError {
+    let snippet = reason.description().to_owned();
+    let message = localization::message(keys::IR_INVALID_COMMAND).with_arg("snippet", &snippet);
+    IrGenError::InvalidCommand {
+        command,
+        snippet,
+        message,
+    }
+}
+
 /// Report whether `command` satisfies the selected shell's command syntax boundary.
 fn is_valid_command_for_shell(command: &str, shell: RecipeShell) -> bool {
     if shell == RecipeShell::PowerShell {
@@ -329,6 +346,7 @@ fn substitute_posix_script(
     }
     Ok(traversal.finish())
 }
+
 /// Internal token emitted for the `{{ ins }}` marker during manifest rendering and
 /// consumed during command interpolation; it is not general template syntax.
 pub const INS_TOKEN: &str = "__NETSUKE_INS_PLACEHOLDER__";

@@ -5,11 +5,12 @@ use super::{
     command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
     find_substitution, invalid_command_error,
     posix_lexical::{
-        EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
+        PosixCharacter, PosixLexicalState, backslash_escapes_marker, opens_arithmetic_expansion,
     },
 };
 use crate::recipe_shell::RecipeShell;
 
+mod heredoc;
 mod powershell;
 
 use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
@@ -125,45 +126,11 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
         let next = self.append_contextual_character(pos, ch, Self::posix_marker_protection)?;
         if ch == '\n' {
-            self.posix_lexical.begin_pending_heredoc_after_newline(next);
+            self.posix_lexical.begin_pending_heredoc_after_newline();
         }
         Ok(next)
     }
 
-    /// Preserve unquoted POSIX heredoc declarations and comments.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when a heredoc delimiter would lower a
-    /// marker directly after an active escape.
-    fn append_unquoted_posix_lexical_character(
-        &mut self,
-        pos: usize,
-        ch: char,
-    ) -> Result<Option<usize>, IrGenError> {
-        if !self.matches_unquoted_quote_context() {
-            return Ok(None);
-        }
-        let mut character = PosixCharacter {
-            chars: self.chars,
-            pos,
-            ch,
-            output: &mut self.output,
-        };
-        let declaration_end = self
-            .posix_lexical
-            .append_heredoc_declaration(&mut character, self.bindings)
-            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
-        if let Some(next) = declaration_end {
-            return Ok(Some(next));
-        }
-        if PosixLexicalState::starts_comment(self.chars, pos, ch) {
-            self.posix_lexical.begin_comment();
-            self.output.push(ch);
-            return Ok(Some(pos + 1));
-        }
-        Ok(None)
-    }
     /// Preserve shared shell syntax before lowering a marker for its active context.
     fn append_contextual_character(
         &mut self,
@@ -212,7 +179,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
         match self.classify_command_substitution_delimiter(pos, ch)? {
             CommandSubstitutionDelimiter::Start => {
-                self.command_substitutions.push(CommandSubstitution::new());
+                self.command_substitutions.push(CommandSubstitution::new(
+                    opens_arithmetic_expansion(self.chars, pos),
+                ));
                 self.output.push_str("$(");
                 Some(pos + 2)
             }
@@ -250,6 +219,18 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Report whether `ch` starts a POSIX or PowerShell `$()` expression.
     fn starts_command_substitution(&self, pos: usize, ch: char) -> bool {
         ch == '$' && self.chars.get(pos + 1) == Some(&'(')
+    }
+
+    /// Report whether the innermost active substitution is arithmetic.
+    ///
+    /// An arithmetic body evaluates numbers, so `<<` there is a shift
+    /// operator. Heredoc tracking must not run inside one: the tracker would
+    /// invent a body the shell never starts and end it at a line that is still
+    /// inside an expansion.
+    fn is_in_arithmetic_expansion(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(|substitution| substitution.is_arithmetic_expansion)
     }
 
     /// Report whether `ch` opens a grouped expression inside a `$()` region.

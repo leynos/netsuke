@@ -912,14 +912,16 @@ The lowering stages have deliberately separate responsibilities:
   binding set for the recipe, then interpolates every scalar or list entry with
   that set. Both recipe kinds recognize the same `{{ ins }}` and `{{ outs }}`
   markers; POSIX lexical scanning can preserve their internal tokens in
-  comments and heredoc bodies rather than resolving them. Literal `$in`, `$out`,
-  `$ins`, and `$outs` remain shell variables and are escaped for Ninja
-  pass-through. POSIX lowering tracks unquoted, single-quoted, and
-  double-quoted text, and rejects markers within command substitutions because
-  it cannot lower them safely. Script recipes therefore retain heredocs and
-  comments without accepting an unsafe marker context. The resulting action
-  contains lowered command text and no Ninja rule variables; an inert region
-  may still retain an internal Netsuke marker token.
+  comments and heredoc bodies rather than resolving them. Heredoc delimiter
+  words end only at POSIX blanks, newlines, and shell operators, never at
+  Unicode whitespace, and delimiters the tracker cannot model are rejected
+  rather than approximated. Literal `$in`, `$out`, `$ins`, and `$outs` remain
+  shell variables and are escaped for Ninja pass-through. POSIX lowering tracks
+  unquoted, single-quoted, and double-quoted text, and rejects markers within
+  command substitutions because it cannot lower them safely. Script recipes
+  therefore retain heredocs and comments without accepting an unsafe marker
+  context. The resulting action contains lowered command text and no Ninja rule
+  variables; an inert region may still retain an internal Netsuke marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen/recipe_shell/`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each
@@ -7034,15 +7036,36 @@ after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
-single-pass recognition of POSIX comments and heredoc inert regions. It copies
+single-pass recognition of POSIX comments and heredoc inert regions. Its
+`declaration.rs` child parses and queues one heredoc declaration, and its
+`delimiter.rs` child owns the delimiter word's quoting grammar; the split keeps
+each module inside the workspace's 400-line limit. The parent module copies
 those comments and heredoc bodies byte-for-byte, so internal marker tokens in
 them are not expanded and can remain in the generated recipe; markers in
-heredoc delimiters are expanded. It queues declarations FIFO, including quoted
-delimiters and `<<-` tab-stripping delimiters, so their text cannot change the
-surrounding quote context. This is a command-interpolation helper, not a
-general shell parser, and is not intended for reuse outside that boundary. The
-`src/ir/cmd_interpolate/substitution/powershell/` module groups focused
-PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
+heredoc delimiters are expanded. Delimiter words are tokenized on the shell's
+own boundaries — blanks, newlines, and the operators `;`, `|`, `&`, `(`, `)`,
+`<`, and `>` — so Unicode whitespace stays inside the word, as the shell reads
+it. That classification lives on the `SourceChar` newtype, so the difference
+between a POSIX blank and Unicode whitespace is a named operation rather than a
+repeated comparison. Its `HeredocDeclaration` result separates "not a
+declaration", "copied", and "rejected"; a rejection propagates through both
+traversals as an `IrGenError::InvalidCommand` naming the unsupported syntax, so
+a delimiter the tracker cannot model never lets marker lowering resume inside
+shell heredoc data. It queues declarations FIFO, including quoted delimiters and
+`<<-` tab-stripping delimiters, so their text cannot change the surrounding
+quote context. `<<<` is recognized as a here-string and queues no body. Body
+termination follows the shell's own unit: because an unquoted delimiter leaves
+the body subject to expansion, a physical line ending in an odd backslash run
+is joined to the next line before the tracker compares it, with a leading tab
+stripped only at the start of a logical line; a quoted delimiter, and an even
+backslash run, keep the physical line as the unit. Both traversals mark a `$(`
+as an arithmetic expansion when the next character is a second `(`, and suspend
+heredoc detection while the innermost active substitution is arithmetic: a `<<`
+there is the left-shift operator, and tracking it as a declaration would
+consume the next source line as body text. This is a command-interpolation
+helper, not a general shell parser, and is not intended for reuse outside that
+boundary. The `src/ir/cmd_interpolate/substitution/powershell/` module groups
+focused PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
 tracks raw native-command arguments, and `tokens/mod.rs` recognizes the token
 boundaries and syntax used by those scanners. The private
@@ -7080,7 +7103,16 @@ backtick-delimited region is rejected before it can evade lowering. PowerShell
 uses backticks as escapes and does not enter that protected region. POSIX and
 Bash scanning also preserves comments and heredoc bodies verbatim; keep markers
 out of those regions, where their internal tokens can remain in generated
-recipe text. Heredoc delimiters are scanned for markers and expand normally.
+recipe text. Heredoc delimiters are scanned for markers and expand normally;
+the delimiter word ends only where the shell ends it, so Unicode whitespace
+cannot shorten it, and a delimiter form whose quote removal or expansion the
+tracker cannot reproduce is rejected with an invalid-command diagnostic rather
+than approximated. An unquoted heredoc body has its backslash-newline
+continuations removed before terminator matching, so the tracker accumulates a
+logical line and compares only a completed one; a quoted delimiter suppresses
+both expansion and joining. A `<<` inside `$(( ))` is a left shift, so both
+traversals suspend heredoc and comment detection while an arithmetic frame is
+innermost.
 
 A marker directly after an unpaired backslash is rejected in `command:`,
 `script:`, and heredoc-delimiter traversal alike. The substituted encoding

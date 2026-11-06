@@ -216,7 +216,12 @@ bedeutet: wird im aktiven Rezepttext umgeschrieben; siehe Hinweis unten).
 
 [^inert]: Auf POSIX- und Bash-Routen kopiert Netsuke Marker in Kommentaren und
     in Heredoc-Körpern als interne Token, statt sie zu expandieren; Marker in
-    Heredoc-Begrenzern werden expandiert. PowerShell-`command:`- und
+    Heredoc-Begrenzern werden expandiert. Ein `<<` innerhalb einer
+    `$(( ))`-Arithmetik-Expansion ist eine Verschiebung nach links, kein
+    Heredoc. Die Regeln für Heredoc-Begrenzer und -Körper, einschließlich der
+    abgelehnten Formen, stehen unter
+    [Sicherheitsgrenze im Benutzerhandbuch](docs/users-guide.md#review-the-safety-boundary).
+    PowerShell-`command:`- und
     `script:`-Rezepte weisen Marker in einfachen und doppelten
     Anführungszeichen, Here-Strings, `$()` sowie direkt nach einem Backtick
     zurück. Ein Marker direkt neben einem von PowerShell erkannten einfachen
