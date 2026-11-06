@@ -149,6 +149,7 @@ impl Blueprint {
                 progress_label: None,
                 phony: plan.is_phony,
                 always: plan.is_always,
+                output_visibility: crate::ir::EdgeOutputVisibility::default(),
             });
         }
         edges

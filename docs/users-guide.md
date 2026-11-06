@@ -626,6 +626,9 @@ A target supports these fields:
   and `glob` restriction above applies here too.
 - `phony`: marks a logical target that does not represent a file.
 - `always`: forces the recipe to run whenever the target is requested.
+- `console`: selects Ninja's serial console pool for this executable action or
+  target. It defaults to `false` and is unavailable to dependency-only
+  aggregates.
 - `description`: an optional human-readable summary of the public operation
   the target performs. It is discovery metadata shown by
   `netsuke help targets`; it never replaces a referenced rule's `description`
@@ -633,6 +636,50 @@ A target supports these fields:
 
 `name`, `sources`, `deps`, and `order_only_deps` accept either one string or a
 list of strings.
+
+### Stream long-running output with the console pool
+
+The `console` field ships in the next pre-release, `v0.1.0-beta5`. The published
+`v0.1.0-beta4` release rejects it during manifest validation, so install a
+beta5-or-later release, or build from a checkout of the `main` branch, before
+relying on it.
+
+Set `console: true` on a long-running or interactive action or target, such as
+`lint` or `test`, when its output should appear as it runs:
+
+<!-- tested-example: guide-console-target -->
+
+```yaml
+netsuke_version: "1.0.0"
+targets:
+  - name: lint
+    command: cargo clippy --all-targets
+    console: true
+```
+
+Ninja's console pool is available from Ninja 1.5. It runs console-pool edges
+one at a time in one invocation. While one such edge runs, Ninja buffers
+progress and output from other edges, so enabling the field can reduce parallel
+build throughput.
+
+Ninja inherits rule bindings by edge, so a rule that sets `pool = console`
+would otherwise put every edge generated from it in the console pool. Netsuke
+generates the console binding per edge and clears an inherited rule-level
+binding on edges that did not opt in, so a shared rule does not widen console
+scheduling: only the edges the manifest selected with `console: true` run in
+the console pool.
+
+Callers that build the IR directly select the same scheduling through
+`BuildEdge::output_visibility`: `EdgeOutputVisibility::Immediate` behaves as
+`console: true` for that edge, and `EdgeOutputVisibility::Buffered` behaves as
+omitting the field. `Action::pool` is a separate IR field with no manifest
+counterpart; a custom pool on an action whose edge selects the console pool is
+rejected at generation time, so clear the pool or set it to `console`.
+
+Outside JSON mode, Netsuke forwards Ninja output as it reads it. Netsuke does
+not provide a pseudo-terminal: the recipe sees a pipe, and visibility still
+depends on the recipe flushing its own output. JSON mode suppresses subprocess
+output so that diagnostics remain parseable.
 
 Netsuke quotes paths inserted through `{{ ins }}` and `{{ outs }}`. Other Jinja
 values render as ordinary command text and are not automatically shell-quoted.
@@ -1897,6 +1944,62 @@ tracing events so stderr remains parseable.
 or `off` (case-insensitively) to disable that search; any other value, or
 leaving it unset, keeps the recursive mode available. A non-Unicode value also
 disables it and is treated as an explicit opt-out, emitting a warning.
+
+#### Bounded Ninja build metrics
+
+Every actual Ninja build invocation records three bounded series in the drained
+`metrics snapshot`:
+
+- `netsuke_runner_ninja_build_executions_total` — a counter labelled with
+  `outcome` (`success` or `error`), `error_category` (`none` or `io`), and
+  `console_scheduling` (`enabled` or `disabled`).
+- `netsuke_runner_ninja_build_execution_duration_seconds` — a histogram with
+  the same three labels, recording wall-clock duration in seconds.
+- `netsuke_runner_ninja_build_console_edges_total` — a counter labelled with
+  `outcome` only, adding the number of console-enabled user edges in the
+  attempted graph.
+
+`console_scheduling` is `enabled` when the graph declares at least one
+console-pool edge and `disabled` otherwise. The edge counter counts the
+configured graph rather than the edges Ninja actually executed, so it measures
+intent, not pool occupancy. The same fields appear on the `runner.ninja.build`
+span, whose `outcome` and `error_category` are recorded when the invocation
+returns.
+
+#### Bounded bundle-generation metrics
+
+Each runner-owned dyndep bundle generation records three bounded series in the
+drained `metrics snapshot`:
+
+- `netsuke_ninja_dyndep_bundle_generations_total` — a counter labelled with
+  `outcome` (`success` or `error`), `error_category`, and `console_scheduling`
+  (`enabled` or `disabled`).
+- `netsuke_ninja_dyndep_bundle_generation_duration_seconds` — a histogram with
+  the same three labels, recording wall-clock duration in seconds.
+- `netsuke_ninja_dyndep_bundle_console_edges_total` — a counter labelled with
+  `outcome` only, adding the number of configured console-enabled edges in the
+  graph the bundle describes.
+
+`error_category` is a bounded vocabulary rather than a message: `none` on
+success, and otherwise the generator failure class, such as `missing_action`,
+`console_pool_conflict`, or `reserved_output_path`. The same fields appear on
+the `runner.ninja.dyndep_bundle.generate` span, together with the aggregate
+graph counts.
+
+#### Bounded output-forwarding metrics
+
+When forwarding a child's output fails, Netsuke records
+`netsuke_ninja_forward_failures_total` with two bounded labels: `stream`
+(`stdout` or `stderr`) and `failure_kind` (`read`, `write`, `flush`, or
+`drain`). It also emits a warning event carrying the same labels and the
+underlying error. `read` means the child stream could not be read, `write` that
+the destination rejected a chunk, `flush` that publishing the chunk failed, and
+`drain` that the remaining output could not be discarded after an earlier
+failure. A drain failure never replaces the kind that stopped forwarding.
+
+Forwarding loss does not change the reported build result. The child's exit
+status remains authoritative, so `netsuke build | head` closing the pipe early
+is a successful build with a truncated stream, not a build failure.
 
 ### Policy values and parsing
 

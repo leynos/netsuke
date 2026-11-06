@@ -1,8 +1,8 @@
 //! Intermediate Representation structures.
 //!
-//! This module defines the backend-agnostic build graph used by Netsuke after
-//! validation. The IR mirrors the conceptual model of Ninja without embedding
-//! any Ninja-specific syntax.
+//! This module defines the validated build graph Netsuke passes to Ninja
+//! generation. Recipe and command data contain no Ninja syntax;
+//! [`EdgeOutputVisibility`] carries an edge's backend-neutral output request.
 //!
 //! # Examples
 //!
@@ -35,4 +35,7 @@ mod from_manifest;
 mod graph;
 
 pub use cmd_interpolate::{INS_TOKEN, OUTS_TOKEN};
-pub use graph::{Action, BuildEdge, BuildGraph, DependencyOrder, EdgeArena, EdgeId, IrGenError};
+pub use graph::{
+    Action, BuildEdge, BuildGraph, DependencyOrder, EdgeArena, EdgeId, EdgeOutputVisibility,
+    IrGenError,
+};

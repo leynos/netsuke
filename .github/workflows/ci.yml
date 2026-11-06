@@ -390,14 +390,16 @@ jobs:
     # ceiling has to contain. See "Test timeouts: the tiers this repository
     # sets" in docs/developers-guide.md.
     #
-    # The ceiling also contains that gate's own slow-timeout, which is ten
-    # 60-second periods rather than the profile's five because the default
-    # allowance sits too near the gate's cost for a runner to decide. A job
-    # whose gate burned the whole raised allowance would still land inside the
-    # ceiling: the measured job is 776s with the gate costing 257.7s of it, so
-    # the work outside the gate is 518s, and 518s + 600s is 1,118s against
-    # 1,800s. That is why raising the per-test allowance needed no change here;
-    # a ceiling that no longer contained it would be the fault to check for.
+    # The ceiling also contains that gate's slow-timeout, which is fifteen
+    # 60-second periods rather than the profile's five: the default allowance
+    # sits too near the gate's cost for a runner to decide. The gate runs as a
+    # prewarm and a patch sweep, two Nextest invocations each capped at 900 s
+    # by its own override. On run 42114692042 the job measured 1,021 s with
+    # both invocations costing 418 s together, so 603 s lies outside the gate
+    # and one invocation burning its allowance lands at 1,503 s against
+    # 1,800 s. Both allowances burning at once would not fit; the job timeout
+    # is the backstop for a gate that has hung twice, not a cost this ceiling
+    # is sized to contain.
     timeout-minutes: 30
     permissions:
       contents: read

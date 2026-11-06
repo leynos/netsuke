@@ -291,42 +291,103 @@ fn behavioural_make_test_composes_the_nextest_and_doctest_passes() -> Result<()>
     Ok(())
 }
 
-/// Verify `test-kani-mutations` selects the ignored mutation compile gate.
+/// Verify `test-kani-mutations` selects every ignored compile test.
 ///
-/// The gate it runs is `#[ignore]`d, so the recipe is correct only if it names
-/// the owning test binary *and* asks nextest to run ignored tests. Drop either
-/// half and the target still exits zero while compiling nothing: nextest skips
-/// the gate and reports success. That is the exact failure this whole contract
-/// exists to prevent — a check that looks green and proves nothing — so the
-/// selection is pinned here rather than left to the recipe's good behaviour.
-///
-/// Asserted against the `nextest run` line, for the reason
-/// [`ensure_worker_bounds_reach_nextest`] gives: a flag sitting in an unrelated
-/// later command would read as configured while selecting nothing.
+/// Both commands must select the ignored test binary, carry the gate flags, and
+/// keep the cold prewarm before the patch sweep. Otherwise nextest can skip the
+/// actual compile work while the target exits successfully. The prewarm's own
+/// invocation also selects the negative test, which compiles the same sandbox
+/// and so reuses the target the prewarm has just warmed.
 #[test]
-fn behavioural_kani_mutation_target_selects_the_ignored_compile_gate() -> Result<()> {
+fn behavioural_kani_mutation_target_selects_every_ignored_compile_test() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let recipe = target_recipe(&makefile, "test-kani-mutations")
         .context("Makefile should declare a test-kani-mutations target")?;
-    let run_command = recipe
+    // Match the command itself rather than any line that mentions it: a
+    // comment or an `echo` describing the gate must not be mistaken for a
+    // command, or the slice below silently pairs the wrong two lines.
+    let run_commands: Vec<&str> = recipe
         .lines()
-        .find(|line| line.contains("nextest run"))
-        .context("test-kani-mutations should invoke cargo nextest run")?;
+        .map(str::trim_start)
+        .filter(|line| line.starts_with("$(GATE_RUSTFLAGS)") && line.contains("nextest run"))
+        .collect();
+    let [prewarm_command, sweep_command] = run_commands.as_slice() else {
+        anyhow::bail!("expected prewarm then sweep, found {run_commands:?}");
+    };
+    for command in &run_commands {
+        ensure!(
+            command.contains("--test kani_mutation_evidence_tests"),
+            "wrong test binary: {command:?}"
+        );
+        ensure!(
+            command.contains("--run-ignored ignored-only"),
+            "ignored gate was not selected: {command:?}"
+        );
+        ensure!(
+            command.contains("$(GATE_RUSTFLAGS)"),
+            "gate flags missing: {command:?}"
+        );
+    }
+    ensure!(
+        prewarm_command.contains("prewarm::prewarm_kani_mutation_target")
+            && prewarm_command
+                .contains("negative::compile_kani_tree_rejects_trees_that_do_not_compile")
+            && sweep_command
+                .contains("compile_guard::every_patched_tree_compiles_under_denied_warnings"),
+        "the cold prewarm and its negative check must precede the filtered \
+         patch sweep: {run_commands:?}"
+    );
+    ensure_the_prewarm_outranks_its_negative_check()
+}
 
+/// Require the prewarm to outrank the negative check that shares its invocation.
+///
+/// The `nested-cargo-builds` group serializes the two tests but does not order
+/// them, so the priority is what puts the prewarm first. Without it a cold
+/// target charges the dependency build to the negative check's allowance,
+/// which is the cost the split exists to avoid.
+fn ensure_the_prewarm_outranks_its_negative_check() -> Result<()> {
+    let text = read_repo_file(Utf8Path::new(".config/nextest.toml"))?;
+    let config: Value = text
+        .parse()
+        .context("nextest configuration should parse as TOML")?;
+    let prewarm = override_priority(&config, "prewarm::prewarm_kani_mutation_target")?;
+    let negative = override_priority(
+        &config,
+        "negative::compile_kani_tree_rejects_trees_that_do_not_compile",
+    )?;
     ensure!(
-        run_command.contains("--test kani_mutation_evidence_tests"),
-        "test-kani-mutations should select the mutation evidence tests, found {run_command:?}"
-    );
-    ensure!(
-        run_command.contains("--run-ignored ignored-only"),
-        "test-kani-mutations should run ignored tests or the gated compile check silently \
-         skips, found {run_command:?}"
-    );
-    ensure!(
-        run_command.contains("$(GATE_RUSTFLAGS)"),
-        "test-kani-mutations should compose GATE_RUSTFLAGS, found {recipe:?}"
+        prewarm == 1 && prewarm > negative,
+        "the prewarm must carry priority 1 so that it is scheduled before the \
+         negative check, found {prewarm} and {negative}"
     );
     Ok(())
+}
+
+/// Read the `priority` of the override whose filter names `test_name`.
+///
+/// Nextest treats a missing `priority` as zero, so an override that only
+/// inherits the default reports `0`.
+fn override_priority(config: &Value, test_name: &str) -> Result<i64> {
+    let overrides = config
+        .get("profile")
+        .and_then(|profile| profile.get("default"))
+        .and_then(|profile| profile.get("overrides"))
+        .and_then(Value::as_array)
+        .context("nextest configuration should declare profile.default.overrides")?;
+    let entry = overrides
+        .iter()
+        .find(|entry| {
+            entry
+                .get("filter")
+                .and_then(Value::as_str)
+                .is_some_and(|filter| filter.contains(test_name))
+        })
+        .with_context(|| format!("nextest configuration should override {test_name}"))?;
+    Ok(entry
+        .get("priority")
+        .and_then(Value::as_integer)
+        .unwrap_or(0))
 }
 
 /// Keep the glob-expansion benchmark available through the Makefile.

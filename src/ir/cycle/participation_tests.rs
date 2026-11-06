@@ -38,6 +38,7 @@ fn build_edge(spec: EdgeSpec<'_>) -> BuildEdge {
         order_only_deps: paths(spec.order_only_deps),
         phony: false,
         always: false,
+        output_visibility: crate::ir::EdgeOutputVisibility::Buffered,
     }
 }
 

@@ -1,4 +1,4 @@
-//! Construction of the run's [`StatusReporter`] from resolved output settings.
+//! Construct reporters and adapt their progress updates for Ninja execution.
 
 use crate::output_mode::OutputMode;
 use crate::output_prefs::OutputPrefs;
@@ -48,6 +48,15 @@ pub(super) fn make_reporter(options: ReporterOptions) -> Box<dyn StatusReporter>
 /// Whether task updates must render as plain text rather than live UI.
 const fn should_force_text_task_updates(mode: OutputMode, stdout_is_tty: bool) -> bool {
     mode.is_accessible() || !stdout_is_tty
+}
+
+/// Adapt the reporter's task-progress method into a mutable callback.
+pub(super) fn on_task_progress_callback(
+    reporter: &dyn StatusReporter,
+) -> impl FnMut(u32, u32, &str) + '_ {
+    move |current: u32, total: u32, description: &str| {
+        reporter.report_task_progress(current, total, description);
+    }
 }
 
 #[cfg(test)]

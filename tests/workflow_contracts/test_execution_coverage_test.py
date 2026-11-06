@@ -205,8 +205,8 @@ def test_only_the_mutation_gate_has_an_extended_budget() -> None:
 
     Extended allowances existed for tests that compiled inside their own time
     budget. ADR-0059 moved that work out of the suite, so the `#[ignore]`-gated
-    mutation compile gate, which runs in its own invocation, is the one test
-    left with a measured cold-build allowance.
+    prewarm, negative-compile, and patch-sweep tests, which run outside the
+    default suite, are the only tests left with extended allowances.
     """
     config = tomllib.loads(
         (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
@@ -221,16 +221,56 @@ def test_only_the_mutation_gate_has_an_extended_budget() -> None:
         if "slow-timeout" in override
     }
     expected = {
+        "test(/^prewarm::prewarm_kani_mutation_target($|::)/)": {
+            "period": "60s",
+            "terminate-after": 15,
+        },
+        (
+            "test(/^negative::"
+            "compile_kani_tree_rejects_trees_that_do_not_compile($|::)/)"
+        ): {
+            "period": "60s",
+            "terminate-after": 15,
+        },
         (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
         ): {
             "period": "60s",
-            "terminate-after": 10,
+            "terminate-after": 15,
         },
     }
     assert configured == expected, (
-        "only the mutation compile gate may carry an extended allowance"
+        "only the Kani prewarm, negative-compile, and patch sweep may carry "
+        "extended allowances"
+    )
+
+
+def test_the_kani_prewarm_is_scheduled_before_its_negative_check() -> None:
+    """Keep the prewarm ahead of the negative check in their shared invocation.
+
+    The `nested-cargo-builds` group serializes the two tests but does not order
+    them, so the priority is what puts the prewarm first. Without it a cold
+    target charges the dependency build to the negative check's allowance,
+    which is the cost the split exists to avoid.
+    """
+    config = tomllib.loads(
+        (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
+    )
+    priorities = {
+        override["filter"]: override.get("priority", 0)
+        for override in config["profile"]["default"]["overrides"]
+    }
+    prewarm = "test(/^prewarm::prewarm_kani_mutation_target($|::)/)"
+    negative = (
+        "test(/^negative::compile_kani_tree_rejects_trees_that_do_not_compile($|::)/)"
+    )
+    assert priorities[prewarm] == 1, (
+        f"the prewarm must retain priority 1, got {priorities[prewarm]!r}"
+    )
+    assert priorities[prewarm] > priorities[negative], (
+        "the prewarm must be scheduled before the negative check that shares "
+        "its invocation"
     )
 
 

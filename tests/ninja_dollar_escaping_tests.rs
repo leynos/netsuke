@@ -69,6 +69,7 @@ fn graph(recipe: Recipe, input: &str, output: &str) -> Result<BuildGraph> {
         progress_label: None,
         phony: false,
         always: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert("action".into(), action(recipe));

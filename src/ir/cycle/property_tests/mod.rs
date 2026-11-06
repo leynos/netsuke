@@ -59,6 +59,7 @@ impl EdgeBuilder {
             progress_label: None,
             phony: false,
             always: false,
+            output_visibility: crate::ir::EdgeOutputVisibility::default(),
         }
     }
 }

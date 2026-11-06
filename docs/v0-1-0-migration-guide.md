@@ -1,7 +1,28 @@
 # Migrating to v0.1.0
 
-This guide covers the changes released in the v0.1.0 beta series, up to and
-including v0.1.0-beta4.
+## Who should read this
+
+Read this guide when upgrading within the v0.1.0 beta series. It records
+changes through beta4 and migration notes for the next pre-release, beta5.
+Manifest authors, source-build users, and Rust API callers should follow the
+sections that match the features they use.
+
+## Impact at a glance
+
+| Priority          | Area                       | What to do                                                          |
+| ----------------- | -------------------------- | ------------------------------------------------------------------- |
+| Required          | Checkout source builds     | Use the pinned Rust toolchain before building from a checkout.      |
+| Required          | Linux checkout builds      | Install the pinned `mold` linker before building from a checkout.   |
+| Review if enabled | Manifest scheduling        | Opt in only where immediate console output is useful.               |
+| Required          | `Target` literals          | Add `description` and `console` to every literal.                   |
+| Required          | `BuildEdge` literals       | Add `output_visibility` to every literal.                           |
+| Review if enabled | Rust `Action.pool` choices | Check custom pool values for conflicts with `console`.              |
+| Optional          | Existing manifests         | Omit `console` to retain ordinary scheduling; it defaults to false. |
+
+_Table 1: migration obligations for the beta series and console-pool option._
+
+This guide covers the changes released in the v0.1.0 beta series through
+v0.1.0-beta4, plus migration notes for the next pre-release.
 
 The v0.1.0-beta3 release added the injectable child environment (`CommandEnv`),
 the named Ninja request types, narrow process options (`NinjaProcessOptions`),
@@ -24,6 +45,20 @@ Beta4 also adds the opt-in `netsuke --json help targets --edges` graph export.
 no changes. See the
 [graph export reference](users-guide.md#export-dependency-edges-and-raw-recipes).
 
+The next pre-release (`v0.1.0-beta5`) adds the opt-in `console` field for
+actions and targets. It selects Ninja's special console pool for that build
+edge. Ninja runs one console edge at a time; other edges keep running, but
+Ninja buffers their output and progress while a console edge is active. Ninja
+inherits rule-level bindings by edge, so a shared rule that sets
+`pool = console` would otherwise widen console scheduling to every edge
+generated from it; Netsuke clears that inherited binding on edges that did not
+opt in, which is why only the edges a manifest marks with `console: true` run
+in the console pool. Netsuke forwards Ninja's output as it reads it outside
+JSON mode, but recipes receive a pipe rather than a PTY and may buffer their
+own output. See the [console-pool guidance][console].
+
+[console]: users-guide.md#stream-long-running-output-with-the-console-pool
+
 Most existing manifests remain compatible, and callers of the convenience
 wrappers retain their child-process behaviour. Manifests using Jinja `glob()`
 must use shell-inert matched paths. The cached configuration discovery API is a
@@ -32,10 +67,16 @@ no action. Non-UTF-8 build-file and working-directory paths are rejected at
 their input boundary.
 
 Rust callers that construct `Target` with a struct literal must add the new
-`description` field (set it to `None` or `Some(...)`); deserialized manifests
-remain compatible. Callers constructing `NinjaBuildRequest` or
-`NinjaToolRequest` must replace `cli: &cli` with `options: &options`. Callers
-that read `BuildGraph::targets` must use the graph accessors instead; see
+`description` field (set it to `None` or `Some(...)`) and the `console` field
+(set it to `false` or `true`). Callers that construct `BuildEdge` with a struct
+literal must add `output_visibility` for the same reason: both types expose
+public fields and neither is `#[non_exhaustive]`. Use
+`EdgeOutputVisibility::Buffered` for ordinary edges and `Immediate` when the
+manifest's `console: true` behaviour is required. Deserialized manifests remain
+compatible because `console` defaults to `false`. Callers constructing
+`NinjaBuildRequest` or `NinjaToolRequest` must replace `cli: &cli` with
+`options: &options`. Callers that read `BuildGraph::targets` must use the graph
+accessors instead; see
 [Resolve build-graph outputs through the accessors](#resolve-build-graph-outputs-through-the-accessors).
 Every other addition is opt-in.
 
@@ -162,21 +203,6 @@ but cannot widen it. Invalid or non-positive values now fail configuration
 loading. See the [resource budgets](users-guide.md#resource-budgets) section
 for the complete key, environment-variable, and flag reference, along with the
 failure diagnostic.
-
-## Nothing to change for existing callers
-
-The convenience wrappers keep their child-process behaviour: the child inherits
-the calling process's environment, and Ninja is resolved exactly as before.
-Their program and build-file path parameters now use `&Utf8Path`, so callers
-using `std::path::Path` must convert those values. A caller that constructs
-`NinjaBuildRequest`/`NinjaToolRequest` directly must pass `options: &options`
-and supply the required `stderr_mode: StderrMode` field.
-
-Existing callers that construct `VerboseTimingReporter::new` continue to
-receive timing summaries on stderr. Callers that need to capture or redirect
-those summaries can opt into `VerboseTimingReporter::with_writer`; the
-[developers' guide](developers-guide.md#verbose-timing-sink) documents the
-owned sink and completion-ordering contract.
 
 ## Use UTF-8 manifest and working-directory paths
 
@@ -638,6 +664,44 @@ The `contents` and `linecount` filters require UTF-8 input and report an error
 for other byte sequences; `hash` and `digest` stay byte-oriented and accept any
 content. See the [users' guide](users-guide.md#configure-file-reading-limits)
 for the full policy and its diagnostics.
+
+## What does not need to change
+
+The convenience wrappers keep their child-process behaviour: the child inherits
+the calling process's environment, and Ninja is resolved exactly as before.
+Their program and build-file path parameters now use `&Utf8Path`, so callers
+using `std::path::Path` must convert those values. A caller that constructs
+`NinjaBuildRequest`/`NinjaToolRequest` directly must pass `options: &options`
+and supply the required `stderr_mode: StderrMode` field.
+
+Existing callers that construct `VerboseTimingReporter::new` continue to
+receive timing summaries on stderr. Callers that need to capture or redirect
+those summaries can opt into `VerboseTimingReporter::with_writer`; the
+[developers' guide](developers-guide.md#verbose-timing-sink) documents the
+owned sink and completion-ordering contract.
+
+## Migration checklist
+
+- [ ] Install the pinned Rust toolchain before building from a checkout.
+- [ ] On Linux, install the pinned linker before the first source build.
+- [ ] Review the migration sections for manifest or API features in use.
+- [ ] Before opting into `console`, use Ninja 1.5 or later.
+- [ ] Add `console: false` or `console: true` to Rust `Target` literals.
+- [ ] Add `output_visibility: EdgeOutputVisibility::Buffered` or `Immediate`
+  to Rust `BuildEdge` literals.
+
+## Common errors and fixes
+
+- **Error:** `Dependency-only entries cannot select the console pool.`
+  - **Fix:** Remove `console: true` from any dependency-only target.
+- **Error:** `Build edge 'build/stamp' cannot select the console pool because its
+  action is dependency-only.`
+  - **Fix:** Enable console scheduling only on an executable action or target.
+- **Rust API error (`Action.pool`):**
+  `Build edge 'build/stamp' selects the console pool but its action requests
+  custom pool 'compile'.`
+  - **Fix:** For Rust callers, remove the conflicting `Action.pool` value or
+    set it to `console` when that edge should use the console pool.
 
 ## Diagnostics
 

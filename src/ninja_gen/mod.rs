@@ -28,6 +28,7 @@ mod explicit_shell;
 mod escape;
 mod recipe_shell;
 mod validation;
+use validation::validate_console_scheduling;
 
 pub use crate::recipe_shell::RecipeShell;
 pub use error::NinjaGenError;
@@ -55,6 +56,9 @@ macro_rules! write_flag {
     };
 }
 
+/// Name Ninja's built-in pool shared by edge rendering and validation.
+const CONSOLE_POOL: &str = "console";
+
 mod display_edge;
 pub(crate) use display_edge::DisplayEdge;
 mod edge_metadata;
@@ -68,7 +72,7 @@ use order::{ordered_default_targets, ordered_edges};
 /// # Examples
 /// ```
 /// use netsuke::ast::{CommandIsolation, Recipe};
-/// use netsuke::ir::{Action, BuildEdge, BuildGraph};
+/// use netsuke::ir::{Action, BuildEdge, BuildGraph, EdgeOutputVisibility};
 /// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
@@ -85,7 +89,8 @@ use order::{ordered_default_targets, ordered_edges};
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
-///     progress_label: None, phony: false, always: false
+///     progress_label: None, phony: false, always: false,
+///     output_visibility: EdgeOutputVisibility::Buffered
 /// }).expect("test graph output aliases must be unique");
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
 /// let text = netsuke::ninja_gen::generate(&graph)?;
@@ -104,7 +109,9 @@ use order::{ordered_default_targets, ordered_edges};
 /// entry contains a Ninja control character, isolated mode is attached to a
 /// non-list command, a PowerShell recipe exceeds its size limit, an isolated
 /// PowerShell entry exceeds Windows' command-line limit, a graph path uses
-/// Netsuke's reserved serial-ordering namespace, or writing to the output fails.
+/// Netsuke's reserved serial-ordering namespace, a console edge uses a
+/// dependency-only action or conflicts with its custom pool, or writing to the
+/// output fails.
 pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
     let mut out = String::new();
     generate_into(graph, &mut out)?;
@@ -116,7 +123,7 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// # Examples
 /// ```
 /// use netsuke::ast::{CommandIsolation, Recipe};
-/// use netsuke::ir::{Action, BuildEdge, BuildGraph};
+/// use netsuke::ir::{Action, BuildEdge, BuildGraph, EdgeOutputVisibility};
 /// use camino::Utf8PathBuf;
 /// let mut graph = BuildGraph::default();
 /// graph.actions.insert("a".into(), Action {
@@ -133,7 +140,8 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 ///     dependency_order: netsuke::ir::DependencyOrder::Parallel,
 ///     explicit_outputs: vec![Utf8PathBuf::from("out")],
 ///     implicit_outputs: Vec::new(), order_only_deps: Vec::new(),
-///     progress_label: None, phony: false, always: false
+///     progress_label: None, phony: false, always: false,
+///     output_visibility: EdgeOutputVisibility::Buffered
 /// }).expect("test graph output aliases must be unique");
 /// let mut out = String::new();
 /// # let result: Result<(), netsuke::ninja_gen::NinjaGenError> = (|| {
@@ -153,7 +161,9 @@ pub fn generate(graph: &BuildGraph) -> Result<String, NinjaGenError> {
 /// entry contains a Ninja control character, isolated mode is attached to a
 /// non-list command, a PowerShell recipe exceeds its size limit, an isolated
 /// PowerShell entry exceeds Windows' command-line limit, a graph path uses
-/// Netsuke's reserved serial-ordering namespace, or writing to the output fails.
+/// Netsuke's reserved serial-ordering namespace, a console edge uses a
+/// dependency-only action or conflicts with its custom pool, or writing to the
+/// output fails.
 pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), NinjaGenError> {
     generate_into_with_shell(graph, out, RecipeShell::host_default())
 }
@@ -172,6 +182,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     let localizer = localization::localizer();
     reject_unsupported_path_characters(graph)?;
     reject_reserved_paths(graph)?;
+    validate_console_scheduling(graph)?;
     if graph_requires_dyndep(graph) {
         return Err(NinjaGenError::DyndepFilesRequired {
             message: localization::message(keys::NINJA_GEN_DYNDEP_FILES_REQUIRED),
@@ -187,6 +198,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
                 edge,
                 action_name: metadata.action_name,
                 action_restat: metadata.restat,
+                action_pool: metadata.pool,
                 implicit_deps: &edge.implicit_deps,
                 description: metadata.description.as_ref(),
             }

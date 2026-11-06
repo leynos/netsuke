@@ -262,12 +262,17 @@ fn expand_and_render(request: ExpansionRequest<'_, '_, '_>) -> Result<NetsukeMan
     } else {
         render::render_manifest_with_budget(manifest, &jinja, budget)?
     };
-    rendered_manifest
-        .validate_recipes()
-        .map_err(|detail| ManifestError::Parse {
-            source: map_data_error(serde_json::Error::custom(detail), name),
+    rendered_manifest.validate_recipes().map_err(|detail| {
+        let diagnostic_details = if detail == crate::ast::CONSOLE_DEPENDENCY_ONLY_ERROR {
+            localization::message(keys::MANIFEST_CONSOLE_DEPENDENCY_ONLY).to_string()
+        } else {
+            detail.to_owned()
+        };
+        ManifestError::Parse {
+            source: map_data_error(serde_json::Error::custom(diagnostic_details), name),
             message: localization::message(keys::MANIFEST_PARSE),
-        })?;
+        }
+    })?;
     Ok(rendered_manifest)
 }
 mod env;

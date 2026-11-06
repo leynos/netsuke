@@ -322,6 +322,9 @@ operator, user, and contributor references are easier to find.
   moving package verification into `make test-package-verify`.
 - [ADR-0060](adrs/adr-0060-readable-inline-recipe-progress.md):
   Bounded, localized Ninja progress labels for inline recipe edges.
+- [ADR-0061](adrs/adr-0061-select-ninja-console-pool-per-build-edge.md):
+  Select Ninja's console pool on individual build edges while preserving action
+  identity and rejecting incompatible scheduling annotations.
 - [ADR-0068](adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md):
   Include every prerequisite kind in whole-manifest cycle detection while
   keeping output aliases and serial scheduling semantics explicit.
@@ -331,6 +334,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md):
   Deny-by-default stdlib surface for `netsuke test`, typed refusal stubs, and
   template overlays that replace withheld functions by name.
+- [ADR-0073](adrs/adr-0073-split-the-kani-mutation-compile-gate.md): Splitting
+  the Kani mutation compile gate into a prewarm, a negative-compile check, and
+  a patch sweep, each with a 900 s allowance.
 
 ## Proposals
 

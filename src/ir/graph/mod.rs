@@ -268,6 +268,20 @@ pub struct Action {
     pub restat: bool,
 }
 
+/// Desired visibility for output produced by one build edge.
+///
+/// Backends translate this domain request into their own scheduling and
+/// forwarding mechanisms. `Immediate` asks that output become visible as the
+/// action produces it; `Buffered` keeps the backend's normal behaviour.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum EdgeOutputVisibility {
+    /// Use the backend's normal output buffering behaviour.
+    #[default]
+    Buffered,
+    /// Make output visible while the action is still running.
+    Immediate,
+}
+
 /// A single build statement connecting inputs to outputs.
 #[derive(Debug, Clone, PartialEq)]
 pub struct BuildEdge {
@@ -296,6 +310,11 @@ pub struct BuildEdge {
     pub phony: bool,
     /// Run the command on every invocation regardless of timestamps.
     pub always: bool,
+    /// Output visibility requested for this edge.
+    ///
+    /// Keeping the request on the edge lets targets share one action while
+    /// selecting different output behaviour.
+    pub output_visibility: EdgeOutputVisibility,
 }
 
 mod error;

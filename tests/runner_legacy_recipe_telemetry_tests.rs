@@ -1,4 +1,4 @@
-//! Runner-boundary coverage for bounded legacy-recipe operation telemetry.
+//! Runner-boundary coverage for bounded recipe and console telemetry.
 //!
 //! Each case invokes [`netsuke::runner::run_with_ninja_program`] with an
 //! injected executable and local metrics recorder. This verifies the complete
@@ -13,8 +13,12 @@ use metrics_util::{
 use netsuke::cli::{Cli, Commands};
 use netsuke::output_prefs;
 use netsuke::runner::{
-    LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL, run_with_ninja_program,
+    BUNDLE_CONSOLE_EDGES_TOTAL, BUNDLE_GENERATION_DURATION, BUNDLE_GENERATIONS_TOTAL,
+    LEGACY_RECIPE_EXECUTION_DURATION, LEGACY_RECIPE_EXECUTIONS_TOTAL,
+    NINJA_BUILD_CONSOLE_EDGES_TOTAL, NINJA_BUILD_EXECUTION_DURATION, NINJA_BUILD_EXECUTIONS_TOTAL,
+    run_with_ninja_program,
 };
+use rstest::rstest;
 use std::path::{Path, PathBuf};
 use test_support::check_ninja::{ToolName, fake_ninja_check_build_file, fake_ninja_expect_tool};
 use test_support::fs as test_fs;
@@ -132,6 +136,60 @@ fn build_dispatch_records_successful_legacy_recipe_operation() -> Result<()> {
     let (result, snapshot) = capture_operation(&cli, &ninja_program);
     result.context("the injected Ninja build should succeed")?;
     assert_operation(&snapshot, "build", "success", "none");
+    Ok(())
+}
+
+/// Verify both console-edge counters carry the expected bounded outcome.
+fn assert_console_edge_counts(snapshot: &Snapshot, expected_edges: u64) -> Result<()> {
+    for name in [NINJA_BUILD_CONSOLE_EDGES_TOTAL, BUNDLE_CONSOLE_EDGES_TOTAL] {
+        let matching = snapshot
+            .iter()
+            .filter(|(key, _, _, _)| key.kind() == MetricKind::Counter && key.key().name() == name)
+            .collect::<Vec<_>>();
+        ensure!(
+            matching.len() == 1
+                && matching.first().is_some_and(|(key, _, _, value)| {
+                    key.key().labels().count() == 1
+                        && key
+                            .key()
+                            .labels()
+                            .any(|label| label.key() == "outcome" && label.value() == "success")
+                        && matches!(value, DebugValue::Counter(count) if *count == expected_edges)
+                }),
+            "expected {expected_edges} configured edges for {name}: {snapshot:?}"
+        );
+    }
+    Ok(())
+}
+
+#[rstest]
+#[case::ordinary(include_str!("data/minimal.yml"), "disabled", 0)]
+#[case::console(include_str!("data/console.yml"), "enabled", 2)]
+fn build_dispatch_records_console_edge_counts(
+    #[case] manifest: &str,
+    #[case] scheduling: &str,
+    #[case] expected_edges: u64,
+) -> Result<()> {
+    let (_ninja_directory, ninja_program) = fake_ninja_check_build_file()?;
+    let (directory, manifest_path) = temporary_manifest(manifest)?;
+    let cli = runner_cli(directory.path(), manifest_path, None)?;
+    let (result, snapshot) = capture_operation(&cli, &ninja_program);
+    result.context("the injected Ninja build should succeed")?;
+
+    let labels = [
+        ("console_scheduling", scheduling),
+        ("outcome", "success"),
+        ("error_category", "none"),
+    ];
+    for (kind, name) in [
+        (MetricKind::Counter, NINJA_BUILD_EXECUTIONS_TOTAL),
+        (MetricKind::Histogram, NINJA_BUILD_EXECUTION_DURATION),
+        (MetricKind::Counter, BUNDLE_GENERATIONS_TOTAL),
+        (MetricKind::Histogram, BUNDLE_GENERATION_DURATION),
+    ] {
+        assert_metric(&snapshot, kind, name, &labels);
+    }
+    assert_console_edge_counts(&snapshot, expected_edges)?;
     Ok(())
 }
 

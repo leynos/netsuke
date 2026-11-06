@@ -104,6 +104,7 @@ fn arabic_generation_preserves_fluent_isolates_and_sanitizes_input() -> Result<(
         progress_label: Some("left\u{202e}right".into()),
         phony: false,
         always: false,
+        output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
     };
     let mut graph = BuildGraph::default();
     graph.actions.insert(edge.action_id.clone(), action);

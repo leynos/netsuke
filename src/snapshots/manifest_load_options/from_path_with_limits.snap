@@ -1,5 +1,6 @@
 ---
 source: src/manifest/tests/wrapper_equivalence.rs
+assertion_line: 146
 expression: document
 ---
 === pure ===
@@ -16,6 +17,7 @@ expression: document
       },
       "always": false,
       "conditional": false,
+      "console": false,
       "dependency_order": "parallel",
       "deps": null,
       "description": "joined a-b",
@@ -46,6 +48,7 @@ Manifest parse failed.: YAML parse error at line ⁨1⁩, column ⁨11⁩: ⁨un
       },
       "always": false,
       "conditional": false,
+      "console": false,
       "dependency_order": "parallel",
       "deps": null,
       "description": "literals: True/False",
