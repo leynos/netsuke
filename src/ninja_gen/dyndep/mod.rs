@@ -160,6 +160,7 @@ pub(crate) fn generate_bundle_for_shell(
 ///     progress_label: None,
 ///     phony: false,
 ///     always: false,
+///     output_visibility: netsuke::ir::EdgeOutputVisibility::default(),
 /// }).expect("test graph output aliases must be unique");
 /// let executable_path = if cfg!(windows) {
 ///     "C:/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
