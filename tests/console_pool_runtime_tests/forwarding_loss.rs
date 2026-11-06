@@ -1,38 +1,73 @@
-//! Verify that losing the stderr destination does not fail the build.
+//! Verify how the CLI reports and survives a lost output destination.
 
 use super::{ChildCleanup, netsuke_build, runtime_workspace, wait_for_exit, workspace_dir};
 use anyhow::{Context, Result, ensure};
 use std::io::Read;
+
+/// Report a failed stdout destination on stderr, which is still readable.
+///
+/// This is the CLI-observable proof that the forwarding-failure path is
+/// reached: the counter lives in the process, and a failed stderr destination
+/// cannot report its own failure, so breaking stdout and reading the warning
+/// from stderr is the only way to see the path from outside.
+#[test]
+fn a_failed_stdout_destination_is_reported_on_stderr() -> Result<()> {
+    let Some(workspace) = runtime_workspace()? else {
+        return Ok(());
+    };
+    let root = workspace_dir(&workspace)?;
+    write_manifest(&root)?;
+
+    let mut child = netsuke_build(&workspace, &["build", "forwarded"])?
+        .spawn()
+        .context("spawn Netsuke forwarding build")?;
+    // Dropping the read end closes the pipe before Ninja runs, so the first
+    // forwarded byte is rejected.
+    drop(
+        child
+            .stdout
+            .take()
+            .context("Netsuke child should expose stdout")?,
+    );
+    let mut stderr = String::new();
+    child
+        .stderr
+        .take()
+        .context("Netsuke child should expose stderr")?
+        .read_to_string(&mut stderr)
+        .context("read Netsuke stderr")?;
+    let status = wait_for_exit(&mut child)?;
+    ensure!(
+        status.success(),
+        "a lost stdout destination must not fail the build: {status}"
+    );
+
+    ensure!(
+        stderr.contains("failed to forward child output"),
+        "the forwarding failure should be reported on stderr: {stderr:?}"
+    );
+    ensure!(
+        stderr.contains("stream=\"stdout\""),
+        "the warning should name the lost stream: {stderr:?}"
+    );
+    Ok(())
+}
 
 /// Keep a build successful when its stderr destination disappears.
 ///
 /// Netsuke forwards Ninja's stderr to its own stderr. Ninja writes the recipe
 /// output that users watch to stdout, so the forwarded stderr stream carries
 /// Ninja's own warnings; a corrupt `.ninja_log` is the one such warning a
-/// successful build emits on demand. Closing the read end of the pipe is the
-/// only way to make the destination fail from outside the process, so this is
-/// the CLI-boundary check for the forwarding-failure path. The first build
-/// proves Ninja's warning really reaches Netsuke's stderr; the second proves
-/// that losing it is reported through the forwarding counter and warning
-/// rather than through the exit status.
+/// successful build emits on demand. The first build proves that warning
+/// really reaches Netsuke's stderr, and the second closes that destination and
+/// requires the build to succeed anyway.
 #[test]
 fn a_closed_stderr_destination_does_not_fail_the_build() -> Result<()> {
     let Some(workspace) = runtime_workspace()? else {
         return Ok(());
     };
     let root = workspace_dir(&workspace)?;
-    root.write(
-        "Netsukefile",
-        concat!(
-            "netsuke_version: \"1.0.0\"\n",
-            "targets:\n",
-            "  - name: forwarded\n",
-            "    command: 'touch forwarded'\n",
-            "  - name: lost\n",
-            "    command: 'touch lost'\n",
-        ),
-    )
-    .context("write forwarding-loss manifest")?;
+    write_manifest(&root)?;
 
     corrupt_build_log(&root)?;
     let mut forwarded = netsuke_build(&workspace, &["build", "forwarded"])?
@@ -59,7 +94,8 @@ fn a_closed_stderr_destination_does_not_fail_the_build() -> Result<()> {
     let mut lost = netsuke_build(&workspace, &["build", "lost"])?
         .spawn()
         .context("spawn Netsuke forwarding-loss build")?;
-    // Dropping the read end closes the pipe, so every later write to it fails.
+    // Dropping the read end closes the pipe before Ninja runs, so every write
+    // to it fails.
     drop(
         lost.stderr
             .take()
@@ -84,7 +120,27 @@ fn a_closed_stderr_destination_does_not_fail_the_build() -> Result<()> {
         root.exists("lost"),
         "the recipe should still run to completion"
     );
+    ensure!(
+        stdout.contains("lost"),
+        "Ninja's stdout should still reach the user: {stdout:?}"
+    );
     Ok(())
+}
+
+/// Write a manifest with one target per forwarding scenario.
+fn write_manifest(root: &cap_std::fs_utf8::Dir) -> Result<()> {
+    root.write(
+        "Netsukefile",
+        concat!(
+            "netsuke_version: \"1.0.0\"\n",
+            "targets:\n",
+            "  - name: forwarded\n",
+            "    command: 'touch forwarded'\n",
+            "  - name: lost\n",
+            "    command: 'touch lost'\n",
+        ),
+    )
+    .context("write forwarding-loss manifest")
 }
 
 /// Plant a `.ninja_log` that Ninja rejects, so the next build warns on stderr.
