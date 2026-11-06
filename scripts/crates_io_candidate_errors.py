@@ -23,6 +23,7 @@ class CandidateIssue(enum.StrEnum):
     ARCHIVE_COUNT = "expected exactly one matching .crate named {!r}, found {!r}"
     ARCHIVE_FILE = "candidate archive is not a regular file: {!r}"
     MANIFEST_MEMBER = "archive must contain exactly one packaged Cargo.toml, found {!r}"
+    MANIFEST_FILE = "packaged Cargo.toml is not a regular file: {!r}"
     MANIFEST_ROOT = "packaged manifest is rooted at {!r}, expected {!r}"
     MANIFEST_READ = "could not read packaged manifest {!r}"
     MANIFEST_PARSE = "could not read packaged Cargo manifest: {}"

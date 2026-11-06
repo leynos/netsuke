@@ -404,7 +404,10 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 # modules with doctested sources the same way.
 test-release-publication: ## Test release-candidate identity and staged inventory exactness
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
-		--with pytest==9.0.2 --with hypothesis==6.151.9 python -m pytest \
+		--with pytest==9.0.2 --with hypothesis==6.151.9 \
+		--with 'pyyaml>=6' python -m pytest \
+		scripts/tests/test_crates_io_candidate_action.py \
+		scripts/tests/test_crates_io_candidate_archive_properties.py \
 		scripts/tests/test_crates_io_candidate_cli.py \
 		scripts/tests/test_crates_io_candidate_guards.py \
 		scripts/tests/test_crates_io_candidate_metadata.py \

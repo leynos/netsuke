@@ -2758,7 +2758,9 @@ probe and upload retain their single-shot request behaviour. The transport CLI
 remains responsible for writing archive/status files and the bounded retry
 report.
 
-Nine focused test modules cover this new publisher path:
+Eleven focused test modules cover this new publisher path:
+`test_crates_io_candidate_action.py`,
+`test_crates_io_candidate_archive_properties.py`,
 `test_crates_io_candidate_cli.py`, `test_crates_io_candidate_guards.py`,
 `test_crates_io_candidate_metadata.py`, `test_crates_io_candidate_policy.py`,
 `test_crates_io_transport_cli.py`, `test_crates_io_transport_upload.py`,
@@ -2767,7 +2769,15 @@ and `test_crates_io_publish_sequence.py`. The candidate metadata module holds
 the metadata-mode tests that the check-mode module would otherwise carry. The
 candidate policy module names each acceptance rule's accept and reject outcome
 directly, so a changed rule fails there rather than only through a
-whole-command rejection. The candidate guards module pins the archive file-kind
+whole-command rejection. The candidate action module runs the package action's
+candidate step body under Bash from a workspace holding the record and archive
+the packaging step writes, so the step and the CLI are exercised together
+rather than as step text and an in-process call apart. The candidate
+archive-properties module states the manifest selection rule over generated
+member layouts: exactly one regular `<root>/Cargo.toml` among unrelated entries
+in any order is accepted, a directory carrying that name is a file-kind
+rejection, and the policy accepts the reported root and identity only when both
+agree with the release. The candidate guards module pins the archive file-kind
 checks, the damaged identity-record and recorded-digest rejections, and the
 three packaged-README selection outcomes; the upload module pins the
 little-endian metadata and archive framing, the missing-token and

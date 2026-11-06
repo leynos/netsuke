@@ -147,6 +147,20 @@ def test_check_rejects_multiple_packaged_manifests(
     )
 
 
+def test_check_rejects_an_archive_holding_no_manifest(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Refuse an archive that packages no manifest at the expected depth."""
+    body = tar_bytes(((f"{PACKAGE_NAME}-{VERSION}/README.md", b"# Netsuke\n"),))
+    record, _ = write_candidate(
+        tmp_path, overrides=CandidateOverrides(crate_bytes=body)
+    )
+
+    _assert_rejected_without_output(
+        capsys, _fixture_paths(record, tmp_path), "exactly one packaged Cargo.toml"
+    )
+
+
 def test_check_rejects_a_non_regular_manifest_member(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -156,8 +170,10 @@ def test_check_rejects_a_non_regular_manifest_member(
         tmp_path, overrides=CandidateOverrides(crate_bytes=body)
     )
 
+    # The member is present and unique, so the count diagnostic would describe
+    # a valid selection. The rejection must name the file kind instead.
     _assert_rejected_without_output(
-        capsys, _fixture_paths(record, tmp_path), "exactly one packaged Cargo.toml"
+        capsys, _fixture_paths(record, tmp_path), "is not a regular file"
     )
 
 

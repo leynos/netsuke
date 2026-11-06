@@ -289,6 +289,29 @@ def test_archive_reader_reports_the_root_and_manifest(tmp_path: pathlib.Path) ->
     )
 
 
+def test_archive_reader_reports_a_root_the_identity_does_not_use(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Report the observed root even when the identity does not name it.
+
+    The reader states what the archive holds; rejecting a root that disagrees
+    with the release is the policy's decision. A reader that silently required
+    the expected root would look identical through the CLI, because the policy
+    rejects the archive either way.
+    """
+    archive = tmp_path / f"{PACKAGE_NAME}-{VERSION}.crate"
+    _ = archive.write_bytes(archive_bytes(root="elsewhere"))
+
+    root, manifest = crates_io_candidate_archive.read_packaged_manifest(archive)
+
+    assert root == "elsewhere", "report the root the archive actually holds"
+    package = manifest["package"]
+    assert isinstance(package, dict), "parse the manifest package table"
+    assert (package["name"], package["version"]) == (PACKAGE_NAME, VERSION), (
+        "parse the packaged manifest identity the policy compares"
+    )
+
+
 def test_check_refuses_digest_and_packaged_manifest_mismatches(
     tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

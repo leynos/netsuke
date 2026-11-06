@@ -2718,6 +2718,24 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `Cargo.toml`; the adapter gained a behavioural root/manifest test in place of
   the callable-only assertion. Both guides were updated, and the candidate
   suite plus adapter doctests pass at 50 tests.
+- [x] (2026-11-05) Answered the five live CodeRabbit pre-merge rows for the
+  head at `106a7aed7`. The Observability error named a real defect: a member
+  named `Cargo.toml` that is not a regular file produced the manifest-count
+  diagnostic, which describes a valid selection rather than a file-kind
+  rejection. `CandidateIssue.MANIFEST_FILE` now carries that case, so a
+  maintainer can tell the two failures apart. The reader contract also gained a
+  direct assertion that it reports the root the archive holds even when the
+  release identity does not name it; the policy, not the reader, makes that
+  decision, and only a reader-level test distinguishes the two. The two testing
+  rows became two modules: `test_crates_io_candidate_action.py` runs the
+  package action's candidate step body under Bash from a workspace holding the
+  record and archive the packaging step writes, with a `uv` stub naming the
+  test interpreter, and `test_crates_io_candidate_archive_properties.py` states
+  the manifest selection rule over generated member layouts, including member
+  order independence and the policy's exact accept/reject split. Both are
+  registered in `SECTION_MODULES` and the `test-release-publication` recipe,
+  the developers' guide's module inventory was corrected from nine to eleven,
+  and the focused four-module run passed 37 tests.
 
 ## Surprises & discoveries
 

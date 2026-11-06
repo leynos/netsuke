@@ -95,9 +95,16 @@ def _manifest_member(package: tarfile.TarFile) -> tarfile.TarInfo:
         member for member in package.getmembers() if _is_packaged_manifest(member)
     ]
     found = [member.name for member in manifests]
-    if len(manifests) != 1 or not manifests[0].isfile():
+    if len(manifests) != 1:
         raise CandidateError(CandidateIssue.MANIFEST_MEMBER, (found,))
-    return manifests[0]
+    member = manifests[0]
+    if not member.isfile():
+        # A directory or link carrying the manifest's name is a different
+        # failure from a missing or duplicated manifest: the count diagnostic
+        # would report it as a manifest that is present, leaving the maintainer
+        # unable to tell a file-kind rejection from a selection one.
+        raise CandidateError(CandidateIssue.MANIFEST_FILE, (member.name,))
+    return member
 
 
 def _packaged_manifest(package: tarfile.TarFile) -> tuple[str, str]:

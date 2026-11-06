@@ -8,6 +8,8 @@ explicit decision about which side owns its effects.
 
 #: Test suites collected by ``make test-release-publication``.
 SECTION_MODULES = (
+    "scripts/tests/test_crates_io_candidate_action.py",
+    "scripts/tests/test_crates_io_candidate_archive_properties.py",
     "scripts/tests/test_crates_io_candidate_cli.py",
     "scripts/tests/test_crates_io_candidate_guards.py",
     "scripts/tests/test_crates_io_candidate_metadata.py",
