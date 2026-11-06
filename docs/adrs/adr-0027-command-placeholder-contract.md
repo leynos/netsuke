@@ -129,39 +129,6 @@ Netsuke does not expose Ninja's own `$in` and `$out` rule variables. Resolved
 paths are baked into each content-hashed rule, so Ninja never substitutes a
 path into a recipe.
 
-### POSIX comment and heredoc boundaries follow the shell's separators
-
-A `#` begins an inert comment in POSIX and Bash `command:` and `script:`
-recipes only outside quotes, at the beginning of input or after an unescaped
-space, tab, newline, or one of the operator characters `;`, `&`, `|`, `(`, `)`,
-`<`, and `>`. Those are the separators that delimit a POSIX token, so quote
-tracking follows the text the interpreter executes. The set describes an
-operator only where the shell treats it as one: the `)` that closes a command
-substitution or arithmetic expansion stays in the surrounding word, so `#`
-immediately after it is word data, whereas a `)` that closes a subshell is an
-operator and `#` after it starts a comment. Every other character is word data:
-a no-break space, another Unicode space, a carriage return, vertical tab, or
-form feed before `#` does not start a comment, and a quote after that `#` still
-opens or closes a quoted region. Heredoc delimiter words end at the same
-separators, so a delimiter containing such a character remains one word and
-only a line matching it terminates the body. The shared predicate therefore
-prevents a false comment from skipping a real quote transition, which would
-otherwise select an unquoted path encoding for a marker that the shell reads
-inside quotes.
-
-The two kinds of `)` are lexically identical without the `case` grammar: a `)`
-that terminates a `case` pattern is an operator, while a `)` that closes a
-substitution is word data. When a `)` is immediately followed by `#` and the
-substitution's source contains the `case` reserved word, the scanner therefore
-rejects the recipe instead of guessing. The enclosing quote context does not
-narrow the check: a substitution is parsed as its own script, so double quotes
-around it do not extend into its contents and cannot make the boundary
-unambiguous. PowerShell, which has no `case` patterns, keeps its previous
-unquoted-only rule because the ambiguity does not arise there. The check
-deliberately over-approximates by scanning the raw source, so a `case` inside
-quotes or a comment also triggers the rejection; re-lexing the substitution to
-narrow it would repeat the ambiguity the check exists to avoid.
-
 ### Backtick handling is two mechanisms at two different strengths
 
 The mechanisms are not the same kind of thing and are not promised equally.
@@ -470,3 +437,44 @@ The delimiter renderer reports a private `EscapeBeforeMarker` unit error, which
 both traversals map to `IrGenError::InvalidCommand` carrying the original
 template. PowerShell is unchanged: it has no unpaired backslash escape before a
 marker and already rejects markers after its own escape character, the backtick.
+
+## Amendment — 2026-11-06: POSIX comment and heredoc boundaries (#971)
+
+A `#` begins an inert comment in POSIX and Bash `command:` and `script:`
+recipes only outside quotes, at the beginning of input or after an unescaped
+space, tab, newline, or one of the operator characters `;`, `&`, `|`, `(`, `)`,
+`<`, and `>`. Those are the separators that delimit a POSIX token, so quote
+tracking follows the text the interpreter executes. The set describes an
+operator only where the shell treats it as one: the `)` that closes a command
+substitution or arithmetic expansion stays in the surrounding word, so `#`
+immediately after it is word data, whereas a `)` that closes a subshell is an
+operator and `#` after it starts a comment. Every other character is word data:
+a no-break space, another Unicode space, a carriage return, vertical tab, or
+form feed before `#` does not start a comment, and a quote after that `#` still
+opens or closes a quoted region. Heredoc delimiter words end at the same
+separators, so a delimiter containing such a character remains one word and
+only a line matching it terminates the body. The shared predicate therefore
+prevents a false comment from skipping a real quote transition, which would
+otherwise select an unquoted path encoding for a marker that the shell reads
+inside quotes.
+
+The two kinds of `)` are lexically identical without the `case` grammar: a `)`
+that terminates a `case` pattern is an operator, while a `)` that closes a
+substitution is word data. When a `)` is immediately followed by `#` and the
+substitution's source contains the `case` reserved word, the scanner therefore
+rejects the recipe instead of guessing. The enclosing quote context does not
+narrow the check: a substitution is parsed as its own script, so double quotes
+around it do not extend into its contents and cannot make the boundary
+unambiguous. PowerShell, which has no `case` patterns, keeps its previous
+unquoted-only rule because the ambiguity does not arise there. The check
+deliberately over-approximates by scanning the raw source, so a `case` inside
+quotes or a comment also triggers the rejection; re-lexing the substitution to
+narrow it would repeat the ambiguity the check exists to avoid.
+
+The boundary predicate is `is_word_terminator` in
+`src/ir/cmd_interpolate/posix_lexical/mod.rs`. Comment detection and heredoc
+delimiter parsing both call it, so the two cannot drift back to Unicode
+whitespace independently. The regressions are in
+`src/ir/cmd_interpolate/posix_lexical/tests.rs`, with shared command and script
+cases driving both POSIX interpolators, and the end-to-end case is in
+`tests/ninja_dollar_escaping_tests/scripts/mod.rs`.

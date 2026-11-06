@@ -290,6 +290,34 @@ further quoting is needed. See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full marker contract.
 
+## Separate a substitution closer from a following `#`
+
+Netsuke now rejects a POSIX or Bash `script:` recipe when a `)` that closes a
+`$(...)` or `$((...))` substitution is immediately followed by `#` and the
+substitution source contains the `case` reserved word. A `)` that closes a
+substitution stays part of the surrounding word, so `#` after it is word data; a
+`)` that terminates a `case` pattern is an operator, so `#` after it starts a
+comment. The scanner cannot tell the two apart without the `case` grammar, so
+it fails closed rather than encode a later path for the wrong shell context.
+
+Separate the closer from the comment with a space, a tab, or a newline:
+
+```yaml
+netsuke_version: '1.0.0'
+targets:
+  - name: output.txt
+    sources: input.txt
+    script: |
+      echo "$(printf x)" # a comment after a space
+      echo {{ ins }} > {{ outs }}
+defaults: [output.txt]
+```
+
+Recipes that do not place `#` directly after a substitution closer are
+unaffected. The
+[users' guide safety boundary](users-guide.md#review-the-safety-boundary)
+describes the full comment and substitution rules.
+
 ## Resolve build-graph outputs through the accessors
 
 The intermediate build graph now owns each logical build edge once, however
