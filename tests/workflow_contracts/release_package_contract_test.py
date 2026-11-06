@@ -11,32 +11,29 @@ Run via ``make test-workflow-contracts``.
 import copy
 import re
 import shlex
-import typing as typ
 
 import pytest
-import yaml
+from release_package_contract_support import (
+    ARTIFACT_ACTION,
+    ARTIFACT_STEP,
+    CANDIDATE_STEP,
+    CRATE_GLOB,
+    IDENTITY_PATH,
+    PACKAGE_JOB,
+    PACKAGE_STEP,
+    load_action,
+    load_action_steps,
+    mutate_action,
+    mutate_workflow,
+)
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
-    REPO_ROOT,
     job_steps,
     load_workflow,
     named_step,
-    require_list,
     require_mapping,
     workflow_job,
 )
-
-if typ.TYPE_CHECKING:
-    from pathlib import Path
-
-PACKAGE_JOB = "package-crate"
-PACKAGE_STEP = "Package the crate and record its identity"
-CANDIDATE_STEP = "Validate the packaged candidate offline"
-ARTIFACT_STEP = "Upload the packaged archive to regather"
-ARTIFACT_ACTION = "actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9"
-ACTION_PATH: Path = REPO_ROOT / ".github" / "actions" / "package-crate" / "action.yml"
-IDENTITY_PATH = "artifacts/package/identity.json"
-CRATE_GLOB = "target/package/*.crate"
 
 EXPECTED_INPUTS = {
     "tag": False,
@@ -76,29 +73,20 @@ EXPECTED_JOB_INPUTS = {
 }
 
 
-def _action() -> dict[str, object]:
-    """Read the package action as a checked mapping."""
-    return require_mapping(
-        yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8")),
-        "package-crate action",
+def _assert_failure_propagates(step: dict[str, object], description: str) -> None:
+    """Require a step to keep the default success gate and to fail its job.
+
+    The publisher gates on ``needs.package-crate.result == 'success'``, so a
+    step that tolerates failure, or that runs without looking at the previous
+    step's outcome, would hand a rejected candidate to the next job while the
+    workflow still reported a completed package job.
+    """
+    assert "continue-on-error" not in step, (
+        f"{description} must fail the job rather than report success anyway"
     )
-
-
-def _action_steps(action: dict[str, object]) -> list[dict[str, object]]:
-    """Return the action's steps with each step narrowed to a mapping."""
-    runs = require_mapping(action.get("runs"), "action runs")
-    raw_steps = require_list(runs.get("steps"), "action steps")
-    return [require_mapping(step, "action step") for step in raw_steps]
-
-
-def _package_action_step(action: dict[str, object]) -> dict[str, object]:
-    """Return the uniquely named package action step."""
-    return named_step(_action_steps(action), "Package crate")
-
-
-def _candidate_action_step(action: dict[str, object]) -> dict[str, object]:
-    """Return the uniquely named offline candidate action step."""
-    return named_step(_action_steps(action), CANDIDATE_STEP)
+    assert "if" not in step, (
+        f"{description} must keep the default success gate on the step before it"
+    )
 
 
 def _run_tokens(run: str) -> list[str]:
@@ -141,10 +129,11 @@ def _assert_action_contract(action: dict[str, object]) -> None:
         output = require_mapping(outputs[name], f"{name} output")
         assert output.get("value") == value, f"{name} output mapping changed"
 
-    steps = _action_steps(action)
+    steps = load_action_steps(action)
     package = named_step(steps, "Package crate")
     assert package.get("id") == "package", "the package step id must remain stable"
     assert package.get("shell") == "bash", "the action step must run under Bash"
+    _assert_failure_propagates(package, "the packaging step")
     environment = require_mapping(package.get("env"), "package environment")
     assert environment == EXPECTED_ENVIRONMENT, (
         "the action must forward inputs through the contracted environment names"
@@ -195,6 +184,7 @@ def _assert_candidate_step(
     assert steps.index(package) < steps.index(candidate), (
         "the candidate must be validated after it is packaged"
     )
+    _assert_failure_propagates(candidate, "the candidate step")
     environment = require_mapping(candidate.get("env"), "candidate environment")
     assert environment == EXPECTED_CANDIDATE_ENVIRONMENT, (
         "the candidate step must forward the identity inputs it validates"
@@ -280,57 +270,8 @@ def _assert_workflow_contract(workflow: dict[str, object]) -> None:
     assert steps.index(package) < steps.index(artifact), (
         "the package action must produce the files before upload"
     )
-
-
-def _mutate_action(action: dict[str, object], mutation: str) -> None:
-    """Apply one deliberate mutation to a package-action contract dimension."""
-    match mutation:
-        case "input":
-            inputs = require_mapping(action["inputs"], "inputs")
-            require_mapping(inputs["version"], "version input")["required"] = False
-        case "environment":
-            package = _package_action_step(action)
-            require_mapping(package["env"], "package environment")[
-                "RELEASE_VERSION"
-            ] = "wrong"
-        case "command":
-            package = _package_action_step(action)
-            run = str(package["run"])
-            package["run"] = run.replace("--target-dir target", "--target-dir build")
-        case "output":
-            outputs = require_mapping(action["outputs"], "outputs")
-            require_mapping(outputs["crate-name"], "crate-name output")["value"] = (
-                "${{ steps.other.outputs.crate-name }}"
-            )
-        case "candidate":
-            candidate = _candidate_action_step(action)
-            run = str(candidate["run"])
-            candidate["run"] = run.replace(
-                "release_mode=(--rehearsal)", 'release_mode=(--tag "$RELEASE_TAG")'
-            )
-        case other:
-            pytest.fail(f"unknown action mutation {other!r}")
-
-
-def _mutate_workflow(workflow: dict[str, object], mutation: str) -> None:
-    """Apply one deliberate mutation to package-job wiring."""
-    match mutation:
-        case "dependency":
-            workflow_job(workflow, PACKAGE_JOB)["needs"] = []
-        case "permission":
-            workflow_job(workflow, PACKAGE_JOB)["permissions"] = {"contents": "write"}
-        case "artifact-action":
-            named_step(job_steps(workflow, PACKAGE_JOB), ARTIFACT_STEP)["uses"] = (
-                "actions/upload-artifact@main"
-            )
-        case "artifact-name":
-            _artifact_inputs(workflow)["name"] = "wrong-name"
-        case "artifact-path":
-            _artifact_inputs(workflow)["path"] = IDENTITY_PATH
-        case "artifact-missing-policy":
-            _artifact_inputs(workflow)["if-no-files-found"] = "warn"
-        case other:
-            pytest.fail(f"unknown workflow mutation {other!r}")
+    _assert_failure_propagates(package, "the package job's action step")
+    _assert_failure_propagates(artifact, "the package upload step")
 
 
 def _assert_complete_package_contract(
@@ -342,13 +283,22 @@ def _assert_complete_package_contract(
 
 
 @pytest.mark.parametrize(
-    "mutation", ["input", "environment", "command", "output", "candidate"]
+    "mutation",
+    [
+        "input",
+        "environment",
+        "command",
+        "output",
+        "candidate",
+        "candidate-continue-on-error",
+        "candidate-gate",
+    ],
 )
 def test_action_mutations_are_rejected(mutation: str) -> None:
     """Prove the action contract detects mutations to each of its dimensions."""
-    action = copy.deepcopy(_action())
+    action = copy.deepcopy(load_action())
     workflow = copy.deepcopy(_workflow())
-    _mutate_action(action, mutation)
+    mutate_action(action, mutation)
 
     with pytest.raises(AssertionError):
         _assert_complete_package_contract(action, workflow)
@@ -363,26 +313,21 @@ def test_action_mutations_are_rejected(mutation: str) -> None:
         "artifact-name",
         "artifact-path",
         "artifact-missing-policy",
+        "package-continue-on-error",
+        "artifact-gate",
+        "artifact-continue-on-error",
     ],
 )
 def test_workflow_mutations_are_rejected(mutation: str) -> None:
     """Prove the workflow contract detects each package-job mutation."""
-    action = copy.deepcopy(_action())
+    action = copy.deepcopy(load_action())
     workflow = copy.deepcopy(_workflow())
-    _mutate_workflow(workflow, mutation)
+    mutate_workflow(workflow, mutation)
 
     with pytest.raises(AssertionError):
         _assert_complete_package_contract(action, workflow)
 
 
-def _artifact_inputs(workflow: dict[str, object]) -> dict[str, object]:
-    """Return the crate package artefact's ``with`` mapping."""
-    return require_mapping(
-        named_step(job_steps(workflow, PACKAGE_JOB), ARTIFACT_STEP).get("with"),
-        "artifact inputs",
-    )
-
-
 def test_the_action_and_job_satisfy_the_complete_package_contract() -> None:
     """Require the checked-in action and workflow to agree on the full contract."""
-    _assert_complete_package_contract(_action(), _workflow())
+    _assert_complete_package_contract(load_action(), _workflow())

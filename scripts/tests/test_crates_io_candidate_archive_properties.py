@@ -44,6 +44,31 @@ _UNRELATED_NAME = st.one_of(
     ),
 )
 
+#: Manifest-like names the reader must never select, because their path does
+#: not normalise to the two-component packaged shape.
+_WRONG_DEPTH_MANIFEST = st.one_of(
+    st.just("Cargo.toml"),
+    st.builds(
+        lambda top, middle: f"{top}/{middle}/Cargo.toml",
+        _COMPONENT,
+        _COMPONENT,
+    ),
+    st.builds(
+        lambda top, middle, leaf: f"{top}/{middle}/{leaf}/Cargo.toml",
+        _COMPONENT,
+        _COMPONENT,
+        _COMPONENT,
+    ),
+)
+
+#: Spellings a POSIX path library normalises to ``<root>/Cargo.toml``. The
+#: reader compares normalised components, so each must select the same root.
+_NORMALISED_MANIFEST = (
+    "./{root}/Cargo.toml",
+    "{root}/./Cargo.toml",
+    "{root}//Cargo.toml",
+)
+
 _POLICY_NAME = st.text(
     alphabet="abcdefghijklmnopqrstuvwxyz0123456789_-", min_size=1, max_size=8
 )
@@ -54,15 +79,23 @@ _POLICY_VERSION = st.sampled_from(("0.9.0", "1.0.0", "1.2.3"))
 class ArchiveLayout:
     """Describe the generated members of one candidate archive.
 
-    ``unrelated`` pairs a member name with whether the entry is a regular file;
-    a directory entry lets the property exercise the file-kind guard away from
-    the manifest itself. ``position`` places the manifest member among them.
+    ``manifests`` pairs each matching-shape ``<root>/Cargo.toml`` member with
+    whether it is a regular file; the tuple's length is the selection count the
+    reader must classify. ``unrelated`` holds members that can never be
+    selected, including manifest-like names at the wrong depth. ``position``
+    places the manifest members among the unrelated ones.
     """
 
-    root: str
-    manifest_is_file: bool
+    manifests: tuple[tuple[str, bool], ...]
     unrelated: tuple[tuple[str, bool], ...]
     position: int
+
+    @property
+    def roots(self) -> tuple[str, ...]:
+        """The archive roots the matching-shape members name."""
+        return tuple(
+            pathlib.PurePosixPath(name).parent.name for name, _ in self.manifests
+        )
 
 
 @dc.dataclass(frozen=True, slots=True)
@@ -97,11 +130,18 @@ class PolicyExpectation:
 
 @st.composite
 def _layouts(draw: st.DrawFn) -> ArchiveLayout:
-    """Generate an archive layout with the manifest at any position."""
-    unrelated = draw(st.lists(st.tuples(_UNRELATED_NAME, st.booleans()), max_size=4))
+    """Generate zero to three matching manifests at any position."""
+    count = draw(st.integers(min_value=0, max_value=3))
+    roots = draw(st.lists(_COMPONENT, min_size=count, max_size=count, unique=True))
+    manifests = tuple((f"{root}/Cargo.toml", draw(st.booleans())) for root in roots)
+    unrelated = draw(
+        st.lists(
+            st.tuples(st.one_of(_UNRELATED_NAME, _WRONG_DEPTH_MANIFEST), st.booleans()),
+            max_size=4,
+        )
+    )
     return ArchiveLayout(
-        root=draw(_COMPONENT),
-        manifest_is_file=draw(st.booleans()),
+        manifests=manifests,
         unrelated=tuple(unrelated),
         position=draw(st.integers(min_value=0, max_value=len(unrelated))),
     )
@@ -109,18 +149,16 @@ def _layouts(draw: st.DrawFn) -> ArchiveLayout:
 
 def _members(layout: ArchiveLayout) -> tuple[tuple[str, bytes | None], ...]:
     """Build the archive members the layout describes, in their stated order."""
-    manifest = (
-        (
-            f"{layout.root}/Cargo.toml",
-            manifest_text().encode() if layout.manifest_is_file else None,
-        ),
+    manifests = tuple(
+        (name, manifest_text().encode() if is_file else None)
+        for name, is_file in layout.manifests
     )
     unrelated = tuple(
         (name, b"payload" if is_file else None) for name, is_file in layout.unrelated
     )
     return (
         *unrelated[: layout.position],
-        *manifest,
+        *manifests,
         *unrelated[layout.position :],
     )
 
@@ -147,19 +185,25 @@ def _package_identity(manifest: dict[str, object] | None) -> tuple[object, objec
 
 @settings(max_examples=100, deadline=None, derandomize=True)
 @given(layout=_layouts())
-def test_reader_selects_one_regular_manifest_wherever_it_sits(
+def test_reader_accepts_exactly_one_regular_packaged_manifest(
     layout: ArchiveLayout,
 ) -> None:
-    """Accept exactly one regular packaged manifest among unrelated entries."""
+    """Accept one regular manifest and classify every other selection count."""
     outcome = _read(_members(layout))
 
-    if not layout.manifest_is_file:
+    if len(layout.manifests) != 1:
+        assert outcome.issue is CandidateIssue.MANIFEST_MEMBER, (
+            "zero or several matching members is a selection rejection"
+        )
+        return
+    _, is_file = layout.manifests[0]
+    if not is_file:
         assert outcome.issue is CandidateIssue.MANIFEST_FILE, (
             "a directory carrying the manifest name is a file-kind rejection"
         )
         return
     assert outcome.issue is None, "a unique regular manifest must be accepted"
-    assert outcome.root == layout.root, "report the root the archive holds"
+    assert outcome.root == layout.roots[0], "report the root the archive holds"
     assert _package_identity(outcome.manifest) == (PACKAGE_NAME, VERSION), (
         "report the packaged identity the policy compares"
     )
@@ -176,6 +220,41 @@ def test_unrelated_member_order_does_not_change_the_reader_result(
 
     assert _read(reordered) == _read(members), (
         "reordering unrelated members must not change acceptance or its facts"
+    )
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(
+    root=_COMPONENT,
+    template=st.sampled_from(_NORMALISED_MANIFEST),
+    is_file=st.booleans(),
+)
+def test_normalised_manifest_paths_select_the_same_root(
+    root: str, template: str, *, is_file: bool
+) -> None:
+    """Select a manifest whose spelling normalises to the packaged shape."""
+    name = template.format(root=root)
+    outcome = _read(((name, manifest_text().encode() if is_file else None),))
+
+    if not is_file:
+        assert outcome.issue is CandidateIssue.MANIFEST_FILE, (
+            "normalisation must not change the file-kind rejection"
+        )
+        return
+    assert outcome.issue is None, "a normalised regular manifest must be accepted"
+    assert outcome.root == root, "report the root the normalised path names"
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(names=st.lists(_WRONG_DEPTH_MANIFEST, min_size=1, max_size=4))
+def test_manifest_like_names_at_other_depths_never_select_a_manifest(
+    names: list[str],
+) -> None:
+    """Reject an archive whose manifest-like names sit at another depth."""
+    members = tuple((name, manifest_text().encode()) for name in names)
+
+    assert _read(members).issue is CandidateIssue.MANIFEST_MEMBER, (
+        "a manifest name outside the packaged depth is not a selection"
     )
 
 

@@ -132,6 +132,7 @@ impact
 | Script shell variables       | **Breaking:** `$in` and `$out` in `script:` recipes are shell variables, as they already were in `command:` recipes. Use `{{ ins }}` and `{{ outs }}` for Netsuke path substitution.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | [Script shell variables](#replace-script-in-and-out-path-substitution)                                                   |
 | Build graph                  | **Breaking for callers of the unstable Rust API:** each logical build edge is stored once and indexed by output through `EdgeId`; `BuildGraph::targets` is no longer public.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [Graph accessors](#resolve-build-graph-outputs-through-the-accessors)                                                    |
 | Cycle detection              | **Breaking:** cycles through `sources`, `deps`, or `order_only_deps` are rejected during IR validation, even when Ninja would not be asked to build the affected target. Remove latent prerequisite cycles; the whole manifest is checked before Ninja starts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Dependency and build-graph semantics](users-guide.md#dependency-and-build-graph-semantics)                              |
+| Release packaging            | The release workflow validates the packaged candidate offline before upload: the identity, the archive digest, and the packaged manifest must agree, and a dry run must record no release tag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Release packaging validation](#release-packaging-validates-its-candidate-offline)                                       |
 
 ## Remove order-only dependency cycles
 
@@ -638,6 +639,21 @@ The `contents` and `linecount` filters require UTF-8 input and report an error
 for other byte sequences; `hash` and `digest` stay byte-oriented and accept any
 content. See the [users' guide](users-guide.md#configure-file-reading-limits)
 for the full policy and its diagnostics.
+
+## Release packaging validates its candidate offline
+
+The release workflow no longer uploads a packaged crate before checking it. The
+`package-crate` job's action validates the retained candidate offline: the
+package identity, the single recorded `.crate`, its SHA-256 digest, and the
+`Cargo.toml` at the archive's `<package>-<version>` root must all agree with
+the run. A pull-request dry run is checked as a rehearsal and must record no
+release tag; a publishing run supplies the tag, and the identity must record
+exactly that tag. The step never contacts the registry.
+
+Manifests, local builds, and the crate's published contents are unchanged. Only
+the release workflow runs this check, and it needs no new input. The
+[users' guide](users-guide.md) states the candidate contract and the recovery
+path for an interrupted publication.
 
 ## Diagnostics
 

@@ -12,6 +12,7 @@ interpreter instead of resolving the repository's Python baseline.
 Run via ``make test-release-publication``.
 """
 
+import copy
 import json
 import os
 import pathlib
@@ -19,7 +20,8 @@ import shutil
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the step runs as a child.
 import sys
 
-import yaml
+import crates_io_candidate_handoff as handoff
+import pytest
 from crates_io_candidate_support import (
     BIN_NAME,
     COMMIT,
@@ -31,23 +33,13 @@ from crates_io_candidate_support import (
 )
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[2]
-ACTION_MANIFEST = REPO_ROOT / ".github" / "actions" / "package-crate" / "action.yml"
 CANDIDATE_STEP = "Validate the packaged candidate offline"
 OUTPUT_NAME = "crates-io-candidate.json"
 
 
 def _action_steps() -> list[dict[str, object]]:
     """Return the package action's declared steps."""
-    loaded = yaml.safe_load(ACTION_MANIFEST.read_text(encoding="utf-8"))
-    assert isinstance(loaded, dict), "the action manifest must be a mapping"
-    runs = loaded["runs"]
-    assert isinstance(runs, dict), "the action manifest must declare its runs"
-    steps = runs["steps"]
-    assert isinstance(steps, list), "the action runs must be a step list"
-    assert all(isinstance(step, dict) for step in steps), (
-        "each action step must be a mapping"
-    )
-    return steps
+    return handoff.load_action_steps()
 
 
 def _candidate_script() -> str:
@@ -112,11 +104,14 @@ def _step_environment(
     _uv_stub(stub_directory)
     runner_temp = tmp_path / "runner-temp"
     runner_temp.mkdir()
+    github_output = tmp_path / "github-output"
+    _ = github_output.write_text("", encoding="utf-8")
     environment = os.environ.copy()
     environment.update({
         "PATH": os.pathsep.join((str(stub_directory), environment.get("PATH", ""))),
         "STEP_PYTHON": sys.executable,
         "RUNNER_TEMP": str(runner_temp),
+        "GITHUB_OUTPUT": str(github_output),
         "RELEASE_TAG": tag,
         "RELEASE_DRY_RUN": dry_run,
         "RELEASE_COMMIT": COMMIT,
@@ -220,4 +215,81 @@ def test_candidate_step_rejects_an_ambiguous_dry_run_input(
     assert completed.returncode != 0, "an unusable dry-run input must fail the step"
     assert "dry-run must be true or false" in completed.stderr, (
         "name the input the step could not interpret"
+    )
+
+
+def _run_package_job(
+    tmp_path: pathlib.Path,
+    *,
+    dry_run: str,
+    workflow: dict[str, object] | None = None,
+    action_steps: list[dict[str, object]] | None = None,
+) -> handoff.JobOutcome:
+    """Run the package job's hand-off steps over the fixture workspace."""
+    context = handoff.JobContext(
+        workspace=_workspace(tmp_path),
+        environment=_step_environment(tmp_path, dry_run=dry_run),
+    )
+    runner = handoff.Runner(
+        action_steps=tuple(
+            action_steps if action_steps is not None else _action_steps()
+        ),
+        upload_root=tmp_path / "uploaded",
+    )
+    return handoff.run_package_job(
+        context,
+        runner,
+        workflow if workflow is not None else handoff.load_workflow(),
+    )
+
+
+def test_accepted_candidate_hands_the_package_to_the_next_job(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Hand on the identity record and crate archive, not the temporary record."""
+    outcome = _run_package_job(tmp_path, dry_run="false")
+
+    assert not outcome.failed, "an accepted candidate must not fail the job"
+    assert outcome.uploaded == ("identity.json", f"{PACKAGE_NAME}-{VERSION}.crate"), (
+        "hand on the identity record and the crate archive"
+    )
+    assert OUTPUT_NAME not in outcome.uploaded, (
+        "the temporary candidate record is not part of the hand-off"
+    )
+
+
+def test_rejected_candidate_stops_the_package_hand_off(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Hand nothing on when the candidate step rejects the packaged release."""
+    # The fixture identity records a tag, which a dry run must refuse.
+    outcome = _run_package_job(tmp_path, dry_run="true")
+
+    assert outcome.failed, "a rejected candidate must fail the package job"
+    assert not outcome.uploaded, "a rejected candidate must hand nothing on"
+    assert not (tmp_path / "uploaded").exists(), "the upload step must not run"
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "upload-always",
+        "package-continue-on-error",
+        "candidate-continue-on-error",
+    ],
+)
+def test_the_hand_off_harness_detects_a_failure_bypass(
+    tmp_path: pathlib.Path, mutation: str
+) -> None:
+    """Show each failure-bypassing edit hands a rejected package on."""
+    workflow = copy.deepcopy(handoff.load_workflow())
+    action_steps = copy.deepcopy(_action_steps())
+    handoff.mutate_hand_off(workflow, action_steps, mutation)
+
+    outcome = _run_package_job(
+        tmp_path, dry_run="true", workflow=workflow, action_steps=action_steps
+    )
+
+    assert outcome.uploaded == ("identity.json", f"{PACKAGE_NAME}-{VERSION}.crate"), (
+        "the harness must show the bypass handing a rejected package on"
     )

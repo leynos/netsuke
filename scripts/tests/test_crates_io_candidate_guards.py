@@ -1,7 +1,8 @@
 """Guard the candidate record and packaged README boundaries.
 
-``test_crates_io_candidate_cli.py`` covers the accepted candidate, identity
-mismatches, and manifest-derived metadata. This module covers the rejection
+``test_crates_io_candidate_cli.py`` covers the accepted candidate and identity
+mismatches; ``test_crates_io_candidate_metadata.py`` covers the registry
+metadata derived from its archive. This module covers the rejection
 paths that sit beside them: archive file-kind guards, damaged identity records,
 malformed recorded digests, and the three packaged-README selection outcomes.
 It lives apart so each module stays within the repository's file-length cap.
