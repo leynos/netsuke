@@ -173,6 +173,52 @@ pub(super) fn is_valid_posix_command(command: &str) -> bool {
     !has_odd_backticks(command) && shlex::split(command).is_some()
 }
 
+/// Restate the POSIX token separators independently of production code.
+///
+/// The property generator and its expectation both come from this table rather
+/// than from the production predicate, so a predicate that drifts away from
+/// the interpreter's rule fails the property instead of reshaping the input to
+/// match itself.
+pub(super) const POSIX_SEPARATORS: [char; 10] =
+    [' ', '\t', '\n', ';', '&', '|', '(', ')', '<', '>'];
+
+/// Name the characters a Unicode whitespace test accepts but POSIX does not.
+const NON_SEPARATOR_SPACES: [char; 7] = [
+    '\u{00a0}', '\u{2003}', '\u{3000}', '\u{0085}', '\r', '\u{000b}', '\u{000c}',
+];
+
+/// Name the characters that change template syntax instead of a token boundary.
+const SYNTAX_CHARACTERS: [char; 6] = ['#', '\'', '"', '\\', '`', '$'];
+
+/// Generate a character that POSIX keeps inside the surrounding word.
+pub(super) fn non_separator_character_strategy() -> impl Strategy<Value = char> {
+    let printable = ('!'..='~')
+        .filter(|ch| !POSIX_SEPARATORS.contains(ch) && !SYNTAX_CHARACTERS.contains(ch))
+        .chain(NON_SEPARATOR_SPACES);
+    prop::sample::select(printable.collect::<Vec<_>>())
+}
+
+/// Build POSIX bindings whose encodings name their quote context.
+///
+/// A property can then read the context the scanner selected straight out of
+/// the interpolated text, instead of re-deriving the production path quoting
+/// or restating the scanner.
+pub(super) fn context_sentinel_bindings() -> CommandBindings {
+    CommandBindings {
+        shell: RecipeShell::Posix,
+        ins: PathSubstitutions {
+            single_quoted: "SGL".to_owned(),
+            double_quoted: "DBL".to_owned(),
+            unquoted: "UNQ".to_owned(),
+        },
+        outs: PathSubstitutions {
+            single_quoted: "OUT".to_owned(),
+            double_quoted: "OUT".to_owned(),
+            unquoted: "OUT".to_owned(),
+        },
+    }
+}
+
 /// Generate one character that can interact with interpolation syntax.
 fn template_character_strategy() -> impl Strategy<Value = char> {
     prop::sample::select(vec!['$', '`', 'i', 'n', 'o', 'u', 't', '_', 'a', ' '])
