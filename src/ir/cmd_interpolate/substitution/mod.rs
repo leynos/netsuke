@@ -3,14 +3,12 @@
 use super::{
     CommandBindings, IrGenError, QuoteContext,
     command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
-    find_substitution, invalid_command_error, invalid_heredoc_delimiter_error,
-    posix_lexical::{
-        EscapeBeforeMarker, HeredocDeclaration, PosixCharacter, PosixLexicalState,
-        backslash_escapes_marker,
-    },
+    find_substitution, invalid_command_error,
+    posix_lexical::{PosixCharacter, PosixLexicalState, backslash_escapes_marker},
 };
 use crate::recipe_shell::RecipeShell;
 
+mod heredoc;
 mod powershell;
 
 use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
@@ -131,50 +129,6 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         Ok(next)
     }
 
-    /// Preserve unquoted POSIX heredoc declarations and comments.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when a heredoc delimiter would lower a
-    /// marker directly after an active escape, or when the delimiter word uses
-    /// syntax the tracker cannot model. Continuing would let marker lowering
-    /// resume inside text the shell still treats as heredoc data, where command
-    /// substitutions in inserted paths remain executable.
-    fn append_unquoted_posix_lexical_character(
-        &mut self,
-        pos: usize,
-        ch: char,
-    ) -> Result<Option<usize>, IrGenError> {
-        if !self.matches_unquoted_quote_context() || self.is_in_arithmetic_expansion() {
-            return Ok(None);
-        }
-        let mut character = PosixCharacter {
-            chars: self.chars,
-            pos,
-            ch,
-            output: &mut self.output,
-        };
-        let declaration = self
-            .posix_lexical
-            .append_heredoc_declaration(&mut character, self.bindings)
-            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
-        match declaration {
-            HeredocDeclaration::NotADeclaration => {}
-            HeredocDeclaration::Copied(next) => return Ok(Some(next)),
-            HeredocDeclaration::Rejected(reason) => {
-                return Err(invalid_heredoc_delimiter_error(
-                    self.template.to_owned(),
-                    reason,
-                ));
-            }
-        }
-        if PosixLexicalState::starts_comment(self.chars, pos, ch) {
-            self.posix_lexical.begin_comment();
-            self.output.push(ch);
-            return Ok(Some(pos + 1));
-        }
-        Ok(None)
-    }
     /// Preserve shared shell syntax before lowering a marker for its active context.
     fn append_contextual_character(
         &mut self,
