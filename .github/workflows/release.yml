@@ -818,6 +818,11 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
+          # The declaration, the digest record, and the uploader all read
+          # repository files. Pinning the checkout to the candidate keeps them
+          # at the revision the producers built rather than at whatever the
+          # triggering ref resolved to when this job started.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
           persist-credentials: false
       - name: Install uv
         # Pins the interpreter the release helper scripts run under to the
@@ -888,13 +893,16 @@ jobs:
         run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - id: upload_assets
         name: Upload artefacts to release
-        uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        # Selects, declares, and digests this run's assets before uploading
+        # only the declared names, and refuses to replace attached bytes. The
+        # trusted record it retains is what verification and finalization
+        # compare against.
+        uses: ./.github/actions/upload-declared-assets
         with:
           release-tag: ${{ needs.metadata.outputs.release_tag }}
-          bin-name: ${{ needs.metadata.outputs.bin_name }}
-          dist-dir: dist
           dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
+          commit: ${{ needs.metadata.outputs.candidate_commit }}
+          version: ${{ needs.metadata.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

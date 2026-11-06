@@ -2446,10 +2446,31 @@ and macOS builds, and Ubicloud has no Windows runners to move either to.
 The dry run still enters the `release` job to rehearse staging. The package
 jobs upload their packages as workflow artefacts under
 `should_upload_package_artifacts`; the release job downloads them, hoists and
-validates the cargo-binstall archive pairs, then asks `upload-release-assets`
-to validate the upload plan. Its `dry-run` input prevents any release upload,
-and the draft-creation step is publish-only. Build diagnostic artefacts remain
-behind `should_upload_workflow_artifacts`, which stays false during dry runs.
+validates the cargo-binstall archive pairs, then asks the shared
+`upload-release-assets` action to validate the upload plan. Its `dry-run` input
+prevents any release upload, and the draft-creation step is publish-only. Build
+diagnostic artefacts remain behind `should_upload_workflow_artifacts`, which
+stays false during dry runs.
+
+The publishing lane takes the same download and hoist path but hands the result
+to `./.github/actions/upload-declared-assets` instead. That action selects only
+the artefacts this run's producer records vouch for, writes the declaration and
+the trusted digest record from the staged bytes, retains all three files as the
+`declared-assets-${{ github.job }}` workflow artefact, and only then uploads
+the declared names. The shared action remains in use by the rehearsal, so the
+same `dry-run` expression decides both lanes' mode. `publish-release` checks
+out the candidate commit rather than the triggering ref, because the selection,
+the declaration, and the uploader all read repository files and those files
+must be the ones the producers built.
+
+The publishing lane's upload action never fails its own step. It captures the
+uploader's status, writes `upload-error` and `error-message` outputs, and exits
+0; the job's own `Check asset upload errors` step turns a `true` into a
+diagnostic and an exit 1. That hand-off is what the shared action already did,
+and keeping it means the surrounding steps did not move: the outcome record
+still reads `UPLOAD_ERROR_PRESENT` from the output, and
+`release_operation_records` still classifies a planned-but-refused upload as
+`upload_plan_validation` from the flag rather than from a phase outcome.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
@@ -3090,15 +3111,17 @@ publish. That statement is the digest record: `{"assets": {name: digest}}`,
 written by `release_declaration_cli --digest-record` from the staged tree in
 the same run that declares the names, and read by both later consumers.
 
-The provenance chain has four links and each one refuses rather than
+The provenance chain has five links and each one refuses rather than
 interpolates.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
 2. `release_declaration_cli --digest-record` writes those digests to the record.
-3. `verify_release_inventory_cli --trusted` compares every downloaded asset
+3. `upload_declared_assets_cli --digest-record` refuses a payload whose bytes
+   disagree with the record, and uploads only names the record covers.
+4. `verify_release_inventory_cli --trusted` compares every downloaded asset
    against the record, and refuses a record that does not cover exactly the
    declared set.
-4. `finalize_github_release_cli --identity` reads the same record to decide what
+5. `finalize_github_release_cli --identity` reads the same record to decide what
    a re-run should do.
 
 The record is never derived from downloaded bytes, and that is the whole point.
@@ -3311,11 +3334,11 @@ not move it out of harm's way.
 
 Two targets cover this surface, and neither runs the other.
 
-`make test-release-publication` runs the thirty-six `scripts/tests/test_*.py`
-modules for the release-policy CLIs and their library modules, then runs the
-same source modules under `--doctest-modules`, so the examples in their
-docstrings execute. The recipe pins the interpreter, pytest, and hypothesis,
-and passes `-c /dev/null --rootdir=. -p no:cacheprovider`: without the isolated
+`make test-release-publication` runs the `scripts/tests/test_*.py` modules for
+the release-policy CLIs and their library modules, then runs the same source
+modules under `--doctest-modules`, so the examples in their docstrings execute.
+The recipe pins the interpreter, pytest, and hypothesis, and passes
+`-c /dev/null --rootdir=. -p no:cacheprovider`: without the isolated
 configuration a root `pyproject.toml` supplies plugins and options and the
 command stops describing what it runs. It requires `PYTHONPATH=scripts` because
 the suites import their modules by bare name.

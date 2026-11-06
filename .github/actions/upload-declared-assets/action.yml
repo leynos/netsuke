@@ -1,0 +1,163 @@
+---
+name: Upload declared assets
+description: >-
+  Select this run's declared release assets, declare and digest them from the
+  staged bytes, retain that trusted record, and upload only the names the
+  release declares without ever replacing attached bytes.
+
+inputs:
+  release-tag:
+    description: >-
+      The validated release tag to reconcile against. A rehearsal supplies a
+      non-empty ref instead, because the plan is still worth recording even
+      though nothing is uploaded.
+    required: true
+  dry-run:
+    description: >-
+      When `true`, reconcile and plan but upload nothing. The caller passes the
+      same mode output that decides whether the run publishes at all.
+    required: false
+    default: 'false'
+  commit:
+    description: >-
+      The full commit the release publishes, forwarded from the metadata job so
+      the producer records are bound to the candidate this run declares.
+    required: true
+  version:
+    description: The release version that the archive names interpolate.
+    required: true
+  dist-dir:
+    description: The staged tree the download and hoist steps left behind.
+    required: false
+    default: dist
+  staging-config:
+    description: The release staging configuration naming targets and platforms.
+    required: false
+    default: .github/release-staging.toml
+  manifest:
+    description: The Cargo manifest naming the package the archives belong to.
+    required: false
+    default: Cargo.toml
+
+outputs:
+  upload-error:
+    description: >-
+      `true` when the upload step could not reconcile or complete, so the
+      caller's own failure step reports it after the telemetry is recorded.
+    value: ${{ steps.upload.outputs.upload-error }}
+  error-message:
+    description: The upload step's diagnostic, empty when it succeeded.
+    value: ${{ steps.upload.outputs.error-message }}
+
+runs:
+  using: composite
+  steps:
+    - name: Select the declared release payload
+      id: select
+      shell: bash
+      env:
+        RELEASE_DIST_DIR: ${{ inputs['dist-dir'] }}
+        RELEASE_STAGING_CONFIG: ${{ inputs['staging-config'] }}
+        RELEASE_MANIFEST: ${{ inputs.manifest }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        RELEASE_COMMIT: ${{ inputs.commit }}
+        DECLARED_ASSETS_ROOT: ${{ runner.temp }}/declared-assets
+      run: |
+        set -euo pipefail
+        # Everything this action produces lives outside the workspace: the
+        # staged tree is walked for declaration and hashing, so a payload or a
+        # record written inside it would be indexed as a candidate.
+        mkdir -p "$DECLARED_ASSETS_ROOT"
+        # The output directory must not exist yet, so a payload left by an
+        # earlier attempt on the same runner is refused rather than merged.
+        uv run --no-project --python 3.14 scripts/select_release_payload_cli.py \
+          --dist-dir "$RELEASE_DIST_DIR" \
+          --staging-config "$RELEASE_STAGING_CONFIG" \
+          --manifest "$RELEASE_MANIFEST" \
+          --version "$RELEASE_VERSION" \
+          --commit "$RELEASE_COMMIT" \
+          --run-id "$GITHUB_RUN_ID" \
+          --output-dir "$DECLARED_ASSETS_ROOT/selected" \
+          --digest-record "$DECLARED_ASSETS_ROOT/selection.json"
+
+    - name: Declare the release asset names
+      id: declare
+      shell: bash
+      env:
+        RELEASE_DIST_DIR: ${{ inputs['dist-dir'] }}
+        RELEASE_STAGING_CONFIG: ${{ inputs['staging-config'] }}
+        RELEASE_MANIFEST: ${{ inputs.manifest }}
+        RELEASE_VERSION: ${{ inputs.version }}
+        DECLARED_ASSETS_ROOT: ${{ runner.temp }}/declared-assets
+      run: |
+        set -euo pipefail
+        # The declaration and its digest record are produced from the staged
+        # bytes, not from the selection, so the uploader compares the payload
+        # against an independent account of the same tree. This record is what
+        # travels to verification and finalization.
+        uv run --no-project --python 3.14 scripts/release_declaration_cli.py \
+          --dist-dir "$RELEASE_DIST_DIR" \
+          --staging-config "$RELEASE_STAGING_CONFIG" \
+          --manifest "$RELEASE_MANIFEST" \
+          --version "$RELEASE_VERSION" \
+          --output "$DECLARED_ASSETS_ROOT/declaration.txt" \
+          --digest-record "$DECLARED_ASSETS_ROOT/trusted.json"
+
+    - name: Retain the declared asset record
+      id: retain
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      with:
+        # v7.0.1. The record is retained before the upload because a conflicting
+        # release fails the job later, and a failure must not cost the operator
+        # the evidence of what this run declared.
+        name: declared-assets-${{ github.job }}
+        path: |
+          ${{ runner.temp }}/declared-assets/declaration.txt
+          ${{ runner.temp }}/declared-assets/selection.json
+          ${{ runner.temp }}/declared-assets/trusted.json
+        if-no-files-found: error
+
+    - name: Upload the declared release assets
+      id: upload
+      shell: bash
+      env:
+        RELEASE_TAG: ${{ inputs['release-tag'] }}
+        RELEASE_DRY_RUN: ${{ inputs['dry-run'] }}
+        DECLARED_ASSETS_ROOT: ${{ runner.temp }}/declared-assets
+      run: |
+        set -euo pipefail
+        case "$RELEASE_DRY_RUN" in
+          true) upload_mode=(--dry-run) ;;
+          false) upload_mode=() ;;
+          *)
+            printf 'dry-run must be true or false, got %s\n' "$RELEASE_DRY_RUN" >&2
+            exit 1
+            ;;
+        esac
+        upload_status=0
+        uv run --no-project --python 3.14 scripts/upload_declared_assets_cli.py \
+          --release-tag "$RELEASE_TAG" \
+          --payload-dir "$DECLARED_ASSETS_ROOT/selected/payload" \
+          --digest-record "$DECLARED_ASSETS_ROOT/trusted.json" \
+          --plan "$DECLARED_ASSETS_ROOT/upload-plan.json" \
+          "${upload_mode[@]}" \
+          2>"$DECLARED_ASSETS_ROOT/upload-error.txt" || upload_status=$?
+        upload_error=false
+        upload_message=''
+        if [[ "$upload_status" -ne 0 ]]; then
+          upload_error=true
+          upload_message="$(cat "$DECLARED_ASSETS_ROOT/upload-error.txt")"
+        fi
+        # A delimiter no diagnostic line can be: the shell's own pid plus two
+        # random draws, so a multi-line refusal survives the output encoding.
+        delimiter="EOF_${RANDOM}${RANDOM}_$$"
+        {
+          printf 'upload-error=%s\n' "$upload_error"
+          printf 'error-message<<%s\n' "$delimiter"
+          printf '%s\n' "$upload_message"
+          printf '%s\n' "$delimiter"
+        } >>"$GITHUB_OUTPUT"
+        # The failure is deferred rather than raised here. The caller's own
+        # step reports it, which leaves this step successful so the operation
+        # telemetry that follows still runs and records the plan.
+        exit 0
