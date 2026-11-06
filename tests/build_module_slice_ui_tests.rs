@@ -34,6 +34,8 @@ const SIBLING_DECLARATIONS: &[&str] = &[
     "mod cli_localization;",
     "#[path = \"src/host/pattern.rs\"]",
     "mod host_pattern;",
+    "#[path = \"src/shell_selection/mod.rs\"]",
+    "pub mod shell_selection;",
     "#[path = \"src/locale/catalogues.rs\"]",
     "pub mod locale_catalogues;",
     "#[path = \"src/localization/mod.rs\"]",
@@ -53,10 +55,17 @@ const BUILD_SCRIPT_ONLY_DECLARATION: &str = "mod build_l10n_audit;";
 const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
     "src/cli/command.rs",
     "src/cli/config/mod.rs",
+    "src/cli/config/defaults.rs",
     "src/cli/config/validation.rs",
     "src/cli/config/budget.rs",
     "src/cli/config/no_input.rs",
     "src/cli/config/policy_definitions.rs",
+    "src/cli/config/shells/mod.rs",
+    "src/cli/config/shells/arguments.rs",
+    "src/cli/config/shells/compose.rs",
+    "src/cli/config/shells/definition.rs",
+    "src/cli/config/shells/executable.rs",
+    "src/cli/config/shells/preview.rs",
     "src/cli/help.rs",
     "src/cli/validation.rs",
 ];
@@ -167,8 +176,8 @@ fn slice_declarations(source: &str, start: usize) -> Vec<&str> {
 ///
 /// A path attribute belongs to whatever follows it, so it is matched as a line
 /// in its own right; the module, re-export, and closing-brace forms are matched
-/// by their shape. Nothing here admits a `use` import or an item definition, so
-/// an unrelated addition cannot be mistaken for slice membership.
+/// by their shape. Nothing here admits a `use` import or an item
+/// definition, so an unrelated addition cannot be mistaken for slice membership.
 fn is_slice_declaration(line: &str) -> bool {
     SLICE_DECLARATION_FORMS.iter().any(|is_form| is_form(line))
 }

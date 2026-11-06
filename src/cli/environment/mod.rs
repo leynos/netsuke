@@ -5,7 +5,7 @@ use std::ffi::{OsStr, OsString};
 use ortho_config::figment::value::{Dict, Map, Value};
 use ortho_config::figment::{Error, Metadata, Profile, Provider};
 
-use super::constants::ENV_PREFIX;
+use super::constants::{ENV_PREFIX, SHELLS_KEY};
 
 /// Fixed rejection text for a key that claims the Netsuke prefix but is not
 /// UTF-8. The raw key is never included: it is untrusted, unbounded, and may
@@ -14,6 +14,9 @@ const NON_UTF8_KEY: &str = "non-UTF-8 environment key";
 /// Fixed rejection text for a non-UTF-8 value. The raw value is never
 /// included, for the same reasons.
 const NON_UTF8_VALUE: &str = "non-UTF-8 environment value";
+/// Fixed rejection text for the file-only `shells` key.
+const SHELLS_IN_ENVIRONMENT: &str =
+    "the `shells` key may only be declared in a configuration file, not in the environment";
 
 /// Environment layer backed by an owned, injected snapshot.
 pub(super) struct EnvironmentLayer {
@@ -75,6 +78,18 @@ fn parse_entry(key: &OsStr, value: &OsStr) -> Result<Option<(Vec<String>, Value)
     if components.is_empty() {
         return Ok(None);
     }
+    // `shells` declares executable policy, so it is a file-only key. Reject it
+    // on the normalized leading component, which covers case and whitespace
+    // variation as well as nested `NETSUKE_SHELLS__...` spellings.
+    if components
+        .first()
+        .is_some_and(|component| component == SHELLS_KEY)
+    {
+        return Err(Box::new(reject_disallowed(
+            SHELLS_IN_ENVIRONMENT,
+            "shells_in_environment",
+        )));
+    }
     let Some(value_text) = value.to_str() else {
         return Err(Box::new(reject(NON_UTF8_VALUE, "non_utf8_value")));
     };
@@ -119,6 +134,15 @@ fn decode_key(key: &OsStr) -> KeyDecode<'_> {
 /// are untrusted and may carry secrets.
 fn reject(message: &'static str, failure_kind: &'static str) -> Error {
     tracing::warn!(failure_kind, "rejected non-UTF-8 injected configuration");
+    Error::from(message.to_owned())
+}
+
+/// Build the rejection error for an environment key that may not be injected.
+///
+/// Like [`reject`], this records only the bounded `failure_kind` and never the
+/// offending key or value.
+fn reject_disallowed(message: &'static str, failure_kind: &'static str) -> Error {
+    tracing::warn!(failure_kind, "rejected disallowed injected configuration");
     Error::from(message.to_owned())
 }
 
