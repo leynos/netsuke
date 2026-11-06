@@ -9,9 +9,8 @@ use super::RecipeShell;
 use super::command_list::command_list_shell_text;
 use super::error::NinjaGenError;
 use super::escape::{ShellText, escape_metadata_value};
-use super::recipe_shell::escape_posix_script;
+use super::recipe_shell::{InterpreterBinding, escape_posix_script};
 use crate::ast::{CommandIsolation, Recipe, StringOrList};
-use crate::recipe_shell::BashExecutable;
 use std::fmt::Write;
 
 /// Wrapper struct to display a rule with its identifier.
@@ -132,26 +131,16 @@ impl NamedAction<'_> {
         ShellText::new(cmd)
     }
 
-    /// Writes this action's Ninja rule, escaping only the shell-text boundary.
+    /// Writes this action's Ninja rule with one interpreter binding.
     ///
     /// # Errors
     ///
     /// Returns [`NinjaGenError`] when the recipe, metadata, or output cannot be
-    /// rendered safely.
-    pub(crate) fn write_into<W: Write>(&self, output: &mut W) -> Result<(), NinjaGenError> {
-        self.write_into_with_bash(output, None)
-    }
-
-    /// Write one action using the optional runner-selected Bash executable.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`NinjaGenError`] when the recipe, metadata, or output cannot be
-    /// rendered safely.
-    pub(crate) fn write_into_with_bash<W: Write>(
+    /// rendered safely, or when the interpreter has no execution binding.
+    pub(crate) fn write_into_with_interpreter<W: Write>(
         &self,
         output: &mut W,
-        bash_executable: Option<&BashExecutable>,
+        binding: InterpreterBinding<'_>,
     ) -> Result<(), NinjaGenError> {
         let shell_text = self.shell_text()?;
         let command = match (&self.action.recipe, self.shell) {
@@ -161,10 +150,12 @@ impl NamedAction<'_> {
                     isolation: CommandIsolation::Isolated,
                 },
                 RecipeShell::PowerShell,
-            ) => self.shell.isolated_command_list_value(&shell_text)?,
+            ) => self
+                .shell
+                .isolated_command_list_value(&shell_text, binding)?,
             _ => self
                 .shell
-                .command_value_with_bash(&shell_text, bash_executable)?,
+                .command_value_with_interpreter(&shell_text, binding)?,
         };
         writeln!(output, "rule {}", self.id)?;
         writeln!(output, "  command = {}", command.command())?;

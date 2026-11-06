@@ -20,9 +20,23 @@
   `--explain` prints the rule reference. Suppression is a comment that names
   the rules it silences and states a reason; there is no blanket disable
   ([#592](https://github.com/leynos/netsuke/issues/592))
+- Add the public `InterpreterExecutable` binding, its
+  `InterpreterExecutableError` rejection, `generate_with_interpreter`, and
+  `generate_bundle_with_interpreter`, so embedders can render Windows recipes
+  against a trusted absolute interpreter. `NinjaGenError` gains
+  `InterpreterBindingRequired` and `PowerShellParentCommandLineTooLong`
+  ([#980](https://github.com/leynos/netsuke/issues/980))
 
 ### Changed
 
+- **Breaking:** `generate` now resolves the Windows Bash compatibility runtime
+  and writes its absolute path. When no `bash.exe` is available it fails with a
+  missing-runtime diagnostic and writes no plan, instead of emitting the bare
+  name for later `PATH` resolution. Library callers rendering Bash commands on
+  any platform, or PowerShell commands on non-Windows platforms, must supply a
+  binding or receive `NinjaGenError::InterpreterBindingRequired`; on Windows
+  the library `generate` entry points resolve the trusted PowerShell binding
+  themselves ([#980](https://github.com/leynos/netsuke/issues/980)).
 - Bump `ortho_config` from 0.9.0 to 0.10.0 in the library, build-dependency,
   and build-slice fixture manifests, and `cargo-orthohelp` from 0.9.1 to 0.10.0
   in the release workflow. Release help now emits OrthoConfig documentation IR
@@ -42,12 +56,19 @@
   literal backslash, or place the marker inside single quotes
   ([#984](https://github.com/leynos/netsuke/issues/984))
 
-### Fixed
+### Security
 
 - Preserve `script` bytes byte for byte through the `printf %b` transport, so a
   literal backslash sequence supplied through a placeholder, `env()`, or
   `shell_quote` cannot be reconstructed as shell syntax
   ([#967](https://github.com/leynos/netsuke/issues/967))
+- Bind Windows recipe interpreters to a trusted absolute path. PowerShell
+  recipes now invoke `<System>\WindowsPowerShell\v1.0\powershell.exe` resolved
+  through the Known Folder API, in both the inline and response-file
+  transports, so a workspace-controlled `powershell.exe` in the current
+  directory or first on `PATH` is no longer selected and cannot run with the
+  build process's authority (CWE-427)
+  ([#980](https://github.com/leynos/netsuke/issues/980))
 
 ## [0.1.0-beta4] - 2026-09-26
 

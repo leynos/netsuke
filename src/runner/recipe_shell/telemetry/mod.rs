@@ -1,7 +1,7 @@
 //! Bounded observability for recipe-shell selection and legacy runner work.
 //!
 //! This module records shell-resolution and Bash-preflight outcomes, as well as
-//! complete generated-recipe build and Ninja-tool operations. Recipe text,
+//! complete generated-recipe build, generate, and Ninja-tool operations. Recipe text,
 //! environment values, command lines, paths, Bash output, and process statuses
 //! are user-controlled or unbounded, so operation telemetry uses only bounded
 //! operation, shell, outcome, and failure-category labels at the runner
@@ -32,6 +32,8 @@ pub const LEGACY_RECIPE_EXECUTION_DURATION: &str =
 pub(in crate::runner) enum LegacyRecipeOperation {
     /// Represent a Ninja build invocation.
     Build,
+    /// Represent a Ninja file generation without invocation.
+    Generate,
     /// Represent a Ninja tool invocation.
     NinjaTool,
 }
@@ -41,6 +43,7 @@ impl LegacyRecipeOperation {
     const fn label(self) -> &'static str {
         match self {
             Self::Build => "build",
+            Self::Generate => "generate",
             Self::NinjaTool => "ninja_tool",
         }
     }
@@ -245,11 +248,11 @@ fn describe_metrics() {
         );
         describe_counter!(
             LEGACY_RECIPE_EXECUTIONS_TOTAL,
-            "Counts complete runner build and Ninja-tool operations by bounded labels."
+            "Counts complete runner build, generate, and Ninja-tool operations by bounded labels."
         );
         describe_histogram!(
             LEGACY_RECIPE_EXECUTION_DURATION,
-            "Measures complete runner build and Ninja-tool operation duration in seconds by bounded labels."
+            "Measures complete runner build, generate, and Ninja-tool operation duration in seconds by bounded labels."
         );
     });
 }

@@ -2,6 +2,8 @@
 
 use super::*;
 
+use crate::ninja_gen::InterpreterBinding;
+use crate::ninja_gen::test_support::power_shell_interpreter;
 use anyhow::{Context, Result, ensure};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use test_support::ninja_semantics::ResponseFileContent;
@@ -122,7 +124,10 @@ fn isolated_power_shell_lists_use_fresh_encoded_children() -> Result<()> {
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut rendered)?;
+    .write_into_with_interpreter(
+        &mut rendered,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
 
     let parent = decode_power_shell_payload(direct_command_payload(&rendered)?)?;
     verify_isolated_parent(&parent)?;
@@ -149,7 +154,10 @@ fn isolated_power_shell_rejects_child_command_lines_over_the_windows_limit() -> 
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut String::new())
+    .write_into_with_interpreter(
+        &mut String::new(),
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )
     .expect_err("oversized child command line should fail before emission");
     ensure!(
         matches!(
@@ -185,7 +193,10 @@ fn isolated_power_shell_parent_uses_response_file_for_large_lists() -> Result<()
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut rendered)?;
+    .write_into_with_interpreter(
+        &mut rendered,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
     ensure!(rendered.contains("-File \"$rspfile\""));
     ensure!(!rendered.contains("-EncodedCommand"));
     let response = rendered

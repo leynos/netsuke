@@ -413,6 +413,30 @@ in both directions, so a new stdlib helper has to state what each restricted
 surface does with it, and adding a literal registration without a row fails the
 gate.
 
+### Recipe interpreter binding
+
+Recipe rendering never searches for an interpreter. `InterpreterExecutable`
+wraps the absolute path of a Windows recipe interpreter, and
+`InterpreterExecutable::from_absolute_path` is the only constructor: it rejects
+a relative path with `InterpreterExecutableError::RelativePath` and a path
+containing a NUL byte with `NulCharacter`. The renderer treats the binding as
+the complete answer, so it neither reads `PATH` nor inspects the filesystem.
+
+The library entry points `generate`, `generate_into`, `generate_with_shell`, and
+`generate_bundle` resolve one default before rendering. On Windows they bind
+`<System>\WindowsPowerShell\v1.0\powershell.exe` for PowerShell recipes through
+the known-folder locator; for Bash, and on every other platform, they bind
+nothing. Rendering a recipe whose interpreter is unbound fails with
+`NinjaGenError::InterpreterBindingRequired`, while a dependency-only graph
+still renders because it has no command.
+
+An embedder that needs a binding on another shell or platform calls
+`generate_with_interpreter` or `generate_bundle_with_interpreter` with an
+`InterpreterExecutable` it constructed. Rendering is a pure function of the
+graph, shell, and binding, so the trust decision belongs to that caller:
+nothing verifies an Authenticode signature, and Ninja launches whatever file
+occupies the bound path at execution time.
+
 ### Ninja invocation with an explicit environment
 
 A program calling Netsuke's Rust API can invoke Ninja without touching its own
@@ -933,40 +957,67 @@ The lowering stages have deliberately separate responsibilities:
   emits its marker only for non-zero exit status, so `exit 0` leaves no stale
   attribution marker.
 - On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
-  encoded `powershell.exe` invocations while they fit the Windows command-line
-  limit. Recipes up to 1 MiB use Ninja's per-edge `rspfile` and
-  `rspfile_content` bindings; the size check covers the complete parent text,
-  including encoded isolated-entry payloads. Ninja derives a unique `$out`-based
-  `.ps1` response-file name, creates it in the edge's working directory with
-  an ASCII PowerShell bootstrap containing the Base64 UTF-16LE payload, and
-  invokes it with `powershell.exe -File "$rspfile"`. The bootstrap removes its
-  own `$PSCommandPath` in a `finally` block after the recipe succeeds or fails;
-  query-only generation emits the bindings without creating files. Shared lists
-  become one PowerShell script that checks `$LASTEXITCODE` after each entry and
-  carries PowerShell state forward. Isolated lists encode each entry with a
-  cmdlet `ErrorAction` default of `Stop` and native stderr pass-through, then
-  launch a fresh `"$PSHOME\powershell.exe"` from the unchanged parent baseline
-  and stop when a child returns non-zero. The parent also passes through native
-  stderr so a successful child that reports diagnostics does not stop dispatch.
-  Netsuke rejects statically oversized child command lines during generation;
-  the parent also checks the expanded `$PSHOME` executable path before launch
-  and reports the entry and final length if it exceeds 32,766 characters.
-  Multiple native commands inside one entry are not individually instrumented.
-  Cmdlet errors and non-zero native exits stop isolated entries; native stderr
-  alone does not. The POSIX command-list analyser is deliberately not applied
-  to this route; PowerShell does not emit POSIX failure markers. The runner
-  resolves `NETSUKE_WINDOWS_SHELL` and preflights Bash for build and Ninja-tool
-  operations only when the optional compatibility route is selected. Target
-  discovery and `generate` stay outside the runtime probe. The runner-owned
-  `src/runner/recipe_shell/bash_runtime.rs` lookup reads injected `PATH` once,
-  follows its left-to-right order, and skips empty entries. It does not call
-  Jinja's `which` resolver, whose workspace fallback has different semantics.
-  The selected absolute path is stored as `BashExecutable` and passed through
-  runner bundle generation, so preflight and rule execution use one identity.
-  Query-only and library generators keep `bash.exe` as a logical command name;
-  a plan saved by `generate` resolves it from `PATH` when Ninja later runs.
-  Runner build plans contain the selected absolute path and assume that
-  executable remains available there.
+  encoded invocations of a trusted absolute `powershell.exe` while they fit the
+  Windows command-line limit. The parent executable is never the bare name
+  `powershell.exe`: `src/power_shell_location/mod.rs` builds
+  `<System>\WindowsPowerShell\v1.0\powershell.exe` from the Known Folder API's
+  system directory and returns the shared `InterpreterExecutable` binding. It
+  does not read `PATH`, the current directory, `SystemRoot`, `WINDIR` or
+  `PSHOME`, does not select `pwsh.exe`, and does not launch a candidate as a
+  probe. The binding authenticates location only; it performs no Authenticode
+  verification, and the resolution-to-launch race therefore remains. Every
+  rendered parent quotes the absolute path before the fixed arguments, so
+  Windows executable search cannot choose a workspace-controlled file. The
+  inline length check counts the complete unescaped command in UTF-16 code
+  units, executable and arguments before the Base64 payload, and applies Ninja
+  escaping only afterwards. Recipes up to 1 MiB use Ninja's per-edge `rspfile`
+  and `rspfile_content` bindings; the size check covers the complete parent
+  text, including encoded isolated-entry payloads. Ninja derives a unique
+  `$out`-based `.ps1` response-file name, creates it in the edge's working
+  directory with an ASCII PowerShell bootstrap containing the Base64 UTF-16LE
+  payload, and invokes it with the same bound absolute executable followed by
+  `-File "$rspfile"`. The bootstrap removes its own `$PSCommandPath` in a
+  `finally` block after the recipe succeeds or fails; query-only generation
+  emits the bindings without creating files. A response-file parent that would
+  itself exceed 32,766 UTF-16 code units is rejected during generation rather
+  than rendered. Shared lists become one PowerShell script that checks
+  `$LASTEXITCODE` after each entry and carries PowerShell state forward.
+  Isolated lists encode each entry with a cmdlet `ErrorAction` default of
+  `Stop` and native stderr pass-through, then launch a fresh
+  `"$PSHOME\powershell.exe"` from the unchanged parent baseline and stop when a
+  child returns non-zero. The parent also passes through native stderr so a
+  successful child that reports diagnostics does not stop dispatch. Netsuke
+  rejects statically oversized child command lines during generation; the
+  parent also checks the expanded `$PSHOME` executable path before launch and
+  reports the entry and final length if it exceeds 32,766 characters. Multiple
+  native commands inside one entry are not individually instrumented. Cmdlet
+  errors and non-zero native exits stop isolated entries; native stderr alone
+  does not. The POSIX command-list analyser is deliberately not applied to this
+  route; PowerShell does not emit POSIX failure markers. The runner resolves
+  `NETSUKE_WINDOWS_SHELL` and selects one interpreter binding through the
+  dispatcher in `src/runner/recipe_shell/mod.rs`. PowerShell resolves through
+  the trusted locator on Windows;
+  `src/runner/recipe_shell/power_shell_runtime.rs` converts a locator failure
+  into a diagnostic that names the expected path, states that no `PATH`
+  fallback occurs, and names `NETSUKE_WINDOWS_SHELL=bash` as the compatibility
+  route. The optional Bash route uses the unchanged
+  `src/runner/recipe_shell/bash_runtime.rs` lookup, which reads injected `PATH`
+  once, follows its left-to-right order, and skips empty entries. It does not
+  call Jinja's `which` resolver, whose workspace fallback has different
+  semantics. Both paths yield the shared `InterpreterExecutable`, so preflight,
+  rule execution and `generate` use one identity. Bindings are resolved for
+  build operations, Ninja-tool operations including clean, and `generate`.
+  Target discovery issues no Ninja plan and needs no binding. The renderer
+  keeps an inspection-only mode that emits logical names for renderer tests and
+  future query-only callers; no executing Ninja run consumes one. A `generate`
+  without a resolvable Bash runtime fails with the missing-runtime diagnostic
+  and writes no unbound plan, where it previously emitted the bare name
+  `bash.exe` for later `PATH` resolution. Library generators that take no
+  binding resolve the platform default first: on Windows they bind the trusted
+  PowerShell executable, so PowerShell commands render, while Bash commands
+  there and every PowerShell or Bash command on other platforms are rejected
+  with `NinjaGenError::InterpreterBindingRequired`. Runner build plans contain
+  the selected absolute path and assume that executable remains available there.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
   PowerShell uses its per-entry `$LASTEXITCODE` and cmdlet-error policy
@@ -2329,14 +2380,28 @@ Netsuke is PowerShell. The second step invokes:
 
 The fixture exercises the Windows PowerShell legacy-recipe contract, including
 target discovery, scalar and script recipes, ordered-list state and failure,
-path quoting, and the large-recipe response-file transport. Neither step sets
-`SHELL=bash` or uses Git Bash for its invocation, so the launch boundary
-remains an ordinary PowerShell session. The rest of `build-test-windows`
-continues to use Git Bash only for the repository's POSIX Makefile quality
-gates, exactly as `Lint (Whitaker)` already overrides the default to `pwsh`.
-The smoke harness keeps process environment capture and restoration in
-`scripts/windows-recipe-smoke/environment.ps1`, separate from its scenario
-orchestration and path-placeholder fixture helpers.
+path quoting, and the large-recipe response-file transport. It also proves the
+trusted interpreter binding: `powershell-paths.ps1` compiles decoy
+`powershell.exe` programs, places them in the current directory and first on
+`PATH`, and requires both a small and an oversize recipe to produce their real
+output without writing the decoy marker. `bash.ps1` requires `generate` to fail
+with `PATH contains no bash.exe` and to leave no plan behind when Bash is
+selected without a runtime. Because `Add-Type` rejects
+`-OutputType ConsoleApplication` under PowerShell 7.1 and later,
+`powershell-paths.ps1` compiles the decoys with the .NET Framework C# compiler,
+`%SystemRoot%\Microsoft.NET\Framework64\v4.0.30319\csc.exe`, falling back to
+the 32-bit `Framework` directory. The native smoke run therefore needs a
+Windows host carrying that compiler, which the Windows images provide; the
+`windows_recipe_interpreter_binding_tests` integration test covers the same
+decoys through `compile_rust_helper` on the CI image and skips the Ninja
+execution step when `ninja.exe` is absent unless `NETSUKE_REQUIRE_NINJA=1`.
+Neither step sets `SHELL=bash` or uses Git Bash for its invocation, so the
+launch boundary remains an ordinary PowerShell session. The rest of
+`build-test-windows` continues to use Git Bash only for the repository's POSIX
+Makefile quality gates, exactly as `Lint (Whitaker)` already overrides the
+default to `pwsh`. The smoke harness keeps process environment capture and
+restoration in `scripts/windows-recipe-smoke/environment.ps1`, separate from
+its scenario orchestration and path-placeholder fixture helpers.
 
 These steps were in a second job, `windows-native-recipe-smoke`, that `needs`-ed
 `build-test-windows`. That made it a strict serial tail on every pull request:
@@ -7056,11 +7121,12 @@ or add manifest-controlled values to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
-optional preflighted `BashExecutable`, and injected monotonic clock solely for
-this graph-generation composition path. Build and Ninja-tool operations attach
-the runtime binding after preflight; query-only generation leaves it absent. It
-is not a general runner context, shared state container, or reusable public
-API; keep unrelated runner inputs and concerns outside it.
+optional preflighted `InterpreterExecutable`, and injected monotonic clock
+solely for this graph-generation composition path. Build, Ninja-tool, and CLI
+`generate` operations attach the runtime binding after preflight; query-only
+target discovery leaves it absent. It is not a general runner context, shared
+state container, or reusable public API; keep unrelated runner inputs and
+concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that

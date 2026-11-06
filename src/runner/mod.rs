@@ -170,7 +170,7 @@ fn run_with_ninja_program_resolver(
         ninja_program: &ninja_program,
         graph_generation: GraphGenerationContext {
             recipe_shell,
-            bash_executable: None,
+            interpreter_binding: None,
             clock: &clock,
         },
     };
@@ -194,12 +194,9 @@ fn handle_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) -> 
         LegacyRecipeOperation::Build,
         context.graph_generation.recipe_shell,
         || {
-            let graph_generation =
-                context
-                    .graph_generation
-                    .with_bash_executable(recipe_shell::resolve_bash_runtime(
-                        context.graph_generation.recipe_shell,
-                    )?);
+            let graph_generation = context.graph_generation.with_interpreter_binding(
+                recipe_shell::resolve_interpreter_binding(context.graph_generation.recipe_shell)?,
+            );
             execute_build(cli, args, context, &graph_generation)
         },
     )
@@ -301,12 +298,9 @@ fn handle_ninja_tool(
         LegacyRecipeOperation::NinjaTool,
         context.graph_generation.recipe_shell,
         || {
-            let graph_generation =
-                context
-                    .graph_generation
-                    .with_bash_executable(recipe_shell::resolve_bash_runtime(
-                        context.graph_generation.recipe_shell,
-                    )?);
+            let graph_generation = context.graph_generation.with_interpreter_binding(
+                recipe_shell::resolve_interpreter_binding(context.graph_generation.recipe_shell)?,
+            );
             execute_ninja_tool(cli, tool, context, &graph_generation)
         },
     )

@@ -104,18 +104,26 @@ function Assert-BashTargetDiscoveryWithoutRuntime {
     }
 }
 
-function Assert-BashGenerationDefersRuntimeResolution {
+function Assert-BashGenerationRequiresRuntime {
     param(
         [Parameter(Mandatory)]
-        [string]$Netsuke
+        [string]$Netsuke,
+
+        [Parameter(Mandatory)]
+        [string]$PlanPath
     )
 
-    $generated = & $Netsuke generate 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "Generate should not require Bash on PATH: $generated"
+    Remove-Item -LiteralPath $PlanPath -ErrorAction SilentlyContinue
+    $generated = & $Netsuke generate --output $PlanPath 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        throw 'Generate without bash.exe should fail rather than emit an unbound plan.'
     }
-    if (-not ($generated -match 'bash\.exe')) {
-        throw "Generate did not leave Bash executable binding to PATH: $generated"
+    $generatedText = [string]::Join([Environment]::NewLine, [string[]]@($generated))
+    if (-not ($generatedText -match 'PATH contains no bash\.exe')) {
+        throw "Bash generate diagnostics did not distinguish a missing runtime: $generatedText"
+    }
+    if (Test-Path -LiteralPath $PlanPath) {
+        throw 'Generate without bash.exe emitted an unbound Ninja plan.'
     }
 }
 
@@ -152,11 +160,18 @@ function Test-MissingBashRuntimeDiagnostic {
         Get-EnvironmentVariableState -Name 'PATH'
     )
     try {
-        $env:NETSUKE_NINJA = (Get-Command ninja -CommandType Application).Path
+        # Get-Command may report several ninja applications; NETSUKE_NINJA names
+        # exactly one program, so an array would be joined into an invalid path.
+        $ninja = Get-Command ninja -CommandType Application | Select-Object -First 1
+        if (-not $ninja) {
+            throw 'The missing-runtime scenario requires a ninja application on PATH.'
+        }
+        $env:NETSUKE_NINJA = $ninja.Path
         $env:NETSUKE_WINDOWS_SHELL = 'bash'
         $env:PATH = $Workspace
         Assert-BashTargetDiscoveryWithoutRuntime -Netsuke $Netsuke
-        Assert-BashGenerationDefersRuntimeResolution -Netsuke $Netsuke
+        $planPath = Join-Path $Workspace 'bash-generation-must-not-exist.ninja'
+        Assert-BashGenerationRequiresRuntime -Netsuke $Netsuke -PlanPath $planPath
         Assert-MissingBashRuntimeDiagnostic -Netsuke $Netsuke
     }
     finally {

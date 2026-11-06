@@ -25,6 +25,7 @@ pub mod manifest;
 pub mod ninja_gen;
 mod output;
 pub use output::{mode as output_mode, prefs as output_prefs};
+mod power_shell_location;
 pub mod recipe_shell;
 mod result_json;
 pub mod runner;

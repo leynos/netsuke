@@ -4,7 +4,7 @@ use super::super::{RecipeShell, dyndep, test_support::command_action};
 use crate::{
     ast::{CommandIsolation, Recipe, StringOrList},
     ir::BuildGraph,
-    recipe_shell::BashExecutable,
+    recipe_shell::InterpreterExecutable,
 };
 use anyhow::{Result, ensure};
 use camino::Utf8PathBuf;
@@ -26,10 +26,9 @@ fn generated_bundle_binds_the_preflighted_bash_executable() -> Result<()> {
             .join("bash.exe"),
     )
     .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?;
-    let executable = BashExecutable::from_absolute_path(executable_path)?;
+    let executable = InterpreterExecutable::from_absolute_path(executable_path)?;
 
-    let bundle =
-        dyndep::generate_bundle_for_shell_with_bash(&graph, RecipeShell::Bash, Some(&executable))?;
+    let bundle = dyndep::generate_bundle_with_interpreter(&graph, RecipeShell::Bash, &executable)?;
 
     let expected_command = format!(
         "command = \"{}\" -e -c \"echo ready\"",
@@ -73,10 +72,9 @@ fn every_bash_recipe_form_uses_the_preflighted_executable() -> Result<()> {
             .join("bash.exe"),
     )
     .map_err(|_| anyhow::anyhow!("fixture executable path should be UTF-8"))?;
-    let executable = BashExecutable::from_absolute_path(executable_path)?;
+    let executable = InterpreterExecutable::from_absolute_path(executable_path)?;
 
-    let bundle =
-        dyndep::generate_bundle_for_shell_with_bash(&graph, RecipeShell::Bash, Some(&executable))?;
+    let bundle = dyndep::generate_bundle_with_interpreter(&graph, RecipeShell::Bash, &executable)?;
     let binding = format!(
         "command = \"{}\" -e -c ",
         executable.as_path().as_str().replace('$', "$$")

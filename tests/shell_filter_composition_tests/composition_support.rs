@@ -9,12 +9,23 @@
 use anyhow::{Context, Result, ensure};
 use base64::Engine as _;
 
-/// The PowerShell prefix `ninja_gen` puts before the base64 payload.
-pub(super) const POWER_SHELL_PREFIX: &str = "powershell.exe -NoLogo -NoProfile -NonInteractive \
-                                            -ExecutionPolicy Bypass -EncodedCommand ";
+/// The absolute interpreter the composition cases bind into every plan.
+///
+/// These cases select an explicit shell, so the renderer requires a binding
+/// and quotes it as one Windows argument before the fixed shell arguments.
+pub(super) const BOUND_EXECUTABLE: &str = "\"/fixtures/netsuke/interpreter\"";
 
-/// The `bash.exe -e -c ` prefix the Bash transport wraps its script in.
-pub(super) const BASH_PREFIX: &str = "bash.exe -e -c ";
+/// The fixed arguments the PowerShell transport puts after its executable.
+const POWER_SHELL_ARGUMENTS: &str =
+    " -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ";
+
+/// The fixed arguments the Bash transport puts after its executable.
+const BASH_ARGUMENTS: &str = " -e -c ";
+
+/// Build the prefix that introduces a transport's payload.
+fn bound_prefix(arguments: &str) -> String {
+    format!("{BOUND_EXECUTABLE}{arguments}")
+}
 
 /// Prefix every line of `text` with `by` spaces.
 ///
@@ -71,9 +82,10 @@ pub(super) fn list_manifest(entry: &str, value: &str) -> String {
 /// shell is what makes the Bash arm an execution test rather than a shape
 /// assertion.
 pub(super) fn decode_bash_transport(binding: &str) -> Result<String> {
+    let prefix = bound_prefix(BASH_ARGUMENTS);
     let argument = binding
-        .strip_prefix(BASH_PREFIX)
-        .with_context(|| format!("Bash transport should start with {BASH_PREFIX:?}: {binding}"))?;
+        .strip_prefix(&prefix)
+        .with_context(|| format!("Bash transport should start with {prefix:?}: {binding}"))?;
     let inner = argument
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
@@ -115,9 +127,10 @@ pub(super) fn decode_bash_transport(binding: &str) -> Result<String> {
 /// *filter's* output reached the interpreter, rather than only that the
 /// renderer produced a well-formed command.
 pub(super) fn decode_power_shell_transport(binding: &str) -> Result<String> {
+    let prefix = bound_prefix(POWER_SHELL_ARGUMENTS);
     let payload = binding
-        .strip_prefix(POWER_SHELL_PREFIX)
-        .with_context(|| format!("PowerShell transport should start with the prefix: {binding}"))?;
+        .strip_prefix(&prefix)
+        .with_context(|| format!("PowerShell transport should start with {prefix:?}: {binding}"))?;
     let decoded_bytes = base64::engine::general_purpose::STANDARD
         .decode(payload.trim())
         .context("PowerShell payload should be valid base64")?;

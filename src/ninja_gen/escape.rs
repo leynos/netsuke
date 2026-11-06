@@ -21,17 +21,19 @@ impl ShellText {
 
 /// Text safe to emit on the right-hand side of a Ninja binding.
 ///
-/// The POSIX-compatible renderers construct this type through
-/// [`escape_ninja_value`], while the PowerShell renderer constructs an encoded
-/// value whose payload Ninja cannot parse.
+/// Renderers use [`escape_ninja_value`] for the whole value, except when the
+/// value must retain a Ninja variable reference such as `$rspfile`. In that
+/// case the dynamic portion is escaped first and the assembled text is marked
+/// with [`NinjaValue::from_encoded`].
 pub(super) struct NinjaValue(String);
 
 impl NinjaValue {
-    /// Construct a value already safe for Ninja's binding grammar.
+    /// Wrap text whose dynamic portions are already escaped.
     pub(super) const fn from_encoded(value: String) -> Self {
         Self(value)
     }
 }
+
 impl Display for NinjaValue {
     /// Render the already escaped binding text without another conversion.
     fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {

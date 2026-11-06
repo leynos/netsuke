@@ -16,7 +16,10 @@ use netsuke::{
     ast::Recipe,
     ir::{BuildGraph, INS_TOKEN, OUTS_TOKEN},
     manifest,
-    ninja_gen::{NinjaGenError, RecipeShell, generate_with_shell},
+    ninja_gen::{
+        InterpreterExecutable, NinjaGenError, RecipeShell, generate_with_interpreter,
+        generate_with_shell,
+    },
 };
 use pretty_assertions::assert_eq;
 use rstest::{fixture, rstest};
@@ -62,6 +65,25 @@ fn lower_recipe_for_shell(source: &str, shell: RecipeShell) -> Result<(String, B
 fn generate_posix(source: &str) -> Result<String> {
     let (_, graph) = lower_recipe_for_shell(source, RecipeShell::Posix)?;
     Ok(generate_with_shell(&graph, RecipeShell::Posix)?)
+}
+
+/// Generate `graph` for `shell`, binding Bash to an absolute fixture path.
+///
+/// A Bash plan no longer carries the unqualified `bash.exe` name, so the
+/// renderer needs an executable binding even where the plan is only inspected.
+///
+/// # Errors
+/// Return the original Ninja backend error.
+fn generate_for_shell(graph: &BuildGraph, shell: RecipeShell) -> Result<String, NinjaGenError> {
+    match shell {
+        RecipeShell::Posix => generate_with_shell(graph, shell),
+        RecipeShell::Bash | RecipeShell::PowerShell => {
+            let interpreter =
+                InterpreterExecutable::from_absolute_path("/fixtures/netsuke/interpreter".into())
+                    .expect("the fixture interpreter path should be absolute");
+            generate_with_interpreter(graph, shell, &interpreter)
+        }
+    }
 }
 
 #[rstest]
@@ -145,14 +167,14 @@ fn inert_script_regions_preserve_rendered_markers(
     let (lowered, graph) = lower_recipe_for_shell(&source, shell)?;
     assert_eq!(lowered.trim_end_matches('\n'), expected_lowered);
     if kind == "command" && recipe.contains('\n') {
-        let error = generate_with_shell(&graph, shell)
+        let error = generate_for_shell(&graph, shell)
             .expect_err("a multiline command cannot fit one Ninja binding");
         ensure!(
             matches!(error, NinjaGenError::UnsafeNinjaValue),
             "expected unsafe Ninja value, got {error:?}"
         );
     } else {
-        let ninja = generate_with_shell(&graph, shell)?;
+        let ninja = generate_for_shell(&graph, shell)?;
         assert_that!(ninja.as_str(), contains_substring(INS_TOKEN));
         assert_that!(ninja.as_str(), contains_substring(OUTS_TOKEN));
     }

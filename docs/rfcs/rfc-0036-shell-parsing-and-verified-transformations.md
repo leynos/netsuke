@@ -76,7 +76,7 @@ against their own base revisions.
 Current responsibilities span
 [`cmd_interpolate`](../../src/ir/cmd_interpolate/mod.rs),
 [`shell_word`](../../src/shell_word.rs),
-[`recipe_shell`](../../src/recipe_shell.rs),
+[`recipe_shell`](../../src/recipe_shell/mod.rs),
 [`ninja_gen::recipe_shell`](../../src/ninja_gen/recipe_shell/mod.rs), and the
 [`glob` adapter](../../src/manifest/glob/mod.rs). The linter also has a
 [`shellscan`](../../src/lint/rules/shellscan/mod.rs) module. Its advisory

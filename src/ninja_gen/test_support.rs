@@ -2,11 +2,24 @@
 
 use crate::{
     ast::{CommandIsolation, Recipe, StringOrList},
-    ir::{Action, BuildGraph},
+    ir::{Action, BuildEdge, BuildGraph, DependencyOrder},
+    recipe_shell::InterpreterExecutable,
 };
 use anyhow::{Result, bail, ensure};
+use camino::Utf8PathBuf;
 
 use super::{NinjaGenError, generate, generate_bundle, generate_into};
+
+/// Build the fixture Windows PowerShell executable for the test platform.
+pub(super) fn power_shell_interpreter() -> InterpreterExecutable {
+    let path = if cfg!(windows) {
+        r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe"
+    } else {
+        "/fixtures/Windows/System32/WindowsPowerShell/v1.0/powershell.exe"
+    };
+    InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(path))
+        .expect("fixture interpreter path should be absolute and NUL-free")
+}
 
 /// Construct a command action with the stable default metadata used in tests.
 pub(super) const fn command_action(command: StringOrList) -> Action {
@@ -21,6 +34,47 @@ pub(super) const fn command_action(command: StringOrList) -> Action {
         pool: None,
         restat: false,
     }
+}
+
+/// Build one action graph with a single edge whose id names its action.
+fn single_edge_graph(action_id: &str, action: Action, output: &str, phony: bool) -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(action_id.into(), action);
+    graph
+        .insert_edge(BuildEdge {
+            action_id: action_id.into(),
+            inputs: Vec::new(),
+            implicit_deps: Vec::new(),
+            dependency_order: DependencyOrder::Parallel,
+            explicit_outputs: vec![Utf8PathBuf::from(output)],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            progress_label: None,
+            phony,
+            always: false,
+        })
+        .expect("fixture outputs are unique");
+    graph
+}
+
+/// Build one action graph whose single edge renders a command recipe.
+pub(super) fn command_graph() -> BuildGraph {
+    command_graph_with("echo hi")
+}
+
+/// Build one action graph whose single edge renders `command`.
+pub(super) fn command_graph_with(command: &str) -> BuildGraph {
+    single_edge_graph(
+        "run",
+        command_action(StringOrList::String(command.to_owned())),
+        "out",
+        false,
+    )
+}
+
+/// Build one action graph that renders no interpreter command.
+pub(super) fn dependency_only_graph() -> BuildGraph {
+    single_edge_graph("group", command_action(StringOrList::Empty), "group", true)
 }
 
 /// Build one action graph with the requested metadata field populated.

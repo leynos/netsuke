@@ -71,7 +71,7 @@ proptest! {
         script in power_shell_script(),
     ) {
         let encoded = encode_power_shell(&script);
-        let prefix = "  command = powershell.exe -NoProfile -EncodedCommand ";
+        let prefix = r#"  command = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand "#;
         let generated = format!("{prefix}{encoded}\n");
         let document = GeneratedNinja::new(&generated);
 
@@ -119,7 +119,7 @@ proptest! {
             format!("  command = {plaintext}"),
             format!("  rspfile_content = {response_binding}"),
             format!(
-                "  command = powershell.exe -NoProfile -EncodedCommand {}",
+                r#"  command = "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {}"#,
                 encode_power_shell(&command_script)
             ),
         ]

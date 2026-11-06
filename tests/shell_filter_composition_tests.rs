@@ -29,7 +29,9 @@ use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8PathBuf;
 use netsuke::{
     manifest,
-    ninja_gen::{RecipeShell, generate_with_shell},
+    ninja_gen::{
+        InterpreterExecutable, RecipeShell, generate_with_interpreter, generate_with_shell,
+    },
 };
 use rstest::rstest;
 use std::process::Command;
@@ -110,10 +112,20 @@ fn run_posix_shell(shell: &Utf8PathBuf, script: &str) -> Result<String> {
 fn generate(source: &str, shell: RecipeShell) -> Result<String> {
     let parsed = manifest::from_str(source)?;
     let graph = netsuke::ir::BuildGraph::from_manifest_for_shell(&parsed, shell)?;
-    // The `?` converts `NinjaGenError` into the `anyhow::Error` this helper
-    // returns, so it is load-bearing: `clippy::needless_question_mark` does not
-    // flag it, because it is not needless.
-    Ok(generate_with_shell(&graph, shell)?)
+    match shell {
+        RecipeShell::Posix => {
+            // The `?` converts `NinjaGenError` into the `anyhow::Error` this
+            // helper returns, so it is load-bearing: `clippy::needless_question_mark`
+            // does not flag it, because it is not needless.
+            Ok(generate_with_shell(&graph, shell)?)
+        }
+        RecipeShell::PowerShell | RecipeShell::Bash => {
+            let interpreter = InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(
+                "/fixtures/netsuke/interpreter",
+            ))?;
+            Ok(generate_with_interpreter(&graph, shell, &interpreter)?)
+        }
+    }
 }
 
 /// The command binding the generated Ninja carries.

@@ -15,8 +15,17 @@ use super::{GeneratedNinja, PowerShellPayload, RecipeTransport};
 /// Prefix that introduces a Base64 UTF-16LE PowerShell script argument.
 const POWER_SHELL_ENCODED_COMMAND_PREFIX: &str = "-EncodedCommand ";
 
-/// Ninja binding text that introduces a PowerShell command carrying that argument.
-const POWER_SHELL_COMMAND_BINDING_PREFIX: &str = "command = powershell.exe ";
+/// Ninja binding text that introduces a recipe command.
+const COMMAND_BINDING_PREFIX: &str = "command = ";
+
+/// Fixed arguments between a bound PowerShell executable and the payload.
+///
+/// A trusted plan always quotes its absolute executable first, so this suffix
+/// also proves the payload belongs to a bound Windows PowerShell parent rather
+/// than to an unqualified executable name. `-EncodedCommand` itself is the
+/// payload marker, so it is not repeated here.
+const POWER_SHELL_ENCODED_COMMAND_ARGUMENTS: &str =
+    "-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass";
 
 /// Ninja binding text that introduces a response-file Base64 payload.
 ///
@@ -51,7 +60,7 @@ impl PayloadBinding {
     /// generated value carries Ninja's `$$` escaping.
     fn accepts(self, prefix: &str) -> bool {
         match self {
-            Self::PowerShellCommand => prefix.starts_with(POWER_SHELL_COMMAND_BINDING_PREFIX),
+            Self::PowerShellCommand => is_bound_power_shell_command(prefix),
             Self::ResponseFileContent => {
                 let value = prefix
                     .strip_prefix(RESPONSE_FILE_CONTENT_BINDING_PREFIX)
@@ -60,6 +69,32 @@ impl PayloadBinding {
             }
         }
     }
+}
+
+/// Report whether `prefix` starts a bound Windows PowerShell command.
+///
+/// The parent must be a quoted absolute executable followed by the fixed
+/// encoded-command arguments. An unqualified `powershell.exe` parent is
+/// deliberately rejected: Windows would resolve it through its search order,
+/// which is the defect these helpers exist to detect.
+fn is_bound_power_shell_command(prefix: &str) -> bool {
+    let Some(unqualified) = prefix.strip_prefix(COMMAND_BINDING_PREFIX) else {
+        return false;
+    };
+    let Some(quoted) = unqualified.strip_prefix('"') else {
+        return false;
+    };
+    let Some((executable, arguments)) = quoted.split_once('"') else {
+        return false;
+    };
+    is_absolute_executable(executable) && arguments.trim() == POWER_SHELL_ENCODED_COMMAND_ARGUMENTS
+}
+
+/// Report whether `path` is absolute on either Windows or a POSIX host.
+fn is_absolute_executable(path: &str) -> bool {
+    path.starts_with('/')
+        || path.starts_with("\\\\")
+        || matches!(path.as_bytes(), [drive, b':', ..] if drive.is_ascii_alphabetic())
 }
 
 /// Binding text that introduces a Base64 payload, plus its transport.

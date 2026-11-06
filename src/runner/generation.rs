@@ -19,7 +19,7 @@ use crate::ast::NetsukeManifest;
 use crate::cli::Cli;
 use crate::ir::{BuildGraph, IrGenError};
 use crate::localization::{self, keys};
-use crate::recipe_shell::BashExecutable;
+use crate::recipe_shell::InterpreterExecutable;
 use crate::{manifest, ninja_gen};
 use crate::{
     manifest::{EnvAccessPolicy, ManifestEnvironment},
@@ -261,18 +261,20 @@ pub(super) fn ninja_text_for_shell(
     ninja_gen::dyndep::generate_bundle_for_shell(graph, shell)
 }
 
-/// Generate a Ninja bundle with one runner-resolved Bash executable binding.
+/// Generate a Ninja bundle with one runner-resolved interpreter binding.
 ///
-/// A missing binding keeps pure generation deterministic and leaves the
-/// executable name to be resolved by Ninja's execution environment.
+/// Executing operations always pass the binding they resolved. A missing
+/// binding cannot render a PowerShell or Bash recipe; it is reserved for
+/// inspection-only rendering, which never reaches this function.
 ///
 /// # Errors
 ///
-/// Returns an error when Ninja synthesis fails.
-pub(super) fn ninja_text_for_shell_with_bash(
+/// Returns an error when Ninja synthesis fails or a recipe needs a binding
+/// that was not resolved.
+pub(super) fn ninja_text_for_shell_with_interpreter(
     graph: &BuildGraph,
     shell: crate::recipe_shell::RecipeShell,
-    bash_executable: Option<&BashExecutable>,
+    interpreter_binding: Option<&InterpreterExecutable>,
 ) -> Result<ninja_gen::GeneratedNinja, ninja_gen::NinjaGenError> {
-    ninja_gen::dyndep::generate_bundle_for_shell_with_bash(graph, shell, bash_executable)
+    ninja_gen::dyndep::generate_bundle_for_shell_with_interpreter(graph, shell, interpreter_binding)
 }

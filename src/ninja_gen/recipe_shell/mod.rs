@@ -1,14 +1,16 @@
 //! Renders legacy recipes for the interpreter selected by the host contract.
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+mod transport;
+
+pub(super) use self::transport::{RenderedRecipeCommand, escape_posix_script};
+use self::transport::{
+    command_line_characters, encode_power_shell_script, power_shell_response_file_content,
+    windows_argument,
+};
 
 use super::NinjaGenError;
 use super::escape::{NinjaValue, ShellText, escape_ninja_value};
-use crate::recipe_shell::{BashExecutable, RecipeShell};
-
-mod transport;
-
-pub(super) use transport::escape_posix_script;
+use crate::recipe_shell::{InterpreterExecutable, RecipeShell};
 
 /// Leave space for Windows' terminating command-line NUL character.
 const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
@@ -16,9 +18,14 @@ const MAX_POWER_SHELL_COMMAND_LINE: usize = 32_766;
 /// Bound the complete PowerShell parent script before UTF-16LE and Base64 encoding.
 const MAX_POWER_SHELL_RECIPE_BYTES: usize = 1024 * 1024;
 
-/// Prefix shared by every encoded Windows PowerShell recipe invocation.
-const POWER_SHELL_COMMAND_PREFIX: &str =
-    "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ";
+/// Logical executable name used by inspection-only PowerShell rendering.
+const INSPECTION_POWER_SHELL_EXECUTABLE: &str = "powershell.exe";
+
+/// Arguments shared by every encoded Windows PowerShell recipe invocation.
+const POWER_SHELL_ENCODED_ARGUMENTS: &str = concat!(
+    " -NoLogo -NoProfile -NonInteractive ",
+    "-ExecutionPolicy Bypass -EncodedCommand "
+);
 
 /// Executable expression for one fresh PowerShell process used by an isolated entry.
 const ISOLATED_POWER_SHELL_CHILD_EXECUTABLE: &str = "\"$PSHOME\\powershell.exe\"";
@@ -29,23 +36,38 @@ const ISOLATED_POWER_SHELL_CHILD_ARGUMENT_PREFIX: &str = concat!(
     "-ExecutionPolicy Bypass -EncodedCommand "
 );
 
-/// Fixed command that executes Ninja's oversized-recipe response file.
+/// Arguments that execute Ninja's oversized-recipe response file.
 ///
 /// Ninja expands `$rspfile` into a separately quoted `-File` argument, so the
 /// path never becomes PowerShell source text.
-const POWER_SHELL_RESPONSE_FILE_COMMAND: &str =
-    "powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$rspfile\"";
+const POWER_SHELL_RESPONSE_FILE_ARGUMENTS: &str =
+    " -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"$rspfile\"";
 
-/// Start the one-line response-file bootstrap before its Base64 payload.
-const POWER_SHELL_RESPONSE_FILE_SCRIPT_PREFIX: &str = "$netsukePayload = '";
-
-/// Finish the one-line response-file bootstrap after its Base64 payload.
-const POWER_SHELL_RESPONSE_FILE_SCRIPT_SUFFIX: &str = concat!(
-    "'; $netsukeScript = try { [Text.Encoding]::Unicode.GetString([Convert]::FromBase64String($netsukePayload)) } ",
-    "catch { throw \"Netsuke could not decode the PowerShell response file: $($_.Exception.Message)\" }; ",
-    "try { . ([ScriptBlock]::Create($netsukeScript)) } finally { Remove-Item -LiteralPath $PSCommandPath -Force }; ",
-    "if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }"
-);
+/// Select whether rendered commands carry a resolved interpreter executable.
+///
+/// A [`InterpreterBinding::Bound`] binding is the only mode that can produce a
+/// plan fit to execute: it renders the trusted absolute path instead of a
+/// logical name that Windows could resolve through its executable search order.
+#[derive(Clone, Copy)]
+pub(crate) enum InterpreterBinding<'a> {
+    /// Render generated commands against this trusted absolute executable.
+    Bound(&'a InterpreterExecutable),
+    /// Render logical interpreter names for inspection without executing them.
+    ///
+    /// No production caller selects this mode: every executing path binds an
+    /// absolute executable. It exists for renderer tests and future
+    /// inspection-only callers, so the library build has nothing to construct.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "inspection-only rendering is exercised by renderer tests"
+        )
+    )]
+    InspectionOnly,
+    /// Refuse to render an interpreter command that was not resolved.
+    Unbound,
+}
 
 /// Select how an isolated PowerShell process treats native stderr.
 #[derive(Clone, Copy)]
@@ -66,69 +88,47 @@ impl PowerShellErrorAction {
     }
 }
 
-/// Represent one Ninja command binding and its optional response-file payload.
-pub(super) enum RenderedRecipeCommand {
-    /// Run the command directly from the Ninja command binding.
-    Direct(NinjaValue),
-    /// Let Ninja materialize a response file for one build edge.
-    ResponseFile {
-        /// Fixed command that starts the response file as a PowerShell script.
-        command: NinjaValue,
-        /// One-line bootstrap script that contains Base64 UTF-16LE recipe text.
-        content: NinjaValue,
-    },
-}
-
-impl RenderedRecipeCommand {
-    /// Borrow the command text written into the Ninja rule.
-    pub(super) const fn command(&self) -> &NinjaValue {
-        match self {
-            Self::Direct(command) | Self::ResponseFile { command, .. } => command,
-        }
-    }
-
-    /// Borrow the optional response-file content written by Ninja at execution time.
-    pub(super) const fn response_file_content(&self) -> Option<&NinjaValue> {
-        match self {
-            Self::Direct(_) => None,
-            Self::ResponseFile { content, .. } => Some(content),
-        }
-    }
-}
-
 impl RecipeShell {
-    /// Render completed recipe text as a safe Ninja command binding value.
+    /// Render completed recipe text for inspection without an executable binding.
     #[cfg(test)]
     pub(super) fn command_value(
         self,
         script: &ShellText,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
-        self.command_value_with_bash(script, None)
+        self.command_value_with_interpreter(script, InterpreterBinding::InspectionOnly)
     }
 
-    /// Render completed recipe text with an optional runner-selected Bash path.
+    /// Render completed recipe text with one interpreter executable binding.
     ///
     /// # Errors
     ///
     /// Returns [`NinjaGenError`] when the selected renderer rejects the recipe
-    /// text or its command transport exceeds a supported limit.
-    pub(super) fn command_value_with_bash(
+    /// text or its command transport exceeds a supported limit, and
+    /// [`NinjaGenError::InterpreterBindingRequired`] when the interpreter has no
+    /// binding.
+    pub(super) fn command_value_with_interpreter(
         self,
         script: &ShellText,
-        bash_executable: Option<&BashExecutable>,
+        binding: InterpreterBinding<'_>,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
-        self.command_value_with_error_action(script, PowerShellErrorAction::Stop, bash_executable)
+        self.command_value_with_error_action(script, PowerShellErrorAction::Stop, binding)
     }
 
     /// Render a recipe with the error policy required by isolated PowerShell lists.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`NinjaGenError`] when the parent command cannot be rendered or
+    /// the interpreter has no binding.
     pub(super) fn isolated_command_list_value(
         self,
         script: &ShellText,
+        binding: InterpreterBinding<'_>,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         self.command_value_with_error_action(
             script,
             PowerShellErrorAction::ContinueNativeStderr,
-            None,
+            binding,
         )
     }
 
@@ -137,7 +137,7 @@ impl RecipeShell {
         self,
         script: &ShellText,
         error_action: PowerShellErrorAction,
-        bash_executable: Option<&BashExecutable>,
+        binding: InterpreterBinding<'_>,
     ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         match self {
             Self::Posix => escape_ninja_value(script).map(RenderedRecipeCommand::Direct),
@@ -149,11 +149,9 @@ impl RecipeShell {
                     }
                 };
                 Self::validate_power_shell_recipe_size(&power_shell_script)?;
-                Self::power_shell_command(&power_shell_script)
+                Self::power_shell_command(&power_shell_script, binding)
             }
-            Self::Bash => {
-                Self::bash_command(script, bash_executable).map(RenderedRecipeCommand::Direct)
-            }
+            Self::Bash => Self::bash_command(script, binding).map(RenderedRecipeCommand::Direct),
         }
     }
 
@@ -292,88 +290,77 @@ impl RecipeShell {
     }
 
     /// Encode one PowerShell script without exposing its text to Ninja parsing.
-    fn power_shell_command(script: &ShellText) -> Result<RenderedRecipeCommand, NinjaGenError> {
+    fn power_shell_command(
+        script: &ShellText,
+        binding: InterpreterBinding<'_>,
+    ) -> Result<RenderedRecipeCommand, NinjaGenError> {
         if script.as_str().contains('\0') {
             return Err(NinjaGenError::UnsafeNinjaValue);
         }
+        let executable = Self::power_shell_executable(binding)?;
         let command = encode_power_shell_script(script.as_str());
-        let length = POWER_SHELL_COMMAND_PREFIX.len() + command.len();
-        if length > MAX_POWER_SHELL_COMMAND_LINE {
+        let prefix = format!("{executable}{POWER_SHELL_ENCODED_ARGUMENTS}");
+        let escaped_executable =
+            escape_ninja_value(&ShellText::new(executable.clone()))?.to_string();
+        if command_line_characters(&prefix, &command) > MAX_POWER_SHELL_COMMAND_LINE {
+            let response_characters =
+                command_line_characters(&executable, POWER_SHELL_RESPONSE_FILE_ARGUMENTS);
+            if response_characters > MAX_POWER_SHELL_COMMAND_LINE {
+                return Err(NinjaGenError::PowerShellParentCommandLineTooLong {
+                    actual_characters: response_characters,
+                    maximum_characters: MAX_POWER_SHELL_COMMAND_LINE,
+                });
+            }
+            let response_command =
+                format!("{escaped_executable}{POWER_SHELL_RESPONSE_FILE_ARGUMENTS}");
             return Ok(RenderedRecipeCommand::ResponseFile {
-                command: NinjaValue::from_encoded(POWER_SHELL_RESPONSE_FILE_COMMAND.into()),
+                command: NinjaValue::from_encoded(response_command),
                 content: power_shell_response_file_content(&command)?,
             });
         }
+        let direct_command =
+            format!("{escaped_executable}{POWER_SHELL_ENCODED_ARGUMENTS}{command}");
         Ok(RenderedRecipeCommand::Direct(NinjaValue::from_encoded(
-            format!("{POWER_SHELL_COMMAND_PREFIX}{command}"),
+            direct_command,
         )))
+    }
+
+    /// Select the PowerShell executable expression for one binding.
+    fn power_shell_executable(binding: InterpreterBinding<'_>) -> Result<String, NinjaGenError> {
+        match binding {
+            InterpreterBinding::Bound(executable) => {
+                Ok(windows_argument(executable.as_path().as_str()))
+            }
+            InterpreterBinding::InspectionOnly => Ok(INSPECTION_POWER_SHELL_EXECUTABLE.to_owned()),
+            InterpreterBinding::Unbound => Err(NinjaGenError::InterpreterBindingRequired {
+                shell: Self::PowerShell,
+            }),
+        }
     }
 
     /// Wrap one POSIX recipe in the explicit Windows Bash compatibility runtime.
     fn bash_command(
         script: &ShellText,
-        bash_executable: Option<&BashExecutable>,
+        binding: InterpreterBinding<'_>,
     ) -> Result<NinjaValue, NinjaGenError> {
-        let executable = bash_executable.map_or_else(
-            || "bash.exe".to_owned(),
-            |path| windows_argument(path.as_path().as_str()),
-        );
+        let executable = match binding {
+            InterpreterBinding::Bound(executable) => {
+                windows_argument(executable.as_path().as_str())
+            }
+            InterpreterBinding::InspectionOnly => "bash.exe".to_owned(),
+            InterpreterBinding::Unbound => {
+                return Err(NinjaGenError::InterpreterBindingRequired { shell: Self::Bash });
+            }
+        };
         let command = format!("{executable} -e -c {}", windows_argument(script.as_str()));
         escape_ninja_value(&ShellText::new(command))
     }
 }
 
-/// Encode PowerShell source as the UTF-16LE Base64 accepted by `-EncodedCommand`.
-fn encode_power_shell_script(script: &str) -> String {
-    let utf16le = script
-        .encode_utf16()
-        .flat_map(|code_unit| {
-            #[expect(
-                clippy::little_endian_bytes,
-                reason = "PowerShell -EncodedCommand requires UTF-16LE input"
-            )]
-            let bytes = code_unit.to_le_bytes();
-            bytes
-        })
-        .collect::<Vec<_>>();
-    STANDARD.encode(utf16le)
-}
-
-/// Build the one-line PowerShell bootstrap stored in Ninja's response file.
-///
-/// The response file is itself a `-File` script so Windows PowerShell receives
-/// its path through normal argument parsing. The payload remains Base64 because
-/// Ninja bindings cannot safely carry a multi-line legacy recipe directly.
-fn power_shell_response_file_content(encoded_script: &str) -> Result<NinjaValue, NinjaGenError> {
-    let bootstrap = format!(
-        "{POWER_SHELL_RESPONSE_FILE_SCRIPT_PREFIX}{encoded_script}{POWER_SHELL_RESPONSE_FILE_SCRIPT_SUFFIX}"
-    );
-    escape_ninja_value(&ShellText::new(bootstrap))
-}
-
-/// Quote one argument according to the Windows `CommandLineToArgvW` convention.
-fn windows_argument(argument: &str) -> String {
-    let mut quoted = String::with_capacity(argument.len() + 2);
-    quoted.push('"');
-    let mut backslashes = 0usize;
-    for character in argument.chars() {
-        if character == '\\' {
-            backslashes += 1;
-        } else if character == '"' {
-            quoted.push_str(&"\\".repeat(backslashes.saturating_mul(2).saturating_add(1)));
-            quoted.push('"');
-            backslashes = 0;
-        } else {
-            quoted.push_str(&"\\".repeat(backslashes));
-            quoted.push(character);
-            backslashes = 0;
-        }
-    }
-    quoted.push_str(&"\\".repeat(backslashes.saturating_mul(2)));
-    quoted.push('"');
-    quoted
-}
-
 #[cfg(test)]
 #[path = "../shell_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "../interpreter_binding_tests.rs"]
+mod interpreter_binding_tests;

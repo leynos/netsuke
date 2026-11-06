@@ -182,17 +182,16 @@ proptest! {
     /// Verify arbitrary failure details cannot expand the operation telemetry vocabulary.
     #[test]
     fn legacy_recipe_operation_keeps_metrics_bounded_for_all_outcomes(
-        operation_index in 0u8..2,
+        operation_index in 0u8..3,
         shell_index in 0u8..3,
         succeeds in any::<bool>(),
         detail in ".{0,128}",
     ) {
-        let operation = if operation_index == 0 {
-            LegacyRecipeOperation::Build
-        } else {
-            LegacyRecipeOperation::NinjaTool
+        let (operation, operation_label) = match operation_index {
+            0 => (LegacyRecipeOperation::Build, "build"),
+            1 => (LegacyRecipeOperation::Generate, "generate"),
+            _ => (LegacyRecipeOperation::NinjaTool, "ninja_tool"),
         };
-        let operation_label = if operation_index == 0 { "build" } else { "ninja_tool" };
         let shell = match shell_index {
             0 => RecipeShell::Posix,
             1 => RecipeShell::PowerShell,

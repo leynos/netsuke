@@ -37,6 +37,7 @@ pub mod ninja_gen;
 pub mod ninja_semantics;
 pub mod stdlib_assert;
 pub mod temp_path_filter;
+pub mod windows_argv;
 /// Re-export the SHA-256 helper for concise call sites.
 pub use hash::sha256_hex;
 

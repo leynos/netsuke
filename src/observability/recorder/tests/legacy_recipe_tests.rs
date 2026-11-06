@@ -28,6 +28,14 @@ fn record_legacy_recipe_operation_series() {
     .record(0.01);
     counter!(
         LEGACY_RECIPE_EXECUTIONS_TOTAL,
+        "operation" => "generate",
+        "recipe_shell" => "posix",
+        "outcome" => "success",
+        "failure_category" => "none"
+    )
+    .increment(1);
+    counter!(
+        LEGACY_RECIPE_EXECUTIONS_TOTAL,
         "operation" => "build",
         "recipe_shell" => "powershell",
         "outcome" => "success"
@@ -63,7 +71,7 @@ fn recorder_retains_bounded_legacy_recipe_operation_series() {
     let snapshot = snapshotter.snapshot().into_vec();
     assert_eq!(
         snapshot.len(),
-        2,
+        3,
         "only exact bounded legacy-recipe operation series are retained"
     );
     assert_legacy_recipe_metric(
@@ -73,6 +81,17 @@ fn recorder_retains_bounded_legacy_recipe_operation_series() {
         [
             ("operation", "build"),
             ("recipe_shell", "powershell"),
+            ("outcome", "success"),
+            ("failure_category", "none"),
+        ],
+    );
+    assert_legacy_recipe_metric(
+        &snapshot,
+        MetricKind::Counter,
+        LEGACY_RECIPE_EXECUTIONS_TOTAL,
+        [
+            ("operation", "generate"),
+            ("recipe_shell", "posix"),
             ("outcome", "success"),
             ("failure_category", "none"),
         ],

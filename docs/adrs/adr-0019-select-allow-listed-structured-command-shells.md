@@ -360,3 +360,18 @@ the author to the unquoted Boolean. Whether the manifest front-end should stop
 inferring YAML 1.1 Booleans remains a separate, manifest-wide decision for the
 contract consolidation in roadmap task 12.1.1. None of the built-in names is
 reserved by this rule. The ExecPlan for roadmap task 11.2.1 implements it.
+
+## Addendum — 2026-11-06: Recipe-shell module rename and locator extraction
+
+The legacy recipe-shell value that this record references as
+`src/recipe_shell.rs` now lives in `src/recipe_shell/mod.rs`. The type and the
+contract above are unchanged; only the file layout moved when the module gained
+the interpreter-binding vocabulary. The implementation reference retains the
+path that existed when this decision was recorded.
+
+The Windows PowerShell locator is no longer a child of that module. It is the
+adapter `src/power_shell_location/mod.rs`, shared by the runner and the Ninja
+generator, so the `RecipeShell` contract stays independent of the filesystem
+and of the runner. The binding contract itself, including
+`InterpreterExecutable` and `NinjaGenError::InterpreterBindingRequired`,
+remains in `src/recipe_shell/mod.rs`.

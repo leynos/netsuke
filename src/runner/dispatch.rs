@@ -2,6 +2,7 @@
 
 #[cfg(feature = "lint")]
 use super::check;
+use super::recipe_shell::telemetry::{LegacyRecipeOperation, instrument_legacy_recipe_operation};
 use super::{
     ExecutionContext, NinjaContent, NinjaToolSpec, generate_ninja_with_shell, graph, handle_build,
     handle_ninja_tool, help, materialize_dyndep_bundle, process, prune_dyndep_bundle,
@@ -26,7 +27,7 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
         Commands::Check(args) => {
             execute_check(cli, &args, context.reporter, context.graph_generation.clock)
         }
-        Commands::Generate { output } => execute_generate(cli, output.as_ref(), context),
+        Commands::Generate { output } => handle_generate(cli, output.as_ref(), context),
         Commands::Clean => execute_clean(cli, context),
         Commands::Graph(args) => graph::handle_graph(cli, &args, context),
         Commands::Help(args) => execute_help(cli, &args, context.reporter),
@@ -89,6 +90,24 @@ fn execute_build(cli: &Cli, args: &BuildArgs, context: &ExecutionContext<'_>) ->
     write_json_result(cli, "build", None)
 }
 
+/// Generate the Ninja bundle under bounded operation telemetry.
+///
+/// # Errors
+///
+/// Returns an error when the interpreter binding cannot be resolved or the
+/// bundle cannot be generated, published, or written.
+fn handle_generate(
+    cli: &Cli,
+    output: Option<&std::path::PathBuf>,
+    context: &ExecutionContext<'_>,
+) -> Result<()> {
+    instrument_legacy_recipe_operation(
+        LegacyRecipeOperation::Generate,
+        context.graph_generation.recipe_shell,
+        || execute_generate(cli, output, context),
+    )
+}
+
 /// Generate the Ninja bundle and write it to a file, stdout, or JSON.
 ///
 /// The selected output follows the CLI preference: an `--output` path to a
@@ -103,8 +122,11 @@ fn execute_generate(
     output: Option<&std::path::PathBuf>,
     context: &ExecutionContext<'_>,
 ) -> Result<()> {
-    let bundle = generate_ninja_with_shell(cli, context.reporter, None, &context.graph_generation)?
-        .into_bundle();
+    let graph_generation = context.graph_generation.with_interpreter_binding(
+        super::recipe_shell::resolve_interpreter_binding(context.graph_generation.recipe_shell)?,
+    );
+    let bundle =
+        generate_ninja_with_shell(cli, context.reporter, None, &graph_generation)?.into_bundle();
     let publication = materialize_dyndep_bundle(cli, &bundle)?;
     prune_dyndep_bundle(cli, bundle.dyndep_files(), &publication)?;
     let ninja = NinjaContent::new(bundle.into_parts().0);

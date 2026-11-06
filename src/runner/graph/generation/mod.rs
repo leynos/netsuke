@@ -13,7 +13,7 @@ use super::super::{
 };
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedNinja;
-use crate::recipe_shell::BashExecutable;
+use crate::recipe_shell::InterpreterExecutable;
 use crate::runner::process::command_list_targets::CommandListTargetIndex;
 use monotony::MonotonicClock;
 
@@ -24,22 +24,22 @@ use monotony::MonotonicClock;
 pub(in crate::runner) struct GraphGenerationContext<'a> {
     /// Select the legacy-recipe interpreter used during graph generation.
     pub(in crate::runner) recipe_shell: crate::recipe_shell::RecipeShell,
-    /// Bind builds to the Bash executable that passed runner preflight.
-    pub(in crate::runner) bash_executable: Option<BashExecutable>,
+    /// Bind generated recipes to the interpreter the runner resolved.
+    pub(in crate::runner) interpreter_binding: Option<InterpreterExecutable>,
     /// Measure graph generation with a runner-provided monotonic clock.
     pub(in crate::runner) clock: &'a dyn MonotonicClock,
 }
 
 impl GraphGenerationContext<'_> {
-    /// Attach the Bash executable resolved for one build or Ninja-tool operation.
+    /// Attach the interpreter binding resolved for one executing operation.
     #[must_use]
-    pub(in crate::runner) fn with_bash_executable(
+    pub(in crate::runner) fn with_interpreter_binding(
         &self,
-        bash_executable: Option<BashExecutable>,
+        interpreter_binding: Option<InterpreterExecutable>,
     ) -> Self {
         GraphGenerationContext {
             recipe_shell: self.recipe_shell,
-            bash_executable,
+            interpreter_binding,
             clock: self.clock,
         }
     }
@@ -111,10 +111,10 @@ pub(in crate::runner) fn generate_ninja_with_shell(
         tool_key,
     );
     let bundle = dyndep::generation_telemetry::instrument_bundle_generation(&graph, || {
-        generation::ninja_text_for_shell_with_bash(
+        generation::ninja_text_for_shell_with_interpreter(
             &graph,
             graph_generation.recipe_shell,
-            graph_generation.bash_executable.as_ref(),
+            graph_generation.interpreter_binding.as_ref(),
         )
     })
     .context(localization::message(keys::RUNNER_CONTEXT_GENERATE_NINJA))?;

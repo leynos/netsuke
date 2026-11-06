@@ -330,8 +330,9 @@ netsuke build
 MSYS2 is equally suitable when its `bash.exe` is on `PATH`. The executable is
 checked before `build` and Ninja-tool commands, so an absent selected Bash
 runtime produces an actionable Netsuke error instead of a Ninja command-not-
-found failure. `generate` and `help targets` do not run recipes and therefore
-do not require the optional runtime.
+found failure. `generate` resolves the selected runtime before graph generation
+and writes no plan when resolution fails; `help targets` does not run recipes
+and does not require the optional runtime.
 
 In the default route, write `$name` for a PowerShell variable and `$env:NAME`
 for an environment variable. PowerShell parses the braced variable name in
@@ -391,6 +392,27 @@ structured command blocks and argv templates in
 are planned for v0.2.0 to remove shell-dependent quoting, paths, variable
 expansion, and exit-status ambiguity. They are not backported through an
 implicit change to legacy recipes.
+
+### Bind the interpreter through the Rust API
+
+v0.1.x closes the same search-path hazard for embedders. The library entry
+points `generate`, `generate_into`, `generate_with_shell`, and
+`generate_bundle` resolve the platform default before rendering. On Windows
+they bind `<System>\WindowsPowerShell\v1.0\powershell.exe` for PowerShell
+recipes through the known-folder locator; for Bash, and on every other
+platform, they bind nothing. Rendering a recipe that needs an unbound
+interpreter returns `NinjaGenError::InterpreterBindingRequired`, while a
+dependency-only graph still renders because it has no command.
+
+Call `generate_with_interpreter` or `generate_bundle_with_interpreter` to
+supply the binding yourself. Construct the `InterpreterExecutable` with
+`InterpreterExecutable::from_absolute_path`, which rejects a relative path and
+a path containing a NUL byte. Recipe rendering is a pure function of the graph,
+shell, and binding, so the trust decision belongs to the embedder: no
+Authenticode signature is checked, and a file replaced at the bound path
+between resolution and launch is still executed. Ninja launches whatever file
+occupies the bound path at execution time, so the embedder must choose a
+location it controls.
 
 ## Opting into an explicit child environment
 

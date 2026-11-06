@@ -1,10 +1,9 @@
 //! Tests for PowerShell-specific Ninja recipe rendering.
 
-use super::{
-    Action, BuildGraph, NamedAction, Recipe, RecipeShell, StringOrList, command_action,
-    generate_into_with_shell,
-};
+use super::{Action, BuildGraph, NamedAction, Recipe, RecipeShell, StringOrList, command_action};
 
+use crate::ninja_gen::test_support::power_shell_interpreter;
+use crate::ninja_gen::{InterpreterBinding, generate_into_with_interpreter};
 use anyhow::{Context, Result, ensure};
 // The Base64 UTF-16LE decoding lives in `test_support` so this module and the
 // integration tests that inspect generated Ninja files share one implementation.
@@ -27,7 +26,10 @@ fn shared_semantics_helper_reads_rendered_power_shell_commands() -> Result<()> {
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut rendered)?;
+    .write_into_with_interpreter(
+        &mut rendered,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
 
     ensure!(
         !rendered.contains("netsuke-marker"),
@@ -64,7 +66,10 @@ fn assert_large_recipe_uses_ninja_response_file(
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut rendered)?;
+    .write_into_with_interpreter(
+        &mut rendered,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
     ensure!(rendered.contains("-File \"$rspfile\""));
     ensure!(!rendered.contains("-EncodedCommand"));
     ensure!(rendered.contains("rspfile = $out.netsuke-large_power_shell.ps1"));
@@ -145,14 +150,20 @@ fn large_power_shell_rules_use_distinct_response_files() -> Result<()> {
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut first)?;
+    .write_into_with_interpreter(
+        &mut first,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
     let mut second = String::new();
     NamedAction {
         id: "second_large_power_shell",
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut second)?;
+    .write_into_with_interpreter(
+        &mut second,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
     ensure!(first.contains("rspfile = $out.netsuke-first_large_power_shell.ps1"));
     ensure!(second.contains("rspfile = $out.netsuke-second_large_power_shell.ps1"));
     Ok(())
@@ -171,7 +182,10 @@ fn power_shell_command_lists_preserve_state_and_stop_on_native_failure() -> Resu
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut rendered)?;
+    .write_into_with_interpreter(
+        &mut rendered,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
     let generated = GeneratedNinja::new(&rendered);
     ensure!(
         generated.recipe_contains(RecipeNeedle::new("$ErrorActionPreference = 'Stop'"))?,
@@ -209,7 +223,12 @@ fn power_shell_recipes_quote_apostrophe_paths_with_power_shell_literals() -> Res
     )?;
     let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
     let mut rendered = String::new();
-    generate_into_with_shell(&graph, &mut rendered, RecipeShell::PowerShell)?;
+    generate_into_with_interpreter(
+        &graph,
+        &mut rendered,
+        RecipeShell::PowerShell,
+        &power_shell_interpreter(),
+    )?;
     let generated = GeneratedNinja::new(&rendered);
     ensure!(
         generated.recipe_contains(RecipeNeedle::new(
@@ -243,7 +262,10 @@ fn power_shell_scripts_do_not_use_the_posix_script_wrapper() -> Result<()> {
         action: &action,
         shell: RecipeShell::PowerShell,
     }
-    .write_into(&mut rendered)?;
+    .write_into_with_interpreter(
+        &mut rendered,
+        InterpreterBinding::Bound(&power_shell_interpreter()),
+    )?;
     let generated = GeneratedNinja::new(&rendered);
     ensure!(
         generated.recipe_contains(RecipeNeedle::new("$edition = $PSVersionTable.PSEdition"))?,
@@ -275,7 +297,12 @@ fn power_shell_encoded_script_keeps_path_syntax_inside_one_literal() -> Result<(
     )?;
     let graph = BuildGraph::from_manifest_for_shell(&manifest, RecipeShell::PowerShell)?;
     let mut rendered = String::new();
-    generate_into_with_shell(&graph, &mut rendered, RecipeShell::PowerShell)?;
+    generate_into_with_interpreter(
+        &graph,
+        &mut rendered,
+        RecipeShell::PowerShell,
+        &power_shell_interpreter(),
+    )?;
     let generated = GeneratedNinja::new(&rendered);
 
     ensure!(

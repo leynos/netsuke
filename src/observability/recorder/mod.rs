@@ -91,7 +91,7 @@ const OMITTED_FILTERED_ENTRIES_TOTAL: &str = "netsuke_manifest_omitted_filtered_
 /// Counter recording bounded manifest-structure summaries emitted by the runner.
 const MANIFEST_STRUCTURES_TOTAL: &str = "netsuke_runner_manifest_structures_total";
 /// Bounded runner-operation values emitted by legacy-recipe telemetry.
-const LEGACY_RECIPE_OPERATION_VALUES: [&str; 2] = ["build", "ninja_tool"];
+const LEGACY_RECIPE_OPERATION_VALUES: [&str; 3] = ["build", "generate", "ninja_tool"];
 /// Bounded outcomes emitted by legacy-recipe operation telemetry.
 const LEGACY_RECIPE_OPERATION_OUTCOMES: [&str; 2] = ["success", "error"];
 /// Bounded failure categories emitted by legacy-recipe operation telemetry.

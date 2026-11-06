@@ -18,9 +18,10 @@ workspace = true
 [features]
 lint = ["netsuke-build/lint"]
 
-# `netsuke` is the only dependency, so each module sees exactly what an
-# external crate sees: the library's public API and nothing it re-exports by
-# accident through a shared dependency. Clap is deliberately absent, which is
-# what lets `policy_from_str` prove that policy parsing needs no Clap import.
+# The fixture otherwise depends only on `netsuke`, so each module sees exactly
+# what an external crate sees: the library's public API and nothing it
+# re-exports by accident through a shared dependency. Clap is deliberately
+# absent, which is what lets `policy_from_str` prove that policy parsing needs
+# no Clap import.
 [dependencies]
 netsuke-build = { path = ".." }

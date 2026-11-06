@@ -75,7 +75,12 @@ const fn error_category(error: &NinjaGenError) -> &'static str {
         | NinjaGenError::NinjaControlCharacter { .. } => "command_list",
         NinjaGenError::UnsafeNinjaValue => "unsafe_ninja_value",
         NinjaGenError::PowerShellRecipeTooLarge { .. }
-        | NinjaGenError::PowerShellCommandLineTooLong { .. } => "power_shell_recipe_too_large",
+        | NinjaGenError::PowerShellCommandLineTooLong { .. }
+        | NinjaGenError::PowerShellParentCommandLineTooLong { .. } => {
+            "power_shell_recipe_too_large"
+        }
+        NinjaGenError::InterpreterBindingRequired { .. } => "interpreter_binding_required",
+        NinjaGenError::InterpreterResolutionFailed { .. } => "interpreter_resolution_failed",
         NinjaGenError::Format { .. } => "format",
         NinjaGenError::DyndepFilesRequired { .. } => "dyndep_files_required",
         NinjaGenError::ReservedOutputPath { .. } => "reserved_output_path",

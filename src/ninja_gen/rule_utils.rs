@@ -9,12 +9,10 @@ use std::fmt::Write;
 use camino::Utf8PathBuf;
 use itertools::Itertools;
 
-use crate::{
-    ir::{BuildEdge, BuildGraph},
-    recipe_shell::BashExecutable,
-};
+use crate::ir::{BuildEdge, BuildGraph};
 
 use super::order::ordered_actions;
+use super::recipe_shell::InterpreterBinding;
 use super::{NamedAction, NinjaGenError, RecipeShell, path_syntax, validation};
 
 /// Write executable rules in stable action-ID order, omitting dependency-only `phony` nodes.
@@ -27,7 +25,7 @@ pub(crate) fn write_action_rules<W: Write>(
     graph: &BuildGraph,
     out: &mut W,
     shell: RecipeShell,
-    bash_executable: Option<&BashExecutable>,
+    binding: InterpreterBinding<'_>,
 ) -> Result<(), NinjaGenError> {
     for (zero_based_action_index, (id, action)) in ordered_actions(
         graph
@@ -44,11 +42,7 @@ pub(crate) fn write_action_rules<W: Write>(
         validation::validate_action_recipe(action, zero_based_action_index + 1, shell)?;
         validation::validate_action_metadata(action)?;
         let named_action = NamedAction { id, action, shell };
-        if let Some(executable) = bash_executable {
-            named_action.write_into_with_bash(out, Some(executable))?;
-        } else {
-            named_action.write_into(out)?;
-        }
+        named_action.write_into_with_interpreter(out, binding)?;
     }
     Ok(())
 }

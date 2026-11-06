@@ -70,7 +70,9 @@ fn plaintext_ninja_content_matches() -> Result<()> {
 fn encoded_power_shell_recipe_matches_after_decoding() -> Result<()> {
     let script = format!("$ErrorActionPreference = 'Stop'\necho {SENTINEL}\n");
     let encoded = encode_power_shell(&script);
-    let generated = format!("  command = powershell.exe -NoProfile -EncodedCommand {encoded}\n");
+    let generated = format!(
+        "  command = \"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}\n"
+    );
     ensure!(
         !generated.contains(SENTINEL),
         "the sentinel must not be visible in the generated binding"
@@ -132,7 +134,7 @@ fn mixed_payloads_report_each_transport_once_in_document_order() -> Result<()> {
     let generated = [
         format!("  rspfile_content = {binding}"),
         format!(
-            "  command = powershell.exe -NoProfile -EncodedCommand {}",
+            "  command = \"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {}",
             encode_power_shell(&command_script)
         ),
         format!("  rspfile_content = {binding}"),
@@ -174,7 +176,9 @@ fn encoded_payload_text_does_not_match_as_plaintext() -> Result<()> {
         !script.contains(needle),
         "the sampled needle must not appear in the decoded script"
     );
-    let generated = format!("  command = powershell.exe -NoProfile -EncodedCommand {encoded}\n");
+    let generated = format!(
+        "  command = \"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}\n"
+    );
     ensure!(
         generated.contains(needle),
         "the sampled needle should appear in the encoded binding text"
@@ -190,8 +194,9 @@ fn encoded_payload_text_does_not_match_as_plaintext() -> Result<()> {
 #[test]
 fn text_around_a_removed_payload_cannot_form_a_match() -> Result<()> {
     let encoded = encode_power_shell("Write-Output done");
-    let generated =
-        format!("  command = powershell.exe -NoProfile -EncodedCommand {encoded}-RIGHT\n");
+    let generated = format!(
+        "  command = \"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}-RIGHT\n"
+    );
     ensure!(
         !generated.contains("-EncodedCommand -RIGHT"),
         "the spliced needle must not already appear in the generated text"
@@ -200,6 +205,25 @@ fn text_around_a_removed_payload_cannot_form_a_match() -> Result<()> {
         !GeneratedNinja::new(&generated)
             .recipe_contains(RecipeNeedle::new("-EncodedCommand -RIGHT"))?,
         "text either side of a removed payload must not be joined into a match"
+    );
+    Ok(())
+}
+
+/// Verify an unqualified PowerShell parent is not an encoded transport.
+///
+/// Windows resolves `powershell.exe` through its executable search order, so a
+/// plan carrying that bare name is not a trusted binding and must not be read
+/// as one by the helper that inspects generated plans.
+#[test]
+fn unqualified_power_shell_parent_is_not_an_encoded_transport() -> Result<()> {
+    let encoded = encode_power_shell("Write-Output marker");
+    let generated = format!(
+        "  command = powershell.exe -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {encoded}\n"
+    );
+    ensure!(
+        GeneratedNinja::new(&generated).detected_recipe_transports()
+            == vec![RecipeTransport::Plaintext],
+        "a bare powershell.exe parent must not be treated as a bound plan"
     );
     Ok(())
 }
@@ -256,7 +280,9 @@ fn response_file_content_requires_the_binding_value_escaping() -> Result<()> {
 fn malformed_power_shell_payloads_are_rejected_without_echoing_them(
     #[case] payload: &str,
 ) -> Result<()> {
-    let generated = format!("  command = powershell.exe -NoProfile -EncodedCommand {payload}\n");
+    let generated = format!(
+        "  command = \"C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand {payload}\n"
+    );
     let error = GeneratedNinja::new(&generated)
         .recipe_contains(RecipeNeedle::new(SENTINEL))
         .err()
