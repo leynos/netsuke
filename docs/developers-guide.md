@@ -7167,9 +7167,10 @@ deterministic clock. The boundary records one
 attempt, including failures. Its only labels are the bounded `recipe_shell`
 values `posix`, `bash`, and `powershell`, the `outcome` values `success` and
 `error`, and the `error_category` values `none`,
-`invalid_command_interpolation`, and `other`. Keep clock access and metric
-composition here; callers must not measure graph-generation time with `Instant`
-or add manifest-controlled values to telemetry.
+`invalid_command_interpolation`, `ambiguous_substitution_boundary`, and
+`other`. Keep clock access and metric composition here; callers must not
+measure graph-generation time with `Instant` or add manifest-controlled values
+to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
@@ -7226,6 +7227,29 @@ closing a subshell remains an operator and still permits a comment.
 `src/ir/cmd_interpolate/property_tests/support.rs` keep separate boundary
 models; neither controls path encoding, so neither is part of this contract.
 
+A `)` that terminates a `case` pattern is an operator, so a `#` immediately
+after it starts a comment, while the `)` that closes `$()` stays in the
+surrounding word and leaves the same `#` as word data. The two are lexically
+identical without the `case` grammar, so `CaseNesting` in
+`src/ir/cmd_interpolate/command_substitution.rs` counts `case` and `esac`
+reserved words inside each substitution and keeps the substitution open across
+pattern terminators; the `)` that finally closes it is the one checked. When
+that closer is immediately followed by `#` and the substitution's source
+contains `case`, both POSIX traversals fail closed with
+`IrGenError::AmbiguousSubstitutionBoundary` rather than guessing a quote
+context. The check over-approximates on purpose: it scans the raw source, so a
+`case` inside quotes or a comment also triggers it, and it does not consult the
+enclosing quote context, because a substitution is parsed as its own script.
+The diagnostic carries the one-based character offset of the `#` and no recipe
+text, so it survives the 160-character snippet truncation and cannot copy
+executable syntax into a log line. PowerShell has no `case` patterns and keeps
+its unquoted-only rule. The regressions live in
+`src/ir/cmd_interpolate/posix_lexical/tests/case_boundary.rs`; the property
+`hash_boundary_follows_the_posix_comment_rule` in
+`src/ir/cmd_interpolate/property_tests/mod.rs` checks the comment rule against
+an independent generator label for separators, word data, escapes, line
+continuations, and substitution or group closers in both traversals.
+
 The `src/ir/cmd_interpolate/substitution/powershell/` module groups focused
 PowerShell helpers: `lexical/mod.rs` tracks quotes and here-strings,
 `lexical/comments.rs` tracks fail-closed comment state, `stop_parsing.rs`
@@ -7277,7 +7301,7 @@ The heredoc renderer returns a private `EscapeBeforeMarker` unit error, which
 both traversals map to `IrGenError::InvalidCommand` carrying the original
 template; that parity is pinned by
 `delimiter_markers_after_an_active_escape_are_rejected` in
-`src/ir/cmd_interpolate/posix_lexical/tests.rs` and
+`src/ir/cmd_interpolate/posix_lexical/tests/mod.rs` and
 `markers_after_an_active_backslash_are_rejected` in
 `src/ir/cmd_interpolate/backslash_marker_tests.rs`. Backslash pairs still
 decode to one escaped backslash before the marker, single-quoted backslashes

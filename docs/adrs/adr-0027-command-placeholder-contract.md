@@ -481,6 +481,6 @@ The boundary predicate is `is_word_terminator` in
 `src/ir/cmd_interpolate/posix_lexical/mod.rs`. Comment detection and heredoc
 delimiter parsing both call it, so the two cannot drift back to Unicode
 whitespace independently. The regressions are in
-`src/ir/cmd_interpolate/posix_lexical/tests.rs`, with shared command and script
-cases driving both POSIX interpolators, and the end-to-end case is in
+`src/ir/cmd_interpolate/posix_lexical/tests/mod.rs`, with shared command and
+script cases driving both POSIX interpolators, and the end-to-end case is in
 `tests/ninja_dollar_escaping_tests/scripts/mod.rs`.
