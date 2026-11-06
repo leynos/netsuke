@@ -153,10 +153,14 @@ The two kinds of `)` are lexically identical without the `case` grammar: a `)`
 that terminates a `case` pattern is an operator, while a `)` that closes a
 substitution is word data. When a `)` is immediately followed by `#` and the
 substitution's source contains the `case` reserved word, the scanner therefore
-rejects the recipe instead of guessing. The check deliberately
-over-approximates by scanning the raw source, so a `case` inside quotes or a
-comment also triggers the rejection; re-lexing the substitution to narrow it
-would repeat the ambiguity the check exists to avoid.
+rejects the recipe instead of guessing. The enclosing quote context does not
+narrow the check: a substitution is parsed as its own script, so double quotes
+around it do not extend into its contents and cannot make the boundary
+unambiguous. PowerShell, which has no `case` patterns, keeps its previous
+unquoted-only rule because the ambiguity does not arise there. The check
+deliberately over-approximates by scanning the raw source, so a `case` inside
+quotes or a comment also triggers the rejection; re-lexing the substitution to
+narrow it would repeat the ambiguity the check exists to avoid.
 
 ### Backtick handling is two mechanisms at two different strengths
 
