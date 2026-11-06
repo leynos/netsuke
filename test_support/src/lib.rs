@@ -220,4 +220,3 @@ pub fn ensure_binaries_available(probes: &[(&str, &[&str])]) -> Result<(), Probe
         Err(ProbesError::Failures(failures))
     }
 }
-// weave: run 'weave explain test_support/src/lib.rs' for per-hunk detail, 'weave check' to verify your resolution
