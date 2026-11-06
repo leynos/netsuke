@@ -113,7 +113,10 @@ fn kani_check_handles_apostrophes_in_the_active_cargo_home() -> Result<()> {
 /// construction, so the test removes the ability to write or reach the network
 /// and shows the query still answers. The reported restriction lines prove the
 /// namespace took effect, which keeps the case from passing vacuously on a host
-/// where `unshare` silently did nothing.
+/// where `unshare` silently did nothing. The `control` line is the converse
+/// check: it names a path that really is writable, so a probe that reported
+/// every path as blocked because redirection itself was broken would fail here
+/// rather than pass.
 ///
 /// # Errors
 ///
@@ -123,8 +126,8 @@ fn kani_check_handles_apostrophes_in_the_active_cargo_home() -> Result<()> {
 #[test]
 fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
     let fixture = Fixture::new()?;
-    if let Some(reason) = support::sandbox_unavailable() {
-        return support::skip_sandbox(&reason);
+    if let Some(reason) = support::sandbox::unavailable() {
+        return support::sandbox::skip(&reason);
     }
     let (output, marker) = fixture.run_sandboxed_check(Path::new(env!("CARGO_MANIFEST_DIR")))?;
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -135,8 +138,14 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         "the isolated query should succeed, got stdout `{stdout}` and stderr `{stderr}`"
     );
     for expected in [
+        "control=writable",
         "repo=read-only",
-        "temp=read-only",
+        "fixture=read-only",
+        "rootdir=read-only",
+        "usr=read-only",
+        "etc=read-only",
+        "tmp=read-only",
+        "home=read-only",
         "ifaces=lo,",
         "dns=blocked",
         "Kani 0.67.0 matches",
@@ -144,6 +153,15 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         ensure!(
             stdout.contains(expected),
             "the isolated query should report `{expected}`, got `{stdout}`"
+        );
+    }
+    // The control path is the only one allowed to be writable. Anything else
+    // reporting `=writable` means the sandbox left a hole, and anything
+    // reporting `=other` means the probe could not classify the failure.
+    for line in stdout.lines().filter(|line| line.contains('=')) {
+        ensure!(
+            line == "control=writable" || !line.ends_with("=writable"),
+            "only the control path may be writable, got `{line}` in `{stdout}`"
         );
     }
     ensure!(

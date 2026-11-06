@@ -10,28 +10,15 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, PermissionsExt};
+use sandbox::SandboxPaths;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
+pub(super) mod sandbox;
+
 /// The version pin every case compares against.
 const PINNED_VERSION: &str = "0.67.0";
-
-/// Environment variable that turns an unavailable isolation sandbox into a
-/// failure instead of a reported skip.
-const SANDBOX_STRICT_ENV: &str = "NETSUKE_KANI_CHECK_SANDBOX_STRICT";
-
-/// Paths the isolation sandbox script interpolates.
-///
-/// Grouping them keeps the script builder's signature small, and makes the
-/// provenance of each interpolation explicit at the call site.
-struct SandboxPaths<'a> {
-    repo: &'a Path,
-    root: &'a Path,
-    kani: &'a Path,
-    version_file: &'a Path,
-    poison: &'a Path,
-}
 
 /// Quote a path so a POSIX shell reads it as one literal word.
 fn shell_quote(path: &Path) -> String {
@@ -221,23 +208,28 @@ impl Fixture {
     /// Query the pinned version inside a namespace with no network and no
     /// writable storage.
     ///
-    /// The repository root and the fixture directory are both rebound
-    /// read-only, and the query runs in a fresh network namespace. The script
-    /// reports each restriction it applied, so the caller can prove the
-    /// sandbox was effective rather than assume it. The returned path is the
-    /// poison marker.
+    /// The sandbox builds a chroot whose every directory is a read-only bind,
+    /// so the inherited home directory, temporary paths, and any cache are
+    /// equally unwritable rather than merely outside a narrow allowlist. The
+    /// query runs in a fresh network namespace and process namespace. The
+    /// script reports each restriction it applied, and reports one deliberately
+    /// writable control path, so the caller can prove the sandbox was effective
+    /// rather than assume it. The returned path is the poison marker.
     ///
     /// # Errors
     ///
-    /// Returns an error if the fake verifier, version file, or sandbox script
-    /// cannot be created, or if `unshare` cannot be spawned.
+    /// Returns an error if the fake verifier, version file, sandbox root, or
+    /// sandbox script cannot be created, or if `unshare` cannot be spawned.
     pub(super) fn run_sandboxed_check(&self, repo: &Path) -> Result<(Output, PathBuf)> {
         let (poison, marker) = self.poison_runner()?;
         let kani = self.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
         let version_file = self.write_version_file()?;
+        // The chroot root must outlive the child; keep its handle in scope.
+        let chroot = tempdir().context("create kani-check sandbox root")?;
         let paths = SandboxPaths {
             repo,
-            root: self.temp.path(),
+            fixture: self.temp.path(),
+            chroot: chroot.path(),
             kani: &kani,
             version_file: &version_file,
             poison: &poison,
@@ -248,103 +240,15 @@ impl Fixture {
                 "--map-root-user",
                 "--net",
                 "--mount",
+                "--pid",
+                "--fork",
                 "--",
                 "sh",
                 "-c",
             ])
-            .arg(sandbox_script(&paths))
+            .arg(sandbox::script(&paths))
             .output()
             .context("run make kani-check inside an isolation namespace")?;
         Ok((output, marker))
     }
-}
-
-/// Build the shell script that applies the restrictions and runs the query.
-///
-/// Each restriction is asserted, not merely attempted: a sandbox that fails to
-/// take effect would otherwise make the boundary test pass vacuously. `mount`
-/// needs a self-bind first because `/` itself cannot be remounted read-only
-/// from inside a user namespace.
-fn sandbox_script(paths: &SandboxPaths<'_>) -> String {
-    let repo = shell_quote(paths.repo);
-    let root = shell_quote(paths.root);
-    let kani = shell_quote(paths.kani);
-    let version_file = shell_quote(paths.version_file);
-    let poison = shell_quote(paths.poison);
-    format!(
-        concat!(
-            "set -u\n",
-            "mount --bind {repo} {repo} && mount -o remount,ro,bind {repo} || exit 90\n",
-            "mount --bind {root} {root} && mount -o remount,ro,bind {root} || exit 91\n",
-            "cd {repo} || exit 92\n",
-            "if touch .kani-check-write-probe 2>/dev/null; then echo 'repo=writable'; exit 93; fi\n",
-            "echo 'repo=read-only'\n",
-            "if touch write-probe 2>/dev/null; then echo 'temp=writable'; exit 94; fi\n",
-            "echo 'temp=read-only'\n",
-            "echo \"ifaces=$(cut -d: -f1 /proc/net/dev | tail -n +3 | tr -d ' ' | tr '\\n' ',')\"\n",
-            "if timeout 5 getent hosts example.com >/dev/null 2>&1; ",
-            "then echo 'dns=resolved'; exit 95; fi\n",
-            "echo 'dns=blocked'\n",
-            "exec make --no-print-directory kani-check KANI={kani} ",
-            "KANI_VERSION_FILE={version_file} PROVER_TOOLS={poison} UV={poison}\n",
-        ),
-        repo = repo,
-        root = root,
-        kani = kani,
-        version_file = version_file,
-        poison = poison,
-    )
-}
-
-/// Report why the isolation sandbox cannot run, if it cannot.
-///
-/// A host without user namespaces cannot demonstrate the blocked state. The
-/// case reports that as a skip, which strict mode turns back into a failure so
-/// a lane that requires the boundary test cannot pass without exercising it.
-pub(super) fn sandbox_unavailable() -> Option<String> {
-    let probe = Command::new("unshare")
-        .args([
-            "--user",
-            "--map-root-user",
-            "--net",
-            "--mount",
-            "--",
-            "true",
-        ])
-        .output();
-    match probe {
-        Ok(output) if output.status.success() => None,
-        Ok(output) => Some(format!(
-            "unshare could not create an isolation namespace: {}",
-            String::from_utf8_lossy(&output.stderr).trim()
-        )),
-        Err(error) => Some(format!("unshare is not runnable: {error}")),
-    }
-}
-
-/// Report a skipped isolation case, unless strict mode forbids skipping.
-///
-/// # Errors
-///
-/// Returns an error when [`SANDBOX_STRICT_ENV`] is `1`, so a lane that requires
-/// the boundary test fails rather than silently passing on a host that could
-/// not run it.
-#[expect(
-    clippy::disallowed_methods,
-    reason = "this is the single site that reads the strict-mode switch; the \
-              test binary has no injected environment to consult"
-)]
-#[expect(
-    clippy::print_stderr,
-    reason = "a skipped prerequisite must be visible in the captured test output"
-)]
-pub(super) fn skip_sandbox(reason: &str) -> Result<()> {
-    let strict = std::env::var_os(SANDBOX_STRICT_ENV).is_some_and(|value| value == "1");
-    ensure!(
-        !strict,
-        "the kani-check isolation sandbox could not be exercised: {reason} \
-         (strict mode requires the boundary test to run for real)"
-    );
-    eprintln!("skipped: kani-check isolation — {reason}");
-    Ok(())
 }
