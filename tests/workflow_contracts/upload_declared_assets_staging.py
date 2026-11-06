@@ -145,9 +145,7 @@ def package_names(facts: Facts, target: Target) -> tuple[str, ...]:
     """
     templates = PACKAGE_TEMPLATES[target.platform]
     return tuple(
-        template.format(
-            package=facts.package, version=facts.version, arch=target.arch
-        )
+        template.format(package=facts.package, version=facts.version, arch=target.arch)
         for template in templates
     )
 
