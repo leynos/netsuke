@@ -34,6 +34,13 @@
   targets not requested by Ninja. The crate-private `missing_dependencies`
   report also includes unresolved order-only paths
   ([ADR-0068](docs/adrs/adr-0068-detect-cycles-across-all-prerequisite-kinds.md)).
+- **Breaking:** reject a `{{ ins }}` or `{{ outs }}` marker that directly
+  follows an unpaired backslash in POSIX and Bash `command:`, `script:`, and
+  heredoc-delimiter text. The retained backslash would escape the first
+  character of the substituted path, so a path beginning with `"` could close a
+  double-quoted string and inject shell syntax. Write `\\{{ outs }}` for a
+  literal backslash, or place the marker inside single quotes
+  ([#984](https://github.com/leynos/netsuke/issues/984))
 
 ### Fixed
 

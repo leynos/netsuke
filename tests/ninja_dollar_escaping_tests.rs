@@ -24,12 +24,14 @@ use tempfile::TempDir;
 use test_support::ninja::ninja_integration_workspace;
 
 const SENTINEL: &str = "NETSUKE_TEST_SENTINEL";
+
 const SENTINEL_VALUE: &str = "sentinel-value";
 
 /// Render Ninja content with explicit POSIX shell semantics.
 fn generate_posix(graph: &BuildGraph) -> Result<String> {
     generate_with_shell(graph, RecipeShell::Posix).map_err(Into::into)
 }
+
 /// Read the host `PATH` for isolated real-Ninja child processes.
 ///
 /// # Errors
@@ -120,6 +122,7 @@ impl NinjaWorkspace {
         Ok(workspace)
     }
 }
+
 /// Query Ninja's effective commands for a generated target.
 fn ninja_commands(ninja_file: &str, target: &str) -> Result<String> {
     let workspace = NinjaWorkspace::create(ninja_file)?;
@@ -216,6 +219,7 @@ fn assert_script_output(
     ensure!(actual == expected, "{failure_message}: {actual:?}");
     Ok(())
 }
+
 /// Verify that remaining shell dollars are doubled for Ninja.
 #[rstest]
 #[case::shell_variable("echo $NETSUKE_TEST_SENTINEL", "echo $$NETSUKE_TEST_SENTINEL")]
@@ -396,3 +400,7 @@ fn script_default_reaches_the_child_shell(
 /// Script recipe cases, gated per test where they need a POSIX child shell.
 #[path = "ninja_dollar_escaping_tests/scripts/mod.rs"]
 mod scripts;
+
+/// Backslashes immediately before a path marker, executed through Ninja.
+#[path = "ninja_dollar_escaping_tests/backslash.rs"]
+mod backslash;

@@ -6,8 +6,10 @@
 
 use super::{
     CommandBindings, IrGenError, Placeholder, QuoteContext, find_script_substitution,
-    find_substitution, invalid_command_error,
-    posix_lexical::{PosixCharacter, PosixLexicalState},
+    invalid_command_error,
+    posix_lexical::{
+        EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
+    },
 };
 
 /// Track quote context while interpolating one POSIX or Bash script.
@@ -100,7 +102,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             .chars
             .get(pos)
             .ok_or_else(|| invalid_command_error(self.template.to_owned()))?;
-        if let Some(next) = self.append_non_substitution_character(pos, ch) {
+        if let Some(next) = self.append_non_substitution_character(pos, ch)? {
             return Ok(next);
         }
 
@@ -113,7 +115,16 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Process source characters that do not require placeholder substitution.
-    fn append_non_substitution_character(&mut self, pos: usize, ch: char) -> Option<usize> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a heredoc delimiter or an escape
+    /// would modify a marker lowered immediately after it.
+    fn append_non_substitution_character(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
         let copied_inert_character = {
             let mut character = PosixCharacter {
                 chars: self.chars,
@@ -124,42 +135,51 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.posix_lexical.append_inert_character(&mut character)
         };
         if copied_inert_character {
-            return Some(pos + 1);
+            return Ok(Some(pos + 1));
         }
         if self.is_escaped {
             self.output.push(ch);
             self.is_escaped = false;
-            return Some(pos + 1);
+            return Ok(Some(pos + 1));
         }
-        if self.should_escape_next(pos, ch) {
+        if self.starts_escape(pos, ch)? {
             self.output.push(ch);
             self.is_escaped = true;
-            return Some(pos + 1);
+            return Ok(Some(pos + 1));
         }
-        if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch) {
-            return Some(next);
+        if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch)? {
+            return Ok(Some(next));
         }
         if self.starts_comment(pos, ch) {
             self.output.push(ch);
             self.posix_lexical.begin_comment();
-            return Some(pos + 1);
+            return Ok(Some(pos + 1));
         }
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
-            return Some(next);
+            return Ok(Some(next));
         }
         if self.update_quote_context(ch) {
             self.output.push(ch);
-            return Some(pos + 1);
+            return Ok(Some(pos + 1));
         }
-        None
+        Ok(None)
     }
 
     /// Preserve unquoted POSIX heredoc declarations before their bodies become inert.
-    fn append_unquoted_posix_lexical_character(&mut self, pos: usize, ch: char) -> Option<usize> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a delimiter word would lower a
+    /// marker directly after an active escape.
+    fn append_unquoted_posix_lexical_character(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
         if self.active_quote_context() != ShellQuoteContext::Unquoted
             || self.backtick_outer_context.is_some()
         {
-            return None;
+            return Ok(None);
         }
         let mut character = PosixCharacter {
             chars: self.chars,
@@ -169,6 +189,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         };
         self.posix_lexical
             .append_heredoc_declaration(&mut character, self.bindings)
+            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))
     }
 
     /// Return whether `ch` begins a POSIX shell comment in ordinary text.
@@ -178,11 +199,20 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             && PosixLexicalState::starts_comment(self.chars, pos, ch)
     }
 
-    /// Return whether a backslash escapes the following script character.
-    fn should_escape_next(&self, pos: usize, ch: char) -> bool {
-        ch == '\\'
-            && self.active_quote_context() != ShellQuoteContext::SingleQuoted
-            && find_substitution(self.chars, pos + 1).is_none()
+    /// Report whether a backslash begins an escape of the following character.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the escape would modify a marker
+    /// lowered immediately after it.
+    fn starts_escape(&self, pos: usize, ch: char) -> Result<bool, IrGenError> {
+        if ch != '\\' || self.active_quote_context() == ShellQuoteContext::SingleQuoted {
+            return Ok(false);
+        }
+        if backslash_escapes_marker(self.chars, pos, false, None) {
+            return Err(invalid_command_error(self.template.to_owned()));
+        }
+        Ok(true)
     }
 
     /// Update quoting state and return whether `ch` was a quote delimiter.

@@ -4,7 +4,9 @@ use super::{
     CommandBindings, IrGenError, QuoteContext,
     command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
     find_substitution, invalid_command_error,
-    posix_lexical::{PosixCharacter, PosixLexicalState},
+    posix_lexical::{
+        EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
+    },
 };
 use crate::recipe_shell::RecipeShell;
 
@@ -110,10 +112,10 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         if copied_inert_character {
             return Ok(pos + 1);
         }
-        if let Some(next) = self.append_escaped_character(pos, ch) {
+        if let Some(next) = self.append_escaped_character(pos, ch)? {
             return Ok(next);
         }
-        if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch) {
+        if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch)? {
             return Ok(next);
         }
         if ch == '`' && !self.matches_single_quote_context() {
@@ -129,9 +131,18 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     }
 
     /// Preserve unquoted POSIX heredoc declarations and comments.
-    fn append_unquoted_posix_lexical_character(&mut self, pos: usize, ch: char) -> Option<usize> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a heredoc delimiter would lower a
+    /// marker directly after an active escape.
+    fn append_unquoted_posix_lexical_character(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
         if !self.matches_unquoted_quote_context() {
-            return None;
+            return Ok(None);
         }
         let mut character = PosixCharacter {
             chars: self.chars,
@@ -141,16 +152,17 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         };
         let declaration_end = self
             .posix_lexical
-            .append_heredoc_declaration(&mut character, self.bindings);
+            .append_heredoc_declaration(&mut character, self.bindings)
+            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
         if let Some(next) = declaration_end {
-            return Some(next);
+            return Ok(Some(next));
         }
         if PosixLexicalState::starts_comment(self.chars, pos, ch) {
             self.posix_lexical.begin_comment();
             self.output.push(ch);
-            return Some(pos + 1);
+            return Ok(Some(pos + 1));
         }
-        None
+        Ok(None)
     }
     /// Preserve shared shell syntax before lowering a marker for its active context.
     fn append_contextual_character(
@@ -172,17 +184,28 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         )
     }
     /// Preserve a POSIX escaped character without interpreting its quote meaning.
-    fn append_escaped_character(&mut self, pos: usize, ch: char) -> Option<usize> {
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when the escape would modify a marker
+    /// lowered immediately after it.
+    fn append_escaped_character(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
         if ch != '\\' || self.matches_single_quote_context() {
-            return None;
+            return Ok(None);
         }
-        if find_substitution(self.chars, pos + 1).is_some() {
-            return None;
+        if backslash_escapes_marker(self.chars, pos, false, None) {
+            return Err(invalid_command_error(self.template.to_owned()));
         }
-        let next = *self.chars.get(pos + 1)?;
+        let Some(next) = self.chars.get(pos + 1).copied() else {
+            return Ok(None);
+        };
         self.output.push(ch);
         self.output.push(next);
-        Some(pos + 2)
+        Ok(Some(pos + 2))
     }
 
     /// Track `$()` nesting and preserve its delimiters before marker handling.
