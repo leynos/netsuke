@@ -2970,9 +2970,11 @@ aliases. Actions hold the parsed `Recipe` and optional execution metadata.
 `BuildEdge` connects inputs to outputs using an action identifier and carries
 the `phony` and `always` flags from the manifest. Its `EdgeOutputVisibility`
 field expresses the desired output behaviour without exposing a Ninja pool
-name. The Ninja adapter maps `Immediate` to its console pool and leaves
-`Buffered` edges in the normal pool. This edge-level choice does not affect
-action identity.
+name. The Ninja adapter maps `Immediate` to its console pool. A `Buffered` edge
+retains its action's custom pool, because rule bindings are inherited: the
+renderer emits an empty edge-level `pool =` only when the shared rule declares
+`console`, so `Action.pool = "compile"`, for example, stays in effect. This
+edge-level choice does not affect action identity.
 
 - Actions are deduplicated using a SHA-256 hash of a canonical JSON
   serialization of their recipe, inputs, and outputs. Because commands embed

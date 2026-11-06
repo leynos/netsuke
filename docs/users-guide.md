@@ -1970,6 +1970,42 @@ or `off` (case-insensitively) to disable that search; any other value, or
 leaving it unset, keeps the recursive mode available. A non-Unicode value also
 disables it and is treated as an explicit opt-out, emitting a warning.
 
+#### Bounded Ninja build metrics
+
+Every actual Ninja build invocation records three bounded series in the drained
+`metrics snapshot`:
+
+- `netsuke_runner_ninja_build_executions_total` — a counter labelled with
+  `outcome` (`success` or `error`), `error_category` (`none` or `io`), and
+  `console_scheduling` (`enabled` or `disabled`).
+- `netsuke_runner_ninja_build_execution_duration_seconds` — a histogram with
+  the same three labels, recording wall-clock duration in seconds.
+- `netsuke_runner_ninja_build_console_edges_total` — a counter labelled with
+  `outcome` only, adding the number of console-enabled user edges in the
+  attempted graph.
+
+`console_scheduling` is `enabled` when the graph declares at least one
+console-pool edge and `disabled` otherwise. The edge counter counts the
+configured graph rather than the edges Ninja actually executed, so it measures
+intent, not pool occupancy. The same fields appear on the `runner.ninja.build`
+span, whose `outcome` and `error_category` are recorded when the invocation
+returns.
+
+#### Bounded output-forwarding metrics
+
+When forwarding a child's output fails, Netsuke records
+`netsuke_ninja_forward_failures_total` with two bounded labels: `stream`
+(`stdout` or `stderr`) and `failure_kind` (`read`, `write`, `flush`, or
+`drain`). It also emits a warning event carrying the same labels and the
+underlying error. `read` means the child stream could not be read, `write` that
+the destination rejected a chunk, `flush` that publishing the chunk failed, and
+`drain` that the remaining output could not be discarded after an earlier
+failure. A drain failure never replaces the kind that stopped forwarding.
+
+Forwarding loss does not change the reported build result. The child's exit
+status remains authoritative, so `netsuke build | head` closing the pipe early
+is a successful build with a truncated stream, not a build failure.
+
 ### Policy values and parsing
 
 The CLI and configuration use the same policy values, and policy names are
