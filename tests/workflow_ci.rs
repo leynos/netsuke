@@ -436,6 +436,8 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
     Ok(())
 }
 
+/// Check that the Kani smoke job installs through the shared tool, verifies
+/// the version locally, and then runs the bounded harnesses.
 #[test]
 fn behavioural_ci_workflow_wires_kani_smoke_job() -> Result<()> {
     let contents = workflow_contents("ci.yml").expect("CI workflow should be readable");

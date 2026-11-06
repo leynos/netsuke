@@ -304,7 +304,10 @@ The first formal-verification commands should extend the existing `Makefile`
 without disturbing the current developer workflow.[^2]
 
 - `make kani-check` should run the fast pinned-version drift guard suitable
-  for pull requests.
+  for pull requests. It stays a local read-only query: read
+  `tools/kani/VERSION`, ask the installed `cargo-kani` for `--version`, and
+  compare. It must not resolve `rust-prover-tools` through `uv`, so a cold host
+  needs no network access and the uv cache is not written by a check.
 - The bounded Kani harness suite now also runs on pull requests through
   `make kani-ir`.
 - `make kani-full` should run the full Kani suite.

@@ -24,6 +24,12 @@ struct FakeProverTools {
 }
 
 impl FakeProverTools {
+    /// Prepare a fake prover-tools executable and the files it observes.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the temporary directory or pinned version file cannot
+    /// be created.
     fn new() -> Result<Self> {
         let temp = tempdir().context("create fake prover-tools directory")?;
         let executable = temp.path().join("prover-tools");
@@ -72,24 +78,6 @@ impl ProverMakeCase {
             expected_args: &["kani", "install", "--api-token=kani-install-secret"],
             secret_flags_variable: "KANI_INSTALL_FLAGS",
             secret_flags_value: "--api-token=kani-install-secret",
-        }
-    }
-
-    /// Build the Kani proof-check case.
-    ///
-    /// Use `ProverMakeCase::kani_check()` to select the `kani-check` recipe.
-    const fn kani_check() -> Self {
-        Self {
-            target: "kani-check",
-            expected_args: &[
-                "kani",
-                "check-version",
-                "--kani-command",
-                "cargo kani",
-                "--license=kani-check-secret",
-            ],
-            secret_flags_variable: "KANI_CHECK_FLAGS",
-            secret_flags_value: "--license=kani-check-secret",
         }
     }
 
@@ -147,11 +135,13 @@ exit "${{PROVER_TOOLS_EXIT:-0}}"
         .with_context(|| format!("mark {} executable", executable.display()))
 }
 
+/// Supply each test with an isolated fake prover-tools installation.
 #[fixture]
 fn fake_prover_tools() -> Result<FakeProverTools> {
     FakeProverTools::new()
 }
 
+/// Build a Make invocation that routes prover-tools to the fake executable.
 fn make_command(fake: &FakeProverTools) -> Command {
     let mut command = Command::new("make");
     command
@@ -165,6 +155,11 @@ fn make_command(fake: &FakeProverTools) -> Command {
     command
 }
 
+/// Run one delegated Make target with the case's secret flag variable.
+///
+/// # Errors
+///
+/// Returns an error if the Make invocation cannot be spawned.
 fn run_make_target(fake: &FakeProverTools, case: ProverMakeCase) -> Result<Output> {
     let output = make_command(fake)
         .arg(case.target)
@@ -177,9 +172,10 @@ fn run_make_target(fake: &FakeProverTools, case: ProverMakeCase) -> Result<Outpu
     Ok(output)
 }
 
+/// Check that every delegated target forwards its real flags while redacting
+/// them from maintainer diagnostics.
 #[rstest]
 #[case(ProverMakeCase::install_kani())]
-#[case(ProverMakeCase::kani_check())]
 #[case(ProverMakeCase::install_verus())]
 #[case(ProverMakeCase::verus())]
 fn delegated_prover_targets_call_tool_and_redact_secret_flags(
@@ -216,6 +212,8 @@ fn delegated_prover_targets_call_tool_and_redact_secret_flags(
     Ok(())
 }
 
+/// Check that `make verus` selects the canonical-value proof when no flags are
+/// supplied.
 #[test]
 fn verus_uses_the_canonical_value_proof_by_default() -> Result<()> {
     let fake = FakeProverTools::new()?;
@@ -242,6 +240,8 @@ fn verus_uses_the_canonical_value_proof_by_default() -> Result<()> {
     Ok(())
 }
 
+/// Check that repeated proof-file options survive Make's shell parsing as
+/// distinct argv tokens, including paths containing spaces.
 #[test]
 fn verus_preserves_repeated_proof_files_and_paths_with_spaces() -> Result<()> {
     let fake = FakeProverTools::new()?;
@@ -271,6 +271,8 @@ fn verus_preserves_repeated_proof_files_and_paths_with_spaces() -> Result<()> {
     Ok(())
 }
 
+/// Check that a failing installer propagates its exit status without leaking
+/// secret flags.
 #[test]
 fn delegated_prover_target_reports_failure_exit_status() -> Result<()> {
     let fake = FakeProverTools::new()?;
@@ -295,6 +297,8 @@ fn delegated_prover_target_reports_failure_exit_status() -> Result<()> {
     Ok(())
 }
 
+/// Check that a failing proof run reports its status, redacts flags, and still
+/// forwarded the selected flags to the verifier.
 #[test]
 fn verus_target_reports_failure_exit_status_and_redacts_flags() -> Result<()> {
     let fake = FakeProverTools::new()?;
@@ -323,6 +327,8 @@ fn verus_target_reports_failure_exit_status_and_redacts_flags() -> Result<()> {
     Ok(())
 }
 
+/// Check that the Makefile keeps the reviewed prover-tools source, the
+/// public-Git environment, and the repository Python baseline.
 #[test]
 fn makefile_pins_prover_tools_to_the_reviewed_upstream_revision() -> Result<()> {
     let makefile = fs::read_to_string("Makefile").context("read Makefile")?;
@@ -344,6 +350,8 @@ fn makefile_pins_prover_tools_to_the_reviewed_upstream_revision() -> Result<()> 
     Ok(())
 }
 
+/// Check that Kani installation uses the prebuilt route only on its published
+/// host and falls back to compiling elsewhere.
 #[rstest]
 #[case::linux_x86_64("Linux", "x86_64", "kani install")]
 #[case::macos_arm64("Darwin", "arm64", "kani install --compile")]

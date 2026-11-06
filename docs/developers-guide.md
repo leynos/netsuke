@@ -5780,16 +5780,22 @@ under Kani while compiling everywhere else. If that happens, move Kani to a
 build whose nightly is 2026-08-04 or later rather than reinstating a
 `-Zpolonius` directive.
 
-Delegated prover targets print maintainer diagnostics to standard error before
-invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
-pinned source, Make target, redacted command shape, relevant Kani version, and
-non-zero exit status on failure.
+`make install-kani`, `make install-verus`, and `make verus` print maintainer
+diagnostics to standard error before invoking `rust-prover-tools`. Expect
+`prover-tools:` lines containing the pinned source, Make target, redacted
+command shape, relevant Kani version, and non-zero exit status on failure.
+`make kani-check` is not delegated and prints no `prover-tools:` invocation
+line; it reports its own `prover-tools: target=kani-check` diagnostics.
 
 Use the Make targets for day-to-day formal-verification checks:
 
 - `make kani-check` runs the fast local version check used by `formal-pr`.
-  This check verifies the `cargo-kani` executable in the active `$CARGO_HOME`
-  matches `tools/kani/VERSION`.
+  It reads `tools/kani/VERSION`, runs the `cargo-kani` executable in the active
+  `$CARGO_HOME` with `--version`, and compares the first semantic version in
+  its output with the file. The query is deliberately local and read-only: it
+  never resolves `rust-prover-tools` through `uv`, so it works without network
+  access and does not write the uv cache. A version mismatch, a failing
+  verifier, or unparsable output fails the target.
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.

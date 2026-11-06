@@ -47,14 +47,13 @@ NEXTEST_BUILD_JOBS ?=
 NEXTEST_TEST_JOBS ?=
 CLIPPY_FLAGS ?= --workspace --all-targets --all-features -- -D warnings
 KANI ?= "$(CARGO_HOME)/bin/cargo-kani"
-# Escape shell single quotes while preserving the quotes that keep paths with
-# spaces together for prover-tools' command parser.
+# Escape shell single quotes so the maintainer diagnostic prints the command as
+# one value even when the active Cargo home contains an apostrophe.
 KANI_SHELL_ARG := $(subst ','"'"',$(KANI))
 KANI_FLAGS ?=
 # Use the verified archive on its supported host; retain Cargo installation
 # for developers on other platforms. CI sets explicit cached install flags.
 KANI_INSTALL_FLAGS ?= $(if $(filter Linux-x86_64,$(KANI_HOST_TRIPLE)),,--compile)
-KANI_CHECK_FLAGS ?=
 KANI_VERSION_FILE ?= tools/kani/VERSION
 # The development build standard: the `mold` linker and the parallel `rustc`
 # frontend are the defaults for development, test, lint, and typecheck builds.
@@ -660,11 +659,29 @@ install-kani: ## Install the pinned Kani verifier
 	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani install <redacted-flags>' >&2
 	@PATH="$$CARGO_HOME/bin:$$PATH" $(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-kani failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
+# A query path must stay local: read the pin, ask the installed verifier for
+# its version, and compare. Resolving the shared CLI through `uv tool run` here
+# would fetch a Git package and write the uv cache on a cold host, so that work
+# stays in `install-kani` alone.
 kani-check: ## Check the installed Kani verifier version
-	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
-	@printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$(cat '$(KANI_VERSION_FILE)')" >&2
-	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani check-version --kani-command <redacted-command> <redacted-flags>' >&2
-	@$(PROVER_TOOLS) kani check-version --kani-command '$(KANI_SHELL_ARG)' $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
+	@version_file='$(subst ','"'"',$(KANI_VERSION_FILE))'; \
+	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
+	printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$expected" >&2; \
+	output="$$($(KANI) --version 2>&1)"; status=$$?; \
+	if [ "$$status" -ne 0 ]; then \
+		printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; \
+		exit "$$status"; \
+	fi; \
+	actual="$$(printf '%s\n' "$$output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"; \
+	if [ -z "$$actual" ]; then \
+		printf 'prover-tools: target=kani-check could not parse Kani version from: %s\n' "$$output" >&2; \
+		exit 1; \
+	fi; \
+	if [ "$$actual" != "$$expected" ]; then \
+		printf 'prover-tools: target=kani-check expected Kani %s from %s, found %s\n' "$$expected" "$$version_file" "$$actual" >&2; \
+		exit 1; \
+	fi; \
+	printf 'Kani %s matches %s.\n' "$$actual" "$$version_file"
 
 kani-full: ## Run the full Kani verification suite
 	$(KANI_RUSTFLAGS) $(KANI) $(KANI_FLAGS)
