@@ -1142,3 +1142,24 @@ the one-word change. This plan-only revision follows the code commit so the
 recorded candidate SHA and gate evidence stay together. Next, publish over SSH,
 reconcile the current-head review and pre-merge rows, request the final
 approval, and merge once equilibrium holds. Keep Status: IN PROGRESS.
+
+Revision 43 (2026-11-06): The hosted CodeScene check failed on the Revision 42
+head with "Code Duplication" (9.38) in tests/prover_tools_kani_check_tests.rs,
+where each case repeated the same fake-verifier, version-file, and query setup.
+Commit `3a684b0689dc66feecb69add11f4efe0c9d2625e` extracts `run_fake_kani` and
+`run_failing_check` helpers and introduces a `PINNED_VERSION` constant, so the
+version file takes no argument and each test states only the verifier script it
+exercises. The first extraction scored 9.68 on "String Heavy Function
+Arguments" because the version string was still threaded through as a
+parameter; removing that parameter restored 10.00 with no advisories. The
+committed tree hash is `5600d58467a5eba7bb6301a8168ba2610cb1eba4`, identical to
+the candidate the gates ran against, and all 12 gates passed sequentially on it:
+`make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage` (98.23%),
+`make markdownlint` (212 files, zero issues), `make nixie`, `make test` (4,953
+passed, 7 skipped, plus doctests), `make test-workflow-contracts` (1,669
+passed, 3 skipped, plus 28 helper tests), `make test-ci-scripts` (90 passed),
+`make test-prover-tools-integration` (7 passed), `mbake validate Makefile`, and
+`git diff --check`. This plan-only revision follows the code commit. Next,
+publish over SSH, post the pre-merge reconciliation comment, await the queued
+CodeRabbit review, request the final approval, and merge once equilibrium
+holds. Keep Status: IN PROGRESS.
