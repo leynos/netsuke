@@ -57,8 +57,14 @@ max-threads = 1
 # prewarm's invocation: it compiles a valid tree and two deliberately broken
 # ones, so it needs the same warm target and a build-capable group slot.
 [[profile.default.overrides]]
+# Nextest orders tests by `priority` before applying the group, and a higher
+# number runs first. Without this, the negative check can be scheduled ahead of
+# the prewarm inside their shared invocation: on a cold target its clean
+# compile and two fault compiles would then pay the dependency build out of its
+# own allowance, which is precisely the cost the split exists to avoid.
 filter = 'test(/^prewarm::prewarm_kani_mutation_target($|::)/)'
 test-group = "nested-cargo-builds"
+priority = 1
 success-output = "immediate"
 slow-timeout = { period = "60s", terminate-after = 15 }
 
@@ -72,10 +78,10 @@ slow-timeout = { period = "60s", terminate-after = 15 }
 filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'
 test-group = "nested-cargo-builds"
 success-output = "immediate"
-# Fifteen warning periods, not the profile's five. The cold-build and
-# patch-sweep costs together exhaust one allowance on CI, so the prewarm now
-# pays the cold cost in a separate invocation. The target directory is not
-# restored by `kani-cache`.
+# Fifteen warning periods, not the profile's five. The patch sweep needs the
+# warm target that the prewarm builds in its own invocation, because
+# `kani-cache` does not restore that directory; without the prewarm, the sweep
+# pays the cold dependency build out of this allowance.
 #
 # Measured: 151.5 s on a local host, and 257.7 s and 261.5 s on CI in two
 # runs that both passed, against the 300 s default. A third CI run hit
@@ -84,8 +90,11 @@ success-output = "immediate"
 # nextest's cap rather than the patch that was slow. CI run 41782146443 passed
 # in 480.264 s on the previous base; after rebasing, run 41826968891 reached
 # this 600 s cap. Child compiler output is captured, so that establishes a
-# lower bound but gives no per-patch timing. The 900 s allowance is the largest
-# the 960 s whole-run budget admits and leaves 60 s for nextest to stop cleanly.
+# lower bound but gives no per-patch timing. The 900 s allowance sits below the
+# 960 s whole-run cap that the coverage lanes apply under `NEXTEST_PROFILE=ci`,
+# so one figure governs both shapes and still leaves 60 s for nextest to stop
+# cleanly there. `kani-smoke` sets no profile, so it has no whole-run budget and
+# its 30-minute job timeout is the outer bound.
 slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.default.overrides]]
