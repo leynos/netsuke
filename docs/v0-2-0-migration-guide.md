@@ -95,11 +95,16 @@ output contract are in the
 
 ## Migration checklist
 
-- [ ] In POSIX and Bash recipes, inspect the backslashes immediately before
-      every `{{ ins }}` and `{{ outs }}` marker.
+- [ ] In POSIX and Bash `command:` and `script:` text, and in heredoc
+      delimiter words, inspect the backslashes immediately before every
+      `{{ ins }}` and `{{ outs }}` marker.
 - [ ] Rewrite only a marker whose preceding run of backslashes has odd length,
-      as `\\{{ ins }}` or `'{{ ins }}'`, and likewise for `outs`. An even run is
-      already valid; leave it unchanged.
+      and likewise for `outs`. Adding one backslash makes the run even and turns
+      the formerly active escape into a pair, as in `\\{{ ins }}`. Placing the
+      marker in single quotes, as `'{{ ins }}'`, leaves the run untouched. An
+      even run is already valid, so leave it unchanged; a marker inside single
+      quotes needs no change either, because a backslash there escapes nothing.
+      Heredoc bodies are inert, so nothing in them needs rewriting.
 - [ ] Run `netsuke check` and resolve any findings worth adopting.
 
 ## Common errors and fixes
