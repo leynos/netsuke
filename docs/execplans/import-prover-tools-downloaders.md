@@ -370,6 +370,16 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       `fe679d954f064187ab642572bfc09640649e5dec`; the code commit is
       `b45b19da5d00f6c2bfeb63681384743a24f2a853`. Revision 45 records the
       detail, and Revision 44's superseded claim is corrected in place.
+- [x] (2026-11-06) Make the `kani-check` write boundary a required CI check.
+      Commit `231ec7344` creates `/tmp` and the caller's home directory inside
+      the chroot before the read-only remount, so both are proven unwritable
+      instead of absent, and guards an unset `HOME` under `set -u`; adds a
+      capability probe that performs the bind, read-only remount, procfs
+      mount, and `chroot` the sandbox needs and names the operation a host
+      refused; gates the sandbox module with `#[cfg(target_os = "linux")]`;
+      and runs the case as `make test-kani-check-isolation` with
+      `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` from its own `kani-smoke` step.
+      All 16 gate targets pass on tree `bc8771006`. See Revision 46.
 
 ## Surprises & discoveries
 
@@ -1268,9 +1278,9 @@ requests, and the case then calls `sandbox::skip`, which prints
 records the case as passed with zero skipped, so the reason is visible only in
 the captured output. `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` converts it into a
 failure, following the precedent of `NETSUKE_REQUIRE_NINJA`, and remains
-available to a lane that must exercise the boundary. It is not set in CI, so
-the boundary is enforced on hosts that admit user namespaces and reported, not
-enforced, on those that do not.
+available to a lane that must exercise the boundary. This revision left it
+unset in CI; Revision 46 corrects that with a dedicated `kani-smoke` step, so
+the required lane enforces the boundary rather than reporting it.
 
 The sandbox machinery moved to `tests/prover_tools_kani_check_tests/sandbox.rs`
 because the combined file reached 413 lines and the `module-max-lines` lint
@@ -1292,3 +1302,124 @@ passed), and `make test-package-verify` (publish dry run). The code commit is
 Next, post the corrective follow-up comment, await the CodeRabbit review,
 request the final approval, and merge once equilibrium holds. Keep Status: IN
 PROGRESS.
+
+Revision 46 (2026-11-06): The review at head `8c80761db` raised four inline
+findings and an earlier trivial one. Commit `231ec7344` supplies the repairs,
+and CodeRabbit marked the four inline findings addressed in
+`8c80761`..`231ec73`.
+
+The chroot now creates `/tmp` and the caller's home directory before the root
+is remounted read-only. Revision 45 left both paths outside the mounts, so the
+probe reported `absent` where the assertion required `read-only`, and the home
+probe dereferenced `$HOME` under `set -u`. Both directories are now proven
+unwritable rather than merely missing, an unset `HOME` is guarded with
+`${HOME:-}` and reported as `home=absent`, and the test accepts either reading
+for `home` while still refusing any `=writable` line other than `control`.
+Findings
+[#4495296252](https://github.com/leynos/netsuke/pull/1063#discussion_r4495296252)
+and
+[#4495296271](https://github.com/leynos/netsuke/pull/1063#discussion_r4495296271).
+
+Creating the namespaces does not prove the sandbox can build its chroot: a host
+may admit `unshare` and still refuse a bind mount, a read-only remount, a
+procfs mount, or `chroot`. `unavailable()` now runs exactly that sequence on a
+throwaway directory inside the namespace, with a distinct exit status for each
+step, and `probe_stage` names the refused operation in the reported skip. A
+host that can do only part of the sequence is therefore reported, not failed
+from inside the real script. Finding
+[#4495296289](https://github.com/leynos/netsuke/pull/1063#discussion_r4495296289).
+
+The sandbox module, its `SandboxPaths` import, and `run_sandboxed_check` are
+gated with `#[cfg(target_os = "linux")]`, so a non-Linux Unix build compiles
+them out instead of carrying dead code that `-D warnings` rejects. Finding
+[#4495296304](https://github.com/leynos/netsuke/pull/1063#discussion_r4495296304).
+
+The trivial finding
+[#4493213472](https://github.com/leynos/netsuke/pull/1063#discussion_r4493213472)
+asked for a boundary test that blocks and records network attempts and
+inspects an isolated uv cache for writes. Revision 45 already supplies the
+first half: the sandbox runs in a network namespace whose only interface is
+`lo`, the case asserts `ifaces=lo,` and `dns=blocked`, and a DNS lookup is
+attempted inside the sandbox so a namespace that failed to apply cannot pass.
+The cache half is subsumed rather than omitted. `.uv-cache` and `.uv-tools`
+live inside the repository, which is bound read-only as a whole, and
+`$HOME/.cache/uv` lies under the home directory, which the `home` probe covers
+by the same rule. A read-only mount is enforced by the kernel for every
+descendant, so a probe of a cache subdirectory cannot fail while
+`repo=read-only` passes; the existing catch-all assertion rejects any
+`=writable` line. The recipe also invokes neither `uv` nor the network, and both
+`PROVER_TOOLS` and `UV` are poisoned, so an attempt would fail loudly rather
+than silently succeed.
+
+`kani-smoke` now runs `make test-kani-check-isolation` as its own step. That
+target exports `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`, so the required lane
+fails when the boundary cannot be demonstrated instead of recording a skip that
+nextest counts as a pass. `NEXTEST_TARGETS` gains the target, which the nextest
+contract test requires of every target that invokes `cargo nextest run`.
+
+`make test-prover-tools-integration` now passes `--with hypothesis`, which its
+property test already imported. The Python suite also resolves `make` through
+`shutil.which` rather than a bare name, and both multi-line docstrings carry
+the numpydoc `Returns` section the house lints require.
+
+The committed tree hash is `bc87710068100639776c815581e65421b94f1b0b`,
+identical to the candidate the gates ran against. All 16 gate targets passed
+sequentially on it: `make check-fmt`, `make lint-clippy`, `make lint-whitaker`,
+`make lint-python`, `make github-actions-lint`, `make typecheck`,
+`make doc-coverage` (98.23%), `make markdownlint` (212 files, zero issues),
+`make nixie`, `make test-nextest` (4,957 passed, 7 skipped), `make doctest`,
+`make test-workflow-contracts` (1,669 passed, 3 skipped, plus 28 helper tests),
+`make test-ci-scripts` (90 passed), `make test-prover-tools-integration` (11
+passed), `make test-documentation-contracts` (15 passed, 48 skipped), and
+`make test-package-verify` (711 files packaged). `make lint` is decomposed into
+its four documented prerequisites only to fit the harness's per-command limit;
+the set is the one the target runs. The code commit is `231ec7344`. This
+plan-only revision follows it. Next, post the corrective follow-up comment,
+await the CodeRabbit review, request the final approval, and merge once
+equilibrium holds. Keep Status: IN PROGRESS.
+
+Revision 47 (2026-11-06): The first hosted run of the new boundary step failed
+before the sandbox ran. Run `42275955402`, job `128092206020`, step 14, "Verify
+the kani-check isolation boundary", at head `231ec7344`:
+
+```text
+Error: the kani-check isolation sandbox could not be exercised: the isolation
+sandbox cannot run the capability probe: unshare: write failed
+/proc/self/uid_map: Operation not permitted (strict mode requires the boundary
+test to run for real)
+```
+
+The lane runs on `ubicloud-standard-2-ubuntu-2404`, and Ubuntu 24.04 ships
+`kernel.apparmor_restrict_unprivileged_userns=1`, which confines unprivileged
+user namespaces with AppArmor. `unshare --user` therefore fails at the
+`uid_map` write, before the capability probe can report a stage. The strict
+variable did its job: the lane failed rather than recording a skip that nextest
+would count as a pass.
+
+The step now lifts that restriction for its own duration and restores it
+afterwards, preserving `make`'s exit status across the restore so a genuine
+sandbox failure is still reported as itself. A host that will not let the
+restriction be lifted fails with an `::error::` naming the reason, rather than
+reporting a sandbox failure that never reached the sandbox. The local host is
+Rocky 10, which has no AppArmor and admits unprivileged user namespaces, so the
+repair is exercised only by the hosted lane; locally
+`make test-kani-check-isolation` ran 9 tests with 0 skipped, so the boundary
+itself was exercised for real.
+
+The hosted lane then confirmed the repair at head `9430d0f93`: run
+`42283994996`, job `128119970127`, step 14. The log records
+`kernel.apparmor_restrict_unprivileged_userns = 0` after the lift, then
+`9 tests run: 9 passed, 0 skipped`, then `= 1` after the restore. The required
+lane therefore enforces the boundary for real, rather than reporting a skip on
+the one host whose policy would otherwise forbid it.
+
+The committed tree hash is `d4627899165a7826d471f17de458df6997aad26d`, and all
+13 gate targets passed sequentially on the candidate that carried this revision:
+`make check-fmt`, `make lint-clippy`, `make lint-whitaker`, `make lint-python`,
+`make github-actions-lint`, `make typecheck`, `make doc-coverage` (98.23%),
+`make markdownlint` (212 files, zero issues), `make nixie`,
+`make test-kani-check-isolation` (9 passed, 0 skipped), `make test-nextest`,
+`make doctest`, and `make test-workflow-contracts`. The code commit is
+`9430d0f93`. This plan-only revision follows it. Next, post the corrective
+follow-up comment, await the CodeRabbit review, request the final approval, and
+merge once equilibrium holds. Keep Status: IN PROGRESS.

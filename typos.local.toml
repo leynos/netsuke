@@ -56,6 +56,11 @@ raizing = "raising"
 # The shared dictionary corrects this en-GB term to American spelling; this
 # repository's prose deliberately retains the required local form.
 ignore = ["mis-grouping",
+  # `AppArmor` names the Linux security module
+  # (https://gitlab.com/apparmor/apparmor); the tokenizer splits it into
+  # `App` and `Armor`, so ignore the whole proper noun rather than accepting
+  # American `Armor` across the repository.
+  "\\bAppArmor\\b",
   # HTML attribute value in the README localization menus; not prose.
   "align=\"center\"",
   "\\blocalisation\\b",
