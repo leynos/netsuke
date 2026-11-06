@@ -11,7 +11,7 @@
 //! the shell still holds as heredoc data.
 
 use super::super::{CommandBindings, Placeholder, QuoteContext, find_substitution};
-use super::{DelimiterRejection, EscapeBeforeMarker, backslash_escapes_marker, is_word_terminator};
+use super::{DelimiterRejection, EscapeBeforeMarker, SourceChar, backslash_escapes_marker};
 
 /// Track quote removal within one heredoc delimiter word.
 #[derive(Clone, Copy)]
@@ -59,7 +59,7 @@ pub(super) fn parse_delimiter(
     }
     let mut word = DelimiterWord::new(start);
     while let Some(ch) = chars.get(word.pos).copied() {
-        if word.is_terminated_by(ch) {
+        if word.is_terminated_by(SourceChar::new(ch)) {
             break;
         }
         word.consume(ch, chars)?;
@@ -94,8 +94,8 @@ impl DelimiterWord {
     }
 
     /// Report whether an unquoted `ch` ends the delimiter word.
-    const fn is_terminated_by(&self, ch: char) -> bool {
-        matches!(self.quote_context, DelimiterQuoteContext::Unquoted) && is_word_terminator(ch)
+    const fn is_terminated_by(&self, ch: SourceChar) -> bool {
+        matches!(self.quote_context, DelimiterQuoteContext::Unquoted) && ch.is_word_terminator()
     }
 
     /// Apply one source character, stopping at forms the tracker cannot model.

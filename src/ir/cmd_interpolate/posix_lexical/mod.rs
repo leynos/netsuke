@@ -7,11 +7,10 @@
 
 use std::collections::VecDeque;
 
-use super::{CommandBindings, find_substitution};
+use super::find_substitution;
 
+mod declaration;
 mod delimiter;
-
-use delimiter::{parse_delimiter, render_delimiter, rendered_terminator};
 
 #[cfg(test)]
 mod tests;
@@ -123,6 +122,41 @@ pub(super) fn backslash_escapes_marker(
     bound.is_none_or(|end| pos + 1 + skip <= end)
 }
 
+/// Classify one source character with POSIX shell word rules.
+///
+/// Only ASCII blanks and the shell operator set separate words; Unicode
+/// whitespace is ordinary word text. Naming that rule as a type keeps the
+/// distinction explicit at each call site that decides where a word ends.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct SourceChar(char);
+
+impl SourceChar {
+    /// Wrap one source character for POSIX word classification.
+    pub(super) const fn new(ch: char) -> Self {
+        Self(ch)
+    }
+
+    /// Return this character as source text.
+    pub(super) const fn as_char(self) -> char {
+        self.0
+    }
+
+    /// Report whether this character is a POSIX blank: a space or a tab.
+    const fn is_blank(self) -> bool {
+        matches!(self.0, ' ' | '\t')
+    }
+
+    /// Report whether this character terminates an unquoted shell word.
+    ///
+    /// POSIX shells tokenize on blanks, newlines, and operator characters.
+    /// Unicode whitespace such as NBSP, em space, vertical tab, form feed, and
+    /// carriage return is ordinary word text, so treating it as a separator
+    /// would end a delimiter before the shell does.
+    pub(super) const fn is_word_terminator(self) -> bool {
+        self.is_blank() || matches!(self.0, '\n' | ';' | '|' | '&' | '(' | ')' | '<' | '>')
+    }
+}
+
 /// Group the current source character with the output it must preserve.
 pub(super) struct PosixCharacter<'chars, 'output> {
     /// Borrow the source-character buffer for lexical checks.
@@ -162,7 +196,7 @@ impl PosixLexicalState {
             return false;
         };
         character.output.push(character.ch);
-        if body.consume(character.ch) {
+        if body.consume(SourceChar::new(character.ch)) {
             self.heredoc_body = None;
             self.begin_next_heredoc();
         }
@@ -177,64 +211,6 @@ impl PosixLexicalState {
     /// Report whether an unquoted number sign begins a POSIX comment.
     pub(super) fn starts_comment(chars: &[char], pos: usize, ch: char) -> bool {
         ch == '#' && is_shell_word_boundary(chars, pos)
-    }
-
-    /// Preserve one heredoc declaration and queue its body delimiter.
-    ///
-    /// A here-string (`<<<`) copies its operator without queueing a body.
-    /// Delimiter forms the tracker cannot model are rejected rather than
-    /// copied, because a mis-tracked terminator would let marker lowering
-    /// resume inside the shell's real heredoc body.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`EscapeBeforeMarker`] when the delimiter word would lower a
-    /// marker directly after an active escape.
-    pub(super) fn append_heredoc_declaration(
-        &mut self,
-        character: &mut PosixCharacter<'_, '_>,
-        bindings: &CommandBindings,
-    ) -> Result<HeredocDeclaration, EscapeBeforeMarker> {
-        if character.ch != '<' || character.chars.get(character.pos + 1) != Some(&'<') {
-            return Ok(HeredocDeclaration::NotADeclaration);
-        }
-        if character.chars.get(character.pos + 2) == Some(&'<') {
-            return Ok(copy_here_string_operator(character));
-        }
-        let mut word_start = character.pos + 2;
-        let strips_leading_tabs = character.chars.get(word_start) == Some(&'-');
-        if strips_leading_tabs {
-            word_start += 1;
-        }
-        while character
-            .chars
-            .get(word_start)
-            .is_some_and(|ch| is_posix_blank(*ch))
-        {
-            word_start += 1;
-        }
-        let parsed = match parse_delimiter(character.chars, word_start) {
-            Ok(parsed) => parsed,
-            Err(reason) => return Ok(HeredocDeclaration::Rejected(reason)),
-        };
-        let rendered = render_delimiter(character.chars, word_start, parsed.end, bindings)?;
-        let terminator = match rendered_terminator(&rendered) {
-            Ok(terminator) => terminator,
-            Err(reason) => return Ok(HeredocDeclaration::Rejected(reason)),
-        };
-        let Some(operator_prefix) = character.chars.get(character.pos..word_start) else {
-            return Ok(HeredocDeclaration::Rejected(
-                DelimiterRejection::RenderedDelimiterInvalid,
-            ));
-        };
-        character.output.extend(operator_prefix.iter());
-        character.output.push_str(&rendered);
-        self.pending_heredocs.push_back(HeredocDelimiter {
-            text: terminator.text,
-            is_quoted: terminator.is_quoted,
-            strips_leading_tabs,
-        });
-        Ok(HeredocDeclaration::Copied(parsed.end))
     }
 
     /// Begin the first queued heredoc body after its declaration line ends.
@@ -255,22 +231,6 @@ impl PosixLexicalState {
     }
 }
 
-/// Copy a `<<<` here-string operator without queueing a heredoc body.
-///
-/// A here-string takes its input from the word that follows it on the same
-/// command line, so no later line terminates it.
-fn copy_here_string_operator(character: &mut PosixCharacter<'_, '_>) -> HeredocDeclaration {
-    let operator_end = character.pos + 3;
-    character.output.extend(
-        character
-            .chars
-            .get(character.pos..operator_end)
-            .into_iter()
-            .flatten(),
-    );
-    HeredocDeclaration::Copied(operator_end)
-}
-
 impl HeredocBody {
     /// Record one copied body character and report whether it ends the body.
     ///
@@ -281,21 +241,21 @@ impl HeredocBody {
     /// bodies accumulate logical lines and compare only once one is complete.
     /// A quoted delimiter suppresses expansion and joining alike, so each
     /// physical line is already the unit the shell compares.
-    fn consume(&mut self, ch: char) -> bool {
-        if ch == '\n' {
+    fn consume(&mut self, ch: SourceChar) -> bool {
+        if ch.as_char() == '\n' {
             return self.finish_line();
         }
         if self.is_stripped_tab(ch) {
             return false;
         }
         self.at_line_start = false;
-        self.line.push(ch);
+        self.line.push(ch.as_char());
         false
     }
 
     /// Report whether `ch` is a leading tab that `<<-` removes before matching.
-    const fn is_stripped_tab(&self, ch: char) -> bool {
-        self.at_line_start && self.delimiter.strips_leading_tabs && ch == '\t'
+    const fn is_stripped_tab(&self, ch: SourceChar) -> bool {
+        self.at_line_start && self.delimiter.strips_leading_tabs && ch.as_char() == '\t'
     }
 
     /// Compare the completed line and report whether the body ends here.
@@ -337,7 +297,7 @@ fn is_shell_word_boundary(chars: &[char], pos: usize) -> bool {
         && is_unescaped_character(chars, previous_pos)
         && chars
             .get(previous_pos)
-            .is_some_and(|previous| is_word_terminator(*previous))
+            .is_some_and(|previous| SourceChar::new(*previous).is_word_terminator())
 }
 
 /// Find the preceding shell character after removing unquoted line continuations.
@@ -363,19 +323,4 @@ fn is_unescaped_character(chars: &[char], pos: usize) -> bool {
         .count()
         .rem_euclid(2)
         == 0
-}
-
-/// Report whether `ch` is a POSIX blank: a space or a tab.
-const fn is_posix_blank(ch: char) -> bool {
-    matches!(ch, ' ' | '\t')
-}
-
-/// Report whether `ch` terminates an unquoted shell word.
-///
-/// POSIX shells tokenize on blanks, newlines, and operator characters. Unicode
-/// whitespace such as NBSP, em space, vertical tab, form feed, and carriage
-/// return is ordinary word text, so treating it as a separator would end a
-/// delimiter before the shell does.
-pub(super) const fn is_word_terminator(ch: char) -> bool {
-    is_posix_blank(ch) || matches!(ch, '\n' | ';' | '|' | '&' | '(' | ')' | '<' | '>')
 }

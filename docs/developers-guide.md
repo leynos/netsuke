@@ -7024,19 +7024,24 @@ after analysing its shell context. Keep this split private to `ir`; it is an
 implementation boundary, not a public command-template API.
 
 The private `src/ir/cmd_interpolate/posix_lexical/mod.rs` helper owns the
-single-pass recognition of POSIX comments and heredoc inert regions. It copies
+single-pass recognition of POSIX comments and heredoc inert regions. Its
+`declaration.rs` child parses and queues one heredoc declaration, and its
+`delimiter.rs` child owns the delimiter word's quoting grammar; the split keeps
+each module inside the workspace's 400-line limit. The parent module copies
 those comments and heredoc bodies byte-for-byte, so internal marker tokens in
 them are not expanded and can remain in the generated recipe; markers in
 heredoc delimiters are expanded. Delimiter words are tokenized on the shell's
 own boundaries — blanks, newlines, and the operators `;`, `|`, `&`, `(`, `)`,
 `<`, and `>` — so Unicode whitespace stays inside the word, as the shell reads
-it. Its `HeredocDeclaration` result separates "not a declaration", "copied",
-and "rejected"; a rejection propagates through both traversals as an
-`IrGenError::InvalidCommand` naming the unsupported syntax, so a delimiter the
-tracker cannot model never lets marker lowering resume inside shell heredoc
-data. It queues declarations FIFO, including quoted delimiters and `<<-`
-tab-stripping delimiters, so their text cannot change the surrounding quote
-context. `<<<` is recognized as a here-string and queues no body. Body
+it. That classification lives on the `SourceChar` newtype, so the difference
+between a POSIX blank and Unicode whitespace is a named operation rather than a
+repeated comparison. Its `HeredocDeclaration` result separates "not a
+declaration", "copied", and "rejected"; a rejection propagates through both
+traversals as an `IrGenError::InvalidCommand` naming the unsupported syntax, so
+a delimiter the tracker cannot model never lets marker lowering resume inside
+shell heredoc data. It queues declarations FIFO, including quoted delimiters and
+`<<-` tab-stripping delimiters, so their text cannot change the surrounding
+quote context. `<<<` is recognized as a here-string and queues no body. Body
 termination follows the shell's own unit: because an unquoted delimiter leaves
 the body subject to expansion, a physical line ending in an odd backslash run
 is joined to the next line before the tracker compares it, with a leading tab
