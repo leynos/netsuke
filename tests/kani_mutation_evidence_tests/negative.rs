@@ -60,22 +60,26 @@ fn compile_kani_tree_rejects_trees_that_do_not_compile() -> Result<()> {
     let target_dir = manifest_dir().join(SHARED_TARGET_DIR);
     let sandbox = Sandbox::create(manifest_dir())?;
     ensure_sandbox_is_isolated(&sandbox)?;
-    if let Some(stderr) = compile_kani_tree(&sandbox, &target_dir)? {
-        bail!("the unmodified sandbox tree failed to compile: {stderr}");
+    if let Some(failure) = compile_kani_tree(&sandbox, &target_dir)? {
+        bail!("the unmodified sandbox tree failed to compile: {failure}");
     }
 
     for (fault, marker) in SEEDED_FAULTS {
-        let stderr = compile_seeded_fault(&target_dir, fault)?;
+        let failure = compile_seeded_fault(&target_dir, fault)?;
         ensure!(
-            stderr.contains(marker),
+            failure.contains(marker),
             "a seeded fault was rejected for a reason other than the fault \
-             itself: marker {marker:?} is absent from {stderr}"
+             itself: marker {marker:?} is absent from {failure}"
         );
     }
     Ok(())
 }
 
-/// Compile a fresh sandbox carrying one seeded fault and return its stderr.
+/// Compile a fresh sandbox carrying one seeded fault and return its failure
+/// output.
+///
+/// The output is Kani's rendered diagnostics followed by Cargo's summary; both
+/// are needed, and [`compile_kani_tree`] says which stream carries which.
 ///
 /// # Errors
 ///
