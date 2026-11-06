@@ -108,7 +108,7 @@ pub(crate) fn generate_bundle_for_shell(
     graph: &BuildGraph,
     shell: RecipeShell,
 ) -> Result<GeneratedNinja, NinjaGenError> {
-    let interpreter = resolve_default_interpreter(shell);
+    let interpreter = resolve_default_interpreter(graph, shell)?;
     let binding = interpreter
         .as_ref()
         .map_or(InterpreterBinding::Unbound, InterpreterBinding::Bound);

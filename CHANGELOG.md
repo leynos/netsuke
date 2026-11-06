@@ -32,10 +32,11 @@
 - **Breaking:** `generate` now resolves the Windows Bash compatibility runtime
   and writes its absolute path. When no `bash.exe` is available it fails with a
   missing-runtime diagnostic and writes no plan, instead of emitting the bare
-  name for later `PATH` resolution. Library callers rendering PowerShell or
-  Bash commands must supply a binding or receive
-  `NinjaGenError::InterpreterBindingRequired`
-  ([#980](https://github.com/leynos/netsuke/issues/980))
+  name for later `PATH` resolution. Library callers rendering Bash commands on
+  any platform, or PowerShell commands on non-Windows platforms, must supply a
+  binding or receive `NinjaGenError::InterpreterBindingRequired`; on Windows
+  the library `generate` entry points resolve the trusted PowerShell binding
+  themselves ([#980](https://github.com/leynos/netsuke/issues/980)).
 - Bump `ortho_config` from 0.9.0 to 0.10.0 in the library, build-dependency,
   and build-slice fixture manifests, and `cargo-orthohelp` from 0.9.1 to 0.10.0
   in the release workflow. Release help now emits OrthoConfig documentation IR

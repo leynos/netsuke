@@ -2653,12 +2653,14 @@ absolute interpreter followed by
 so neither the shell that launched Netsuke nor Windows executable search
 selects the recipe interpreter. On Windows, the parent is always
 `<System>\WindowsPowerShell\v1.0\powershell.exe`, built from the Known Folder
-API's system directory by `src/recipe_shell/power_shell_location.rs`. The
-lookup reads no environment variable, does not consult `PATH` or the current
-directory, does not select `pwsh.exe`, and never launches a candidate as a
-probe; the returned `InterpreterExecutable` is the only binding the renderer
-accepts. It authenticates location, not content: no Authenticode check runs,
-and the resolution-to-launch race remains documented in ADR-0071. On Windows,
+API's system directory by `src/power_shell_location/mod.rs`. The lookup reads
+no environment variable, does not consult `PATH` or the current directory, does
+not select `pwsh.exe`, and never launches a candidate as a probe; the runner
+uses that locator for Windows PowerShell. The renderer also accepts any
+`InterpreterExecutable` that an embedder constructs from an absolute, NUL-free
+path, so embedders own the trust decision for bindings they supply. The binding
+authenticates location, not content: no Authenticode check runs, and the
+resolution-to-launch race remains documented in ADR-0071. On Windows,
 `NETSUKE_WINDOWS_SHELL=bash` selects the explicit Bash compatibility route.
 Before a build or Ninja-tool operation, the runner searches the injected `PATH`
 entries from left to right, resolves the selected `bash.exe` to an absolute
@@ -2688,8 +2690,10 @@ informational. Multiple native commands inside one entry are not individually
 instrumented. POSIX and Bash use the same brace-group and `eval` wrapper:
 shared groups carry current-shell state, while isolated groups run in
 subshells. The background-job and `exec` validation rules apply to both POSIX
-modes. Target discovery and generation do not execute recipes, so they do not
-require the optional Bash runtime.
+modes. Target discovery does not execute recipes and does not require the
+optional Bash runtime; `generate` resolves the selected runtime before graph
+generation and, when resolution fails, stops with a missing-runtime diagnostic
+instead of writing a plan.
 
 PowerShell recipes that fit within the 32,766-character Windows command-line
 limit use `-EncodedCommand`. The check counts the complete unescaped command in

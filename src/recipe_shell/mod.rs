@@ -4,19 +4,15 @@
 //! rendering. Lowering needs the selected interpreter to quote placeholders,
 //! while the Ninja adapter owns the interpreter-specific command transport.
 //!
-//! It stays data-only: the encoder it maps into lives in the private
-//! `shell_word` module, so this module carries no `shell_quote` dependency.
-//! That module is deliberately not linked here — it is private, and a public
-//! module's docs may not name it with an intra-doc link.
-
-mod power_shell_location;
+//! The binding types stay data-only: the encoder they map into lives in the
+//! private `shell_word` module, so this module carries no `shell_quote`
+//! dependency. That module is deliberately not linked here — it is private,
+//! and a public module's docs may not name it with an intra-doc link. The
+//! Windows Known Folder locator is an adapter in its own module, so this
+//! contract stays independent of the filesystem and of the runner.
 
 use crate::shell_word::ShellDialect;
 use camino::{Utf8Path, Utf8PathBuf};
-pub(crate) use power_shell_location::{
-    KnownFolderSystemDirectory, SystemDirectory, WindowsPowerShellLocationError,
-    locate_windows_power_shell,
-};
 use thiserror::Error;
 
 /// Identify the exact interpreter executable bound into a generated plan.

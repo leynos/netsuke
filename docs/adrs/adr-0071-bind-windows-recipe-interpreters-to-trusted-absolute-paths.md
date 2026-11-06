@@ -36,7 +36,8 @@ without a resolvable runtime because they never execute the result.
   performs executable search.
 - The renderer must remain a pure function of its inputs.
 - A binding must be authenticated once and reused by preflight, rendering and
-  execution, so no window exists for a different file to be selected.
+  execution, so launch does not repeat executable search. A file replaced at
+  the bound path before launch remains outside this guarantee.
 - Existing manifests, including the Windows PowerShell legacy recipes and the
   explicit Bash compatibility route, must keep working on supported hosts.
 - Query-only generation must not require an installed runtime and must never
@@ -71,12 +72,12 @@ substitute, and no candidate is executed as a probe.
 
 ## Decision outcome
 
-`src/recipe_shell/power_shell_location.rs` constructs the candidate path from
-an injected `SystemDirectory` port, implemented for production by the
-`known-folders` crate's `KnownFolder::System`. On non-Windows targets the
-locator does not exist. The resolved path must be UTF-8, absolute, and a
-regular file that is not a reparse point, following the existing reparse policy
-in `src/stdlib/path/windows_reparse/`. Failure returns a typed error naming the
+`src/power_shell_location/mod.rs` constructs the candidate path from an injected
+`SystemDirectory` port, implemented for production by the `known-folders`
+crate's `KnownFolder::System`. On non-Windows targets the locator does not
+exist. The resolved path must be UTF-8, absolute, and a regular file that is
+not a reparse point, following the existing reparse policy in
+`src/stdlib/path/windows_reparse/`. Failure returns a typed error naming the
 expected path.
 
 The resolved path becomes an `InterpreterExecutable`, the renamed and now shared
@@ -145,10 +146,12 @@ installation as the trusted parent.
 - Bash recipes may still launch `/bin/sh` internally, and bare names in
   `src/shell_selection/built_in/` remain user-authored recipe content rather
   than interpreter selection.
-- Library callers that render recipes must supply a binding through
+- Library callers that render Bash commands on any platform, or PowerShell
+  commands on non-Windows platforms, must supply a binding through
   `generate_with_interpreter` or `generate_bundle_with_interpreter`, or accept
-  `InterpreterBindingRequired`. This is a public API addition and a behaviour
-  change for Bash `generate`.
+  `InterpreterBindingRequired`. On Windows, the library `generate` entry points
+  resolve the trusted PowerShell binding themselves. This is a public API
+  addition and a behaviour change for Bash `generate`.
 - The renderer, the runner dispatcher and the test transport detector all
   reject the bare name `powershell.exe`, so a regression to unqualified
   invocation fails a deterministic gate.
@@ -173,7 +176,7 @@ applies to isolated command-list entries.
   which is the same trust-boundary principle for manifest names.
 - [ADR-0045](adr-0045-isolate-command-list-entries.md) defines isolated
   PowerShell entries, whose `$PSHOME` launch is retained.
-- [`src/recipe_shell/power_shell_location.rs`](../../src/recipe_shell/power_shell_location.rs)
+- [`src/power_shell_location/mod.rs`](../../src/power_shell_location/mod.rs)
   constructs the trusted candidate.
 - [`src/runner/recipe_shell/mod.rs`](../../src/runner/recipe_shell/mod.rs)
   dispatches binding resolution.

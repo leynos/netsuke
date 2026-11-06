@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use super::resolve_power_shell_runtime_with;
-use crate::recipe_shell::SystemDirectory;
+use crate::power_shell_location::SystemDirectory;
 
 /// Supply one fixed system directory to the locator.
 struct FixedSystemDirectory(Option<PathBuf>);

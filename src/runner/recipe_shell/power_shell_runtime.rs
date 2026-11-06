@@ -1,16 +1,17 @@
 //! Bind the trusted Windows PowerShell interpreter used by generated recipes.
 //!
-//! The locator in [`crate::recipe_shell`] owns the trusted lookup policy. This
-//! runner adapter turns its typed failures into actionable diagnostics and
-//! deliberately offers no `PATH`, application-directory, current-directory,
-//! `SystemRoot`, `WINDIR`, or `PSHOME` fallback.
+//! The locator in [`crate::power_shell_location`] owns the trusted lookup
+//! policy. This runner adapter turns its typed failures into actionable
+//! diagnostics and deliberately offers no `PATH`, application-directory,
+//! current-directory, `SystemRoot`, `WINDIR`, or `PSHOME` fallback.
 
 use anyhow::Result;
 
-use crate::recipe_shell::{
-    InterpreterExecutable, KnownFolderSystemDirectory, SystemDirectory,
-    WindowsPowerShellLocationError, locate_windows_power_shell,
+use crate::power_shell_location::{
+    KnownFolderSystemDirectory, SystemDirectory, WindowsPowerShellLocationError,
+    locate_windows_power_shell,
 };
+use crate::recipe_shell::InterpreterExecutable;
 
 use super::WINDOWS_SHELL_ENV;
 

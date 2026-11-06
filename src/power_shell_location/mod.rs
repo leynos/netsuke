@@ -1,5 +1,10 @@
 //! Locate Windows PowerShell without consulting executable search order.
 //!
+//! This is an adapter module, not part of the interpreter contract: the
+//! runner's preflight and the Ninja generator's default-binding path both call
+//! it, so one implementation owns the trusted-location policy while
+//! [`crate::recipe_shell`] stays independent of the filesystem.
+//!
 //! Windows resolves an unqualified `powershell.exe` through the application,
 //! current, and system directories before `PATH`, so a workspace file can win
 //! that race and inherit the build process's authority (CWE-427). This module
@@ -21,7 +26,7 @@ use cap_std::ambient_authority;
 use cap_std::fs_utf8::{Dir, Metadata};
 use thiserror::Error;
 
-use super::{InterpreterExecutable, InterpreterExecutableError};
+use crate::recipe_shell::{InterpreterExecutable, InterpreterExecutableError};
 
 /// Components of the Windows PowerShell engine directory.
 ///

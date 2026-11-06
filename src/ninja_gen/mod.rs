@@ -21,6 +21,7 @@ pub(crate) use rule_utils::{
 
 use crate::ir::BuildGraph;
 use crate::localization::{self, keys};
+use crate::power_shell_location::WindowsPowerShellLocationError;
 use std::fmt::Write;
 
 pub(crate) mod command_list;
@@ -167,17 +168,63 @@ pub fn generate_into<W: Write>(graph: &BuildGraph, out: &mut W) -> Result<(), Ni
 /// Windows PowerShell is resolved through the trusted system-directory locator
 /// so a generated plan never carries an unqualified executable name. Other
 /// shells keep their existing runner-owned resolution policy and bind nothing
-/// here. A locator failure leaves the binding unresolved; rendering a recipe
-/// then reports [`NinjaGenError::InterpreterBindingRequired`], while a
-/// dependency-only graph still succeeds.
-pub(crate) fn resolve_default_interpreter(shell: RecipeShell) -> Option<InterpreterExecutable> {
-    if !cfg!(windows) || shell != RecipeShell::PowerShell {
-        return None;
+/// here. Resolution happens only when the graph has a recipe to render, so a
+/// dependency-only graph still renders where no interpreter can be bound.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError::InterpreterResolutionFailed`] when a graph with a
+/// recipe to render needs Windows PowerShell and the trusted locator cannot
+/// supply one.
+pub(crate) fn resolve_default_interpreter(
+    graph: &BuildGraph,
+    shell: RecipeShell,
+) -> Result<Option<InterpreterExecutable>, NinjaGenError> {
+    resolve_default_interpreter_with(graph, shell, cfg!(windows), || {
+        crate::power_shell_location::locate_windows_power_shell(
+            &crate::power_shell_location::KnownFolderSystemDirectory,
+        )
+    })
+}
+
+/// Resolve the default interpreter with the platform and locator injected.
+///
+/// Injecting both lets the boundary be exercised on a host that is not
+/// Windows without changing process state.
+///
+/// # Errors
+///
+/// Returns [`NinjaGenError::InterpreterResolutionFailed`] when the graph has a
+/// recipe to render, the shell needs a Windows PowerShell binding, and
+/// `locate` fails.
+fn resolve_default_interpreter_with(
+    graph: &BuildGraph,
+    shell: RecipeShell,
+    is_windows: bool,
+    locate: impl FnOnce() -> Result<InterpreterExecutable, WindowsPowerShellLocationError>,
+) -> Result<Option<InterpreterExecutable>, NinjaGenError> {
+    if !is_windows || shell != RecipeShell::PowerShell {
+        return Ok(None);
     }
-    crate::recipe_shell::locate_windows_power_shell(
-        &crate::recipe_shell::KnownFolderSystemDirectory,
-    )
-    .ok()
+    if !graph_needs_interpreter(graph) {
+        return Ok(None);
+    }
+    locate()
+        .map(Some)
+        .map_err(|source| NinjaGenError::InterpreterResolutionFailed {
+            source: Box::new(source),
+        })
+}
+
+/// Return whether rendering `graph` emits at least one interpreter command.
+///
+/// The predicate mirrors [`write_action_rules`], which skips dependency-only
+/// actions, so resolution is requested exactly when a binding is consumed.
+fn graph_needs_interpreter(graph: &BuildGraph) -> bool {
+    graph
+        .actions
+        .values()
+        .any(|action| !action.recipe.is_dependency_only())
 }
 
 /// Write a Ninja build file for one explicit legacy recipe interpreter.
@@ -191,7 +238,7 @@ pub(crate) fn generate_into_with_shell<W: Write>(
     out: &mut W,
     shell: RecipeShell,
 ) -> Result<(), NinjaGenError> {
-    let interpreter = resolve_default_interpreter(shell);
+    let interpreter = resolve_default_interpreter(graph, shell)?;
     let binding = interpreter
         .as_ref()
         .map_or(InterpreterBinding::Unbound, InterpreterBinding::Bound);
@@ -258,6 +305,10 @@ pub(crate) fn generate_into_with_binding<W: Write>(
     Ok(())
 }
 
+#[cfg(test)]
+mod default_interpreter_properties;
+#[cfg(test)]
+mod default_interpreter_tests;
 #[cfg(test)]
 mod determinism;
 #[cfg(test)]

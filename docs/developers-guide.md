@@ -413,6 +413,30 @@ in both directions, so a new stdlib helper has to state what each restricted
 surface does with it, and adding a literal registration without a row fails the
 gate.
 
+### Recipe interpreter binding
+
+Recipe rendering never searches for an interpreter. `InterpreterExecutable`
+wraps the absolute path of a Windows recipe interpreter, and
+`InterpreterExecutable::from_absolute_path` is the only constructor: it rejects
+a relative path with `InterpreterExecutableError::RelativePath` and a path
+containing a NUL byte with `NulCharacter`. The renderer treats the binding as
+the complete answer, so it neither reads `PATH` nor inspects the filesystem.
+
+The library entry points `generate`, `generate_into`, `generate_with_shell`, and
+`generate_bundle` resolve one default before rendering. On Windows they bind
+`<System>\WindowsPowerShell\v1.0\powershell.exe` for PowerShell recipes through
+the known-folder locator; for Bash, and on every other platform, they bind
+nothing. Rendering a recipe whose interpreter is unbound fails with
+`NinjaGenError::InterpreterBindingRequired`, while a dependency-only graph
+still renders because it has no command.
+
+An embedder that needs a binding on another shell or platform calls
+`generate_with_interpreter` or `generate_bundle_with_interpreter` with an
+`InterpreterExecutable` it constructed. Rendering is a pure function of the
+graph, shell, and binding, so the trust decision belongs to that caller:
+nothing verifies an Authenticode signature, and Ninja launches whatever file
+occupies the bound path at execution time.
+
 ### Ninja invocation with an explicit environment
 
 A program calling Netsuke's Rust API can invoke Ninja without touching its own
@@ -935,7 +959,7 @@ The lowering stages have deliberately separate responsibilities:
 - On Windows, `RecipeShell::PowerShell` renders scalar commands and scripts as
   encoded invocations of a trusted absolute `powershell.exe` while they fit the
   Windows command-line limit. The parent executable is never the bare name
-  `powershell.exe`: `src/recipe_shell/power_shell_location.rs` builds
+  `powershell.exe`: `src/power_shell_location/mod.rs` builds
   `<System>\WindowsPowerShell\v1.0\powershell.exe` from the Known Folder API's
   system directory and returns the shared `InterpreterExecutable` binding. It
   does not read `PATH`, the current directory, `SystemRoot`, `WINDIR` or
@@ -7023,10 +7047,11 @@ or add manifest-controlled values to telemetry.
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
 optional preflighted `InterpreterExecutable`, and injected monotonic clock
-solely for this graph-generation composition path. Build and Ninja-tool
-operations attach the runtime binding after preflight; query-only generation
-leaves it absent. It is not a general runner context, shared state container,
-or reusable public API; keep unrelated runner inputs and concerns outside it.
+solely for this graph-generation composition path. Build, Ninja-tool, and CLI
+`generate` operations attach the runtime binding after preflight; query-only
+target discovery leaves it absent. It is not a general runner context, shared
+state container, or reusable public API; keep unrelated runner inputs and
+concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that

@@ -1,0 +1,239 @@
+//! Property coverage for rendered interpreter paths.
+//!
+//! Windows resolves an unqualified executable name through its search order, so
+//! a bound path must survive two independent decoders: Ninja's own variable and
+//! escape expansion, and `CommandLineToArgvW` quote handling. These properties
+//! generate paths with spaces, Unicode, literal dollars and the platform
+//! separator, render them through each transport, and check the bound path with
+//! the independent parser in `test_support::ninja_semantics` and with a real
+//! `ninja` binary.
+
+use super::{
+    InterpreterExecutable, RecipeShell, generate_with_interpreter, test_support::command_action,
+};
+use crate::ast::StringOrList;
+use crate::ir::{BuildEdge, BuildGraph, DependencyOrder};
+use camino::{Utf8Path, Utf8PathBuf};
+use cap_std::{ambient_authority, fs_utf8::Dir};
+use proptest::prelude::*;
+use proptest::test_runner::{TestCaseError, TestRunner};
+use std::process::Command;
+use test_support::ninja::ninja_integration_workspace;
+use test_support::ninja_semantics::{GeneratedNinja, RecipeNeedle, RecipeTransport};
+
+/// Build one command action graph that renders an interpreter command.
+fn command_graph() -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "run".into(),
+        command_action(StringOrList::String("echo hi".into())),
+    );
+    graph
+        .insert_edge(BuildEdge {
+            action_id: "run".into(),
+            inputs: Vec::new(),
+            implicit_deps: Vec::new(),
+            dependency_order: DependencyOrder::Parallel,
+            explicit_outputs: vec![Utf8PathBuf::from("out")],
+            implicit_outputs: Vec::new(),
+            order_only_deps: Vec::new(),
+            progress_label: None,
+            phony: false,
+            always: false,
+        })
+        .expect("fixture outputs are unique");
+    graph
+}
+
+/// The separator Windows arguments and the host both accept in a fixture.
+const fn separator() -> char {
+    if cfg!(windows) { '\\' } else { '/' }
+}
+
+/// Generate path segments that exercise quoting, Unicode and Ninja escapes.
+fn path_segments() -> impl Strategy<Value = Vec<String>> {
+    prop::collection::vec(
+        prop_oneof![
+            Just("Program Files".to_owned()),
+            Just("two words".to_owned()),
+            Just("$dollar".to_owned()),
+            Just("\u{03bb}ambda".to_owned()),
+            "[A-Za-z0-9_.-]{1,8}".prop_map(|segment| segment),
+        ],
+        1..4,
+    )
+}
+
+/// Build an absolute interpreter path from `segments`, padded to `target_len`.
+fn absolute_path(segments: &[String], target_len: usize) -> String {
+    let separator = separator();
+    let root = if cfg!(windows) { "C:\\" } else { "/" };
+    let fixed = root.len() + segments.iter().map(|s| s.len() + 1).sum::<usize>() + 15;
+    let padding = "a".repeat(target_len.saturating_sub(fixed));
+    let mut path = String::from(root);
+    for segment in segments {
+        path.push_str(segment);
+        path.push(separator);
+    }
+    path.push_str(&padding);
+    path.push(separator);
+    path.push_str("powershell.exe");
+    path
+}
+
+/// Extract the first `command` binding from a generated Ninja file.
+fn first_command(ninja: &str) -> &str {
+    ninja
+        .lines()
+        .find_map(|line| line.strip_prefix("  command = "))
+        .expect("generated manifest should carry one command binding")
+}
+
+/// Build one executable from an absolute fixture path.
+fn executable(path: &str) -> InterpreterExecutable {
+    InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(path))
+        .expect("generated fixture paths should be absolute")
+}
+
+/// The bound path survives Ninja parsing and Windows quoting for every
+/// PowerShell transport.
+#[test]
+fn bound_power_shell_paths_survive_ninja_parsing() {
+    let mut runner = TestRunner::new(ProptestConfig {
+        cases: 48,
+        ..ProptestConfig::default()
+    });
+    runner
+        .run(
+            &(
+                path_segments(),
+                prop_oneof![0usize..64, 32_590usize..32_610],
+            ),
+            |(segments, target_len)| {
+                let path = absolute_path(&segments, target_len);
+                let ninja = generate_with_interpreter(
+                    &command_graph(),
+                    RecipeShell::PowerShell,
+                    &executable(&path),
+                )
+                .map_err(|error| TestCaseError::fail(format!("generate: {error}")))?;
+                let parsed = GeneratedNinja::new(&ninja);
+                prop_assert!(
+                    parsed
+                        .recipe_contains(RecipeNeedle::new("echo hi"))
+                        .map_err(|error| TestCaseError::fail(format!("decode: {error}")))?,
+                    "the independent parser should recover the recipe text"
+                );
+                let response_file = first_command(&ninja).contains("-File \"$rspfile\"");
+                let expected = if response_file {
+                    RecipeTransport::PowerShellResponseFile
+                } else {
+                    RecipeTransport::PowerShellEncodedCommand
+                };
+                prop_assert_eq!(parsed.detected_recipe_transports(), vec![expected]);
+                prop_assert_eq!(
+                    response_file,
+                    target_len > 32_000,
+                    "a path beyond the command-line limit should select the response file"
+                );
+                let unescaped = first_command(&ninja).replace("$$", "$");
+                prop_assert!(
+                    unescaped.starts_with(&format!("\"{path}\"")),
+                    "Ninja and Windows quoting should preserve the bound path"
+                );
+                Ok(())
+            },
+        )
+        .expect("PowerShell interpreter path property should hold");
+}
+
+/// The bound path survives Ninja parsing and Windows quoting for Bash.
+#[test]
+fn bound_bash_paths_survive_ninja_parsing() {
+    let mut runner = TestRunner::new(ProptestConfig {
+        cases: 48,
+        ..ProptestConfig::default()
+    });
+    runner
+        .run(&(path_segments(), 0usize..64), |(segments, target_len)| {
+            let path = absolute_path(&segments, target_len);
+            let ninja =
+                generate_with_interpreter(&command_graph(), RecipeShell::Bash, &executable(&path))
+                    .map_err(|error| TestCaseError::fail(format!("generate: {error}")))?;
+            let parsed = GeneratedNinja::new(&ninja);
+            prop_assert!(
+                parsed
+                    .recipe_contains(RecipeNeedle::new("echo hi"))
+                    .map_err(|error| TestCaseError::fail(format!("decode: {error}")))?,
+                "the independent parser should recover the Bash recipe text"
+            );
+            prop_assert_eq!(
+                parsed.detected_recipe_transports(),
+                vec![RecipeTransport::Plaintext]
+            );
+            let unescaped = first_command(&ninja).replace("$$", "$");
+            prop_assert!(
+                unescaped.starts_with(&format!("\"{path}\" -e -c ")),
+                "Ninja and Windows quoting should preserve the bound path"
+            );
+            Ok(())
+        })
+        .expect("Bash interpreter path property should hold");
+}
+
+/// A real Ninja binary expands the generated plan back to the same path.
+#[test]
+fn bound_paths_survive_real_ninja() {
+    let Ok(workspace) = ninja_integration_workspace() else {
+        return;
+    };
+    let Some(workspace_path) = Utf8Path::from_path(workspace.path()) else {
+        panic!("the Ninja integration workspace path should be UTF-8");
+    };
+    let directory = Dir::open_ambient_dir(workspace_path, ambient_authority())
+        .expect("the Ninja integration workspace should open as a capability directory");
+    let mut runner = TestRunner::new(ProptestConfig {
+        cases: 32,
+        ..ProptestConfig::default()
+    });
+    runner
+        .run(
+            &(path_segments(), 0usize..64, any::<bool>()),
+            |(segments, target_len, power_shell)| {
+                let path = absolute_path(&segments, target_len);
+                let shell = if power_shell {
+                    RecipeShell::PowerShell
+                } else {
+                    RecipeShell::Bash
+                };
+                let ninja = generate_with_interpreter(&command_graph(), shell, &executable(&path))
+                    .map_err(|error| TestCaseError::fail(format!("generate: {error}")))?;
+                directory
+                    .write("build.ninja", &ninja)
+                    .map_err(|error| TestCaseError::fail(format!("write plan: {error}")))?;
+                let output = Command::new("ninja")
+                    .arg("-f")
+                    .arg("build.ninja")
+                    .arg("-t")
+                    .arg("commands")
+                    .arg("out")
+                    .current_dir(workspace_path.as_std_path())
+                    .output()
+                    .map_err(|error| TestCaseError::fail(format!("run Ninja: {error}")))?;
+                if !output.status.success() {
+                    return Err(TestCaseError::fail(format!(
+                        "Ninja rejected the plan: {}",
+                        String::from_utf8_lossy(&output.stderr)
+                    )));
+                }
+                let commands = String::from_utf8(output.stdout)
+                    .map_err(|error| TestCaseError::fail(format!("Ninja output: {error}")))?;
+                prop_assert!(
+                    commands.contains(&path),
+                    "Ninja should expand the escaped plan back to the bound path"
+                );
+                Ok(())
+            },
+        )
+        .expect("real-Ninja interpreter path property should hold");
+}

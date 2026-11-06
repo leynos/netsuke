@@ -92,6 +92,13 @@ pub enum NinjaGenError {
         /// Interpreter whose command could not be rendered.
         shell: crate::recipe_shell::RecipeShell,
     },
+    /// The trusted Windows PowerShell interpreter could not be resolved.
+    #[error("cannot bind the Windows PowerShell interpreter: {source}")]
+    InterpreterResolutionFailed {
+        /// Locator failure explaining why no trusted executable was available.
+        #[source]
+        source: Box<dyn std::error::Error + Send + Sync>,
+    },
     /// A PowerShell parent command exceeds Windows' command-line limit.
     #[error(
         "PowerShell parent command needs {actual_characters} command-line characters, exceeding the {maximum_characters}-character limit"

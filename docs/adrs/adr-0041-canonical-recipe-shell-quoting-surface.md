@@ -273,5 +273,13 @@ that a future reader who prefers it knows it was weighed rather than missed.
 - [`src/shell_word.rs`](../../src/shell_word.rs) holds the single encoding.
   [`src/stdlib/recipe_text/`](../../src/stdlib/recipe_text/) is the
   template-facing adapter that validates arguments and delegates to it.
-- [`src/recipe_shell/mod.rs`](../../src/recipe_shell/mod.rs) is the data-only
+- [`src/recipe_shell.rs`](../../src/recipe_shell.rs) is the data-only
   interpreter vocabulary, including `host_default()`.
+
+## Addendum — 2026-11-06: Recipe-shell module rename
+
+The data-only interpreter vocabulary that this record references as
+`src/recipe_shell.rs` now lives in `src/recipe_shell/mod.rs`. Its content and
+every guarantee above are unchanged; only the file layout moved. The
+implementation reference retains the path that existed when this decision was
+recorded.
