@@ -1213,6 +1213,14 @@ the Bash transport and runs the inner script under the host's own `sh`. That is
 the closest executable check a Unix host can make: it verifies the payload this
 route would hand to `bash.exe`, not `bash.exe` itself.
 
+`test_support::shell_transport::decode_bash_transport` owns that decoding so
+every suite shares one implementation. It undoes the Windows argument quoting
+and returns the exact `-c` argument `bash.exe` would receive; it does not model
+the PowerShell transport, whose decoder lives with the PowerShell test suite.
+The helper itself is not platform-gated, because it only manipulates strings,
+but the cases that execute its output are Unix-only because they run the result
+under a POSIX shell.
+
 ### Inline recipe progress labels
 
 `BuildEdge.progress_label` in `src/ir/graph/mod.rs` retains the raw first

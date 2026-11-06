@@ -7,7 +7,7 @@
 //!   `LocalizerGuard`, `localizer_test_lock`, `set_en_localizer`)
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
-//! - decoding the Bash and PowerShell command transports in generated Ninja
+//! - decoding the Windows Bash command transport in generated Ninja
 //!   (`shell_transport` module)
 //! - sandboxing PATH and HOME for the build-tools target tests (`build_tools` module)
 //! - building the shared temporary-path snapshot filter (`temp_path_filter` module)
