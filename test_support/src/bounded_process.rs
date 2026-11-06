@@ -37,9 +37,9 @@ const POLL_INTERVAL: Duration = Duration::from_millis(25);
 /// ```rust,no_run
 /// # use std::{process::Command, time::Duration};
 /// # use test_support::bounded_process::output_within;
-/// let mut command = Command::new("rustc");
-/// command.arg("--version");
-/// let output = output_within(&mut command, Duration::from_secs(60)).expect("rustc runs");
+/// let mut command = Command::new("sh");
+/// command.args(["-c", "echo ready"]);
+/// let output = output_within(&mut command, Duration::from_secs(60)).expect("sh runs");
 /// assert!(output.status.success());
 /// ```
 pub fn output_within(command: &mut Command, deadline: Duration) -> io::Result<Output> {
