@@ -42,7 +42,7 @@ impl ScriptCommandSubstitution {
     }
 }
 
-impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
+impl ScriptSubstitutionTraversal<'_, '_> {
     /// Preserve `$()` delimiters while rejecting placeholders within their scope.
     pub(super) fn append_command_substitution_delimiter(
         &mut self,

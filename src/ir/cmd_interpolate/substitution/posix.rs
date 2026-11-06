@@ -10,7 +10,7 @@ use super::super::posix_lexical::{
 };
 use super::{IrGenError, MarkerProtection, SubstitutionTraversal, invalid_command_error};
 
-impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
+impl SubstitutionTraversal<'_, '_> {
     /// Preserve POSIX shell syntax while lowering context-safe recipe markers.
     pub(super) fn append_posix_character(
         &mut self,
