@@ -70,6 +70,7 @@ class _HandoffDisagreementError(PayloadHandoffError):
     """Report exactly which declared names the payload omits and adds."""
 
     def __init__(self, missing: list[str], extra: list[str]) -> None:
+        """Name both sides of the disagreement in one operator-readable line."""
         super().__init__(f"payload omits {missing!r} and adds {extra!r}")
 
 

@@ -38,8 +38,14 @@ import sys
 
 import release_digest_record
 import release_digest_record_files
-import release_github_assets_adapter
 import release_reconcile_github
+
+# The shared GitHub digest conversion, imported under the private name this
+# module has always used. The uploader needs the same conversion, and a private
+# copy in each CLI would let the two drift on what an unusable digest means.
+from release_github_assets_adapter import (
+    normalise_github_digest as _normalise_github_digest,
+)
 
 EXIT_OK = 0
 EXIT_CONFLICT = 1
@@ -98,12 +104,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 class InputUnreadableError(ValueError):
     """Report a digest record that cannot support a publish decision."""
-
-
-#: The shared GitHub digest conversion, aliased under the name this module has
-#: always used. The uploader needs the same conversion, and a private copy in
-#: each CLI would let the two drift on what an unusable digest means.
-_normalise_github_digest = release_github_assets_adapter.normalise_github_digest
 
 
 def _expected(

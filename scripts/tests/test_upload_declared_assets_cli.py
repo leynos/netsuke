@@ -50,8 +50,10 @@ def test_an_empty_release_receives_every_declared_asset(
     assert sorted(exchange.uploads()[0][4:]) == sorted([
         str(scenario.payload / DEB),
         str(scenario.payload / RPM),
-    ])
-    assert {action.value for _name, action in actions} == {"skip-verified"}
+    ]), "every declared asset must be carried by the upload"
+    assert {action.value for _name, action in actions} == {"skip-verified"}, (
+        "each transferred asset must be verified from the re-read release"
+    )
 
 
 def test_an_identical_attached_asset_is_skipped(scenario: Scenario) -> None:
@@ -61,19 +63,27 @@ def test_an_identical_attached_asset_is_skipped(scenario: Scenario) -> None:
         attached={DEB: f"sha256:{digests[DEB]}", RPM: f"sha256:{digests[RPM]}"}
     )
     actions = settle(scenario.request(), runner=exchange)
-    assert not exchange.uploads()
-    assert {action.value for _name, action in actions} == {"skip-verified"}
+    assert not exchange.uploads(), "nothing may be sent to a release that agrees"
+    assert {action.value for _name, action in actions} == {"skip-verified"}, (
+        "every asset must be reported as verified, not as transferred"
+    )
 
 
 def test_only_the_missing_asset_is_uploaded(scenario: Scenario) -> None:
     """Upload the gap and leave the verified asset alone."""
     exchange = Exchange(attached={DEB: f"sha256:{scenario.digests()[DEB]}"})
     actions = settle(scenario.request(), runner=exchange)
-    assert len(exchange.uploads()) == 1
-    assert exchange.uploads()[0][4:] == [str(scenario.payload / RPM)]
+    assert len(exchange.uploads()) == 1, "exactly one transfer must be made"
+    assert exchange.uploads()[0][4:] == [str(scenario.payload / RPM)], (
+        "only the missing asset may be sent"
+    )
     plan = dict(actions)
-    assert plan[DEB].value == "skip-verified"
-    assert plan[RPM].value == "skip-verified"
+    assert plan[DEB].value == "skip-verified", (
+        "the already-attached asset must still be recorded as verified"
+    )
+    assert plan[RPM].value == "skip-verified", (
+        "the sent asset must be recorded as verified after the re-read"
+    )
 
 
 def test_a_conflicting_asset_blocks_every_upload(scenario: Scenario) -> None:
@@ -85,7 +95,9 @@ def test_a_conflicting_asset_blocks_every_upload(scenario: Scenario) -> None:
     exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
     actions = settle(scenario.request(), runner=exchange)
     assert not exchange.uploads(), "a conflict must block the whole transfer"
-    assert dict(actions)[DEB].value == "conflict"
+    assert dict(actions)[DEB].value == "conflict", (
+        "the disagreeing asset must be recorded as a conflict"
+    )
     assert dict(actions)[RPM].value == "upload", "the gap is still visible in the plan"
 
 
@@ -93,7 +105,7 @@ def test_a_conflicting_asset_is_never_clobbered(scenario: Scenario) -> None:
     """Refuse to replace attached bytes that disagree with the record."""
     exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
     _ = settle(scenario.request(), runner=exchange)
-    assert not exchange.clobbered()
+    assert not exchange.clobbered(), "a conflicting asset must never be replaced"
 
 
 def test_an_unreported_digest_is_established_by_downloading(
@@ -105,8 +117,10 @@ def test_an_unreported_digest_is_established_by_downloading(
         downloads={DEB: scenario.contents[DEB]},
     )
     actions = settle(scenario.request(), runner=exchange)
-    assert dict(actions)[DEB].value == "skip-verified"
-    assert not exchange.uploads()
+    assert dict(actions)[DEB].value == "skip-verified", (
+        "the downloaded bytes must be accepted as the recorded ones"
+    )
+    assert not exchange.uploads(), "a verified asset must not be sent again"
 
 
 def test_a_download_that_fails_makes_the_asset_a_conflict(
@@ -115,23 +129,29 @@ def test_a_download_that_fails_makes_the_asset_a_conflict(
     """Refuse an attached asset whose bytes cannot be established at all."""
     exchange = Exchange(attached={DEB: None})
     actions = settle(scenario.request(), runner=exchange)
-    assert dict(actions)[DEB].value == "conflict"
-    assert not exchange.uploads()
+    assert dict(actions)[DEB].value == "conflict", (
+        "an unestablishable digest must be refused, not assumed"
+    )
+    assert not exchange.uploads(), "a conflict must block the whole transfer"
 
 
 def test_downloaded_bytes_that_differ_are_a_conflict(scenario: Scenario) -> None:
     """Refuse attached bytes that are not the recorded ones."""
     exchange = Exchange(attached={DEB: None}, downloads={DEB: b"another commit"})
     actions = settle(scenario.request(), runner=exchange)
-    assert dict(actions)[DEB].value == "conflict"
+    assert dict(actions)[DEB].value == "conflict", (
+        "bytes from another commit must be refused as a conflict"
+    )
 
 
 def test_a_dry_run_sends_nothing(scenario: Scenario) -> None:
     """Plan the transfer without making it."""
     exchange = Exchange(attached={})
     actions = settle(scenario.request(is_dry_run=True), runner=exchange)
-    assert not exchange.uploads()
-    assert {action.value for _name, action in actions} == {"upload"}
+    assert not exchange.uploads(), "a dry run must never transfer a byte"
+    assert {action.value for _name, action in actions} == {"upload"}, (
+        "a dry run must still report what it would have sent"
+    )
 
 
 def test_a_dry_run_still_reads_the_release(scenario: Scenario) -> None:
@@ -155,7 +175,9 @@ def test_the_returned_plan_describes_the_post_upload_release(
     """Report every asset verified, not merely sent."""
     exchange = Exchange(attached={})
     actions = settle(scenario.request(), runner=exchange)
-    assert all(action.value == "skip-verified" for _name, action in actions)
+    assert all(action.value == "skip-verified" for _name, action in actions), (
+        "the plan must describe the post-upload release, not the pre-upload one"
+    )
 
 
 def test_a_payload_that_lost_an_asset_is_refused(scenario: Scenario) -> None:
@@ -185,7 +207,7 @@ def test_a_refused_payload_never_reaches_the_network(scenario: Scenario) -> None
     exchange = Exchange(attached={})
     with pytest.raises(release_digest_record.RecordedDigestMismatchError):
         settle(scenario.request(), runner=exchange)
-    assert not exchange.calls
+    assert not exchange.calls, "a refused payload must not reach the network"
 
 
 def test_a_transport_failure_is_reported(scenario: Scenario) -> None:
@@ -199,8 +221,8 @@ def test_no_upload_ever_carries_clobber(scenario: Scenario) -> None:
     """Pin the property the whole module exists for."""
     exchange = Exchange(attached={})
     _ = settle(scenario.request(), runner=exchange)
-    assert exchange.uploads()
-    assert not exchange.clobbered()
+    assert exchange.uploads(), "the fixture must exercise a real transfer"
+    assert not exchange.clobbered(), "no upload may ever carry --clobber"
 
 
 def test_an_undeclared_attached_asset_is_ignored(scenario: Scenario) -> None:
@@ -218,8 +240,10 @@ def test_an_undeclared_attached_asset_is_ignored(scenario: Scenario) -> None:
         }
     )
     actions = settle(scenario.request(), runner=exchange)
-    assert not exchange.uploads()
-    assert "unrelated.txt" not in dict(actions)
+    assert not exchange.uploads(), "an undeclared asset must not provoke a transfer"
+    assert "unrelated.txt" not in dict(actions), (
+        "an undeclared asset must not appear in the plan"
+    )
 
 
 def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
@@ -237,4 +261,6 @@ def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
     )
     recorded = scenario.stored_plan()
     # The plan sorts by name, and "-" precedes "_", so the RPM leads.
-    assert recorded["actions"] == [[RPM, "upload"], [DEB, "conflict"]]
+    assert recorded["actions"] == [[RPM, "upload"], [DEB, "conflict"]], (
+        "the plan must express every action the reconciliation produced"
+    )

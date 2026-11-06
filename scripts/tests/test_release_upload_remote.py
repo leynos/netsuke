@@ -38,6 +38,7 @@ class RecordingRunner:
         stderr: str = "",
         writes: dict[str, bytes] | None = None,
     ) -> None:
+        """Hold the canned answer and start an empty record of invocations."""
         self.stdout = stdout
         self.returncode = returncode
         self.stderr = stderr
@@ -80,14 +81,18 @@ def asset_listing(*assets: tuple[str, object]) -> str:
 def test_attached_digests_reads_the_asset_listing() -> None:
     """Normalise the vendor digest into the bare value reconciliation compares."""
     runner = RecordingRunner(stdout=asset_listing(("a.deb", f"sha256:{DIGEST}")))
-    assert attached_digests("v1", runner=runner) == {"a.deb": DIGEST}
+    assert attached_digests("v1", runner=runner) == {"a.deb": DIGEST}, (
+        "the vendor digest must be normalised to its bare value"
+    )
 
 
 def test_attached_digests_lists_the_release_with_json_assets() -> None:
     """Ask ``gh`` for the asset member, not for a human-readable table."""
     runner = RecordingRunner(stdout=asset_listing())
     _ = attached_digests("v1", runner=runner)
-    assert runner.calls == [["gh", "release", "view", "v1", "--json", "assets"]]
+    assert runner.calls == [["gh", "release", "view", "v1", "--json", "assets"]], (
+        "the listing must ask for the assets member as JSON"
+    )
 
 
 def test_an_absent_digest_is_unknown_rather_than_empty() -> None:
@@ -97,13 +102,17 @@ def test_an_absent_digest_is_unknown_rather_than_empty() -> None:
     "nothing wrong".
     """
     runner = RecordingRunner(stdout=asset_listing(("a.deb", None)))
-    assert attached_digests("v1", runner=runner) == {"a.deb": None}
+    assert attached_digests("v1", runner=runner) == {"a.deb": None}, (
+        "an absent digest must be unknown, not empty"
+    )
 
 
 def test_an_unusable_digest_is_unknown_rather_than_empty() -> None:
     """Treat a digest in another algorithm the same way as none at all."""
     runner = RecordingRunner(stdout=asset_listing(("a.deb", "md5:abcd")))
-    assert attached_digests("v1", runner=runner) == {"a.deb": None}
+    assert attached_digests("v1", runner=runner) == {"a.deb": None}, (
+        "an absent digest must be unknown, not empty"
+    )
 
 
 def test_entries_without_a_name_are_skipped() -> None:
@@ -112,7 +121,9 @@ def test_entries_without_a_name_are_skipped() -> None:
 
     stdout = json.dumps({"assets": [{"digest": DIGEST}, {"name": 7}, "junk"]})
     runner = RecordingRunner(stdout=stdout)
-    assert attached_digests("v1", runner=runner) == {}
+    assert attached_digests("v1", runner=runner) == {}, (
+        "a nameless entry must not be reconciled"
+    )
 
 
 def test_a_listing_that_is_not_json_is_refused() -> None:
@@ -147,7 +158,7 @@ def test_upload_sends_one_call_for_every_pending_name(tmp_path: pathlib.Path) ->
     """Send every missing asset in one invocation, so a partial send is visible."""
     runner = RecordingRunner()
     upload("v1", ["b.rpm", "a.deb"], tmp_path, runner=runner)
-    assert runner.calls == [
+    expected = [
         [
             "gh",
             "release",
@@ -157,6 +168,7 @@ def test_upload_sends_one_call_for_every_pending_name(tmp_path: pathlib.Path) ->
             str(tmp_path / "b.rpm"),
         ]
     ]
+    assert runner.calls == expected, "one call, with the names in sorted order"
 
 
 def test_upload_never_passes_clobber(tmp_path: pathlib.Path) -> None:
@@ -168,14 +180,18 @@ def test_upload_never_passes_clobber(tmp_path: pathlib.Path) -> None:
     """
     runner = RecordingRunner()
     upload("v1", ["a.deb"], tmp_path, runner=runner)
-    assert "--clobber" not in runner.calls[0]
+    assert "--clobber" not in runner.calls[0], (
+        "the uploader must never delete an attached asset before transfer"
+    )
 
 
 def test_upload_of_nothing_asks_gh_for_nothing(tmp_path: pathlib.Path) -> None:
     """Refuse to invoke ``gh`` with no file, which uploads nothing and may error."""
     runner = RecordingRunner()
     upload("v1", [], tmp_path, runner=runner)
-    assert runner.calls == [["gh", "release", "upload", "v1"]]
+    assert runner.calls == [["gh", "release", "upload", "v1"]], (
+        "an empty payload must not add a file argument"
+    )
 
 
 def test_upload_reports_a_transport_failure(tmp_path: pathlib.Path) -> None:
@@ -201,7 +217,7 @@ def test_downloaded_digests_hashes_the_exact_named_asset(
     digests = downloaded_digests("v1", ["a.deb"], runner=runner)
     assert digests["a.deb"] == release_digest_files.digest_of_file(
         _written(tmp_path, content)
-    )
+    ), "the digest must come from the downloaded bytes"
 
 
 def _written(tmp_path: pathlib.Path, content: bytes) -> pathlib.Path:
@@ -222,27 +238,35 @@ def test_downloaded_digests_asks_for_the_exact_name() -> None:
     runner = RecordingRunner()
     _ = downloaded_digests("v1", ["a.deb"], runner=runner)
     call = runner.calls[0]
-    assert call[:4] == ["gh", "release", "download", "v1"]
-    assert call[call.index("--pattern") + 1] == "a.deb"
+    assert call[:4] == ["gh", "release", "download", "v1"], call[:4]
+    assert call[call.index("--pattern") + 1] == "a.deb", (
+        "the pattern must be the exact asset name"
+    )
 
 
 def test_downloaded_digests_downloads_into_its_own_directory() -> None:
     """Pass an explicit destination so a download cannot land in the checkout."""
     runner = RecordingRunner()
     _ = downloaded_digests("v1", ["a.deb"], runner=runner)
-    assert "--dir" in runner.calls[0]
+    assert "--dir" in runner.calls[0], (
+        "the download must name its own destination"
+    )
 
 
 def test_a_failed_download_leaves_the_digest_unknown() -> None:
     """Answer ``None`` rather than raising: reconciliation turns it into a conflict."""
     runner = RecordingRunner(returncode=1, stderr="404")
-    assert downloaded_digests("v1", ["a.deb"], runner=runner) == {"a.deb": None}
+    assert downloaded_digests("v1", ["a.deb"], runner=runner) == {"a.deb": None}, (
+        "a failed download must leave the digest unknown"
+    )
 
 
 def test_a_download_that_writes_nothing_leaves_the_digest_unknown() -> None:
     """Refuse to hash an absence as though it were agreement."""
     runner = RecordingRunner()
-    assert downloaded_digests("v1", ["a.deb"], runner=runner) == {"a.deb": None}
+    assert downloaded_digests("v1", ["a.deb"], runner=runner) == {"a.deb": None}, (
+        "an absent file must not be hashed as agreement"
+    )
 
 
 def test_downloaded_digests_never_reports_a_digest_it_did_not_compute() -> None:
@@ -253,31 +277,37 @@ def test_downloaded_digests_never_reports_a_digest_it_did_not_compute() -> None:
     """
     runner = RecordingRunner(writes={"a.deb": b"x"})
     digests = downloaded_digests("v1", ["a.deb", "b.rpm"], runner=runner)
-    assert digests["b.rpm"] is None
-    assert digests["a.deb"] is not None
+    assert digests["b.rpm"] is None, "the missing asset must stay unknown"
+    assert digests["a.deb"] is not None, "the written asset must be hashed"
 
 
 def test_downloaded_digests_of_nothing_launches_nothing() -> None:
     """Establish no digest for no name without paying for a download."""
     runner = RecordingRunner()
-    assert downloaded_digests("v1", [], runner=runner) == {}
-    assert not runner.calls
+    assert downloaded_digests("v1", [], runner=runner) == {}, (
+        "no name means no digest"
+    )
+    assert not runner.calls, "no name means no subprocess"
 
 
 def test_a_static_runner_records_what_a_caller_ran() -> None:
     """Record the exchange so a dry-run case can be asserted after the fact."""
     runner = StaticRunner('{"assets": []}')
     _ = attached_digests("v1", runner=runner)
-    assert runner.calls == [["gh", "release", "view", "v1", "--json", "assets"]]
+    assert runner.calls == [["gh", "release", "view", "v1", "--json", "assets"]], (
+        "the listing must ask for the assets member as JSON"
+    )
 
 
 def test_the_static_runner_always_succeeds() -> None:
     """Pin the stub's contract so a case using it is testing what it thinks."""
     completed = StaticRunner('{"assets": []}')(["gh", "release", "view"])
-    assert completed.returncode == 0
-    assert not completed.stderr
+    assert completed.returncode == 0, completed.stderr
+    assert not completed.stderr, completed.stderr
 
 
 def test_the_production_runner_is_subprocess_run() -> None:
     """Name the one production entry point the boundary installs."""
-    assert release_upload_remote.PRODUCTION_RUNNER is subprocess.run
+    assert release_upload_remote.PRODUCTION_RUNNER is subprocess.run, (
+        "the production runner must be the real subprocess boundary"
+    )

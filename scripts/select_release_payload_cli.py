@@ -30,6 +30,15 @@ import release_digest_files
 import release_payload_selection
 import release_payload_tree
 from release_payload_errors import PayloadError
+
+# Re-exported so the workflow step and its tests reach the tree adapter through
+# the CLI that composes it, without this module's own code depending on the
+# aliases.
+from release_payload_tree import (
+    PAYLOAD_DIRECTORY,
+    RECORD_NAME,
+    observe_payload,
+)
 from release_producer_provenance_errors import (
     DuplicateAssetError,
     DuplicateTargetError,
@@ -56,15 +65,6 @@ EXIT_OK = 0
 EXIT_PAYLOAD_REFUSED = 1
 EXIT_UNUSABLE_INPUT = 2
 EXIT_OUTPUT_UNWRITABLE = 3
-
-#: Directory name the selected payload is copied into, below the output root.
-PAYLOAD_DIRECTORY = release_payload_tree.PAYLOAD_DIRECTORY
-
-#: Name the producer records publish under, which no asset may shadow.
-RECORD_NAME = release_payload_tree.RECORD_NAME
-
-#: Re-exported so the workflow step and its tests reach the tree adapter here.
-observe_payload = release_payload_tree.observe_payload
 
 
 def build_parser() -> argparse.ArgumentParser:

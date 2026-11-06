@@ -38,7 +38,7 @@ def test_is_release_shaped_classifies_publishable_names(
     name: str, *, expected: bool
 ) -> None:
     """Separate names a release could publish from the material inside it."""
-    assert is_release_shaped(name) is expected
+    assert is_release_shaped(name) is expected, name
 
 
 def test_package_suffixes_are_derived_from_the_platform_table() -> None:
@@ -57,27 +57,29 @@ def test_package_suffixes_are_derived_from_the_platform_table() -> None:
 def test_a_complete_tree_reports_nothing() -> None:
     """Accept a tree that stages exactly one file per declared name."""
     staged = {"a.deb": ["x"], "b.rpm": ["y"]}
-    assert describe_offenders(("a.deb", "b.rpm"), staged) == []
+    assert describe_offenders(("a.deb", "b.rpm"), staged) == [], "nothing to report"
 
 
 def test_build_material_inside_the_packages_is_excluded_silently() -> None:
     """Ignore staged files no release publishes, such as binaries and licences."""
     staged = {"a.deb": ["x"], "netsuke": ["bin"], "LICENSE": ["licence"]}
-    assert describe_offenders(("a.deb",), staged) == []
+    assert describe_offenders(("a.deb",), staged) == [], (
+        "retained build material must not be reported as a defect"
+    )
 
 
 def test_a_missing_declared_asset_is_reported() -> None:
     """Refuse a tree that omits a declared name."""
     assert describe_offenders(("a.deb", "b.rpm"), {"a.deb": ["x"]}) == [
         "'b.rpm' was not staged"
-    ]
+    ], "the missing name must be the whole report"
 
 
 def test_a_duplicated_declared_asset_is_reported() -> None:
     """Refuse a tree that stages one declared name more than once."""
     assert describe_offenders(("a.deb",), {"a.deb": ["x", "y"]}) == [
         "'a.deb' was staged 2 times"
-    ]
+    ], "the count must name the duplicated asset"
 
 
 def test_a_release_shaped_stray_is_refused_rather_than_guessed_about() -> None:
@@ -90,7 +92,7 @@ def test_a_release_shaped_stray_is_refused_rather_than_guessed_about() -> None:
     staged = {"a.deb": ["x"], "stale-1.0.0-x86_64.tar.gz": ["y"]}
     assert describe_offenders(("a.deb",), staged) == [
         "'stale-1.0.0-x86_64.tar.gz' is release-shaped but not declared"
-    ]
+    ], "a stray must be refused, not silently dropped"
 
 
 def test_a_name_that_escapes_its_directory_is_reported_before_its_file() -> None:
@@ -129,9 +131,9 @@ def test_offenders_are_sorted_so_a_rerun_reports_the_same_list() -> None:
         "'b.rpm' was not staged",
         "'m.rpm' is release-shaped but not declared",
         "'z.rpm' is release-shaped but not declared",
-    ]
+    ], "the report must be sorted by the offending name"
 
 
 def test_the_sidecar_of_a_real_archive_is_release_shaped() -> None:
     """Recognise an archive checksum, which is published beside the archive."""
-    assert is_release_shaped(SIDECAR_NAME)
+    assert is_release_shaped(SIDECAR_NAME), SIDECAR_NAME

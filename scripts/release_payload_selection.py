@@ -43,6 +43,14 @@ from release_payload_errors import (
     TargetPlatformMismatchError,
 )
 
+# Re-exported so callers reach the naming policy through the module that
+# consumes it, without this module's own policy code depending on the alias.
+from release_payload_names import (
+    ARCHIVE_SUFFIX,
+    PACKAGE_SUFFIXES,
+    is_release_shaped,
+)
+
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
@@ -57,15 +65,6 @@ __all__ = [
     "require_staged_digests",
     "select_payload",
 ]
-
-#: Suffix of the cargo-binstall archive every target produces.
-ARCHIVE_SUFFIX = release_payload_names.ARCHIVE_SUFFIX
-
-#: Every package suffix the configured platforms stage.
-PACKAGE_SUFFIXES = release_payload_names.PACKAGE_SUFFIXES
-
-#: Re-exported so callers reach the predicate through the module that uses it.
-is_release_shaped = release_payload_names.is_release_shaped
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
