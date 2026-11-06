@@ -214,6 +214,54 @@ fn word_starting_with_case_before_hash_interpolates_normally() {
     );
 }
 
+/// Verify an unquoted PowerShell substitution boundary still fails closed.
+///
+/// PowerShell has no `case` patterns, so the ambiguity does not arise there and
+/// the guard keeps its narrower unquoted-only rule. An unquoted `$(...)` whose
+/// source contains `case` and whose closer is followed by `#` must still be
+/// rejected, because the raw-source scan cannot tell a keyword from word data.
+#[test]
+fn unquoted_power_shell_case_boundary_fails_closed() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("input")],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::PowerShell,
+    );
+    let template = format!("Write-Output $(Write-Output case)#{INS_TOKEN}");
+
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("an unquoted PowerShell case boundary must fail closed");
+        assert!(
+            matches!(error, IrGenError::AmbiguousSubstitutionBoundary { .. }),
+            "unexpected error: {error:?}"
+        );
+    }
+}
+
+/// Verify the ambiguity guard fires for every POSIX-family script shell.
+///
+/// POSIX and Bash scripts share one traversal, so the rule must not depend on
+/// which of the two selected it. Both spell `case` the same way, and the shell
+/// that reads the finished script applies the same pattern rule.
+#[rstest]
+#[case::posix(RecipeShell::Posix)]
+#[case::bash(RecipeShell::Bash)]
+fn ambiguous_case_boundary_fails_closed_for_each_script_shell(#[case] shell: RecipeShell) {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("input")],
+        &[Utf8PathBuf::from("output")],
+        shell,
+    );
+    let template = format!("echo $(case x in x) :;; esac)#{INS_TOKEN}");
+    let error = interpolate_script_with_bindings(&template, &bindings)
+        .expect_err("an ambiguous case boundary must fail closed for every script shell");
+    assert!(
+        matches!(error, IrGenError::AmbiguousSubstitutionBoundary { .. }),
+        "unexpected error: {error:?}"
+    );
+}
+
 /// Verify an outer-quoted substitution is still checked for the `case` ambiguity.
 ///
 /// The enclosing double quotes do not extend into `$(...)`: the shell parses a
