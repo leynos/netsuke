@@ -60,6 +60,26 @@
           "weight": 0.0
         }
       ]
+    },
+    {
+      "matching_content_path": "tests/hexagonal_inventory_contract/**",
+      "matching_content_path_doc": "Test-only parsers for the pinned inventory contract. Their &str arguments are arbitrary Markdown documents, sections, and roadmap text: raw text is the subject under test, and malformed inputs must remain representable. InventoryValidation groups the inventory and roadmap only where a check needs both; wrapping independent text slices would add conversions without enforcing a grammar. Reassess if these parsers become production-facing or the accepted input grammar gains a validated domain type.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
+    },
+    {
+      "matching_content_path": "tests/hexagonal_inventory_contract_tests.rs",
+      "matching_content_path_doc": "The integration contract's raw Markdown fixtures and expected error fragments are independent oracle data. Malformed documents must remain unconstrained, and wrapping fixture strings would obscure the literal input and error pair without enforcing a useful invariant. Reassess if this test harness gains non-test callers.",
+      "rules": [
+        {
+          "name": "String Heavy Function Arguments",
+          "weight": 0.0
+        }
+      ]
     }
   ]
 }
