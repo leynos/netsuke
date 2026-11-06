@@ -139,8 +139,15 @@ slow-timeout = { period = "60s", terminate-after = 5 }
 # invocation builds the whole dependency graph as well as compiling the target.
 # Fifteen warning periods: measured at 762.60 s on a local host that was
 # carrying 149+ queued `rustc` requests at load 22 on 6 cores.
+#
+# Nextest orders tests by `priority` before applying the group, and a higher
+# number runs first. Without this, the negative check can be scheduled ahead of
+# the prewarm inside their shared invocation: on a cold target its clean
+# compile and two fault compiles would then pay the dependency build out of its
+# own allowance, which is precisely the cost the split exists to avoid.
 filter = 'test(/^prewarm::prewarm_kani_mutation_target($|::)/)'
 test-group = "nested-cargo-builds"
+priority = 1
 success-output = "immediate"
 slow-timeout = { period = "60s", terminate-after = 15 }
 
