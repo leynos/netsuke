@@ -285,6 +285,45 @@ fn inner_group_close_inside_substitution_starts_inert_comment() {
     );
 }
 
+/// Verify a `case` substitution without a comment boundary still interpolates.
+///
+/// The guard applies only to a `)` immediately followed by `#`. A substitution
+/// that merely contains `case` and closes before ordinary text must be
+/// accepted, and a later marker must still lower. Without this case, deleting
+/// the comment-boundary test from the guard would leave every other test
+/// passing.
+#[test]
+fn case_substitution_without_comment_boundary_is_accepted() {
+    let bindings = bindings();
+    let template = format!("echo $(case x in x) y {INS_TOKEN}");
+    let expected = "echo $(case x in x) y input";
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings)
+                .expect("a case substitution without ')#' must be accepted"),
+            expected,
+            "a case substitution without a comment boundary must be accepted"
+        );
+    }
+}
+
+/// Verify a word that merely contains `case` is not treated as the keyword.
+///
+/// `showcase` ends in the same four letters as the `case` reserved word, and
+/// the `)` that closes its substitution is followed by `#`. A substring match
+/// would reject this supported recipe; only a whole-word match may fail
+/// closed. Because the closer stays in the word, the `#` is word data and the
+/// quote after it still opens a double-quoted region.
+#[test]
+fn word_containing_case_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(showcase)");
+    assert_both_outputs(
+        &template,
+        &expected,
+        "a word containing 'case' must not trigger the ambiguity guard",
+    );
+}
+
 /// Verify a `case` pattern terminator before `#` fails closed.
 ///
 /// A `)` that ends a `case` pattern is an operator, so `#` after it starts a
