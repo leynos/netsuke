@@ -53,14 +53,17 @@ fn a_failed_stdout_destination_is_reported_on_stderr() -> Result<()> {
     Ok(())
 }
 
-/// Keep a build successful when its stderr destination disappears.
+/// Keep a build successful and still reported when its stderr destination
+/// disappears.
 ///
 /// Netsuke forwards Ninja's stderr to its own stderr. Ninja writes the recipe
 /// output that users watch to stdout, so the forwarded stderr stream carries
 /// Ninja's own warnings; a corrupt `.ninja_log` is the one such warning a
 /// successful build emits on demand. The first build proves that warning
-/// really reaches Netsuke's stderr, and the second closes that destination and
-/// requires the build to succeed anyway.
+/// really reaches Netsuke's stderr. The second closes that destination and
+/// requires the build to succeed, the recipe to run, and the loss to be
+/// reported on stdout — a channel the closed pipe cannot carry, so the
+/// assertion fails unless the forwarded write really was rejected.
 #[test]
 fn a_closed_stderr_destination_does_not_fail_the_build() -> Result<()> {
     let Some(workspace) = runtime_workspace()? else {
@@ -123,6 +126,14 @@ fn a_closed_stderr_destination_does_not_fail_the_build() -> Result<()> {
     ensure!(
         stdout.contains("lost"),
         "Ninja's stdout should still reach the user: {stdout:?}"
+    );
+    // This line can only be produced by the fallback that runs after the
+    // stderr forwarding thread has reported a rejected write, so it is
+    // positive evidence that the loss happened rather than a coincidence of
+    // the warning arriving before the pipe closed.
+    ensure!(
+        stdout.contains("reporting on stdout because the stderr destination rejected the output"),
+        "the lost stderr destination should be reported on stdout: {stdout:?}"
     );
     Ok(())
 }

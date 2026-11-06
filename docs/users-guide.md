@@ -2040,6 +2040,16 @@ Forwarding loss does not change the reported build result. The child's exit
 status remains authoritative, so `netsuke build | head` closing the pipe early
 is a successful build with a truncated stream, not a build failure.
 
+The warning normally travels on stderr, beside the output it describes. When
+stderr is the destination that failed — for example, when the caller closed it
+with `netsuke build 2>&-` — the closed pipe cannot carry its own report, so
+Netsuke writes a line beginning
+`netsuke: warning: failed to forward child stderr` to stdout instead. Only a
+rejected write or flush triggers that fallback: failing to read the child
+stream says nothing about the destination. JSON mode is unaffected, because it
+drains both child streams to a sink, so forwarding cannot fail there and stdout
+stays one result document.
+
 ### Policy values and parsing
 
 The CLI and configuration use the same policy values, and policy names are

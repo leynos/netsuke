@@ -107,21 +107,23 @@ pub(super) fn ninja_exit_error(
 /// status remains authoritative, and a truncated output stream is reported
 /// through the classified forwarding-failure counter and a warning event
 /// instead. This policy keeps a closed parent pipe, as produced by
-/// `netsuke build | head`, from being reported as a build failure. Both
-/// statistics are therefore intentionally discarded here; the forwarding
-/// helper has already emitted their telemetry.
+/// `netsuke build | head`, from being reported as a build failure.
+///
+/// The stderr statistics are returned rather than discarded because the caller
+/// is the only layer that can tell whether the stderr destination itself
+/// rejected the write, and so whether the warning needs a second channel.
 pub(super) fn finalize_streaming(
     wait_result: io::Result<ExitStatus>,
     stdout_stats: ForwardStats,
     err_handle: thread::JoinHandle<(ForwardStats, Option<CommandListFailure>)>,
-) -> io::Result<(ExitStatus, Option<CommandListFailure>)> {
+) -> io::Result<(ExitStatus, Option<CommandListFailure>, ForwardStats)> {
     let _ = stdout_stats;
-    let command_list_failure = match err_handle.join() {
-        Ok((_stderr_stats, context)) => context,
+    let (stderr_stats, command_list_failure) = match err_handle.join() {
+        Ok((stderr_stats, context)) => (stderr_stats, context),
         Err(error) => {
             tracing::warn!("stderr forwarding thread panicked: {error:?}");
-            None
+            (ForwardStats::default(), None)
         }
     };
-    wait_result.map(|status| (status, command_list_failure))
+    wait_result.map(|status| (status, command_list_failure, stderr_stats))
 }

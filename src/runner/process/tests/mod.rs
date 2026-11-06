@@ -129,6 +129,28 @@ fn forwarding_loss_preserves_a_failed_child_result() {
     assert_eq!(result.0, status);
 }
 
+/// The joined stderr statistics reach the caller.
+///
+/// The caller decides whether the stderr destination rejected the output and
+/// therefore whether the warning needs the stdout fallback, so discarding
+/// these statistics here would silently disable that fallback.
+#[test]
+fn finalize_streaming_surfaces_the_stderr_statistics() {
+    let status = child_exit_status(0);
+    let (_, _, stderr_stats) = finalize_streaming(
+        Ok(status),
+        ForwardStats::default(),
+        joined_stderr(failed_forwarding_stats(ForwardFailureKind::Write)),
+    )
+    .expect("joining a completed stderr thread must succeed");
+
+    assert_eq!(
+        stderr_stats.failure,
+        Some(ForwardFailureKind::Write),
+        "the stderr forwarding failure must survive the join"
+    );
+}
+
 #[test]
 fn forwarding_loss_does_not_mask_a_wait_failure() {
     let result = finalize_streaming(

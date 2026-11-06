@@ -7,11 +7,12 @@ use super::{
         CommandListFailure, NinjaFailureOutputTail, forward_stderr_with_attribution,
     },
     streaming::{
-        ForwardStats, ForwardStream, forward_child_output, forward_child_output_with_ninja_status,
+        ForwardFailureKind, ForwardStats, ForwardStream, forward_child_output,
+        forward_child_output_with_ninja_status,
     },
 };
 use std::{
-    io::{self, BufReader},
+    io::{self, BufReader, Write},
     process::{Child, ExitStatus},
     thread,
 };
@@ -122,11 +123,51 @@ pub(super) fn spawn_and_stream_output(
     // joined on every exit path. Returning early on a `wait()` error would
     // otherwise detach the thread, leaking it and discarding its result.
     let wait_result = child.wait();
-    let (status, stderr_failure) = finalize_streaming(wait_result, stdout_stats, err_handle)?;
+    let (status, stderr_failure, stderr_stats) =
+        finalize_streaming(wait_result, stdout_stats, err_handle)?;
+    if matches!(stderr_mode, StderrMode::Forward) {
+        report_unwritable_stderr(stderr_stats);
+    }
     let failure = if status.success() {
         stderr_failure
     } else {
         stderr_failure.or(stdout_failure)
     };
     Ok((status, failure))
+}
+
+/// Warn on stdout when the stderr destination itself rejected child output.
+///
+/// A forwarding warning normally travels on stderr, beside the output it
+/// describes. When stderr is the destination that failed — a closed pipe, as
+/// produced by `netsuke build 2>&-` — that warning cannot reach the user, and
+/// dropping it would leave the loss entirely unobservable. The fallback is
+/// written after the stderr forwarding thread has joined, so it cannot
+/// interleave with forwarded output, and JSON mode never reaches it because
+/// [`StderrMode::Suppress`] drains both child streams to [`io::sink`].
+///
+/// Only a rejected write or flush triggers the fallback: a failure to read the
+/// child stream says nothing about the destination's health.
+fn report_unwritable_stderr(stats: ForwardStats) {
+    let rejected = match stats.failure {
+        Some(kind @ (ForwardFailureKind::Write | ForwardFailureKind::Flush)) => Some(kind),
+        Some(ForwardFailureKind::Read | ForwardFailureKind::Drain) | None => None,
+    };
+    let Some(kind) = rejected else {
+        return;
+    };
+
+    let mut stdout = io::stdout().lock();
+    let message = writeln!(
+        stdout,
+        concat!(
+            "netsuke: warning: failed to forward child stderr ({}); ",
+            "reporting on stdout because the stderr destination rejected the output",
+        ),
+        kind.label()
+    )
+    .and_then(|()| stdout.flush());
+    if let Err(error) = message {
+        tracing::debug!("failed to report an unwritable stderr on stdout: {error}");
+    }
 }

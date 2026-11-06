@@ -1156,6 +1156,17 @@ failed subcommand's stderr on its own stdout, build runs retain only a fixed
 512-byte stdout tail and use its parsed marker only after a non-zero exit.
 Ordinary child stdout streams forward directly and must not use this tail.
 
+Forwarding loss never changes the reported build result, so the process layer
+reports it rather than failing. `finalize_streaming` returns the joined stderr
+statistics beside the exit status, because only the caller can tell whether the
+stderr destination itself rejected a write. When it did, that closed pipe
+cannot carry the warning Ninja's loss would normally produce, so
+`report_unwritable_stderr` repeats a bounded line on stdout from the main
+thread, after the worker has joined and therefore without interleaving risk.
+Only a `write` or `flush` failure triggers the fallback: a `read` or `drain`
+failure says nothing about the destination's health. JSON mode drains both
+child streams to `io::sink()`, so it cannot take this path.
+
 The lowest-layer shell-word quoting used for input/output paths during IR
 lowering, and for the `shell_quote` and `shell_join` template filters, is
 [`src/shell_word.rs`](../src/shell_word.rs). `quote_word` is its one entry
