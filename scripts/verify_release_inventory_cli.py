@@ -54,7 +54,7 @@ def verify(
     directory: pathlib.Path,
     *,
     expected: list[str],
-    trusted: cabc.Mapping[str, str],
+    trusted: release_digest_record.DigestRecord,
 ) -> dict[str, str]:
     """Verify the inventory, every sidecar, and every trusted digest.
 
@@ -65,8 +65,8 @@ def verify(
     expected
         Asset names the release declared.
     trusted
-        Published name to the digest the build recorded for the staged
-        candidate before upload.
+        The record the build wrote for the staged candidate before upload,
+        mapping each published name to its digest.
 
     Returns
     -------
@@ -229,7 +229,12 @@ def _write_verified_record(output: pathlib.Path, verified: dict[str, str]) -> No
     ) as tmp:
         staged = pathlib.Path(tmp) / output.name
         _ = staged.write_text(
-            json.dumps({"assets": verified}, indent=2, sort_keys=True) + "\n",
+            json.dumps(
+                {release_digest_record_files.ASSETS_MEMBER: verified},
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
             encoding="utf-8",
         )
         _ = staged.replace(output)

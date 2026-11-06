@@ -1,8 +1,9 @@
-"""Validate trusted digest-record values and compare their coverage.
+"""Represent trusted digest records and compare their coverage.
 
 The release record maps published asset names to SHA-256 digests. This module
-owns that in-memory shape and the comparisons made against it. JSON parsing,
-serialization, and file access belong to :mod:`release_digest_record_files`.
+owns the validated :class:`DigestRecord` and the comparisons made against it.
+JSON parsing, the record's ``assets`` member, serialization, and file access
+belong to :mod:`release_digest_record_files`.
 
 The record is written before upload and remains independent of downloaded
 bytes. Comparing downloads to it is what makes replacing an archive or package
@@ -12,6 +13,7 @@ Run via the release publication adapters; behavioural coverage lives in
 ``scripts/tests/test_release_digest_record.py``.
 """
 
+import dataclasses
 import re
 import typing as typ
 
@@ -22,9 +24,6 @@ if typ.TYPE_CHECKING:
 
 #: One hexadecimal SHA-256 digest, in either case.
 _DIGEST_TEXT = re.compile(rf"\A[0-9a-fA-F]{{{release_digest.DIGEST_HEX_LENGTH}}}\Z")
-
-#: The member holding the name-to-digest mapping.
-ASSETS_MEMBER = "assets"
 
 
 class DigestRecordError(ValueError):
@@ -37,73 +36,110 @@ class RecordedDigestMismatchError(
     """Report downloaded bytes that differ from the trusted record."""
 
 
-def validate_digest_record(record: object) -> dict[str, str]:
-    """Return a validated name-to-lowercase-digest mapping.
+@dataclasses.dataclass(frozen=True, slots=True)
+class DigestRecord:
+    """A non-empty, validated set of published asset names and digests."""
 
-    Parameters
-    ----------
-    record
-        Decoded record value, normally parsed by the JSON adapter.
+    #: Asset names paired with their lowercase SHA-256 digest, sorted by name.
+    entries: tuple[tuple[str, str], ...]
 
-    Returns
-    -------
-    dict[str, str]
-        Asset name mapped to its lowercase SHA-256 digest.
+    def __post_init__(self) -> None:
+        """Refuse a record that is empty or carries a malformed entry.
 
-    Notes
-    -----
-    The validation helpers' :class:`DigestRecordError` reaches the caller
-    unchanged, preserving the precise reason the decoded record was refused.
+        The comparison functions accept any :class:`DigestRecord`, so the
+        guarantee that a record is usable has to hold for every construction
+        path rather than only for the factory. Validation here is what makes
+        "validated record" a property of the type.
 
-    Examples
-    --------
-    >>> validate_digest_record({"assets": {"a": "AB" * 32}})["a"] == "ab" * 32
-    True
-    >>> validate_digest_record({"assets": {}})  # doctest: +ELLIPSIS
-    Traceback (most recent call last):
-        ...
-    release_digest_record.DigestRecordError: the digest record declares no assets...
-    """
-    declared = _asset_mapping(record)
-    return dict(_validated_entries(declared))
+        Raises
+        ------
+        DigestRecordError
+            If the record declares no asset, names an asset with a non-string
+            key, lists an asset name more than once, or carries a digest that
+            is not a lowercase hexadecimal value.
 
+        Examples
+        --------
+        >>> DigestRecord((("a", "ab" * 32),)).names()
+        {'a'}
+        >>> DigestRecord(())  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+            ...
+        release_digest_record.DigestRecordError: the digest record declares no assets...
+        """
+        if not self.entries:
+            msg = "the digest record declares no assets, so there is nothing to verify"
+            raise DigestRecordError(msg)
+        for name, digest in self.entries:
+            if _validated_entry(name, digest) != (name, digest):
+                msg = f"the digest record must carry lowercase digests, got {digest!r}"
+                raise DigestRecordError(msg)
+        _require_unique_names(self.entries)
 
-def _asset_mapping(record: object) -> dict[object, object]:
-    """Return the non-empty asset mapping from a decoded record.
+    @classmethod
+    def from_mapping(cls, declared: cabc.Mapping[str, object]) -> DigestRecord:
+        """Validate decoded entries and build the trusted record.
 
-    Returns
-    -------
-    dict[object, object]
-        The unvalidated entries from the record's ``assets`` member.
+        Parameters
+        ----------
+        declared
+            Asset names mapped to digests, before validation.
 
-    Raises
-    ------
-    DigestRecordError
-        If the record is not a non-empty mapping of asset entries.
+        Returns
+        -------
+        DigestRecord
+            The entries with lowercase digests, sorted by asset name.
 
-    Examples
-    --------
-    >>> _asset_mapping({"assets": {"a": "ab"}})
-    {'a': 'ab'}
-    """
-    if not isinstance(record, dict):
-        msg = f"the digest record must be a mapping, got {type(record).__name__}"
-        raise DigestRecordError(msg)
-    declared = record.get(ASSETS_MEMBER)
-    if not isinstance(declared, dict):
-        msg = (
-            f"the digest record must carry an '{ASSETS_MEMBER}' mapping, got "
-            f"{type(declared).__name__}"
-        )
-        raise DigestRecordError(msg)
-    if not declared:
-        msg = "the digest record declares no assets, so there is nothing to verify"
-        raise DigestRecordError(msg)
-    return declared
+        Notes
+        -----
+        This factory normalizes case and sorts; the value invariant itself is
+        enforced by :meth:`__post_init__`, whose ``DigestRecordError`` reaches
+        the caller unchanged.
+
+        Examples
+        --------
+        >>> DigestRecord.from_mapping({"a": "AB" * 32}).as_mapping()["a"] == "ab" * 32
+        True
+        >>> DigestRecord.from_mapping({})  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+            ...
+        release_digest_record.DigestRecordError: the digest record declares no assets...
+        """
+        return cls(tuple(sorted(_validated_entries(declared))))
+
+    def as_mapping(self) -> dict[str, str]:
+        """Return the record as a name-to-digest mapping.
+
+        Returns
+        -------
+        dict[str, str]
+            Each asset name mapped to its lowercase digest.
+
+        Examples
+        --------
+        >>> DigestRecord.from_mapping({"a": "ab" * 32}).as_mapping()["a"] == "ab" * 32
+        True
+        """
+        return dict(self.entries)
+
+    def names(self) -> set[str]:
+        """Return the asset names the record covers.
+
+        Returns
+        -------
+        set[str]
+            The asset names, without their digests.
+
+        Examples
+        --------
+        >>> DigestRecord.from_mapping({"a": "ab" * 32}).names()
+        {'a'}
+        """
+        return {name for name, _ in self.entries}
 
 
 def _validated_entries(
-    declared: dict[object, object],
+    declared: cabc.Mapping[str, object],
 ) -> cabc.Iterable[tuple[str, str]]:
     """Yield each asset name and lowercase digest after validating its types.
 
@@ -112,10 +148,13 @@ def _validated_entries(
     tuple[str, str]
         One asset name and its lowercase digest.
 
-    Raises
-    ------
-    DigestRecordError
-        If an entry is not a string name and a valid hexadecimal digest.
+    Notes
+    -----
+    :func:`_validated_entry` raises ``DigestRecordError`` for a malformed
+    entry. Its check runs as each entry is yielded, so a malformed key is
+    refused before ``sorted`` compares it against a string key. Sorting first
+    would raise ``TypeError`` for mixed key types instead of the record's own
+    error.
 
     Examples
     --------
@@ -123,10 +162,61 @@ def _validated_entries(
     True
     """
     for name, digest in declared.items():
-        if not isinstance(name, str) or not isinstance(digest, str):
-            msg = "the digest record must map asset names to digests as strings"
-            raise DigestRecordError(msg)
-        yield name, _validated_digest(name, digest)
+        yield _validated_entry(name, digest)
+
+
+def _require_unique_names(entries: cabc.Iterable[tuple[str, str]]) -> None:
+    """Refuse a record that names one asset more than once.
+
+    A repeated name is reachable only by constructing the record directly,
+    because a mapping cannot repeat a key. Every accessor collapses the
+    repetition, so only the later digest would be compared and the earlier
+    digest would never be checked against anything.
+
+    Raises
+    ------
+    DigestRecordError
+        If two entries share an asset name.
+
+    Examples
+    --------
+    >>> _require_unique_names([("a", "ab" * 32), ("b", "ab" * 32)])
+    >>> _require_unique_names(  # doctest: +ELLIPSIS
+    ...     [("a", "ab" * 32), ("a", "ab" * 32)]
+    ... )
+    Traceback (most recent call last):
+        ...
+    release_digest_record.DigestRecordError: the digest record must list each...
+    """
+    names = [name for name, _ in entries]
+    if len(set(names)) != len(names):
+        msg = "the digest record must list each asset name once"
+        raise DigestRecordError(msg)
+
+
+def _validated_entry(name: object, digest: object) -> tuple[str, str]:
+    """Return one asset name and its lowercase digest, or refuse the entry.
+
+    Returns
+    -------
+    tuple[str, str]
+        The asset name and its lowercase digest.
+
+    Raises
+    ------
+    DigestRecordError
+        If either value is not a string, or the digest is not a valid
+        hexadecimal value.
+
+    Examples
+    --------
+    >>> _validated_entry("a", "AB" * 32)[1] == "ab" * 32
+    True
+    """
+    if not isinstance(name, str) or not isinstance(digest, str):
+        msg = "the digest record must map asset names to digests as strings"
+        raise DigestRecordError(msg)
+    return name, _validated_digest(name, digest)
 
 
 def _validated_digest(name: str, digest: str) -> str:
@@ -154,7 +244,7 @@ def _validated_digest(name: str, digest: str) -> str:
 
 
 def require_record_matches_declaration(
-    digests: cabc.Mapping[str, str], *, expected: cabc.Iterable[str]
+    record: DigestRecord, *, expected: cabc.Iterable[str]
 ) -> None:
     """Require the record to cover exactly the assets the release declares.
 
@@ -166,9 +256,11 @@ def require_record_matches_declaration(
 
     Examples
     --------
-    >>> require_record_matches_declaration({"a": "ab"}, expected=["a"])
+    >>> require_record_matches_declaration(
+    ...     DigestRecord.from_mapping({"a": "ab" * 32}), expected=["a"]
+    ... )
     >>> require_record_matches_declaration(  # doctest: +ELLIPSIS
-    ...     {"a": "ab"}, expected=["a", "b"]
+    ...     DigestRecord.from_mapping({"a": "ab" * 32}), expected=["a", "b"]
     ... )
     Traceback (most recent call last):
         ...
@@ -178,7 +270,7 @@ def require_record_matches_declaration(
     if not declared:
         msg = "the declaration names no asset, so there is nothing to verify"
         raise DigestRecordError(msg)
-    _require_complete_coverage(declared, set(digests))
+    _require_complete_coverage(declared, record.names())
 
 
 def _require_complete_coverage(declared: set[str], recorded: set[str]) -> None:
@@ -195,7 +287,7 @@ def _require_complete_coverage(declared: set[str], recorded: set[str]) -> None:
 
 
 def require_downloads_match_record(
-    computed: cabc.Mapping[str, str], *, trusted: cabc.Mapping[str, str]
+    computed: cabc.Mapping[str, str], *, trusted: DigestRecord
 ) -> None:
     """Require every downloaded asset digest to match the trusted record.
 
@@ -207,15 +299,17 @@ def require_downloads_match_record(
 
     Examples
     --------
-    >>> require_downloads_match_record({"a": "ab"}, trusted={"a": "ab"})
+    >>> require_downloads_match_record(
+    ...     {"a": "ab" * 32}, trusted=DigestRecord.from_mapping({"a": "ab" * 32})
+    ... )
     >>> require_downloads_match_record(  # doctest: +ELLIPSIS
-    ...     {"a": "cd"}, trusted={"a": "ab"}
+    ...     {"a": "cd" * 32}, trusted=DigestRecord.from_mapping({"a": "ab" * 32})
     ... )
     Traceback (most recent call last):
         ...
     release_digest_record.RecordedDigestMismatchError: uploaded assets do not match...
     """
-    wrong = _mismatched_download_names(computed, trusted)
+    wrong = _mismatched_download_names(computed, trusted.as_mapping())
     if not wrong:
         return
     msg = f"uploaded assets do not match the staged candidate: {wrong!r}"

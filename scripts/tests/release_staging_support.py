@@ -19,6 +19,7 @@ Nothing here reaches the network.
 import typing as typ
 
 import release_digest_files
+import release_digest_record
 import release_digest_record_files
 
 if typ.TYPE_CHECKING:
@@ -102,7 +103,7 @@ def write_declaration(destination: pathlib.Path, names: list[str]) -> pathlib.Pa
     return destination
 
 
-def trusted_digests(staging: pathlib.Path) -> dict[str, str]:
+def trusted_digests(staging: pathlib.Path) -> release_digest_record.DigestRecord:
     """Record the staged tree's own digests, as the build would before upload.
 
     Parameters
@@ -112,8 +113,8 @@ def trusted_digests(staging: pathlib.Path) -> dict[str, str]:
 
     Returns
     -------
-    dict[str, str]
-        Asset name to the digest of that staged file's own bytes.
+    release_digest_record.DigestRecord
+        Each staged file's name and the digest of its own bytes.
 
     Notes
     -----
@@ -121,15 +122,15 @@ def trusted_digests(staging: pathlib.Path) -> dict[str, str]:
     substitution is compared against an independent record and not against the
     module under test's idea of one.
     """
-    return {
+    return release_digest_record.DigestRecord.from_mapping({
         path.name: release_digest_files.digest_of_file(path)
         for path in staging.iterdir()
         if path.is_file()
-    }
+    })
 
 
 def write_trusted_record(
-    destination: pathlib.Path, digests: dict[str, str]
+    destination: pathlib.Path, digests: release_digest_record.DigestRecord
 ) -> pathlib.Path:
     """Write a trusted digest record the CLIs can read.
 
@@ -138,7 +139,7 @@ def write_trusted_record(
     destination
         File to write.
     digests
-        Asset name to recorded digest.
+        The validated record to serialize.
 
     Returns
     -------
@@ -146,5 +147,5 @@ def write_trusted_record(
         ``destination``, so a caller can pass the result straight to an
         invocation's argument list.
     """
-    release_digest_record_files.write_digest_record(digests, destination)
+    release_digest_record_files.write_digest_record(digests.as_mapping(), destination)
     return destination

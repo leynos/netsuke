@@ -331,6 +331,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0070](adrs/adr-0070-deny-by-default-test-mode-stdlib.md):
   Deny-by-default stdlib surface for `netsuke test`, typed refusal stubs, and
   template overlays that replace withheld functions by name.
+- [ADR-0071](adrs/adr-0071-typed-records-for-release-policy-boundaries.md):
+  Frozen slotted records at release policy boundaries, with adapters owning
+  external record shapes and domain-shaped mappings retained.
 
 ## Proposals
 
