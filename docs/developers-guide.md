@@ -6390,7 +6390,8 @@ failures; `make kani-full` performs the model codegen and verification.
 
 The mutation gate's allowances live in the dedicated `kani` profile. The patch
 sweep gets forty 60-second periods, the largest allowance the profile's
-42-minute whole-run cap contains, and the prewarm gets fifteen. Both compile
+42-minute whole-run cap contains, and the prewarm and its negative-compile check
+get fifteen each. All three compile
 into `target/kani-mutation-compile`, which no cache restores — `kani-cache`
 holds the Kani payloads, not a build tree — so a run without the prewarm pays a
 cold build of the whole dependency graph plus a recompile per patch. Splitting
@@ -6424,9 +6425,9 @@ runner variance and post-step reporting. Sizing the ceiling from a single cap
 would cancel the job while the second invocation was still reporting, and a
 cancellation discards the log that explains the overrun.
 
-The mutation filters use the anchored `compile_guard::` and `prewarm::`
-submodule test names, so the Kani-specific timeouts are applied to the intended
-tests rather than falling through to the 300 s default. A filter selecting
+The mutation filters use the anchored `compile_guard::`, `prewarm::`, and
+`negative::` submodule test names, so the Kani-specific timeouts are applied to
+the intended tests rather than falling through to the 300 s default. A filter selecting
 nothing leaves its override out of the test-groups listing, which makes
 `cargo nextest show-config test-groups --profile kani` a cheap binding check.
 
@@ -6838,8 +6839,9 @@ governs the non-doctest pass only, and deliberately stays small:
   allowance. The remaining targeted allowances stay below the 960s CI whole-run
   cap; none adds retries or widens timeouts for unrelated tests. The explicit
   `make test-kani-mutations` target is the bounded exception: its ignored
-  prewarm test pays the cold Kani frontend build, and its separate ignored
-  sweep reuses that target directory.
+  prewarm test pays the cold Kani frontend build, its ignored negative-compile
+  check proves that same path rejects a seeded fault, and its separate ignored
+  sweep reuses the target directory.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
