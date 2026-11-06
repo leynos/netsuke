@@ -54,6 +54,10 @@ PYTHON_SOURCES: tuple[str, ...] = (
     "tests/workflow_contracts",
 )
 
+#: Every owned Python root the docstring gate scans: the quality roots plus the
+#: package-validation helper under `.github`.
+INTERROGATE_SOURCES: tuple[str, ...] = (*PYTHON_SOURCES, ".github/package-validation")
+
 #: Parsed shell tokens for the pinned Interrogate Makefile command.
 INTERROGATE_COMMAND: tuple[str, ...] = (
     "$(UV_ENV)",
@@ -237,7 +241,7 @@ def _interrogate_invocation(baseline: str, version: str) -> list[str]:
         "interrogate",
         "--fail-under",
         "100",
-        *PYTHON_SOURCES,
+        *INTERROGATE_SOURCES,
     ]
 
 
@@ -262,7 +266,7 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
             "$(PYLINT) $(PYLINT_TARGETS)",
             "$(DF12_PYLINT) $(PYLINT_TARGETS)",
             "$(AMBRLEAKS) $(PYTHON_SOURCES)",
-            "$(INTERROGATE) $(PYTHON_SOURCES)",
+            "$(INTERROGATE) $(INTERROGATE_SOURCES)",
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",

@@ -178,6 +178,9 @@ CI_SCRIPT_DEPS = --with cyclopts==$(CYCLOPTS_VERSION) --with cuprum==$(CUPRUM_VE
 # configuration and exclusions from pyproject.toml, so these paths only bound
 # the walk.
 PYTHON_SOURCES = .github/scripts scripts tests/workflow_contracts
+# Every Python file the repository owns, for the docstring-presence gate: the lint
+# sources above plus the package-validation helper under .github.
+INTERROGATE_SOURCES = $(PYTHON_SOURCES) .github/package-validation
 # Pylint must run on the Python baseline so it parses every repository-owned
 # source. `--load-plugins=` clears any configured plugins so this pass runs
 # exactly the messages pyproject.toml enables.
@@ -484,7 +487,7 @@ lint-python: lint-workflow-scripts ## Run Ruff, Pylint, Interrogate, the df12 ho
 	$(PYLINT) $(PYLINT_TARGETS)
 	$(DF12_PYLINT) $(PYLINT_TARGETS)
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
-	$(INTERROGATE) $(PYTHON_SOURCES)
+	$(INTERROGATE) $(INTERROGATE_SOURCES)
 
 lint-workflow-scripts: ## Load every trusted workflow module under the Python baseline
 	# The trusted coverage workflow runs these through GitHub Actions' `python`
