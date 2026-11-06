@@ -354,6 +354,22 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       figure is substituted for the diff-scoped row. Reconcile the row against
       the latest summary and pre-merge output after the repair review,
       requesting declaration diagnostics if a warning remains.
+- [x] (2026-11-06) Replace the isolation sandbox with a read-only chroot after
+      CodeRabbit kept the boundary finding open. The previous version bound
+      only the repository, so `temp=read-only` re-probed the repository and
+      nothing outside that mount was restricted. The chroot now binds `/usr`,
+      `/etc`, the repository, and the fixture read-only over a read-only root,
+      mounts a fresh procfs, and classifies each probe by the kernel's errno
+      with a writable `control` path as a non-vacuity guard. The test requires
+      `control=writable`, `repo=read-only`, `fixture=read-only`,
+      `rootdir=read-only`, `usr=read-only`, `etc=read-only`, `tmp=read-only`,
+      `home=read-only`, `ifaces=lo,`, `dns=blocked`, and the matching version,
+      and rejects any other `=writable` line. The sandbox machinery moved to
+      `tests/prover_tools_kani_check_tests/sandbox.rs` to stay under the
+      400-line module cap. All 11 gates passed sequentially on tree
+      `fe679d954f064187ab642572bfc09640649e5dec`; the code commit is
+      `b45b19da5d00f6c2bfeb63681384743a24f2a853`. Revision 45 records the
+      detail, and Revision 44's superseded claim is corrected in place.
 
 ## Surprises & discoveries
 
@@ -507,9 +523,10 @@ build-tools-first PATH precedence for `mold`; the regression covers conflicting
 binaries, default and custom Cargo homes, and paths with spaces. CodeRabbit
 confirmed the repair in reply
 [#4440506630](https://github.com/leynos/netsuke/pull/1063#discussion_r4440506630).
-The guide distinguishes the pinned CLI's installation and version-checking
-roles from proof execution by Make targets; CodeRabbit confirmed that
-correction in reply
+The guide distinguishes the pinned CLI's installation role from proof
+execution by Make targets, and from Kani version checking, which is the local
+read-only query rather than a delegation; CodeRabbit confirmed that correction
+in reply
 [#4437685594](https://github.com/leynos/netsuke/pull/1063#discussion_r4437685594).
 Both corrections are published. Current-head hosted Kani smoke verified
 version 0.67.0 and all 15 harnesses. The next completed formal review on
@@ -526,8 +543,13 @@ contracts, 90 CI-script tests, seven prover-tools integration tests, and 98.23%
 doc coverage. The exact-base CodeScene delta reports no new findings, the new
 edge-test file scores 10.0 with no review findings, and the hosted CodeScene
 check reports six quality gates passed. The repair is published in the
-candidate. Current-head review reconciliation and trusted-main warm-cache
-acceptance remain open.
+candidate. The isolation boundary test now enforces the write boundary with a
+read-only chroot rather than a single repository bind, so the query is verified
+to run with no writable path outside the repository and fixture; on a host that
+forbids unprivileged user namespaces the case reports the reason and returns
+success, which `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` converts into a failure.
+Current-head review reconciliation and trusted-main warm-cache acceptance
+remain open.
 
 ## Context and orientation
 
@@ -1174,13 +1196,16 @@ formal-verification guide, and reconciliation of this plan's Progress and
 Outcomes statements. Commit `2b63540d0c65a28f8a9fd6f46a6abf869ea1bbfb` supplies
 all three. The new `kani_check_runs_without_network_or_writable_storage` case
 runs the real recipe inside `unshare --user --map-root-user --net --mount` with
-the repository root and the fixture directory self-bound and remounted
-read-only; the sandbox asserts each restriction before running the query, and
-the test asserts the reported `repo=read-only`, `temp=read-only`, `ifaces=lo,`,
-and `dns=blocked` lines, so a namespace that silently failed to apply fails the
-case rather than passing it vacuously. A host without user namespaces reports a
-skip, and `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` turns that skip into a failure.
-The fixture and sandbox machinery moved to
+the repository root self-bound and remounted read-only; the sandbox asserts
+that restriction before running the query, and the test asserts the reported
+`repo=read-only`, `temp=read-only`, `ifaces=lo,`, and `dns=blocked` lines, so a
+namespace that silently failed to apply fails the case rather than passing it
+vacuously. That revision bound only the repository, so its `temp` probe
+re-probed the repository rather than the fixture, and the inherited home
+directory, cache, and temporary paths stayed writable outside the namespace's
+write barrier; Revision 45 replaces it. A host without user namespaces reports
+a skip, and `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` turns that skip into a
+failure. The fixture and sandbox machinery moved to
 `tests/prover_tools_kani_check_tests/support.rs`, keeping both files under the
 400-line cap; both score 10.00 on the CodeScene command-line interface. The
 guide now separates installation and Verus proof execution, which delegate to
@@ -1196,3 +1221,74 @@ passed, 3 skipped, plus 28 helper tests), `make test-ci-scripts` (90 passed),
 (publish dry run). This plan-only revision follows the code commit. Next, post
 the follow-up comment, await the CodeRabbit review, request the final approval,
 and merge once equilibrium holds. Keep Status: IN PROGRESS.
+
+Revision 45 (2026-11-06): CodeRabbit's reply on the pre-merge thread
+([#6688359015](https://github.com/leynos/netsuke/pull/1063#issuecomment-6688359015))
+accepted the guide correction and the Progress/Outcomes reconciliation but
+kept the isolation-boundary finding open with four repairs: probe the fixture
+directory rather than the repository twice, block writes outside the two
+mounts, enforce the filesystem-write boundary for the query process so the
+inherited `HOME`, the uv cache, and temporary paths are not writable, and
+verify that attempted writes outside the repository and fixture fail. Revision
+44 satisfied none of the last three: it bound only the repository, so
+`temp=read-only` re-probed the repository, and every path outside the namespace
+stayed writable in principle. That revision record has been corrected in place,
+and this revision supersedes it.
+
+The sandbox is now a read-only chroot built inside
+`unshare --user --map-root-user --net --mount --pid --fork`. The chroot root is
+a fresh temporary directory, self-bound and remounted `ro,bind`; `/usr`,
+`/etc`, the repository, and the fixture are bound on top of that read-only root
+and remounted read-only; `/proc` is a fresh procfs mounted over it. `/bin`,
+`/sbin`, `/lib`, and `/lib64` are symlinks into `/usr`, so the query sees only
+read-only mounts, and every other path — the inherited home directory, the uv
+cache, `/tmp`, and the chroot root itself — is a read-only directory or absent.
+The process namespace is what makes the procfs mount possible; the network
+namespace leaves `lo` as the only interface, matching the existing `ifaces=lo,`
+assertion.
+
+Each restriction is verified rather than assumed. The inner script reports
+`control=writable` for `/proc/self/comm`, a path that really is writable, which
+proves the probe distinguishes a protected path from a broken redirection; it
+then classifies the attempt to create a file in the repository, the fixture,
+the chroot root, `/usr`, `/etc`, `/tmp`, and `$HOME` by the errno the kernel
+returns, reporting `read-only`, `absent`, or `other`. The test requires
+`control=writable`, `repo=read-only`, `fixture=read-only`, `rootdir=read-only`,
+`usr=read-only`, `etc=read-only`, `tmp=read-only`, `home=read-only`,
+`ifaces=lo,`, `dns=blocked`, and `Kani 0.67.0 matches`, and rejects any line
+other than `control=writable` that ends in `=writable`. The observed output on
+this host is exactly that list. The `temp=read-only` line is gone because it
+was the repository probed twice; `fixture=read-only` replaces it.
+
+A host that forbids unprivileged user namespaces cannot demonstrate the
+boundary. `sandbox::unavailable` probes the same namespace set the sandbox
+requests, and the case then calls `sandbox::skip`, which prints
+`skipped: kani-check isolation — <reason>` to standard error and returns
+`Ok(())`. That is a reported prerequisite skip, not a native test skip: nextest
+records the case as passed with zero skipped, so the reason is visible only in
+the captured output. `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` converts it into a
+failure, following the precedent of `NETSUKE_REQUIRE_NINJA`, and remains
+available to a lane that must exercise the boundary. It is not set in CI, so
+the boundary is enforced on hosts that admit user namespaces and reported, not
+enforced, on those that do not.
+
+The sandbox machinery moved to `tests/prover_tools_kani_check_tests/sandbox.rs`
+because the combined file reached 413 lines and the `module-max-lines` lint
+caps a module at 400. The three files are 172, 254, and 172 lines, and each
+scores 10.00 on the CodeScene command-line interface. The outer and inner
+scripts are raw string constants so the shell braces survive formatting, and
+the inner script is passed to `sh -c` as a single-quoted literal, which is why
+it uses no apostrophes.
+
+The committed tree hash is `fe679d954f064187ab642572bfc09640649e5dec`,
+identical to the candidate the gates ran against, and all 11 gates passed
+sequentially on it: `make check-fmt`, `make lint`, `make typecheck`,
+`make doc-coverage` (98.23%), `make markdownlint` (212 files, zero issues),
+`make nixie`, `make test` (4,954 passed, 7 skipped, plus doctests),
+`make test-workflow-contracts` (1,669 passed, 3 skipped, plus 28 helper tests),
+`make test-ci-scripts` (90 passed), `make test-prover-tools-integration` (7
+passed), and `make test-package-verify` (publish dry run). The code commit is
+`b45b19da5d00f6c2bfeb63681384743a24f2a853`. This plan-only revision follows it.
+Next, post the corrective follow-up comment, await the CodeRabbit review,
+request the final approval, and merge once equilibrium holds. Keep Status: IN
+PROGRESS.
