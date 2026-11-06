@@ -228,4 +228,35 @@ pub enum IrGenError {
         /// Localized error message.
         message: LocalizedMessage,
     },
+
+    /// Raised when a `)#` boundary is ambiguous without the `case` grammar.
+    ///
+    /// A `)` that closes `$()` stays part of the surrounding word, so a `#`
+    /// after it is word data. A `)` that terminates a `case` pattern is an
+    /// operator, so the same `#` starts a comment instead. Raw source cannot
+    /// distinguish the two, so the scanner fails closed and reports where the
+    /// boundary sits rather than quoting the recipe, which may itself carry
+    /// executable syntax.
+    ///
+    /// ```
+    /// use netsuke::ir::IrGenError;
+    /// use netsuke::localization::{self, keys};
+    ///
+    /// let err = IrGenError::AmbiguousSubstitutionBoundary {
+    ///     position: 42,
+    ///     message: localization::message(keys::IR_AMBIGUOUS_SUBSTITUTION_BOUNDARY)
+    ///         .with_arg("position", 42),
+    /// };
+    /// assert!(matches!(
+    ///     err,
+    ///     IrGenError::AmbiguousSubstitutionBoundary { position, .. } if position == 42
+    /// ));
+    /// ```
+    #[error("{message}")]
+    AmbiguousSubstitutionBoundary {
+        /// One-based character offset of the ambiguous `)`.
+        position: usize,
+        /// Localized error message.
+        message: LocalizedMessage,
+    },
 }

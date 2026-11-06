@@ -122,6 +122,7 @@ define_keys! {
     IR_CIRCULAR_DEPENDENCY => "ir.circular_dependency",
     IR_ACTION_SERIALISATION => "ir.action_serialisation",
     IR_INVALID_COMMAND => "ir.invalid_command",
+    IR_AMBIGUOUS_SUBSTITUTION_BOUNDARY => "ir.ambiguous_substitution_boundary",
     NINJA_GEN_MISSING_ACTION => "ninja_gen.missing_action",
     NINJA_GEN_FORMAT => "ninja_gen.format",
     NINJA_GEN_DYNDEP_FILES_REQUIRED => "ninja_gen.dyndep_files_required",

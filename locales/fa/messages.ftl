@@ -195,6 +195,7 @@ ir.duplicate_outputs = خروجی‌های تکراری یافت شد: { $output
 ir.circular_dependency = وابستگی چرخه‌ای یافت شد: { $cycle }.
 ir.action_serialisation = تبدیل کنش به داده‌های پیاپی ممکن نشد: { $details }.
 ir.invalid_command = درج نامعتبر در فرمان: { $snippet }.
+ir.ambiguous_substitution_boundary = مرز مبهم جایگزینی فرمان در نویسه { $position }؛ پرانتز بستن جایگزینی را از '#' بعدی جدا کنید.
 
 # خطاهای تولید پرونده‌های Ninja.
 ninja_gen.missing_action = کنش «{ $id }» که یک یال ساخت به آن ارجاع می‌دهد وجود ندارد.

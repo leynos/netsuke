@@ -291,17 +291,25 @@ further quoting is needed. See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full marker contract.
 
-## Separate a substitution closer from a following `#`
+## Separate a substitution closer and a following `#`
 
-Netsuke now rejects a POSIX or Bash `script:` recipe when a `)` that closes a
-`$(...)` or `$((...))` substitution is immediately followed by `#` and the
-substitution source contains the `case` reserved word. A `)` that closes a
-substitution stays part of the surrounding word, so `#` after it is word data; a
-`)` that terminates a `case` pattern is an operator, so `#` after it starts a
-comment. The scanner cannot tell the two apart without the `case` grammar, so
-it fails closed rather than encode a later path for the wrong shell context.
+Netsuke now rejects a POSIX or Bash `command:` or `script:` recipe when a `)`
+that closes a `$(...)` or `$((...))` substitution is immediately followed by
+`#` and the substitution source contains the `case` reserved word. A `)` that
+closes a substitution stays part of the surrounding word, so `#` after it is
+word data; a `)` that terminates a `case` pattern is an operator, so `#` after
+it starts a comment. The scanner cannot tell the two apart without the `case`
+grammar, so it fails closed rather than encode a later path for the wrong shell
+context.
 
-Separate the closer from the comment with a space, a tab, or a newline:
+The remedy depends on what the `#` means in your recipe.
+
+- When `#` starts a comment, separate it from the closer with a space, a tab,
+  or a newline. The shell then sees the comment it always did.
+- When `#` is literal word data, escape it as `\#` inside an unquoted word.
+  Inserting whitespace would change the word the shell receives.
+
+This recipe triggers the rejection:
 
 ```yaml
 netsuke_version: '1.0.0'
@@ -309,10 +317,23 @@ targets:
   - name: output.txt
     sources: input.txt
     script: |
-      echo "$(printf x)" # a comment after a space
+      echo "$(case x in x) :;; esac)# trailing comment"
       echo {{ ins }} > {{ outs }}
 defaults: [output.txt]
 ```
+
+Rewriting the first line as either remedy clears it:
+
+```yaml
+      echo "$(case x in x) :;; esac)" # trailing comment
+      echo $(printf x)\#literal
+```
+
+The check scans raw recipe source, so it also rejects a `case` that appears
+inside a string or a comment within the substitution. Anything that separates
+the `#` from the closer, including the `\#` escape, lifts the rejection whether
+or not the `case` was a real keyword. A rejection therefore means "the scanner
+cannot prove which `)` this is", not "this recipe is unsafe".
 
 Recipes that do not place `#` directly after a substitution closer are
 unaffected. The

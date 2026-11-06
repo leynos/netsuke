@@ -5,7 +5,8 @@
 //! markers.
 
 use super::posix_lexical::is_word_terminator;
-use super::{IrGenError, QuoteContext, invalid_command_error};
+use super::{IrGenError, QuoteContext};
+use crate::localization::{self, keys};
 
 /// Identify one command-substitution delimiter recognised during traversal.
 pub(super) enum CommandSubstitutionDelimiter {
@@ -25,6 +26,8 @@ pub(super) struct CommandSubstitution {
     pub(super) parenthesis_depth: usize,
     /// Record the `$` that opened this substitution for source-range checks.
     pub(super) start: usize,
+    /// Track `case ... esac` nesting so a pattern terminator is not a closer.
+    pub(super) case_nesting: CaseNesting,
 }
 
 impl CommandSubstitution {
@@ -34,7 +37,105 @@ impl CommandSubstitution {
             quote_context: QuoteContext::Unquoted,
             parenthesis_depth: 1,
             start,
+            case_nesting: CaseNesting::new(),
         }
+    }
+}
+
+/// Track `case ... esac` nesting inside one command substitution.
+///
+/// A `)` that terminates a `case` pattern is an operator, while the `)` that
+/// closes `$()` stays part of the surrounding word. The two are lexically
+/// identical, so the traversal counts the reserved words and keeps the
+/// substitution open across pattern terminators. That makes the real closer the
+/// one that is checked for an ambiguous `#`, instead of the pattern terminator
+/// that merely happens to come first.
+#[derive(Default)]
+pub(super) struct CaseNesting {
+    /// Count `case` keywords not yet matched by `esac`.
+    depth: usize,
+    /// Accumulate the current unquoted word so reserved words are recognised.
+    word: String,
+    /// Record that the traversal is inside an unquoted `#` comment.
+    in_comment: bool,
+    /// Record that a `case` keyword was seen, even if `esac` later closed it.
+    saw_case: bool,
+}
+
+impl CaseNesting {
+    /// Initialise an empty tracker for one command substitution.
+    pub(super) const fn new() -> Self {
+        Self {
+            depth: 0,
+            word: String::new(),
+            in_comment: false,
+            saw_case: false,
+        }
+    }
+
+    /// Report whether a `case` construct is open inside this substitution.
+    pub(super) const fn is_open(&self) -> bool {
+        self.depth > 0
+    }
+
+    /// Report whether a `case` keyword appeared anywhere in this substitution.
+    ///
+    /// The raw-source scan that backs the ambiguity guard cannot see a keyword
+    /// spelled with escapes or line continuations, so the tracker reports its
+    /// own sighting and the guard fails closed on either.
+    pub(super) const fn saw_case(&self) -> bool {
+        self.saw_case
+    }
+
+    /// Record the source character at `pos` and update the reserved-word count.
+    ///
+    /// Only unquoted word data can spell a reserved word, so a quote or a
+    /// separator ends the word being accumulated. Both traversals consume an
+    /// escaped character without reporting it separately, so a backslash reads
+    /// its own escape here: `ca\se` and `c\<newline>ase` both spell `case`,
+    /// while a line continuation removes both characters. A `case` inside a
+    /// quoted string or a comment therefore never opens a construct.
+    pub(super) fn observe(&mut self, chars: &[char], pos: usize, ch: char, is_unquoted: bool) {
+        if !is_unquoted {
+            self.finish_word();
+            return;
+        }
+        if self.in_comment {
+            if ch == '\n' {
+                self.in_comment = false;
+            }
+            return;
+        }
+        if ch == '\\' {
+            if let Some(escaped) = chars.get(pos + 1).filter(|escaped| **escaped != '\n') {
+                self.word.push(*escaped);
+            }
+            return;
+        }
+        if is_word_terminator(ch) || matches!(ch, '\'' | '"' | '`') {
+            self.finish_word();
+            return;
+        }
+        // A number sign starts a comment only at a word start; mid-word it is
+        // ordinary word data, so `case#x` must not read as the keyword.
+        if ch == '#' && self.word.is_empty() {
+            self.in_comment = true;
+            return;
+        }
+        self.word.push(ch);
+    }
+
+    /// Apply the completed word to the `case` nesting count.
+    fn finish_word(&mut self) {
+        match self.word.as_str() {
+            "case" => {
+                self.depth += 1;
+                self.saw_case = true;
+            }
+            "esac" => self.depth = self.depth.saturating_sub(1),
+            _ => {}
+        }
+        self.word.clear();
     }
 }
 
@@ -44,12 +145,19 @@ pub(super) struct SubstitutionBoundary {
     pub(super) pos: usize,
     /// The `$` that opened the substitution, when this `)` closed it.
     pub(super) start: Option<usize>,
+    /// Whether the substitution's own tracker saw a `case` keyword.
+    pub(super) saw_case: bool,
 }
 
 impl SubstitutionBoundary {
-    /// Record the `)` at `pos` and the substitution opener it closed, if any.
-    pub(super) const fn new(pos: usize, start: Option<usize>) -> Self {
-        Self { pos, start }
+    /// Record the `)` at `pos`, the substitution opener it closed, and whether
+    /// that substitution contained a `case` keyword.
+    pub(super) const fn new(pos: usize, start: Option<usize>, saw_case: bool) -> Self {
+        Self {
+            pos,
+            start,
+            saw_case,
+        }
     }
 }
 
@@ -68,20 +176,34 @@ impl SubstitutionBoundary {
 ///
 /// # Errors
 ///
-/// Returns [`IrGenError::InvalidCommand`] when the boundary is ambiguous.
+/// Returns [`IrGenError::AmbiguousSubstitutionBoundary`] when the boundary is
+/// ambiguous.
 pub(super) fn reject_ambiguous_case_comment(
     chars: &[char],
-    template: &str,
     boundary: &SubstitutionBoundary,
 ) -> Result<(), IrGenError> {
     let Some(start) = boundary.start else {
         return Ok(());
     };
     let is_comment_boundary = chars.get(boundary.pos + 1) == Some(&'#');
-    if is_comment_boundary && contains_case_keyword(chars, start, boundary.pos) {
-        return Err(invalid_command_error(template.to_owned()));
+    let has_case = boundary.saw_case || contains_case_keyword(chars, start, boundary.pos);
+    if is_comment_boundary && has_case {
+        return Err(ambiguous_boundary_error(boundary.pos + 1));
     }
     Ok(())
+}
+
+/// Build the diagnostic for an ambiguous `)#` boundary.
+///
+/// The recipe is deliberately left out. The rejected text is exactly the text
+/// the scanner could not classify, so quoting it would copy executable shell
+/// syntax into a log line; the character offset is enough to find the boundary
+/// in the source, and it survives the 160-character truncation that the
+/// invalid-command diagnostic applies.
+fn ambiguous_boundary_error(position: usize) -> IrGenError {
+    let message = localization::message(keys::IR_AMBIGUOUS_SUBSTITUTION_BOUNDARY)
+        .with_arg("position", position);
+    IrGenError::AmbiguousSubstitutionBoundary { position, message }
 }
 
 /// Report whether `chars[start..end]` contains the `case` reserved word.

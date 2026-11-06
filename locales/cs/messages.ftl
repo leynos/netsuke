@@ -195,6 +195,7 @@ ir.duplicate_outputs = Byly zjištěny duplicitní výstupy: { $outputs }.
 ir.circular_dependency = Byla zjištěna cyklická závislost: { $cycle }.
 ir.action_serialisation = Akci se nepodařilo serializovat: { $details }.
 ir.invalid_command = Neplatné vložení v příkazu: { $snippet }.
+ir.ambiguous_substitution_boundary = Nejednoznačná hranice substituce příkazu na znaku { $position }; oddělte uzavírací závorku substituce od následujícího '#'.
 
 # Chyby při generování souborů Ninja.
 ninja_gen.missing_action = Chybí akce „{ $id }“, na kterou odkazuje hrana sestavení.

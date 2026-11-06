@@ -5,7 +5,9 @@
 //! helpers own that nesting state, keeping the parent traversal within the
 //! repository's module-size cap.
 
-use super::super::command_substitution::{SubstitutionBoundary, reject_ambiguous_case_comment};
+use super::super::command_substitution::{
+    CaseNesting, SubstitutionBoundary, reject_ambiguous_case_comment,
+};
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
 
 /// Track one nested POSIX command substitution while traversing a script.
@@ -19,6 +21,8 @@ pub(super) struct ScriptCommandSubstitution {
     parenthesis_depth: usize,
     /// Record the `$` that opened this substitution for source-range checks.
     start: usize,
+    /// Track `case ... esac` nesting so a pattern terminator is not a closer.
+    pub(super) case_nesting: CaseNesting,
 }
 
 /// Identify a command-substitution delimiter in a script traversal.
@@ -38,6 +42,7 @@ impl ScriptCommandSubstitution {
             quote_context: ShellQuoteContext::Unquoted,
             parenthesis_depth: 1,
             start,
+            case_nesting: CaseNesting::new(),
         }
     }
 }
@@ -65,11 +70,17 @@ impl ScriptSubstitutionTraversal<'_, '_> {
                 Ok(Some(pos + 1))
             }
             ScriptCommandSubstitutionDelimiter::Close => {
-                let closed_start = self
+                if self.is_case_pattern_terminator() {
+                    self.output.push(ch);
+                    return Ok(Some(pos + 1));
+                }
+                let closing = self
                     .command_substitutions
                     .last()
                     .filter(|substitution| substitution.parenthesis_depth == 1)
-                    .map(|substitution| substitution.start);
+                    .map(|substitution| (substitution.start, substitution.case_nesting.saw_case()));
+                let (closed_start, saw_case) =
+                    closing.map_or((None, false), |(start, saw)| (Some(start), saw));
                 let Some(is_closed) = self.decrement_command_substitution_parenthesis_depth()
                 else {
                     return Ok(None);
@@ -77,11 +88,7 @@ impl ScriptSubstitutionTraversal<'_, '_> {
                 if is_closed {
                     reject_ambiguous_case_comment(
                         self.chars,
-                        self.template,
-                        &SubstitutionBoundary {
-                            pos,
-                            start: closed_start,
-                        },
+                        &SubstitutionBoundary::new(pos, closed_start, saw_case),
                     )?;
                     self.closed_command_substitution = Some(pos);
                 }
@@ -89,6 +96,33 @@ impl ScriptSubstitutionTraversal<'_, '_> {
                 Ok(Some(pos + 1))
             }
         }
+    }
+
+    /// Record one source character for `case` nesting inside a substitution.
+    ///
+    /// Only the innermost substitution is updated: a `case` in an outer region
+    /// cannot terminate a pattern of an inner one.
+    pub(super) fn observe_case_word(&mut self, pos: usize, ch: char) {
+        let is_unquoted = self.active_quote_context() == ShellQuoteContext::Unquoted;
+        let chars = self.chars;
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution
+                .case_nesting
+                .observe(chars, pos, ch, is_unquoted);
+        }
+    }
+
+    /// Report whether the current `)` terminates a `case` pattern.
+    ///
+    /// While a `case` construct is open, a `)` at the substitution's own depth
+    /// cannot close it: the shell reads it as a pattern terminator. Keeping the
+    /// substitution open makes the real closer the one that is checked.
+    fn is_case_pattern_terminator(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(|substitution| {
+                substitution.parenthesis_depth == 1 && substitution.case_nesting.is_open()
+            })
     }
 
     /// Classify a character that delimits an active script command substitution.

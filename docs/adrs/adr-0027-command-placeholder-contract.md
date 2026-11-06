@@ -48,6 +48,12 @@ Amended on 2026-10-18 after review of PowerShell comment and stop-parsing edges.
 Amended on 2026-10-19 for issue #846. The PowerShell script insertion-site
 contract and scanner review corrections are recorded in the addenda below.
 
+Amended on 2026-11-06 for issue #971. POSIX comment detection now uses the
+token boundaries of POSIX shell word recognition rather than Unicode
+whitespace, and a `)` that closes a substitution immediately before `#` fails
+closed when the substitution source contains the `case` reserved word. The
+POSIX comment and heredoc boundary amendment below states the contract.
+
 ## Date
 
 2026-09-19

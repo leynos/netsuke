@@ -194,6 +194,7 @@ ir.duplicate_outputs = 检测到重复输出：{ $outputs }。
 ir.circular_dependency = 检测到循环依赖：{ $cycle }。
 ir.action_serialisation = 无法序列化动作：{ $details }。
 ir.invalid_command = 命令中的插值无效：{ $snippet }。
+ir.ambiguous_substitution_boundary = 字符 { $position } 处的命令替换边界不明确；请将替换的右括号与后面的 '#' 分开。
 
 # Ninja 生成错误。
 ninja_gen.missing_action = 缺少构建边引用的动作“{ $id }”。

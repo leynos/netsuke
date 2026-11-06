@@ -195,6 +195,7 @@ ir.duplicate_outputs = Chaidh às-chuir dhùblaichte a lorg: { $outputs }.
 ir.circular_dependency = Chaidh eisimeileachd chuairteach a lorg: { $cycle }.
 ir.action_serialisation = Cha b' urrainnear an gnìomh a shreathachadh: { $details }.
 ir.invalid_command = Cur a-steach mì-dhligheach san àithne: { $snippet }.
+ir.ambiguous_substitution_boundary = Crìoch mhì-chinnteach air ionadachadh àithne aig caractar { $position }; dealaich bratach dùnaidh an ionadachaidh bhon '#' a leanas.
 
 # Mearachdan dèanamh Ninja.
 ninja_gen.missing_action = Tha an gnìomh “{ $id }” air a bheil oir togail a' toirt iomradh a dhìth.

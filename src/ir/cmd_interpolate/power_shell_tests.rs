@@ -172,3 +172,26 @@ fn power_shell_keeps_quoted_case_boundary_accepted() {
 
     assert_eq!(actual, "Write-Output \"$(case x in x)#\" 'out'");
 }
+
+/// Reject an unquoted `$(...)#` boundary in both PowerShell traversals.
+///
+/// PowerShell keeps the narrower unquoted-only rule, so this is the case that
+/// rule exists for: outside quotes, a `)` followed by `#` still fails closed
+/// because the scanner cannot tell a substitution closer from a grouping
+/// closer. The quoted counterpart above pins the exception.
+#[test]
+fn power_shell_rejects_unquoted_case_boundary() {
+    let template = format!("Write-Output $(Write-Output case)#{OUTS_TOKEN}");
+    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
+
+    for interpolate in [
+        interpolate_command_with_bindings
+            as fn(&str, &CommandBindings) -> Result<String, IrGenError>,
+        interpolate_script_with_bindings,
+    ] {
+        assert!(
+            interpolate(&template, &bindings).is_err(),
+            "an unquoted ')#' boundary must fail closed in PowerShell"
+        );
+    }
+}
