@@ -87,15 +87,15 @@ impl CaseNesting {
         self.saw_case
     }
 
-    /// Record the source character at `pos` and update the reserved-word count.
+    /// Record one source character and update the reserved-word count.
     ///
     /// Only unquoted word data can spell a reserved word, so a quote or a
     /// separator ends the word being accumulated. Both traversals consume an
     /// escaped character without reporting it separately, so a backslash reads
-    /// its own escape here: `ca\se` and `c\<newline>ase` both spell `case`,
-    /// while a line continuation removes both characters. A `case` inside a
-    /// quoted string or a comment therefore never opens a construct.
-    pub(super) fn observe(&mut self, chars: &[char], pos: usize, ch: char, is_unquoted: bool) {
+    /// its own escape from `next`: `ca\se` and `c\<newline>ase` both spell
+    /// `case`, while a line continuation removes both characters. A `case`
+    /// inside a quoted string or a comment therefore never opens a construct.
+    pub(super) fn observe(&mut self, ch: char, next: Option<char>, is_unquoted: bool) {
         if !is_unquoted {
             self.finish_word();
             return;
@@ -107,8 +107,8 @@ impl CaseNesting {
             return;
         }
         if ch == '\\' {
-            if let Some(escaped) = chars.get(pos + 1).filter(|escaped| **escaped != '\n') {
-                self.word.push(*escaped);
+            if let Some(escaped) = next.filter(|escaped| *escaped != '\n') {
+                self.word.push(escaped);
             }
             return;
         }

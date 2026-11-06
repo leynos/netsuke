@@ -69,33 +69,54 @@ impl ScriptSubstitutionTraversal<'_, '_> {
                 self.output.push(ch);
                 Ok(Some(pos + 1))
             }
-            ScriptCommandSubstitutionDelimiter::Close => {
-                if self.is_case_pattern_terminator() {
-                    self.output.push(ch);
-                    return Ok(Some(pos + 1));
-                }
-                let closing = self
-                    .command_substitutions
-                    .last()
-                    .filter(|substitution| substitution.parenthesis_depth == 1)
-                    .map(|substitution| (substitution.start, substitution.case_nesting.saw_case()));
-                let (closed_start, saw_case) =
-                    closing.map_or((None, false), |(start, saw)| (Some(start), saw));
-                let Some(is_closed) = self.decrement_command_substitution_parenthesis_depth()
-                else {
-                    return Ok(None);
-                };
-                if is_closed {
-                    reject_ambiguous_case_comment(
-                        self.chars,
-                        &SubstitutionBoundary::new(pos, closed_start, saw_case),
-                    )?;
-                    self.closed_command_substitution = Some(pos);
-                }
-                self.output.push(ch);
-                Ok(Some(pos + 1))
-            }
+            ScriptCommandSubstitutionDelimiter::Close => self.close_script_substitution(pos, ch),
         }
+    }
+
+    /// Close one grouped expression or the command substitution itself.
+    ///
+    /// A `)` that terminates a `case` pattern is kept in the output without
+    /// closing anything: the shell reads it as an operator, and only the later
+    /// `)` that ends the substitution belongs to the surrounding word.
+    fn close_script_substitution(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
+        if self.is_case_pattern_terminator() {
+            self.output.push(ch);
+            return Ok(Some(pos + 1));
+        }
+        let boundary = self.boundary_at(pos);
+        let Some(is_closed) = self.decrement_command_substitution_parenthesis_depth() else {
+            return Ok(None);
+        };
+        if is_closed {
+            reject_ambiguous_case_comment(self.chars, &boundary)?;
+            self.closed_command_substitution = Some(pos);
+        }
+        self.output.push(ch);
+        Ok(Some(pos + 1))
+    }
+
+    /// Describe the substitution boundary that the `)` at `pos` may close.
+    ///
+    /// The description is captured before the depth is decremented, because
+    /// closing the substitution discards the state the report is built from.
+    fn boundary_at(&self, pos: usize) -> SubstitutionBoundary {
+        self.command_substitutions
+            .last()
+            .filter(|substitution| substitution.parenthesis_depth == 1)
+            .map_or_else(
+                || SubstitutionBoundary::new(pos, None, false),
+                |substitution| {
+                    SubstitutionBoundary::new(
+                        pos,
+                        Some(substitution.start),
+                        substitution.case_nesting.saw_case(),
+                    )
+                },
+            )
     }
 
     /// Record one source character for `case` nesting inside a substitution.
@@ -104,11 +125,9 @@ impl ScriptSubstitutionTraversal<'_, '_> {
     /// cannot terminate a pattern of an inner one.
     pub(super) fn observe_case_word(&mut self, pos: usize, ch: char) {
         let is_unquoted = self.active_quote_context() == ShellQuoteContext::Unquoted;
-        let chars = self.chars;
+        let next = self.chars.get(pos + 1).copied();
         if let Some(substitution) = self.command_substitutions.last_mut() {
-            substitution
-                .case_nesting
-                .observe(chars, pos, ch, is_unquoted);
+            substitution.case_nesting.observe(ch, next, is_unquoted);
         }
     }
 
