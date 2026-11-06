@@ -11,23 +11,19 @@
 use anyhow::{Context, Result, ensure};
 use base64::Engine as _;
 
-pub(super) use test_support::shell_transport::decode_bash_transport;
-
-/// The absolute interpreter the composition cases bind into every plan.
-///
-/// These cases select an explicit shell, so the renderer requires a binding
-/// and quotes it as one Windows argument before the fixed shell arguments.
-pub(super) const BOUND_EXECUTABLE: &str = "\"/fixtures/netsuke/interpreter\"";
+pub(super) use test_support::shell_transport::{INTERPRETER_PATH, decode_bash_transport};
 
 /// The fixed arguments the PowerShell transport puts after its executable.
 const POWER_SHELL_ARGUMENTS: &str =
     " -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand ";
 
 /// Build the prefix that introduces a transport's payload.
+///
+/// The renderer quotes the bound interpreter as one Windows argument before
+/// the fixed shell arguments.
 fn bound_prefix(arguments: &str) -> String {
-    format!("{BOUND_EXECUTABLE}{arguments}")
+    format!("\"{INTERPRETER_PATH}\"{arguments}")
 }
-
 
 /// Prefix every line of `text` with `by` spaces.
 ///
@@ -75,7 +71,6 @@ pub(super) fn list_manifest(entry: &str, value: &str) -> String {
         value,
     )
 }
-
 
 /// Decode the PowerShell transport's base64 payload back to its script.
 ///

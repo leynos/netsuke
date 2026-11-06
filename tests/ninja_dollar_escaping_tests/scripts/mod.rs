@@ -7,11 +7,31 @@
 use super::*;
 
 // Only the Unix-gated transport case decodes a Bash command line, so on Windows
-// this import would be unused and `-D warnings` would reject the test build.
+// these items would be unused and `-D warnings` would reject the test build.
 #[cfg(unix)]
-use test_support::shell_transport::decode_bash_transport;
+use netsuke::ninja_gen::{InterpreterExecutable, generate_with_interpreter};
+#[cfg(unix)]
+use test_support::shell_transport::{INTERPRETER_PATH, decode_bash_transport};
 
 mod transport;
+
+/// Generate Ninja text for `shell`, binding an interpreter for the Bash route.
+///
+/// The renderer refuses an unbound Bash interpreter, so this case binds the
+/// absolute fixture path the composition suite also uses. The path is never
+/// executed: only the rendered script is decoded and run under the host shell.
+#[cfg(unix)]
+fn generate_for(shell: RecipeShell, graph: &BuildGraph) -> Result<String> {
+    match shell {
+        RecipeShell::Bash => {
+            let executable =
+                InterpreterExecutable::from_absolute_path(Utf8PathBuf::from(INTERPRETER_PATH))?;
+            Ok(generate_with_interpreter(graph, shell, &executable)?)
+        }
+        RecipeShell::Posix => Ok(generate_with_shell(graph, shell)?),
+        RecipeShell::PowerShell => bail!("this suite covers only the POSIX lexis"),
+    }
+}
 
 /// Verify script `$in` and `$out` become literal shell variables in Ninja.
 #[rstest]
@@ -158,15 +178,15 @@ fn non_ascii_space_before_hash_keeps_the_marker_quoted(#[case] shell: RecipeShel
     let manifest = manifest::from_str(&format!(
         "netsuke_version: '1.0.0'\ntargets:\n  - name: '{output_path}'\n    script: |\n      echo x\u{00a0}#\"\n      echo {{{{ outs }}}}\"\n"
     ))?;
-    let ninja = generate_with_shell(
-        &BuildGraph::from_manifest_for_shell(&manifest, shell)?,
+    let ninja = generate_for(
         shell,
+        &BuildGraph::from_manifest_for_shell(&manifest, shell)?,
     )?;
     let binding = ninja_commands(&ninja, output_path)?;
     let script = match shell {
         // `ninja -t commands` terminates its output with a newline, which is
         // outside the transport's quoted argument.
-        RecipeShell::Bash => decode_bash_transport(binding.trim_end())?,
+        RecipeShell::Bash => decode_bash_transport(INTERPRETER_PATH, binding.trim_end())?,
         RecipeShell::Posix | RecipeShell::PowerShell => binding,
     };
 

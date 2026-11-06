@@ -1,13 +1,14 @@
 //! Bash-transport regression coverage for backslash-bearing script bytes.
 //!
 //! The `Bash` renderer wraps the POSIX script transport in
-//! `bash.exe -e -c "…"`. This case decodes that argument and runs it under the
-//! host's own `sh`, which is the closest executable check available on a Unix
-//! host, and asserts the reported payload reaches the final interpreter
-//! without becoming shell syntax.
+//! `"<interpreter>" -e -c "…"`. This case decodes that argument and runs it
+//! under the host's own `sh`, which is the closest executable check available
+//! on a Unix host, and asserts the reported payload reaches the final
+//! interpreter without becoming shell syntax.
 
 use super::{
-    command_binding, decode_bash_transport, generate, posix_shell, skip_without_posix_shell,
+    INTERPRETER_PATH, command_binding, decode_bash_transport, generate, posix_shell,
+    skip_without_posix_shell,
 };
 use anyhow::{Context, Result, ensure};
 use netsuke::ninja_gen::RecipeShell;
@@ -30,7 +31,8 @@ fn bash_script_transport_preserves_backslash_bytes() -> Result<()> {
     let ninja = generate(&source, RecipeShell::Bash)?;
     // Ninja collapses `$$` before the shell sees the text. This binding has no
     // doubled dollars, but the step keeps the model faithful to execution.
-    let script = decode_bash_transport(&command_binding(&ninja)?)?.replace("$$", "$");
+    let script =
+        decode_bash_transport(INTERPRETER_PATH, &command_binding(&ninja)?)?.replace("$$", "$");
 
     let workspace = tempfile::tempdir()?;
     let output = Command::new(interpreter.as_str())

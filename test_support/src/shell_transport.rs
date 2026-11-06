@@ -1,28 +1,47 @@
 //! Decode the shell transports that `RecipeShell` wraps recipe text in.
 //!
 //! The `Posix` transport puts recipe text on the command line unchanged, but
-//! the Windows `Bash` transport hides it inside `bash.exe -e -c "…"` with
-//! Windows argument quoting. Decoding that argument recovers the script
-//! `bash.exe` would run, so a Unix test can execute it under the host shell.
+//! the Windows `Bash` transport hides it inside `"<executable>" -e -c "…"`
+//! with Windows argument quoting. Decoding that argument recovers the script
+//! the Bash interpreter would run, so a Unix test can execute it under the
+//! host shell.
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 
-/// The `bash.exe -e -c ` prefix the Bash transport wraps its script in.
-const BASH_PREFIX: &str = "bash.exe -e -c ";
-
-/// Recover the inner script of the Bash transport's `bash.exe -e -c "…"`.
+/// The absolute interpreter path every suite binds into a Bash recipe.
 ///
-/// Undoes the Windows argument quoting so the result is the exact text
-/// `bash.exe` would receive as its `-c` argument.
+/// The path need not exist: the tests decode the rendered command instead of
+/// executing it through this binding. It is absolute because the renderer
+/// refuses a relative interpreter, which would resolve through `PATH`.
+pub const INTERPRETER_PATH: &str = "/fixtures/netsuke/interpreter";
+
+/// The fixed arguments the Bash transport puts after its executable.
+const BASH_ARGUMENTS: &str = " -e -c ";
+
+/// Recover the inner script from the transport built for `executable`.
+///
+/// The renderer always quotes its executable, so the binding is
+/// `"<executable>" -e -c "<script>"`. The executable is compared against the
+/// expectation so a transport that ignored the binding cannot decode here:
+/// silently accepting `bash.exe` would hide exactly the substitution this
+/// argument guards against.
 ///
 /// # Errors
 ///
-/// Returns an error when `binding` is not a Bash transport or its argument is
-/// not a single quoted word.
-pub fn decode_bash_transport(binding: &str) -> Result<String> {
-    let argument = binding
-        .strip_prefix(BASH_PREFIX)
-        .with_context(|| format!("Bash transport should start with {BASH_PREFIX:?}: {binding}"))?;
+/// Returns an error when `binding` is not a Bash transport, when it names a
+/// different executable, or when its script is not a single quoted word.
+pub fn decode_bash_transport(executable: &str, binding: &str) -> Result<String> {
+    let (named, argument) = binding
+        .strip_prefix('"')
+        .and_then(|rest| rest.split_once('"'))
+        .with_context(|| format!("Bash transport should name its executable: {binding}"))?;
+    ensure!(
+        named == executable,
+        "Bash transport should run {executable}, not {named}: {binding}"
+    );
+    let argument = argument.strip_prefix(BASH_ARGUMENTS).with_context(|| {
+        format!("Bash transport should pass {BASH_ARGUMENTS:?} after its executable: {binding}")
+    })?;
     let inner = argument
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))
