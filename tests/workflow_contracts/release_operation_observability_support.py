@@ -25,31 +25,41 @@ STAGED_PHASES = (
     "archive_hoist",
     "upload_plan_validation",
 )
-#: The phases the packaging job runs, which are its own two boundaries.
-PACKAGING_PHASES = ("crate_packaging", "artifact_upload")
+#: The phases the packaging job runs. Packaging and candidate validation are
+#: timed inside the package action, because the boundary between them is not
+#: visible to the workflow; the upload is timed by markers around it.
+PACKAGING_PHASES = ("crate_packaging", "crate_candidate_validation", "artifact_upload")
 #: The step-id prefix each phase's timing markers carry. Draft creation has no
 #: markers: its outcome is the step's own, so there is nothing to time around
 #: it. The upload plan's markers are named for the plan rather than for the
-#: validation phase, which is what the workflow has always called them.
+#: validation phase, which is what the workflow has always called them. The two
+#: package-action phases carry none either: the action times its own steps and
+#: reports them as outputs, so the job has no markers to inspect.
 MARKER_PREFIXES = {
     "draft_release": (),
     "artifact_download": ("artifact_download",),
     "archive_hoist": ("archive_hoist",),
     "upload_plan_validation": ("upload_plan",),
-    "crate_packaging": ("crate_packaging",),
+    "crate_packaging": (),
+    "crate_candidate_validation": (),
     "artifact_upload": ("artifact_upload",),
 }
+#: The phases that report no timing at all. Draft creation is the only one: its
+#: outcome is the step's own, and the summary does not model its duration.
+PHASES_WITHOUT_TIMING = frozenset({"draft_release"})
 OBSERVABILITY_SUMMARY_STEP = "Record release operation observability"
 OBSERVABILITY_ARTIFACT_STEP = "Upload release operation observability"
 DRY_RUN_INPUT = "${{ needs.metadata.outputs.should_publish != 'true' }}"
 
 
 def timed_phases(phases: tuple[str, ...]) -> tuple[str, ...]:
-    """Return the phases among ``phases`` that carry start/end timing markers.
+    """Return the phases among ``phases`` that report start and end times.
 
     Draft creation is reported through its step's own outcome, so it has no
-    marked start and end. Filtering by :data:`MARKER_PREFIXES` keeps that one
-    exception stated in the table rather than repeated at each assertion.
+    start and end. Phases timed inside a composite action do report both, as
+    action outputs rather than as workflow markers, so :data:`MARKER_PREFIXES`
+    is the wrong table to filter by: only :data:`PHASES_WITHOUT_TIMING` names a
+    phase that has no timing anywhere.
 
     Parameters
     ----------
@@ -59,9 +69,9 @@ def timed_phases(phases: tuple[str, ...]) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        The subset whose markers exist in the workflow.
+        The subset that must carry ``_STARTED_NS`` and ``_ENDED_NS``.
     """
-    return tuple(phase for phase in phases if MARKER_PREFIXES[phase])
+    return tuple(phase for phase in phases if phase not in PHASES_WITHOUT_TIMING)
 
 
 def assert_staged_steps_expose_outcomes(steps: list[dict[str, object]]) -> None:
@@ -79,11 +89,14 @@ def assert_staged_steps_expose_outcomes(steps: list[dict[str, object]]) -> None:
 
 
 def assert_packaging_steps_expose_outcomes(steps: list[dict[str, object]]) -> None:
-    """Require the packaging job's own two phases to expose their outcomes.
+    """Require the packaging job's own stepped phases to expose their outcomes.
 
     The package step and the artifact upload are the job's boundaries: one
     compiles and digests the crate, the other hands it to the next job. A phase
     whose outcome is unreadable cannot be reported, so both carry an ``id``.
+    Candidate validation is the third phase, and it runs inside the package
+    action rather than as a job step, so it is asserted through that action's
+    outputs instead of here.
     """
     named_step(steps, "Start release operation timing")
     for step_id, label in (
@@ -92,6 +105,25 @@ def assert_packaging_steps_expose_outcomes(steps: list[dict[str, object]]) -> No
     ):
         step = steps[step_index_by_key(steps, "id", step_id)]
         assert step.get("id"), f"{label} must expose a step outcome"
+
+
+def assert_packaging_phases_read_action_outputs(env: dict[str, object]) -> None:
+    """Require both action-timed phases to be read from the package action.
+
+    An outcome that the summary reads from anywhere else cannot distinguish a
+    rejected candidate from a failed packaging step, which is the whole reason
+    the action reports the two separately.
+    """
+    for phase, output in (
+        ("crate_packaging", "crate-packaging"),
+        ("crate_candidate_validation", "crate-candidate-validation"),
+    ):
+        for suffix in ("outcome", "started-ns", "ended-ns"):
+            expected = f"${{{{ steps.package_crate.outputs.{output}-{suffix} }}}}"
+            key = f"{phase.upper()}_{suffix.upper().replace('-', '_')}"
+            assert env.get(key) == expected, (
+                f"the summary must read the {phase} {suffix} from the package action"
+            )
 
 
 def assert_summary_environment(
@@ -280,6 +312,7 @@ __all__ = [
     "PACKAGING_PHASES",
     "STAGED_PHASES",
     "assert_draft_outcome_policy",
+    "assert_packaging_phases_read_action_outputs",
     "assert_packaging_steps_expose_outcomes",
     "assert_retained_telemetry_policy",
     "assert_staged_steps_expose_outcomes",

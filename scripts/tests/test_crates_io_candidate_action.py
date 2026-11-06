@@ -13,6 +13,7 @@ Run via ``make test-release-publication``.
 """
 
 import copy
+import dataclasses
 import json
 import os
 import pathlib
@@ -218,28 +219,46 @@ def test_candidate_step_rejects_an_ambiguous_dry_run_input(
     )
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class JobFixture:
+    """Collect the workspace identity and documents a case may substitute.
+
+    Each is an independent replacement for one fixture input, and a case that
+    needs none of them supplies nothing, so they travel together rather than as
+    three more keyword arguments to :func:`_run_package_job`.
+    """
+
+    overrides: CandidateOverrides | None = None
+    workflow: dict[str, object] | None = None
+    action_steps: list[dict[str, object]] | None = None
+
+
 def _run_package_job(
     tmp_path: pathlib.Path,
     *,
     dry_run: str,
-    workflow: dict[str, object] | None = None,
-    action_steps: list[dict[str, object]] | None = None,
+    fixture: JobFixture | None = None,
 ) -> handoff.JobOutcome:
     """Run the package job's hand-off steps over the fixture workspace."""
+    substituted = fixture if fixture is not None else JobFixture()
     context = handoff.JobContext(
-        workspace=_workspace(tmp_path),
+        workspace=_workspace(tmp_path, overrides=substituted.overrides),
         environment=_step_environment(tmp_path, dry_run=dry_run),
     )
     runner = handoff.Runner(
         action_steps=tuple(
-            action_steps if action_steps is not None else _action_steps()
+            substituted.action_steps
+            if substituted.action_steps is not None
+            else _action_steps()
         ),
         upload_root=tmp_path / "uploaded",
     )
     return handoff.run_package_job(
         context,
         runner,
-        workflow if workflow is not None else handoff.load_workflow(),
+        substituted.workflow
+        if substituted.workflow is not None
+        else handoff.load_workflow(),
     )
 
 
@@ -255,6 +274,29 @@ def test_accepted_candidate_hands_the_package_to_the_next_job(
     )
     assert OUTPUT_NAME not in outcome.uploaded, (
         "the temporary candidate record is not part of the hand-off"
+    )
+
+
+def test_rehearsal_candidate_hands_the_package_to_the_next_job(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Hand on a tagless rehearsal candidate, which has no release tag to check.
+
+    A pull-request run has a merge ref rather than a tag, so the whole job —
+    not only the candidate step — must accept the record its packaging step
+    wrote and still pass the identity record and archive to the next job.
+    """
+    outcome = _run_package_job(
+        tmp_path,
+        dry_run="true",
+        fixture=JobFixture(
+            overrides=CandidateOverrides(identity=_rehearsal_identity())
+        ),
+    )
+
+    assert not outcome.failed, "an accepted rehearsal must not fail the job"
+    assert outcome.uploaded == ("identity.json", f"{PACKAGE_NAME}-{VERSION}.crate"), (
+        "hand on the identity record and the crate archive"
     )
 
 
@@ -287,7 +329,9 @@ def test_the_hand_off_harness_detects_a_failure_bypass(
     handoff.mutate_hand_off(workflow, action_steps, mutation)
 
     outcome = _run_package_job(
-        tmp_path, dry_run="true", workflow=workflow, action_steps=action_steps
+        tmp_path,
+        dry_run="true",
+        fixture=JobFixture(workflow=workflow, action_steps=action_steps),
     )
 
     assert outcome.uploaded == ("identity.json", f"{PACKAGE_NAME}-{VERSION}.crate"), (

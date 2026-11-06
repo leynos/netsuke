@@ -2598,11 +2598,15 @@ when crates.io publication fails, leaving the two release surfaces out of sync.
 ### Crate-package operation telemetry
 
 The `package-crate` job records the `release_package` operation through
-`scripts/release_operation_observability.py`. The operation has two phases:
-`crate_packaging` brackets the package action, and `artifact_upload` brackets
-the upload of the `release-crate-package` artefact containing the `.crate` and
-`identity.json`. The same phase set applies to rehearsals and tagged release
-runs. The telemetry upload is separate and is not counted as a third phase.
+`scripts/release_operation_observability.py`. The operation has three phases:
+`crate_packaging` and `crate_candidate_validation` time the two steps of the
+package action, and `artifact_upload` brackets the upload of the
+`release-crate-package` artefact containing the `.crate` and `identity.json`.
+The action times its own steps because the boundary between them falls inside
+it: the candidate check runs after packaging and before the artefact upload, so
+no workflow-level bracket can tell a rejected candidate from a failed packaging
+step. The same phase set applies to rehearsals and tagged release runs. The
+telemetry upload is separate and is not counted as a fourth phase.
 
 An always-run step writes the job and phase outcomes, durations, dry-run mode,
 and fixed error category to `GITHUB_STEP_SUMMARY`. It also writes

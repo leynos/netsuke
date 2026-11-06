@@ -61,6 +61,12 @@ _WRONG_DEPTH_MANIFEST = st.one_of(
     ),
 )
 
+#: Any member the reader cannot select, in either file kind. Adding one of
+#: these to an archive is the metamorphic step: it must change nothing.
+_UNSELECTABLE_MEMBER = st.tuples(
+    st.one_of(_UNRELATED_NAME, _WRONG_DEPTH_MANIFEST), st.booleans()
+)
+
 #: Spellings a POSIX path library normalises to ``<root>/Cargo.toml``. The
 #: reader compares normalised components, so each must select the same root.
 _NORMALISED_MANIFEST = (
@@ -220,6 +226,37 @@ def test_unrelated_member_order_does_not_change_the_reader_result(
 
     assert _read(reordered) == _read(members), (
         "reordering unrelated members must not change acceptance or its facts"
+    )
+
+
+@settings(max_examples=100, deadline=None, derandomize=True)
+@given(
+    layout=_layouts(),
+    extra=st.lists(_UNSELECTABLE_MEMBER, min_size=1, max_size=4),
+    insert_at=st.integers(min_value=0, max_value=8),
+)
+def test_adding_unselectable_members_does_not_change_the_reader_result(
+    layout: ArchiveLayout,
+    extra: list[tuple[str, bool]],
+    insert_at: int,
+) -> None:
+    """Keep acceptance, rejection class, and reported facts as strangers appear.
+
+    Unrelated members are what a real archive carries besides the packaged
+    manifest: build output, extra files, and manifest-shaped names at the wrong
+    depth. None of them can be selected, so adding them anywhere must leave the
+    reader's answer untouched. ``insert_at`` clamps to the end so the final
+    position stays reachable when the layout is short.
+    """
+    members = _members(layout)
+    additions = tuple(
+        (name, b"payload" if is_file else None) for name, is_file in extra
+    )
+    at = min(insert_at, len(members))
+    augmented = (*members[:at], *additions, *members[at:])
+
+    assert _read(augmented) == _read(members), (
+        "a member the reader cannot select must not change what it reports"
     )
 
 

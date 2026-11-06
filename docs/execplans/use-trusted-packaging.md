@@ -4425,3 +4425,18 @@ lint, typecheck, documentation coverage (98.30%, 6,657/6,772), Rust tests
 skipped, plus 28 script-helper checks), release-publication tests (592 passed),
 Markdown lint (0 issues), and Mermaid validation (all diagrams valid). Stage C
 remains partial; no live exchange or release has been exercised.
+
+Draft 26, 2026-11-06: split offline candidate validation out of the packaging
+phase. The `release_package` operation now records `crate_packaging`,
+`crate_candidate_validation`, and `artifact_upload`, so a rejected candidate is
+reported against the check that rejected it instead of as a packaging failure.
+Both package-action steps time themselves from an exit trap and report their
+outcome and timestamps as action outputs, because the boundary between them
+falls inside the composite action and no workflow-level step bracket can
+observe it; the workflow reads those outputs rather than the action's own
+outcome. The archive reader gains a metamorphic property: adding members it
+cannot select, at any position, must leave acceptance, rejection category, and
+reported facts unchanged. The hand-off harness gains a whole-job rehearsal
+case, and the action contract gains timing and candidate-output mutations that
+prove the new assertions detect a reverted wiring. Stage C remains partial; no
+live exchange or release has been exercised.

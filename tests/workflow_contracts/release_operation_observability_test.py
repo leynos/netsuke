@@ -30,6 +30,7 @@ from release_operation_observability_support import (
     PACKAGING_PHASES,
     STAGED_PHASES,
     assert_draft_outcome_policy,
+    assert_packaging_phases_read_action_outputs,
     assert_packaging_steps_expose_outcomes,
     assert_retained_telemetry_policy,
     assert_staged_steps_expose_outcomes,
@@ -81,6 +82,8 @@ def test_release_jobs_emit_always_run_bounded_observability(
     # Draft creation carries no timing markers — its outcome is the step's own —
     # so it is asserted through the per-job policy below rather than here.
     assert_summary_phase_timings(env, timed_phases(phases))
+    if not staged:
+        assert_packaging_phases_read_action_outputs(env)
 
     if job_name == "release":
         assert_staging_telemetry_policy(steps, env)
@@ -303,7 +306,10 @@ def test_observability_reports_only_the_phases_of_its_operation() -> None:
         ended_ns=2_000_000_000,
         steps={
             "crate_packaging": StepState("success", 1_000_000_000, 1_500_000_000),
-            "artifact_upload": StepState("success", 1_500_000_000, 2_000_000_000),
+            "crate_candidate_validation": StepState(
+                "success", 1_500_000_000, 1_750_000_000
+            ),
+            "artifact_upload": StepState("success", 1_750_000_000, 2_000_000_000),
         },
         upload_error_present=False,
     )
@@ -322,15 +328,18 @@ def test_observability_reports_only_the_phases_of_its_operation() -> None:
 
 
 def test_observability_reads_packaging_values_from_the_environment() -> None:
-    """Parse the packaging job's own fixed environment into an observation."""
+    """Attribute a candidate rejection to its own phase, not to packaging."""
     environment = {
         "RELEASE_OPERATION": "release_package",
         "RELEASE_DRY_RUN": "false",
         "JOB_STATUS": "failure",
         "OPERATION_STARTED_NS": "1000000000",
-        "CRATE_PACKAGING_OUTCOME": "failure",
+        "CRATE_PACKAGING_OUTCOME": "success",
         "CRATE_PACKAGING_STARTED_NS": "1100000000",
         "CRATE_PACKAGING_ENDED_NS": "1200000000",
+        "CRATE_CANDIDATE_VALIDATION_OUTCOME": "failure",
+        "CRATE_CANDIDATE_VALIDATION_STARTED_NS": "1200000000",
+        "CRATE_CANDIDATE_VALIDATION_ENDED_NS": "1300000000",
         "ARTIFACT_UPLOAD_OUTCOME": "skipped",
         "ARTIFACT_UPLOAD_STARTED_NS": "",
         "ARTIFACT_UPLOAD_ENDED_NS": "",
@@ -339,15 +348,23 @@ def test_observability_reads_packaging_values_from_the_environment() -> None:
 
     observation = observation_from_environment(environment, ended_ns=1_700_000_000)
     summary, _ = render_observation(observation)
+    accepted = observation_from_environment(
+        environment
+        | {"JOB_STATUS": "success", "CRATE_CANDIDATE_VALIDATION_OUTCOME": "success"},
+        ended_ns=1_700_000_000,
+    )
 
     assert set(observation.steps) == set(PACKAGING_PHASES), (
         "the environment must be read for exactly the packaging phases"
     )
-    assert observation.steps["crate_packaging"].outcome == "failure", (
-        "a failed package step must be recorded as the crate packaging outcome"
+    assert observation.steps["crate_packaging"].outcome == "success", (
+        "a rejected candidate must not be attributed to packaging"
     )
-    assert "Error category: `crate_packaging`" in summary, (
-        "a failed packaging step must map to the fixed crate-packaging category"
+    assert "Error category: `crate_candidate_validation`" in summary, (
+        "a rejected candidate must be reported against its own phase"
+    )
+    assert accepted.steps["crate_candidate_validation"].outcome == "success", (
+        "an accepted candidate must still record that the check ran"
     )
 
 

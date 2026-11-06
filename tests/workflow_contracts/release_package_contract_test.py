@@ -62,6 +62,17 @@ EXPECTED_OUTPUTS = {
     "identity-path": "${{ steps.package.outputs.identity-path }}",
     "crate-path": "${{ steps.package.outputs.crate-path }}",
     "crate-name": "${{ steps.package.outputs.crate-name }}",
+    # The job reads these rather than the action's own outcome, because the
+    # action bundles packaging with candidate validation: without them a
+    # rejected candidate would be recorded as a packaging failure.
+    "crate-packaging-outcome": "${{ steps.package.outcome }}",
+    "crate-packaging-started-ns": "${{ steps.package.outputs.started_ns }}",
+    "crate-packaging-ended-ns": "${{ steps.package.outputs.ended_ns }}",
+    "crate-candidate-validation-outcome": "${{ steps.candidate.outcome }}",
+    "crate-candidate-validation-started-ns": (
+        "${{ steps.candidate.outputs.started_ns }}"
+    ),
+    "crate-candidate-validation-ended-ns": "${{ steps.candidate.outputs.ended_ns }}",
 }
 EXPECTED_JOB_INPUTS = {
     "tag": "${{ needs.metadata.outputs.release_tag }}",
@@ -100,6 +111,28 @@ def _run_tokens(run: str) -> list[str]:
     return shlex.split(command)
 
 
+_TIMING_MARKERS = (
+    'printf \'started_ns=%s\\n\' "$(date +%s%N)" >>"$GITHUB_OUTPUT"',
+    'printf \'ended_ns=%s\\n\' "$(date +%s%N)" >>"$GITHUB_OUTPUT"',
+    "trap record_ended_ns EXIT",
+)
+
+
+def _assert_step_reports_timing(step: dict[str, object], description: str) -> None:
+    """Require a step to report a start time and an end time from an exit trap.
+
+    An end time written by the script's last statement disappears exactly when
+    the script fails, which is the case the phase's duration exists to explain.
+    The trap also disarms itself before writing, so an error inside the handler
+    cannot recurse.
+    """
+    run = step.get("run")
+    assert isinstance(run, str), f"the {description} command must be a shell script"
+    for marker in _TIMING_MARKERS:
+        assert marker in run, f"the {description} must report its own timing"
+    assert "trap - EXIT" in run, f"the {description} trap must disarm itself"
+
+
 def _workflow() -> dict[str, object]:
     """Read the release workflow for the package job contract."""
     return load_workflow(RELEASE_WORKFLOW_PATH)
@@ -134,6 +167,7 @@ def _assert_action_contract(action: dict[str, object]) -> None:
     assert package.get("id") == "package", "the package step id must remain stable"
     assert package.get("shell") == "bash", "the action step must run under Bash"
     _assert_failure_propagates(package, "the packaging step")
+    _assert_step_reports_timing(package, "packaging step")
     environment = require_mapping(package.get("env"), "package environment")
     assert environment == EXPECTED_ENVIRONMENT, (
         "the action must forward inputs through the contracted environment names"
@@ -185,6 +219,7 @@ def _assert_candidate_step(
         "the candidate must be validated after it is packaged"
     )
     _assert_failure_propagates(candidate, "the candidate step")
+    _assert_step_reports_timing(candidate, "candidate step")
     environment = require_mapping(candidate.get("env"), "candidate environment")
     assert environment == EXPECTED_CANDIDATE_ENVIRONMENT, (
         "the candidate step must forward the identity inputs it validates"
@@ -289,6 +324,8 @@ def _assert_complete_package_contract(
         "environment",
         "command",
         "output",
+        "timing",
+        "candidate-output",
         "candidate",
         "candidate-continue-on-error",
         "candidate-gate",

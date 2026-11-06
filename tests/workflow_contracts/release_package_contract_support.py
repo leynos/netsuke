@@ -68,38 +68,89 @@ def artifact_inputs(workflow: dict[str, object]) -> dict[str, object]:
     )
 
 
-def mutate_action(action: dict[str, object], mutation: str) -> None:
-    """Apply one deliberate mutation to a package-action contract dimension."""
+def _mutate_action_input(action: dict[str, object], mutation: str) -> None:
+    """Relax one action input's declaration."""
+    if mutation != "input":
+        pytest.fail(f"unknown input mutation {mutation!r}")
+    inputs = require_mapping(action["inputs"], "inputs")
+    require_mapping(inputs["version"], "version input")["required"] = False
+
+
+def _mutate_action_output(action: dict[str, object], mutation: str) -> None:
+    """Point one action output at a different step's value."""
+    outputs = require_mapping(action["outputs"], "outputs")
     match mutation:
-        case "input":
-            inputs = require_mapping(action["inputs"], "inputs")
-            require_mapping(inputs["version"], "version input")["required"] = False
+        case "output":
+            require_mapping(outputs["crate-name"], "crate-name output")["value"] = (
+                "${{ steps.other.outputs.crate-name }}"
+            )
+        case "candidate-output":
+            require_mapping(
+                outputs["crate-candidate-validation-outcome"],
+                "candidate validation outcome",
+            )["value"] = "${{ steps.package.outcome }}"
+        case other:
+            pytest.fail(f"unknown output mutation {other!r}")
+
+
+def _mutate_package_step(action: dict[str, object], mutation: str) -> None:
+    """Change one dimension of the packaging step."""
+    package = package_action_step(action)
+    match mutation:
         case "environment":
-            package = package_action_step(action)
             require_mapping(package["env"], "package environment")[
                 "RELEASE_VERSION"
             ] = "wrong"
         case "command":
-            package = package_action_step(action)
-            run = str(package["run"])
-            package["run"] = run.replace("--target-dir target", "--target-dir build")
-        case "output":
-            outputs = require_mapping(action["outputs"], "outputs")
-            require_mapping(outputs["crate-name"], "crate-name output")["value"] = (
-                "${{ steps.other.outputs.crate-name }}"
+            package["run"] = str(package["run"]).replace(
+                "--target-dir target", "--target-dir build"
             )
+        case "timing":
+            package["run"] = str(package["run"]).replace(
+                "trap record_ended_ns EXIT", ":"
+            )
+        case other:
+            pytest.fail(f"unknown package-step mutation {other!r}")
+
+
+def _mutate_candidate_step(action: dict[str, object], mutation: str) -> None:
+    """Change one dimension of the offline candidate step."""
+    candidate = candidate_action_step(action)
+    match mutation:
         case "candidate":
-            candidate = candidate_action_step(action)
-            run = str(candidate["run"])
-            candidate["run"] = run.replace(
+            candidate["run"] = str(candidate["run"]).replace(
                 "release_mode=(--rehearsal)", 'release_mode=(--tag "$RELEASE_TAG")'
             )
         case "candidate-continue-on-error":
-            candidate_action_step(action)["continue-on-error"] = True
+            candidate["continue-on-error"] = True
         case "candidate-gate":
-            candidate_action_step(action)["if"] = "always()"
+            candidate["if"] = "always()"
         case other:
-            pytest.fail(f"unknown action mutation {other!r}")
+            pytest.fail(f"unknown candidate-step mutation {other!r}")
+
+
+#: Each action mutation and the helper that applies it. Grouping by the part of
+#: the action a mutation touches keeps every helper within the repository's
+#: complexity limit while leaving each mutation beside the shape it changes.
+_ACTION_MUTATIONS = {
+    "input": _mutate_action_input,
+    "output": _mutate_action_output,
+    "candidate-output": _mutate_action_output,
+    "environment": _mutate_package_step,
+    "command": _mutate_package_step,
+    "timing": _mutate_package_step,
+    "candidate": _mutate_candidate_step,
+    "candidate-continue-on-error": _mutate_candidate_step,
+    "candidate-gate": _mutate_candidate_step,
+}
+
+
+def mutate_action(action: dict[str, object], mutation: str) -> None:
+    """Apply one deliberate mutation to a package-action contract dimension."""
+    apply_mutation = _ACTION_MUTATIONS.get(mutation)
+    if apply_mutation is None:
+        pytest.fail(f"unknown action mutation {mutation!r}")
+    apply_mutation(action, mutation)
 
 
 #: Mutations that change whether a package-job step admits a failure.

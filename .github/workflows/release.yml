@@ -451,11 +451,6 @@ jobs:
         with:
           python-version: '3.14'
           enable-cache: false
-      - id: crate_packaging_start
-        name: Start crate packaging timing
-        if: always()
-        shell: bash
-        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - id: package_crate
         name: Package the crate and record its identity
         uses: ./.github/actions/package-crate
@@ -471,11 +466,6 @@ jobs:
           package-name: ${{ needs.metadata.outputs.package_name }}
           version: ${{ needs.metadata.outputs.version }}
           bin-name: ${{ needs.metadata.outputs.bin_name }}
-      - id: crate_packaging_end
-        name: Finish crate packaging timing
-        if: always()
-        shell: bash
-        run: printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - id: artifact_upload_start
         name: Start artefact upload timing
         if: always()
@@ -503,9 +493,22 @@ jobs:
           RELEASE_DRY_RUN: ${{ needs.metadata.outputs.should_publish != 'true' }}
           JOB_STATUS: ${{ job.status }}
           OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
-          CRATE_PACKAGING_OUTCOME: ${{ steps.package_crate.outcome }}
-          CRATE_PACKAGING_STARTED_NS: ${{ steps.crate_packaging_start.outputs.started_ns }}
-          CRATE_PACKAGING_ENDED_NS: ${{ steps.crate_packaging_end.outputs.ended_ns }}
+          # The action times packaging and candidate validation itself, because
+          # the boundary between them is inside it. Reading its outputs, rather
+          # than the action's own outcome, keeps a rejected candidate out of the
+          # packaging phase's outcome and duration.
+          CRATE_PACKAGING_OUTCOME: >-
+            ${{ steps.package_crate.outputs.crate-packaging-outcome }}
+          CRATE_PACKAGING_STARTED_NS: >-
+            ${{ steps.package_crate.outputs.crate-packaging-started-ns }}
+          CRATE_PACKAGING_ENDED_NS: >-
+            ${{ steps.package_crate.outputs.crate-packaging-ended-ns }}
+          CRATE_CANDIDATE_VALIDATION_OUTCOME: >-
+            ${{ steps.package_crate.outputs.crate-candidate-validation-outcome }}
+          CRATE_CANDIDATE_VALIDATION_STARTED_NS: >-
+            ${{ steps.package_crate.outputs.crate-candidate-validation-started-ns }}
+          CRATE_CANDIDATE_VALIDATION_ENDED_NS: >-
+            ${{ steps.package_crate.outputs.crate-candidate-validation-ended-ns }}
           ARTIFACT_UPLOAD_OUTCOME: ${{ steps.upload_crate_package.outcome }}
           ARTIFACT_UPLOAD_STARTED_NS: ${{ steps.artifact_upload_start.outputs.started_ns }}
           ARTIFACT_UPLOAD_ENDED_NS: ${{ steps.artifact_upload_end.outputs.ended_ns }}
