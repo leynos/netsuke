@@ -107,6 +107,40 @@ def plan_asset_actions(
     return tuple(actions)
 
 
+def uploads(
+    actions: cabc.Iterable[tuple[str, AssetAction]],
+) -> tuple[str, ...]:
+    """Return the names a planned action set must upload, in order.
+
+    Parameters
+    ----------
+    actions
+        Output of :func:`plan_asset_actions`.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Names planned for upload, in the order given.
+
+    Notes
+    -----
+    The uploader sends exactly these names and nothing else, so an asset the
+    release attached earlier is never re-sent. Re-uploading a verified asset
+    would spend the transfer for no change, and re-uploading it *without*
+    ``--clobber`` fails, which would turn an idempotent re-run into a red one.
+
+    Examples
+    --------
+    >>> uploads([
+    ...     ("a", AssetAction.CONFLICT),
+    ...     ("b", AssetAction.UPLOAD),
+    ...     ("c", AssetAction.SKIP_VERIFIED),
+    ... ])
+    ('b',)
+    """
+    return tuple(name for name, action in actions if action is AssetAction.UPLOAD)
+
+
 def conflicts(actions: cabc.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...]:
     """Return the names a planned action set refuses to overwrite.
 

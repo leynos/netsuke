@@ -53,7 +53,11 @@ __all__ = [
     "archive_asset_names",
     "declared_asset_names",
     "platform_target_counts",
+    "target_platforms",
 ]
+
+#: Name of the target mapping in the parsed staging configuration.
+TARGETS_TABLE = "targets"
 
 #: Suffix appended to every published archive name.
 SIDECAR_SUFFIX = ".sha256"
@@ -97,6 +101,59 @@ class StagingTarget:
         """
         if not isinstance(self.platform, str) or not self.platform:
             raise MalformedTargetError(MalformedTargetKind.MISSING_PLATFORM)
+
+
+
+
+def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
+    """Pair each configured archive name with its checksum-sidecar name.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Each archive followed by the sidecar name that describes it.
+
+    Examples
+    --------
+    >>> archive_asset_names(["netsuke.tar.gz"])
+    ('netsuke.tar.gz', 'netsuke.tar.gz.sha256')
+    """
+    return tuple(
+        name for archive in archives for name in (archive, f"{archive}{SIDECAR_SUFFIX}")
+    )
+
+
+def target_platforms(target_config: object) -> dict[str, str]:
+    """Return the platform each configured target serves.
+
+    Payload selection holds every producer record to the platform its target
+    is configured with, so it needs the target keys as well as the per-platform
+    counts the declaration uses. Both views are derived here from one validated
+    reading of the ``targets`` table, so they cannot disagree.
+
+    Returns
+    -------
+    dict[str, str]
+        Configured target key mapped to the platform it stages packages for.
+
+    Notes
+    -----
+    A configuration with no target surfaces ``MissingTargetsError`` and a
+    malformed one ``MalformedTargetError``; both come from :func:`_target_table`
+    and :func:`_platform_of` rather than being raised here.
+
+    Examples
+    --------
+    >>> target_platforms({"targets": {"linux": {"platform": "linux"}}})
+    {'linux': 'linux'}
+    >>> target_platforms({"targets": {}})
+    Traceback (most recent call last):
+        ...
+    release_package_formats.MissingTargetsError: staging configuration defines no \
+release targets
+    """
+    targets = _target_table(target_config)
+    return {target: _platform_of(entry) for target, entry in sorted(targets.items())}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -168,24 +225,6 @@ class StagingTargets:
         return cls(tuple(targets))
 
 
-def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
-    """Pair each configured archive name with its checksum-sidecar name.
-
-    Returns
-    -------
-    tuple[str, ...]
-        Each archive followed by the sidecar name that describes it.
-
-    Examples
-    --------
-    >>> archive_asset_names(["netsuke.tar.gz"])
-    ('netsuke.tar.gz', 'netsuke.tar.gz.sha256')
-    """
-    return tuple(
-        name for archive in archives for name in (archive, f"{archive}{SIDECAR_SUFFIX}")
-    )
-
-
 def platform_target_counts(targets: StagingTargets) -> dict[str, int]:
     """Count decoded staging targets by the platform each one builds for.
 
@@ -210,6 +249,46 @@ def platform_target_counts(targets: StagingTargets) -> dict[str, int]:
     for target in targets.targets:
         counts[target.platform] = counts.get(target.platform, 0) + 1
     return counts
+
+
+def _target_table(target_config: object) -> cabc.Mapping[str, object]:
+    """Return the configuration's non-empty ``targets`` mapping.
+
+    Returns
+    -------
+    collections.abc.Mapping[str, object]
+        Each configured target key and the table describing it.
+
+    Raises
+    ------
+    MissingTargetsError
+        If the configuration carries no target at all.
+
+    Examples
+    --------
+    >>> sorted(_target_table({"targets": {"b": {}, "a": {}}}))
+    ['a', 'b']
+    """
+    config = _mapping(target_config)
+    targets = config.get(TARGETS_TABLE)
+    if not isinstance(targets, dict) or not targets:
+        raise MissingTargetsError
+    return targets
+
+
+def _mapping(value: object) -> cabc.Mapping[str, object]:
+    """Return a string-keyed mapping or refuse the malformed config value."""
+    if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
+        raise MalformedTargetError(MalformedTargetKind.INVALID_MAPPING)
+    return value
+
+
+def _platform_of(entry: object) -> str:
+    """Return one target table's string platform value."""
+    platform = entry.get("platform") if isinstance(entry, dict) else None
+    if not isinstance(platform, str):
+        raise MalformedTargetError(MalformedTargetKind.MISSING_PLATFORM)
+    return platform
 
 
 def _packages_for_platform(

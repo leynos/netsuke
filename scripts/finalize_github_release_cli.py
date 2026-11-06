@@ -38,6 +38,7 @@ import sys
 
 import release_digest_record
 import release_digest_record_files
+import release_github_assets_adapter
 import release_reconcile_github
 
 EXIT_OK = 0
@@ -99,22 +100,10 @@ class InputUnreadableError(ValueError):
     """Report a digest record that cannot support a publish decision."""
 
 
-def _normalise_github_digest(reported: object) -> str | None:
-    """Convert GitHub's vendor digest into the policy's bare digest value.
-
-    GitHub reports ``sha256:<hex>`` while the trusted record stores bare
-    hexadecimal. Keeping that representation at this adapter boundary leaves
-    the reconciliation policy independent of the provider's response format.
-
-    Returns
-    -------
-    str | None
-        The bare lowercase digest, or ``None`` when GitHub's value is unusable.
-    """
-    if not isinstance(reported, str) or not reported.startswith("sha256:"):
-        return None
-    digest = reported.removeprefix("sha256:").strip().lower()
-    return digest or None
+#: The shared GitHub digest conversion, aliased under the name this module has
+#: always used. The uploader needs the same conversion, and a private copy in
+#: each CLI would let the two drift on what an unusable digest means.
+_normalise_github_digest = release_github_assets_adapter.normalise_github_digest
 
 
 def _expected(
