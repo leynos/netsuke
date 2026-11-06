@@ -5306,9 +5306,9 @@ them.
   `rust-toolchain.toml`. `make lint-whitaker` is the exception: it runs on the
   installer-managed Whitaker toolchain, clears `CARGO_ENCODED_RUSTFLAGS`, and
   assigns `RUSTFLAGS="-D warnings"` alone, as does the Windows lint job. They
-  are gated on
-  `make check-build-tools`, so they stop with an installation hint rather than
-  a codegen-backend error. `make check-fmt` compiles nothing and is unaffected.
+  are gated on `make check-build-tools`, so they stop with an installation hint
+  rather than a codegen-backend error. `make check-fmt` compiles nothing and is
+  unaffected.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
   the rustdoc and Clippy stages of `make lint` append `-D warnings` *and* the
   standard's flags to whatever the caller set. An externally set `RUSTFLAGS`
