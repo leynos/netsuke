@@ -10,11 +10,16 @@
 use anyhow::{Context, Result, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, PermissionsExt};
+#[cfg(target_os = "linux")]
 use sandbox::SandboxPaths;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
+// The sandbox is built from Linux namespaces and mount operations, so it is
+// compiled only where the isolation case can run. Gating it here keeps a
+// non-Linux Unix build free of dead-code warnings under `-D warnings`.
+#[cfg(target_os = "linux")]
 pub(super) mod sandbox;
 
 /// The version pin every case compares against.
@@ -86,10 +91,34 @@ impl Fixture {
     ///
     /// Returns an error if the file cannot be written.
     pub(super) fn write_version_file(&self) -> Result<PathBuf> {
+        self.write_version_file_pinning(PINNED_VERSION)
+    }
+
+    /// Write a version file pinning an explicit version.
+    ///
+    /// A case that pins something other than [`PINNED_VERSION`] proves the
+    /// recipe reads the expected value from the file rather than carrying a
+    /// copy of it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be written.
+    pub(super) fn write_version_file_pinning(&self, version: &str) -> Result<PathBuf> {
         self.directory
-            .write("KANI_VERSION", PINNED_VERSION)
-            .context("write fake Kani version file")?;
+            .write("KANI_VERSION", version)
+            .with_context(|| format!("write fake Kani version file pinning {version}"))?;
         Ok(self.path("KANI_VERSION"))
+    }
+
+    /// Read a fixture-relative file as UTF-8.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the file cannot be read or is not valid UTF-8.
+    pub(super) fn read_to_string(&self, name: &str) -> Result<String> {
+        self.directory
+            .read_to_string(name)
+            .with_context(|| format!("read fixture file {name}"))
     }
 
     /// Create an executable fake verifier with the supplied version response.
@@ -97,7 +126,7 @@ impl Fixture {
     /// # Errors
     ///
     /// Returns an error if the fake binary cannot be created.
-    fn fake_kani(&self, script: &str) -> Result<PathBuf> {
+    pub(super) fn fake_kani(&self, script: &str) -> Result<PathBuf> {
         self.write_executable("cargo-kani", script)?;
         Ok(self.path("cargo-kani"))
     }
@@ -168,7 +197,7 @@ impl Fixture {
     /// # Errors
     ///
     /// Returns an error if the command cannot be spawned.
-    fn run_check(&self, kani: &Path, version_file: &Path) -> Result<(Output, PathBuf)> {
+    pub(super) fn run_check(&self, kani: &Path, version_file: &Path) -> Result<(Output, PathBuf)> {
         let (mut command, marker) = self.make_check_command()?;
         let output = command
             .arg(format!("KANI={}", kani.display()))
@@ -220,6 +249,7 @@ impl Fixture {
     ///
     /// Returns an error if the fake verifier, version file, sandbox root, or
     /// sandbox script cannot be created, or if `unshare` cannot be spawned.
+    #[cfg(target_os = "linux")]
     pub(super) fn run_sandboxed_check(&self, repo: &Path) -> Result<(Output, PathBuf)> {
         let (poison, marker) = self.poison_runner()?;
         let kani = self.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;

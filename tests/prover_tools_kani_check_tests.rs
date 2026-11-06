@@ -13,6 +13,7 @@
 mod support;
 
 use anyhow::{Context, Result, ensure};
+#[cfg(target_os = "linux")]
 use std::path::Path;
 use support::Fixture;
 
@@ -106,6 +107,77 @@ fn kani_check_handles_apostrophes_in_the_active_cargo_home() -> Result<()> {
     fixture.ensure_remote_runner_unused(&marker)
 }
 
+/// Check that the recipe asks the verifier for its version and passes no other
+/// argument.
+#[test]
+fn kani_check_invokes_the_verifier_with_the_version_flag() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let kani = fixture.fake_kani(&format!(
+        "#!/bin/sh\nprintf '%s\\n' \"$*\" > '{}'\nprintf 'cargo-kani 0.67.0\\n'\n",
+        fixture.path("kani-argv").display()
+    ))?;
+    let version_file = fixture.write_version_file()?;
+    let (output, marker) = fixture.run_check(&kani, &version_file)?;
+
+    ensure!(
+        output.status.success(),
+        "make kani-check should succeed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        fixture.read_to_string("kani-argv")?.trim() == "--version",
+        "the recipe should ask for the version and nothing else, got `{}`",
+        fixture.read_to_string("kani-argv")?.trim()
+    );
+    fixture.ensure_remote_runner_unused(&marker)
+}
+
+/// Check that the expected version comes from the version file rather than
+/// from a copy carried inside the recipe.
+#[test]
+fn kani_check_reads_the_expected_version_from_the_file() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let kani = fixture.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.68.0\\n'\n")?;
+    let version_file = fixture.write_version_file_pinning("0.68.0")?;
+    let (output, marker) = fixture.run_check(&kani, &version_file)?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    ensure!(
+        output.status.success(),
+        "the query should accept a verifier matching a re-pinned file: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        stdout.contains("Kani 0.68.0 matches"),
+        "the query should compare against the file's pin, got `{stdout}`"
+    );
+    fixture.ensure_remote_runner_unused(&marker)
+}
+
+/// Check that an unreadable version file fails with a diagnostic naming the
+/// read, rather than being treated as an empty pin.
+///
+/// The file is replaced with a directory: `cat` refuses one for every user,
+/// including a root runner, so the case does not depend on the test's uid.
+#[test]
+fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let kani = fixture.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
+    fixture.create_dir_all("KANI_VERSION")?;
+    let (output, marker) = fixture.run_check(&kani, &fixture.path("KANI_VERSION"))?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    ensure!(
+        !output.status.success(),
+        "an unreadable version file must fail the query, got `{stderr}`"
+    );
+    ensure!(
+        stderr.contains("could not read"),
+        "the diagnostic should name the unreadable pin, got `{stderr}`"
+    );
+    fixture.ensure_remote_runner_unused(&marker)
+}
+
 /// Check that the query succeeds with network access and filesystem writes
 /// blocked, and that the sandbox actually applied both restrictions.
 ///
@@ -145,7 +217,6 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         "usr=read-only",
         "etc=read-only",
         "tmp=read-only",
-        "home=read-only",
         "ifaces=lo,",
         "dns=blocked",
         "Kani 0.67.0 matches",
@@ -155,9 +226,17 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
             "the isolated query should report `{expected}`, got `{stdout}`"
         );
     }
-    // The control path is the only one allowed to be writable. Anything else
-    // reporting `=writable` means the sandbox left a hole, and anything
-    // reporting `=other` means the probe could not classify the failure.
+    // `HOME` is inherited from the caller, so the chroot contains it only when
+    // the caller has one. Either way it must not be writable, and an absent
+    // path cannot be written.
+    ensure!(
+        stdout
+            .lines()
+            .any(|line| line == "home=read-only" || line == "home=absent"),
+        "the isolated query should report `home` as read-only or absent, got `{stdout}`"
+    );
+    // The control path is the only one allowed to be writable; anything else
+    // reporting `=writable` means the sandbox left a hole.
     for line in stdout.lines().filter(|line| line.contains('=')) {
         ensure!(
             line == "control=writable" || !line.ends_with("=writable"),

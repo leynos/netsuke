@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean fetch test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper test-kani-check-isolation install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -417,7 +417,7 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 
 test-prover-tools-integration: ## Exercise the pinned prover-tools Verus CLI with a fake verifier
 	@PROVER_TOOLS="$(PROVER_TOOLS)" $(UV_ENV) $(UV) run --no-project \
-		--python $(PYTHON_BASELINE) --with pytest==9.0.2 \
+		--python $(PYTHON_BASELINE) --with pytest==9.0.2 --with hypothesis==6.151.9 \
 		python -m pytest scripts/tests/test_prover_tools_integration.py -q \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
@@ -712,6 +712,17 @@ KANI_SCOPE_WRAPPER_STRICT ?= 1
 test-kani-scope-wrapper: ## Verify the Kani scope wrapper end to end
 	NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT) \
 		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test kani_scope_wrapper_e2e_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+# The `kani-check` isolation boundary's own lane. The Rust suite runs the case
+# as part of `make test`, but a host that forbids unprivileged user namespaces
+# reports it as a skip, and a lane that skipped it would read as green. The
+# strict variable turns that skip into a failure, exactly as the scope wrapper
+# target above does. It takes `KANI_RUSTFLAGS` for the same reason: this lane
+# builds on the stable toolchain, which rejects `-Zthreads`.
+KANI_CHECK_ISOLATION_STRICT ?= 1
+test-kani-check-isolation: ## Verify the kani-check boundary inside a read-only sandbox
+	NETSUKE_KANI_CHECK_SANDBOX_STRICT=$(KANI_CHECK_ISOLATION_STRICT) \
+		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test prover_tools_kani_check_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2

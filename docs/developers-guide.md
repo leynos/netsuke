@@ -5838,7 +5838,24 @@ Use the Make targets for day-to-day formal-verification checks:
   The pinned CLI runs files in order, stops at the first failed proof, and
   returns the verifier's exit status. `make test-prover-tools-integration`
   exercises this contract with fake verifier processes and never installs
-  Verus. These targets are not part of the ordinary pull-request gate.
+  Verus, and covers the `make verus` target itself as well as the CLI: the
+  default proof, an ordered batch, and a failing proof whose diagnostic names
+  the verifier's status. GNU make normalizes any failed recipe to its own exit
+  status 2, so that diagnostic, not make's status, is what carries the
+  verifier's code. These targets are not part of the ordinary pull-request gate.
+
+`tests/prover_tools_kani_check_tests.rs` holds the boundary around
+`make kani-check`: that the query reads the pin, asks the installed verifier for
+`--version` and nothing else, and never resolves `rust-prover-tools` through a
+network path. Its isolation case goes further and runs the real recipe inside a
+read-only chroot with no network, proving the query still answers. That case
+needs unprivileged user namespaces, so a host that forbids them reports a skip
+rather than failing `make test`. `make test-kani-check-isolation` runs the same
+binary with `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`, turning the skip into a
+failure, and `kani-smoke` runs that target as its own step so the required lane
+exercises the boundary instead of reporting green without it. The capability
+probe names the sandbox operation a host refused, which is the evidence to
+collect before changing the lane.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`. `Cargo.toml` declares `cfg(kani)` under

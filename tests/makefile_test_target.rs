@@ -36,7 +36,11 @@ use toml::Value;
 /// `test-documentation-contracts` is a focused local contract loop.
 /// `test-kani-scope-wrapper` is the scope wrapper's own end-to-end suite, which
 /// the `kani-smoke` lane runs on its own because that suite needs a per-user
-/// systemd manager rather than the whole workspace. `test-kani-mutations` runs
+/// systemd manager rather than the whole workspace.
+/// `test-kani-check-isolation` is the `kani-check` boundary suite on its own
+/// for a related reason: the `kani-smoke` lane runs it strictly, so a host that
+/// forbids unprivileged user namespaces fails instead of reporting a skip that
+/// would read as green. `test-kani-mutations` runs
 /// the same runner over the `#[ignore]`-gated mutation compile gate, which is
 /// too expensive for the default profile.
 /// `test-rfc-stdlib-coverage` runs the RFC parser and coverage contract in
@@ -52,10 +56,11 @@ use toml::Value;
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 7] = [
+const NEXTEST_TARGETS: [&str; 8] = [
     "proptest",
     "test-default-features",
     "test-documentation-contracts",
+    "test-kani-check-isolation",
     "test-kani-mutations",
     "test-kani-scope-wrapper",
     "test-nextest",
