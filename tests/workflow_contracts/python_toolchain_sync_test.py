@@ -26,7 +26,12 @@ import subprocess
 import typing as typ
 
 import pytest
-from makefile_recipes import makefile_command, makefile_target, makefile_variable
+from makefile_recipes import (
+    load_makefile,
+    makefile_command,
+    makefile_target,
+    makefile_variable,
+)
 from workflow_loading import (
     CI_WORKFLOW_PATH,
     PACKAGE_WORKFLOW_PATH,
@@ -69,9 +74,11 @@ INTERROGATE_COMMAND: tuple[str, ...] = (
     "--from",
     "interrogate==$(INTERROGATE_VERSION)",
     "interrogate",
-    "--fail-under",
-    "100",
 )
+
+#: The flags the docstring gate passes: every definition printed, so the
+#: `interrogate` target can fail on a MISSED row the rounded percentage hides.
+INTERROGATE_FLAGS: tuple[str, ...] = ("-vv", "--fail-under", "100")
 
 
 def _ci_env_value(name: str) -> str:
@@ -239,8 +246,7 @@ def _interrogate_invocation(baseline: str, version: str) -> list[str]:
         "--from",
         f"interrogate=={version}",
         "interrogate",
-        "--fail-under",
-        "100",
+        *INTERROGATE_FLAGS,
         *INTERROGATE_SOURCES,
     ]
 
@@ -266,7 +272,6 @@ def test_python_quality_targets_run_the_pinned_local_commands() -> None:
             "$(PYLINT) $(PYLINT_TARGETS)",
             "$(DF12_PYLINT) $(PYLINT_TARGETS)",
             "$(AMBRLEAKS) $(PYTHON_SOURCES)",
-            "$(INTERROGATE) $(INTERROGATE_SOURCES)",
         ),
         "typecheck-python": (
             "ty check --python-version $(PYTHON_BASELINE)",
@@ -301,8 +306,26 @@ def test_interrogate_pin_is_the_selected_release() -> None:
 def test_interrogate_command_uses_the_pinned_baseline_and_release() -> None:
     """Interrogate selects the baseline interpreter and exact pinned package."""
     assert makefile_command("INTERROGATE") == list(INTERROGATE_COMMAND), (
-        "INTERROGATE must select the baseline, pinned package, executable, "
-        "and 100% threshold"
+        "INTERROGATE must select the baseline, pinned package and executable"
+    )
+
+
+def test_interrogate_flags_demand_a_full_exact_report() -> None:
+    """Exactly: every definition printed and a threshold of 100, no relaxing flag."""
+    found = re.findall(
+        r"^INTERROGATE_FLAGS \?= (.+)$", load_makefile(), flags=re.MULTILINE
+    )
+    assert len(found) == 1, "the Makefile must assign INTERROGATE_FLAGS once with ?="
+    assert found[0].split() == list(INTERROGATE_FLAGS), (
+        "INTERROGATE_FLAGS must be exactly the verbose threshold-100 flags"
+    )
+
+
+def test_lint_python_reaches_the_interrogate_target() -> None:
+    """Dropping the prerequisite would remove the docstring gate from lint."""
+    prerequisites, _ = makefile_target("lint-python")
+    assert "interrogate" in prerequisites, (
+        "lint-python must depend on the interrogate target"
     )
 
 

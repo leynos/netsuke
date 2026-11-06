@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scriptsgithub-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -158,7 +158,10 @@ RUFF = $(UV_ENV) $(UV) tool run --from ruff==$(RUFF_VERSION) ruff
 INTERROGATE_VERSION ?= 1.7.0
 INTERROGATE = $(UV_ENV) $(UV) tool run --python $(PYTHON_BASELINE) \
 	--from 'interrogate==$(INTERROGATE_VERSION)' \
-	interrogate --fail-under 100
+	interrogate
+# Level 2 prints a MISSED row per undocumented definition, which the
+# `interrogate` target fails on: the rounded percentage alone passes a lone gap.
+INTERROGATE_FLAGS ?= -vv --fail-under 100
 # Pin ty so `make` and CI invoke the same typechecker release. ty is pre-1.0
 # and diagnostics shift between releases, so an unpinned install breaks the
 # typecheck gate without any code change. Bump deliberately and fix new
@@ -482,12 +485,23 @@ target/release/$(APP): ## Build the release binary on the LLVM backend
 
 lint: lint-clippy lint-whitaker lint-python github-actions-lint ## Run the Rust, Python, and GitHub Actions lint suites with warnings denied
 
-lint-python: lint-workflow-scripts ## Run Ruff, Pylint, Interrogate, the df12 house lints, and ambrleaks over the Python sources
+lint-python: lint-workflow-scripts interrogate ## Run Ruff, Pylint, Interrogate, the df12 house lints, and ambrleaks over the Python sources
 	$(RUFF) check $(PYTHON_SOURCES)
 	$(PYLINT) $(PYLINT_TARGETS)
 	$(DF12_PYLINT) $(PYLINT_TARGETS)
 	$(AMBRLEAKS) $(PYTHON_SOURCES)
-	$(INTERROGATE) $(INTERROGATE_SOURCES)
+
+# Interrogate rounds its percentage to one decimal, so `--fail-under 100` alone
+# passes a lone gap in a large repository; fail on any MISSED row as well.
+interrogate: ## Require a docstring on every Python definition the repository owns
+	@report="$$($(INTERROGATE) $(INTERROGATE_FLAGS) $(INTERROGATE_SOURCES))"; \
+	  status=$$?; \
+	  printf '%s\n' "$$report"; \
+	  test "$$status" -eq 0 || exit "$$status"; \
+	  if printf '%s\n' "$$report" | grep -q '| *MISSED *|'; then \
+	    printf '%s\n' 'interrogate: undocumented definitions remain; see the MISSED rows above' >&2; \
+	    exit 1; \
+	  fi
 
 lint-workflow-scripts: ## Load every trusted workflow module under the Python baseline
 	# The trusted coverage workflow runs these through GitHub Actions' `python`

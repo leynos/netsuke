@@ -211,6 +211,7 @@ def _flag_override_problems(workflow: dict[str, object]) -> list[str]:
     found: list[str] = []
 
     def walk(node: object, path: str) -> None:
+        """Record each flag-variable key under ``node``, recursing into children."""
         match node:
             case dict():
                 for key, child in node.items():
