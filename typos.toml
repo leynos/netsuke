@@ -65,6 +65,7 @@ extend-ignore-re = [
     "NETSUKE_COLOR",
     "\\b(?:background|theme)_color\\b",
     "\\b(?:carousel|dropdown|footer|indicator|items|navbar|toast)-center\\b",
+    "\\bAppArmor\\b",
     "\\bAppFactory<Ser\\b",
     "\\bNETSUKE_COLOR\\b",
     "\\bartifact-(?:name|server-path)\\b",
