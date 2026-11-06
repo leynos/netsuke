@@ -15,8 +15,8 @@
 //!
 //! Platform notes: fake executables are implemented for Unix and Windows.
 
-#[cfg(unix)]
 pub mod bounded_process;
+#[cfg(unix)]
 pub mod build_tools;
 pub mod check_ninja;
 pub mod command_helper;

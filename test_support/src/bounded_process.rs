@@ -93,7 +93,7 @@ fn join(reader: std::thread::JoinHandle<Vec<u8>>) -> io::Result<Vec<u8>> {
         .map_err(|_| io::Error::other("a pipe reader thread panicked"))
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod tests {
     //! A child past its deadline is killed; one inside it keeps its output.
 
