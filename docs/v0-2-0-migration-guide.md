@@ -91,20 +91,22 @@ output contract are in the
 - A backslash inside single quotes stays literal.
 - A backslash-newline continuation is unaffected.
 - Heredoc bodies remain inert; only the delimiter word is scanned.
+- A marker in a shell comment is inert; the comment is copied unchanged.
 - PowerShell `command:` and `script:` recipes are unaffected.
 
 ## Migration checklist
 
 - [ ] In POSIX and Bash `command:` and `script:` text, and in heredoc
-      delimiter words, inspect the backslashes immediately before every
-      `{{ ins }}` and `{{ outs }}` marker.
-- [ ] Rewrite only a marker whose preceding run of backslashes has odd length,
-      and likewise for `outs`. Adding one backslash makes the run even and turns
-      the formerly active escape into a pair, as in `\\{{ ins }}`. Placing the
-      marker in single quotes, as `'{{ ins }}'`, leaves the run untouched. An
-      even run is already valid, so leave it unchanged; a marker inside single
-      quotes needs no change either, because a backslash there escapes nothing.
-      Heredoc bodies are inert, so nothing in them needs rewriting.
+      delimiter words, find the `{{ ins }}` and `{{ outs }}` markers that are
+      actually interpolated. Markers in a heredoc body or in a shell comment
+      are inert, so skip them.
+- [ ] Among the rest, rewrite only a marker whose preceding run of backslashes
+      has odd length, and likewise for `outs`. Adding one backslash makes the
+      run even and turns the formerly active escape into a pair, as in
+      `\\{{ ins }}`. Placing the marker in single quotes, as `'{{ ins }}'`,
+      leaves the run untouched. A marker inside single quotes needs no change,
+      because a backslash there escapes nothing, and an even run is already
+      valid.
 - [ ] Run `netsuke check` and resolve any findings worth adopting.
 
 ## Common errors and fixes
