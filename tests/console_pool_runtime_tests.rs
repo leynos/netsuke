@@ -286,3 +286,6 @@ fn console_output_reaches_piped_stdout_before_the_recipe_exits() -> Result<()> {
 
 #[path = "console_pool_runtime_tests/exclusivity.rs"]
 mod exclusivity;
+
+#[path = "console_pool_runtime_tests/forwarding_loss.rs"]
+mod forwarding_loss;
