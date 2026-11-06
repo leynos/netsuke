@@ -4286,12 +4286,20 @@ workflow-only pin. `tests/workflow_contracts/python_toolchain_sync_test.py`
 asserts the pairs agree — without asserting any specific version — so a bump
 must land in both files in the same commit.
 
-Interrogate measures every definition under `PYTHON_SOURCES` (`.github/scripts`,
-`scripts`, and `tests/workflow_contracts`) at 100%; no path or nested-function
-exemption applies. There are no `typ.overload` stubs in this scope. If one is
-introduced, add a targeted `--ignore-regex` for that stub only because
-Interrogate 1.7.0 cannot recognize the configured `typ.overload` spelling;
-leave Ruff's real-implementation docstring rule enabled.
+`make interrogate`, which `lint-python` depends on, measures every definition
+under `INTERROGATE_SOURCES` (`PYTHON_SOURCES` plus
+`.github/package-validation`, so `.github/scripts`, `scripts`,
+`tests/workflow_contracts` and the package validation helper) at 100%; no path
+or nested-function exemption applies. The target passes `INTERROGATE_FLAGS`
+(`-vv --fail-under 100`) and also fails on any `MISSED` row, because
+Interrogate rounds its percentage to one decimal and a single gap among
+thousands of definitions would otherwise pass.
+`tests/workflow_contracts/interrogate_exactness_test.py` runs the real target
+over a generated tree that has exactly that gap. There are no `typ.overload`
+stubs in this scope. If one is introduced, add a targeted `--ignore-regex` for
+that stub only because Interrogate 1.7.0 cannot recognize the configured
+`typ.overload` spelling; leave Ruff's real-implementation docstring rule
+enabled.
 
 Keep workflow-contract helpers for one output contract private to its owning
 test module, and compose them only from that module's tests. Promote them to
