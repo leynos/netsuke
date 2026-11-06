@@ -2,8 +2,10 @@
 
 Interrogate rounds its coverage percentage to one decimal before it compares
 that figure with ``--fail-under``, so a lone undocumented definition among a few
-thousand passes a bare threshold. ``make interrogate`` therefore prints every
-definition and fails on any ``MISSED`` row. These tests run the real pinned
+thousand passes a bare threshold. ``make interrogate``, with its default
+flags, therefore prints every definition and fails on any ``MISSED`` row;
+overriding ``INTERROGATE_FLAGS`` with a bare threshold removes that guard, as
+the second test shows. These tests run the real pinned
 tool, through the real target, over generated trees: one fully documented, and
 one with a single gap that the bare threshold does not see.
 

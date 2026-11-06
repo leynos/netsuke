@@ -20,9 +20,9 @@ pulls only when the image is genuinely absent, which is what lets the images
 stay local: the packaging job never pushes them.
 
 This file is deliberately outside the repository's Ruff, Pylint and typecheck
-roots. Those runs would need the pinned dependency installed to resolve the
-import below, and the wrapper has no behaviour beyond forwarding ``argv`` to
-the CLI that ``validate-linux-packages`` invoked. The docstring gate
+roots. Pylint and the type checker would need the pinned dependency installed
+to resolve the import below, and the wrapper has no behaviour beyond forwarding
+``argv`` to the CLI that ``validate-linux-packages`` invoked. The docstring gate
 (``make interrogate``) does scan it, because interrogate reads syntax only.
 
 The file is named ``polythene_cli.py`` rather than ``polythene.py`` because

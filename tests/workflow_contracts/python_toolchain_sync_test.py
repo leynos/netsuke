@@ -311,7 +311,7 @@ def test_interrogate_command_uses_the_pinned_baseline_and_release() -> None:
 
 
 def test_interrogate_flags_demand_a_full_exact_report() -> None:
-    """Exactly: every definition printed and a threshold of 100, no relaxing flag."""
+    """The Makefile's default flags are exactly the verbose threshold-100 flags."""
     found = re.findall(
         r"^INTERROGATE_FLAGS \?= (.+)$", load_makefile(), flags=re.MULTILINE
     )
