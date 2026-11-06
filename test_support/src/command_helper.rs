@@ -9,6 +9,8 @@ use camino::Utf8PathBuf;
 use cap_std::fs_utf8::Dir;
 use mockable::{DefaultEnv, Env};
 
+use crate::bounded_process::{COMPILE_DEADLINE, output_within};
+
 /// A helper `main` that upper-cases stdin to stdout.
 const UPPERCASE_SOURCE: &str = concat!(
     "use std::io::{self, Read};\n",
@@ -184,20 +186,25 @@ fn compile_rust_helper_with_env(
     let src_path = root.join(format!("{name}.rs"));
     let exe_path = root.join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
     let rustc = rust_compiler(env);
-    let status = Command::new(&rustc)
+    // nested-cargo-allow: timed the spawn is bounded by `output_within`'s deadline
+    let mut compile = Command::new(&rustc);
+    compile
         .arg(src_path.as_std_path())
         .arg("-o")
-        .arg(exe_path.as_std_path())
-        .status()
-        .with_context(|| {
-            format!(
-                "invoke {} to compile helper {name}",
-                rustc.to_string_lossy()
-            )
-        })?;
+        .arg(exe_path.as_std_path());
+    let output = output_within(&mut compile, COMPILE_DEADLINE).with_context(|| {
+        format!(
+            "invoke {} to compile helper {name}",
+            rustc.to_string_lossy()
+        )
+    })?;
 
-    if !status.success() {
-        bail!("failed to compile helper {name}: {status:?}");
+    if !output.status.success() {
+        bail!(
+            "failed to compile helper {name}: {:?}\n{}",
+            output.status,
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
     Ok(exe_path)
 }
