@@ -346,11 +346,14 @@ proptest! {
         (declaration, terminator) in supported_delimiter(),
         body_lines in prop::collection::vec("[a-zA-Z0-9 _.,:/-]{0,16}", 0..4),
     ) {
-        let body: String = body_lines
+        let body = body_lines
             .iter()
             .filter(|line| line.as_str() != terminator)
-            .map(|line| format!("{line}\n"))
-            .collect();
+            .fold(String::new(), |mut body, line| {
+                body.push_str(line);
+                body.push('\n');
+                body
+            });
         let template = format!(
             "cat {declaration}\n{body}{INS_TOKEN}\n{terminator}\necho {OUTS_TOKEN}"
         );
