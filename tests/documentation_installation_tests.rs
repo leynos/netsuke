@@ -43,8 +43,10 @@ fn registry_install_examples_pin_the_toolchain() -> Result<()> {
                 continue;
             }
             ensure!(
-                line.contains("cargo +nightly-2026-10-22 install netsuke-build"),
-                "{id} must install with the pinned nightly toolchain: {line}",
+                line.strip_prefix("cargo +")
+                    .and_then(|rest| rest.strip_suffix(" install netsuke-build"))
+                    .is_some_and(is_dated_nightly),
+                "{id} must install with a dated nightly toolchain: {line}",
                 id = example.id
             );
             example_matches = true;
@@ -68,6 +70,27 @@ fn registry_install_examples_pin_the_toolchain() -> Result<()> {
     Ok(())
 }
 
+/// Whether a toolchain name is `nightly-YYYY-MM-DD`.
+fn is_dated_nightly(name: &str) -> bool {
+    let Some(date) = name.strip_prefix("nightly-") else {
+        return false;
+    };
+    let parts: Vec<&str> = date.split('-').collect();
+    matches!(parts.as_slice(), [year, month, day]
+        if [(year, 4), (month, 2), (day, 2)]
+            .iter()
+            .all(|(part, width)| part.len() == *width && part.bytes().all(|b| b.is_ascii_digit())))
+}
+
+/// The dated nightly the first `rustup toolchain install` line of a body names.
+fn documented_nightly(body: &str) -> Result<String> {
+    body.lines()
+        .find_map(|line| line.strip_prefix("rustup toolchain install "))
+        .filter(|name| is_dated_nightly(name))
+        .map(str::to_owned)
+        .context("the documented install must `rustup toolchain install` a dated nightly")
+}
+
 /// Check the documented crates.io install command and release details.
 fn assert_release_installation_contract() -> Result<()> {
     let readme_binstall = documented_example("readme-binstall-install")?;
@@ -86,10 +109,11 @@ fn assert_release_installation_contract() -> Result<()> {
     // Registry installs run outside a checkout, so the packaged source does
     // not see rust-toolchain.toml; the documented command must select the
     // pinned nightly itself, which is what enables Polonius.
-    let expected_release = concat!(
-        "rustup toolchain install nightly-2026-10-22\n",
-        "cargo +nightly-2026-10-22 install netsuke-build\n"
-    );
+    // The date is Dependabot-adjacent state, so it is read from the README
+    // rather than restated; the guide must agree and both commands must name it.
+    let nightly = documented_nightly(&readme_release.body)?;
+    let expected_release =
+        format!("rustup toolchain install {nightly}\ncargo +{nightly} install netsuke-build\n");
     ensure!(readme_release.body == expected_release, "README drifted");
     ensure!(guide_release.body == expected_release, "user guide drifted");
     // Derive version literals from the crate version so docs contracts track
