@@ -14,6 +14,9 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
+/// The version pin every case compares against.
+const PINNED_VERSION: &str = "0.67.0";
+
 /// A temporary directory whose files are written through a capability handle.
 struct Fixture {
     temp: TempDir,
@@ -63,9 +66,9 @@ impl Fixture {
     /// # Errors
     ///
     /// Returns an error if the file cannot be written.
-    fn write_version_file(&self, version: &str) -> Result<PathBuf> {
+    fn write_version_file(&self) -> Result<PathBuf> {
         self.directory
-            .write("KANI_VERSION", version)
+            .write("KANI_VERSION", PINNED_VERSION)
             .context("write fake Kani version file")?;
         Ok(self.path("KANI_VERSION"))
     }
@@ -141,6 +144,33 @@ impl Fixture {
             .context("run make kani-check")?;
         Ok((output, marker))
     }
+
+    /// Install a fake verifier that prints `script` and query the pinned version.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the fake binary, version file, or command cannot be
+    /// created.
+    fn run_fake_kani(&self, script: &str) -> Result<(Output, PathBuf)> {
+        let kani = self.fake_kani(script)?;
+        let version_file = self.write_version_file()?;
+        self.run_check(&kani, &version_file)
+    }
+
+    /// Query the pinned version with `script` and return the failure diagnostic.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the command cannot run or unexpectedly succeeds.
+    fn run_failing_check(&self, script: &str) -> Result<(String, PathBuf)> {
+        let (output, marker) = self.run_fake_kani(script)?;
+        ensure!(
+            !output.status.success(),
+            "the query should reject {script:?} against a 0.67.0 pin"
+        );
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        Ok((stderr, marker))
+    }
 }
 
 /// Check that a matching version succeeds and that the remote runner is never
@@ -148,10 +178,7 @@ impl Fixture {
 #[test]
 fn kani_check_reads_the_installed_binary_without_remote_resolution() -> Result<()> {
     let fixture = Fixture::new()?;
-    let kani = fixture.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
-    let version_file = fixture.write_version_file("0.67.0")?;
-
-    let (output, marker) = fixture.run_check(&kani, &version_file)?;
+    let (output, marker) = fixture.run_fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
 
     ensure!(
         output.status.success(),
@@ -171,13 +198,9 @@ fn kani_check_reads_the_installed_binary_without_remote_resolution() -> Result<(
 #[test]
 fn kani_check_reports_a_version_mismatch() -> Result<()> {
     let fixture = Fixture::new()?;
-    let kani = fixture.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.66.0\\n'\n")?;
-    let version_file = fixture.write_version_file("0.67.0")?;
+    let (stderr, marker) =
+        fixture.run_failing_check("#!/bin/sh\nprintf 'cargo-kani 0.66.0\\n'\n")?;
 
-    let (output, marker) = fixture.run_check(&kani, &version_file)?;
-
-    ensure!(!output.status.success(), "a version mismatch must fail");
-    let stderr = String::from_utf8_lossy(&output.stderr);
     ensure!(
         stderr.contains("expected Kani 0.67.0") && stderr.contains("found 0.66.0"),
         "the mismatch diagnostic should name the expected and actual versions, got `{stderr}`"
@@ -190,16 +213,8 @@ fn kani_check_reports_a_version_mismatch() -> Result<()> {
 #[test]
 fn kani_check_preserves_the_verifier_exit_status() -> Result<()> {
     let fixture = Fixture::new()?;
-    let kani = fixture.fake_kani("#!/bin/sh\nexit 42\n")?;
-    let version_file = fixture.write_version_file("0.67.0")?;
+    let (stderr, marker) = fixture.run_failing_check("#!/bin/sh\nexit 42\n")?;
 
-    let (output, marker) = fixture.run_check(&kani, &version_file)?;
-
-    ensure!(
-        !output.status.success(),
-        "a failing verifier must fail the query"
-    );
-    let stderr = String::from_utf8_lossy(&output.stderr);
     ensure!(
         stderr.contains("prover-tools: target=kani-check failed exit=42"),
         "the diagnostic should preserve the verifier status, got `{stderr}`"
@@ -212,13 +227,8 @@ fn kani_check_preserves_the_verifier_exit_status() -> Result<()> {
 #[test]
 fn kani_check_rejects_unparseable_version_output() -> Result<()> {
     let fixture = Fixture::new()?;
-    let kani = fixture.fake_kani("#!/bin/sh\nprintf 'unknown build\\n'\n")?;
-    let version_file = fixture.write_version_file("0.67.0")?;
+    let (stderr, marker) = fixture.run_failing_check("#!/bin/sh\nprintf 'unknown build\\n'\n")?;
 
-    let (output, marker) = fixture.run_check(&kani, &version_file)?;
-
-    ensure!(!output.status.success(), "unparseable output must fail");
-    let stderr = String::from_utf8_lossy(&output.stderr);
     ensure!(
         stderr.contains("could not parse Kani version"),
         "the diagnostic should report the unparseable output, got `{stderr}`"
@@ -240,7 +250,7 @@ fn kani_check_handles_apostrophes_in_the_active_cargo_home() -> Result<()> {
         "cargo's home with spaces/bin/cargo-kani",
         "#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n",
     )?;
-    let version_file = fixture.write_version_file("0.67.0")?;
+    let version_file = fixture.write_version_file()?;
     let (mut command, marker) = fixture.make_check_command()?;
     let output = command
         .arg(format!("KANI_VERSION_FILE={}", version_file.display()))
