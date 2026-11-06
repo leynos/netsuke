@@ -14,11 +14,11 @@ use super::{
 };
 
 use support::{
-    POSIX_SEPARATORS, adversarial_template_strategy, assert_matches_specification,
+    HashBoundary, POSIX_SEPARATORS, adversarial_template_strategy, assert_matches_specification,
     context_sentinel_bindings, eight_placeholder_template_strategy, has_odd_backticks,
-    interpolation_template_strategy, is_valid_posix_command, non_separator_character_strategy,
-    posix_bindings, power_shell_path_strategy, power_shell_template_strategy, raw_binding_strategy,
-    safe_text_strategy,
+    hash_boundary_strategy, interpolation_template_strategy, is_valid_posix_command,
+    non_separator_character_strategy, posix_bindings, power_shell_path_strategy,
+    power_shell_template_strategy, raw_binding_strategy, safe_text_strategy,
 };
 
 proptest! {
@@ -315,6 +315,51 @@ proptest! {
             template,
             "a separator before '#' must leave the rest of the line inert"
         );
+    }
+
+    /// Keep the shell's comment rule and the following marker context aligned.
+    ///
+    /// `HashBoundary` labels each generated prefix with the rule the shell
+    /// applies, so this compares both POSIX traversals against POSIX token
+    /// recognition rather than against the scanner. The template's `"` sits
+    /// immediately after `#`: when `#` starts a comment the quote and the
+    /// marker are inert, so the template must survive byte-for-byte, and when
+    /// `#` stays in the word the quote opens a region around the marker, so the
+    /// marker must take the double-quoted encoding. Both branches keep the
+    /// quote pair balanced, so the command-syntax guard accepts either reading.
+    #[test]
+    fn hash_boundary_follows_the_posix_comment_rule(boundary in hash_boundary_strategy()) {
+        let HashBoundary {
+            prefix,
+            starts_comment,
+        } = boundary;
+        let template = format!("echo {prefix}#\"{INS_TOKEN}\"");
+        let expected = if starts_comment {
+            template.clone()
+        } else {
+            format!("echo {prefix}#\"DBL\"")
+        };
+        let bindings = context_sentinel_bindings();
+
+        for interpolate in [
+            interpolate_command_with_bindings
+                as fn(&str, &CommandBindings) -> Result<String, IrGenError>,
+            interpolate_script_with_bindings,
+        ] {
+            match interpolate(&template, &bindings) {
+                Ok(output) => prop_assert_eq!(
+                    output,
+                    expected.as_str(),
+                    "'#' after {:?} must follow the POSIX comment rule",
+                    prefix
+                ),
+                Err(error) => prop_assert!(
+                    false,
+                    "'#' after {:?} was rejected: {error:?}",
+                    prefix
+                ),
+            }
+        }
     }
 }
 

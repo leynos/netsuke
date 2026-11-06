@@ -280,6 +280,64 @@ fn sparse_interpolation_template_strategy() -> impl Strategy<Value = String> {
         })
 }
 
+/// One generated `#` boundary together with the rule the shell applies to it.
+///
+/// The expectation comes from the grammar that built the prefix rather than
+/// from the production scanner: the start of input, a separator, or an
+/// operator closer ends the preceding word, while word data, an escape, a line
+/// continuation, or a closing substitution delimiter leaves it open. A scanner
+/// that disagrees with the interpreter therefore fails the property instead of
+/// shaping the input to match itself.
+#[derive(Clone, Debug)]
+pub(super) struct HashBoundary {
+    /// Source text placed immediately before the `#`.
+    pub(super) prefix: String,
+    /// Whether the shell starts a comment at that `#`.
+    pub(super) starts_comment: bool,
+}
+
+impl HashBoundary {
+    /// Record a boundary whose preceding word the shell has already ended.
+    fn after_separator(prefix: String) -> Self {
+        Self {
+            prefix,
+            starts_comment: true,
+        }
+    }
+
+    /// Record a boundary that is still inside the preceding word.
+    fn inside_word(prefix: String) -> Self {
+        Self {
+            prefix,
+            starts_comment: false,
+        }
+    }
+}
+
+/// Generate `#` boundaries that exercise every POSIX word-ending rule.
+pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
+    let separator = prop::sample::select(POSIX_SEPARATORS.to_vec())
+        .prop_map(|separator| HashBoundary::after_separator(format!("echo x{separator}")));
+    let start_of_input = Just(HashBoundary::after_separator("echo ".to_owned()));
+    let in_word = non_separator_character_strategy()
+        .prop_map(|character| HashBoundary::inside_word(format!("echo x{character}")));
+    let escaped = prop::sample::select(vec![' ', 'a', '9', '-'])
+        .prop_map(|character| HashBoundary::inside_word(format!("echo x\\{character}")));
+    let line_continuation = Just(HashBoundary::inside_word("echo x\\\n".to_owned()));
+    let substitution_closer = prop::sample::select(vec!["$(printf x)", "$((1 + 2))"])
+        .prop_map(|closer| HashBoundary::inside_word(format!("echo {closer}")));
+    let subshell_closer = Just(HashBoundary::after_separator("echo (echo x)".to_owned()));
+    prop_oneof![
+        separator,
+        start_of_input,
+        in_word,
+        escaped,
+        line_continuation,
+        substitution_closer,
+        subshell_closer,
+    ]
+}
+
 /// Join generated fragments and placeholders into one template.
 fn join_template_parts(parts: Vec<(String, &'static str)>, suffix: &str) -> String {
     let mut template = String::new();
