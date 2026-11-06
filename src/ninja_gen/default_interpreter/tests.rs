@@ -10,75 +10,115 @@
 //! the sibling `properties` module.
 
 use super::super::{
-    NinjaGenError, RecipeShell, generate_with_shell, resolve_default_interpreter_with,
+    InterpreterExecutable, NinjaGenError, RecipeShell, generate_with_shell,
+    resolve_default_interpreter_with,
     test_support::{command_graph, dependency_only_graph, power_shell_interpreter},
 };
 use crate::power_shell_location::WindowsPowerShellLocationError;
-use camino::Utf8PathBuf;
+use camino::{Utf8Path, Utf8PathBuf};
 use rstest::rstest;
 use std::io;
+
+/// One locator failure the generation boundary should report.
+#[derive(Clone, Copy)]
+enum LocatorFailure {
+    /// The trusted executable is absent.
+    Missing,
+    /// The trusted path is not a regular file.
+    NotRegularFile,
+    /// The trusted path cannot be inspected.
+    Uninspectable,
+}
+
+impl LocatorFailure {
+    /// Build the failure for the path the locator inspected.
+    fn error(self, expected: Utf8PathBuf) -> WindowsPowerShellLocationError {
+        match self {
+            Self::Missing => WindowsPowerShellLocationError::Missing {
+                expected,
+                source: io::Error::new(io::ErrorKind::NotFound, "no such file"),
+            },
+            Self::NotRegularFile => WindowsPowerShellLocationError::NotRegularFile { expected },
+            Self::Uninspectable => WindowsPowerShellLocationError::Inspect {
+                expected,
+                source: io::Error::new(io::ErrorKind::PermissionDenied, "access denied"),
+            },
+        }
+    }
+
+    /// The diagnostic fragment this failure should produce.
+    const fn needle(self) -> &'static str {
+        match self {
+            Self::Missing => "missing at",
+            Self::NotRegularFile => "not a regular file",
+            Self::Uninspectable => "could not inspect",
+        }
+    }
+}
+
+/// The trusted executable path the locator would have inspected.
+fn trusted_path() -> Utf8PathBuf {
+    Utf8PathBuf::from("/fixtures/Windows/System32/WindowsPowerShell/v1.0/powershell.exe")
+}
+
+/// Assert a locator failure is reported, naming `needle` and `expected`.
+fn assert_locator_failure(
+    expected: Option<&Utf8Path>,
+    needle: &str,
+    locate: impl FnOnce() -> Result<InterpreterExecutable, WindowsPowerShellLocationError>,
+) {
+    let error =
+        resolve_default_interpreter_with(&command_graph(), RecipeShell::PowerShell, true, locate)
+            .expect_err("a locator failure must not be swallowed");
+    assert!(
+        matches!(error, NinjaGenError::InterpreterResolutionFailed { .. }),
+        "a locator failure should surface as a resolution failure: {error:?}"
+    );
+    let message = error.to_string();
+    assert!(
+        message.contains(needle),
+        "the diagnostic should report {needle}: {message}"
+    );
+    if let Some(named) = expected {
+        assert!(
+            message.contains(named.as_str()),
+            "the diagnostic should name {named}: {message}"
+        );
+    }
+}
+
+/// Assert `shell` refuses to render a command recipe without a binding.
+fn assert_binding_required(shell: RecipeShell) {
+    let error = generate_with_shell(&command_graph(), shell)
+        .expect_err("a command recipe needs an explicit binding");
+    assert!(
+        matches!(
+            error,
+            NinjaGenError::InterpreterBindingRequired { shell: actual } if actual == shell
+        ),
+        "the error should name {shell:?}: {error:?}"
+    );
+}
 
 /// A locator failure on a rendered recipe is reported, not silently unbound.
 #[test]
 fn default_resolution_reports_a_locator_failure() {
-    let result =
-        resolve_default_interpreter_with(&command_graph(), RecipeShell::PowerShell, true, || {
-            Err(WindowsPowerShellLocationError::SystemDirectoryUnavailable)
-        });
-    let error = result.expect_err("a failed locator must not be swallowed");
-    assert!(matches!(
-        error,
-        NinjaGenError::InterpreterResolutionFailed { .. }
-    ));
-    assert!(
-        error.to_string().contains("system directory"),
-        "the diagnostic should name the locator failure: {error}"
-    );
+    assert_locator_failure(None, "system directory", || {
+        Err(WindowsPowerShellLocationError::SystemDirectoryUnavailable)
+    });
 }
 
-/// A missing trusted executable is reported at the generation boundary.
-#[test]
-fn default_resolution_reports_a_missing_executable() {
-    let expected =
-        Utf8PathBuf::from("/fixtures/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
-    let result =
-        resolve_default_interpreter_with(&command_graph(), RecipeShell::PowerShell, true, || {
-            Err(WindowsPowerShellLocationError::Missing {
-                expected: expected.clone(),
-                source: io::Error::new(io::ErrorKind::NotFound, "no such file"),
-            })
-        });
-    let error = result.expect_err("a missing interpreter must not be swallowed");
-    assert!(matches!(
-        error,
-        NinjaGenError::InterpreterResolutionFailed { .. }
-    ));
-    assert!(
-        error.to_string().contains("missing at"),
-        "the diagnostic should name the missing executable: {error}"
-    );
-}
-
-/// An inaccessible trusted executable is reported at the generation boundary.
-#[test]
-fn default_resolution_reports_an_inaccessible_executable() {
-    let expected =
-        Utf8PathBuf::from("/fixtures/Windows/System32/WindowsPowerShell/v1.0/powershell.exe");
-    let result =
-        resolve_default_interpreter_with(&command_graph(), RecipeShell::PowerShell, true, || {
-            Err(WindowsPowerShellLocationError::NotRegularFile {
-                expected: expected.clone(),
-            })
-        });
-    let error = result.expect_err("an inaccessible interpreter must not be swallowed");
-    assert!(matches!(
-        error,
-        NinjaGenError::InterpreterResolutionFailed { .. }
-    ));
-    assert!(
-        error.to_string().contains("not a regular file"),
-        "the diagnostic should name the inaccessible executable: {error}"
-    );
+/// A trusted path that cannot be used names the executable it inspected.
+#[rstest]
+#[case::missing(LocatorFailure::Missing)]
+#[case::not_regular_file(LocatorFailure::NotRegularFile)]
+#[case::uninspectable(LocatorFailure::Uninspectable)]
+fn default_resolution_reports_an_unusable_executable(#[case] failure: LocatorFailure) {
+    let expected = trusted_path();
+    let located = expected.clone();
+    assert_locator_failure(Some(&expected), failure.needle(), move || {
+        Err(failure.error(located))
+    });
 }
 
 /// A dependency-only graph renders without consulting the locator.
@@ -130,28 +170,14 @@ fn default_resolution_binds_the_located_executable() {
 /// A non-default shell entry point refuses to render without a binding.
 #[test]
 fn generate_with_shell_requires_a_binding_for_bash() {
-    let error = generate_with_shell(&command_graph(), RecipeShell::Bash)
-        .expect_err("Bash rendering needs an explicit binding");
-    assert!(matches!(
-        error,
-        NinjaGenError::InterpreterBindingRequired {
-            shell: RecipeShell::Bash
-        }
-    ));
+    assert_binding_required(RecipeShell::Bash);
 }
 
 /// Off Windows, PowerShell rendering also needs an explicit binding.
 #[cfg(not(windows))]
 #[test]
 fn generate_with_shell_requires_a_binding_for_power_shell_off_windows() {
-    let error = generate_with_shell(&command_graph(), RecipeShell::PowerShell)
-        .expect_err("PowerShell rendering needs an explicit binding off Windows");
-    assert!(matches!(
-        error,
-        NinjaGenError::InterpreterBindingRequired {
-            shell: RecipeShell::PowerShell
-        }
-    ));
+    assert_binding_required(RecipeShell::PowerShell);
 }
 
 /// A dependency-only graph renders through the default entry point unbound.
