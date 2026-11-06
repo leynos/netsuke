@@ -22,12 +22,12 @@ mod failure_tests;
 mod flush_tests;
 
 #[derive(Clone)]
-struct FailingWriter {
+pub(super) struct FailingWriter {
     writes: Arc<AtomicUsize>,
 }
 
 impl FailingWriter {
-    fn new(writes: Arc<AtomicUsize>) -> Self {
+    pub(super) fn new(writes: Arc<AtomicUsize>) -> Self {
         Self { writes }
     }
 }

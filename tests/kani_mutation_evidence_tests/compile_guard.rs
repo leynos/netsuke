@@ -79,6 +79,13 @@ const DENY_WARNINGS: &str = "-D warnings";
 /// shells out to `git` for workspace metadata, and an unceiled invocation
 /// would find the real checkout instead of the copy it is compiling.
 ///
+/// `RUSTFLAGS` is replaced rather than extended, so the caller's
+/// `GATE_RUSTFLAGS` — `-Zthreads=8` and the mold linker — never reach the
+/// child. That is deliberate. The Makefile's `KANI_RUSTFLAGS` carries the
+/// warning policy alone, and Kani's frontend build does not use the
+/// workspace's linker configuration, so inheriting those flags would test a
+/// configuration no Kani gate runs. Do not "fix" this into an append.
+///
 /// # Errors
 ///
 /// Returns an error if Cargo cannot start or its output cannot be collected.

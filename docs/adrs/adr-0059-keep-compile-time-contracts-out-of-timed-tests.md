@@ -240,17 +240,16 @@ bound.
 [ADR-0073](adr-0073-split-the-kani-mutation-compile-gate.md) amends the
 decision outcome above. The text is preserved as written, including its
 statement that the `#[ignore]`-gated mutation compile gate is the group's only
-member with a 600 s allowance, because that is what this ADR decided at the
-time.
+member with a 600 s allowance because that is what this ADR decided at the time.
 
 The gate now runs as three `#[ignore]`-gated tests in two Nextest invocations:
 a prewarm that compiles the unpatched sandbox, a negative check that requires
 the same compile path to reject seeded faults, and the patch sweep. The prewarm
 and the negative check carry 900 s each and share one invocation, so the cold
 dependency build is paid once; the sweep then runs against that warm target
-with the 2,400 s allowance the 2026-11-05 reassessment records. The reason is measured
-rather than theoretical: the single-invocation gate passed at 257.7 s and 261.5
-s, failed at 300.008 s, passed at 480.264 s on one base, and reached its 600 s
-cap on the rebased base (CI runs 41782146443 and 41826968891). The placement
-decision this ADR records is unchanged; only the gate's internal shape and its
-allowance moved.
+with the 2,400 s allowance the 2026-11-05 reassessment records. The reason is
+measured rather than theoretical: the single-invocation gate passed at 257.7 s
+and 261.5 s, failed at 300.008 s, passed at 480.264 s on one base, and reached
+its 600 s cap on the rebased base (CI runs 41782146443 and 41826968891). The
+placement decision this ADR records is unchanged; only the gate's internal shape
+and its allowance moved.

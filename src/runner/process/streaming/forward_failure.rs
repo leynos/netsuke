@@ -1,12 +1,17 @@
 //! Classify child-output forwarding failures and bound their telemetry.
 //!
 //! Every forwarding failure reaches a [`ForwardFailureKind`] before it is
-//! counted or logged, so neither a metric label nor a warning field can carry
-//! a path, command line, or child output. The label vocabularies are closed
-//! arrays: [`ForwardStream::label`] and [`ForwardFailureKind::label`] choose
-//! values from those arrays, and the application recorder admits exactly the
-//! same arrays, so a new label value cannot reach the retained snapshot
-//! unless it is declared here first.
+//! counted or logged. The metric labels are bounded: [`ForwardStream::label`]
+//! and [`ForwardFailureKind::label`] choose values from closed arrays, and the
+//! application recorder admits exactly the same arrays, so a new label value
+//! cannot reach the retained snapshot unless it is declared here first.
+//!
+//! The warning event is bounded differently. Its `stream` and `failure_kind`
+//! fields carry the same closed values, but its `error` field carries the
+//! underlying I/O error, which may quote an operating-system message such as a
+//! destination path. That field is deliberately kept out of the metric labels:
+//! it is what makes a lost stream diagnosable, and it is not a value the
+//! recorder admits.
 
 use metrics::{counter, describe_counter};
 use std::{io, sync::Once};
