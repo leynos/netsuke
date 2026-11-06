@@ -1166,3 +1166,33 @@ passed, 3 skipped, plus 28 helper tests), `make test-ci-scripts` (90 passed),
 publish over SSH, post the pre-merge reconciliation comment, await the queued
 CodeRabbit review, request the final approval, and merge once equilibrium
 holds. Keep Status: IN PROGRESS.
+
+Revision 44 (2026-11-06): The follow-up triage on the pre-merge comment
+([#6684528489](https://github.com/leynos/netsuke/pull/1063#issuecomment-6684528489))
+asked for an isolation boundary test for `kani-check`, a correction to the
+formal-verification guide, and reconciliation of this plan's Progress and
+Outcomes statements. Commit `2b63540d0c65a28f8a9fd6f46a6abf869ea1bbfb` supplies
+all three. The new `kani_check_runs_without_network_or_writable_storage` case
+runs the real recipe inside `unshare --user --map-root-user --net --mount` with
+the repository root and the fixture directory self-bound and remounted
+read-only; the sandbox asserts each restriction before running the query, and
+the test asserts the reported `repo=read-only`, `temp=read-only`, `ifaces=lo,`,
+and `dns=blocked` lines, so a namespace that silently failed to apply fails the
+case rather than passing it vacuously. A host without user namespaces reports a
+skip, and `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` turns that skip into a failure.
+The fixture and sandbox machinery moved to
+`tests/prover_tools_kani_check_tests/support.rs`, keeping both files under the
+400-line cap; both score 10.00 on the CodeScene command-line interface. The
+guide now separates installation and Verus proof execution, which delegate to
+the pinned CLI through `uv tool run`, from `make kani-check`, which is a local
+read-only query over `tools/kani/VERSION` and the installed `cargo-kani`. The
+committed tree hash is `a06f75b4dede95743ac060d186d8de38b645ea4e`, identical to
+the candidate the gates ran against, and all 11 gates passed sequentially on it:
+`make check-fmt`, `make lint`, `make typecheck`, `make doc-coverage` (98.23%),
+`make markdownlint` (212 files, zero issues), `make nixie`, `make test` (4,954
+passed, 7 skipped, plus doctests), `make test-workflow-contracts` (1,669
+passed, 3 skipped, plus 28 helper tests), `make test-ci-scripts` (90 passed),
+`make test-prover-tools-integration` (7 passed), and `make test-package-verify`
+(publish dry run). This plan-only revision follows the code commit. Next, post
+the follow-up comment, await the CodeRabbit review, request the final approval,
+and merge once equilibrium holds. Keep Status: IN PROGRESS.
