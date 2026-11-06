@@ -23,7 +23,8 @@ use std::time::{Duration, Instant};
 use test_support::fluent::normalize_fluent_isolates;
 use test_support::{localizer::LOCALIZER_TEST_LOCK, localizer_test_lock};
 
-#[path = "graph_json/tests.rs"]
+mod bounds;
+#[path = "../graph_json/tests.rs"]
 mod graph_json_tests;
 
 /// Parse the fixed fixture manifest used by the catalogue snapshots.
