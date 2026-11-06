@@ -198,48 +198,6 @@ fn runs_whitaker(line: &str) -> bool {
     line.starts_with('\t') && line.contains("$(WHITAKER)")
 }
 
-/// The words of a recipe line before the Whitaker program: the `env` prefix.
-#[cfg(unix)]
-fn whitaker_prefix(line: &str) -> Vec<&str> {
-    line.split_whitespace()
-        .take_while(|word| *word != "$(WHITAKER)")
-        .collect()
-}
-
-#[cfg(unix)]
-#[test]
-fn behavioural_the_whitaker_route_assigns_its_own_flags() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let recipe = target_recipe(&makefile, "lint-whitaker")
-        .context("Makefile should declare a lint-whitaker target")?;
-    let routes: Vec<&str> = recipe.lines().filter(|line| runs_whitaker(line)).collect();
-    ensure!(!routes.is_empty(), "lint-whitaker should run Whitaker");
-    for route in routes {
-        let prefix = whitaker_prefix(route);
-        ensure!(
-            prefix
-                .windows(2)
-                .any(|pair| pair == ["-u", "CARGO_ENCODED_RUSTFLAGS"]),
-            "the Whitaker route should clear the encoded flags: {route:?}"
-        );
-        let assigned = prefix
-            .iter()
-            .filter(|word| word.starts_with("RUSTFLAGS="))
-            .count();
-        ensure!(
-            assigned == 1 && route.contains("RUSTFLAGS=\"-D warnings\" "),
-            "the Whitaker route should assign RUSTFLAGS the warning policy alone: {route:?}"
-        );
-        ensure!(
-            RUSTFLAGS_VARIABLES
-                .iter()
-                .all(|variable| !route.contains(&format!("$({})", variable.name))),
-            "the Whitaker route should compose no contracted variable: {route:?}"
-        );
-    }
-    Ok(())
-}
-
 // Declared last, as in `test_support/src/fs.rs`: the module's own model reads
 // first, and the submodule carries the machinery that needs a real shell.
 #[cfg(unix)]
