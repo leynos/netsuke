@@ -239,13 +239,20 @@ def test_only_the_kani_profile_has_an_extended_mutation_budget() -> None:
             "terminate-after": 15,
         },
         (
+            "test(/^negative::"
+            "compile_kani_tree_rejects_trees_that_do_not_compile($|::)/)"
+        ): {"period": "60s", "terminate-after": 15},
+        (
             "test(/^compile_guard::"
             "every_patched_tree_compiles_under_denied_warnings($|::)/)"
         ): {"period": "60s", "terminate-after": 40},
     }
     assert configured == expected, (
-        "only the Kani prewarm and the patch sweep may carry extended allowances"
+        "only the Kani prewarm, its negative control, and the patch sweep may "
+        "carry extended allowances"
     )
+
+
 
 
 def test_packaging_list_check_compiles_nothing() -> None:
@@ -345,3 +352,4 @@ def test_instrumented_lanes_budget_for_a_cold_build(
         f"{CARGO_WAIT_TIMEOUT}s for one instrumented cargo run, got "
         f"{env.get('RUN_RUST_CARGO_WAIT_TIMEOUT')!r}"
     )
+# weave: run 'weave explain tests/workflow_contracts/test_execution_coverage_test.py' for per-hunk detail, 'weave check' to verify your resolution

@@ -340,6 +340,9 @@ operator, user, and contributor references are easier to find.
 - [ADR-0072](adrs/adr-0072-display-policy-contract-and-terminal-verification.md):
   One resolved terminal display plan shared by status, tracing, diagnostics,
   and help, with policy snapshots and terminal-rendering tests.
+- [ADR-0073](adrs/adr-0073-split-the-kani-mutation-compile-gate.md): Splitting
+  the Kani mutation compile gate into a prewarm, a negative-compile check, and
+  a patch sweep, with the cold dependency build paid once.
 - [ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md):
   Frozen slotted records at release policy boundaries, with adapters owning
   external record shapes and domain-shaped mappings retained.

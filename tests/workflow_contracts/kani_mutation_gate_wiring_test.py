@@ -102,6 +102,12 @@ def test_the_gate_target_denies_warnings_through_the_kani_frontend() -> None:
         "the cold Kani compile must warm the shared target first"
     )
     assert (
+        "negative::compile_kani_tree_rejects_trees_that_do_not_compile" in commands[0]
+    ), (
+        "the negative check must share the prewarm's warm target, so the sweep's "
+        "'every patch compiles' result cannot be vacuous"
+    )
+    assert (
         "compile_guard::every_patched_tree_compiles_under_denied_warnings"
         in commands[1]
     ), "the timed patch sweep must run after the target is warm"

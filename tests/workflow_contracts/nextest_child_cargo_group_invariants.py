@@ -47,11 +47,13 @@ if typ.TYPE_CHECKING:  # pragma: no cover - imported for annotations only
 NEXTEST_CONFIG = REPO_ROOT / ".config" / "nextest.toml"
 CHILD_CARGO_GROUP = "nested-cargo-builds"
 # These ignored tests start child Cargo builds through
-# `make test-kani-mutations`: the prewarm builds a cold target, then the sweep
-# compiles the patched trees against it. ADR-0059 moved other such work into the
-# build phase, doctest pass, or `make test-package-verify`.
+# `make test-kani-mutations`: the prewarm builds a cold target, the negative
+# test compiles a valid tree and two deliberately broken ones against it, and
+# the sweep compiles the patched trees against it. ADR-0059 moved other such
+# work into the build phase, doctest pass, or `make test-package-verify`.
 NESTED_CARGO_BUILD_TESTS = (
     "prewarm_kani_mutation_target",
+    "compile_kani_tree_rejects_trees_that_do_not_compile",
     "every_patched_tree_compiles_under_denied_warnings",
 )
 # Nextest names a parameterized `#[rstest]` by its instances, `name::case_1_…`.

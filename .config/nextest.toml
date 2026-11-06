@@ -145,6 +145,18 @@ success-output = "immediate"
 slow-timeout = { period = "60s", terminate-after = 15 }
 
 [[profile.kani.overrides]]
+# The negative control shares the prewarm's invocation and group, so the group
+# slot hands it the target the prewarm built. It compiles a valid tree and two
+# deliberately broken ones, so it needs that warm target and a build-capable
+# group slot of its own. It keeps the extended allowance for the same reason as
+# the prewarm: a cold ordering mistake must not charge a dependency build to
+# the profile's ordinary five-period budget.
+filter = 'test(/^negative::compile_kani_tree_rejects_trees_that_do_not_compile($|::)/)'
+test-group = "nested-cargo-builds"
+success-output = "immediate"
+slow-timeout = { period = "60s", terminate-after = 15 }
+
+[[profile.kani.overrides]]
 # Compiles one patched tree per mutation patch, so it belongs in the
 # serialized child-Cargo group.
 filter = 'test(/^compile_guard::every_patched_tree_compiles_under_denied_warnings($|::)/)'
