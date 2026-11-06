@@ -141,20 +141,53 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
     }
 
+    /// Record one source character for `case` nesting inside a substitution.
+    ///
+    /// Only the innermost substitution is updated: a `case` in an outer region
+    /// cannot terminate a pattern of an inner one.
+    fn observe_case_word(&mut self, pos: usize, ch: char) {
+        let is_unquoted = self.matches_unquoted_quote_context();
+        let chars = self.chars;
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution
+                .case_nesting
+                .observe(chars, pos, ch, is_unquoted);
+        }
+    }
+
+    /// Report whether the current `)` terminates a `case` pattern.
+    ///
+    /// While a `case` construct is open, a `)` at the substitution's own depth
+    /// cannot close it: the shell reads it as a pattern terminator. Keeping the
+    /// substitution open makes the real closer the one that is checked.
+    fn is_case_pattern_terminator(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(|substitution| {
+                substitution.parenthesis_depth == 1 && substitution.case_nesting.is_open()
+            })
+    }
+
     /// Close one substitution level and reject an ambiguous `case` boundary.
     fn close_substitution(&mut self, pos: usize, ch: char) -> Result<Option<usize>, IrGenError> {
-        let closed_start = self
+        if self.is_case_pattern_terminator() {
+            self.output.push(ch);
+            return Ok(Some(pos + 1));
+        }
+        let closing = self
             .command_substitutions
             .last()
             .filter(|substitution| substitution.parenthesis_depth == 1)
-            .map(|substitution| substitution.start);
+            .map(|substitution| (substitution.start, substitution.case_nesting.saw_case()));
+        let (closed_start, saw_case) =
+            closing.map_or((None, false), |(start, saw)| (Some(start), saw));
         if self.decrement_command_substitution_parenthesis_depth() {
             // PowerShell has no `case` patterns; keep its unquoted-only rule.
             if self.bindings.shell != RecipeShell::PowerShell
                 || self.matches_unquoted_quote_context()
             {
-                let boundary = SubstitutionBoundary::new(pos, closed_start);
-                reject_ambiguous_case_comment(self.chars, self.template, &boundary)?;
+                let boundary = SubstitutionBoundary::new(pos, closed_start, saw_case);
+                reject_ambiguous_case_comment(self.chars, &boundary)?;
             }
             self.closed_command_substitution = Some(pos);
         }

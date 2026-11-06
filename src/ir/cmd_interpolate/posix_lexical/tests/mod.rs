@@ -1,5 +1,7 @@
 //! Unit tests for POSIX heredoc delimiter interpolation and comment boundaries.
 
+mod case_boundary;
+
 use super::super::{
     CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell,
     interpolate_command_with_bindings, interpolate_script_with_bindings,
@@ -282,92 +284,6 @@ fn inner_group_close_inside_substitution_starts_inert_comment() {
         &template,
         &expected,
         "a group closer inside a substitution must begin a comment",
-    );
-}
-
-/// Verify a `case` substitution without a comment boundary still interpolates.
-///
-/// The guard applies only to a `)` immediately followed by `#`. A substitution
-/// that merely contains `case` and closes before ordinary text must be
-/// accepted, and a later marker must still lower. Without this case, deleting
-/// the comment-boundary test from the guard would leave every other test
-/// passing.
-#[test]
-fn case_substitution_without_comment_boundary_is_accepted() {
-    let bindings = bindings();
-    let template = format!("echo $(case x in x) y {INS_TOKEN}");
-    let expected = "echo $(case x in x) y input";
-    for interpolate in both_interpolators() {
-        assert_eq!(
-            interpolate(&template, &bindings)
-                .expect("a case substitution without ')#' must be accepted"),
-            expected,
-            "a case substitution without a comment boundary must be accepted"
-        );
-    }
-}
-
-/// Verify a word that merely contains `case` is not treated as the keyword.
-///
-/// `showcase` ends in the same four letters as the `case` reserved word, and
-/// the `)` that closes its substitution is followed by `#`. A substring match
-/// would reject this supported recipe; only a whole-word match may fail
-/// closed. Because the closer stays in the word, the `#` is word data and the
-/// quote after it still opens a double-quoted region.
-#[test]
-fn word_containing_case_before_hash_interpolates_normally() {
-    let (template, expected) = executable_quote_case("echo $(showcase)");
-    assert_both_outputs(
-        &template,
-        &expected,
-        "a word containing 'case' must not trigger the ambiguity guard",
-    );
-}
-
-/// Verify a `case` pattern terminator before `#` fails closed.
-///
-/// A `)` that ends a `case` pattern is an operator, so `#` after it starts a
-/// comment; a `)` that closes `$()` is word data, so `#` after it does not.
-/// The scanner cannot tell them apart without the `case` grammar, so it must
-/// reject the script rather than encode a later marker for the wrong context.
-#[test]
-fn case_pattern_close_before_hash_fails_closed() {
-    let (template, _) = inert_comment_case("echo $(case x in\nx)", Some("esac)"));
-    assert_both_reject(
-        &template,
-        "a case pattern terminator before '#' must fail closed",
-    );
-}
-
-/// Verify the ambiguity guard still fires beyond the diagnostic snippet.
-///
-/// The invalid-command diagnostic quotes only the first 160 characters of the
-/// recipe, so a boundary that sits later must still be found by the traversal.
-/// Reading the boundary from the truncated message instead of the source would
-/// accept this recipe and encode a later marker for the wrong context.
-#[test]
-fn case_pattern_close_beyond_diagnostic_snippet_fails_closed() {
-    let padding = format!("echo {} $(case x in\nx)", "x".repeat(200));
-    let (template, _) = inert_comment_case(&padding, Some("esac)"));
-    assert_both_reject(
-        &template,
-        "an ambiguous case boundary beyond the snippet must fail closed",
-    );
-}
-
-/// Verify an outer-quoted substitution is still checked for the `case` ambiguity.
-///
-/// The enclosing double quotes do not extend into `$(...)`: the shell parses a
-/// substitution as its own script, so a `)` there that may terminate a `case`
-/// pattern is just as ambiguous as an unquoted one. Deciding from the quote
-/// context read after the substitution is popped would skip the rejection and
-/// let a `#` comment inside the pattern flip the scanner's quote state.
-#[test]
-fn case_pattern_close_inside_outer_quotes_fails_closed() {
-    let template = format!("echo \"$(case x in x)# {OUTS_TOKEN}\"");
-    assert_both_reject(
-        &template,
-        "an outer-quoted case pattern terminator before '#' must fail closed",
     );
 }
 

@@ -196,6 +196,7 @@ ir.duplicate_outputs = Εντοπίστηκαν διπλότυπες έξοδο�
 ir.circular_dependency = Εντοπίστηκε κυκλική εξάρτηση: { $cycle }.
 ir.action_serialisation = Δεν ήταν δυνατή η σειριοποίηση της ενέργειας: { $details }.
 ir.invalid_command = Μη έγκυρη παρεμβολή στην εντολή: { $snippet }.
+ir.ambiguous_substitution_boundary = Ασαφές όριο αντικατάστασης εντολής στον χαρακτήρα { $position }· διαχωρίστε την παρένθεση κλεισίματος της αντικατάστασης από το επόμενο '#'.
 
 # Σφάλματα παραγωγής αρχείων Ninja.
 ninja_gen.missing_action = Λείπει η ενέργεια «{ $id }» στην οποία παραπέμπει ακμή δόμησης.

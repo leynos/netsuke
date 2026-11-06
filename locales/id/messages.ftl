@@ -195,6 +195,7 @@ ir.duplicate_outputs = Terdeteksi keluaran ganda: { $outputs }.
 ir.circular_dependency = Terdeteksi ketergantungan melingkar: { $cycle }.
 ir.action_serialisation = Tindakan tidak dapat diserialkan: { $details }.
 ir.invalid_command = Penyisipan tidak sah pada perintah: { $snippet }.
+ir.ambiguous_substitution_boundary = Batas substitusi perintah ambigu pada karakter { $position }; pisahkan penutup substitusi dari '#' berikutnya.
 
 # Galat pembuatan berkas Ninja.
 ninja_gen.missing_action = Tindakan "{ $id }" yang dirujuk sebuah sisi build tidak ada.

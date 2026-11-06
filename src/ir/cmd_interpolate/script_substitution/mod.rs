@@ -121,6 +121,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.is_escaped = false;
             return Ok(Some(pos + 1));
         }
+        self.observe_case_word(pos, ch);
         if self.starts_escape(pos, ch)? {
             self.output.push(ch);
             self.is_escaped = true;

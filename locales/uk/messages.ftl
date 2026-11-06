@@ -195,6 +195,7 @@ ir.duplicate_outputs = Виявлено повторювані вихідні ф
 ir.circular_dependency = Виявлено циклічну залежність: { $cycle }.
 ir.action_serialisation = Не вдалося серіалізувати дію: { $details }.
 ir.invalid_command = Некоректна підстановка в команді: { $snippet }.
+ir.ambiguous_substitution_boundary = Неоднозначна межа підстановки команди на символі { $position }; відокремте закривну дужку підстановки від наступного '#'.
 
 # Помилки створення файлів Ninja.
 ninja_gen.missing_action = Відсутня дія «{ $id }», на яку посилається ребро збирання.

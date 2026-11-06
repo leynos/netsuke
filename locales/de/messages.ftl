@@ -195,6 +195,7 @@ ir.duplicate_outputs = Doppelte Ausgaben erkannt: { $outputs }.
 ir.circular_dependency = Zyklische Abhängigkeit erkannt: { $cycle }.
 ir.action_serialisation = Die Aktion konnte nicht serialisiert werden: { $details }.
 ir.invalid_command = Ungültige Befehlsinterpolation: { $snippet }.
+ir.ambiguous_substitution_boundary = Mehrdeutige Grenze der Befehlsersetzung bei Zeichen { $position }; trennen Sie die schließende Klammer der Ersetzung vom folgenden '#'.
 
 # Fehler bei der Ninja-Erzeugung.
 ninja_gen.missing_action = Die von einer Build-Kante referenzierte Aktion „{ $id }“ fehlt.

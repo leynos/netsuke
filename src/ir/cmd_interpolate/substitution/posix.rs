@@ -29,6 +29,7 @@ impl SubstitutionTraversal<'_, '_> {
         if copied_inert_character {
             return Ok(pos + 1);
         }
+        self.observe_case_word(pos, ch);
         if let Some(next) = self.append_escaped_character(pos, ch)? {
             return Ok(next);
         }

@@ -79,6 +79,7 @@ fn record_outcome<T>(
 const fn error_category(error: &IrGenError) -> &'static str {
     match error {
         IrGenError::InvalidCommand { .. } => "invalid_command_interpolation",
+        IrGenError::AmbiguousSubstitutionBoundary { .. } => "ambiguous_substitution_boundary",
         _ => "other",
     }
 }
@@ -127,6 +128,15 @@ mod tests {
             snippet: "echo {{ ins }}".into(),
             message: localization::message(keys::IR_INVALID_COMMAND)
                 .with_arg("snippet", "echo {{ ins }}"),
+        }
+    }
+
+    /// Build an ambiguous-boundary failure, which carries a location but no recipe.
+    fn ambiguous_boundary_error() -> IrGenError {
+        IrGenError::AmbiguousSubstitutionBoundary {
+            position: 42,
+            message: localization::message(keys::IR_AMBIGUOUS_SUBSTITUTION_BOUNDARY)
+                .with_arg("position", 42),
         }
     }
 
@@ -204,6 +214,14 @@ mod tests {
             assert!(matches!(error, IrGenError::InvalidCommand { .. }));
             instrument_with_fixed_clock(RecipeShell::Bash, || Ok::<_, IrGenError>(()))
                 .expect("Bash graph generation should be preserved");
+            let ambiguous_error = instrument_with_fixed_clock(RecipeShell::Bash, || {
+                Err::<(), _>(ambiguous_boundary_error())
+            })
+            .expect_err("ambiguous boundary failure should be preserved");
+            assert!(matches!(
+                ambiguous_error,
+                IrGenError::AmbiguousSubstitutionBoundary { .. }
+            ));
             let non_interpolation_error =
                 instrument_with_fixed_clock(RecipeShell::PowerShell, || {
                     Err::<(), _>(invalid_manifest_error())
@@ -229,6 +247,15 @@ mod tests {
             Some(1)
         );
         assert_eq!(
+            graph_generation_count(
+                &snapshot,
+                "error",
+                "ambiguous_substitution_boundary",
+                "bash"
+            ),
+            Some(1)
+        );
+        assert_eq!(
             graph_generation_count(&snapshot, "error", "other", "powershell"),
             Some(1)
         );
@@ -242,7 +269,7 @@ mod tests {
                 _ => 0,
             })
             .sum::<usize>();
-        assert_eq!(duration_samples, 4);
+        assert_eq!(duration_samples, 5);
     }
 
     /// Verify telemetry helpers expose only bounded shell and error labels.
@@ -254,6 +281,10 @@ mod tests {
         assert_eq!(
             error_category(&invalid_command_error()),
             "invalid_command_interpolation"
+        );
+        assert_eq!(
+            error_category(&ambiguous_boundary_error()),
+            "ambiguous_substitution_boundary"
         );
         assert_eq!(error_category(&invalid_manifest_error()), "other");
     }
