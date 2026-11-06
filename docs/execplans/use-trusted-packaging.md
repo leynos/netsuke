@@ -81,17 +81,21 @@ Its jobs are:
    `ready_for_review` event.
 4. `release-admission-canaries` — the ADR-020 admission-evidence gate.
 5. `release` — the read-only **rehearsal**. It runs only when
-   `dry_run == 'true'` (`release.yml:415`), holds `contents: read`, downloads
-   the workflow artefacts into `dist/`, hoists the cargo-binstall archives to
-   the release root, and calls the shared `upload-release-assets` action at pin
-   `a5765019…` with `dry-run: true`. It creates no release and uploads nothing.
+   `dry_run == 'true'`, holds `contents: read`, downloads the workflow
+   artefacts into `dist/`, hoists the cargo-binstall archives to the release
+   root, and calls the shared `upload-release-assets` action at pin `a5765019…`
+   with `dry-run: true`. It creates no release and uploads nothing. This job is
+   the only remaining caller of that shared action.
 6. `publish-release` — added by #834 after this plan was drafted. It runs only
-   when `should_publish == 'true'` (`release.yml:548`), holds
-   `contents: write`, and creates the draft release
-   (`scripts/ensure_draft_release.py` at `release.yml:589`), then runs the same
-   download, hoist and upload sequence. It calls the shared
-   `upload-release-assets` action at the newer pin `0606ca89…`, so the
-   repository now invokes one shared action at two revisions, chosen by job.
+   when `should_publish == 'true'`, holds `contents: write`, and creates the
+   draft release (`scripts/ensure_draft_release.py`), then runs the same
+   download and hoist sequence. Since #1066 it no longer calls the shared
+   action: it calls the repository's own
+   `./.github/actions/upload-declared-assets`, which selects the declared
+   payload, writes the declaration and the trusted digest record from the
+   staged bytes, retains both, and only then uploads the declared names without
+   ever replacing attached bytes. The checkout is pinned to the candidate
+   commit so those files are read at the revision the producers built.
 
 The two jobs are mutually exclusive: a dry run takes `release`, a tag push takes
 `publish-release`, and a job that needs a skipped job is itself skipped.
@@ -121,18 +125,24 @@ archive would publish under its last path segment. The hoist's docstring and the
 `conftest.py` that describes it were corrected on 2026-10-19; the behaviour is
 unchanged and no test asserted the false reason.
 
-**The upload action's real selection rule.** Read from `leynos/shared-actions`
-at pin `0606ca899ce2995a0c4bc78e660e80832e6e8855` (the newer of the two pins
-`main` now carries; the `release` job still runs
-`a5765019912a8ab6882b12db049c7cde635f3a85`), its `_is_candidate` accepts
-exactly: a file named `{bin-name}`, `{bin-name}.exe`, or `{bin-name}.1`; any
-file whose name ends `.sha256`; and any file whose suffix is `.deb`, `.rpm`,
-`.pkg`, or `.msi`. It therefore **rejects** `.tar.gz`, `.crate`, `.json`, and
-`.sigstore` bundles. `clobber` defaults to `"true"`, and the action never fails
-its own step: a `gh` failure sets `upload_error=true` and `uploaded_count=0`,
+**The shared upload action's real selection rule.** Read from
+`leynos/shared-actions` at pin `0606ca899ce2995a0c4bc78e660e80832e6e8855`, its
+`_is_candidate` accepts exactly: a file named `{bin-name}`, `{bin-name}.exe`, or
+`{bin-name}.1`; any file whose name ends `.sha256`; and any file whose suffix
+is `.deb`, `.rpm`, `.pkg`, or `.msi`. It therefore **rejects** `.tar.gz`,
+`.crate`, `.json`, and `.sigstore` bundles. `clobber` defaults to `"true"`. Its
+selection rule is unchanged between the two pins, so this plan's
+asset-selection findings hold at either revision. That rule is exactly the
+defect #1066 removes from the publishing path: the suffix-and-count heuristics
+say what an artefact *is*, never which commit produced it, and `clobber: true`
+lets a second run replace the first run's bytes. `publish-release` no longer
+invokes the shared action; only the rehearsal job, which uploads nothing, still
+does, and it is unaffected because a dry run performs no transfer.
+
+Both actions never fail their own step: a `gh` failure sets an error output,
 which `release.yml`'s `Check asset upload errors` step converts into an exit 1.
-The selection rule is unchanged between the two pins, so this plan's
-asset-selection findings hold at either revision.
+The replacement action keeps that hand-off so the operation telemetry that
+follows still runs and records the plan.
 
 **The dry run.** `.github/workflows/release-dry-run.yml` calls `release.yml`
 with `dry-run: true` on `pull_request` events `opened`, `synchronize`,
@@ -227,14 +237,14 @@ tests/workflow_contracts/actions_expression_evaluator.py          -> EP-M6  -> e
 ```
 
 External dependencies, cited by revision and treated as axioms. The shared
-action now carries two pins on `main`, because `release` and the new
-`publish-release` job were bumped separately; this plan must pin whichever it
-invokes to the newer of the two:
+action is now invoked from one job only, so one pin survives in the release
+workflow; the second remains a historical citation for the findings recorded
+against it:
 
 ```plaintext
-rust-lang/crates-io-auth-action  3268eb413133e2960fa4ae0e963ca76380c54cd9
-leynos/shared-actions (release job)         a5765019912a8ab6882b12db049c7cde635f3a85
-leynos/shared-actions (publish-release job) 0606ca899ce2995a0c4bc78e660e80832e6e8855
+rust-lang/crates-io-auth-action           3268eb413133e2960fa4ae0e963ca76380c54cd9
+leynos/shared-actions (release job)        a5765019912a8ab6882b12db049c7cde635f3a85
+leynos/shared-actions (cited findings)     0606ca899ce2995a0c4bc78e660e80832e6e8855
 ```
 
 Cuprum (`leynos/cuprum`) is a motivating context only. Its release design — a
@@ -2878,10 +2888,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   outright, because `Path("x.tar.gz").suffix` is `.gz`. Evidence: read from its
   `scripts/upload_release_assets.py` at pin
   `a5765019912a8ab6882b12db049c7cde635f3a85`; the rule is unchanged at the newer
-  `0606ca899ce2995a0c4bc78e660e80832e6e8855` that `publish-release` uses.
-  Impact: binstall archives reach the release root only through
-  `scripts/hoist_binstall_archives.py`, and any new asset type (`.crate`, a
-  provenance bundle) will need the same treatment or a different uploader.
+  `0606ca899ce2995a0c4bc78e660e80832e6e8855`. That pin is now a citation only:
+  `publish-release` no longer invokes the action, and the rehearsal lane that
+  still does uploads nothing. Impact: binstall archives reach the release root
+  only through `scripts/hoist_binstall_archives.py`, and any new asset type
+  (`.crate`, a provenance bundle) will need the same treatment or a different
+  uploader.
 
 - Observation: the action's `clobber` defaults to `"true"`, so the current
   upload path already overwrites same-named assets on a re-run. Evidence: same
@@ -4084,18 +4096,19 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   not reach it. The name states what it does — it uploads exactly the declared
   names — rather than repeating the job it serves.
 
-  Two couplings follow, both measured. First, `tests/workflow_release.rs:25`
-  pins the raw substring `upload-release-assets@`, and `release.yml` carries
-  that substring twice — once in `release` at line 493 (pin `a5765019…`) and
-  once in `publish-release` at line 634 (pin `0606ca89…`). Changing only
-  `publish-release`'s `uses:` leaves exactly one occurrence, so the Rust pin
-  stays satisfied with no edit to the Rust suite. Substituting **both** lanes
-  would delete the substring and turn that assertion red, which is a second
-  reason the rehearsal lane is out of scope for this change. Second, the
-  orientation sentence "the repository now invokes one shared action at two
-  revisions, chosen by job" describes the current tree and goes stale in the
-  same commit that lands this change; it must be corrected there rather than
-  left as a description of a file that no longer has that shape.
+  Two couplings followed, both measured and both since discharged. First,
+  `tests/workflow_release.rs:25` pins the raw substring
+  `upload-release-assets@`, and `release.yml` carried that substring twice —
+  once in `release` (pin `a5765019…`) and once in `publish-release` (pin
+  `0606ca89…`). Changing only `publish-release`'s `uses:` left exactly one
+  occurrence, so the Rust pin stays satisfied with no edit to the Rust suite,
+  and that is what the landed change did: the rehearsal lane remains the sole
+  caller. Substituting **both** lanes would delete the substring and turn that
+  assertion red, which is a second reason the rehearsal lane is out of scope.
+  Second, the orientation sentence "the repository now invokes one shared
+  action at two revisions, chosen by job" described the tree before this change
+  and was corrected in the same commit that landed it, rather than left as a
+  description of a file that no longer has that shape.
 
   The rehearsal lane is left on the shared action deliberately, and the gap is
   recorded rather than closed: `release` runs with `dry-run: true` and uploads
