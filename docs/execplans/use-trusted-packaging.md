@@ -9,10 +9,11 @@ Status: IN PROGRESS
 
 The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
-contracts; Stage C remains partial because inventory verification, GitHub
-finalization, and consumer smoke are still open. Stage D is in progress. No
-release, tag, registry publication, live credential exchange, GitHub Release,
-or account setting has been changed by this work.
+contracts, and #1066 replaces the shared upload action in `publish-release`
+with a candidate-bound declared-asset upload. Stage C remains partial because
+inventory verification, GitHub finalization, and consumer smoke are still open.
+Stage D is in progress. No release, tag, registry publication, live credential
+exchange, GitHub Release, or account setting has been changed by this work.
 
 ## Purpose / big picture
 
@@ -1624,11 +1625,13 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   existing upload sequence. Since that reconnaissance, the `package-crate` and
   `publish-crates-io` actions and jobs have landed, with workflow contracts for
   publisher permissions, prerequisite reachability, artefact use, action order,
-  and dry-run isolation. Three job-matched actions and jobs remain
-  (`verify-release-inventory`, `finalize-github-release`, and
-  `consumer-smoke`), together with the planned `upload-declared-assets` helper
-  for `publish-release`. No live exchange or release has exercised the
-  publisher; the external GitHub `crates-io` environment and crates.io
+  and dry-run isolation, and #1066 has replaced the shared upload action in
+  `publish-release` with `./.github/actions/upload-declared-assets`. Two
+  job-matched actions and jobs remain (`verify-release-inventory` and
+  `consumer-smoke`), as does `finalize-github-release`; since #1066 the
+  declaration and trusted digest record are retained for exactly that
+  finalizer, but it is not yet wired. No live exchange or release has exercised
+  the publisher; the external GitHub `crates-io` environment and crates.io
   publisher registration remain unverified, so Stage C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
@@ -2746,6 +2749,37 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   registered in `SECTION_MODULES` and the `test-release-publication` recipe,
   the developers' guide's module inventory was corrected from nine to eleven,
   and the focused four-module run passed 37 tests.
+- [x] (2026-11-06) Issue #1066 delivered the candidate-bound declared-asset
+  upload, so `publish-release` no longer calls the shared
+  `upload-release-assets` action. Its replacement,
+  `./.github/actions/upload-declared-assets`, has four steps. `select` runs
+  `scripts/select_release_payload_cli.py`, which reads the producer records the
+  packaging jobs retained, checks each against the candidate commit, the
+  workflow run, the target table in `.github/release-staging.toml`, and the
+  platform each target declares, and then refuses a stale candidate, a foreign
+  run, a missing or duplicated target, a declared asset that was not staged or
+  was staged twice, and a release-shaped stray that nobody declared. The
+  judgement itself is `scripts/release_payload_selection.py`, which never opens
+  a file: it receives the staged index from `scripts/release_payload_tree.py`
+  and returns the declared set with each name's recorded digest and the
+  adapter's own source value. `declare` hashes exactly those staged bytes and
+  writes the declaration and the trusted digest record before any transfer, so
+  both describe one set of bytes. `retain` uploads them as artefacts, which is
+  how they cross a job boundary. `upload` runs
+  `scripts/upload_declared_assets_cli.py`, which re-reads the trusted record,
+  reconciles it against the release's attached assets through
+  `scripts/release_reconcile_github.py`, skips a name GitHub already holds with
+  the recorded digest, and refuses the whole run on a conflict rather than
+  replacing the attached bytes: no invocation carries `--clobber`. Retained
+  workspace material (`netsuke`, `LICENSE`, `README.md`, completions, manual
+  pages) is excluded before declaration and hashing, and never reaches the
+  network. The policy stays mapping-based, and provenance orchestration lives
+  in the adapters, so no suffix or count check is claimed as proof of origin.
+  Four workflow-contract modules exercise the executed step bodies against a
+  checkout-shaped tree and a recorded `gh` stub rather than asserting on YAML
+  tokens. `release.yml` still carries no verifier or finalizer step, so the
+  release remains draft and a human still publishes it; the crates.io
+  publication is untouched by this change.
 
 ## Surprises & discoveries
 
