@@ -303,9 +303,13 @@ fn behavioural_kani_mutation_target_selects_every_ignored_compile_test() -> Resu
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let recipe = target_recipe(&makefile, "test-kani-mutations")
         .context("Makefile should declare a test-kani-mutations target")?;
+    // Match the command itself rather than any line that mentions it: a
+    // comment or an `echo` describing the gate must not be mistaken for a
+    // command, or the slice below silently pairs the wrong two lines.
     let run_commands: Vec<&str> = recipe
         .lines()
-        .filter(|line| line.contains("nextest run"))
+        .map(str::trim_start)
+        .filter(|line| line.starts_with("$(GATE_RUSTFLAGS)") && line.contains("nextest run"))
         .collect();
     let [prewarm_command, sweep_command] = run_commands.as_slice() else {
         anyhow::bail!("expected prewarm then sweep, found {run_commands:?}");
@@ -333,7 +337,57 @@ fn behavioural_kani_mutation_target_selects_every_ignored_compile_test() -> Resu
         "the cold prewarm and its negative check must precede the filtered \
          patch sweep: {run_commands:?}"
     );
+    ensure_the_prewarm_outranks_its_negative_check()
+}
+
+/// Require the prewarm to outrank the negative check that shares its invocation.
+///
+/// The `nested-cargo-builds` group serializes the two tests but does not order
+/// them, so the priority is what puts the prewarm first. Without it a cold
+/// target charges the dependency build to the negative check's allowance,
+/// which is the cost the split exists to avoid.
+fn ensure_the_prewarm_outranks_its_negative_check() -> Result<()> {
+    let text = read_repo_file(Utf8Path::new(".config/nextest.toml"))?;
+    let config: Value = text
+        .parse()
+        .context("nextest configuration should parse as TOML")?;
+    let prewarm = override_priority(&config, "prewarm::prewarm_kani_mutation_target")?;
+    let negative = override_priority(
+        &config,
+        "negative::compile_kani_tree_rejects_trees_that_do_not_compile",
+    )?;
+    ensure!(
+        prewarm == 1 && prewarm > negative,
+        "the prewarm must carry priority 1 so that it is scheduled before the \
+         negative check, found {prewarm} and {negative}"
+    );
     Ok(())
+}
+
+/// Read the `priority` of the override whose filter names `test_name`.
+///
+/// Nextest treats a missing `priority` as zero, so an override that only
+/// inherits the default reports `0`.
+fn override_priority(config: &Value, test_name: &str) -> Result<i64> {
+    let overrides = config
+        .get("profile")
+        .and_then(|profile| profile.get("default"))
+        .and_then(|profile| profile.get("overrides"))
+        .and_then(Value::as_array)
+        .context("nextest configuration should declare profile.default.overrides")?;
+    let entry = overrides
+        .iter()
+        .find(|entry| {
+            entry
+                .get("filter")
+                .and_then(Value::as_str)
+                .is_some_and(|filter| filter.contains(test_name))
+        })
+        .with_context(|| format!("nextest configuration should override {test_name}"))?;
+    Ok(entry
+        .get("priority")
+        .and_then(Value::as_integer)
+        .unwrap_or(0))
 }
 
 /// Keep the glob-expansion benchmark available through the Makefile.
