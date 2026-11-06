@@ -230,20 +230,42 @@ fn an_arithmetic_shift_does_not_consume_the_next_line() {
     );
 }
 
-// Verify heredoc tracking resumes after an arithmetic expansion closes.
+/// One arithmetic-scope scenario: the source text and the rule it demonstrates.
+struct ArithmeticHeredocCase<'a> {
+    /// Source text with `{INS_TOKEN}` in a heredoc body and `{OUTS_TOKEN}` after
+    /// the terminator, so the two markers show which text stayed inert.
+    template: &'a str,
+    /// The rule named in a failure message.
+    rule: &'a str,
+}
+
+// Verify the arithmetic suspension is scoped to the innermost substitution frame.
 //
-// The arithmetic suspension belongs to one substitution frame. If it outlived
-// the closing `))`, a later declaration would go untracked and a marker in its
-// body would be lowered into text the shell still expands.
-#[test]
-fn heredoc_tracking_resumes_after_an_arithmetic_expansion() {
-    let template = format!("n=$((1 << 3))\ncat <<EOF\n{INS_TOKEN}\nEOF\necho {OUTS_TOKEN}");
-    let expected = format!("n=$((1 << 3))\ncat <<EOF\n{INS_TOKEN}\nEOF\necho output");
+// `<<` inside `$(( ))` is a left shift, so heredoc tracking is suspended for
+// that frame. The suspension must end with the frame: a declaration after the
+// closing `))` is a real heredoc, and a nested `$( )` pushes a non-arithmetic
+// frame whose own heredoc is tracked. In both cases the body marker must stay
+// inert and the marker after the terminator must be lowered.
+#[rstest]
+#[case::tracking_resumes_after_the_expansion(ArithmeticHeredocCase {
+    template: "n=$((1 << 3))\ncat <<EOF\n{INS_TOKEN}\nEOF\necho {OUTS_TOKEN}",
+    rule: "heredoc tracking must resume after the expansion",
+})]
+#[case::nested_substitution_keeps_its_heredoc(ArithmeticHeredocCase {
+    template: "n=$((1 + $(cat <<EOF\n{INS_TOKEN}\nEOF\n)))\necho {OUTS_TOKEN}",
+    rule: "a nested command substitution must keep its heredoc body inert",
+})]
+fn arithmetic_suspension_is_scoped_to_its_frame(#[case] case: ArithmeticHeredocCase<'_>) {
+    let template = case
+        .template
+        .replace("{INS_TOKEN}", INS_TOKEN)
+        .replace("{OUTS_TOKEN}", OUTS_TOKEN);
+    let expected = template.replace(OUTS_TOKEN, "output");
     assert_both_traversals_lower(
         Recipe(&template),
         &Lowering {
             text: &expected,
-            rule: "heredoc tracking must resume after the expansion",
+            rule: case.rule,
         },
     );
 }
@@ -287,25 +309,6 @@ fn comment_boundaries_follow_posix_word_rules(#[case] case: CommentBoundaryCase<
         &Lowering {
             text: &expected,
             rule: "a number sign starts a comment only at a POSIX word boundary",
-        },
-    );
-}
-
-// Verify a heredoc declared by a nested command substitution inside an
-// arithmetic expansion is still tracked.
-//
-// The arithmetic suspension belongs to the innermost substitution frame. A
-// nested `$( )` pushes a non-arithmetic frame, so a heredoc it declares must
-// keep its body inert, and lowering must resume once the expansion closes.
-#[test]
-fn nested_command_substitution_inside_arithmetic_tracks_its_heredoc() {
-    let template = format!("n=$((1 + $(cat <<EOF\n{INS_TOKEN}\nEOF\n)))\necho {OUTS_TOKEN}");
-    let expected = format!("n=$((1 + $(cat <<EOF\n{INS_TOKEN}\nEOF\n)))\necho output");
-    assert_both_traversals_lower(
-        Recipe(&template),
-        &Lowering {
-            text: &expected,
-            rule: "a nested command substitution must keep its heredoc body inert",
         },
     );
 }
