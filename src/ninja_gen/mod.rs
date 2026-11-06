@@ -331,4 +331,3 @@ mod test_support;
 #[cfg(test)]
 mod tests;
 // weave: run 'weave explain src/ninja_gen/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
-// weave: run 'weave explain src/ninja_gen/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
