@@ -282,6 +282,28 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       moved to tests/prover_tools_make_edge_tests.rs to keep the original
       test file within the repository's 400-line limit. The new target and all
       12 repository gates now pass on the final candidate; see Revision 41.
+- [x] (2026-11-06) Make `make kani-check` a local read-only version query.
+      Commit `475d15409` removes `KANI_CHECK_FLAGS` and the delegated
+      `check-version` invocation; the target reads `tools/kani/VERSION`, runs
+      the active-home `cargo-kani --version`, and compares the first semantic
+      version, so it needs neither `uv` nor network access and writes no uv
+      cache. New tests/prover_tools_kani_check_tests.rs poisons `PROVER_TOOLS`
+      and `UV` to prove no remote resolution occurs, and covers mismatch,
+      verifier exit status, unparsable output, and apostrophes in the active
+      Cargo home. The obsolete delegated-target cases leave
+      tests/prover_tools_make_tests.rs, and the developers' guide and formal
+      verification methods document the local contract.
+- [x] (2026-11-06) Run the full 12-gate sequence on the local-query candidate.
+      All gates passed: `make check-fmt`, `make lint`, `make typecheck`,
+      `make doc-coverage` (98.23%), `make markdownlint` (212 files),
+      `make nixie`, `make test` (4,953 passed, 7 skipped, plus doctests),
+      `make test-workflow-contracts` (1,669 passed, 3 skipped, plus 28 helper
+      tests), `make test-ci-scripts` (90 passed),
+      `make test-prover-tools-integration` (7 passed),
+      `mbake validate Makefile`, and `git diff --check`. The first
+      `make markdownlint` attempt failed on `unparseable` in
+      docs/developers-guide.md; correcting it to `unparsable` and rerunning
+      the Markdown gate resolved the finding.
 - [ ] Reconcile the current-head CodeRabbit formal review. The candidate-bound
       implementation assessment [#6573587184](https://github.com/leynos/netsuke/pull/1063#issuecomment-6573587184)
       (Assessment-ID `import-prover-tools-1e9a9927-completeness-20261102`,
@@ -321,11 +343,14 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       source inventory lists only `#[test]` and
       `#[rstest]` functions without Rustdoc comments and finds documentation
       on touched helpers and Python declarations. The completed formal review
-      reports findings but supplies no refreshed declaration diagnostics. Do
-      not add Rust test comments or substitute aggregate Rustdoc coverage.
-      Reconcile the row against the latest summary and pre-merge output after
-      the repair review, requesting declaration diagnostics if a warning
-      remains.
+      reports findings but supplies no refreshed declaration diagnostics.
+      Commit `475d15409` adds `///` documentation to the touched
+      integration-test and helper functions; the `#[cfg(test)]`/`#[test]`
+      carve-out in AGENTS.md covers Rustdoc-invisible items, which these
+      compiled integration-test targets are not, and no aggregate Rustdoc
+      figure is substituted for the diff-scoped row. Reconcile the row against
+      the latest summary and pre-merge output after the repair review,
+      requesting declaration diagnostics if a warning remains.
 
 ## Surprises & discoveries
 
@@ -1093,3 +1118,27 @@ head passed all six quality gates with no annotations. Publish the validated
 repair, reconcile the current-head formal review and Docstring Coverage row,
 and observe trusted-main warm-cache acceptance before completing this plan.
 Keep Status: IN PROGRESS.
+
+Revision 42 (2026-11-06): `make kani-check` is now a local read-only version
+query, committed as `475d15409` on top of published head
+`9a562f33f4b4756758cad322def4d30f8c886dac` and bound to candidate tree hash
+`1ca3782f483c9685cdf0cdb40be9cfe18dcd1dd2f37018085495c458a9816de3`. The target
+reads `tools/kani/VERSION`, runs the active Cargo home's
+`cargo-kani --version`, and compares the first semantic version, so resolution
+no longer needs `uv` or the network and writes no uv cache. The new
+tests/prover_tools_kani_check_tests.rs poisons `PROVER_TOOLS` and `UV` to prove
+no remote runner is consulted and covers a version mismatch, a failing
+verifier's exit status, unparsable output, and apostrophes in the active Cargo
+home. All 12 gates passed sequentially: `make check-fmt`, `make lint`,
+`make typecheck`, `make doc-coverage` (98.23%), `make markdownlint` (212 files,
+zero issues), `make nixie`, `make test` (4,953 passed, 7 skipped, plus
+doctests), `make test-workflow-contracts` (1,669 passed, 3 skipped, plus 28
+helper tests), `make test-ci-scripts` (90 passed),
+`make test-prover-tools-integration` (7 passed), `mbake validate Makefile`, and
+`git diff --check`. The first Markdown attempt rejected `unparseable` at
+docs/developers-guide.md:5200; correcting it to `unparsable` and rerunning the
+Markdown gate cleared the finding, and the documentation gates were rerun after
+the one-word change. This plan-only revision follows the code commit so the
+recorded candidate SHA and gate evidence stay together. Next, publish over SSH,
+reconcile the current-head review and pre-merge rows, request the final
+approval, and merge once equilibrium holds. Keep Status: IN PROGRESS.
