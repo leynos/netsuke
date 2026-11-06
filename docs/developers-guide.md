@@ -5301,9 +5301,12 @@ them.
 
 ### Composition rules
 
-- **Quality gates.** `make lint`, `make lint-clippy`, `make lint-whitaker`,
-  `make test`, and `make typecheck` run on the standard, on the repository's
-  pinned nightly from `rust-toolchain.toml`. They are gated on
+- **Quality gates.** `make lint`, `make lint-clippy`, `make test`, and
+  `make typecheck` run on the standard, on the repository's pinned nightly from
+  `rust-toolchain.toml`. `make lint-whitaker` is the exception: it runs on the
+  installer-managed Whitaker toolchain, clears `CARGO_ENCODED_RUSTFLAGS`, and
+  assigns `RUSTFLAGS="-D warnings"` alone, as does the Windows lint job. They
+  are gated on
   `make check-build-tools`, so they stop with an installation hint rather than
   a codegen-backend error. `make check-fmt` compiles nothing and is unaffected.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and

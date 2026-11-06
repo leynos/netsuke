@@ -30,11 +30,10 @@ WHITAKER_WORKSPACE_FRAGMENTS = (
         "[Environment+SpecialFolder]::UserProfile)"
     ),
     "Join-Path $profileHome '.local\\bin\\whitaker.ps1'",
-    # `-Zthreads=8` must survive the assignment. Assigning RUSTFLAGS displaces
-    # the `.cargo/config.toml` tables, and mold's flag is Linux-only so it is
-    # legitimately absent here — which is exactly why the frontend flag has to
-    # be spelled out rather than assumed to come from the file.
-    '$env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings -Zthreads=8"',
+    # Whitaker takes none of the development flags: the encoded flags are
+    # cleared and RUSTFLAGS carries the warning policy alone.
+    "Remove-Item Env:CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue",
+    '$env:RUSTFLAGS = "-D warnings"',
     "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
     (
         "& $whitaker --all --no-deps --package netsuke-build '--' "
