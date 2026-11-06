@@ -189,10 +189,34 @@ fn ninja_output(
     input: Option<(&str, &str)>,
 ) -> Result<String> {
     let workspace = run_ninja_workspace(ninja_file, environment, input)?;
+
+    run_ninja_target(&workspace, environment)?;
     workspace
         .directory
         .read_to_string("out")
         .context("read shell output from generated target")
+}
+
+/// Run a generated Ninja file's `out` target with child shell variables.
+#[cfg(unix)]
+fn run_ninja_target(workspace: &NinjaWorkspace, environment: &[(&str, &str)]) -> Result<()> {
+    let mut command = Command::new("ninja");
+    command
+        .args(["-f", "build.ninja", "out"])
+        .current_dir(workspace.path.as_std_path())
+        .env_clear()
+        .env("PATH", host_path()?);
+    for (name, value) in environment {
+        command.env(name, value);
+    }
+    let output = command.output().context("run generated Ninja build")?;
+    if !output.status.success() {
+        bail!(
+            "Ninja failed to execute generated file: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+    Ok(())
 }
 
 /// Build the optional sentinel variable for an isolated child shell.
@@ -396,6 +420,10 @@ fn script_default_reaches_the_child_shell(
     );
     Ok(())
 }
+
+/// Heredoc delimiter cases, gated per test where they need a POSIX child shell.
+#[path = "ninja_dollar_escaping_tests/heredoc.rs"]
+mod heredoc;
 
 /// Script recipe cases, gated per test where they need a POSIX child shell.
 #[path = "ninja_dollar_escaping_tests/scripts/mod.rs"]
