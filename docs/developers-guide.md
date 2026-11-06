@@ -1443,6 +1443,15 @@ wrapper), so those flags survive rather than being silently discarded.
 `tests/makefile_test_target/rustflags.rs` holds all four to that composition
 and to their individual policies.
 
+The Whitaker route composes none of them. `lint-whitaker` runs Whitaker on its
+installer-managed toolchain, which must not inherit the development flags, so
+each command goes through `env -u CARGO_ENCODED_RUSTFLAGS` and assigns
+`RUSTFLAGS="-D warnings"` as its own value. The assignment matters: with
+`RUSTFLAGS` unset, Cargo still reads the configuration's `rustflags` tables and
+the route would carry the parallel frontend and the `mold` flag. The same test
+module parses the recipe and asserts that the route clears the encoded flags,
+assigns the warning policy alone, and composes no contracted variable.
+
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
 records the policy decision, and the [polonius migration notes](polonius.md)
 track every site whose design depends on the analysis. Sites tagged
@@ -5292,11 +5301,14 @@ them.
 
 ### Composition rules
 
-- **Quality gates.** `make lint`, `make lint-clippy`, `make lint-whitaker`,
-  `make test`, and `make typecheck` run on the standard, on the repository's
-  pinned nightly from `rust-toolchain.toml`. They are gated on
-  `make check-build-tools`, so they stop with an installation hint rather than
-  a codegen-backend error. `make check-fmt` compiles nothing and is unaffected.
+- **Quality gates.** `make lint`, `make lint-clippy`, `make test`, and
+  `make typecheck` run on the standard, on the repository's pinned nightly from
+  `rust-toolchain.toml`. `make lint-whitaker` is the exception: it runs on the
+  installer-managed Whitaker toolchain, clears `CARGO_ENCODED_RUSTFLAGS`, and
+  assigns `RUSTFLAGS="-D warnings"` alone, as does the Windows lint job. They
+  are gated on `make check-build-tools`, so they stop with an installation hint
+  rather than a codegen-backend error. `make check-fmt` compiles nothing and is
+  unaffected.
 - **`RUSTFLAGS`.** `make test-nextest`, `make doctest`, `make typecheck`, and
   the rustdoc and Clippy stages of `make lint` append `-D warnings` *and* the
   standard's flags to whatever the caller set. An externally set `RUSTFLAGS`

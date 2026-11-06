@@ -119,6 +119,7 @@ fn behavioural_every_rustflags_assignment_is_a_contracted_variable() -> Result<(
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
     let declared: BTreeSet<String> = makefile
         .lines()
+        .filter(|line| !runs_whitaker(line))
         .filter(|line| line.contains(RUSTFLAGS_PREFIX))
         .map(|line| line.trim().to_owned())
         .collect();
@@ -150,6 +151,7 @@ fn behavioural_every_recipe_sets_rustflags_through_a_contracted_variable() -> Re
     let offenders: Vec<&str> = makefile
         .lines()
         .filter(|line| line.starts_with('\t') && line.contains("RUSTFLAGS"))
+        .filter(|line| !runs_whitaker(line))
         .filter(|line| {
             !RUSTFLAGS_VARIABLES
                 .iter()
@@ -178,13 +180,7 @@ fn behavioural_every_recipe_sets_rustflags_through_a_contracted_variable() -> Re
 #[test]
 fn behavioural_the_gate_variable_reaches_every_gate_recipe() -> Result<()> {
     let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    for target in [
-        "test-nextest",
-        "doctest",
-        "lint-clippy",
-        "lint-whitaker",
-        "typecheck",
-    ] {
+    for target in ["test-nextest", "doctest", "lint-clippy", "typecheck"] {
         let recipe = target_recipe(&makefile, target)
             .with_context(|| format!("Makefile should declare a {target} target"))?;
         ensure!(
@@ -193,6 +189,13 @@ fn behavioural_the_gate_variable_reaches_every_gate_recipe() -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Whether a recipe line runs the Whitaker suite. Whitaker builds on its own
+/// installer-managed toolchain, so it is the one route that composes none of
+/// the contracted variables.
+fn runs_whitaker(line: &str) -> bool {
+    line.starts_with('\t') && line.contains("$(WHITAKER)")
 }
 
 // Declared last, as in `test_support/src/fs.rs`: the module's own model reads

@@ -209,13 +209,14 @@ directive anywhere.
     RUSTDOCFLAGS="--cfg docsrs -D warnings" cargo doc --workspace --no-deps
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
-    RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
-    whitaker --all -- --all-targets --all-features
+    env -u CARGO_ENCODED_RUSTFLAGS RUSTFLAGS="-D warnings" \
+    whitaker --all --no-deps --package netsuke-build -- --all-targets --all-features
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint
     ```
 
-    The Makefile composes that `RUSTFLAGS` value from one variable.
+    The Makefile composes the rustdoc and Clippy `RUSTFLAGS` value from one
+    variable; the Whitaker line takes neither it nor the caller's flags.
     `-Clink-arg=-fuse-ld=mold` is Linux-only, so every sample in this section
     drops it elsewhere — macOS and Windows use their platform linker and the
     value ends `-D warnings -Zthreads=8`. Only that one flag is platform-gated;
