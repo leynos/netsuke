@@ -2317,8 +2317,16 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   one in a command substitution or backticks. Netsuke also rejects a marker
   that directly follows an unpaired backslash, because that backslash would
   escape the first character of the substituted path; write `\\{{ outs }}` to
-  keep one literal backslash, or place the marker inside single quotes. In
-  PowerShell `command:` and `script:` recipes, markers are valid only at
+  keep one literal backslash, or place the marker inside single quotes. A
+  heredoc delimiter is read as the shell reads it: the word ends only at a
+  blank, a newline, or a shell operator, so Unicode whitespace stays inside the
+  delimiter, and a delimiter form Netsuke cannot model safely is rejected
+  rather than guessed. An unquoted delimiter leaves the body subject to shell
+  expansion, so a body line continued with a trailing backslash is joined to
+  the next line before Netsuke looks for the delimiter; a quoted delimiter
+  suppresses that joining. A `<<` inside a `$(( ))` arithmetic expansion is a
+  left shift, not a heredoc, so arithmetic expressions pass through unchanged.
+  In PowerShell `command:` and `script:` recipes, markers are valid only at
   unquoted sites. Netsuke rejects markers in single-quoted strings,
   double-quoted strings, here-strings, `$()`, and immediately after a backtick.
   Netsuke rejects markers in the raw native-command region after PowerShell's

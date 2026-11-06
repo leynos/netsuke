@@ -129,6 +129,83 @@ Netsuke does not expose Ninja's own `$in` and `$out` rule variables. Resolved
 paths are baked into each content-hashed rule, so Ninja never substitutes a
 path into a recipe.
 
+### Heredoc delimiters end only at POSIX word boundaries
+
+The heredoc tracker must agree with the selected shell about where a delimiter
+word ends. POSIX ends an unquoted word only at a blank (space or tab), a
+newline, or one of the operator characters `;`, `|`, `&`, `(`, `)`, `<`, and
+`>`. Every other character, including Unicode whitespace such as no-break
+space, em space, vertical tab, form feed, and carriage return, is ordinary word
+text. The predicate is `is_word_terminator`, built on `is_posix_blank`, in
+`src/ir/cmd_interpolate/posix_lexical/mod.rs`.
+
+This is a security boundary, not a formatting preference. `<<EOF<nbsp>suffix`
+declares the delimiter `EOF<nbsp>suffix`, so a line reading `EOF` does not end
+the body. A tracker that treated the no-break space as a separator would end
+the body at that line and resume marker lowering inside text the shell still
+holds as heredoc data. An unquoted heredoc body undergoes parameter and command
+expansion, so a path lowered there is re-evaluated by the shell, and backticks
+inside a filename remain executable even when the recipe quotes the marker.
+Word-boundary agreement prevents the premature exit; the general marker rules
+in this document then keep the rest of the contract.
+
+Delimiter forms whose quote removal the tracker cannot reproduce, or whose text
+it does not model, are rejected rather than approximated. Rejection is
+fail-closed: the recipe fails at IR-lowering time with
+`IrGenError::InvalidCommand` and the localized `ir.invalid_command` message,
+whose snippet names the reason (for example,
+`unsupported heredoc delimiter syntax: unclosed quote`). The rejected forms are
+a missing delimiter, a leading unquoted `#` (which the shell reads as a
+comment), an unclosed quote, a trailing backslash, an unquoted
+backslash-newline line continuation, and an unescaped `$` or backtick outside
+single quotes. Rendered-delimiter substitution is re-parsed under the same
+rules, so a lowered path that would introduce any of these forms is rejected
+too. This is a deliberate narrowing of what the tracker accepts. `<<$DELIM` and
+`` <<`delim` `` are valid declarations: the shell applies quote removal to the
+delimiter word and performs no parameter or command expansion on it, so it
+looks for a line reading literally `$DELIM` or `` `delim` ``. The tracker does
+not model those literal forms, and `<<#EOF` is a syntax error because the shell
+reads `#` as the start of a comment. Those forms, and a delimiter with an
+unclosed quote, now fail closed instead of being copied. The forms that remain
+supported are `<<EOF`, `<<-EOF`, `<<'EOF'`, `<<"EOF"`, `<<E"O"F`, `<<\EOF`,
+`<<''`, and non-ASCII delimiters that use no blank, newline, or operator
+character. `<<<` is a here-string, not a heredoc, so its operator is copied and
+no body is queued.
+
+`<<` inside a `$(( ))` arithmetic expansion is the left-shift operator, not a
+heredoc declaration, so heredoc tracking is suspended for the whole arithmetic
+body. Both traversals record whether a `$(` opened an arithmetic expansion and
+skip heredoc detection while the innermost active substitution is arithmetic.
+Without that rule the tracker queues a delimiter from the rest of the
+arithmetic expression and consumes the following line as body text, which
+leaves the marker on that line unlowered. A nested `$( )` inside an arithmetic
+expansion pushes a non-arithmetic frame, so heredocs declared by a genuine
+nested command substitution are still tracked.
+
+### Heredoc bodies end only at the shell's logical lines
+
+The tracker must also agree with the shell about which line ends a body. An
+unquoted delimiter leaves the body subject to parameter and command expansion,
+and a shell removes backslash-newline throughout such a body before it looks
+for the terminator. A physical line ending in an odd number of backslashes is
+therefore only a fragment: the shell joins it to the next physical line, and
+only the completed logical line can end the body. `HeredocBody` accumulates
+that logical line, strips a leading tab for `<<-` only at the start of a
+logical line, and compares the result with the delimiter.
+
+This is the same security boundary as word termination. Matching physical lines
+would end the body before the shell does — `prefix\` followed by an `EOF` line
+forms `prefixEOF`, which is not the delimiter — and marker lowering would
+resume inside text the shell still expands, where backticks in an inserted path
+remain executable. The joining rule closes that path and keeps the general
+marker rules in this document in force.
+
+A quoted delimiter suppresses expansion, and with it backslash-newline joining,
+so those bodies compare physical lines. An even run of trailing backslashes
+leaves the newline unescaped and is likewise compared as a physical line. Both
+controls, the joining cases, and their `<<-` tab-stripping variants are covered
+by regressions through both traversals and the real-Ninja path.
+
 ### Backtick handling is two mechanisms at two different strengths
 
 The mechanisms are not the same kind of thing and are not promised equally.
