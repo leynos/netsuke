@@ -7573,13 +7573,12 @@ to telemetry.
 
 The runner-internal `GraphGenerationContext` in
 `src/runner/graph/generation/mod.rs` groups the selected `RecipeShell`, an
-optional preflighted `InterpreterExecutable`, and injected monotonic clock
-for the graph-generation composition path. The build runner also uses that
-clock to measure its Ninja invocation. Build, Ninja-tool, and CLI `generate`
-operations attach the runtime binding after preflight; query-only target
-discovery leaves it absent. It is not a general runner context, shared state
-container, or reusable public API; keep unrelated runner inputs and concerns
-outside it.
+optional preflighted `InterpreterExecutable`, and injected monotonic clock for
+the graph-generation composition path. The build runner also uses that clock to
+measure its Ninja invocation. Build, Ninja-tool, and CLI `generate` operations
+attach the runtime binding after preflight; query-only target discovery leaves
+it absent. It is not a general runner context, shared state container, or
+reusable public API; keep unrelated runner inputs and concerns outside it.
 
 The intended serial guarantee is path-scoped. A later dependency that is
 independently reachable elsewhere in the requested graph may start via that
