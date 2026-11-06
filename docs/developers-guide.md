@@ -989,9 +989,11 @@ The lowering stages have deliberately separate responsibilities:
   without a resolvable Bash runtime fails with the missing-runtime diagnostic
   and writes no unbound plan, where it previously emitted the bare name
   `bash.exe` for later `PATH` resolution. Library generators that take no
-  binding reject PowerShell and Bash commands with
-  `NinjaGenError::InterpreterBindingRequired`. Runner build plans contain the
-  selected absolute path and assume that executable remains available there.
+  binding resolve the platform default first: on Windows they bind the trusted
+  PowerShell executable, so PowerShell commands render, while Bash commands
+  there and every PowerShell or Bash command on other platforms are rejected
+  with `NinjaGenError::InterpreterBindingRequired`. Runner build plans contain
+  the selected absolute path and assume that executable remains available there.
 - The brace-group, `eval`, background-job, and `exec` validation rules described
   above apply only to Unix and the explicit Windows Bash compatibility route.
   PowerShell uses its per-entry `$LASTEXITCODE` and cmdlet-error policy
