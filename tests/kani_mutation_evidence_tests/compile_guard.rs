@@ -18,10 +18,10 @@
 //! Patches are applied to an isolated copy of the working tree, exported by
 //! [`sandbox`], rather than to the checkout the test is running in: reverting
 //! happens on the normal path, but it cannot be what the developer's checkout
-//! depends on. [`sandbox`] gives the mechanism, and why a timed-out run can
-//! strand a mutation it never reverts. The parent contract
-//! `every_patch_applies_cleanly` reads the working tree too, so the two agree
-//! on which tree they describe.
+//! depends on. [`sandbox`] gives the isolation mechanism and [`applied_patch`]
+//! the apply/revert pairing, including why a timed-out run can strand a
+//! mutation it never reverts. The parent contract `every_patch_applies_cleanly`
+//! reads the working tree too, so the two agree on which tree they describe.
 //!
 //! # Why Kani compiles the tree, not `cargo check`
 //!
@@ -39,12 +39,13 @@
 //! that motivated this gate and the `cfg(kani)`-gated ones `cargo check` cannot
 //! see. `make kani-full` remains responsible for model codegen and proofs.
 
-use std::process::Command;
+use std::process::{Command, Output};
 
 use anyhow::{Context, Result, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
+use super::applied_patch::AppliedPatch;
 use super::discovery::{MUTATIONS_DIR, is_git_work_tree, manifest_dir};
 use super::sandbox::Sandbox;
 
@@ -63,122 +64,10 @@ pub(super) const SHARED_TARGET_DIR: &str = "target/kani-mutation-compile";
 /// caller's environment changed.
 const DENY_WARNINGS: &str = "-D warnings";
 
-/// Apply `patch` to the sandbox, then revert it — explicitly on the normal
-/// path, and through `Drop` when unwinding.
-///
-/// Both paths matter and they are not interchangeable. The explicit
-/// [`Self::revert`] makes a failed reverse a test failure, so a run cannot
-/// report success with a seeded mutation left behind; `Drop` covers the panic
-/// — or early return from a failed assertion — that would otherwise strand a
-/// mutation for every later patch to trip over.
-///
-/// The revert is now a tidiness step rather than a safety one. What it
-/// protects is the sandbox itself, which the next `create` replaces wholesale,
-/// so a mutation that survives this run cannot reach the developer's checkout.
-struct AppliedPatch<'a> {
-    /// Repository-relative path of the patch that was applied.
-    ///
-    /// This names the patch within the *sandbox*, which is what `git apply`
-    /// resolves against when the sandbox is the working directory.
-    patch: &'a Utf8Path,
-    /// The sandboxed tree the patch is applied to, and its isolation env.
-    ///
-    /// Both halves are needed by every `git` call this type makes: the tree
-    /// is the working directory, and the env is what stops `git` walking up
-    /// from it into the real checkout.
-    sandbox: &'a Sandbox,
-    /// True while the patch is still applied to the sandbox.
-    ///
-    /// Cleared by [`Self::revert`] so the `Drop` fallback does not attempt a
-    /// second reverse, which would fail and log a spurious error on every
-    /// successful patch.
-    applied: bool,
-}
-
-impl<'a> AppliedPatch<'a> {
-    /// Apply `patch` to the sandbox, failing when it does not apply.
-    fn apply(patch: &'a Utf8Path, sandbox: &'a Sandbox) -> Result<Self> {
-        run_git_apply(["apply", patch.as_str()], patch, sandbox, "apply")?;
-        Ok(Self {
-            patch,
-            sandbox,
-            applied: true,
-        })
-    }
-
-    /// Revert the patch, propagating a failure to the caller.
-    ///
-    /// Reverting here rather than relying on `Drop` is what stops a failed
-    /// reverse from passing quietly: without it the test returns `Ok(())` and
-    /// the sandbox keeps a mutation nothing reports, which would then be
-    /// compiled into every later patch's tree.
-    ///
-    /// `applied` is cleared only when the reverse actually succeeded, so a
-    /// failure leaves the flag set and `Drop` still attempts the reverse as
-    /// the run unwinds. Clearing it unconditionally would disable that retry
-    /// at the one moment it is wanted, turning a recoverable failure into a
-    /// lingering mutation.
-    fn revert(mut self) -> Result<()> {
-        let outcome = run_git_apply(
-            ["apply", "--reverse", self.patch.as_str()],
-            self.patch,
-            self.sandbox,
-            "reverse",
-        );
-        if outcome.is_ok() {
-            self.applied = false;
-        }
-        outcome
-    }
-}
-
-impl Drop for AppliedPatch<'_> {
-    fn drop(&mut self) {
-        if !self.applied {
-            return;
-        }
-        if let Err(err) = run_git_apply(
-            ["apply", "--reverse", self.patch.as_str()],
-            self.patch,
-            self.sandbox,
-            "reverse",
-        ) {
-            // A panic is already unwinding when this runs, so the failure is
-            // reported rather than raised: replacing the panic's message with
-            // a revert error would hide the defect that caused it.
-            tracing::error!("failed to revert {patch}: {err}", patch = self.patch);
-        }
-    }
-}
-
-/// Run one `git apply`-family invocation against the sandbox.
-///
-/// The working directory is the sandbox tree, and the environment carries the
-/// ceiling that keeps `git` from walking out of it, so a patch can only ever
-/// be applied to the copy.
-fn run_git_apply<const N: usize>(
-    args: [&str; N],
-    patch: &Utf8Path,
-    sandbox: &Sandbox,
-    action: &str,
-) -> Result<()> {
-    let output = Command::new("git")
-        .args(args)
-        .current_dir(sandbox.tree())
-        .envs(sandbox.isolation_env())
-        .output()
-        .with_context(|| format!("run git apply to {action} {patch}"))?;
-    ensure!(
-        output.status.success(),
-        "git apply to {action} {patch} failed: {}",
-        String::from_utf8_lossy(&output.stderr).trim(),
-    );
-    Ok(())
-}
-
 /// Compile a sandbox tree with Kani under `-D warnings`.
 ///
-/// Return `None` on success or stderr on failure; both ignored tests share it.
+/// Return `None` on success or the failure output on failure; both ignored
+/// tests share it.
 ///
 /// Invoked through the Kani frontend rather than `cargo check`, for the reason
 /// the module docs give: only Kani parses `#[cfg(kani)]` code, so only Kani can
@@ -189,6 +78,7 @@ fn run_git_apply<const N: usize>(
 /// The build runs in the sandbox, so the ceiling travels with it: `cargo kani`
 /// shells out to `git` for workspace metadata, and an unceiled invocation
 /// would find the real checkout instead of the copy it is compiling.
+///
 /// # Errors
 ///
 /// Returns an error if Cargo cannot start or its output cannot be collected.
@@ -213,9 +103,21 @@ pub(super) fn compile_kani_tree(tree: &Sandbox, target: &Utf8Path) -> Result<Opt
     if output.status.success() {
         return Ok(None);
     }
-    Ok(Some(
-        String::from_utf8_lossy(&output.stderr).trim().to_owned(),
-    ))
+    Ok(Some(failure_output(&output)))
+}
+
+/// Join the diagnostics Kani prints with the progress Cargo prints.
+///
+/// Kani renders rustc's diagnostics on standard output and leaves only Cargo's
+/// progress and summary on standard error, so a failure has to report both.
+/// The diagnostics are what name a seeded fault; the summary is what says which
+/// crate failed. Reading either stream alone loses one of the two, and a
+/// diagnostics stream read from the wrong one is exactly how a seeded fault
+/// once looked like an unrelated rejection.
+fn failure_output(output: &Output) -> String {
+    let diagnostics = String::from_utf8_lossy(&output.stdout);
+    let progress = String::from_utf8_lossy(&output.stderr);
+    format!("{}\n{}", diagnostics.trim(), progress.trim())
 }
 
 /// List every mutation patch in the sandbox, repository-relative, sorted.
@@ -363,8 +265,8 @@ fn every_patched_tree_compiles_under_denied_warnings() -> Result<()> {
     let mut unreverted = Vec::new();
     for patch in patch_paths(&sandbox)? {
         let applied = AppliedPatch::apply(&patch, &sandbox)?;
-        if let Some(stderr) = compile_kani_tree(&sandbox, &target_dir)? {
-            broken.push(format!("{patch}: {stderr}"));
+        if let Some(failure) = compile_kani_tree(&sandbox, &target_dir)? {
+            broken.push(format!("{patch}: {failure}"));
         }
         // Reverted through the fallible path, not left to `Drop`: a reverse
         // that fails must fail the test, or a run reports success while the

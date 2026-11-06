@@ -27,6 +27,8 @@
 // reach their own `<stem>/` directory the same way, and a bare `mod` is
 // reserved for shared trees (`support`, `fixtures`, `common`) that really do
 // sit directly under `tests/`.
+#[path = "kani_mutation_evidence_tests/applied_patch.rs"]
+mod applied_patch;
 #[path = "kani_mutation_evidence_tests/compile_guard.rs"]
 mod compile_guard;
 #[path = "kani_mutation_evidence_tests/contracts.rs"]
