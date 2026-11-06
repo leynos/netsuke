@@ -157,3 +157,18 @@ fn power_shell_commands_preserve_hashes_inside_argument_tokens(#[case] argument:
 
     assert_eq!(actual, format!("Write-Output {argument} 'out'"));
 }
+
+/// Keep the POSIX `case` boundary check out of the PowerShell traversal.
+///
+/// `case` is not a PowerShell keyword, so a `)` followed by `#` carries no
+/// pattern-terminator ambiguity there. The POSIX fail-closed rule must not
+/// reject a PowerShell recipe that merely contains those characters.
+#[test]
+fn power_shell_keeps_quoted_case_boundary_accepted() {
+    let template = format!("Write-Output \"$(case x in x)#\" {OUTS_TOKEN}");
+    let bindings = CommandBindings::new(&[], &[Utf8PathBuf::from("out")], RecipeShell::PowerShell);
+    let actual = interpolate_command_with_bindings(&template, &bindings)
+        .expect("PowerShell has no case-pattern ambiguity at a ')#' boundary");
+
+    assert_eq!(actual, "Write-Output \"$(case x in x)#\" 'out'");
+}

@@ -325,14 +325,12 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
                     return Ok(None);
                 };
                 if is_closed {
-                    let is_unquoted = self.active_quote_context() == ShellQuoteContext::Unquoted;
                     reject_ambiguous_case_comment(
                         self.chars,
                         self.template,
                         &SubstitutionBoundary {
                             pos,
                             start: closed_start,
-                            is_unquoted,
                         },
                     )?;
                     self.closed_command_substitution = Some(pos);

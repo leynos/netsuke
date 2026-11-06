@@ -44,8 +44,13 @@ pub(super) struct SubstitutionBoundary {
     pub(super) pos: usize,
     /// The `$` that opened the substitution, when this `)` closed it.
     pub(super) start: Option<usize>,
-    /// Whether the closing `)` sits outside shell quotes.
-    pub(super) is_unquoted: bool,
+}
+
+impl SubstitutionBoundary {
+    /// Record the `)` at `pos` and the substitution opener it closed, if any.
+    pub(super) const fn new(pos: usize, start: Option<usize>) -> Self {
+        Self { pos, start }
+    }
 }
 
 /// Reject a `)#` boundary whose `)` may terminate a `case` pattern.
@@ -55,6 +60,11 @@ pub(super) struct SubstitutionBoundary {
 /// after it starts a comment. The two are lexically identical without the
 /// `case` grammar, so a substitution containing `case` fails closed rather than
 /// guessing and encoding a later marker for the wrong context.
+///
+/// The enclosing quote context is deliberately not consulted. A substitution
+/// is parsed as its own script, so outer double quotes do not extend into it
+/// and cannot make the boundary unambiguous. Callers that model a shell
+/// without `case` patterns decide for themselves whether to call this.
 ///
 /// # Errors
 ///
@@ -67,7 +77,7 @@ pub(super) fn reject_ambiguous_case_comment(
     let Some(start) = boundary.start else {
         return Ok(());
     };
-    let is_comment_boundary = boundary.is_unquoted && chars.get(boundary.pos + 1) == Some(&'#');
+    let is_comment_boundary = chars.get(boundary.pos + 1) == Some(&'#');
     if is_comment_boundary && contains_case_keyword(chars, start, boundary.pos) {
         return Err(invalid_command_error(template.to_owned()));
     }

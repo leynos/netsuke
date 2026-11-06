@@ -242,29 +242,29 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
                 self.output.push(ch);
                 Ok(Some(pos + 1))
             }
-            CommandSubstitutionDelimiter::Close => {
-                let closed_start = self
-                    .command_substitutions
-                    .last()
-                    .filter(|substitution| substitution.parenthesis_depth == 1)
-                    .map(|substitution| substitution.start);
-                if self.decrement_command_substitution_parenthesis_depth() {
-                    let is_unquoted = self.matches_unquoted_quote_context();
-                    reject_ambiguous_case_comment(
-                        self.chars,
-                        self.template,
-                        &SubstitutionBoundary {
-                            pos,
-                            start: closed_start,
-                            is_unquoted,
-                        },
-                    )?;
-                    self.closed_command_substitution = Some(pos);
-                }
-                self.output.push(ch);
-                Ok(Some(pos + 1))
-            }
+            CommandSubstitutionDelimiter::Close => self.close_substitution(pos, ch),
         }
+    }
+
+    /// Close one substitution level and reject an ambiguous `case` boundary.
+    fn close_substitution(&mut self, pos: usize, ch: char) -> Result<Option<usize>, IrGenError> {
+        let closed_start = self
+            .command_substitutions
+            .last()
+            .filter(|substitution| substitution.parenthesis_depth == 1)
+            .map(|substitution| substitution.start);
+        if self.decrement_command_substitution_parenthesis_depth() {
+            // PowerShell has no `case` patterns; keep its unquoted-only rule.
+            if self.bindings.shell != RecipeShell::PowerShell
+                || self.matches_unquoted_quote_context()
+            {
+                let boundary = SubstitutionBoundary::new(pos, closed_start);
+                reject_ambiguous_case_comment(self.chars, self.template, &boundary)?;
+            }
+            self.closed_command_substitution = Some(pos);
+        }
+        self.output.push(ch);
+        Ok(Some(pos + 1))
     }
 
     /// Classify a character that delimits an active command substitution.

@@ -300,6 +300,22 @@ fn case_pattern_close_before_hash_fails_closed() {
     );
 }
 
+/// Verify an outer-quoted substitution is still checked for the `case` ambiguity.
+///
+/// The enclosing double quotes do not extend into `$(...)`: the shell parses a
+/// substitution as its own script, so a `)` there that may terminate a `case`
+/// pattern is just as ambiguous as an unquoted one. Deciding from the quote
+/// context read after the substitution is popped would skip the rejection and
+/// let a `#` comment inside the pattern flip the scanner's quote state.
+#[test]
+fn case_pattern_close_inside_outer_quotes_fails_closed() {
+    let template = format!("echo \"$(case x in x)# {OUTS_TOKEN}\"");
+    assert_both_reject(
+        &template,
+        "an outer-quoted case pattern terminator before '#' must fail closed",
+    );
+}
+
 /// Verify a non-ASCII character keeps a heredoc delimiter word intact.
 ///
 /// The delimiter is `EOF` followed by a no-break space and `X`, so the body
