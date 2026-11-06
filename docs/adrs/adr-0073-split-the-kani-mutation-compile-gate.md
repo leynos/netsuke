@@ -97,7 +97,8 @@ both shapes.
 
 - The negative check compiles three trees, so it adds two compiles to the
   prewarm's invocation. They reuse the warm target, but a cold runner pays for
-  them inside the same 900 s allowance as the prewarm.
+  them inside the negative check's own 900 s allowance; the shared target
+  shortens them rather than granting the check a second budget.
 - The seeded faults are appended to `src/lib.rs`, so a future change that makes
   the library root a thin re-export module would need the faults moved to
   whichever module the Kani frontend actually parses.

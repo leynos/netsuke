@@ -5929,22 +5929,24 @@ only changed line is a `cfg(kani)` match arm,
 Kani's model-checking backend. The mutation gate catches frontend and warning
 failures; `make kani-full` performs the model codegen and verification.
 
-Both tests carry a `slow-timeout` in `.config/nextest.toml`, fifteen 60-second
-periods rather than the profile's five. The prewarm pays the cold dependency
-build once; the sweep compiles the patched trees into the same
-`target/kani-mutation-compile` directory, which `kani-cache` does not restore.
-The cold dependency build and the patch sweep together exhausted the cap before
-the sweep finished, so splitting the work gives each invocation its own timer
-while preserving incremental reuse. The older CI measurements still show why a
-larger per-test budget was needed: two runs passed at 257.7 s and 261.5 s, and
-a third failed at 300.008 s. The widened allowance is bounded from above by the
-whole-run budget: the ordering requires `global-timeout` strictly above the
-largest per-test allowance. The Kani prewarm and sweep each get 900 s, the
-largest allowance in the file; every other test uses the 300 s default because
-ADR-0059 moved the compiler work that once needed 900 s out of the suite. At 60
-s periods, 960 s would permit at most fifteen periods (900 s) while remaining
-strictly below the whole-run budget. An allowance of 960 s would equal that
-budget, and the run could end before the test used its allowance.
+All three tests carry a `slow-timeout` in `.config/nextest.toml`, fifteen
+60-second periods rather than the profile's five. The prewarm pays the cold
+dependency build once; the negative check compiles two deliberately broken
+trees into the same directory; the sweep compiles the patched trees into the
+same `target/kani-mutation-compile` directory, which `kani-cache` does not
+restore. The cold dependency build and the patch sweep together exhausted the
+cap before the sweep finished, so splitting the work gives each invocation its
+own timer while preserving incremental reuse. The older CI measurements still
+show why a larger per-test budget was needed: two runs passed at 257.7 s and
+261.5 s, and a third failed at 300.008 s. The widened allowance is bounded from
+above by the whole-run budget: the ordering requires `global-timeout` strictly
+above the largest per-test allowance. The Kani prewarm, negative-compile check,
+and sweep each get 900 s, the largest allowance in the file; every other test
+uses the 300 s default because ADR-0059 moved the compiler work that once
+needed 900 s out of the suite. At 60 s periods, 960 s would permit at most
+fifteen periods (900 s) while remaining strictly below the whole-run budget. An
+allowance of 960 s would equal that budget, and the run could end before the
+test used its allowance.
 
 That widening was inert when it first landed, which is why the override is
 worth reading as a worked example of the trap above. Its filter named the bare
@@ -6355,8 +6357,9 @@ governs the non-doctest pass only, and deliberately stays small:
   allowance. The remaining targeted allowances stay below the 960s CI whole-run
   cap; none adds retries or widens timeouts for unrelated tests. The explicit
   `make test-kani-mutations` target is the bounded exception: its ignored
-  prewarm test pays the cold Kani frontend build, and its separate ignored
-  sweep reuses that target directory.
+  prewarm test pays the cold Kani frontend build, its ignored negative-compile
+  check proves that same path rejects a seeded fault, and its separate ignored
+  sweep reuses the target directory.
 - **One serialized child-Cargo group.** Tests that spawn their own Cargo build
   join `nested-cargo-builds`, whose `max-threads = 1` stops four Nextest
   workers from each starting a four-job build on four vCPUs. Membership is
