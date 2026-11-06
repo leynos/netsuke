@@ -2321,7 +2321,12 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   heredoc delimiter is read as the shell reads it: the word ends only at a
   blank, a newline, or a shell operator, so Unicode whitespace stays inside the
   delimiter, and a delimiter form Netsuke cannot model safely is rejected
-  rather than guessed. An unquoted delimiter leaves the body subject to shell
+  rather than guessed. The rejected forms are a missing delimiter, a leading
+  unquoted `#`, an unclosed quote, a trailing backslash, an unquoted
+  backslash-newline continuation, and an unquoted `$` or backtick. Write the
+  delimiter immediately after `<<` or `<<-`, close every quote, keep the whole
+  word on one line, and quote any part that must survive literally, as in
+  `<<'$DELIM'`. An unquoted delimiter leaves the body subject to shell
   expansion, so a body line continued with a trailing backslash is joined to
   the next line before Netsuke looks for the delimiter; a quoted delimiter
   suppresses that joining. A `<<` inside a `$(( ))` arithmetic expansion is a

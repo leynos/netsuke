@@ -237,11 +237,11 @@ active recipe text; see the note below).
 
 [^inert]: On POSIX and Bash routes, markers in comments and heredoc bodies
     remain internal tokens instead of becoming paths; markers in heredoc
-    delimiters are expanded. A heredoc delimiter ends only where the shell ends
-    it — at a blank, a newline, or a shell operator — so Unicode whitespace
-    stays inside the delimiter, and a delimiter form Netsuke cannot model
-    safely is rejected rather than guessed. A `<<` inside a `$(( ))` arithmetic
-    expansion is a left shift, not a heredoc. Both PowerShell `command:` and
+    delimiters are expanded. A `<<` inside a `$(( ))` arithmetic expansion is a
+    left shift, not a heredoc. See the
+    [users' guide safety boundary](docs/users-guide.md#review-the-safety-boundary)
+    for the heredoc delimiter and body rules, including the forms Netsuke
+    rejects. Both PowerShell `command:` and
     `script:` recipes reject markers in single-quoted strings, double-quoted
     strings, here-strings,
     `$()` and immediately after a backtick. A marker touching any PowerShell

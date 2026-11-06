@@ -223,6 +223,11 @@ ci-dessous).
 [^inert]: Sur les routes POSIX et Bash, Netsuke copie les marqueurs présents
     dans les commentaires et le corps des heredocs comme des jetons internes, sans
     les développer ; les marqueurs des délimiteurs de heredoc sont développés.
+    Un `<<` dans une expansion arithmétique `$(( ))` est un décalage à gauche,
+    pas un heredoc. Voir le
+    [limite de sécurité du guide de l'utilisateur](docs/users-guide.md#review-the-safety-boundary)
+    pour les règles des délimiteurs et des corps de heredoc, y compris les
+    formes rejetées.
     Les recettes PowerShell `command:` et `script:` rejettent les marqueurs entre
     guillemets simples ou doubles, dans les here-strings, dans `$()` et juste après
     un accent grave. Un marqueur adjacent à un caractère de guillemet simple

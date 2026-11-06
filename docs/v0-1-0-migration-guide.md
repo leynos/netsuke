@@ -132,6 +132,7 @@ impact
 | Script shell variables       | **Breaking:** `$in` and `$out` in `script:` recipes are shell variables, as they already were in `command:` recipes. Use `{{ ins }}` and `{{ outs }}` for Netsuke path substitution.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | [Script shell variables](#replace-script-in-and-out-path-substitution)                                                   |
 | Build graph                  | **Breaking for callers of the unstable Rust API:** each logical build edge is stored once and indexed by output through `EdgeId`; `BuildGraph::targets` is no longer public.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [Graph accessors](#resolve-build-graph-outputs-through-the-accessors)                                                    |
 | Cycle detection              | **Breaking:** cycles through `sources`, `deps`, or `order_only_deps` are rejected during IR validation, even when Ninja would not be asked to build the affected target. Remove latent prerequisite cycles; the whole manifest is checked before Ninja starts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Dependency and build-graph semantics](users-guide.md#dependency-and-build-graph-semantics)                              |
+| POSIX heredoc delimiters     | **Breaking:** a delimiter form whose quote removal Netsuke cannot reproduce now fails closed instead of being copied: a missing delimiter, a leading unquoted `#`, an unclosed quote, a trailing backslash, a line continuation, and an unquoted `$` or backtick. Quote the literal part instead, for example `<<'$DELIM'`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | [Heredoc delimiters](#update-heredoc-delimiters-the-tracker-cannot-model)                                                |
 
 ## Remove order-only dependency cycles
 
@@ -289,6 +290,42 @@ defaults: [output.txt]
 further quoting is needed. See the
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
 the full marker contract.
+
+## Update heredoc delimiters the tracker cannot model
+
+Netsuke tracks POSIX heredoc bodies so it never lowers a path marker into text
+the shell still expands. The tracker now reproduces the shell's own word and
+line rules and fails closed instead of copying a delimiter it cannot model. A
+recipe that used one of the rejected forms below now fails at IR lowering with
+an `ir.invalid_command` diagnostic naming the reason, for example
+`unsupported heredoc delimiter syntax: unclosed quote`.
+
+- **Missing delimiter**, or a leading unquoted `#` that the shell reads as a
+  comment: `cat <<` and `cat <<#EOF`. Write the delimiter immediately after
+  `<<` or `<<-`, and keep comments on their own line.
+- **Unclosed quote**: `cat <<'EOF`. Close every quote in the word, as in
+  `cat <<'EOF'`.
+- **Trailing backslash**, or an unquoted backslash-newline continuation:
+  `cat <<EOF\` and a delimiter split across two lines. Write the whole
+  delimiter on one line.
+- **Unquoted `$` or backtick**: `cat <<$DELIM` and `` cat <<`delim` ``. Quote
+  the part that must stay literal, as in `cat <<'$DELIM'` or
+  `` cat <<'`delim`' ``.
+
+The first two entries also apply to a rendered delimiter: if a marker inside
+the delimiter lowers to a path that would introduce one of these forms, Netsuke
+rejects the substitution too.
+
+Two rules are unchanged in intent and now stated explicitly. A delimiter word
+ends only at a POSIX blank, a newline, or a shell operator, so Unicode
+whitespace such as a no-break space stays inside the delimiter and a line
+reading only the visible prefix does not end the body. A `<<` inside a `$(( ))`
+arithmetic expansion is a left shift, not a heredoc, so arithmetic expressions
+pass through unchanged.
+
+See the
+[users' guide safety boundary](users-guide.md#review-the-safety-boundary) for
+the full heredoc contract.
 
 ## Resolve build-graph outputs through the accessors
 
