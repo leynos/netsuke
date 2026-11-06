@@ -96,22 +96,25 @@ fn timed_out(deadline: Duration) -> io::Error {
 }
 
 /// Read a child pipe to its end on a thread of its own.
-fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> Receiver<Vec<u8>> {
+fn drain<R: Read + Send + 'static>(pipe: Option<R>) -> Receiver<io::Result<Vec<u8>>> {
     let (sender, receiver) = mpsc::channel();
     std::thread::spawn(move || {
         let mut bytes = Vec::new();
-        if let Some(mut reader) = pipe {
-            // What was read is all the diagnostics there are; a read error ends it.
-            reader.read_to_end(&mut bytes).ok();
-        }
-        sender.send(bytes).ok();
+        let outcome = match pipe {
+            Some(mut reader) => reader.read_to_end(&mut bytes).map(|_| bytes),
+            None => Ok(bytes),
+        };
+        sender.send(outcome).ok();
     });
     receiver
 }
 
 /// Take a drained pipe's bytes within what remains of the deadline.
+///
+/// A read error is returned rather than dropped: diagnostics cut short by one
+/// must not pass as the child's complete output.
 fn collect(
-    reader: &Receiver<Vec<u8>>,
+    reader: &Receiver<io::Result<Vec<u8>>>,
     started: Instant,
     deadline: Duration,
 ) -> io::Result<Vec<u8>> {
@@ -120,7 +123,7 @@ fn collect(
         .map_err(|error| match error {
             RecvTimeoutError::Timeout => timed_out(deadline),
             RecvTimeoutError::Disconnected => io::Error::other("a pipe reader thread panicked"),
-        })
+        })?
 }
 
 #[cfg(all(test, unix))]
@@ -197,6 +200,24 @@ mod tests {
         assert!(output.status.success());
         assert_eq!(output.stdout.len(), SIZE);
         assert_eq!(output.stderr.len(), SIZE);
+    }
+
+    #[test]
+    fn a_pipe_read_error_is_reported_not_dropped() {
+        struct Broken;
+        impl Read for Broken {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::new(io::ErrorKind::BrokenPipe, "the pipe broke"))
+            }
+        }
+
+        let reader = drain(Some(Broken));
+        let outcome = collect(&reader, Instant::now(), Duration::from_secs(20));
+
+        assert!(
+            matches!(&outcome, Err(error) if error.kind() == io::ErrorKind::BrokenPipe),
+            "a read error must reach the caller, got {outcome:?}",
+        );
     }
 
     #[test]
