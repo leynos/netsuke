@@ -4440,3 +4440,13 @@ reported facts unchanged. The hand-off harness gains a whole-job rehearsal
 case, and the action contract gains timing and candidate-output mutations that
 prove the new assertions detect a reverted wiring. Stage C remains partial; no
 live exchange or release has been exercised.
+
+The eleven local gates passed sequentially on the final candidate: formatting,
+lint, documentation coverage (98.30%, 6,663/6,778), typecheck, Rust tests
+(5,071 passed, 7 skipped, plus 46 doctests), release-publication tests (641
+passed), workflow contracts (1,734 passed, 3 skipped, plus 28 script-helper
+checks), documentation contracts (15 passed, 48 skipped), Markdown lint (0
+issues in 215 files), spelling with no generated-configuration drift, and
+Mermaid validation (all diagrams valid). The action's exit-trap timing and its
+six new outputs remain unexercised by a hosted run; the first release workflow
+run on this head is what will exercise them.
