@@ -248,9 +248,7 @@ def test_downloaded_digests_downloads_into_its_own_directory() -> None:
     """Pass an explicit destination so a download cannot land in the checkout."""
     runner = RecordingRunner()
     _ = downloaded_digests("v1", ["a.deb"], runner=runner)
-    assert "--dir" in runner.calls[0], (
-        "the download must name its own destination"
-    )
+    assert "--dir" in runner.calls[0], "the download must name its own destination"
 
 
 def test_a_failed_download_leaves_the_digest_unknown() -> None:
@@ -284,9 +282,7 @@ def test_downloaded_digests_never_reports_a_digest_it_did_not_compute() -> None:
 def test_downloaded_digests_of_nothing_launches_nothing() -> None:
     """Establish no digest for no name without paying for a download."""
     runner = RecordingRunner()
-    assert downloaded_digests("v1", [], runner=runner) == {}, (
-        "no name means no digest"
-    )
+    assert downloaded_digests("v1", [], runner=runner) == {}, "no name means no digest"
     assert not runner.calls, "no name means no subprocess"
 
 
