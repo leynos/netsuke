@@ -147,11 +147,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// cannot terminate a pattern of an inner one.
     fn observe_case_word(&mut self, pos: usize, ch: char) {
         let is_unquoted = self.matches_unquoted_quote_context();
-        let chars = self.chars;
+        let next = self.chars.get(pos + 1).copied();
         if let Some(substitution) = self.command_substitutions.last_mut() {
-            substitution
-                .case_nesting
-                .observe(chars, pos, ch, is_unquoted);
+            substitution.case_nesting.observe(ch, next, is_unquoted);
         }
     }
 
@@ -174,25 +172,46 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             self.output.push(ch);
             return Ok(Some(pos + 1));
         }
-        let closing = self
-            .command_substitutions
-            .last()
-            .filter(|substitution| substitution.parenthesis_depth == 1)
-            .map(|substitution| (substitution.start, substitution.case_nesting.saw_case()));
-        let (closed_start, saw_case) =
-            closing.map_or((None, false), |(start, saw)| (Some(start), saw));
+        let boundary = self.boundary_at(pos);
         if self.decrement_command_substitution_parenthesis_depth() {
-            // PowerShell has no `case` patterns; keep its unquoted-only rule.
-            if self.bindings.shell != RecipeShell::PowerShell
-                || self.matches_unquoted_quote_context()
-            {
-                let boundary = SubstitutionBoundary::new(pos, closed_start, saw_case);
-                reject_ambiguous_case_comment(self.chars, &boundary)?;
-            }
+            self.reject_ambiguous_boundary(&boundary)?;
             self.closed_command_substitution = Some(pos);
         }
         self.output.push(ch);
         Ok(Some(pos + 1))
+    }
+
+    /// Describe the substitution boundary that the `)` at `pos` may close.
+    ///
+    /// The description is captured before the depth is decremented, because
+    /// closing the substitution discards the state the report is built from.
+    fn boundary_at(&self, pos: usize) -> SubstitutionBoundary {
+        self.command_substitutions
+            .last()
+            .filter(|substitution| substitution.parenthesis_depth == 1)
+            .map_or_else(
+                || SubstitutionBoundary::new(pos, None, false),
+                |substitution| {
+                    SubstitutionBoundary::new(
+                        pos,
+                        Some(substitution.start),
+                        substitution.case_nesting.saw_case(),
+                    )
+                },
+            )
+    }
+
+    /// Reject a `)#` boundary that the active shell cannot disambiguate.
+    ///
+    /// PowerShell has no `case` patterns, so its ambiguity only arises in an
+    /// unquoted region; POSIX and Bash always check.
+    fn reject_ambiguous_boundary(&self, boundary: &SubstitutionBoundary) -> Result<(), IrGenError> {
+        let is_checked =
+            self.bindings.shell != RecipeShell::PowerShell || self.matches_unquoted_quote_context();
+        if is_checked {
+            reject_ambiguous_case_comment(self.chars, boundary)?;
+        }
+        Ok(())
     }
 
     /// Classify a character that delimits an active command substitution.
