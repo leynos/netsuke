@@ -339,6 +339,22 @@ fn case_pattern_close_before_hash_fails_closed() {
     );
 }
 
+/// Verify the ambiguity guard still fires beyond the diagnostic snippet.
+///
+/// The invalid-command diagnostic quotes only the first 160 characters of the
+/// recipe, so a boundary that sits later must still be found by the traversal.
+/// Reading the boundary from the truncated message instead of the source would
+/// accept this recipe and encode a later marker for the wrong context.
+#[test]
+fn case_pattern_close_beyond_diagnostic_snippet_fails_closed() {
+    let padding = format!("echo {} $(case x in\nx)", "x".repeat(200));
+    let (template, _) = inert_comment_case(&padding, Some("esac)"));
+    assert_both_reject(
+        &template,
+        "an ambiguous case boundary beyond the snippet must fail closed",
+    );
+}
+
 /// Verify an outer-quoted substitution is still checked for the `case` ambiguity.
 ///
 /// The enclosing double quotes do not extend into `$(...)`: the shell parses a
