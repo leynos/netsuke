@@ -669,6 +669,13 @@ binding on edges that did not opt in, so a shared rule does not widen console
 scheduling: only the edges the manifest selected with `console: true` run in
 the console pool.
 
+Callers that build the IR directly select the same scheduling through
+`BuildEdge::output_visibility`: `EdgeOutputVisibility::Immediate` behaves as
+`console: true` for that edge, and `EdgeOutputVisibility::Buffered` behaves as
+omitting the field. `Action::pool` is a separate IR field with no manifest
+counterpart; a custom pool on an action whose edge selects the console pool is
+rejected at generation time, so clear the pool or set it to `console`.
+
 Outside JSON mode, Netsuke forwards Ninja output as it reads it. Netsuke does
 not provide a pseudo-terminal: the recipe sees a pipe, and visibility still
 depends on the recipe flushing its own output. JSON mode suppresses subprocess

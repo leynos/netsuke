@@ -40,8 +40,10 @@ look healthy and the gate would prove nothing.
 
 - The cold dependency build must not consume the patch sweep's allowance.
 - The sweep's "every patch compiles" result must not be vacuous.
-- The whole gate must stay inside the `kani-smoke` job's 30-minute
-  `timeout-minutes`.
+- The whole gate is expected to finish inside the `kani-smoke` job's
+  30-minute `timeout-minutes`, which is an outer backstop rather than a
+  promise. The per-test allowances bound each test's own duration; they do not
+  add up to a guaranteed combined bound.
 - No test the default suite runs may start a Cargo build (ADR-0059).
 
 ## Options Considered
