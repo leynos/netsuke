@@ -662,6 +662,12 @@ one at a time in one invocation. While one such edge runs, Ninja buffers
 progress and output from other edges, so enabling the field can reduce parallel
 build throughput.
 
+An action can also name `console` as its own `pool`. Ninja inherits rule
+bindings by edge, so every edge generated from that rule would otherwise join
+the console pool. Netsuke clears the inherited binding on edges that did not
+opt in themselves, so a shared rule does not widen console scheduling: only the
+edges the manifest selected run in the console pool.
+
 Outside JSON mode, Netsuke forwards Ninja output as it reads it. Netsuke does
 not provide a pseudo-terminal: the recipe sees a pipe, and visibility still
 depends on the recipe flushing its own output. JSON mode suppresses subprocess
@@ -1951,6 +1957,26 @@ configured graph rather than the edges Ninja actually executed, so it measures
 intent, not pool occupancy. The same fields appear on the `runner.ninja.build`
 span, whose `outcome` and `error_category` are recorded when the invocation
 returns.
+
+#### Bounded bundle-generation metrics
+
+Each runner-owned dyndep bundle generation records three bounded series in the
+drained `metrics snapshot`:
+
+- `netsuke_ninja_dyndep_bundle_generations_total` — a counter labelled with
+  `outcome` (`success` or `error`), `error_category`, and `console_scheduling`
+  (`enabled` or `disabled`).
+- `netsuke_ninja_dyndep_bundle_generation_duration_seconds` — a histogram with
+  the same three labels, recording wall-clock duration in seconds.
+- `netsuke_ninja_dyndep_bundle_console_edges_total` — a counter labelled with
+  `outcome` only, adding the number of configured console-enabled edges in the
+  graph the bundle describes.
+
+`error_category` is a bounded vocabulary rather than a message: `none` on
+success, and otherwise the generator failure class, such as `missing_action`,
+`console_pool_conflict`, or `reserved_output_path`. The same fields appear on
+the `runner.ninja.dyndep_bundle.generate` span, together with the aggregate
+graph counts.
 
 #### Bounded output-forwarding metrics
 

@@ -47,7 +47,8 @@ no changes. See the
 
 The next pre-release (`v0.1.0-beta5`) adds the opt-in `console` field for
 actions and targets. It selects Ninja's special console pool for that build
-edge, which runs alone and holds back progress from other edges. Netsuke
+edge. Ninja runs one console edge at a time; other edges keep running, but
+Ninja buffers their output and progress while a console edge is active. Netsuke
 forwards Ninja's output as it reads it outside JSON mode, but recipes receive a
 pipe rather than a PTY and may buffer their own output. See the
 [console-pool guidance][console].
