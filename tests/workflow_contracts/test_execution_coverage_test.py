@@ -253,6 +253,36 @@ def test_only_the_kani_profile_has_an_extended_mutation_budget() -> None:
     )
 
 
+def test_the_kani_prewarm_is_scheduled_before_its_negative_check() -> None:
+    """Keep the prewarm ahead of the negative check in their shared invocation.
+
+    The `nested-cargo-builds` group serializes the two tests but does not order
+    them, so the priority is what puts the prewarm first. Without it a cold
+    target charges the dependency build to the negative check's allowance,
+    which is the cost the split exists to avoid.
+    """
+    config = tomllib.loads(
+        (REPO_ROOT / ".config" / "nextest.toml").read_text(encoding="utf-8")
+    )
+    priorities = {
+        override["filter"]: override.get("priority", 0)
+        for override in config["profile"]["default"]["overrides"]
+    }
+    prewarm = "test(/^prewarm::prewarm_kani_mutation_target($|::)/)"
+    negative = (
+        "test(/^negative::compile_kani_tree_rejects_trees_that_do_not_compile($|::)/)"
+    )
+    assert priorities[prewarm] == 1, (
+        f"the prewarm must retain priority 1, got {priorities[prewarm]!r}"
+    )
+    assert priorities[prewarm] > priorities[negative], (
+        "the prewarm must be scheduled before the negative check that shares "
+        "its invocation"
+    )
+
+
+
+
 
 
 def test_packaging_list_check_compiles_nothing() -> None:
