@@ -22,14 +22,22 @@ pub(super) struct CommandSubstitution {
     pub(super) quote_context: QuoteContext,
     /// Count this substitution's opening parenthesis and nested grouped forms.
     pub(super) parenthesis_depth: usize,
+    /// Record whether the body is a `$(( ))` arithmetic expansion.
+    pub(super) is_arithmetic_expansion: bool,
 }
 
 impl CommandSubstitution {
     /// Initialise the state required after a `$(` delimiter.
-    pub(super) const fn new() -> Self {
+    ///
+    /// `is_arithmetic_expansion` records whether the delimiter was `$((`, so a
+    /// caller can keep arithmetic operators such as `<<` away from shell
+    /// heredoc tracking. Arithmetic bodies expand numbers, so they never hold
+    /// a heredoc declaration.
+    pub(super) const fn new(is_arithmetic_expansion: bool) -> Self {
         Self {
             quote_context: QuoteContext::Unquoted,
             parenthesis_depth: 1,
+            is_arithmetic_expansion,
         }
     }
 }

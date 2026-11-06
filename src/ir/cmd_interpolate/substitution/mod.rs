@@ -3,9 +3,10 @@
 use super::{
     CommandBindings, IrGenError, QuoteContext,
     command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
-    find_substitution, invalid_command_error,
+    find_substitution, invalid_command_error, invalid_heredoc_delimiter_error,
     posix_lexical::{
-        EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
+        EscapeBeforeMarker, HeredocDeclaration, PosixCharacter, PosixLexicalState,
+        backslash_escapes_marker,
     },
 };
 use crate::recipe_shell::RecipeShell;
@@ -125,7 +126,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
         let next = self.append_contextual_character(pos, ch, Self::posix_marker_protection)?;
         if ch == '\n' {
-            self.posix_lexical.begin_pending_heredoc_after_newline(next);
+            self.posix_lexical.begin_pending_heredoc_after_newline();
         }
         Ok(next)
     }
@@ -135,13 +136,16 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// # Errors
     ///
     /// Returns an invalid-command error when a heredoc delimiter would lower a
-    /// marker directly after an active escape.
+    /// marker directly after an active escape, or when the delimiter word uses
+    /// syntax the tracker cannot model. Continuing would let marker lowering
+    /// resume inside text the shell still treats as heredoc data, where command
+    /// substitutions in inserted paths remain executable.
     fn append_unquoted_posix_lexical_character(
         &mut self,
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
-        if !self.matches_unquoted_quote_context() {
+        if !self.matches_unquoted_quote_context() || self.is_in_arithmetic_expansion() {
             return Ok(None);
         }
         let mut character = PosixCharacter {
@@ -150,12 +154,19 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             ch,
             output: &mut self.output,
         };
-        let declaration_end = self
+        let declaration = self
             .posix_lexical
             .append_heredoc_declaration(&mut character, self.bindings)
             .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
-        if let Some(next) = declaration_end {
-            return Ok(Some(next));
+        match declaration {
+            HeredocDeclaration::NotADeclaration => {}
+            HeredocDeclaration::Copied(next) => return Ok(Some(next)),
+            HeredocDeclaration::Rejected(reason) => {
+                return Err(invalid_heredoc_delimiter_error(
+                    self.template.to_owned(),
+                    reason,
+                ));
+            }
         }
         if PosixLexicalState::starts_comment(self.chars, pos, ch) {
             self.posix_lexical.begin_comment();
@@ -212,7 +223,9 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
         match self.classify_command_substitution_delimiter(pos, ch)? {
             CommandSubstitutionDelimiter::Start => {
-                self.command_substitutions.push(CommandSubstitution::new());
+                self.command_substitutions.push(CommandSubstitution::new(
+                    self.starts_arithmetic_expansion(pos),
+                ));
                 self.output.push_str("$(");
                 Some(pos + 2)
             }
@@ -250,6 +263,23 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
     /// Report whether `ch` starts a POSIX or PowerShell `$()` expression.
     fn starts_command_substitution(&self, pos: usize, ch: char) -> bool {
         ch == '$' && self.chars.get(pos + 1) == Some(&'(')
+    }
+
+    /// Report whether the `$(` at `pos` opens an arithmetic expansion.
+    fn starts_arithmetic_expansion(&self, pos: usize) -> bool {
+        self.chars.get(pos + 2) == Some(&'(')
+    }
+
+    /// Report whether the innermost active substitution is arithmetic.
+    ///
+    /// An arithmetic body evaluates numbers, so `<<` there is a shift
+    /// operator. Heredoc tracking must not run inside one: the tracker would
+    /// invent a body the shell never starts and end it at a line that is still
+    /// inside an expansion.
+    fn is_in_arithmetic_expansion(&self) -> bool {
+        self.command_substitutions
+            .last()
+            .is_some_and(|substitution| substitution.is_arithmetic_expansion)
     }
 
     /// Report whether `ch` opens a grouped expression inside a `$()` region.
