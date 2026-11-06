@@ -568,7 +568,35 @@ jobs:
         # Another step on this lane rather than a second execution in
         # `build-test`, which runs its suite once; `kani-smoke` is exempt from
         # that rule for steps like this and the scope-wrapper step above.
-        run: make test-kani-check-isolation
+        #
+        # Ubuntu 24.04 ships `kernel.apparmor_restrict_unprivileged_userns=1`,
+        # which makes `unshare --user` fail at `write /proc/self/uid_map` before
+        # the sandbox script runs at all. That is a host policy, not a defect in
+        # the boundary, so the step lifts it for its own duration and restores
+        # it afterwards. A host that will not let the restriction be lifted
+        # cannot exercise the boundary, and says so rather than reporting a
+        # sandbox failure that never reached the sandbox.
+        run: |
+          set -u
+          restriction=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          restore_restriction=0
+          if [ -e "$restriction" ] && [ "$(cat "$restriction")" = 1 ]; then
+            if ! sudo --non-interactive sysctl --write \
+              kernel.apparmor_restrict_unprivileged_userns=0; then
+              reason='cannot lift the AppArmor unprivileged-userns restriction'
+              printf '::error::%s, so the kani-check boundary cannot be exercised\n' \
+                "$reason"
+              exit 1
+            fi
+            restore_restriction=1
+          fi
+          status=0
+          make test-kani-check-isolation || status=$?
+          if [ "$restore_restriction" = 1 ]; then
+            sudo --non-interactive sysctl --write \
+              kernel.apparmor_restrict_unprivileged_userns=1 || true
+          fi
+          exit "$status"
       - name: Mark proof start
         if: steps.scope.outputs.run-proofs == 'true'
         env:
