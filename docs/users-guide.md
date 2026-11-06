@@ -2360,8 +2360,11 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   does not start a comment. A `)` that ends a `case` pattern is an operator,
   and the scanner cannot distinguish it from one that closes a substitution, so
   a substitution containing the `case` reserved word is rejected when a `)` is
-  immediately followed by `#`. A non-breaking space or another non-ASCII space
-  before `#` does not start a comment, so a quote after it still opens or
+  immediately followed by `#`. That check matches the substitution's raw source
+  text, so it can also reject a substitution whose `case` appears only inside
+  quotes or a comment; that over-approximation keeps the check independent of a
+  second parse of the substitution. A non-breaking space or another non-ASCII
+  space before `#` does not start a comment, so a quote after it still opens or
   closes a quoted region. Netsuke also rejects a marker that directly follows
   an unpaired backslash, because that backslash would escape the first
   character of the substituted path; write `\\{{ outs }}` to keep one literal
