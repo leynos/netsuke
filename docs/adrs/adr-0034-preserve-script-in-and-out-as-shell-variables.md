@@ -81,7 +81,7 @@ backtick or command-substitution rejection for markers.
 - Script token matching:
   [`src/ir/cmd_interpolate/mod.rs`](../../src/ir/cmd_interpolate/mod.rs)
 - Script traversal:
-  [`src/ir/cmd_interpolate/script_substitution.rs`](../../src/ir/cmd_interpolate/script_substitution.rs)
+  [`src/ir/cmd_interpolate/script_substitution/mod.rs`](../../src/ir/cmd_interpolate/script_substitution/mod.rs)
 - Backend escaping: [`src/ninja_gen_escape.rs`](../../src/ninja_gen_escape.rs)
 - Regression coverage:
   [`tests/ninja_dollar_escaping_tests.rs`](../../tests/ninja_dollar_escaping_tests.rs)
