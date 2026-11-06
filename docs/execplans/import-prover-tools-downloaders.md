@@ -313,11 +313,14 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       findings, with no confirmed functional defect. It confirms that the
       current hosted Kani run verified all 15 harnesses and reported successful
       mutation metrics. The two local scoped `make kani-ir` attempts remain
-      inconclusive after their eight-minute caps. Review #5743914948 covers
-      head `15f413bac8fcda6a96c344261125aeddbfd2f774`; resolve its two findings,
-      publish the repairs, and reconcile the summary and pre-merge rows for the
-      resulting head. The CodeRabbit review check reports completion, but its
-      review decision requests changes until those findings are addressed.
+      inconclusive after their eight-minute caps. Review #5743914948 covered
+      head `15f413bac8fcda6a96c344261125aeddbfd2f774`, and its two findings are
+      repaired and published in the candidate. The follow-up triage
+      [#6684528489](https://github.com/leynos/netsuke/pull/1063#issuecomment-6684528489)
+      asked for an isolation boundary test for `kani-check` and two
+      documentation corrections; this revision supplies all three.
+      Reconciling the summary and pre-merge rows for the resulting head remains
+      open.
 - [ ] EP-M3: Complete trusted-main warm-cache acceptance and PR
       assessment/delivery. The candidate-bound assessment confirms the
       functional requirements; hosted warm-cache evidence remains open because
@@ -522,9 +525,9 @@ final candidate, including 4,950 nextest tests, all doctests, 1,669 workflow
 contracts, 90 CI-script tests, seven prover-tools integration tests, and 98.23%
 doc coverage. The exact-base CodeScene delta reports no new findings, the new
 edge-test file scores 10.0 with no review findings, and the hosted CodeScene
-check reports six quality gates passed. Publication of this repair,
-current-head review reconciliation, and trusted-main warm-cache acceptance
-remain open.
+check reports six quality gates passed. The repair is published in the
+candidate. Current-head review reconciliation and trusted-main warm-cache
+acceptance remain open.
 
 ## Context and orientation
 
