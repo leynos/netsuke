@@ -42,10 +42,14 @@ exercise environment resolution. Inject the resolved fake executable through
 
 ```rust
 use netsuke::runner;
+use netsuke::cli::Cli;
+use netsuke::display_plan::{resolve_display_plan, TerminalFacts};
 use test_support::fake_ninja;
 
 let (_ninja_dir, ninja_path) = fake_ninja(0)?;
-runner::run_with_ninja_program(&cli, output_prefs, &ninja_path)?;
+let cli = Cli::default();
+let display_plan = resolve_display_plan(cli.display_policies(), TerminalFacts::default());
+runner::run_with_ninja_program(&cli, display_plan, &ninja_path)?;
 # Ok::<(), anyhow::Error>(())
 ```
 

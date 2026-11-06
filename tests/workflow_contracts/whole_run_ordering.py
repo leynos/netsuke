@@ -1,11 +1,9 @@
 """The rule a configured whole-run budget has to satisfy.
 
-`.config/nextest.toml` sets one ``global-timeout``, so the contract over
-it exercises this rule at a single point and would agree with every rule
-that happens to accept that point. The rule therefore lives here, taking
-its configuration and its lanes as parameters, and is driven with
-configurations this repository does not have in
-``whole_run_ordering_test``, including one omitting the key entirely.
+`.config/nextest.toml` has separate coverage and Kani profiles. Coverage
+watchdogs are checked against the coverage profile's effective test budgets;
+the rule also runs against configurations that exercise missing and invalid
+values in ``whole_run_ordering_test``.
 
 Read by ``ty`` and run by pytest; runtime annotation introspection is not
 supported here, because these annotations name ``TYPE_CHECKING``-only imports
@@ -21,7 +19,11 @@ from nextest_budgets import (
     largest_test_allowance,
     termination_allowance,
 )
-from timeout_budgets import COLD_BUILD_ALLOWANCE_SECONDS, REPORT_PHASE_ALLOWANCE_SECONDS
+from timeout_budgets import (
+    CAPPED_PROFILE,
+    COLD_BUILD_ALLOWANCE_SECONDS,
+    REPORT_PHASE_ALLOWANCE_SECONDS,
+)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -86,7 +88,7 @@ def whole_run_ordering_faults(
 
 def _per_test_faults(config_text: str, whole_run: fractions.Fraction) -> list[str]:
     """Return the fault, if any, in the whole run against one test."""
-    largest = largest_test_allowance(config_text)
+    largest = largest_test_allowance(config_text, profile=CAPPED_PROFILE)
     if whole_run > largest:
         return []
     message = (

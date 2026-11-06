@@ -11,13 +11,12 @@ use std::borrow::Cow;
 use unicode_width::UnicodeWidthStr;
 
 use crate::cli::{Cli, configured_command};
+use crate::display_plan::DisplayPlan;
 use crate::json_envelope::{GeneratorInfo, SCHEMA_VERSION};
 use crate::localization::{self, keys};
-use crate::output_mode;
-use crate::output_prefs::{self, OutputPrefs};
+use crate::output_prefs::OutputPrefs;
 use crate::status::{LocalizationKey, PipelineStage, StatusReporter, report_pipeline_stage};
 use crate::terminal_text::terminal_safe;
-use crate::theme::ThemeContext;
 
 use super::{RunnerError, process};
 use telemetry::instrument_help_targets;
@@ -44,6 +43,7 @@ use query::{HelpEntry, HelpTargetsQueryFailure, query_help_targets};
 pub(super) fn handle_help_targets(
     cli: &Cli,
     edges: bool,
+    plan: DisplayPlan,
     reporter: &dyn StatusReporter,
 ) -> Result<()> {
     if edges && !cli.json {
@@ -69,7 +69,7 @@ pub(super) fn handle_help_targets(
         let rendered = render_json(&query.entries, query.graph.as_ref())?;
         process::write_text_stdout(&rendered)?;
     } else {
-        let rendered = render_text(&query.entries, resolved_prefs(cli));
+        let rendered = render_text(&query.entries, resolved_prefs(plan));
         process::write_text_stdout(&rendered)?;
     }
     reporter.report_complete(status_key);
@@ -118,14 +118,9 @@ pub(super) fn render_subcommand_help(name: &str) -> Result<()> {
     process::write_text_stdout(&text)
 }
 
-/// Resolve the same output preferences the rest of the CLI uses, so emoji and
-/// accessibility settings drive the catalogue's marker glyph.
-fn resolved_prefs(cli: &Cli) -> OutputPrefs {
-    let mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
-    output_prefs::resolve_from_theme(
-        cli.theme_preference(),
-        ThemeContext::new(None, Some(cli.color), mode),
-    )
+/// Return the theme preferences already selected by the display plan.
+const fn resolved_prefs(plan: DisplayPlan) -> OutputPrefs {
+    plan.prefs()
 }
 
 /// Render the text catalogue: an "Actions:" section followed by a "Targets:"

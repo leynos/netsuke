@@ -2,34 +2,15 @@
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-#[cfg(unix)]
-use cap_std::fs::PermissionsExt;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 use netsuke::runner::NINJA_ENV;
 use rstest::fixture;
 use std::path::Path;
 use tempfile::{TempDir, tempdir};
+pub(super) use test_support::ninja_script::write_fake_ninja_script;
 
 #[cfg(unix)]
-fn make_script_executable(dir: &Dir, path: &Utf8Path) -> Result<()> {
-    let mut permissions = dir
-        .metadata(path)
-        .with_context(|| format!("read metadata for {path}"))?
-        .permissions();
-    permissions.set_mode(0o755);
-    dir.set_permissions(path, permissions)
-        .with_context(|| format!("set executable bit for {path}"))?;
-    Ok(())
-}
-
-#[cfg(not(unix))]
-#[expect(
-    clippy::unnecessary_wraps,
-    reason = "the fallible signature must match the Unix variant so the shared call site needs no platform-specific handling"
-)]
-const fn make_script_executable(_dir: &Dir, _path: &Utf8Path) -> Result<()> {
-    Ok(())
-}
+use crate::command_list_failure_support::FAILURE_PREFIX;
 
 #[fixture]
 pub(super) fn temp_with_minimal_manifest() -> Result<TempDir> {
@@ -55,41 +36,54 @@ pub(super) fn open_workspace(temp: &TempDir) -> Result<Dir> {
         .with_context(|| format!("open temporary workspace {workspace_path}"))
 }
 
-/// Return a stable diagnostic fragment with its fingerprints replaced.
 #[cfg(unix)]
-pub(super) fn normalized_diagnostic_fragment(
-    message: &str,
-    identifying_field: &str,
-) -> Option<String> {
-    let line = message
-        .lines()
-        .find(|line| line.contains(identifying_field))?;
-    let start = line.find(identifying_field)?;
-    Some(normalize_fingerprints(line.get(start..)?))
-}
-
-/// Select the rendered human error and replace its action fingerprint.
-#[cfg(unix)]
-pub(super) fn normalized_human_error_fragment(
-    message: &str,
-    failure_prefix: &str,
-) -> Option<String> {
-    let error = human_error_fragment(message, failure_prefix)?;
-    let diagnostic_start = error.find("ninja exited with")?;
-    Some(normalize_fingerprints(error.get(diagnostic_start..)?))
-}
-
-/// Return the rendered human error line carrying command-list attribution.
-#[cfg(unix)]
-pub(super) fn human_error_fragment<'message>(
+pub(super) struct CommandListDiagnostics<'message> {
     message: &'message str,
-    failure_prefix: &str,
-) -> Option<&'message str> {
-    message.lines().find(|line| {
-        line.contains("Error:")
-            && line.contains("ninja exited with")
-            && line.contains(failure_prefix)
-    })
+}
+
+#[cfg(unix)]
+impl<'message> CommandListDiagnostics<'message> {
+    /// Wrap captured output for command-list diagnostic projections.
+    pub(super) const fn new(message: &'message str) -> Self {
+        Self { message }
+    }
+
+    /// Return the rendered human error line carrying command-list attribution.
+    pub(super) fn human_error_fragment(&self) -> Option<&'message str> {
+        self.message.lines().find(|line| {
+            line.contains("Error:")
+                && line.contains("ninja exited with")
+                && line.contains(FAILURE_PREFIX)
+        })
+    }
+
+    /// Return a stable human error fragment with its fingerprint replaced.
+    pub(super) fn normalized_human_error_fragment(&self) -> Option<String> {
+        let error = self.human_error_fragment()?;
+        let diagnostic_start = error.find("ninja exited with")?;
+        Some(normalize_fingerprints(error.get(diagnostic_start..)?))
+    }
+
+    /// Return a stable JSON failure marker with its fingerprint replaced.
+    pub(super) fn normalized_failure_marker_fragment(&self) -> Option<String> {
+        let line = self
+            .message
+            .lines()
+            .find(|line| line.contains(FAILURE_PREFIX))?;
+        let start = line.find(FAILURE_PREFIX)?;
+        Some(normalize_fingerprints(line.get(start..)?))
+    }
+
+    /// Return a stable tracing action field with its fingerprint replaced.
+    pub(super) fn normalized_tracing_fragment(&self) -> Option<String> {
+        const ACTION_FIELD: &str = "command_list_action=";
+        let line = self
+            .message
+            .lines()
+            .find(|line| line.contains(ACTION_FIELD))?;
+        let start = line.find(ACTION_FIELD)?;
+        Some(normalize_fingerprints(line.get(start..)?))
+    }
 }
 
 /// Replace every fixed-width hexadecimal fingerprint in a diagnostic fragment.
@@ -121,49 +115,6 @@ fn normalize_fingerprints(fragment: &str) -> String {
     };
     normalized.push_str(suffix);
     normalized
-}
-
-pub(super) fn write_fake_ninja_script(
-    dir: &Dir,
-    path: &Utf8Path,
-    stdout_lines: &[&str],
-    stderr_marker: Option<&str>,
-) -> Result<()> {
-    let script = if cfg!(windows) {
-        let mut script = String::from("@echo off\r\n");
-        for line in stdout_lines {
-            script.push_str("echo ");
-            script.push_str(line);
-            script.push_str("\r\n");
-        }
-        if let Some(marker) = stderr_marker {
-            script.push_str("echo ");
-            script.push_str(marker);
-            script.push_str(" 1>&2\r\n");
-        }
-        script.push_str("exit /B 0\r\n");
-        script
-    } else {
-        let mut script = String::from(
-            "#!/bin/sh\nwhile IFS= read -r line; do\n  printf '%s\\n' \"$line\"\ndone <<'NETSUKE_OUTPUT'\n",
-        );
-        for line in stdout_lines {
-            script.push_str(line);
-            script.push('\n');
-        }
-        script.push_str("NETSUKE_OUTPUT\n");
-        if let Some(marker) = stderr_marker {
-            script.push_str("printf '%s\\n' '");
-            script.push_str(marker);
-            script.push_str("' >&2\n");
-        }
-        script.push_str("exit 0\n");
-        script
-    };
-
-    dir.write(path, script)
-        .with_context(|| format!("write fake ninja script {path}"))?;
-    make_script_executable(dir, path)
 }
 
 pub(super) fn fake_ninja_name(stem: &str) -> String {

@@ -384,21 +384,19 @@ jobs:
       ${{ (github.event.pull_request.head.repo.fork
       || github.event.pull_request.user.login == 'dependabot[bot]')
       && 'ubuntu-latest' || 'ubicloud-standard-2-ubuntu-2404' }}
-    # Thirty minutes, not twenty. The compile gate at the end of this job
+    # Sixty minutes, not thirty. The compile gate at the end of this job
     # builds the whole dependency graph through the Kani frontend, and a cold
     # `CARGO_TARGET_DIR` plus the frontend's own toolchain download is what the
     # ceiling has to contain. See "Test timeouts: the tiers this repository
     # sets" in docs/developers-guide.md.
     #
-    # The ceiling also contains that gate's own slow-timeout, which is ten
-    # 60-second periods rather than the profile's five because the default
-    # allowance sits too near the gate's cost for a runner to decide. A job
-    # whose gate burned the whole raised allowance would still land inside the
-    # ceiling: the measured job is 776s with the gate costing 257.7s of it, so
-    # the work outside the gate is 518s, and 518s + 600s is 1,118s against
-    # 1,800s. That is why raising the per-test allowance needed no change here;
-    # a ceiling that no longer contained it would be the fault to check for.
-    timeout-minutes: 30
+    # Run 41840367244 spent 824s before nextest started the mutation test and
+    # hit the former 600s test cap. A later local run also reached the 900s
+    # cap without a compiler diagnostic. The Kani profile now allows 2,400s
+    # for the test and 2,520s for the full nextest run; including the measured
+    # 824s setup and 7s finalisation totals 3,351s. The 3,600s job ceiling leaves
+    # 249s for runner variance and post-step reporting.
+    timeout-minutes: 60
     permissions:
       contents: read
     env:

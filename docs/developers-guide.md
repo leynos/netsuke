@@ -120,8 +120,12 @@ The public runner signatures preserve that path vocabulary:
   invokes a build with the CLI's process options.
 - `run_ninja_tool(program: &Utf8Path, cli: &Cli, build_file: &Utf8Path, tool: &str)`
   invokes a Ninja tool with the CLI's process options.
-- `run_with_ninja_program(cli: &Cli, prefs: OutputPrefs, program: &Utf8Path)`
+- `run_with_ninja_program(cli: &Cli, plan: DisplayPlan, program: &Utf8Path)`
   runs the selected command with a caller-supplied Ninja executable.
+
+The application composition root builds the `DisplayPlan` once from
+`Cli::display_policies()` and captured environment and terminal facts. Runner
+adapters consume the plan instead of resolving output preferences themselves.
 
 The process boundary is parser-independent; callers without CLI state construct
 `NinjaProcessOptions` directly.
@@ -702,12 +706,13 @@ warning can be emitted before the effective diagnostic mode — human or JSON �
 is known, yet the JSON diagnostic document is also written to stderr: an
 eagerly emitted warning could corrupt it. `StartupWriter` in
 `src/startup_tracing/mod.rs` closes that window. It implements
-`tracing_subscriber`'s `MakeWriter` and is installed by `init_tracing` in
-`src/main.rs` before locale resolution runs, so every startup event is held
-rather than written. The buffer is bounded at `MAX_BUFFERED_BYTES` (64 KiB): it
-keeps the earliest bytes, appends a truncation marker once if the bound is
-reached, and drops the remainder, so its size never depends on how much a run
-emits.
+`tracing_subscriber`'s `MakeWriter` and is installed by the `main` entrypoint
+through `main_tracing::init_tracing` in `src/main_tracing/mod.rs`, after `main`
+captures stderr's terminal status and before locale resolution runs. Every
+startup event is held rather than written. The buffer is bounded at
+`MAX_BUFFERED_BYTES` (64 KiB): it keeps the earliest bytes, appends a
+truncation marker once if the bound is reached, and drops the remainder, so its
+size never depends on how much a run emits.
 
 `settle_startup_diagnostics` in `src/main.rs` decides where the buffer goes
 once the effective mode is known: human mode releases it to stderr, JSON mode
@@ -5961,36 +5966,32 @@ reports the tree healthy while `cargo kani` rejects that same tree with
 `cfg(kani)` with verification skipped, so it subsumes the check it replaced
 rather than joining it.
 
-It carries its own `slow-timeout` in `.config/nextest.toml`, ten 60-second
-periods rather than the profile's five, because the default allowance is too
-small for it rather than merely tight. The test compiles into
-`target/kani-mutation-compile`, which no cache restores — `kani-cache` holds
-the Kani payloads, not a build tree — so every run pays a cold build of the
-whole dependency graph plus 18 incremental recompiles, and how long that takes
-is the host's to decide. Two CI runs passed at 257.7 s and 261.5 s; a third
-failed at 300.008 s on a head whose only difference was eight lines of
-Markdown. A 38 s margin is not a budget but the difference between two runners,
-and the failure then names nextest's cap rather than the patch that was slow.
-The widened allowance is bounded from above by the whole-run budget: the
-ordering requires `global-timeout` strictly above the largest per-test
-allowance. The mutation gate's 600 s is now the largest allowance in the file;
-every other test uses the 300 s default because ADR-0059 moved the compiler
-work that once needed 900 s out of the suite. At 60 s periods, 960 s would
-permit at most fifteen periods (900 s) while remaining strictly below the
-whole-run budget. An allowance of 960 s would equal that budget, and the run
-could end before the test used its allowance.
+The mutation compile gate has its own `slow-timeout` in the `kani` profile,
+forty 60-second periods. The test compiles into `target/kani-mutation-compile`,
+which no cache restores — `kani-cache` holds the Kani payloads, not a build
+tree — so every run pays a cold build of the whole dependency graph plus 30
+incremental recompiles. With the original 18 patches, two CI runs passed at
+257.7 s and 261.5 s; a third failed at 300.008 s on a head whose only
+difference was eight lines of Markdown.
 
-That widening was inert when it first landed, which is why the override is
-worth reading as a worked example of the trap above. Its filter named the bare
-test name, and the test is declared in a submodule, so the anchor never matched
-and the override applied to nothing: the 600 s was never in force, and the two
-passing CI runs at 257.7 s and 261.5 s cannot show otherwise, because both sit
-inside the 300 s default an inert override predicts. The filter now carries the
-`compile_guard::` prefix. The general rule is that a filter for a test in a
-submodule must name the module path Nextest prefixes onto the qualified name it
-matches against; `cargo nextest show-config test-groups` is the cheap way to
-see whether an override binds, since a filter selecting nothing leaves its
-override out of that listing entirely.
+The 30-patch candidate timed out at 600 s on hosted run 41840367244 and at
+900.093 s in a warm local run, both while compiling the first sorted patch and
+without a compiler diagnostic. A separate one-patch cold compile completed in
+1,864 s while shared compiler admission was heavily queued. That is evidence
+for allowing more time, not a stable runtime prediction. The Kani profile gives
+the test 2,400 s and the whole run 2,520 s: the latter exceeds the per-test
+allowance by the default 70-second termination window plus a 50-second margin.
+The ordinary and coverage profiles retain their 300 s per-test allowance and
+the coverage CI run remains 960 s.
+
+The hosted run spent 824 s before nextest started the mutation test and 7 s
+finalizing. Setup, the full 2,520 s Kani run allowance, and finalization total
+3,351 s. The 60-minute `kani-smoke` job leaves 249 s for runner variance and
+post-step reporting. The mutation filter uses the anchored `compile_guard::`
+submodule test name, so the Kani-specific timeout is applied to the intended
+test rather than falling through to the 300 s default. A filter selecting
+nothing leaves its override out of the test-groups listing, which makes
+`cargo nextest show-config test-groups --profile kani` a cheap binding check.
 
 Regenerate a rotted patch *in place*: swap an operator, comparator, index, or
 literal rather than deleting a statement or redirecting a call. Deleting the
@@ -6037,7 +6038,7 @@ Pull requests run a dedicated `kani-smoke` CI job alongside the ordinary
 `build-test` job. When the proofs run, the job installs the pinned, checksummed
 `cargo-kani` front-end and Kani release bundle, checks the reported version,
 and then runs the bounded harness suite through `make kani-ir` and the mutation
-compile gate through `make test-kani-mutations`, both under a 30-minute job
+compile gate through `make test-kani-mutations`, both under a 60-minute job
 timeout; it does not run `make verus`, coverage, CodeScene upload, or the
 normal build matrix. Its cache entry owns the job-local Kani Cargo,
 support-file, and Rust toolchain homes separately from ordinary Cargo build
@@ -7228,6 +7229,28 @@ recreate state per test is enforced by the runner as well as by convention.
 `rstest-bdd-macros` is configured with `strict-compile-time-validation`, so
 missing or ambiguous step bindings should be treated as compile-time failures.
 
+### Terminal rendering tests
+
+`test_support::terminal` owns the child-process and Unix PTY harness used by
+`tests/terminal_rendering_tests.rs` and the terminal-rendering BDD steps. Reuse
+its output classifier and process setup for terminal-policy tests; keep
+terminal-specific expectations in the owning test module. Each child starts with
+`env_clear()` and receives only the test's explicit environment plus the
+required executable and temporary-directory paths.
+
+PTY tests live under `#[cfg(unix)]` because they use Unix `openpty`; Windows
+uses the pipe tests and the platform-neutral display-plan tests. To investigate
+timing-sensitive PTY behaviour, use a bounded stress run such as
+`cargo nextest run -p test_support --stress-count 20 -E 'test(pty_smoke)'`. Do
+not add retries to the test profile or nextest configuration.
+
+Tests derive expected colour, glyph, progress, and accessibility decisions from
+`resolve_display_plan`, then classify the binary's emitted bytes. Keep the
+truth model independent in the exhaustive domain test and the stable contract
+projections in the four YAML snapshots. `clippy.toml` disallows terminal
+queries outside the process entry point; `main()` captures stdout and stderr
+terminal status once and passes those facts into the plan.
+
 ## rstest-bdd v0.6.0 usage
 
 The migration plan and implementation record are tracked in
@@ -7734,6 +7757,40 @@ the pre-persist action to cover controlled creation orderings; they do not
 claim to model arbitrary scheduler or filesystem interleavings. The fallible
 `test_support::fs::inspect_path` probe treats `NotFound` as absence and
 propagates every other metadata error.
+
+### `test_support::ninja_script`
+
+`test_support::ninja_script::write_fake_ninja_script` writes a small fake Ninja
+inside a caller-owned `cap_std::fs_utf8::Dir`. It emits configured stdout
+lines, an optional stderr marker, and exits successfully; on Unix it also sets
+the executable bit. The helper owns this formatting and permission work so
+tests do not repeat script-writing details or use ambient filesystem calls.
+
+Use it only for deterministic fake Ninja output with those behaviours. Tests
+that need to create build artefacts or model richer process behaviour keep that
+logic at their existing fixture boundary. `tests/logging_stderr/support.rs`
+re-exports the helper to preserve its existing call expressions, while the
+terminal-rendering integration tests use it directly.
+
+`tests/terminal_rendering/support.rs::TerminalWorkspace` is local to the
+terminal-rendering test binary. It stages the minimal manifest, owns the fake
+Ninja process fixture, and builds child commands with a cleared environment and
+an explicit allowlist. Do not reuse it for unrelated integration tests; those
+tests should compose their own workspace and environment needs.
+
+### Command-list failure diagnostic projections
+
+`tests/logging_stderr/support.rs::CommandListDiagnostics` owns selection of the
+human-readable command-list failure, JSON failure marker, and tracing action
+field from captured stderr. It also replaces volatile fingerprints in the
+corresponding snapshot fragments.
+
+Keep this wrapper local to `tests/logging_stderr/command_list_failure.rs` and
+use it only for command-list failure output. It accepts the captured text once
+and exposes these fixed semantic projections; do not add arbitrary marker
+strings or generalize it into a repository-wide stderr parser. Other diagnostic
+tests should define projections for their own output contract. Production code
+must not depend on this test helper.
 
 ### `test_support::ninja_semantics`
 
@@ -8682,16 +8739,18 @@ is confined to the child.
 
 ### `tracing_capture`
 
-Production tracing has one process-wide subscriber, installed by `init_tracing`
-in `src/main.rs` with a reloadable filter starting at `WARN`. Events are
-written through `StartupWriter`, which buffers startup tracing until the
-effective diagnostic mode is known — no startup tracing reaches stdout. The
-buffer is bounded (64 KiB), with a truncation policy documented in the "Startup
-diagnostics buffering" subsection above. `settle_startup_diagnostics` then
-releases the buffer to stderr in human mode, or discards it in JSON mode. Once
-the mode is resolved, `set_tracing_filter` adjusts the level to the one
-`startup_filter` chooses for the mode, with a fallback filter on the paths
-where resolution itself fails. No library module installs a global subscriber.
+Production tracing has one process-wide subscriber, installed by the `main`
+entrypoint through `main_tracing::init_tracing` in `src/main_tracing/mod.rs`,
+with a reloadable filter starting at `WARN`. The entrypoint passes the captured
+stderr-terminal fact into that setup. Events are written through
+`StartupWriter`, which buffers startup tracing until the effective diagnostic
+mode is known — no startup tracing reaches stdout. The buffer is bounded (64
+KiB), with a truncation policy documented in the "Startup diagnostics
+buffering" subsection above. `settle_startup_diagnostics` then releases the
+buffer to stderr in human mode, or discards it in JSON mode. Once the mode is
+resolved, `set_tracing_filter` adjusts the level to the one `startup_filter`
+chooses for the mode, with a fallback filter on the paths where resolution
+itself fails. No library module installs a global subscriber.
 
 Tests use a separate capture boundary:
 
@@ -10649,12 +10708,12 @@ choosing status-aware or plain child-output draining, and its callers select
 either the terminal or a JSON-mode sink.
 
 `ExecutionContext` is the private dispatch context shared by build and clean
-handlers. `run_with_ninja_program` constructs it after resolving output mode
-and reporter settings, then passes the reporter, progress decision, and
-selected Ninja program through `dispatch::execute`. Handlers consume the
-context rather than resolving output or process configuration again; tests
-should inject the program through `run_with_ninja_program` when they need a
-deterministic child executable.
+handlers. `run_with_ninja_program` constructs it from the resolved
+`DisplayPlan`, reporter, progress decision, and selected Ninja program, then
+passes it through `dispatch::execute`. Handlers consume the context rather than
+resolving output or process configuration again; tests should inject the
+program through `run_with_ninja_program` when they need a deterministic child
+executable.
 
 ### Module: `runner::generation`
 
@@ -10759,15 +10818,11 @@ free of runner telemetry.
 
 ### Module: `runner::reporter`
 
-`src/runner/reporter.rs` owns construction of the run's `StatusReporter` from
-resolved output settings. `ReporterOptions` bundles the resolved output mode,
-progress preference, verbose preference, output preferences, and whether
-standard output is a TTY. `make_reporter(options)` selects the base reporter,
-`AccessibleReporter` or `IndicatifReporter` when progress is enabled and
-`SilentReporter` otherwise, then wraps it in `VerboseTimingReporter` when
-verbose mode is active. `should_force_text_task_updates` decides whether the
-indicatif reporter emits textual task updates, forcing them for accessible mode
-or non-TTY standard output.
+`src/runner/reporter.rs` constructs the run's `StatusReporter` from a resolved
+`DisplayPlan`. `make_reporter(plan, verbose)` selects the reporter named by the
+plan, then wraps it in `VerboseTimingReporter` when verbose mode is active.
+`IndicatifReporter` receives a hidden draw target when the plan disallows live
+progress, and uses the plan's task-update preference for plain-text fallback.
 
 `AccessibleReporter` and `VerboseTimingReporter` are each generic over a
 `Write + Send` output sink that defaults to `io::Stderr`; tests inject a
@@ -10788,8 +10843,8 @@ retain their rendered order, write errors remain ignored as they are for
 draining. The deterministic clock constructor is private and test-only.
 
 `run_with_ninja_program` (in `src/runner/mod.rs`) constructs the run's
-`StatusReporter` through `reporter::make_reporter` after resolving output mode
-and reporter settings, then shares it via the `ExecutionContext` it passes to
+`StatusReporter` through `reporter::make_reporter` from the resolved
+`DisplayPlan`, then shares it via the `ExecutionContext` it passes to
 `dispatch::execute`.
 
 `StatusReporter` is a `Send + Sync` contract. The runner constructs one
@@ -10824,10 +10879,9 @@ disabled, so this event cannot corrupt its diagnostic output.
   `runner::process`, dispatch handlers, and external embedders never construct
   reporters; handlers consume the already-built reporter through the
   `ExecutionContext`/`&dyn StatusReporter` only.
-- **Composition rules:** the caller must resolve all `ReporterOptions` inputs
-  (output mode, progress, verbose, output prefs, stdout TTY) from
-  CLI/environment state before calling `make_reporter`; the module performs no
-  such resolution itself. The reporter is composed once per run and shared
+- **Composition rules:** the caller passes the resolved `DisplayPlan` and
+  verbose flag to `make_reporter`; the module does not read CLI, environment,
+  or terminal state. The reporter is composed once per run and shared
   immutably. New reporter kinds or selection policies belong in this module
   beside the mode-selection logic, colocated with the output-mode policy.
 
@@ -11273,10 +11327,10 @@ All four tiers are set here.
 
 | Tier                     | What it bounds                     | Where it is set                               | Current value                                 |
 | ------------------------ | ---------------------------------- | --------------------------------------------- | --------------------------------------------- |
-| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default; 600 s mutation compile gate    |
-| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`, `[profile.ci]`        | 960 s (16 m) in CI; unset locally             |
+| Per-test `slow-timeout`  | one test                           | `.config/nextest.toml`                        | 300 s default and CI; 2,400 s Kani mutation   |
+| nextest `global-timeout` | the whole test run                 | `.config/nextest.toml`                        | 960 s CI; 2,520 s Kani; unset locally         |
 | Cargo watchdog           | one `cargo` invocation, wall clock | `RUN_RUST_CARGO_WAIT_TIMEOUT` at job level    | 1,980 s (33 m), armed twice per coverage step |
-| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 100 m                                         |
+| Job `timeout-minutes`    | the whole job                      | job level in `ci.yml` and `coverage-main.yml` | 60 m Kani; 100 m coverage                     |
 
 *Table: the timers that can end a run, innermost first. The watchdog is one
 tier but not one window: the coverage step here passes `doctests: 'true'`, so
@@ -11290,19 +11344,16 @@ and the watchdog's 1,980 s are the current values.*
 
 `terminate-after` counts warning periods, so the budget a test actually gets is
 `period` multiplied by it. Every period here is 60 s, so reading the period
-alone would report a 60 s allowance where the real maximum is 600 s. Any
+alone would report a 60 s allowance where the real maximum is 2,400 s. Any
 comparison against the tiers above rests on that reading, and the contract
 asserts it explicitly rather than leaving it implied.
 
-There are two distinct per-test allowances and the larger governs.
-`[profile.default]`'s own `slow-timeout` gives five periods — 300 s — to every
-test no override matches, which is almost all of them. The mutation compile
-gate gets ten periods, 600 s; it compiles all 18 patched trees through the Kani
-frontend into a target directory no cache restores, and it runs in its own
-`make test-kani-mutations` invocation rather than in the default suite. A
-whole-run budget has to sit above the largest allowance in the file, so 600 s
-is the figure the ordering below is written against, not the 300 s most tests
-get.
+The default and CI profiles give five periods — 300 s — to every test no
+override matches, which is almost all of them. The mutation compile gate gets
+forty periods, 2,400 s, only in the dedicated `kani` profile. That profile sets
+a 42-minute whole-run cap, and `make test-kani-mutations` selects it
+explicitly. The 2,520 s whole-run cap is above the mutation test's 2,400 s
+allowance; the coverage profile remains at 960 s above its own 300 s maximum.
 
 No test the default suite runs needs an allowance of its own any longer. The
 production module slice, the embedder-facing public API, and the `test_support`
@@ -11405,7 +11456,7 @@ to sit between its neighbours, and does:
 
 ```text
 global-timeout > largest per-test allowance
-960 s          > 600 s
+960 s          > 300 s
 
 watchdog      >= global-timeout + termination + cold build + report
 1,980 s       >= 960 s + 70 s + 600 s + 300 s = 1,930 s
@@ -11895,14 +11946,15 @@ key out or deleting it satisfies each of them by leaving nothing to compare,
 and the watchdog silently resumes doing tier two's job. The presence assertion
 is what a comment defeats and an ordering assertion does not.
 `bounds_a_single_test` is driven the same way and for the same reason, since
-this file bounds its default profile and so cannot tell that reading from one
-accepting an override or a bare duration.
+the synthetic configuration bounds its default profile and cannot tell that
+reading from one accepting an override or a bare duration.
 
-`tests/workflow_contracts/whole_run_value_test.py` pins the budget's value as
-well as its place in the order. The ordering holds for everything between the
-600 s largest per-test allowance and the 1,010 s the watchdog can cover, so the
-budget could drift to a value nobody chose with every comparison still passing,
-and the sample above would then describe a figure the file no longer sets.
+`tests/workflow_contracts/whole_run_value_test.py` pins the coverage budget's
+value as well as its place in the order. The coverage ordering holds for
+everything between the 300 s largest CI-profile allowance and the 1,010 s the
+watchdog can cover, so the budget could drift to a value nobody chose with
+every comparison still passing, and the sample above would then describe a
+figure the file no longer sets.
 
 Every one of those assertions reads the budget out of the file, and none of
 them asks whether a run selects the profile it sits in. That is what

@@ -17,15 +17,36 @@ IGNORED_MODULE_NAMES = frozenset({"lib", "main", "mod"})
 
 # Keyed by the directory relative to src/ and the shared first prefix.
 # Every entry must carry the exact sibling set and a disparate-concern rationale.
-DISPARATE_PREFIX_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
-    (".", "shell"): (
-        frozenset({"shell_selection/", "shell_word.rs"}),
-        (
-            "Public data-only shell selection and registry vocabulary is independent "
-            "of recipe shell-word encoding for named dialects; neither concern "
-            "is a child of the other."
-        ),
+_SHELL_PREFIX_EXCEPTION: tuple[frozenset[str], str] = (
+    frozenset({"shell_selection/", "shell_word.rs"}),
+    (
+        "Public data-only shell selection and registry vocabulary is independent "
+        "of recipe shell-word encoding for named dialects; neither concern "
+        "is a child of the other."
     ),
+)
+
+_MAIN_PREFIX_EXCEPTION: tuple[frozenset[str], str] = (
+    frozenset({"main_diagnostics.rs", "main_tracing/"}),
+    (
+        "The main_ prefix marks binary-private adapters owned by the composition "
+        "root, not a shared feature: one installs the tracing subscriber and one "
+        "installs the Miette hook. Their grouping is ownership, not parentage, "
+        "and a src/main/ directory is not available because src/main.rs is the "
+        "binary crate root."
+    ),
+)
+
+DISPARATE_PREFIX_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
+    (".", "shell"): _SHELL_PREFIX_EXCEPTION,
+    (".", "main"): _MAIN_PREFIX_EXCEPTION,
+}
+
+# The synthetic-tree tests below build directories that contain no binary
+# entry point, so only the shell entry can ever apply to them. Passing the
+# whole table would make every other entry read as a stale exception.
+SHELL_ONLY_EXCEPTIONS: dict[tuple[str, str], tuple[frozenset[str], str]] = {
+    (".", "shell"): _SHELL_PREFIX_EXCEPTION,
 }
 
 
@@ -142,7 +163,7 @@ def test_added_prefix_pair_fails_contract(tmp_path: Path) -> None:
     (source_root / "widget.rs").touch()
     (source_root / "widget_tests.rs").touch()
     with pytest.raises(AssertionError, match="unrecorded prefix group"):
-        assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
+        assert_module_layout(source_root, SHELL_ONLY_EXCEPTIONS)
 
 
 def test_added_prefix_directory_pair_fails_contract(tmp_path: Path) -> None:
@@ -153,7 +174,7 @@ def test_added_prefix_directory_pair_fails_contract(tmp_path: Path) -> None:
         directory.mkdir(parents=True)
         (directory / "mod.rs").touch()
     with pytest.raises(AssertionError, match="unrecorded prefix group"):
-        assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
+        assert_module_layout(source_root, SHELL_ONLY_EXCEPTIONS)
 
 
 def test_prefixed_file_beside_directory_fails_contract(tmp_path: Path) -> None:
@@ -164,7 +185,7 @@ def test_prefixed_file_beside_directory_fails_contract(tmp_path: Path) -> None:
     (directory / "mod.rs").touch()
     (source_root / "widget_error.rs").touch()
     with pytest.raises(AssertionError, match="prefixed sibling beside directory"):
-        assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
+        assert_module_layout(source_root, SHELL_ONLY_EXCEPTIONS)
 
 
 def test_exception_requires_exact_files_and_reason(tmp_path: Path) -> None:
@@ -214,7 +235,7 @@ def test_shell_prefix_exception_is_exact(
         else:
             (source_root / name).touch()
     if expected_error is None:
-        assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
+        assert_module_layout(source_root, SHELL_ONLY_EXCEPTIONS)
     else:
         with pytest.raises(AssertionError, match=expected_error):
-            assert_module_layout(source_root, DISPARATE_PREFIX_EXCEPTIONS)
+            assert_module_layout(source_root, SHELL_ONLY_EXCEPTIONS)

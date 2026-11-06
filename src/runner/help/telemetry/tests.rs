@@ -3,6 +3,7 @@
 use super::super::*;
 use super::{HELP_TARGETS_DURATION, HELP_TARGETS_TOTAL};
 use crate::cli::Cli;
+use crate::display_plan::{TerminalFacts, resolve_display_plan};
 use crate::localization::set_localizer_for_tests;
 use crate::status::SilentReporter;
 use crate::test_tracing_capture::with_test_subscriber;
@@ -140,9 +141,10 @@ fn assert_help_targets_telemetry(
     let _guard = set_localizer_for_tests(Arc::from(crate::cli_localization::build_localizer(
         Some("en-US"),
     )));
+    let plan = resolve_display_plan(cli.display_policies(), TerminalFacts::default());
     let ((result, events), snapshot) = recorded(|| {
         with_test_subscriber(LevelFilter::INFO, |captured| {
-            let result = handle_help_targets(cli, false, &SilentReporter);
+            let result = handle_help_targets(cli, false, plan, &SilentReporter);
             (result, captured.snapshot())
         })
     });

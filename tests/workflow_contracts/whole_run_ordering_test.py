@@ -1,14 +1,15 @@
 """The whole-run tier, driven with configurations this repository lacks.
 
-`.config/nextest.toml` sets one ``global-timeout``, so the contract over
-it exercises one point of the rule and agrees with every rule that
-happens to accept that point. These cases set one above and below each
-bound in turn, including none at all, so the branches the repository
-never reaches are executed.
+`.config/nextest.toml` sets separate whole-run budgets for coverage and
+Kani. This contract checks the coverage profile's budget against its
+watchdogs. Synthetic cases set one above and below each bound in turn,
+including none at all, so the branches the repository never reaches are
+executed.
 
-``bounds_a_single_test`` is here for the same reason: this file bounds
-its default profile, so the reading agrees with one that accepted an
-override, or any declaration at all, against the real tree alone.
+`bounds_a_single_test` is here for the same reason: the synthetic
+configuration bounds its default profile, so the reading agrees with one
+that accepted an override, or any declaration at all, against the real
+tree alone.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -26,12 +27,12 @@ from timeout_budgets import (
 )
 from whole_run_ordering import watchdog_required_for, whole_run_ordering_faults
 
-#: A default profile bounding one test at 600 s: ten warning periods of
+#: A default profile bounding one test at 900 s: fifteen warning periods of
 #: sixty seconds. The shape `.config/nextest.toml` uses, with a
 #: multiplier of its own so the cases below can sit either side of the
 #: bound without tracking the repository's figures.
 _BOUNDED_PROFILE: typ.Final[str] = (
-    '[profile.default]\nslow-timeout = { period = "60s", terminate-after = 10 }\n'
+    '[profile.default]\nslow-timeout = { period = "60s", terminate-after = 15 }\n'
 )
 
 
@@ -133,7 +134,7 @@ def test_the_report_phase_allowance_is_the_value_the_guide_states() -> None:
 def test_a_whole_run_below_the_per_test_allowance_is_a_fault() -> None:
     """The run would end before the slowest test could use its budget.
 
-    600 s is what this profile allows one test, so a 300 s whole run
+    900 s is what this profile allows one test, so a 300 s whole run
     makes the per-test tier unreachable while every value in the file
     still reads as deliberate.
     """
@@ -154,7 +155,7 @@ def test_a_whole_run_equal_to_the_per_test_allowance_is_a_fault() -> None:
     the strictness of the comparison is stated rather than implied.
     """
     faults = whole_run_ordering_faults(
-        _config("600s"), [_lane(fractions.Fraction(100_000))]
+        _config("900s"), [_lane(fractions.Fraction(100_000))]
     )
 
     assert len(faults) == 1, faults

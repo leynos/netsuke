@@ -3,46 +3,35 @@
 //! Parses command-line arguments and delegates execution to [`runner::run`].
 //! It records configuration-load outcomes and latency during startup.
 
-use clap::ArgMatches;
 use clap::error::ErrorKind;
+use clap::{ArgMatches, ColorChoice};
 use miette::Report;
-use netsuke::theme::ThemeContext;
 use netsuke::{
-    cli, cli_localization, diagnostic_json, ir::IrGenError, locale_resolution, localization,
-    manifest, output_mode, output_prefs, runner,
+    cli, cli_localization, diagnostic_json,
+    display_plan::{DisplayPlan, TerminalFacts, resolve_display_plan},
+    ir::IrGenError,
+    locale_resolution, localization,
+    output_mode::EnvSignals,
+    output_prefs, runner,
 };
 use ortho_config::Localizer;
 use std::ffi::OsString;
 use std::io::{self, IsTerminal, Write};
 use std::process::ExitCode;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tracing_subscriber::filter::LevelFilter;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::{Registry, fmt, reload};
+// Keep the subscriber extension visible to src/tests.rs through `use super::*`.
+#[cfg(test)]
+use tracing_subscriber::layer::SubscriberExt;
 
+use main_diagnostics::DiagMode;
 use monotony::{MonotonicClock, StdMonotonicClock};
-/// Selects whether diagnostics render as human text or JSON documents.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum DiagMode {
-    /// Human-readable diagnostics written to stderr.
-    Human,
-    /// Versioned JSON diagnostic documents written to stderr.
-    Json,
-}
-
-impl DiagMode {
-    /// Build the diagnostic mode from a JSON-enabled flag.
-    const fn from_json_enabled(enabled: bool) -> Self {
-        if enabled { Self::Json } else { Self::Human }
-    }
-
-    /// Return whether JSON diagnostics are selected.
-    const fn is_json(self) -> bool {
-        matches!(self, Self::Json)
-    }
-}
 
 mod observability;
+
+mod main_tracing;
+
+mod main_diagnostics;
 
 mod startup_tracing;
 
@@ -54,8 +43,8 @@ use startup_tracing::StartupWriter;
 
 /// Injectable dependencies for one invocation of the startup composition root.
 ///
-/// Production supplies process-backed adapters, while tests use in-memory
-/// adapters to keep locale and configuration environment access deterministic.
+/// Production supplies process-backed adapters and captured stream facts,
+/// while tests inject deterministic environment and terminal values.
 struct RunWithArgsDependencies<'a, L, S, C, E>
 where
     L: locale_resolution::LocaleEnvProvider,
@@ -71,6 +60,10 @@ where
     configuration_clock: &'a C,
     /// Environment provider consulted during configuration discovery and merge.
     config_env: &'a E,
+    /// Whether stdout was connected to a terminal at process entry.
+    stdout_is_terminal: bool,
+    /// Whether stderr was connected to a terminal at process entry.
+    stderr_is_terminal: bool,
 }
 
 /// Send buffered startup diagnostics where `mode` says they belong.
@@ -91,6 +84,10 @@ fn settle_startup_diagnostics(writer: &StartupWriter, mode: DiagMode) {
 }
 
 /// Collect production arguments and environment providers, then run Netsuke.
+#[expect(
+    clippy::disallowed_methods,
+    reason = "the process entrypoint captures each terminal stream once"
+)]
 fn main() -> ExitCode {
     let args: Vec<OsString> = std::env::args_os().collect();
     let env = locale_resolution::SystemEnv;
@@ -102,9 +99,16 @@ fn main() -> ExitCode {
         system_locale: &system_locale,
         configuration_clock: &configuration_clock,
         config_env: &config_env,
+        stdout_is_terminal: io::stdout().is_terminal(),
+        stderr_is_terminal: io::stderr().is_terminal(),
     };
     let startup_writer = StartupWriter::buffering();
-    init_tracing(LevelFilter::WARN, startup_writer.clone());
+    main_tracing::init_tracing(LevelFilter::WARN, startup_writer.clone());
+    if let Err(error) = main_diagnostics::install_miette_handler() {
+        tracing::error!(error = %error, "failed to install diagnostic renderer");
+        drop(startup_writer.release_to_stderr());
+        return ExitCode::FAILURE;
+    }
     run_with_args(args, &dependencies, &startup_writer)
 }
 
@@ -126,25 +130,39 @@ where
     C: MonotonicClock,
     E: cli::ConfigEnvProvider,
 {
-    let json_hint = locale_resolution::resolve_startup_json(&args, dependencies.locale_env);
-    // Recorded at `WARN` but written to a buffer, not to stderr. `json_hint` is
-    // only a hint — configuration can still turn JSON on — and the JSON
+    let startup_signals = resolve_startup_signals(&args, dependencies);
+    let terminal_facts = startup_signals.terminal_facts;
+    // Recorded at `WARN` but written to a buffer, not to stderr. The JSON hint
+    // is only a hint — configuration can still turn JSON on — and the JSON
     // diagnostic goes to stderr, so an event emitted now could corrupt it.
     // Buffering keeps the locale fallback report without taking that risk.
-    let startup_mode = DiagMode::from_json_enabled(json_hint);
+    let startup_mode = DiagMode::from_json_enabled(startup_signals.json_hint);
     observability::init_metrics();
     let localizer = startup_localizer(&args, dependencies.locale_env, dependencies.system_locale);
-    let (parsed_cli, matches) =
-        match parse_cli_or_exit(args, &localizer, startup_mode, startup_writer) {
-            Ok(parsed) => parsed,
-            // The buffer was settled inside, before the branch that exits.
-            Err(code) => return code,
-        };
+    let startup_parse = StartupParse {
+        args,
+        localizer: &localizer,
+        mode: startup_mode,
+        color_choice: startup_signals.parser_color,
+        startup_writer,
+    };
+    let (parsed_cli, matches) = match parse_cli_or_exit(startup_parse) {
+        Ok(parsed) => parsed,
+        // The buffer was settled inside, before the branch that exits.
+        Err(code) => return code,
+    };
     let verbose = parsed_cli.verbose;
+    let startup_plan = resolve_display_plan(parsed_cli.display_policies(), terminal_facts);
+    main_tracing::set_tracing_ansi(startup_plan.stderr_colour());
     if is_informational_help(&parsed_cli) {
         settle_startup_diagnostics(startup_writer, startup_mode);
         return finish_run(
-            run_cli(&parsed_cli, dependencies.system_locale, startup_mode),
+            run_cli(
+                &parsed_cli,
+                dependencies.system_locale,
+                startup_mode,
+                startup_plan,
+            ),
             verbose,
         );
     }
@@ -166,18 +184,81 @@ where
     let merged_verbose = merged_cli.verbose;
     let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
 
-    configure_runtime(&merged_cli, dependencies.system_locale, runtime_mode);
-    let output_mode =
-        output_mode::resolve(merged_cli.accessibility_override(), Some(merged_cli.color));
-    let prefs = output_prefs::resolve_from_theme(
-        merged_cli.theme_preference(),
-        ThemeContext::new(None, Some(merged_cli.color), output_mode),
+    let exit_code = run_configured_command(
+        &merged_cli,
+        dependencies.system_locale,
+        runtime_mode,
+        terminal_facts,
     );
-    let exit_code = match runner::run(&merged_cli, prefs) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, prefs, runtime_mode),
-    };
     finish_run(exit_code, merged_verbose)
+}
+
+/// Signals resolved from raw argv and the environment before configuration loads.
+struct StartupSignals {
+    /// Whether raw argv already asks for JSON, before configuration is merged.
+    json_hint: bool,
+    /// The terminal facts shared by the startup and runtime display plans.
+    terminal_facts: TerminalFacts,
+    /// Colour choice for Clap's own help and version renderers.
+    parser_color: ColorChoice,
+}
+
+/// Resolve the terminal facts, JSON hint, and help colour from startup inputs.
+///
+/// All three depend only on raw argv and the environment, so none of them may
+/// wait for configuration to load: Clap's help renderer needs its colour choice
+/// before the parser runs, and the JSON hint decides how diagnostics recorded
+/// during that same window are buffered.
+fn resolve_startup_signals<L, S, C, E>(
+    args: &[OsString],
+    dependencies: &RunWithArgsDependencies<'_, L, S, C, E>,
+) -> StartupSignals
+where
+    L: locale_resolution::LocaleEnvProvider,
+    S: locale_resolution::SystemLocale,
+    C: MonotonicClock,
+    E: cli::ConfigEnvProvider,
+{
+    let json_hint = locale_resolution::resolve_startup_json(args, dependencies.locale_env);
+    let terminal_facts = TerminalFacts::from_signals(
+        EnvSignals::read(|key| dependencies.locale_env.var(key)),
+        dependencies.stdout_is_terminal,
+        dependencies.stderr_is_terminal,
+    );
+    let colour_hint = locale_resolution::resolve_startup_colour(args, dependencies.locale_env);
+    let colour_for_help = netsuke::display_plan::startup_colour(colour_hint, terminal_facts);
+    let parser_color = if requests_help_or_version(args) && colour_for_help {
+        ColorChoice::Always
+    } else {
+        ColorChoice::Never
+    };
+    StartupSignals {
+        json_hint,
+        terminal_facts,
+        parser_color,
+    }
+}
+
+/// Resolve the runtime display plan, configure the process, and run the command.
+///
+/// Resolution happens once here so the tracing formatter, the status reporter,
+/// the diagnostic hook, and the runner all act on the same plan rather than
+/// each deriving colour and glyph decisions from ambient state.
+fn run_configured_command<S>(
+    merged_cli: &cli::Cli,
+    system_locale: &S,
+    runtime_mode: DiagMode,
+    terminal_facts: TerminalFacts,
+) -> ExitCode
+where
+    S: locale_resolution::SystemLocale,
+{
+    let plan = resolve_display_plan(merged_cli.display_policies(), terminal_facts);
+    configure_runtime(merged_cli, system_locale, runtime_mode, plan);
+    match runner::run(merged_cli, plan) {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(err) => handle_runner_error(err, plan.prefs(), runtime_mode),
+    }
 }
 
 /// Emit a development snapshot after the command has completed when requested.
@@ -201,26 +282,33 @@ const fn is_informational_help(cli: &cli::Cli) -> bool {
     )
 }
 
+/// Return whether Clap's help or version renderer was requested in raw argv.
+fn requests_help_or_version(args: &[OsString]) -> bool {
+    for arg in args {
+        let text = arg.to_string_lossy();
+        if text == "--" {
+            break;
+        }
+        if matches!(text.as_ref(), "-h" | "--help" | "-V" | "--version") {
+            return true;
+        }
+    }
+    false
+}
+
 /// Configure the runtime and dispatch the selected command through the runner.
 fn run_cli(
     cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,
     runtime_mode: DiagMode,
+    plan: DisplayPlan,
 ) -> ExitCode {
-    configure_runtime(cli, system_locale, runtime_mode);
-    let output_mode = output_mode::resolve(cli.accessibility_override(), Some(cli.color));
-    let prefs = output_prefs::resolve_from_theme(
-        cli.theme_preference(),
-        ThemeContext::new(None, Some(cli.color), output_mode),
-    );
-    match runner::run(cli, prefs) {
+    configure_runtime(cli, system_locale, runtime_mode, plan);
+    match runner::run(cli, plan) {
         Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, prefs, runtime_mode),
+        Err(err) => handle_runner_error(err, plan.prefs(), runtime_mode),
     }
 }
-
-/// Handle for adjusting the installed subscriber's level after startup.
-static TRACING_FILTER: OnceLock<reload::Handle<LevelFilter, Registry>> = OnceLock::new();
 
 /// Choose the stderr verbosity for `mode`.
 ///
@@ -241,39 +329,6 @@ const fn startup_filter(mode: DiagMode, verbose: bool) -> LevelFilter {
     }
 }
 
-/// Install the process-wide subscriber with a reloadable level filter set to
-/// `initial`.
-///
-/// Only the first call installs; later calls are ignored so exactly one global
-/// subscriber exists, and the level is adjusted through [`set_tracing_filter`]
-/// rather than by installing a second subscriber. Events go to `writer`, which
-/// buffers until the effective mode is known and then releases to stderr or
-/// discards — never to stdout, so a JSON document is never interleaved.
-fn init_tracing(initial: LevelFilter, writer: StartupWriter) {
-    let (filter, handle) = reload::Layer::new(initial);
-    if Registry::default()
-        .with(filter)
-        .with(
-            fmt::layer()
-                .with_writer(writer)
-                // Colour only a terminal; piped or redirected logs stay plain so
-                // they remain greppable and free of escape sequences.
-                .with_ansi(io::stderr().is_terminal()),
-        )
-        .try_init()
-        .is_ok()
-    {
-        TRACING_FILTER.set(handle).ok();
-    }
-}
-
-/// Adjust the installed subscriber's level, if one was installed.
-fn set_tracing_filter(level: LevelFilter) {
-    if let Some(handle) = TRACING_FILTER.get() {
-        handle.modify(|filter| *filter = level).ok();
-    }
-}
-
 /// Resolve and install the localizer used while parsing startup arguments.
 fn startup_localizer(
     args: &[OsString],
@@ -286,18 +341,38 @@ fn startup_localizer(
     localizer
 }
 
+/// Everything startup knows before the command line has been parsed.
+///
+/// Grouped rather than passed positionally so the parser's colour choice and
+/// the diagnostic mode cannot be transposed at a call site: the two are both
+/// small enums that read as "some policy" in isolation.
+struct StartupParse<'a> {
+    /// Raw process arguments, including the program name.
+    args: Vec<OsString>,
+    /// Localizer built from the startup locale, before configuration merging.
+    localizer: &'a Arc<dyn Localizer>,
+    /// Diagnostic mode assumed before configuration can override it.
+    mode: DiagMode,
+    /// Colour choice handed to clap for help and version rendering.
+    color_choice: ColorChoice,
+    /// Buffer holding startup diagnostics until a path decides their stream.
+    startup_writer: &'a StartupWriter,
+}
+
 /// Parse localized arguments, emitting valid JSON diagnostics when JSON is
 /// selected.
 ///
 /// Help and version requests exit through clap; all other parse failures return
 /// the corresponding failure [`ExitCode`] on the JSON path.
-fn parse_cli_or_exit(
-    args: Vec<OsString>,
-    localizer: &Arc<dyn Localizer>,
-    mode: DiagMode,
-    startup_writer: &StartupWriter,
-) -> Result<(cli::Cli, ArgMatches), ExitCode> {
-    match cli::parse_with_localizer_from(args, localizer) {
+fn parse_cli_or_exit(parse: StartupParse<'_>) -> Result<(cli::Cli, ArgMatches), ExitCode> {
+    let StartupParse {
+        args,
+        localizer,
+        mode,
+        color_choice,
+        startup_writer,
+    } = parse;
+    match cli::parse_with_localizer_from(args, localizer, color_choice) {
         Ok(parsed) => Ok(parsed),
         Err(err) => {
             // Every arm below terminates the process or returns, and
@@ -327,11 +402,14 @@ fn configure_runtime(
     merged_cli: &cli::Cli,
     system_locale: &impl locale_resolution::SystemLocale,
     mode: DiagMode,
+    plan: DisplayPlan,
 ) {
+    main_tracing::set_tracing_ansi(plan.stderr_colour());
+    main_diagnostics::set_style(plan.diagnostic_style());
     // Raised before the localizer is built, so a fallback warning is both
     // visible in a normal run and suppressed in JSON mode, where stderr
     // carries the diagnostic document.
-    set_tracing_filter(startup_filter(mode, merged_cli.verbose));
+    main_tracing::set_tracing_filter(startup_filter(mode, merged_cli.verbose));
 
     let runtime_locale = locale_resolution::resolve_runtime_locale(merged_cli, system_locale);
     let runtime_localizer = Arc::from(cli_localization::build_localizer(runtime_locale.as_deref()));
@@ -349,7 +427,9 @@ fn handle_runner_error(
     mode: DiagMode,
 ) -> ExitCode {
     if mode.is_json() {
-        return diagnostic_json::emit_or_fallback(render_runtime_error_json(&err));
+        return diagnostic_json::emit_or_fallback(main_diagnostics::render_runtime_error_json(
+            &err,
+        ));
     }
     let prefix = prefs.error_prefix();
     if let Some(cycle_error) = circular_dependency_cause(&err) {
@@ -377,23 +457,6 @@ fn circular_dependency_cause(error: &anyhow::Error) -> Option<&IrGenError> {
             .downcast_ref::<IrGenError>()
             .filter(|ir_error| matches!(ir_error, IrGenError::CircularDependency { .. }))
     })
-}
-
-/// Select the most specific JSON-safe diagnostic representation for a failure.
-fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Result<String> {
-    if let Some(runner_err) = err.downcast_ref::<runner::RunnerError>() {
-        return diagnostic_json::render_diagnostic_json(runner_err);
-    }
-    if let Some(manifest_err) = err
-        .chain()
-        .find_map(|cause| cause.downcast_ref::<manifest::ManifestError>())
-    {
-        return diagnostic_json::render_diagnostic_json(manifest_err);
-    }
-    if let Some(report) = err.downcast_ref::<Report>() {
-        return diagnostic_json::render_report_json(report);
-    }
-    diagnostic_json::render_error_json(err.as_ref())
 }
 
 #[cfg(test)]

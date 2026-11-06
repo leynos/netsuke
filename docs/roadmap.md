@@ -296,11 +296,15 @@ and agents.
 
 ### 3.12. Terminal rendering verification
 
-- [ ] 3.12.3. Add terminal rendering regression tests.
-  - [ ] Verify `--color auto|always|never` policy behaviour.
-  - [ ] Verify `--emoji auto|always|never` policy behaviour.
-  - [ ] Verify `--progress auto|always|never` policy behaviour.
-  - [ ] Verify `--accessibility auto|on|off` behaviour.
+- [x] 3.12.3. Add terminal rendering regression tests.
+  - [x] Verify `--color auto|always|never` policy behaviour.
+  - [x] Verify `--emoji auto|always|never` policy behaviour.
+  - [x] Verify `--progress auto|always|never` policy behaviour.
+  - [x] Verify `--accessibility auto|on|off` behaviour.
+  See
+  [ADR-0072](adrs/adr-0072-display-policy-contract-and-terminal-verification.md)
+  and the
+  [terminal-rendering tests](execplans/3-12-3-terminal-rendering-regression-tests.md).
 
 ### 3.13. CI guidance
 

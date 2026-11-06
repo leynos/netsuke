@@ -79,7 +79,7 @@ proptest! {
 
         let localizer = Arc::from(cli_localization::build_localizer(None));
         let (cli, matches) =
-            netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
+            netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer, clap::ColorChoice::Auto)
                 .expect("parse CLI");
         let selector = config_path.to_string_lossy().into_owned();
         let env = TestEnv::default().with_var("NETSUKE_CONFIG", selector.as_str());
@@ -127,7 +127,8 @@ fn rendered_config_file_is_parseable_toml() -> Result<()> {
 
     let localizer = Arc::from(cli_localization::build_localizer(None));
     let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer).context("parse CLI")?;
+        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI")?;
     let selector = config_path.to_string_lossy().into_owned();
     let env = TestEnv::default().with_var("NETSUKE_CONFIG", selector.as_str());
 

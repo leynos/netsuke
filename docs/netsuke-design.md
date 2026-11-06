@@ -3734,12 +3734,22 @@ gives later roadmap items a stable snapshot surface for validating ASCII and
 Unicode renderings without duplicating formatting rules. Colour policy is
 resolved alongside theme and output-mode detection so `--color never` behaves
 like an internal `NO_COLOR`, while `always` bypasses `NO_COLOR` auto-detection.
-Build dispatch also consults OrthoConfig `[cmds.build]` defaults before falling
-back to manifest `defaults`, letting operators set user- or workspace-level
-build defaults without editing the manifest itself. Accessible reporter output,
-timing summaries, and the semantic prefix surface are guarded by `insta`
-snapshots so spacing, prefix alignment, and wrapping regressions fail with
-reviewable diffs instead of drifting silently.
+The pure `src/output/plan/mod.rs` core combines these policies with captured
+`TerminalFacts` to produce one `DisplayPlan`. The application entry point reads
+environment signals and terminal status once, then passes that plan to the
+status reporter, tracing formatter, diagnostic hook, and Clap help renderer.
+Those adapters apply the plan and do not re-read `NO_COLOR`, `TERM`, or
+terminal status.
+[ADR-0072](adrs/adr-0072-display-policy-contract-and-terminal-verification.md)
+records the contract and verification strategy. Build dispatch also consults
+OrthoConfig `[cmds.build]` defaults before falling back to manifest `defaults`,
+letting operators set user- or workspace-level build defaults without editing
+the manifest itself. Accessible reporter output, timing summaries, and the
+semantic prefix surface are guarded by `insta` snapshots so spacing, prefix
+alignment, and wrapping regressions fail with reviewable diffs instead of
+drifting silently. The terminal-rendering PTY suite checks emitted bytes, and
+four `display_plan_contract` snapshots pin the pure policy projections on every
+platform.
 
 The Advanced Usage chapter in `docs/users-guide.md` is validated by behavioural
 tests in `tests/features/advanced_usage.feature`. Netsuke treats those

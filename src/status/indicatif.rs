@@ -97,7 +97,48 @@ impl IndicatifReporter {
     /// Build a multi-progress reporter with one line per pipeline stage.
     #[must_use]
     pub fn new(prefs: OutputPrefs, force_text_task_updates: bool) -> Self {
-        let progress = MultiProgress::with_draw_target(ProgressDrawTarget::stderr_with_hz(12));
+        Self::with_draw_target(
+            prefs,
+            force_text_task_updates,
+            ProgressDrawTarget::stderr_with_hz(12),
+        )
+    }
+
+    /// Build a reporter whose draw target follows the resolved display plan.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let reporter = IndicatifReporter::with_display_plan(prefs, true, false);
+    /// ```
+    #[must_use]
+    pub(crate) fn with_display_plan(
+        prefs: OutputPrefs,
+        force_text_task_updates: bool,
+        live_progress: bool,
+    ) -> Self {
+        let draw_target = if live_progress {
+            ProgressDrawTarget::stderr_with_hz(12)
+        } else {
+            ProgressDrawTarget::hidden()
+        };
+        Self::with_draw_target(prefs, force_text_task_updates, draw_target)
+    }
+
+    /// Build a reporter around an explicit progress draw target.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// let reporter = IndicatifReporter::with_draw_target(prefs, false, target);
+    /// ```
+    #[must_use]
+    fn with_draw_target(
+        prefs: OutputPrefs,
+        force_text_task_updates: bool,
+        draw_target: ProgressDrawTarget,
+    ) -> Self {
+        let progress = MultiProgress::with_draw_target(draw_target);
         progress.set_move_cursor(false);
         let style = ProgressStyle::with_template("{msg}")
             .unwrap_or_else(|_| ProgressStyle::default_spinner());

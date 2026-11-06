@@ -9,7 +9,7 @@ use std::fmt;
 use std::str::FromStr;
 
 use crate::cli::ColourPolicy;
-use crate::output_mode::{OutputMode, no_color_active_with};
+use crate::output_mode::{EnvSignals, OutputMode};
 use serde::{Deserialize, Serialize};
 
 /// User-facing theme preference for CLI presentation.
@@ -231,13 +231,6 @@ const COLOURS: ColourTokens = ColourTokens {
     timing: SemanticColour::Timing,
 };
 
-/// Environment signals that may force ASCII symbols.
-#[derive(Debug, Clone, Copy)]
-struct EnvSignals {
-    /// Whether the `NO_COLOR` environment signal is set.
-    no_color: bool,
-}
-
 /// Determine whether Unicode symbols should be used based on theme configuration.
 ///
 /// This helper encapsulates the precedence logic for symbol selection:
@@ -248,7 +241,7 @@ struct EnvSignals {
 const fn should_use_unicode(
     theme: Option<ThemePreference>,
     no_emoji: Option<bool>,
-    env: EnvSignals,
+    no_color_active: bool,
     mode: OutputMode,
 ) -> bool {
     match theme {
@@ -258,7 +251,7 @@ const fn should_use_unicode(
             if let Some(true) = no_emoji {
                 return false;
             }
-            if env.no_color {
+            if no_color_active {
                 return false;
             }
             // Default: Unicode for Standard mode, ASCII for Accessible
@@ -297,10 +290,13 @@ pub fn resolve_theme<F>(
 where
     F: Fn(&str) -> Option<String>,
 {
-    let env = EnvSignals {
-        no_color: no_color_active_with(context.colour_policy, &read_env),
-    };
-    let use_unicode = should_use_unicode(theme, context.no_emoji, env, context.mode);
+    let env = EnvSignals::read(read_env);
+    let use_unicode = should_use_unicode(
+        theme,
+        context.no_emoji,
+        env.no_color_active(context.colour_policy),
+        context.mode,
+    );
 
     let symbols = if use_unicode {
         UNICODE_SYMBOLS

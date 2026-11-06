@@ -59,14 +59,15 @@ pub(super) fn apply_cli_tokens(world: &TestWorld, mut tokens: Vec<std::ffi::OsSt
 
     let locale = locale_resolution::resolve_startup_locale(&tokens, &env, &system);
     let localizer = Arc::from(cli_localization::build_localizer(locale.as_deref()));
-    let outcome = netsuke::cli::parse_with_localizer_from(tokens, &localizer)
-        .map_err(|e| e.to_string())
-        .and_then(|(parsed_cli, matches)| {
-            // Apply config file discovery and merge
-            merge_with_world_env(world, &parsed_cli, &matches)
-                .map(normalize_cli)
-                .map_err(|e| e.to_string())
-        });
+    let outcome =
+        netsuke::cli::parse_with_localizer_from(tokens, &localizer, clap::ColorChoice::Auto)
+            .map_err(|e| e.to_string())
+            .and_then(|(parsed_cli, matches)| {
+                // Apply config file discovery and merge
+                merge_with_world_env(world, &parsed_cli, &matches)
+                    .map(normalize_cli)
+                    .map_err(|e| e.to_string())
+            });
     store_parse_outcome(&world.cli, &world.cli_error, outcome);
 }
 

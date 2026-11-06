@@ -54,8 +54,9 @@ pub(super) fn merge_and_observe_after_json_resolution(
     env: &TestEnv,
 ) -> Result<(bool, Vec<MergeEvent>, bool)> {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
-        .context("parse CLI args for merge observer test")?;
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(cli_args, &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI args for merge observer test")?;
     let (json_mode, outcome) =
         netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, env);
     let input = netsuke::cli::CachedMergeInput::new(&cli, &matches, env, outcome.into_layers());
@@ -71,8 +72,9 @@ pub(super) fn merge_and_observe_after_json_resolution(
 /// Run the cached merge with the application's explicit tracing adapter.
 fn merge_and_capture(cli_args: &[&str], env: &TestEnv) -> Result<(Vec<String>, bool)> {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(cli_args, &localizer)
-        .context("parse CLI args for merge logging test")?;
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(cli_args, &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI args for merge logging test")?;
     let (json_mode, outcome) =
         netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, env);
     json_mode.context("resolve diagnostic mode before merge")?;
@@ -100,8 +102,9 @@ fn assert_contains(events: &[String], needle: &str) -> Result<()> {
 #[rstest]
 fn merge_query_without_observer_emits_no_merge_events() -> Result<()> {
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI args for side-effect-free merge test")?;
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI args for side-effect-free merge test")?;
     let events = with_test_subscriber(LevelFilter::DEBUG, |captured| {
         let merge = netsuke::cli::merge_with_config_and_env(&cli, &matches, &TestEnv::default());
         ensure!(
@@ -144,6 +147,7 @@ fn explicit_manifest_budget_flags_override_environment_limits() -> Result<()> {
             "17",
         ],
         &localizer,
+        clap::ColorChoice::Auto,
     )
     .context("parse explicit manifest-budget flags")?;
     let env = TestEnv {
@@ -258,9 +262,12 @@ fn merge_logs_validation_rejection_with_key_and_reason() -> Result<()> {
 
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
     let config_arg = config_path.to_string_lossy().into_owned();
-    let (cli, matches) =
-        netsuke::cli::parse_with_localizer_from(["netsuke", "--config", &config_arg], &localizer)
-            .context("parse CLI args")?;
+    let (cli, matches) = netsuke::cli::parse_with_localizer_from(
+        ["netsuke", "--config", &config_arg],
+        &localizer,
+        clap::ColorChoice::Auto,
+    )
+    .context("parse CLI args")?;
     let env = TestEnv::default();
     let (json_mode, outcome) =
         netsuke::cli::resolve_json_and_layers_outcome_with_env(&cli, &matches, &env);
@@ -358,8 +365,9 @@ fn merge_rejects_non_utf8_manifest_environment_value() -> Result<()> {
     );
 
     let localizer = Arc::from(netsuke::cli_localization::build_localizer(None));
-    let (cli, matches) = netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer)
-        .context("parse CLI args for raw environment-value merge test")?;
+    let (cli, matches) =
+        netsuke::cli::parse_with_localizer_from(["netsuke"], &localizer, clap::ColorChoice::Auto)
+            .context("parse CLI args for raw environment-value merge test")?;
     let error = netsuke::cli::merge_with_config_and_env(&cli, &matches, &env)
         .expect_err("a non-UTF-8 NETSUKE_FILE value must be rejected");
     ensure!(
