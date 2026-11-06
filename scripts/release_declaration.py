@@ -48,6 +48,7 @@ __all__ = [
     "archive_asset_names",
     "declared_asset_names",
     "platform_target_counts",
+    "target_platforms",
 ]
 
 #: Name of the target mapping in the parsed staging configuration.
@@ -75,6 +76,39 @@ def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
     )
 
 
+def target_platforms(target_config: object) -> dict[str, str]:
+    """Return the platform each configured target serves.
+
+    Payload selection holds every producer record to the platform its target
+    is configured with, so it needs the target keys as well as the per-platform
+    counts the declaration uses. Both views are derived here from one validated
+    reading of the ``targets`` table, so they cannot disagree.
+
+    Returns
+    -------
+    dict[str, str]
+        Configured target key mapped to the platform it stages packages for.
+
+    Notes
+    -----
+    A configuration with no target surfaces ``MissingTargetsError`` and a
+    malformed one ``MalformedTargetError``; both come from :func:`_target_table`
+    and :func:`_platform_of` rather than being raised here.
+
+    Examples
+    --------
+    >>> target_platforms({"targets": {"linux": {"platform": "linux"}}})
+    {'linux': 'linux'}
+    >>> target_platforms({"targets": {}})
+    Traceback (most recent call last):
+        ...
+    release_package_formats.MissingTargetsError: staging configuration defines no \
+release targets
+    """
+    targets = _target_table(target_config)
+    return {target: _platform_of(entry) for target, entry in sorted(targets.items())}
+
+
 def platform_target_counts(target_config: object) -> dict[str, int]:
     """Count configured targets by platform from an already parsed mapping.
 
@@ -83,23 +117,19 @@ def platform_target_counts(target_config: object) -> dict[str, int]:
     dict[str, int]
         The number of configured targets for each platform.
 
-    Raises
-    ------
-    MissingTargetsError
-        If the ``targets`` mapping is absent or empty.
+    Notes
+    -----
+    An unusable target table surfaces the same diagnoses as
+    :func:`target_platforms`, because this counts the view that function
+    returns.
 
     Examples
     --------
     >>> platform_target_counts({"targets": {"linux": {"platform": "linux"}}})
     {'linux': 1}
     """
-    config = _mapping(target_config)
-    targets = config.get(TARGETS_TABLE)
-    if not isinstance(targets, dict) or not targets:
-        raise MissingTargetsError
     counts: dict[str, int] = {}
-    for entry in targets.values():
-        platform = _platform_of(entry)
+    for platform in target_platforms(target_config).values():
         counts[platform] = counts.get(platform, 0) + 1
     return counts
 
@@ -109,6 +139,31 @@ def _mapping(value: object) -> cabc.Mapping[str, object]:
     if not isinstance(value, dict) or not all(isinstance(key, str) for key in value):
         raise MalformedTargetError(MalformedTargetKind.INVALID_MAPPING)
     return value
+
+
+def _target_table(target_config: object) -> cabc.Mapping[str, object]:
+    """Return the configuration's non-empty ``targets`` mapping.
+
+    Returns
+    -------
+    collections.abc.Mapping[str, object]
+        Each configured target key and the table describing it.
+
+    Raises
+    ------
+    MissingTargetsError
+        If the configuration carries no target at all.
+
+    Examples
+    --------
+    >>> sorted(_target_table({"targets": {"b": {}, "a": {}}}))
+    ['a', 'b']
+    """
+    config = _mapping(target_config)
+    targets = config.get(TARGETS_TABLE)
+    if not isinstance(targets, dict) or not targets:
+        raise MissingTargetsError
+    return targets
 
 
 def _platform_of(entry: object) -> str:

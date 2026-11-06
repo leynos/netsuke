@@ -1,0 +1,162 @@
+"""Test the exit status the upload step reports for each outcome.
+
+A workflow branches on the status, so the statuses are part of the contract
+rather than a diagnostic detail: a conflict asks an operator to check which
+commit produced the attached bytes, an unreadable record asks for the producer
+job to be fixed, and neither is a transfer to retry. Each case here runs
+``main`` over a real payload with the stubbed exchange from
+:mod:`release_upload_support`, and asserts only what the workflow reads: the
+status, whether a plan was recorded, and whether anything reached ``gh``.
+
+Run via ``make test-release-publication``.
+"""
+
+import typing as typ
+
+import pytest
+import release_upload_plan
+from release_upload_support import DEB, Destinations, Exchange, Scenario, run_cli
+from upload_declared_assets_cli import (
+    EXIT_CONFLICT,
+    EXIT_INPUT_UNREADABLE,
+    EXIT_OK,
+    EXIT_OUTPUT_UNWRITABLE,
+    EXIT_UPLOAD_FAILED,
+)
+
+if typ.TYPE_CHECKING:
+    import pathlib
+
+
+@pytest.fixture
+def scenario(tmp_path: pathlib.Path) -> Scenario:
+    """Build a two-asset payload with its trusted record.
+
+    Returns
+    -------
+    Scenario
+        The payload, record, and the request that names them.
+    """
+    return Scenario(tmp_path, contents={DEB: b"deb bytes", "b.rpm": b"rpm bytes"})
+
+
+def test_main_writes_a_plan_on_success(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Record the plan so the job can report what it did."""
+    status = run_cli(scenario, Exchange(attached={}), monkeypatch)
+    assert status == EXIT_OK
+    # The plan sorts by name, and "-" precedes "_", so the RPM leads.
+    assert scenario.stored_plan()["actions"] == [
+        ["b.rpm", "skip-verified"],
+        [DEB, "skip-verified"],
+    ]
+
+
+def test_main_reports_a_conflict_with_its_own_status(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit distinctly on a conflict so a workflow can retry or escalate."""
+    exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
+    status = run_cli(scenario, exchange, monkeypatch)
+    assert status == EXIT_CONFLICT
+    assert scenario.stored_plan()["conflicts"] == [DEB]
+
+
+def test_a_conflict_still_records_the_plan_it_refused(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Record the decisions a refusing run made, so its log says what it saw."""
+    exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_CONFLICT
+    # The plan sorts by name, so "b.rpm" precedes the deb it depends on.
+    assert scenario.stored_plan()["actions"] == [
+        ["b.rpm", "upload"],
+        [DEB, "conflict"],
+    ]
+
+
+def test_a_conflicting_run_uploads_nothing(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuse the whole transfer, so the release never holds mixed bytes."""
+    exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
+    _ = run_cli(scenario, exchange, monkeypatch)
+    assert not exchange.uploads()
+
+
+def test_main_reports_an_absent_record_as_unreadable_input(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit distinctly when the trusted record is missing."""
+    exchange = Exchange(attached={})
+    status = run_cli(
+        scenario,
+        exchange,
+        monkeypatch,
+        destinations=Destinations(record=scenario.root / "absent.json"),
+    )
+    assert status == EXIT_INPUT_UNREADABLE
+    assert not exchange.calls
+
+
+def test_a_record_declaring_no_asset_is_unreadable_input(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuse an empty trusted record before anything reaches the network.
+
+    A record with no assets would reconcile nothing and report success, which
+    is the worst outcome available: a release that published nothing and said
+    it was done.
+    """
+    scenario = Scenario(tmp_path, contents={DEB: b"deb bytes"})
+    _ = scenario.record.write_text("{}", encoding="utf-8")
+    exchange = Exchange(attached={})
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_INPUT_UNREADABLE
+    assert not exchange.calls
+
+
+def test_a_payload_that_disagrees_with_the_record_is_a_conflict(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Report replaced bytes as a disagreement, not as a transfer failure."""
+    _ = (scenario.payload / DEB).write_bytes(b"rebuilt")
+    exchange = Exchange(attached={})
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_CONFLICT
+    assert not exchange.calls
+
+
+def test_main_reports_an_unwritable_plan(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit distinctly when the plan cannot be recorded."""
+    status = run_cli(
+        scenario,
+        Exchange(attached={}),
+        monkeypatch,
+        destinations=Destinations(
+            plan=scenario.root / "absent" / release_upload_plan.PLAN_NAME
+        ),
+    )
+    assert status == EXIT_OUTPUT_UNWRITABLE
+
+
+def test_main_reports_a_transport_failure_with_its_own_status(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit distinctly when the transfer fails, so a retry can be automated."""
+    exchange = Exchange(attached={}, fail_upload=True)
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_UPLOAD_FAILED
+
+
+def test_main_reports_success_only_when_the_release_holds_the_bytes(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exit zero on a re-run over a release this step already completed.
+
+    Idempotence is the property that makes an interrupted job safe to restart,
+    so a second run must reach the same status as the first.
+    """
+    exchange = Exchange(attached={})
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK
