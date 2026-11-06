@@ -711,9 +711,13 @@ the console pool.
 Callers that build the IR directly select the same scheduling through
 `BuildEdge::output_visibility`: `EdgeOutputVisibility::Immediate` behaves as
 `console: true` for that edge, and `EdgeOutputVisibility::Buffered` behaves as
-omitting the field. `Action::pool` is a separate IR field with no manifest
-counterpart; a custom pool on an action whose edge selects the console pool is
-rejected at generation time, so clear the pool or set it to `console`.
+omitting the field. The edge decides, not the action: setting `Action::pool` to
+`console` on its own no longer selects the pool, because a `Buffered` edge
+clears the inherited binding. A caller that relied on the action pool must set
+`output_visibility` to `Immediate` to keep console scheduling. `Action::pool`
+is a separate IR field with no manifest counterpart; a custom pool on an action
+whose edge selects the console pool is rejected at generation time, so clear
+the pool or set it to `console`.
 
 Outside JSON mode, Netsuke forwards Ninja output as it reads it. Netsuke does
 not provide a pseudo-terminal: the recipe sees a pipe, and visibility still
