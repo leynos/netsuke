@@ -2314,32 +2314,44 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   them unchanged. `{{ ins }}` and `{{ outs }}` are the only Netsuke markers for
   input and output paths. On POSIX and Bash routes, Netsuke encodes a marker
   for its unquoted, single-quoted, or double-quoted shell context, and rejects
-  one in a command substitution or backticks. Netsuke also rejects a marker
-  that directly follows an unpaired backslash, because that backslash would
-  escape the first character of the substituted path; write `\\{{ outs }}` to
-  keep one literal backslash, or place the marker inside single quotes. In
-  PowerShell `command:` and `script:` recipes, markers are valid only at
-  unquoted sites. Netsuke rejects markers in single-quoted strings,
-  double-quoted strings, here-strings, `$()`, and immediately after a backtick.
-  Netsuke rejects markers in the raw native-command region after PowerShell's
-  `--%` stop-parsing token. That region ends at a newline or pipeline
-  character; a semicolon does not end it, and scanning resumes after the
-  boundary. Only ASCII double quotes are modelled for pipeline detection; a
-  single quote, backtick, or typographic quote in the raw region makes later
-  markers fail closed. The path text otherwise reaches the native command
-  literally instead of being interpreted as Netsuke's quoted path literal.
-  PowerShell scripts have no inert comment regions: plain line-comment text
-  leaves later markers eligible for interpolation, while scanner-sensitive
-  syntax after a comment boundary or any mid-token `#` can make later markers
-  fail closed. This includes a block-comment opener, quotes, backticks, or
-  substitution syntax. In particular, an apostrophe in a comment can make a
-  later marker fail closed. Typographic PowerShell quote characters also make
-  later markers fail closed. A braced variable such as `${env:NAME}` or a
-  here-string opened inside `$()` also makes later markers fail closed.
-  PowerShell path bindings use a single-quoted literal that is unsafe inside an
-  existing string. Markers touching any PowerShell single-quote character,
-  including typographic forms, or another marker are also rejected because the
-  literals could merge with adjacent string or argument text.
+  one in a command substitution or backticks. A `#` starts a comment only
+  outside quotes, at the beginning of input or after a space, tab, newline, or
+  one of `;`, `&`, `|`, `(`, `)`, `<`, and `>`. A `)` that closes `$(...)` or
+  `$((...))` stays part of the surrounding word, so `#` immediately after it
+  does not start a comment. A `)` that ends a `case` pattern is an operator,
+  and the scanner cannot distinguish it from one that closes a substitution, so
+  a substitution containing the `case` reserved word is rejected when a `)` is
+  immediately followed by `#`. That check matches the substitution's raw source
+  text, so it can also reject a substitution whose `case` appears only inside
+  quotes or a comment; that over-approximation keeps the check independent of a
+  second parse of the substitution. A non-breaking space or another non-ASCII
+  space before `#` does not start a comment, so a quote after it still opens or
+  closes a quoted region. Netsuke also rejects a marker that directly follows
+  an unpaired backslash, because that backslash would escape the first
+  character of the substituted path; write `\\{{ outs }}` to keep one literal
+  backslash, or place the marker inside single quotes. In PowerShell `command:`
+  and `script:` recipes, markers are valid only at unquoted sites. Netsuke
+  rejects markers in single-quoted strings, double-quoted strings, here-strings,
+  `$()`, and immediately after a backtick. Netsuke rejects markers in the raw
+  native-command region after PowerShell's `--%` stop-parsing token. That
+  region ends at a newline or pipeline character; a semicolon does not end it,
+  and scanning resumes after the boundary. Only ASCII double quotes are
+  modelled for pipeline detection; a single quote, backtick, or typographic
+  quote in the raw region makes later markers fail closed. The path text
+  otherwise reaches the native command literally instead of being interpreted
+  as Netsuke's quoted path literal. PowerShell scripts have no inert comment
+  regions: plain line-comment text leaves later markers eligible for
+  interpolation, while scanner-sensitive syntax after a comment boundary or any
+  mid-token `#` can make later markers fail closed. This includes a
+  block-comment opener, quotes, backticks, or substitution syntax. In
+  particular, an apostrophe in a comment can make a later marker fail closed.
+  Typographic PowerShell quote characters also make later markers fail closed.
+  A braced variable such as `${env:NAME}` or a here-string opened inside `$()`
+  also makes later markers fail closed. PowerShell path bindings use a
+  single-quoted literal that is unsafe inside an existing string. Markers
+  touching any PowerShell single-quote character, including typographic forms,
+  or another marker are also rejected because the literals could merge with
+  adjacent string or argument text.
 - Build and default-target paths escape a literal space as a `$` followed by a
   space, Ninja's own path escape. They reject `|` and control characters, which
   Ninja's path grammar cannot represent, and also reject `$` and colon, which

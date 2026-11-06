@@ -12,6 +12,10 @@ use super::{
     },
 };
 
+mod delimiters;
+
+use delimiters::ScriptCommandSubstitution;
+
 /// Track quote context while interpolating one POSIX or Bash script.
 pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Preserve the source text for interpolation diagnostics.
@@ -32,6 +36,8 @@ pub(super) struct ScriptSubstitutionTraversal<'template, 'bindings> {
     is_escaped: bool,
     /// Retain nested command substitutions whose markers must be rejected.
     command_substitutions: Vec<ScriptCommandSubstitution>,
+    /// Record the `)` that closed the most recent command substitution.
+    closed_command_substitution: Option<usize>,
 }
 
 /// Describe the quoting mode that controls placeholder substitution.
@@ -43,34 +49,6 @@ enum ShellQuoteContext {
     SingleQuoted,
     /// Temporarily close and reopen double quotes around a word-quoted path.
     DoubleQuoted,
-}
-
-/// Track one nested POSIX command substitution while traversing a script.
-struct ScriptCommandSubstitution {
-    /// Record the quote context local to this command substitution.
-    quote_context: ShellQuoteContext,
-    /// Count nested parenthesised groups until the closing delimiter.
-    parenthesis_depth: usize,
-}
-
-/// Identify a command-substitution delimiter in a script traversal.
-enum ScriptCommandSubstitutionDelimiter {
-    /// Begin a `$()` command substitution.
-    Start,
-    /// Open a grouped expression in the active command substitution.
-    NestedOpen,
-    /// Close a grouped expression or command substitution.
-    Close,
-}
-
-impl ScriptCommandSubstitution {
-    /// Initialise the outermost group of one command substitution.
-    const fn new() -> Self {
-        Self {
-            quote_context: ShellQuoteContext::Unquoted,
-            parenthesis_depth: 1,
-        }
-    }
 }
 
 impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
@@ -90,6 +68,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             posix_lexical: PosixLexicalState::new(),
             is_escaped: false,
             command_substitutions: Vec::new(),
+            closed_command_substitution: None,
         }
     }
 
@@ -155,7 +134,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.posix_lexical.begin_comment();
             return Ok(Some(pos + 1));
         }
-        if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
+        if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(Some(next));
         }
         if self.update_quote_context(ch) {
@@ -196,7 +175,12 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     fn starts_comment(&self, pos: usize, ch: char) -> bool {
         self.active_quote_context() == ShellQuoteContext::Unquoted
             && self.backtick_outer_context.is_none()
-            && PosixLexicalState::starts_comment(self.chars, pos, ch)
+            && PosixLexicalState::starts_comment(
+                self.chars,
+                pos,
+                ch,
+                self.closed_command_substitution,
+            )
     }
 
     /// Report whether a backslash begins an escape of the following character.
@@ -272,60 +256,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         Ok(pos + skip)
     }
 
-    /// Preserve `$()` delimiters while rejecting placeholders within their scope.
-    fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
-        match self.classify_command_substitution_delimiter(pos, ch)? {
-            ScriptCommandSubstitutionDelimiter::Start => {
-                self.command_substitutions
-                    .push(ScriptCommandSubstitution::new());
-                self.output.push_str("$(");
-                Some(pos + 2)
-            }
-            ScriptCommandSubstitutionDelimiter::NestedOpen => {
-                self.increment_command_substitution_parenthesis_depth();
-                self.output.push(ch);
-                Some(pos + 1)
-            }
-            ScriptCommandSubstitutionDelimiter::Close => {
-                self.decrement_command_substitution_parenthesis_depth()?;
-                self.output.push(ch);
-                Some(pos + 1)
-            }
-        }
-    }
-
-    /// Classify a character that delimits an active script command substitution.
-    fn classify_command_substitution_delimiter(
-        &self,
-        pos: usize,
-        ch: char,
-    ) -> Option<ScriptCommandSubstitutionDelimiter> {
-        if self.starts_command_substitution(pos, ch) {
-            return Some(ScriptCommandSubstitutionDelimiter::Start);
-        }
-        if self.is_unquoted_command_substitution() && ch == '(' {
-            return Some(ScriptCommandSubstitutionDelimiter::NestedOpen);
-        }
-        if self.is_unquoted_command_substitution() && ch == ')' {
-            return Some(ScriptCommandSubstitutionDelimiter::Close);
-        }
-        None
-    }
-
-    /// Return whether `ch` opens an unquoted POSIX `$()` command substitution.
-    fn starts_command_substitution(&self, pos: usize, ch: char) -> bool {
-        matches!(
-            (ch, self.chars.get(pos + 1), self.active_quote_context()),
-            ('$', Some('('), context) if context != ShellQuoteContext::SingleQuoted
-        )
-    }
-
-    /// Return whether the active command substitution is outside shell quotes.
-    fn is_unquoted_command_substitution(&self) -> bool {
-        self.is_in_command_substitution()
-            && self.active_quote_context() == ShellQuoteContext::Unquoted
-    }
-
     /// Return the quote context of the innermost command substitution when active.
     fn active_quote_context(&self) -> ShellQuoteContext {
         self.command_substitutions
@@ -346,23 +276,6 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
     /// Report whether a `$()` command substitution is active.
     const fn is_in_command_substitution(&self) -> bool {
         !self.command_substitutions.is_empty()
-    }
-
-    /// Increase the grouping depth in the innermost command substitution.
-    fn increment_command_substitution_parenthesis_depth(&mut self) {
-        if let Some(substitution) = self.command_substitutions.last_mut() {
-            substitution.parenthesis_depth += 1;
-        }
-    }
-
-    /// Close one grouping level and leave the substitution when its delimiter closes.
-    fn decrement_command_substitution_parenthesis_depth(&mut self) -> Option<()> {
-        let substitution = self.command_substitutions.last_mut()?;
-        substitution.parenthesis_depth -= 1;
-        if substitution.parenthesis_depth == 0 {
-            self.command_substitutions.pop();
-        }
-        Some(())
     }
 
     /// Finish the traversal and return the generated shell text.

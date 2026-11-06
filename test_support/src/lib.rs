@@ -7,6 +7,8 @@
 //!   `LocalizerGuard`, `localizer_test_lock`, `set_en_localizer`)
 //! - computing SHA-256 hashes for cache keys (hash module)
 //! - spawning lightweight HTTP servers for network tests (http module)
+//! - decoding the Windows Bash command transport in generated Ninja
+//!   (`shell_transport` module)
 //! - sandboxing PATH and HOME for the build-tools target tests (`build_tools` module)
 //! - building the shared temporary-path snapshot filter (`temp_path_filter` module)
 //!
@@ -35,6 +37,7 @@ pub mod netsuke;
 pub mod ninja;
 pub mod ninja_gen;
 pub mod ninja_semantics;
+pub mod shell_transport;
 pub mod stdlib_assert;
 pub mod temp_path_filter;
 /// Re-export the SHA-256 helper for concise call sites.

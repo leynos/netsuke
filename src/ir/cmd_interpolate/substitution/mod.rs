@@ -2,14 +2,16 @@
 
 use super::{
     CommandBindings, IrGenError, QuoteContext,
-    command_substitution::{CommandSubstitution, CommandSubstitutionDelimiter},
-    find_substitution, invalid_command_error,
-    posix_lexical::{
-        EscapeBeforeMarker, PosixCharacter, PosixLexicalState, backslash_escapes_marker,
+    command_substitution::{
+        CommandSubstitution, CommandSubstitutionDelimiter, SubstitutionBoundary,
+        reject_ambiguous_case_comment,
     },
+    find_substitution, invalid_command_error,
+    posix_lexical::PosixLexicalState,
 };
 use crate::recipe_shell::RecipeShell;
 
+mod posix;
 mod powershell;
 
 use powershell::{PowerShellLexicalState, PowerShellSourceCharacter, PowerShellStopParsingState};
@@ -56,6 +58,8 @@ pub(super) struct SubstitutionTraversal<'template, 'bindings> {
     quote_context: QuoteContext,
     /// Retain nested `$()` parsing state where path insertion is refused.
     command_substitutions: Vec<CommandSubstitution>,
+    /// Record the `)` that closed the most recent command substitution.
+    closed_command_substitution: Option<usize>,
     /// Track POSIX comments and heredocs whose text must remain lexically inert.
     posix_lexical: PosixLexicalState,
 }
@@ -77,6 +81,7 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
             power_shell_stop_parsing: PowerShellStopParsingState::new(),
             quote_context: QuoteContext::Unquoted,
             command_substitutions: Vec::new(),
+            closed_command_substitution: None,
             posix_lexical: PosixLexicalState::new(),
         }
     }
@@ -98,72 +103,6 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         self.append_posix_character(pos, ch)
     }
 
-    /// Preserve POSIX shell syntax while lowering context-safe recipe markers.
-    fn append_posix_character(&mut self, pos: usize, ch: char) -> Result<usize, IrGenError> {
-        let copied_inert_character = {
-            let mut character = PosixCharacter {
-                chars: self.chars,
-                pos,
-                ch,
-                output: &mut self.output,
-            };
-            self.posix_lexical.append_inert_character(&mut character)
-        };
-        if copied_inert_character {
-            return Ok(pos + 1);
-        }
-        if let Some(next) = self.append_escaped_character(pos, ch)? {
-            return Ok(next);
-        }
-        if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch)? {
-            return Ok(next);
-        }
-        if ch == '`' && !self.matches_single_quote_context() {
-            self.in_backticks ^= true;
-            self.output.push(ch);
-            return Ok(pos + 1);
-        }
-        let next = self.append_contextual_character(pos, ch, Self::posix_marker_protection)?;
-        if ch == '\n' {
-            self.posix_lexical.begin_pending_heredoc_after_newline(next);
-        }
-        Ok(next)
-    }
-
-    /// Preserve unquoted POSIX heredoc declarations and comments.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when a heredoc delimiter would lower a
-    /// marker directly after an active escape.
-    fn append_unquoted_posix_lexical_character(
-        &mut self,
-        pos: usize,
-        ch: char,
-    ) -> Result<Option<usize>, IrGenError> {
-        if !self.matches_unquoted_quote_context() {
-            return Ok(None);
-        }
-        let mut character = PosixCharacter {
-            chars: self.chars,
-            pos,
-            ch,
-            output: &mut self.output,
-        };
-        let declaration_end = self
-            .posix_lexical
-            .append_heredoc_declaration(&mut character, self.bindings)
-            .map_err(|EscapeBeforeMarker| invalid_command_error(self.template.to_owned()))?;
-        if let Some(next) = declaration_end {
-            return Ok(Some(next));
-        }
-        if PosixLexicalState::starts_comment(self.chars, pos, ch) {
-            self.posix_lexical.begin_comment();
-            self.output.push(ch);
-            return Ok(Some(pos + 1));
-        }
-        Ok(None)
-    }
     /// Preserve shared shell syntax before lowering a marker for its active context.
     fn append_contextual_character(
         &mut self,
@@ -171,62 +110,56 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         ch: char,
         marker_protection: fn(&Self, usize) -> MarkerProtection,
     ) -> Result<usize, IrGenError> {
-        if let Some(next) = self.append_command_substitution_delimiter(pos, ch) {
+        if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {
             return Ok(next);
         }
         self.update_quote_context(ch);
         self.append_marker_for_context(pos, ch, marker_protection(self, pos))
     }
-    /// Classify POSIX backticks and command substitutions as protected regions.
-    const fn posix_marker_protection(&self, _pos: usize) -> MarkerProtection {
-        MarkerProtection::from_protected_region(
-            self.in_backticks || self.is_in_command_substitution(),
-        )
-    }
-    /// Preserve a POSIX escaped character without interpreting its quote meaning.
-    ///
-    /// # Errors
-    ///
-    /// Returns an invalid-command error when the escape would modify a marker
-    /// lowered immediately after it.
-    fn append_escaped_character(
+    /// Track `$()` nesting and preserve its delimiters before marker handling.
+    fn append_command_substitution_delimiter(
         &mut self,
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
-        if ch != '\\' || self.matches_single_quote_context() {
-            return Ok(None);
-        }
-        if backslash_escapes_marker(self.chars, pos, false, None) {
-            return Err(invalid_command_error(self.template.to_owned()));
-        }
-        let Some(next) = self.chars.get(pos + 1).copied() else {
+        let Some(delimiter) = self.classify_command_substitution_delimiter(pos, ch) else {
             return Ok(None);
         };
-        self.output.push(ch);
-        self.output.push(next);
-        Ok(Some(pos + 2))
-    }
-
-    /// Track `$()` nesting and preserve its delimiters before marker handling.
-    fn append_command_substitution_delimiter(&mut self, pos: usize, ch: char) -> Option<usize> {
-        match self.classify_command_substitution_delimiter(pos, ch)? {
+        match delimiter {
             CommandSubstitutionDelimiter::Start => {
-                self.command_substitutions.push(CommandSubstitution::new());
+                self.command_substitutions
+                    .push(CommandSubstitution::new(pos));
                 self.output.push_str("$(");
-                Some(pos + 2)
+                Ok(Some(pos + 2))
             }
             CommandSubstitutionDelimiter::NestedOpen => {
                 self.increment_command_substitution_parenthesis_depth();
                 self.output.push(ch);
-                Some(pos + 1)
+                Ok(Some(pos + 1))
             }
-            CommandSubstitutionDelimiter::Close => {
-                self.decrement_command_substitution_parenthesis_depth();
-                self.output.push(ch);
-                Some(pos + 1)
-            }
+            CommandSubstitutionDelimiter::Close => self.close_substitution(pos, ch),
         }
+    }
+
+    /// Close one substitution level and reject an ambiguous `case` boundary.
+    fn close_substitution(&mut self, pos: usize, ch: char) -> Result<Option<usize>, IrGenError> {
+        let closed_start = self
+            .command_substitutions
+            .last()
+            .filter(|substitution| substitution.parenthesis_depth == 1)
+            .map(|substitution| substitution.start);
+        if self.decrement_command_substitution_parenthesis_depth() {
+            // PowerShell has no `case` patterns; keep its unquoted-only rule.
+            if self.bindings.shell != RecipeShell::PowerShell
+                || self.matches_unquoted_quote_context()
+            {
+                let boundary = SubstitutionBoundary::new(pos, closed_start);
+                reject_ambiguous_case_comment(self.chars, self.template, &boundary)?;
+            }
+            self.closed_command_substitution = Some(pos);
+        }
+        self.output.push(ch);
+        Ok(Some(pos + 1))
     }
 
     /// Classify a character that delimits an active command substitution.
@@ -321,15 +254,20 @@ impl<'template, 'bindings> SubstitutionTraversal<'template, 'bindings> {
         }
     }
 
-    /// Close one grouping level and leave the substitution when its delimiter closes.
-    fn decrement_command_substitution_parenthesis_depth(&mut self) {
+    /// Close one grouping level and report whether the substitution ended.
+    ///
+    /// Only the `)` that leaves the substitution belongs to the outer word; a
+    /// `)` closing an inner group is still a separator inside the substitution.
+    fn decrement_command_substitution_parenthesis_depth(&mut self) -> bool {
         let Some(substitution) = self.command_substitutions.last_mut() else {
-            return;
+            return false;
         };
         substitution.parenthesis_depth -= 1;
-        if substitution.parenthesis_depth == 0 {
+        let is_closed = substitution.parenthesis_depth == 0;
+        if is_closed {
             self.command_substitutions.pop();
         }
+        is_closed
     }
 
     /// Lower a marker when its current shell context permits substitution.

@@ -14,10 +14,11 @@ use super::{
 };
 
 use support::{
-    adversarial_template_strategy, assert_matches_specification,
-    eight_placeholder_template_strategy, has_odd_backticks, interpolation_template_strategy,
-    is_valid_posix_command, posix_bindings, power_shell_path_strategy,
-    power_shell_template_strategy, raw_binding_strategy, safe_text_strategy,
+    POSIX_SEPARATORS, adversarial_template_strategy, assert_matches_specification,
+    context_sentinel_bindings, eight_placeholder_template_strategy, has_odd_backticks,
+    interpolation_template_strategy, is_valid_posix_command, non_separator_character_strategy,
+    posix_bindings, power_shell_path_strategy, power_shell_template_strategy, raw_binding_strategy,
+    safe_text_strategy,
 };
 
 proptest! {
@@ -271,6 +272,49 @@ proptest! {
                 "guard and independent specification disagree: {unexpected_outcome:?} != {unexpected_specification:?}"
             ),
         }
+    }
+
+    /// Keep `#` inside the surrounding word after every non-separator.
+    ///
+    /// The quote after `#` still opens a double-quoted region, so the marker
+    /// must lower to the double-quoted encoding. A scanner that treated the
+    /// character as whitespace would end the word, read `#` as a comment, and
+    /// leave the marker literal while the shell executed the quote.
+    #[test]
+    fn non_separator_before_hash_keeps_the_marker_quoted(
+        character in non_separator_character_strategy(),
+        filler in "[a-z]{0,8}",
+    ) {
+        let template = format!("echo {filler}{character}#\"{INS_TOKEN}\"");
+        let output = interpolate_script_with_bindings(&template, &context_sentinel_bindings())
+            .expect("a non-separator must keep '#' inside the surrounding word");
+
+        prop_assert_eq!(
+            output,
+            format!("echo {filler}{character}#\"DBL\""),
+            "a non-separator before '#' must keep the marker double-quoted"
+        );
+    }
+
+    /// End the word at every POSIX separator so `#` starts an inert comment.
+    ///
+    /// The marker sits in the quoted text that follows `#`; when the comment
+    /// is recognised the whole remainder stays literal, so the interpolation
+    /// must leave the template byte-for-byte unchanged.
+    #[test]
+    fn separator_before_hash_starts_an_inert_comment(
+        separator in prop::sample::select(POSIX_SEPARATORS.to_vec()),
+        filler in "[a-z]{1,8}",
+    ) {
+        let template = format!("echo {filler}{separator}#\"{INS_TOKEN}\"");
+        let output = interpolate_script_with_bindings(&template, &context_sentinel_bindings())
+            .expect("a separator must let '#' start an inert comment");
+
+        prop_assert_eq!(
+            output,
+            template,
+            "a separator before '#' must leave the rest of the line inert"
+        );
     }
 }
 

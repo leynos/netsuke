@@ -4,17 +4,18 @@
 //! Split out of the parent to keep it under `AGENTS.md`'s 400-line cap. The
 //! decoders are the interesting half: `decode_bash_transport` undoes the Windows
 //! argument quoting so its inner script can be run for real, and
-//! `decode_power_shell_transport` undoes the base64/UTF-16LE envelope.
+//! `decode_power_shell_transport` undoes the base64/UTF-16LE envelope. The Bash
+//! decoder is shared with the Ninja dollar-escaping suite, so it lives in
+//! `test_support` and is re-exported here to keep the parent's import list.
 
 use anyhow::{Context, Result, ensure};
 use base64::Engine as _;
 
+pub(super) use test_support::shell_transport::decode_bash_transport;
+
 /// The PowerShell prefix `ninja_gen` puts before the base64 payload.
 pub(super) const POWER_SHELL_PREFIX: &str = "powershell.exe -NoLogo -NoProfile -NonInteractive \
                                             -ExecutionPolicy Bypass -EncodedCommand ";
-
-/// The `bash.exe -e -c ` prefix the Bash transport wraps its script in.
-pub(super) const BASH_PREFIX: &str = "bash.exe -e -c ";
 
 /// Prefix every line of `text` with `by` spaces.
 ///
@@ -61,51 +62,6 @@ pub(super) fn list_manifest(entry: &str, value: &str) -> String {
         &format!("command:\n  - \"{}\"\n", entry.replace('\\', "\\\\")),
         value,
     )
-}
-
-/// Recover the inner script of the `Bash` transport's `bash.exe -e -c "…"`.
-///
-/// This is a *decoder*, not a restatement of the encoder: it undoes the
-/// Windows argument quoting so the result is the exact text `bash.exe` would
-/// receive as its `-c` argument. Running that text under the host's own POSIX
-/// shell is what makes the Bash arm an execution test rather than a shape
-/// assertion.
-pub(super) fn decode_bash_transport(binding: &str) -> Result<String> {
-    let argument = binding
-        .strip_prefix(BASH_PREFIX)
-        .with_context(|| format!("Bash transport should start with {BASH_PREFIX:?}: {binding}"))?;
-    let inner = argument
-        .strip_prefix('"')
-        .and_then(|rest| rest.strip_suffix('"'))
-        .with_context(|| {
-            format!("Bash transport argument should be one quoted word: {argument}")
-        })?;
-
-    // Windows argument quoting: a backslash before a `"` is an escape, and the
-    // run of backslashes before the closing quote is halved.
-    //
-    // The halving is written `>> 1` and the parity test `is_multiple_of`,
-    // because the workspace denies `clippy::integer_division` and
-    // `clippy::integer_division_remainder_used`: a literal `/` or `%` here
-    // would fail the build. Both spell the arithmetic the sentence above names.
-    let mut decoded = String::with_capacity(inner.len());
-    let mut backslashes = 0usize;
-    for character in inner.chars() {
-        if character == '\\' {
-            backslashes += 1;
-            continue;
-        }
-        if character == '"' && !backslashes.is_multiple_of(2) {
-            decoded.push_str(&"\\".repeat(backslashes >> 1));
-            decoded.push('"');
-        } else {
-            decoded.push_str(&"\\".repeat(backslashes));
-            decoded.push(character);
-        }
-        backslashes = 0;
-    }
-    decoded.push_str(&"\\".repeat(backslashes >> 1));
-    Ok(decoded)
 }
 
 /// Decode the PowerShell transport's base64 payload back to its script.

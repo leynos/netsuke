@@ -1,4 +1,4 @@
-//! Unit tests for POSIX heredoc delimiter interpolation.
+//! Unit tests for POSIX heredoc delimiter interpolation and comment boundaries.
 
 use super::super::{
     CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell,
@@ -7,6 +7,15 @@ use super::super::{
 
 use camino::Utf8PathBuf;
 use rstest::rstest;
+
+/// Signature shared by the POSIX command and script interpolators.
+type Interpolator = fn(&str, &CommandBindings) -> Result<String, IrGenError>;
+
+/// Path whose unquoted encoding is executable shell syntax inside double quotes.
+const HOSTILE_PATH: &str = "x\"; touch injected; echo \"y";
+
+/// Expect the hostile path escaped for insertion between existing double quotes.
+const HOSTILE_DOUBLE_QUOTED: &str = "x\\\"; touch injected; echo \\\"y";
 
 /// Build bindings for one simple input and output path pair.
 fn bindings() -> CommandBindings {
@@ -68,6 +77,78 @@ fn escaped_delimiter_backslashes_keep_markers_eligible(
     );
 }
 
+/// Build POSIX bindings that expose a wrong quote-context encoding.
+fn hostile_posix_bindings() -> CommandBindings {
+    CommandBindings::new(
+        &[Utf8PathBuf::from(HOSTILE_PATH)],
+        &[Utf8PathBuf::from(HOSTILE_PATH)],
+        RecipeShell::Posix,
+    )
+}
+
+/// Return both POSIX interpolators that share the comment scanner.
+///
+/// A boundary case that holds for one traversal should hold for the other.
+fn both_interpolators() -> [Interpolator; 2] {
+    [
+        interpolate_command_with_bindings,
+        interpolate_script_with_bindings,
+    ]
+}
+
+/// Assert that command and script interpolation both yield the expected text.
+fn assert_both_outputs(template: &str, expected: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(template, &bindings).expect(context),
+            expected,
+            "{context}"
+        );
+    }
+}
+
+/// Assert that command and script interpolation both reject the template.
+fn assert_both_reject(template: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
+        assert!(interpolate(template, &bindings).is_err(), "{context}");
+    }
+}
+
+/// Assert that script interpolation yields the expected text.
+fn assert_script_output(template: &str, expected: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    assert_eq!(
+        interpolate_script_with_bindings(template, &bindings).expect(context),
+        expected,
+        "{context}"
+    );
+}
+
+/// Build a pair whose comment carries a marker and an unmatched quote.
+///
+/// A scanner that ends the comment early treats either as executable syntax and
+/// mis-encodes the double-quoted marker on the following line. `closer` is an
+/// extra line between the comment and that marker line, used when a
+/// substitution must be closed before interpolation continues.
+fn inert_comment_case(prefix: &str, closer: Option<&str>) -> (String, String) {
+    let continuation = closer.map_or_else(String::new, |line| format!("\n{line}"));
+    let comment = format!("{prefix}# {INS_TOKEN} unmatched '{continuation}");
+    (
+        format!("{comment}\necho \"{OUTS_TOKEN}\""),
+        format!("{comment}\necho \"{HOSTILE_DOUBLE_QUOTED}\""),
+    )
+}
+
+/// Build a pair where `#` must stay in the word so its quote stays executable.
+fn executable_quote_case(prefix: &str) -> (String, String) {
+    (
+        format!("{prefix}#\"\necho {INS_TOKEN}\""),
+        format!("{prefix}#\"\necho {HOSTILE_DOUBLE_QUOTED}\""),
+    )
+}
+
 /// Verify escaped quotes do not change the marker context in a heredoc delimiter.
 #[test]
 fn escaped_heredoc_delimiter_quotes_preserve_marker_context() {
@@ -102,5 +183,212 @@ fn multiple_heredoc_bodies_preserve_marker_literals() {
         interpolate_script_with_bindings(&template, &bindings)
             .expect("each heredoc body must remain literal"),
         expected
+    );
+}
+
+/// Verify a non-separator before `#` cannot hide a later quote transition.
+///
+/// POSIX shells end a word only at blank, newline, or an operator. A no-break
+/// space is word data, so the quote after `#` stays executable and must open a
+/// double-quoted region for the marker on the next line. Treating it as
+/// whitespace would skip that transition and encode the path as unquoted text,
+/// which the real double-quoted region would execute.
+#[rstest]
+#[case::no_break_space('\u{00a0}')]
+#[case::ideographic_space('\u{3000}')]
+#[case::em_space('\u{2003}')]
+#[case::next_line('\u{0085}')]
+#[case::carriage_return('\r')]
+#[case::vertical_tab('\u{000b}')]
+#[case::form_feed('\u{000c}')]
+#[case::non_ascii_word_letter('\u{00e9}')]
+fn non_ascii_whitespace_before_hash_preserves_executable_quote_context(#[case] character: char) {
+    let (template, expected) = executable_quote_case(&format!("echo x{character}"));
+    assert_both_outputs(
+        &template,
+        &expected,
+        "a non-separator before '#' must keep the later quote executable",
+    );
+}
+
+/// Verify each POSIX separator lets `#` start an inert comment.
+///
+/// The comment carries a marker and an unmatched quote; a scanner that ends
+/// the comment early would treat either as executable syntax and mis-encode
+/// the double-quoted marker on the following line.
+#[rstest]
+#[case::space("echo x ")]
+#[case::tab("echo x\t")]
+#[case::newline("echo x\n")]
+#[case::beginning_of_input("")]
+#[case::semicolon("echo x;")]
+#[case::ampersand("echo x&")]
+#[case::pipe("echo x|")]
+#[case::subshell_open("echo x(")]
+#[case::subshell_close("echo x)")]
+#[case::input_redirect("echo x<")]
+#[case::output_redirect("echo x>")]
+fn posix_separators_before_hash_start_inert_comments(#[case] prefix: &str) {
+    let (template, expected) = inert_comment_case(prefix, None);
+    assert_script_output(
+        &template,
+        &expected,
+        "a comment after a separator must stay inert",
+    );
+}
+
+/// Verify a closing substitution delimiter keeps `#` in the surrounding word.
+///
+/// After `$()` or `$(( ))`, the closing `)` is still part of the word, so `#`
+/// does not begin a comment. A scanner that treated it as a separator would
+/// skip the quote on the same line and encode the marker for the wrong
+/// context, letting a quote-bearing path escape its double-quoted region.
+#[rstest]
+#[case::command_substitution("echo $(printf x)")]
+#[case::arithmetic_expansion("echo $((1 + 2))")]
+fn substitution_close_before_hash_preserves_executable_quote_context(#[case] prefix: &str) {
+    let (template, expected) = executable_quote_case(prefix);
+    assert_both_outputs(
+        &template,
+        &expected,
+        "a closing substitution delimiter must keep '#' in the word",
+    );
+}
+
+/// Verify a subshell closer still delimits the word before `#`.
+///
+/// A `)` that closes a subshell is an operator rather than part of a word, so
+/// `#` after it begins an inert comment. A quote inside that comment must not
+/// change the encoding of a marker on the following line.
+#[test]
+fn subshell_close_before_hash_starts_inert_comment() {
+    let (template, expected) = inert_comment_case("(echo x)", None);
+    assert_script_output(
+        &template,
+        &expected,
+        "a subshell closer must still begin a comment",
+    );
+}
+
+/// Verify an inner group closer inside `$()` still begins a comment.
+///
+/// The `)` that closes the subshell rather than the substitution is an
+/// operator within the substitution, so `#` after it makes the rest of that
+/// line inert. The substitution's own `)` on the next line then closes it.
+#[test]
+fn inner_group_close_inside_substitution_starts_inert_comment() {
+    let (template, expected) = inert_comment_case("echo $( (echo x)", Some(")"));
+    assert_script_output(
+        &template,
+        &expected,
+        "a group closer inside a substitution must begin a comment",
+    );
+}
+
+/// Verify a `case` substitution without a comment boundary still interpolates.
+///
+/// The guard applies only to a `)` immediately followed by `#`. A substitution
+/// that merely contains `case` and closes before ordinary text must be
+/// accepted, and a later marker must still lower. Without this case, deleting
+/// the comment-boundary test from the guard would leave every other test
+/// passing.
+#[test]
+fn case_substitution_without_comment_boundary_is_accepted() {
+    let bindings = bindings();
+    let template = format!("echo $(case x in x) y {INS_TOKEN}");
+    let expected = "echo $(case x in x) y input";
+    for interpolate in both_interpolators() {
+        assert_eq!(
+            interpolate(&template, &bindings)
+                .expect("a case substitution without ')#' must be accepted"),
+            expected,
+            "a case substitution without a comment boundary must be accepted"
+        );
+    }
+}
+
+/// Verify a word that merely contains `case` is not treated as the keyword.
+///
+/// `showcase` ends in the same four letters as the `case` reserved word, and
+/// the `)` that closes its substitution is followed by `#`. A substring match
+/// would reject this supported recipe; only a whole-word match may fail
+/// closed. Because the closer stays in the word, the `#` is word data and the
+/// quote after it still opens a double-quoted region.
+#[test]
+fn word_containing_case_before_hash_interpolates_normally() {
+    let (template, expected) = executable_quote_case("echo $(showcase)");
+    assert_both_outputs(
+        &template,
+        &expected,
+        "a word containing 'case' must not trigger the ambiguity guard",
+    );
+}
+
+/// Verify a `case` pattern terminator before `#` fails closed.
+///
+/// A `)` that ends a `case` pattern is an operator, so `#` after it starts a
+/// comment; a `)` that closes `$()` is word data, so `#` after it does not.
+/// The scanner cannot tell them apart without the `case` grammar, so it must
+/// reject the script rather than encode a later marker for the wrong context.
+#[test]
+fn case_pattern_close_before_hash_fails_closed() {
+    let (template, _) = inert_comment_case("echo $(case x in\nx)", Some("esac)"));
+    assert_both_reject(
+        &template,
+        "a case pattern terminator before '#' must fail closed",
+    );
+}
+
+/// Verify the ambiguity guard still fires beyond the diagnostic snippet.
+///
+/// The invalid-command diagnostic quotes only the first 160 characters of the
+/// recipe, so a boundary that sits later must still be found by the traversal.
+/// Reading the boundary from the truncated message instead of the source would
+/// accept this recipe and encode a later marker for the wrong context.
+#[test]
+fn case_pattern_close_beyond_diagnostic_snippet_fails_closed() {
+    let padding = format!("echo {} $(case x in\nx)", "x".repeat(200));
+    let (template, _) = inert_comment_case(&padding, Some("esac)"));
+    assert_both_reject(
+        &template,
+        "an ambiguous case boundary beyond the snippet must fail closed",
+    );
+}
+
+/// Verify an outer-quoted substitution is still checked for the `case` ambiguity.
+///
+/// The enclosing double quotes do not extend into `$(...)`: the shell parses a
+/// substitution as its own script, so a `)` there that may terminate a `case`
+/// pattern is just as ambiguous as an unquoted one. Deciding from the quote
+/// context read after the substitution is popped would skip the rejection and
+/// let a `#` comment inside the pattern flip the scanner's quote state.
+#[test]
+fn case_pattern_close_inside_outer_quotes_fails_closed() {
+    let template = format!("echo \"$(case x in x)# {OUTS_TOKEN}\"");
+    assert_both_reject(
+        &template,
+        "an outer-quoted case pattern terminator before '#' must fail closed",
+    );
+}
+
+/// Verify a non-ASCII character keeps a heredoc delimiter word intact.
+///
+/// The delimiter is `EOF` followed by a no-break space and `X`, so the body
+/// line `EOF` does not terminate it and the marker inside the body stays
+/// literal. A scanner that ended the delimiter at the no-break space would
+/// close the body early and interpolate that marker as executable text.
+#[test]
+fn non_ascii_delimiter_character_keeps_heredoc_body_inert() {
+    let bindings = CommandBindings::new(
+        &[Utf8PathBuf::from("$(touch injected)")],
+        &[Utf8PathBuf::from("output")],
+        RecipeShell::Posix,
+    );
+    let template = format!("cat <<EOF\u{00a0}X\nEOF\n{INS_TOKEN}\nEOF\u{00a0}X\n");
+
+    assert_eq!(
+        interpolate_script_with_bindings(&template, &bindings)
+            .expect("a heredoc delimiter containing word data must keep its body inert"),
+        template
     );
 }
