@@ -99,9 +99,11 @@ def complete_staged() -> dict[str, list[str]]:
 def test_a_complete_tree_selects_exactly_the_declared_names() -> None:
     """Select every declared name once, with its recorded digest."""
     selected = selection_for([provenance()], complete_staged())
-    assert selected.declared == tuple(sorted((ARCHIVE, SIDECAR, DEB, RPM)))
+    assert selected.declared == tuple(sorted((ARCHIVE, SIDECAR, DEB, RPM))), (
+        "selection must declare every published name"
+    )
     assert selected.sources[DEB] == "deb", "the adapter's own source must survive"
-    assert selected.trusted[DEB] == "3" * 64
+    assert selected.trusted[DEB] == "3" * 64, "the recorded digest must survive"
 
 
 def test_the_sources_are_returned_opaque() -> None:
@@ -118,7 +120,9 @@ def test_the_sources_are_returned_opaque() -> None:
         archive_names=[ARCHIVE],
         staged=staged,
     )
-    assert selected.sources[DEB] is tokens["deb"]
+    assert selected.sources[DEB] is tokens["deb"], (
+        "selection must return the adapter's own object, not a copy"
+    )
 
 
 def test_a_record_from_another_commit_is_refused() -> None:
@@ -191,8 +195,8 @@ def test_retained_workspace_material_is_excluded() -> None:
     staged = complete_staged()
     staged |= {"netsuke": ["bin"], "LICENSE": ["licence"], "README.md": ["readme"]}
     selected = selection_for([provenance()], staged)
-    assert "netsuke" not in selected.declared
-    assert "LICENSE" not in selected.declared
+    assert "netsuke" not in selected.declared, "the retained binary is not an asset"
+    assert "LICENSE" not in selected.declared, "the licence is not an asset"
 
 
 def test_a_record_claiming_a_name_the_declaration_does_not_is_refused() -> None:

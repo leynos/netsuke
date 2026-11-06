@@ -185,8 +185,10 @@ def test_a_complete_tree_installs_exactly_the_declared_names(
 ) -> None:
     """Copy the declared assets under their published names and nothing else."""
     tree = staged_tree(tmp_path)
-    assert run_cli(tree) == cli.EXIT_OK
-    assert installed_names(tree["output"]) == sorted([ARCHIVE, SIDECAR, DEB, RPM])
+    assert run_cli(tree) == cli.EXIT_OK, "a complete tree must be accepted"
+    assert installed_names(tree["output"]) == sorted([ARCHIVE, SIDECAR, DEB, RPM]), (
+        "the payload must hold exactly the declared names"
+    )
 
 
 def test_the_trusted_record_describes_the_installed_bytes(
@@ -194,11 +196,15 @@ def test_the_trusted_record_describes_the_installed_bytes(
 ) -> None:
     """Write a record the verifier and finalizer can compare downloads against."""
     tree = staged_tree(tmp_path)
-    assert run_cli(tree) == cli.EXIT_OK
+    assert run_cli(tree) == cli.EXIT_OK, "a complete tree must be accepted"
     record = release_digest_record_files.read_digest_record(tree["record"])
-    assert sorted(record) == sorted([ARCHIVE, SIDECAR, DEB, RPM])
+    assert sorted(record) == sorted([ARCHIVE, SIDECAR, DEB, RPM]), (
+        "the record must describe every declared name"
+    )
     installed = tree["output"] / cli.PAYLOAD_DIRECTORY / DEB
-    assert record[DEB] == release_digest_files.digest_of_file(installed)
+    assert record[DEB] == release_digest_files.digest_of_file(installed), (
+        "the recorded digest must describe the installed bytes"
+    )
 
 
 def test_retained_material_never_reaches_the_payload(tmp_path: pathlib.Path) -> None:
@@ -208,12 +214,11 @@ def test_retained_material_never_reaches_the_payload(tmp_path: pathlib.Path) -> 
     the release never declared.
     """
     tree = staged_tree(tmp_path)
-    assert run_cli(tree) == cli.EXIT_OK
+    assert run_cli(tree) == cli.EXIT_OK, "retained material must not be refused"
+    recorded = release_digest_record_files.read_digest_record(tree["record"])
     for retained in RETAINED:
-        assert retained not in installed_names(tree["output"])
-        assert retained not in release_digest_record_files.read_digest_record(
-            tree["record"]
-        )
+        assert retained not in installed_names(tree["output"]), retained
+        assert retained not in recorded, retained
 
 
 def test_the_producer_record_is_not_uploaded_as_an_asset(
@@ -221,8 +226,10 @@ def test_the_producer_record_is_not_uploaded_as_an_asset(
 ) -> None:
     """Leave the provenance record out of the payload it describes."""
     tree = staged_tree(tmp_path)
-    assert run_cli(tree) == cli.EXIT_OK
-    assert "producer-provenance.json" not in installed_names(tree["output"])
+    assert run_cli(tree) == cli.EXIT_OK, "the record must not be an asset"
+    assert "producer-provenance.json" not in installed_names(tree["output"]), (
+        "the producer record must stay out of the payload"
+    )
 
 
 def test_a_producer_from_another_commit_is_refused(tmp_path: pathlib.Path) -> None:
@@ -233,7 +240,9 @@ def test_a_producer_from_another_commit_is_refused(tmp_path: pathlib.Path) -> No
         fields=Provenance(commit="b" * 40),
         assets=_staged_assets(tree),
     )
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "a stale candidate must be refused"
+    )
     assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
@@ -243,8 +252,8 @@ def test_a_producer_from_another_run_is_refused(tmp_path: pathlib.Path) -> None:
     record_provenance(
         tree["dist"], fields=Provenance(run_id="9999"), assets=_staged_assets(tree)
     )
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, "a foreign run must be refused"
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_a_record_naming_an_unknown_platform_is_unusable_input(
@@ -258,32 +267,40 @@ def test_a_record_naming_an_unknown_platform_is_unusable_input(
     record_provenance(
         tree["dist"], fields=Provenance(platform="beos"), assets=_staged_assets(tree)
     )
-    assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT, (
+        "an unknown platform is input trouble, not a refusal"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_an_ambiguous_declared_name_is_refused(tmp_path: pathlib.Path) -> None:
     """Refuse two staged files claiming one published name."""
     tree = staged_tree(tmp_path)
     stage(tree["dist"], f"stray/{DEB}")
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "an ambiguous name must be refused"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_a_release_shaped_stray_is_refused(tmp_path: pathlib.Path) -> None:
     """Refuse an undeclared staged file that would publish if uploaded."""
     tree = staged_tree(tmp_path)
     stage(tree["dist"], "netsuke-9.9.9-aarch64-apple-darwin.tar.gz")
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "a release-shaped stray must be refused"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_a_missing_declared_asset_is_refused(tmp_path: pathlib.Path) -> None:
     """Refuse a tree that lost one of the recorded assets."""
     tree = staged_tree(tmp_path)
     _ = (tree["dist"] / RPM).unlink()
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "a lost declared asset must be refused"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_replaced_bytes_are_refused_before_the_copy(tmp_path: pathlib.Path) -> None:
@@ -291,8 +308,10 @@ def test_replaced_bytes_are_refused_before_the_copy(tmp_path: pathlib.Path) -> N
     tree = staged_tree(tmp_path, producer=False)
     record_provenance(tree["dist"], assets=_staged_assets(tree))
     stage(tree["dist"], DEB, b"rebuilt from another commit")
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "bytes the producer did not record must be refused"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_a_missing_producer_record_is_refused(tmp_path: pathlib.Path) -> None:
@@ -302,8 +321,10 @@ def test_a_missing_producer_record_is_refused(tmp_path: pathlib.Path) -> None:
     even though every file in it is readable.
     """
     tree = staged_tree(tmp_path, producer=False)
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "a producer that never reported must be refused"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_an_existing_output_directory_is_unusable_input(
@@ -312,7 +333,9 @@ def test_an_existing_output_directory_is_unusable_input(
     """Refuse to merge into a directory left by an earlier attempt."""
     tree = staged_tree(tmp_path)
     tree["output"].mkdir()
-    assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT
+    assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT, (
+        "an existing output directory must be refused"
+    )
 
 
 def test_a_malformed_staging_config_is_unusable_input(
@@ -321,8 +344,10 @@ def test_a_malformed_staging_config_is_unusable_input(
     """Report a configuration that cannot declare any release."""
     tree = staged_tree(tmp_path)
     _ = tree["staging_config"].write_text("not = [toml", encoding="utf-8")
-    assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT
-    assert not tree["output"].exists()
+    assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT, (
+        "a malformed config must be reported as input trouble"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def _staged_assets(tree: dict[str, object]) -> dict[str, str]:
@@ -346,6 +371,8 @@ def test_every_declared_name_is_copied_from_its_own_staged_file(
 ) -> None:
     """Copy each name's bytes, not one asset's bytes under every name."""
     tree = staged_tree(tmp_path)
-    assert run_cli(tree) == cli.EXIT_OK
+    assert run_cli(tree) == cli.EXIT_OK, "a complete tree must be accepted"
     installed = tree["output"] / cli.PAYLOAD_DIRECTORY / name
-    assert installed.read_bytes() == name.encode("utf-8")
+    assert installed.read_bytes() == name.encode("utf-8"), (
+        "each name must be copied from its own staged file"
+    )

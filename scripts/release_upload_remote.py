@@ -339,6 +339,7 @@ class _GhExitError(GhCommandFailedError):
     def __init__(
         self, arguments: cabc.Sequence[str], completed: subprocess.CompletedProcess[str]
     ) -> None:
+        """Fold the arguments and the captured standard error into the message."""
         detail = (completed.stderr or "").strip()
         super().__init__(
             f"gh {' '.join(arguments)} exited {completed.returncode}: {detail}"
@@ -353,6 +354,7 @@ class NoNetworkInDoctestError(AssertionError):
     """
 
     def __init__(self) -> None:
+        """Carry the fixed message the doctest's assertion matches on."""
         super().__init__("this path must not invoke gh")
 
 
@@ -365,6 +367,7 @@ class StaticRunner:
     """
 
     def __init__(self, stdout: str) -> None:
+        """Hold the fixed standard output and start an empty record of calls."""
         self.stdout = stdout
         self.calls: list[list[str]] = []
 

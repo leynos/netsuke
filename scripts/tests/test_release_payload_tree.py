@@ -19,11 +19,10 @@ import release_digest_record_files
 import release_payload_selection
 import release_payload_tree
 from release_payload_errors import StagedFileMissingError
+from release_payload_tree import RECORD_NAME
 
 if typ.TYPE_CHECKING:
     import pathlib
-
-RECORD_NAME = release_payload_tree.RECORD_NAME
 
 
 def write_asset(
@@ -66,7 +65,7 @@ def test_observe_payload_indexes_files_by_published_name(
     assert sorted(release_payload_tree.observe_payload(tmp_path)) == [
         "netsuke-0.1.0.beta4-1.x86_64.rpm",
         "netsuke_1.0.0_amd64.deb",
-    ]
+    ], "the indexed names must carry the platform rename"
 
 
 def test_observe_payload_does_not_index_producer_records(
@@ -79,14 +78,18 @@ def test_observe_payload_does_not_index_producer_records(
     """
     write_asset(tmp_path, "netsuke.deb")
     write_provenance(tmp_path / "producer", "linux-x86_64")
-    assert sorted(release_payload_tree.observe_payload(tmp_path)) == ["netsuke.deb"]
+    assert sorted(release_payload_tree.observe_payload(tmp_path)) == ["netsuke.deb"], (
+        "a producer record must never be indexed as an asset"
+    )
 
 
 def test_observe_payload_skips_symlinked_leaves(tmp_path: pathlib.Path) -> None:
     """Exclude a symlink rather than indexing what it points at."""
     real = write_asset(tmp_path / "real", "netsuke.deb")
     _ = (tmp_path / "link.deb").symlink_to(real)
-    assert sorted(release_payload_tree.observe_payload(tmp_path)) == ["netsuke.deb"]
+    assert sorted(release_payload_tree.observe_payload(tmp_path)) == ["netsuke.deb"], (
+        "the link must not appear beside the file it names"
+    )
 
 
 def test_observe_payload_propagates_an_unreadable_tree(
@@ -108,7 +111,7 @@ def test_read_provenances_validates_and_sorts_by_target(
     targets = [
         record.target for record in release_payload_tree.read_provenances(tmp_path)
     ]
-    assert targets == ["alpha", "zulu"]
+    assert targets == ["alpha", "zulu"], "the records must be read in sorted order"
 
 
 def test_read_provenances_reports_an_unusable_record(tmp_path: pathlib.Path) -> None:
@@ -121,7 +124,9 @@ def test_read_provenances_reports_an_unusable_record(tmp_path: pathlib.Path) -> 
 def test_require_regular_accepts_an_ordinary_file(tmp_path: pathlib.Path) -> None:
     """Accept a regular file below regular directories."""
     asset = write_asset(tmp_path, "a.deb")
-    assert release_payload_tree.require_regular(asset) == asset
+    assert release_payload_tree.require_regular(asset) == asset, (
+        "an ordinary file must be returned unchanged"
+    )
 
 
 def test_require_regular_refuses_a_symlinked_leaf(tmp_path: pathlib.Path) -> None:
@@ -183,7 +188,7 @@ def test_copy_verified_copies_the_bytes(tmp_path: pathlib.Path) -> None:
     destination = tmp_path / "out" / "a.deb"
     destination.parent.mkdir()
     release_payload_tree.copy_verified(source, destination)
-    assert destination.read_bytes() == b"payload"
+    assert destination.read_bytes() == b"payload", "the bytes must be copied verbatim"
 
 
 def test_copy_verified_refuses_a_symlink(tmp_path: pathlib.Path) -> None:
@@ -226,8 +231,10 @@ def test_install_payload_copies_and_writes_the_record(
         selection_for({"a.deb": source}), output, record, computed
     )
     installed = output / release_payload_tree.PAYLOAD_DIRECTORY / "a.deb"
-    assert installed.read_bytes() == b"payload"
-    assert release_digest_record_files.read_digest_record(record) == computed
+    assert installed.read_bytes() == b"payload", "the payload must be installed"
+    assert release_digest_record_files.read_digest_record(record) == computed, (
+        "the record must carry the digest the caller computed"
+    )
 
 
 def test_install_payload_refuses_an_existing_output_directory(

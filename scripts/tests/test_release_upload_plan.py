@@ -30,7 +30,7 @@ def read_plan(path: pathlib.Path) -> object:
 
 def test_the_plan_name_is_a_plain_file_name() -> None:
     """Keep the plan name free of separators so it survives a glob-free copy."""
-    assert PLAN_NAME == "upload-plan.json"
+    assert PLAN_NAME == "upload-plan.json", "the plan name must stay plain"
 
 
 def test_write_plan_records_every_action_in_name_order(
@@ -49,7 +49,7 @@ def test_write_plan_records_every_action_in_name_order(
     assert read_plan(destination) == {
         "actions": [["a.deb", "upload"], ["b.rpm", "skip-verified"]],
         "conflicts": [],
-    }
+    }, "every action must be recorded in the order given"
 
 
 def test_write_plan_records_the_conflicts_it_was_given(
@@ -58,14 +58,18 @@ def test_write_plan_records_the_conflicts_it_was_given(
     """Record the conflicting names so a failed run says which asset blocked it."""
     destination = tmp_path / PLAN_NAME
     write_plan(destination, [("a.deb", AssetAction.CONFLICT)], ["a.deb"])
-    assert read_plan(destination)["conflicts"] == ["a.deb"]
+    assert read_plan(destination)["conflicts"] == ["a.deb"], (
+        "the plan must name the blocked asset"
+    )
 
 
 def test_write_plan_is_newline_terminated(tmp_path: pathlib.Path) -> None:
     """Terminate the file so it appends cleanly to a job log."""
     destination = tmp_path / PLAN_NAME
     write_plan(destination, [], [])
-    assert destination.read_text(encoding="utf-8").endswith("}\n")
+    assert destination.read_text(encoding="utf-8").endswith("}\n"), (
+        "the plan must be newline-terminated"
+    )
 
 
 def test_two_identical_runs_serialize_identically(tmp_path: pathlib.Path) -> None:
@@ -79,7 +83,9 @@ def test_two_identical_runs_serialize_identically(tmp_path: pathlib.Path) -> Non
     second = tmp_path / "second.json"
     write_plan(first, actions, ["a.deb"])
     write_plan(second, actions, ["a.deb"])
-    assert first.read_bytes() == second.read_bytes()
+    assert first.read_bytes() == second.read_bytes(), (
+        "identical decisions must serialize identically"
+    )
 
 
 def test_a_conflicting_run_still_records_its_plan(tmp_path: pathlib.Path) -> None:
@@ -95,7 +101,9 @@ def test_a_conflicting_run_still_records_its_plan(tmp_path: pathlib.Path) -> Non
         ["a.deb"],
     )
     plan = read_plan(destination)
-    assert plan["actions"] == [["a.deb", "conflict"], ["b.rpm", "upload"]]
+    assert plan["actions"] == [["a.deb", "conflict"], ["b.rpm", "upload"]], (
+        "a refused run must still record every planned action"
+    )
 
 
 def test_write_plan_reports_an_unwritable_destination(tmp_path: pathlib.Path) -> None:
@@ -108,14 +116,14 @@ def test_conflict_message_names_every_conflict() -> None:
     """Name each conflicting asset in one line an operator can act on."""
     assert conflict_message(["a.deb", "b.rpm"]) == (
         "the release holds assets that disagree with the trusted record: a.deb, b.rpm"
-    )
+    ), "every conflicting name must appear"
 
 
 def test_conflict_message_leads_with_the_reason() -> None:
     """State why the run refused before listing what it refused."""
     assert conflict_message(["a.deb"]).startswith(
         "the release holds assets that disagree"
-    )
+    ), "the reason must lead the message"
 
 
 def test_an_upload_request_holds_the_whole_run() -> None:
@@ -127,7 +135,9 @@ def test_an_upload_request_holds_the_whole_run() -> None:
         plan_path=pathlib.Path("plan.json"),
         is_dry_run=False,
     )
-    assert (request.tag, request.is_dry_run) == ("v1.0.0", False)
+    assert (request.tag, request.is_dry_run) == ("v1.0.0", False), (
+        "the request must carry the tag and the mode unchanged"
+    )
 
 
 def test_an_upload_request_is_immutable() -> None:
@@ -158,7 +168,7 @@ def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
     destination = tmp_path / PLAN_NAME
     write_plan(destination, actions, release_reconcile_github.conflicts(actions))
     recorded = read_plan(destination)
-    assert recorded == {
+    expected = {
         "actions": [
             ["a.deb", "skip-verified"],
             ["b.rpm", "conflict"],
@@ -166,3 +176,4 @@ def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
         ],
         "conflicts": ["b.rpm"],
     }
+    assert recorded == expected, "the plan must express every reconciliation action"

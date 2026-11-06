@@ -60,6 +60,7 @@ class Scenario:
     """Hold one run's payload, trusted record, and plan destination."""
 
     def __init__(self, root: pathlib.Path, *, contents: dict[str, bytes]) -> None:
+        """Write ``contents`` as the payload and record their digests beside it."""
         self.root = root
         self.payload = root / "payload"
         self.payload.mkdir()
@@ -176,6 +177,7 @@ class Exchange:
         downloads: dict[str, bytes] | None = None,
         fail_upload: bool = False,
     ) -> None:
+        """Hold the release's attached digests, staged downloads, and failure mode."""
         self.attached = attached
         self.downloads = downloads or {}
         self.fail_upload = fail_upload

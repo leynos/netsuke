@@ -45,12 +45,12 @@ def test_main_writes_a_plan_on_success(
 ) -> None:
     """Record the plan so the job can report what it did."""
     status = run_cli(scenario, Exchange(attached={}), monkeypatch)
-    assert status == EXIT_OK
+    assert status == EXIT_OK, "a completed transfer must exit zero"
     # The plan sorts by name, and "-" precedes "_", so the RPM leads.
     assert scenario.stored_plan()["actions"] == [
         ["b.rpm", "skip-verified"],
         [DEB, "skip-verified"],
-    ]
+    ], "a successful run must record every asset as verified"
 
 
 def test_main_reports_a_conflict_with_its_own_status(
@@ -59,8 +59,10 @@ def test_main_reports_a_conflict_with_its_own_status(
     """Exit distinctly on a conflict so a workflow can retry or escalate."""
     exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
     status = run_cli(scenario, exchange, monkeypatch)
-    assert status == EXIT_CONFLICT
-    assert scenario.stored_plan()["conflicts"] == [DEB]
+    assert status == EXIT_CONFLICT, "a conflict must not report success"
+    assert scenario.stored_plan()["conflicts"] == [DEB], (
+        "the plan must name the asset that blocked the run"
+    )
 
 
 def test_a_conflict_still_records_the_plan_it_refused(
@@ -68,12 +70,14 @@ def test_a_conflict_still_records_the_plan_it_refused(
 ) -> None:
     """Record the decisions a refusing run made, so its log says what it saw."""
     exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
-    assert run_cli(scenario, exchange, monkeypatch) == EXIT_CONFLICT
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_CONFLICT, (
+        "a refused run must still report the conflict status"
+    )
     # The plan sorts by name, so "b.rpm" precedes the deb it depends on.
     assert scenario.stored_plan()["actions"] == [
         ["b.rpm", "upload"],
         [DEB, "conflict"],
-    ]
+    ], "a refused run must record the decisions it made"
 
 
 def test_a_conflicting_run_uploads_nothing(
@@ -82,7 +86,7 @@ def test_a_conflicting_run_uploads_nothing(
     """Refuse the whole transfer, so the release never holds mixed bytes."""
     exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
     _ = run_cli(scenario, exchange, monkeypatch)
-    assert not exchange.uploads()
+    assert not exchange.uploads(), "a conflict must block the whole transfer"
 
 
 def test_main_reports_an_absent_record_as_unreadable_input(
@@ -96,8 +100,8 @@ def test_main_reports_an_absent_record_as_unreadable_input(
         monkeypatch,
         destinations=Destinations(record=scenario.root / "absent.json"),
     )
-    assert status == EXIT_INPUT_UNREADABLE
-    assert not exchange.calls
+    assert status == EXIT_INPUT_UNREADABLE, "an absent record must be input trouble"
+    assert not exchange.calls, "an unreadable record must not reach the network"
 
 
 def test_a_record_declaring_no_asset_is_unreadable_input(
@@ -112,8 +116,10 @@ def test_a_record_declaring_no_asset_is_unreadable_input(
     scenario = Scenario(tmp_path, contents={DEB: b"deb bytes"})
     _ = scenario.record.write_text("{}", encoding="utf-8")
     exchange = Exchange(attached={})
-    assert run_cli(scenario, exchange, monkeypatch) == EXIT_INPUT_UNREADABLE
-    assert not exchange.calls
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_INPUT_UNREADABLE, (
+        "a record with no asset must be refused as input trouble"
+    )
+    assert not exchange.calls, "an empty record must not reach the network"
 
 
 def test_a_payload_that_disagrees_with_the_record_is_a_conflict(
@@ -122,8 +128,10 @@ def test_a_payload_that_disagrees_with_the_record_is_a_conflict(
     """Report replaced bytes as a disagreement, not as a transfer failure."""
     _ = (scenario.payload / DEB).write_bytes(b"rebuilt")
     exchange = Exchange(attached={})
-    assert run_cli(scenario, exchange, monkeypatch) == EXIT_CONFLICT
-    assert not exchange.calls
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_CONFLICT, (
+        "replaced bytes must report as a conflict"
+    )
+    assert not exchange.calls, "a conflicting payload must not reach the network"
 
 
 def test_main_reports_an_unwritable_plan(
@@ -138,7 +146,9 @@ def test_main_reports_an_unwritable_plan(
             plan=scenario.root / "absent" / release_upload_plan.PLAN_NAME
         ),
     )
-    assert status == EXIT_OUTPUT_UNWRITABLE
+    assert status == EXIT_OUTPUT_UNWRITABLE, (
+        "an unwritable plan must report output trouble, not success"
+    )
 
 
 def test_main_reports_a_transport_failure_with_its_own_status(
@@ -146,7 +156,9 @@ def test_main_reports_a_transport_failure_with_its_own_status(
 ) -> None:
     """Exit distinctly when the transfer fails, so a retry can be automated."""
     exchange = Exchange(attached={}, fail_upload=True)
-    assert run_cli(scenario, exchange, monkeypatch) == EXIT_UPLOAD_FAILED
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_UPLOAD_FAILED, (
+        "a failed transfer must report its own status"
+    )
 
 
 def test_main_reports_success_only_when_the_release_holds_the_bytes(
@@ -158,5 +170,9 @@ def test_main_reports_success_only_when_the_release_holds_the_bytes(
     so a second run must reach the same status as the first.
     """
     exchange = Exchange(attached={})
-    assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK
-    assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK, (
+        "the first run must complete successfully"
+    )
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK, (
+        "a re-run over a completed release must also succeed"
+    )
