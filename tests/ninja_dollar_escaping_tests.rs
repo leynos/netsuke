@@ -161,23 +161,7 @@ fn run_ninja_workspace(
             .write(path, contents)
             .context("write script input")?;
     }
-
-    let mut command = Command::new("ninja");
-    command
-        .args(["-f", "build.ninja", "out"])
-        .current_dir(workspace.path.as_std_path())
-        .env_clear()
-        .env("PATH", host_path()?);
-    for (name, value) in environment {
-        command.env(name, value);
-    }
-    let output = command.output().context("run generated Ninja build")?;
-    if !output.status.success() {
-        bail!(
-            "Ninja failed to execute generated file: {}",
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
+    run_ninja_target(&workspace, environment)?;
     Ok(workspace)
 }
 
@@ -189,8 +173,6 @@ fn ninja_output(
     input: Option<(&str, &str)>,
 ) -> Result<String> {
     let workspace = run_ninja_workspace(ninja_file, environment, input)?;
-
-    run_ninja_target(&workspace, environment)?;
     workspace
         .directory
         .read_to_string("out")

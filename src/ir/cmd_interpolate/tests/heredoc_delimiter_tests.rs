@@ -2,6 +2,8 @@
 
 use super::*;
 
+use proptest::prelude::*;
+
 /// Wrap recipe text so the shared helpers take named domain values.
 ///
 /// Keeping the template distinct from its expected lowering stops the two from
@@ -244,6 +246,122 @@ fn heredoc_tracking_resumes_after_an_arithmetic_expansion() {
             rule: "heredoc tracking must resume after the expansion",
         },
     );
+}
+
+/// One comment-boundary scenario: the text before `#` and how the shell reads it.
+struct CommentBoundaryCase<'a> {
+    /// The source text that precedes the number sign.
+    prefix: &'a str,
+    /// Whether the shell starts a comment at the number sign.
+    is_comment: bool,
+}
+
+// Verify a number sign starts a comment only at a POSIX word boundary.
+//
+// The shell ends a word at a blank, a newline, or an operator, so `#` after
+// any other character is ordinary word text. Treating Unicode whitespace as a
+// separator would start a comment early and leave a marker on that line
+// unlowered, which silently changes the generated recipe. The blank, newline,
+// and operator cases are the controls: there the shell really does start a
+// comment, so the marker must stay an internal token.
+#[rstest]
+#[case::start_of_text(CommentBoundaryCase { prefix: "", is_comment: true })]
+#[case::after_space(CommentBoundaryCase { prefix: "echo x ", is_comment: true })]
+#[case::after_tab(CommentBoundaryCase { prefix: "echo x\t", is_comment: true })]
+#[case::after_operator(CommentBoundaryCase { prefix: "echo x;", is_comment: true })]
+#[case::after_no_break_space(CommentBoundaryCase { prefix: "echo x\u{00A0}", is_comment: false })]
+#[case::after_em_space(CommentBoundaryCase { prefix: "echo x\u{2003}", is_comment: false })]
+#[case::after_vertical_tab(CommentBoundaryCase { prefix: "echo x\u{000B}", is_comment: false })]
+#[case::after_form_feed(CommentBoundaryCase { prefix: "echo x\u{000C}", is_comment: false })]
+#[case::after_carriage_return(CommentBoundaryCase { prefix: "echo x\r", is_comment: false })]
+fn comment_boundaries_follow_posix_word_rules(#[case] case: CommentBoundaryCase<'_>) {
+    let template = format!("{}# {OUTS_TOKEN}", case.prefix);
+    let marker = if case.is_comment {
+        OUTS_TOKEN
+    } else {
+        "output"
+    };
+    let expected = format!("{}# {marker}", case.prefix);
+    assert_both_traversals_lower(
+        Recipe(&template),
+        &Lowering {
+            text: &expected,
+            rule: "a number sign starts a comment only at a POSIX word boundary",
+        },
+    );
+}
+
+// Verify a heredoc declared by a nested command substitution inside an
+// arithmetic expansion is still tracked.
+//
+// The arithmetic suspension belongs to the innermost substitution frame. A
+// nested `$( )` pushes a non-arithmetic frame, so a heredoc it declares must
+// keep its body inert, and lowering must resume once the expansion closes.
+#[test]
+fn nested_command_substitution_inside_arithmetic_tracks_its_heredoc() {
+    let template = format!("n=$((1 + $(cat <<EOF\n{INS_TOKEN}\nEOF\n)))\necho {OUTS_TOKEN}");
+    let expected = format!("n=$((1 + $(cat <<EOF\n{INS_TOKEN}\nEOF\n)))\necho output");
+    assert_both_traversals_lower(
+        Recipe(&template),
+        &Lowering {
+            text: &expected,
+            rule: "a nested command substitution must keep its heredoc body inert",
+        },
+    );
+}
+
+/// Generate a supported heredoc declaration and the terminator it selects.
+///
+/// The forms are the ones the tracker models: plain, tab-stripping, quoted,
+/// partially quoted, escaped, and arbitrary non-ASCII-free words. An empty
+/// terminator is excluded because a blank line would end the body, which the
+/// body generator below does not model.
+fn supported_delimiter() -> impl Strategy<Value = (String, String)> {
+    prop_oneof![
+        Just(("<<EOF".to_owned(), "EOF".to_owned())),
+        Just(("<<-EOF".to_owned(), "EOF".to_owned())),
+        Just(("<<'EOF'".to_owned(), "EOF".to_owned())),
+        Just(("<<\"EOF\"".to_owned(), "EOF".to_owned())),
+        Just(("<<E\"O\"F".to_owned(), "EOF".to_owned())),
+        Just(("<<\\EOF".to_owned(), "EOF".to_owned())),
+        "[a-z]{1,8}".prop_map(|word| (format!("<<{word}"), word.clone())),
+        "[a-z]{1,8}".prop_map(|word| (format!("<<'{word}'"), word)),
+    ]
+}
+
+// Verify every supported delimiter keeps its body inert until the terminator.
+//
+// The reference model is the shell's own rule: a body line ends the heredoc
+// only when it equals the delimiter, so every marker before that line must
+// survive lowering byte-for-byte and the marker after it must be lowered. The
+// generated body lines exclude the terminator and any trailing backslash, so
+// the model needs no continuation handling and a failure points at the
+// delimiter rules rather than at line joining.
+proptest! {
+    #[test]
+    fn heredoc_bodies_stay_inert_for_supported_delimiters(
+        (declaration, terminator) in supported_delimiter(),
+        body_lines in prop::collection::vec("[a-zA-Z0-9 _.,:/-]{0,16}", 0..4),
+    ) {
+        let body: String = body_lines
+            .iter()
+            .filter(|line| line.as_str() != terminator)
+            .map(|line| format!("{line}\n"))
+            .collect();
+        let template = format!(
+            "cat {declaration}\n{body}{INS_TOKEN}\n{terminator}\necho {OUTS_TOKEN}"
+        );
+        let expected = format!(
+            "cat {declaration}\n{body}{INS_TOKEN}\n{terminator}\necho output"
+        );
+        assert_both_traversals_lower(
+            Recipe(&template),
+            &Lowering {
+                text: &expected,
+                rule: "a supported delimiter must keep its body inert until the terminator",
+            },
+        );
+    }
 }
 
 // Verify `<<<` is copied as a here-string operator without queuing a body.
