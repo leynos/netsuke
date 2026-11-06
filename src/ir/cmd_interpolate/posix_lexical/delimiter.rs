@@ -7,7 +7,7 @@
 //! the parent module tracks where a declaration begins and ends.
 
 use super::super::{CommandBindings, Placeholder, QuoteContext, find_substitution};
-use super::{EscapeBeforeMarker, backslash_escapes_marker};
+use super::{EscapeBeforeMarker, backslash_escapes_marker, is_word_terminator};
 
 /// Track quote removal within one heredoc delimiter word.
 #[derive(Clone, Copy)]
@@ -162,9 +162,4 @@ impl From<DelimiterQuoteContext> for QuoteContext {
             DelimiterQuoteContext::Double => Self::Double('"'),
         }
     }
-}
-
-/// Report whether `ch` terminates an unquoted shell word.
-const fn is_word_terminator(ch: char) -> bool {
-    ch.is_whitespace() || matches!(ch, ';' | '|' | '&' | '(' | ')' | '<' | '>')
 }
