@@ -819,7 +819,7 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 
 - **D25. The rebase onto `921320086` needed two CodeScene clearances, and the
   CLI reproduced both.** After replaying 22 commits onto the newer main, four
-  conflicts were resolved and one merge artifact was removed:
+  conflicts were resolved and one merge artefact was removed:
   `test_support/src/lib.rs` had gained a second copy of the re-export block,
   because weave reported the file "auto-resolved" while the duplicated
   `pub use` lines produced ten E0252 errors. The hosted CodeScene delta then
