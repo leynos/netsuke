@@ -1617,3 +1617,17 @@ was treated as failed or restarted.
 
 Keep Status: IN PROGRESS pending review at the new head and trusted-main
 warm-cache acceptance.
+
+Revision 50 (2026-11-07): The pull request reported a conflict against `main`
+after the review-round repair was pushed, because `main` had advanced to
+`6ff836603`. The branch was rebased onto that commit. Three commits conflicted,
+all on the single `.PHONY` line, because `main` added a `fetch` target while
+this branch added `test-prover-tools-integration`, `test-kani-check-isolation`
+and `test-verus-e2e`. Each conflict was resolved as a union: the branch's own
+targets plus `main`'s `fetch`, and `interrogate` kept because it is a real
+target that `main` still lists. Nothing else in the diff changed, which a diff
+of the pre-rebase head against the rebased head confirms: only the ten files
+`main` touched differ. All eleven commit gates were then run again from the
+beginning on the rebased candidate and all passed, with the same counts the
+preceding paragraph records. Keep Status: IN PROGRESS pending review at the new
+head and trusted-main warm-cache acceptance.
