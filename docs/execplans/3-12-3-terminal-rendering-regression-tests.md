@@ -875,17 +875,17 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   way the row did not state — `test_support::terminal::classify` consumed an
   unterminated escape sequence wholesale, so a bare carriage return after
   `\x1b[` was reported absent. A truncated capture with a live redraw would
-  have read as a static stream. Both are fixed.
-  `User-Facing Documentation` was correct that the README still claimed colour
-  rendering was unimplemented, which this branch makes false, and that the
-  guide's `NO_COLOR` sentence omitted the `--color always` precedence.
-  `Developer Documentation` was correct that `settle_startup_diagnostics` was
-  still placed in `src/main.rs` after D20 moved it. `Unit Architecture` and
-  `Domain Architecture` were not adopted: the startup side effects it names
-  (`observability::init_metrics`, `localization::set_localizer`) are unchanged
-  from the base commit and merely moved with the function, and the
-  policy-type dependency it names already exists at base in `src/theme/mod.rs`
-  and `src/output/mode.rs`. Date/Author: 2026-11-08, implementation agent.
+  have read as a static stream. Both are fixed. `User-Facing Documentation` was
+  correct that the README still claimed colour rendering was unimplemented,
+  which this branch makes false, and that the guide's `NO_COLOR` sentence
+  omitted the `--color always` precedence. `Developer Documentation` was
+  correct that `settle_startup_diagnostics` was still placed in `src/main.rs`
+  after D20 moved it. `Unit Architecture` and `Domain Architecture` were not
+  adopted: the startup side effects it names (`observability::init_metrics`,
+  `localization::set_localizer`) are unchanged from the base commit and merely
+  moved with the function, and the policy-type dependency it names already
+  exists at base in `src/theme/mod.rs` and `src/output/mode.rs`. Date/Author:
+  2026-11-08, implementation agent.
 
 ## Outcomes & retrospective
 

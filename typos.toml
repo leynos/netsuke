@@ -68,6 +68,7 @@ extend-ignore-re = [
     "\\bAppArmor\\b",
     "\\bAppFactory<Ser\\b",
     "\\bNETSUKE_COLOR\\b",
+    "\\bNO_COLOR\\b",
     "\\bartifact-(?:name|server-path)\\b",
     "\\bartifact-dir\\b",
     "\\bartifact-name\\b",

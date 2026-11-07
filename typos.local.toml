@@ -87,6 +87,7 @@ ignore = ["mis-grouping",
   "\\bartifact-name\\b",
   "\\bartifact-suffix\\b",
   "\\bNETSUKE_COLOR\\b",
+  "\\bNO_COLOR\\b",
 ]
 
 [files]

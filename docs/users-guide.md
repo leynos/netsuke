@@ -1987,11 +1987,12 @@ Accessible mode uses static, labelled status lines instead of animated progress.
 non-empty value, or when `--color never` is selected. Select it explicitly with
 `--accessibility on`, or force standard output with `--accessibility off`.
 
-Precedence is explicit configuration first, then the environment. `--color
-always` and `NETSUKE_COLOR=always` suppress the `NO_COLOR` and `TERM=dumb`
-triggers, because an operator who asked for colour has overridden the ambient
-hint. `--accessibility on` and `--accessibility off` take precedence over all of
-them: they name the output mode directly rather than inferring it from colour.
+Precedence is explicit configuration first, then the environment.
+`--color always` and `NETSUKE_COLOR=always` suppress the `NO_COLOR` and
+`TERM=dumb` triggers, because an operator who asked for colour has overridden
+the ambient hint. `--accessibility on` and `--accessibility off` take
+precedence over all of them: they name the output mode directly rather than
+inferring it from colour.
 
 A typical accessible build reports:
 

@@ -761,14 +761,14 @@ startup event is held rather than written. The buffer is bounded at
 truncation marker once if the bound is reached, and drops the remainder, so its
 size never depends on how much a run emits.
 
-`settle_startup_diagnostics` in `src/main_startup/mod.rs` decides where the buffer goes
-once the effective mode is known: human mode releases it to stderr, JSON mode
-discards it so stderr carries only the diagnostic document. In `run_with_args`,
-settlement happens after the JSON mode is resolved but before the configuration
-merge, so a human-mode warning still precedes any configuration processing. On
-the paths where `clap` calls `Error::exit` and never returns —
-`parse_cli_or_exit` — settlement happens first, because nothing after that call
-would otherwise run.
+`settle_startup_diagnostics` in `src/main_startup/mod.rs` decides where the
+buffer goes once the effective mode is known: human mode releases it to stderr,
+JSON mode discards it so stderr carries only the diagnostic document. In
+`run_with_args`, settlement happens after the JSON mode is resolved but before
+the configuration merge, so a human-mode warning still precedes any
+configuration processing. On the paths where `clap` calls `Error::exit` and
+never returns — `parse_cli_or_exit` — settlement happens first, because nothing
+after that call would otherwise run.
 
 Unit tests in `src/tests.rs` drive `startup_filter` and the real
 `startup_localizer` to check the buffered warning and the level it is gated by.
