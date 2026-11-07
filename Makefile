@@ -538,6 +538,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/select_release_payload_cli.py \
 		scripts/release_upload_plan.py scripts/release_upload_remote.py \
 		scripts/upload_declared_assets_cli.py \
+		scripts/upload_declared_assets_refusals.py \
 		-c /dev/null --rootdir=. \
 		-p no:cacheprovider --doctest-modules
 
