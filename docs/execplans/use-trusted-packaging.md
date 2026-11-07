@@ -869,7 +869,11 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   `release_publication_boundary_test.py` over `NETWORK_FREE_MODULES`. The only
   network sources are `scripts/crates_io_transport_cli.py` and
   `scripts/crates_io_transport_http.py`, covered by
-  `test_transport_sources_are_the_only_network_sources`. The `POLICY_MODULES`
+  `test_transport_sources_are_the_only_network_sources`. A source that launches
+  a child process is a separate question, held by
+  `test_every_process_spawner_is_a_named_decision` against `PROCESS_MODULES` in
+  `release_publication_modules.py`: a process is not a socket, so the two are
+  banned apart, and each spawner names the reason it must. The `POLICY_MODULES`
   contract also rejects file IO, JSON/TOML parsing, HTTP status codes, and
   GitHub digest syntax in policy code. Both boundaries have positive controls;
   Ruff, Pylint, Interrogate, and ty pass.
@@ -2780,6 +2784,27 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   tokens. `release.yml` still carries no verifier or finalizer step, so the
   release remains draft and a human still publishes it; the crates.io
   publication is untouched by this change.
+- [x] (2026-11-07) Answered the two CodeRabbit rows for the #1066 head. The
+  boundary module described its ban as covering modules that open "a socket, a
+  URL, or a process" while `subprocess` was absent from the set, so the
+  documentation and the check disagreed. Adding `subprocess` to
+  `NETWORK_MODULES` was the suggested repair and would have been wrong twice
+  over: `package_crate_cli` runs `cargo package`, a local build that touches no
+  network, and `test_transport_sources_are_the_only_network_sources` requires
+  each transport module to carry a genuine network import, which no
+  process-launching source could satisfy. The process question now lives in
+  `release_publication_processes.py` as its own ban, and
+  `test_every_process_spawner_is_a_named_decision` requires every source that
+  imports one to be named in `PROCESS_MODULES` with its reason: the packaging
+  seam, and `release_upload_remote`, which runs `gh release upload` and
+  `gh release view`. The second row was a real gap: `release_upload_plan`
+  documents that the plan is written for a refusing run, and it was, but no
+  step retained it, so the record the module promises never left the runner. A
+  third retention step now runs after the upload under `always()` with
+  `if-no-files-found: warn`, so a failure before the uploader runs cannot mask
+  the uploader's own diagnostic. Both contracts were checked against
+  deliberately damaged manifests and files to confirm they fail rather than
+  pass vacuously.
 
 ## Surprises & discoveries
 
