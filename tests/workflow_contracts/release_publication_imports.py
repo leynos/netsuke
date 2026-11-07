@@ -106,8 +106,19 @@ def imported_modules(source: str) -> set[str]:
     return imported
 
 
-def _is_banned(module: str, banned_names: frozenset[str]) -> bool:
+def is_banned(module: str, banned_names: frozenset[str]) -> bool:
     """Report whether ``module`` is, or is nested under, one of ``banned_names``.
+
+    Exported because more than one boundary is drawn with the same rule: a
+    banned name also bans its submodules, and a second copy of this predicate
+    would let the two boundaries disagree about what a nested import is.
+
+    Parameters
+    ----------
+    module
+        A module name, as :func:`imported_modules` records it.
+    banned_names
+        The names a boundary forbids.
 
     Returns
     -------
@@ -116,9 +127,19 @@ def _is_banned(module: str, banned_names: frozenset[str]) -> bool:
 
     Examples
     --------
-    >>> _is_banned("urllib.request", NETWORK_MODULES)
+    >>> is_banned("urllib.request", NETWORK_MODULES)
     True
-    >>> _is_banned("release_digest", NETWORK_MODULES)
+    >>> is_banned("release_digest", NETWORK_MODULES)
+    False
+
+    The submodule arm is pinned against a set naming only the parent, because
+    :data:`NETWORK_MODULES` names ``urllib.request`` outright and would satisfy
+    an exact-match rule on its own. The second case pins the arm's edge: a
+    longer name that merely starts with the same characters is not nested.
+
+    >>> is_banned("pkg.sub", frozenset({"pkg"}))
+    True
+    >>> is_banned("pkgother", frozenset({"pkg"}))
     False
     """
     return any(
@@ -148,7 +169,7 @@ def opens_a_socket(module: str) -> bool:
     >>> opens_a_socket("release_digest")
     False
     """
-    return _is_banned(module, NETWORK_MODULES)
+    return is_banned(module, NETWORK_MODULES)
 
 
 def network_offenders(source: str) -> list[str]:
@@ -337,6 +358,7 @@ __all__ = [
     "NETWORK_MODULES",
     "any_offender",
     "imported_modules",
+    "is_banned",
     "network_offenders",
     "opens_a_socket",
     "policy_boundary_offenders",

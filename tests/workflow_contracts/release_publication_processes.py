@@ -33,26 +33,6 @@ if typ.TYPE_CHECKING:
 PROCESS_LAUNCHERS = frozenset({"subprocess"})
 
 
-def _is_banned(module: str, banned_names: frozenset[str]) -> bool:
-    """Report whether ``module`` is, or is nested under, one of ``banned_names``.
-
-    Returns
-    -------
-    bool
-        ``True`` when the name matches a banned module or its submodule.
-
-    Examples
-    --------
-    >>> _is_banned("subprocess", PROCESS_LAUNCHERS)
-    True
-    >>> _is_banned("socket", PROCESS_LAUNCHERS)
-    False
-    """
-    return any(
-        module == banned or module.startswith(f"{banned}.") for banned in banned_names
-    )
-
-
 def starts_a_process(module: str) -> bool:
     """Report whether an imported module name can launch a child process.
 
@@ -67,6 +47,11 @@ def starts_a_process(module: str) -> bool:
     bool
         ``True`` when the name is, or is nested under, a process launcher.
 
+    Notes
+    -----
+    The submodule rule is shared with the network boundary rather than restated,
+    so the two cannot drift apart about what a nested import is.
+
     Examples
     --------
     >>> starts_a_process("subprocess")
@@ -74,7 +59,9 @@ def starts_a_process(module: str) -> bool:
     >>> starts_a_process("socket")
     False
     """
-    return _is_banned(module, PROCESS_LAUNCHERS)
+    from release_publication_imports import is_banned
+
+    return is_banned(module, PROCESS_LAUNCHERS)
 
 
 def process_offenders(source: str) -> list[str]:

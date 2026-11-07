@@ -189,8 +189,8 @@ def test_upload_of_nothing_asks_gh_for_nothing(tmp_path: pathlib.Path) -> None:
     """Refuse to invoke ``gh`` with no file, which uploads nothing and may error."""
     runner = RecordingRunner()
     upload("v1", [], tmp_path, runner=runner)
-    assert runner.calls == [["gh", "release", "upload", "v1"]], (
-        "an empty payload must not add a file argument"
+    assert not runner.calls, (
+        f"an empty payload must not reach gh at all, got {runner.calls}"
     )
 
 

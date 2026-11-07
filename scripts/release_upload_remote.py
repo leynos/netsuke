@@ -286,12 +286,20 @@ def upload(
 
     Examples
     --------
+    An empty ``names`` transfers nothing, so it returns without invoking
+    ``gh``. ``gh release upload`` given no file is not a no-op: it is a
+    request the release endpoint may reject, and a caller misreading that
+    rejection as a refused transfer would report a failure for a run that had
+    every declared asset already attached.
+
     >>> upload("v1", ["a"], pathlib.Path("/payload"), runner=_never_called)
     Traceback (most recent call last):
         ...
     release_upload_remote.NoNetworkInDoctestError: this path must not invoke gh
     """
     files = [str(payload_dir / name) for name in sorted(names)]
+    if not files:
+        return
     gh(("release", "upload", tag, *files), runner=runner)
 
 
