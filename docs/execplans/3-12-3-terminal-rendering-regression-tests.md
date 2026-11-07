@@ -411,6 +411,29 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `cargo test --test terminal_rendering_tests` passed 65/65 and the
   `main_startup` unit tests 20/20. Remaining: the full sequential gate batch,
   publication, and the lifecycle.
+- [x] (2026-11-07) Cleared the rebase's two CodeScene findings and passed the
+  full ten-gate set. `run_with_args` split again — `resolve_startup_window`
+  owns the pre-configuration window and returns a `StartupWindow` — taking
+  `src/main.rs` to 378 lines, and the three environment providers written out in
+  `src/main_startup/tests.rs` collapsed into one table-driven `FixedEnv`, so
+  no test spells out an environment provider by hand. `cs check` reproduced
+  both hosted scores before and cleared them after (9.58 → 10.00 and 9.68 →
+  10.00). Two gate batches were needed: the first failed Clippy on a `match`
+  that was exactly `?`, and the second failed `spelling` on the single word
+  "artefact" in this plan's own D25 text, which also aborted
+  `markdownlint-cli2` before it ran. All ten gates then passed sequentially
+  against `19a49efe0` with the batch's tree byte-identical at its start and
+  end. This entry was then committed, so the candidate that carries it is a
+  later commit whose only change is documentation: `check-fmt` (220 Markdown
+  files unchanged), `lint` (`doc`, Clippy, Whitaker, `yamllint`, `actionlint`),
+  `doc-coverage` (98.38% against 80%), `test` (5,303 passed, 7 skipped,
+  doctests passed), `test-workflow-contracts` (1,792 passed, 3 skipped, plus
+  28), `test-package-verify`, and `test-coverage-artifact` (52),
+  `test-documentation-contracts` (15), `markdownlint` (0 issues across 220
+  files), and `nixie` (221 diagrams). The earlier nine-green batch on
+  `81162c9c9` is superseded, and the prior claim that `test-package-verify` and
+  `test-coverage-artifact` were "not applicable" no longer holds: both were run
+  here and both passed. Remaining: publication and the lifecycle.
 - [x] EP-M0: terminal test harness.
 - [x] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; hosted
@@ -906,11 +929,17 @@ toolchain this host does not have. The audit therefore checks the boundary
 directly — every ungated module is confirmed to name no Unix-only item — and
 the hosted Windows jobs remain the authority.
 
-Three repository targets were not applicable and were not run:
-`test-package-verify` (the package `include` list, `build.rs`, and
-`build_l10n_audit/` are untouched), `test-coverage-artifact` (no validator under
-`scripts/` changed), and the coverage-artefact validator itself, which is
-operator-run against a downloaded artefact directory.
+Three repository targets were recorded as not applicable for that round and
+were not run: `test-package-verify`, `test-coverage-artifact`, and the
+coverage-artefact validator itself, which is operator-run against a downloaded
+artefact directory. Only the last is genuinely inapplicable. The other two
+seemed to be, on the reasoning that the package `include` list, `build.rs`,
+`build_l10n_audit/` and `scripts/` were untouched, but `AGENTS.md` scopes them
+to the change as a whole rather than to a hand-picked path list, and this
+branch touches the Makefile and the packaging tests. Both were run on the final
+candidate and both passed; see the gate entry in `Progress`. The lesson is that
+"not applicable" is a claim about a rule's scope, not about which files a
+diffstat happens to name.
 
 ### CodeScene's blocking gate, and the extraction it asked for
 
