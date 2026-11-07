@@ -255,11 +255,13 @@ where
     finish_run(exit_code, merged_cli.verbose)
 }
 
-/// Resolve the runtime display plan, configure the process, and run the command.
+/// Resolve the runtime display plan, then run the command under it.
 ///
 /// Resolution happens once here so the tracing formatter, the status reporter,
 /// the diagnostic hook, and the runner all act on the same plan rather than
-/// each deriving colour and glyph decisions from ambient state.
+/// each deriving colour and glyph decisions from ambient state. The runtime
+/// sequence itself belongs to [`run_cli`]; this function only supplies the plan
+/// from the merged configuration, so the two entry points cannot drift apart.
 fn run_configured_command<S>(
     merged_cli: &cli::Cli,
     system_locale: &S,
@@ -270,11 +272,7 @@ where
     S: locale_resolution::SystemLocale,
 {
     let plan = resolve_display_plan(merged_cli.display_policies(), terminal_facts);
-    configure_runtime(merged_cli, system_locale, runtime_mode, plan);
-    match runner::run(merged_cli, plan) {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(err) => handle_runner_error(err, plan.prefs(), runtime_mode),
-    }
+    run_cli(merged_cli, system_locale, runtime_mode, plan)
 }
 
 /// Emit a development snapshot after the command has completed when requested.

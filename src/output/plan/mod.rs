@@ -208,7 +208,7 @@ impl DisplayPlan {
 #[must_use]
 pub const fn resolve_display_plan(policies: DisplayPolicies, facts: TerminalFacts) -> DisplayPlan {
     let output_mode = facts.env.resolve_output_mode(
-        accessibility_override(policies.accessibility),
+        policies.accessibility.explicit_override(),
         Some(policies.colour),
     );
     let prefs = output_prefs::resolve_from_signals(
@@ -285,20 +285,15 @@ const fn colour_enabled(
 }
 
 /// Convert emoji policy into the theme preference consumed by the theme facade.
+///
+/// The forced/unforced decision belongs to [`EmojiPolicy::unicode_override`],
+/// so the plan cannot disagree with the CLI accessors about what `always` and
+/// `never` mean; this only names the two theme variants.
 const fn theme_preference(policy: EmojiPolicy) -> Option<ThemePreference> {
-    match policy {
-        EmojiPolicy::Auto => None,
-        EmojiPolicy::Always => Some(ThemePreference::Unicode),
-        EmojiPolicy::Never => Some(ThemePreference::Ascii),
-    }
-}
-
-/// Convert accessibility policy into the output-mode override.
-const fn accessibility_override(policy: AccessibilityPolicy) -> Option<bool> {
-    match policy {
-        AccessibilityPolicy::Auto => None,
-        AccessibilityPolicy::On => Some(true),
-        AccessibilityPolicy::Off => Some(false),
+    match policy.unicode_override() {
+        None => None,
+        Some(true) => Some(ThemePreference::Unicode),
+        Some(false) => Some(ThemePreference::Ascii),
     }
 }
 

@@ -114,10 +114,19 @@ fn wait_for_child_or_stop(
 ) -> Result<(ExitStatus, bool)> {
     match wait_for_child(child, process_group, timeout) {
         Ok(outcome) => Ok(outcome),
-        Err(error) => {
-            let _ = stop_child(child, process_group)?;
-            Err(error)
-        }
+        // The wait failure is the diagnosis the caller needs; a cleanup
+        // failure is attached to it rather than replacing it, otherwise a
+        // timed-out child that also refused to die reports only the symptom of
+        // the cleanup and hides why the test failed.
+        Err(error) => match stop_child(child, process_group) {
+            // The status of a child that is already being abandoned cannot
+            // change the diagnosis, so the pattern discards it unnamed rather
+            // than binding a value that would then need dropping.
+            Ok(_) => Err(error),
+            Err(cleanup) => Err(error.context(format!(
+                "also failed to stop the pseudo-terminal child: {cleanup:#}"
+            ))),
+        },
     }
 }
 

@@ -387,4 +387,3 @@ pub(super) fn load_manifest_with_stage_reporting(
 
 #[cfg(test)]
 mod tests;
-// weave: run 'weave explain src/runner/mod.rs' for per-hunk detail, 'weave check' to verify your resolution

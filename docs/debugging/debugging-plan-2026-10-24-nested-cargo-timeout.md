@@ -122,8 +122,13 @@ whole-run cause because no process timeline was captured at termination.
 - **Escalation trigger**: If this case times out again, capture its child
   process tree and admission snapshots through termination before changing the
   fixture or timeout.
-- Do not raise the per-test allowance above 900 seconds: the CI whole-run cap is
-  960 seconds, leaving insufficient room for a longer per-test budget.
+- Do not raise the per-test allowance above 900 seconds in the `ci` and
+  `default` profiles: their CI whole-run cap is 960 seconds, leaving
+  insufficient room for a longer per-test budget. The `kani` profile is the
+  documented exception — it carries a 2,400-second per-test allowance under its
+  own 2,520-second whole-run cap, because the mutation compile gate
+  legitimately outlives a default-profile run. See `ADR-0059` and decision
+  `D17` in the 3.12.3 ExecPlan.
 
 ## Notes for executing agent
 

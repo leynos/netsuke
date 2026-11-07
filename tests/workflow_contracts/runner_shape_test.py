@@ -12,6 +12,8 @@ Run via ``make test-workflow-contracts``.
 import pytest
 import yaml
 from fork_fallback import owned_runner, read_placement
+from nextest_budgets import global_timeout
+from timeout_budgets import NEXTEST_CONFIG
 from runner_placement_invariants import (
     GITHUB_HOSTED_LABELS,
     INSTRUMENTED_BUILD_JOBS,
@@ -160,14 +162,26 @@ def test_kani_smoke_job_contains_its_measured_mutation_budget() -> None:
     """Keep the Kani job above setup, the whole run, and finalisation."""
     job = workflow_job(load_workflow(WORKFLOW_DIR / "ci.yml"), "kani-smoke")
     timeout = job.get("timeout-minutes")
-    required_seconds = 824 + 42 * 60 + 7
+    # Measured on hosted run 41840367244: the whole job spent this long before
+    # and after nextest itself, so the ceiling has to cover both.
+    setup_seconds = 824
+    finalisation_seconds = 7
+    whole_run = global_timeout(
+        NEXTEST_CONFIG.read_text(encoding="utf-8"), profile="kani"
+    )
+    assert whole_run is not None, "the kani profile must set a whole-run budget"
+    # Derived rather than restated: a change to the profile's budget must move
+    # this ceiling with it instead of leaving a green test over a job too
+    # short to finish the run.
+    required_seconds = setup_seconds + whole_run + finalisation_seconds
     assert isinstance(timeout, int), (
         f"ci.yml job kani-smoke must set timeout-minutes, got {timeout!r}"
     )
     assert timeout * 60 >= required_seconds, (
-        "ci.yml job kani-smoke must cover 824 seconds of measured setup, "
-        "the 2,520-second Kani run cap, and 7 seconds of finalization; "
-        f"needs at least {required_seconds} seconds, got {timeout!r} minutes"
+        f"ci.yml job kani-smoke must cover {setup_seconds} seconds of measured "
+        f"setup, the {whole_run}-second Kani run cap, and "
+        f"{finalisation_seconds} seconds of finalization; needs at least "
+        f"{required_seconds} seconds, got {timeout!r} minutes"
     )
 
 

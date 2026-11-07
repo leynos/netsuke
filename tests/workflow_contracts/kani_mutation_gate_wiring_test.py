@@ -31,6 +31,7 @@ import tomllib
 from cache_contract_data import WORKFLOW_DIR
 from makefile_recipes import makefile_target
 from nextest_budgets import global_timeout
+from nextest_durations import seconds
 from timeout_budgets import NEXTEST_CONFIG
 from workflow_loading import job_steps, load_workflow, named_step
 
@@ -107,11 +108,12 @@ def test_the_kani_profile_covers_the_cold_compile_budget() -> None:
     assert whole_run == 42 * 60, f"the Kani run budget changed: {whole_run}"
 
     (override,) = profile["overrides"]
-    period_seconds = int(override["slow-timeout"]["period"].removesuffix("s"))
+    # Read the period through the shared duration reader; stripping a trailing
+    # "s" by hand turns a future "1m" into a bare ValueError that names no
+    # contract.
+    period_seconds = seconds(override["slow-timeout"]["period"])
     test_budget = period_seconds * override["slow-timeout"]["terminate-after"]
-    assert int(test_budget) == 40 * 60, (
-        f"the mutation test allowance changed: {test_budget}"
-    )
+    assert test_budget == 40 * 60, f"the mutation test allowance changed: {test_budget}"
     assert whole_run > test_budget, (
         "the Kani whole-run budget must exceed the test allowance"
     )

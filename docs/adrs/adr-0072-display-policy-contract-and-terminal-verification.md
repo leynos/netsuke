@@ -83,7 +83,7 @@ The verification strategy follows one oracle per behaviour:
   emitted bytes with a plan resolved from the same arguments and facts.
 - Behavioural scenarios pin externally visible progress and glyph behaviour.
 
-The four principal decisions behind the implementation are:
+The principal decisions behind the implementation are:
 
 - D2: use a functional core and imperative shell, with one plan handed to four
   outbound adapters rather than a terminal-probe trait.
@@ -113,8 +113,10 @@ binary without copying a second policy implementation.
 An empty `NO_COLOR` is now equivalent to an unset variable. `--progress always`
 does not mean animated progress in every environment. Help styling is decided
 before configuration discovery, so help follows command-line and environment
-hints only. No new dependency is required for the Unix PTY harness; it uses the
-existing `nix` development dependency.
+hints only. The Unix PTY harness reuses the `nix` crate already in the
+dependency graph rather than adding a crate: `test_support` takes `nix` as a
+Unix-target dependency, and the `term`, `fs`, and `signal` features are enabled
+on both it and the root dev-dependency.
 
 ## Known Limitations
 

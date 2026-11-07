@@ -39,4 +39,3 @@ mod terminal_text;
 #[cfg(test)]
 pub(crate) mod test_tracing_capture;
 pub mod theme;
-// weave: run 'weave explain src/lib.rs' for per-hunk detail, 'weave check' to verify your resolution

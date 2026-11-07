@@ -80,7 +80,7 @@ impl EnvSignals {
     /// Return whether the colour policy treats `NO_COLOR` as active.
     ///
     /// `always` ignores the environment signal, while `never` acts like an
-    /// active signal so existing accessibility behavior remains consistent.
+    /// active signal so existing accessibility behaviour remains consistent.
     ///
     /// # Examples
     ///

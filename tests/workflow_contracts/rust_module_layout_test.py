@@ -27,15 +27,16 @@ _SHELL_PREFIX_EXCEPTION: tuple[frozenset[str], str] = (
 )
 
 _MAIN_PREFIX_EXCEPTION: tuple[frozenset[str], str] = (
-    frozenset({"main_diagnostics.rs", "main_startup/", "main_tracing/"}),
+    frozenset({"main_diagnostics.rs", "main_startup/", "main_tracing.rs"}),
     (
         "The main_ prefix marks binary-private adapters owned by the composition "
         "root, not a shared feature: one resolves the pre-configuration startup "
         "signals and parses argv, one installs the tracing subscriber, and one "
         "installs the Miette hook. Their grouping is ownership, not parentage, "
         "and a src/main/ directory is not available because src/main.rs is the "
-        "binary crate root. main_startup and main_tracing each carry a child "
-        "module, so each is a directory with a mod.rs."
+        "binary crate root. main_startup carries a child test module, so it is "
+        "a directory with a mod.rs; main_tracing has no child module and stays "
+        "a flat main_tracing.rs."
     ),
 )
 
