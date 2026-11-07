@@ -76,6 +76,52 @@ fn stripping_colour_from_a_diagnostic_reproduces_the_plain_diagnostic() -> Resul
     Ok(())
 }
 
+/// A colour policy set in a configuration file reaches the runtime plan.
+///
+/// The command path that matters is the merged one: `run_configured_command`
+/// builds its plan from the configuration merged with argv, not from the
+/// pre-configuration startup signals that every other case in this module
+/// exercises. Without a configuration-file case the merged resolver could stop
+/// reading `color` and nothing here would notice, because each existing case
+/// passes the policy on the command line and would keep resolving correctly
+/// through either path.
+#[googletest::gtest]
+#[test]
+fn configuration_file_colour_reaches_the_runtime_plan() -> Result<()> {
+    let workspace = empty_workspace()?;
+    test_support::fs::write(
+        workspace.root_path().join(".netsuke.toml"),
+        "color = \"always\"\n",
+    )
+    .context("write the colour configuration")?;
+
+    let from_configuration = workspace
+        .run_piped(&["generate"], &[])
+        .context("run the missing-manifest diagnostic under configuration colour")?;
+    ensure!(
+        !from_configuration.status.success(),
+        "the missing-manifest diagnostic should fail"
+    );
+    // The configuration file is the only source of colour here: no `--color`
+    // and no NETSUKE_COLOR, so a green assertion cannot come from argv.
+    ensure!(
+        classify(&from_configuration.stderr).has_sgr,
+        "color = \"always\" in .netsuke.toml must style the diagnostic"
+    );
+
+    // The command line still wins over the file, which is the precedence the
+    // merged resolver is responsible for rather than the startup one.
+    let overridden = workspace
+        .run_piped(&["--color", "never", "generate"], &[])
+        .context("run the diagnostic with an overriding colour policy")?;
+    ensure!(
+        !overridden.status.success(),
+        "the missing-manifest diagnostic should fail under the override"
+    );
+    expect_that!(classify(&overridden.stderr).has_sgr, eq(false));
+    Ok(())
+}
+
 /// The accessible diagnostic format is pinned so a later handler switch shows.
 ///
 /// `D8` defers Miette's narratable (screen-reader) handler to a follow-up and
