@@ -37,6 +37,10 @@ pub(super) fn execute(cli: &Cli, command: Commands, context: &ExecutionContext<'
 
 /// Render help for the requested topic, or the root help when no topic is given.
 ///
+/// Clap's own `--help` path renders through clap's colour choice; these
+/// renderer paths build the same `Command` themselves, so they take the plan's
+/// resolved stdout colour rather than deciding again.
+///
 /// # Errors
 ///
 /// Returns an error when the requested help text cannot be rendered or written.
@@ -46,17 +50,18 @@ pub(super) fn execute_help(
     plan: DisplayPlan,
     reporter: &dyn crate::status::StatusReporter,
 ) -> Result<()> {
+    let colour = plan.stdout_colour();
     match args.topic.as_ref() {
-        None => help::render_root_help(),
+        None => help::render_root_help(colour),
         Some(HelpTopic::Targets(target_args)) => {
             help::handle_help_targets(cli, target_args.edges, plan, reporter)
         }
-        Some(HelpTopic::Build) => help::render_subcommand_help("build"),
+        Some(HelpTopic::Build) => help::render_subcommand_help("build", colour),
         #[cfg(feature = "lint")]
-        Some(HelpTopic::Check) => help::render_subcommand_help("check"),
-        Some(HelpTopic::Clean) => help::render_subcommand_help("clean"),
-        Some(HelpTopic::Graph) => help::render_subcommand_help("graph"),
-        Some(HelpTopic::Generate) => help::render_subcommand_help("generate"),
+        Some(HelpTopic::Check) => help::render_subcommand_help("check", colour),
+        Some(HelpTopic::Clean) => help::render_subcommand_help("clean", colour),
+        Some(HelpTopic::Graph) => help::render_subcommand_help("graph", colour),
+        Some(HelpTopic::Generate) => help::render_subcommand_help("generate", colour),
     }
 }
 

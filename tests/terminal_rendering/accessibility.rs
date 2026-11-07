@@ -34,6 +34,7 @@ fn piped_accessibility_auto_reports_static_stage_summaries(
     ensure!(output.status.success(), "generate should succeed");
 
     let stderr = visible_text(&output.stderr);
+    let facts = classify(&output.stderr);
     ensure!(
         plan.output_mode().is_accessible(),
         "case should resolve to accessible output"
@@ -42,9 +43,13 @@ fn piped_accessibility_auto_reports_static_stage_summaries(
         stage_labels_in_output_order(&stderr).as_slice(),
         STAGE_LABELS.as_slice(),
     );
-    expect_that!(
-        classify(&output.stderr).has_redraw,
-        eq(plan.live_progress())
-    );
+    expect_that!(facts.has_redraw, eq(plan.live_progress()));
+    // The accessible reporter is the one fixed-output emitter that never emits
+    // SGR: it renders a prefix glyph plus a localized label and nothing else.
+    // `INV-COLOUR-ADDITIVE` therefore holds for it by construction, and the
+    // assertion that keeps that true is "no escape at all", which is stronger
+    // than "stripping SGR changes nothing".
+    expect_that!(facts.has_any_escape, eq(false));
+    expect_that!(facts.has_bare_carriage_return, eq(false));
     Ok(())
 }

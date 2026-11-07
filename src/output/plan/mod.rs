@@ -87,6 +87,19 @@ pub struct DiagnosticStyle {
     pub links: bool,
 }
 
+/// The colour decision for each output stream.
+///
+/// The two decisions are always made together from the same policy and are
+/// consumed together, so they travel as one value rather than as a pair of
+/// loose booleans that a call site could transpose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StreamColour {
+    /// Whether colour is enabled for stdout.
+    pub stdout: bool,
+    /// Whether colour is enabled for stderr.
+    pub stderr: bool,
+}
+
 /// A consistent set of presentation decisions for one command.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DisplayPlan {
@@ -100,8 +113,8 @@ pub struct DisplayPlan {
     live_progress: bool,
     /// Whether task updates must use plain text.
     force_text_task_updates: bool,
-    /// Whether colour is enabled for stderr.
-    stderr_colour: bool,
+    /// The colour decision for each output stream.
+    colour: StreamColour,
     /// Text and link capabilities selected for diagnostics.
     diagnostic_style: DiagnosticStyle,
 }
@@ -143,10 +156,22 @@ impl DisplayPlan {
         self.force_text_task_updates
     }
 
+    /// Return the colour decision for each output stream.
+    #[must_use]
+    pub const fn colour(self) -> StreamColour {
+        self.colour
+    }
+
+    /// Return whether colour is enabled for stdout output.
+    #[must_use]
+    pub const fn stdout_colour(self) -> bool {
+        self.colour.stdout
+    }
+
     /// Return whether colour is enabled for stderr output.
     #[must_use]
     pub const fn stderr_colour(self) -> bool {
-        self.stderr_colour
+        self.colour.stderr
     }
 
     /// Return the style selected for diagnostics.
@@ -181,30 +206,31 @@ impl DisplayPlan {
 /// assert!(!plan.stderr_colour());
 /// ```
 #[must_use]
-pub fn resolve_display_plan(policies: DisplayPolicies, facts: TerminalFacts) -> DisplayPlan {
+pub const fn resolve_display_plan(policies: DisplayPolicies, facts: TerminalFacts) -> DisplayPlan {
     let output_mode = facts.env.resolve_output_mode(
         accessibility_override(policies.accessibility),
         Some(policies.colour),
     );
-    let prefs = output_prefs::resolve_from_theme_with(
+    let prefs = output_prefs::resolve_from_signals(
         theme_preference(policies.emoji),
         ThemeContext::new(None, Some(policies.colour), output_mode),
-        // The theme layer re-reduces whatever this closure returns through
-        // `EnvSignals::read`, which treats an empty `NO_COLOR` as unset. The
-        // sentinel must therefore be non-empty for an already-reduced
-        // `no_color_set` to survive the second reading.
-        |key| match (key, facts.env.no_color_set) {
-            ("NO_COLOR", true) => Some(String::from("1")),
-            _ => None,
-        },
+        facts.env,
     );
     let reporter = reporter_kind(policies, output_mode);
-    let stderr_colour = colour_enabled(
-        policies.colour,
-        facts.stderr_is_terminal,
-        facts.env,
-        policies.json,
-    );
+    let colour = StreamColour {
+        stdout: colour_enabled(
+            policies.colour,
+            facts.stdout_is_terminal,
+            facts.env,
+            policies.json,
+        ),
+        stderr: colour_enabled(
+            policies.colour,
+            facts.stderr_is_terminal,
+            facts.env,
+            policies.json,
+        ),
+    };
     let live_progress = matches!(reporter, ReporterKind::Standard)
         && facts.stderr_is_terminal
         && facts.env.redraw_capable;
@@ -215,11 +241,11 @@ pub fn resolve_display_plan(policies: DisplayPolicies, facts: TerminalFacts) -> 
         reporter,
         live_progress,
         force_text_task_updates: output_mode.is_accessible() || !facts.stdout_is_terminal,
-        stderr_colour,
+        colour,
         diagnostic_style: DiagnosticStyle {
-            colour: stderr_colour,
+            colour: colour.stderr,
             unicode: prefs.emoji_allowed(),
-            links: stderr_colour && !output_mode.is_accessible(),
+            links: colour.stderr && !output_mode.is_accessible(),
         },
     }
 }

@@ -54,20 +54,6 @@ pub use manifest::ensure_manifest_exists;
 /// Helpers for writing executable stubs and setting executable bits in tests.
 pub use exec::{make_executable, write_exec, write_exec_with_content};
 
-/// Re-export the SHA-256 helper for concise call sites.
-pub use hash::sha256_hex;
-
-/// Re-export localizer helpers for integration tests.
-pub use localizer::{
-    EnLocalizer, LocalizerGuard, en_localizer, localizer_test_lock, set_en_localizer,
-};
-
-/// Re-export manifest helpers for integration tests.
-pub use manifest::ensure_manifest_exists;
-
-/// Helpers for writing executable stubs and setting executable bits in tests.
-pub use exec::{make_executable, write_exec, write_exec_with_content};
-
 mod error;
 /// Thread-local tracing capture for integration-test observability assertions.
 pub mod tracing_capture;

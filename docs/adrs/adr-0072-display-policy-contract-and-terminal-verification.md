@@ -61,9 +61,16 @@ The user-visible contract is:
 
 Colour applies only to Netsuke-controlled tracing, diagnostics, and Clap
 help/version output. Generated artefacts and subprocess streams are forwarded
-unchanged. Diagnostics emitted before configuration is merged use the plain
-fallback style. `TERM=dumb` prevents live redraws even when standard output is
+unchanged. `TERM=dumb` prevents live redraws even when standard output is
 forced with `--accessibility off`.
+
+A configuration-load failure is emitted before any configuration value has been
+read, so it cannot follow a configured colour policy. It is therefore split:
+the human-readable error message uses the plain fallback style under every
+policy, while the structured `tracing` events recorded alongside it follow the
+startup colour hint, as `D11` requires of every tracing event Netsuke controls.
+The two halves are asserted separately, because collapsing them either drops
+colour from the diagnostic stream or breaks the plain-message guarantee.
 
 The verification strategy follows one oracle per behaviour:
 

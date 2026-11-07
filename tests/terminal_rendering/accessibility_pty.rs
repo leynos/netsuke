@@ -37,13 +37,25 @@ fn terminal_accessibility_policy_controls_redraw(
     ensure!(output.status.success(), "generate should succeed");
 
     let terminal = visible_text(&output.terminal);
-    expect_that!(
-        classify(&output.terminal).has_redraw,
-        eq(plan.live_progress())
-    );
+    let facts = classify(&output.terminal);
+    expect_that!(facts.has_redraw, eq(plan.live_progress()));
     if plan.live_progress() {
         expect_that!(terminal.as_str(), contains_substring("Stage 1/6"));
     } else {
+        // `INV-ACCESS-STATIC`: a static stream must carry no redraw sequence, no
+        // bare carriage return (a redraw `indicatif` can emit without a CSI),
+        // and no escape other than SGR. Checking only `has_redraw` would let a
+        // bare-CR redraw through, because a lone `\r` is neither a CSI nor an
+        // SGR.
+        expect_that!(facts.has_bare_carriage_return, eq(false));
+        // The accessible reporter is the one fixed-output emitter that never
+        // emits SGR: it renders a prefix glyph plus a localized label and
+        // nothing else. "No escape at all" is therefore the assertion that
+        // keeps `INV-COLOUR-ADDITIVE` true here, and it is stronger than
+        // "stripping SGR changes nothing" — a stream with no escapes cannot
+        // carry meaning in styling.
+        expect_that!(facts.has_any_escape, eq(false));
+        expect_that!(facts.has_osc, eq(false));
         assert_eq!(
             stage_labels_in_output_order(&terminal).as_slice(),
             STAGE_LABELS.as_slice(),

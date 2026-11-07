@@ -2038,9 +2038,18 @@ subprocess.
 
 Help and version output use the last `--color` value on the command line, then
 `NETSUKE_COLOR`, then `auto`; configuration files are not read to choose help
-colour. Other usage errors and diagnostics emitted before configuration is
-merged remain plain text. An explicit `--color always` can override the
-automatic colour suppression from `NO_COLOR` and `TERM=dumb`.
+colour. The same precedence applies to every route that renders help — `--help`,
+`help`, and `help <subcommand>` — so a `NETSUKE_COLOR` value styles all of
+them or none of them. An explicit `--color always` can override the automatic
+colour suppression from `NO_COLOR` and `TERM=dumb`.
+
+Usage errors stay plain under every policy. So does the human-readable
+configuration-load error message, because the configuration that would select a
+colour policy has not been read yet. The structured `tracing` events emitted
+alongside such a message — the ones carrying `operation` and `error_category` —
+do follow `--color`, so `--color always` styles them even on a pipe. The
+distinction is deliberate: the message is the guarantee, the diagnostic stream
+is an implementation detail with its own documented policy.
 
 ### Progress policy
 

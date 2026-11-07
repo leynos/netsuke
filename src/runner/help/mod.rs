@@ -95,10 +95,10 @@ fn report_query_failure_stages(reporter: &dyn StatusReporter, error: &anyhow::Er
 /// # Errors
 ///
 /// Returns an error when the help text cannot be written to stdout.
-pub(super) fn render_root_help() -> Result<()> {
+pub(super) fn render_root_help(colour: bool) -> Result<()> {
     let localizer = localization::localizer();
     let mut command = configured_command(Some(&localizer));
-    let text = command.render_long_help().to_string();
+    let text = render_long_help(&mut command, colour);
     process::write_text_stdout(&text)
 }
 
@@ -108,14 +108,29 @@ pub(super) fn render_root_help() -> Result<()> {
 ///
 /// Returns an error when the subcommand is unknown or the help text cannot be
 /// written to stdout.
-pub(super) fn render_subcommand_help(name: &str) -> Result<()> {
+pub(super) fn render_subcommand_help(name: &str, colour: bool) -> Result<()> {
     let localizer = localization::localizer();
     let mut command = configured_command(Some(&localizer));
     let subcommand = command
         .find_subcommand_mut(name)
         .with_context(|| format!("unknown subcommand '{name}'"))?;
-    let text = subcommand.render_long_help().to_string();
+    let text = render_long_help(subcommand, colour);
     process::write_text_stdout(&text)
+}
+
+/// Render a command's long help with or without the styling clap embedded.
+///
+/// `render_long_help` always embeds clap's styles in the returned buffer;
+/// whether they reach the terminal is the renderer's decision.
+/// `StyledStr::Display` strips them, and [`clap::builder::StyledStr::ansi`]
+/// keeps them, so the resolved colour decides which form is written.
+fn render_long_help(command: &mut clap::Command, colour: bool) -> String {
+    let styled = command.render_long_help();
+    if colour {
+        styled.ansi().to_string()
+    } else {
+        styled.to_string()
+    }
 }
 
 /// Return the theme preferences already selected by the display plan.

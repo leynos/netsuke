@@ -1,6 +1,6 @@
 ---
 source: tests/cli_tests/display_plan_contract.rs
-expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPolicy::Auto, ..policies() },),\n(\"always\", DisplayPolicies\n{ progress: ProgressPolicy::Always, ..policies() },),\n(\"never\", DisplayPolicies\n{ progress: ProgressPolicy::Never, ..policies() },),])"
+expression: rows_for_policy(progress_cases())
 ---
 - policy: auto
   facts: pipe
@@ -12,6 +12,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -27,6 +28,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: false
+    stdout_colour: true
     stderr_colour: false
     diagnostics:
       colour: false
@@ -42,6 +44,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: true
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: true
     diagnostics:
       colour: true
@@ -57,6 +60,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -72,6 +76,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -87,6 +92,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -102,6 +108,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -117,6 +124,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: false
+    stdout_colour: true
     stderr_colour: false
     diagnostics:
       colour: false
@@ -132,6 +140,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: true
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: true
     diagnostics:
       colour: true
@@ -147,6 +156,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -162,6 +172,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: true
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -177,6 +188,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -192,6 +204,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -207,6 +220,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: false
+    stdout_colour: true
     stderr_colour: false
     diagnostics:
       colour: false
@@ -222,6 +236,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: true
     diagnostics:
       colour: true
@@ -237,6 +252,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -252,6 +268,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false
@@ -267,6 +284,7 @@ expression: "rows_for_policy([(\"auto\", DisplayPolicies\n{ progress: ProgressPo
       enabled: false
       live: false
       force_text_task_updates: true
+    stdout_colour: false
     stderr_colour: false
     diagnostics:
       colour: false

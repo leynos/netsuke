@@ -27,6 +27,8 @@ pub(super) struct ExpectedDisplay {
     pub reporter: ReporterKind,
     /// Progress and task-update behaviour.
     pub progress: ExpectedProgress,
+    /// Whether stdout may contain colour.
+    pub stdout_colour: bool,
     /// Whether stderr may contain colour.
     pub stderr_colour: bool,
     /// Diagnostic renderer capabilities.
@@ -57,6 +59,12 @@ pub(super) const fn expected_display(case: DisplayCase) -> ExpectedDisplay {
     } else {
         ReporterKind::Standard
     };
+    let stdout_colour = expected_colour(
+        case.policies.colour,
+        case.facts.stdout_is_terminal,
+        case.facts,
+        case.policies.json,
+    );
     let stderr_colour = expected_colour(
         case.policies.colour,
         case.facts.stderr_is_terminal,
@@ -76,6 +84,7 @@ pub(super) const fn expected_display(case: DisplayCase) -> ExpectedDisplay {
             live: live_progress,
             force_text_task_updates: output_mode.is_accessible() || !case.facts.stdout_is_terminal,
         },
+        stdout_colour,
         stderr_colour,
         diagnostic_style: DiagnosticStyle {
             colour: stderr_colour,

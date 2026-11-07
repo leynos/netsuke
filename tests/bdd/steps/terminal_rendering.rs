@@ -78,6 +78,16 @@ fn has_no_redraw(bytes: &[u8]) -> bool {
     !has_redraw(bytes)
 }
 
+/// Return whether the bytes contain a bare carriage return.
+///
+/// A lone `\r` is not a CSI sequence, so [`has_redraw`] cannot see it, but
+/// `indicatif` redraws with it just as effectively. Treating a bare CR as a
+/// non-redraw would let an animated accessible stream pass a static-output
+/// assertion.
+fn has_no_bare_carriage_return(bytes: &[u8]) -> bool {
+    !classify(bytes).has_bare_carriage_return
+}
+
 /// The SGR fact, asserted present or absent.
 const SGR: [ClassifierFact; 2] = [
     ClassifierFact {
@@ -101,6 +111,15 @@ const REDRAW: [ClassifierFact; 2] = [
         expectation: "contain no redraw sequence",
     },
 ];
+
+/// The bare-carriage-return fact, asserted only for static streams.
+///
+/// `REDRAW` covers CSI sequences; this covers the other way a terminal line
+/// gets rewritten. Both must hold for a stream to be genuinely static.
+const STATIC: [ClassifierFact; 1] = [ClassifierFact {
+    observed: has_no_bare_carriage_return,
+    expectation: "contain no bare carriage return in static output",
+}];
 
 /// Assert a classifier fact over one captured stream.
 ///
@@ -194,9 +213,14 @@ fn terminal_output_contains_redraw(world: &TestWorld) -> Result<()> {
 }
 
 /// Assert that captured pseudo-terminal output contains no redraw controls.
+///
+/// A static stream is asserted against both redraw forms: the CSI sequence and
+/// the bare carriage return. `indicatif` redraws a line by either, so a check
+/// for CSI alone would pass a stream that still rewrites its own line.
 #[then("the terminal output should contain no redraw sequence")]
 fn terminal_output_contains_no_redraw(world: &TestWorld) -> Result<()> {
-    assert_classifier_fact(world, Stream::Terminal, &REDRAW[1])
+    assert_classifier_fact(world, Stream::Terminal, &REDRAW[1])?;
+    assert_classifier_fact(world, Stream::Terminal, &STATIC[0])
 }
 
 /// Assert that captured pseudo-terminal output contains the requested text.

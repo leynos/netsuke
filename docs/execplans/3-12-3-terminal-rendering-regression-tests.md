@@ -396,6 +396,21 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   the BDD suite passed 309/309, and the non-RunnerError failure pair passed
   2/2. The new `kani-smoke` timeout contract still needs the final full gate
   sequence.
+- [x] (2026-11-07) Answered the hosted ExecPlan assessment
+  (`NETSUKE-PR809-EXECPLAN-1103317A7`) and the proof assessment
+  (`NETSUKE-PR809-PROOF-1103317A7`). All five ExecPlan finding groups are
+  addressed: runner-rendered help takes the plan's stdout colour (D18, with the
+  `NETSUKE_COLOR` correction that made `help` and `help build` agree with
+  `--help`); the byte-level invariants are measured per emitter with colour as
+  the only variable (D24); the PTY-only cases moved into Unix-gated modules so
+  pipe coverage compiles on every platform; the configuration-load split is
+  documented in the users' guide and ADR-0072; and the structural deviations
+  are recorded as D20 to D22. The proof assessment accepted the branch as
+  preserving the existing bounded verification claims and asked for two
+  evidence qualifications, recorded in D17 and D23.
+  `cargo test --test terminal_rendering_tests` passed 65/65 and the
+  `main_startup` unit tests 20/20. Remaining: the full sequential gate batch,
+  publication, and the lifecycle.
 - [x] EP-M0: terminal test harness.
 - [x] EP-M1: regression suite for already-correct behaviour. Its 31 piped/PTy
   cases and 20-run loaded-host stress evidence are recorded above; hosted
@@ -705,7 +720,102 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   minutes while 189 requests were queued, because every patch re-enters the
   same queue. Do not raise the allowance again on local evidence; measure on
   CI. The gate is validated by its hosted result, and the local re-run is not
-  evidence of a defect. Date/Author: 2026-11-05, implementation agent.
+  evidence of a defect. One qualification, added after the proof assessment
+  (`NETSUKE-PR809-PROOF-1103317A7`): a timeout with no compiler diagnostic does
+  not by itself prove admission-queue contention. Treat the timed-out run as
+  inconclusive and cite the separate contention measurements — the warm-target
+  re-run that compiled nothing in fourteen minutes while 189 requests were
+  queued — and the successful hosted execution as the supporting evidence, not
+  the absence of output. Date/Author: 2026-11-05, implementation agent.
+- Decision D18 (assessment follow-up): the runner-rendered help paths take the
+  colour from the resolved plan rather than clap's `ColorChoice`.
+  `render_long_help` always embeds clap's styles in its `StyledStr`;
+  `StyledStr::Display` strips them and `StyledStr::ansi()` keeps them, so the
+  renderer decides. `DisplayPlan` gained a `StreamColour { stdout, stderr }`
+  for this, resolved from one function, so `--help`, `help`, and `help build`
+  cannot disagree. The two flags travel as one value rather than as loose
+  booleans: they are always decided together and consumed together, and a
+  fourth independent bool on the plan would also have tripped
+  `clippy::struct_excessive_bools`, whose remedy — merging fields into an enum
+  — is the right shape here. The first version of this fix was still wrong for
+  `NETSUKE_COLOR`: the informational-help path runs ahead of the configuration
+  merge, so its plan was resolved from parsed argv alone, where an absent
+  `--color` is indistinguishable from `--color auto`. Only clap's own `--help`
+  saw the environment value, through `resolve_startup_colour`. The measured
+  evidence was 50 SGR lines on `--help` against 0 on `help` and `help build`
+  under `NETSUKE_COLOR=always`. `StartupSignals` now carries the resolved
+  startup colour hint and applies it through `policies_before_configuration`,
+  which restores the precedence the users' guide states — `--color`, then
+  `NETSUKE_COLOR`, then `auto` — on all three routes. Date/Author: 2026-11-07,
+  implementation agent, after the hosted ExecPlan assessment
+  (`NETSUKE-PR809-EXECPLAN-1103317A7`).
+- Decision D19 (assessment follow-up): a configuration-load failure splits into
+  a plain user-facing message and policy-styled `tracing` events. The message
+  is plain because the configuration that would select a colour policy has not
+  been read; the events follow the startup hint because `D11` says `--color`
+  governs every emitter Netsuke controls, and exempting startup tracing would
+  make the emitter's behaviour depend on which phase it happens to run in. Both
+  halves are pinned in one test per policy. Date/Author: 2026-11-07,
+  implementation agent.
+- Decision D20 (assessment follow-up): `src/main.rs` was 463 lines at the
+  assessed head, above the 400-line rule in `AGENTS.md`. The pre-configuration
+  startup window — `StartupSignals`, `StartupParse`, `parse_cli_or_exit`,
+  `settle_startup_diagnostics`, `startup_filter`, `startup_localizer`, and
+  `requests_help_or_version` — moved to `src/main_startup/mod.rs` (226 lines)
+  with its unit tests in `src/main_startup/tests.rs`. The `main_` prefix group
+  in `tests/workflow_contracts/rust_module_layout_test.py` now names that third
+  entry and extends its rationale. It is a directory module rather than a
+  sibling `main_startup.rs` because the repository lint requires `mod.rs` as
+  soon as a module owns a child file, and `tests.rs` is that child.
+  Date/Author: 2026-11-07, implementation agent.
+- Decision D21 (assessment follow-up): the 22-file production diff is approved
+  as it stands. The tolerance escalates at 18 production files or 600 net
+  lines; the diff touches 22 files for 510 net lines, so the line budget is met
+  and only the file count is over. The files are not extra scope: the change
+  replaces `output_mode::resolve` and `output_prefs::resolve_from_theme` with a
+  core plus four adapters, and the deletion side of that refactor is spread
+  across every module that used to make its own decision. Splitting it into
+  fewer files would mean leaving ambient resolution in place. Date/Author:
+  2026-11-07, implementation agent.
+- Decision D22 (assessment follow-up): two test-support `#[expect]`s are
+  approved as scope-narrowed exceptions to the plan's "no new suppression" rule.
+  `clippy::struct_excessive_bools` on `TerminalBytes` is a data carrier whose
+  whole purpose is to expose independent byte-level facts; the lint's remedy is
+  to merge fields, which would delete facts the assertions need.
+  `clippy::unnecessary_wraps` on the non-Unix `make_script_executable` is the
+  platform-mirror shape the codebase already uses at
+  `tests/bdd/steps/progress_output.rs`, where the fallible signature exists so
+  the caller needs no `cfg`. Neither suppression hides production behaviour.
+  Date/Author: 2026-11-07, implementation agent.
+- Decision D23 (proof assessment follow-up): the mutation gate proves
+  compilation, not detection.
+  `tests/kani_mutation_evidence_tests/compile_guard.rs` invokes
+  `cargo kani --only-codegen --lib --all-features`, which establishes that the
+  30 patched trees compile under the Kani frontend; it does not establish that
+  their intended assertions produce counterexamples, and the 30 patches include
+  ordinary property-test controls rather than 30 Kani harnesses. The compile
+  gate stands on its own terms. Any claim that every negative control remains
+  effective needs mutation-replay results naming the intended failed assertion,
+  and this branch does not make that claim. The same assessment confirms the
+  display-domain arithmetic — 3⁴ × 2 × 2⁵ = 5,184, not 20,736 — and asks that
+  enumeration over a finite domain not be described as inherently stronger than
+  an equivalent Kani proof. Its advantages here are complete finite coverage
+  against the independent truth model and a cost small enough to run in the
+  default gate. Date/Author: 2026-11-07, implementation agent, after
+  `NETSUKE-PR809-PROOF-1103317A7`.
+- Decision D24 (assessment follow-up): `INV-COLOUR-ADDITIVE` is proven per
+  emitter with the comparison held to one variable, and the accessible reporter
+  is recorded as an intentionally excluded emitter. Stripping SGR from a
+  `--color always` stream must reproduce the `--color never` stream byte for
+  byte — but only when glyph and accessibility policy are pinned identically on
+  both sides, because `--color never` also selects accessible mode when
+  accessibility is `auto`, which swaps every Unicode glyph and every progress
+  line for its ASCII or static counterpart. Letting that drift compares two
+  differently rendered streams and blames the difference on colour. The
+  accessible status reporter emits no escape at all — a prefix glyph plus a
+  localized label — so for it the invariant holds by construction and the
+  assertion that keeps it true is the stronger "no escape", not "stripping SGR
+  changes nothing". Date/Author: 2026-11-07, implementation agent.
 
 ## Outcomes & retrospective
 
@@ -1090,8 +1200,15 @@ End-to-end obligations (artefacts `tests/terminal_rendering_tests.rs` and
   (accessible reporter, `miette` diagnostic, `--help`), removing SGR sequences
   from the colour-on output yields exactly the colour-off output. Colour
   therefore adds emphasis and never carries meaning. `tracing` is excluded
-  because timestamps differ between runs. Non-vacuity: the colour-on output
-  must contain SGR.
+  because timestamps differ between runs. The paired comparison must hold glyph
+  and accessibility policy fixed: `--color never` also selects accessible mode
+  when accessibility is `auto`, so an unpinned pair differs in glyph set and
+  progress rendering as well as in colour, and the comparison would no longer
+  be about colour. The accessible status reporter is an intentionally excluded
+  emitter: it renders a prefix glyph and a localized label and emits no escape
+  at all, so the invariant holds for it by construction and the assertion that
+  keeps it true is the stronger "no escape sequence of any kind". Non-vacuity:
+  the colour-on output must contain SGR.
 - `INV-ACCESS-STATIC`: in accessible mode the terminal stream contains no
   redraw sequence, no bare carriage return, and no escape sequence other than
   SGR when colour is on; stderr carries every `Stage N/6` label in order.
@@ -1218,8 +1335,11 @@ replaces them with plan-derived expectations):
   `--color never` is static.
 - JSON: `--json --color always` on a PTY has no escape sequence on either
   stream.
-- Pre-merge output: a configuration-load error under `--color always` is
-  plain.
+- Pre-merge output: the human-readable configuration-load error message is
+  plain under `--color always`, while the structured `tracing` events emitted
+  alongside it carry SGR. Both halves are asserted in one case per policy, so
+  neither a plain-message regression nor a dropped-style regression can hide
+  behind the other.
 
 Use `googletest` (`expect_that!`, `contains_substring`, `not(…)`) so each
 failing cell names its policy combination, and `pretty_assertions::assert_eq`

@@ -156,6 +156,7 @@ fn actual_display(
             live: plan.live_progress(),
             force_text_task_updates: plan.force_text_task_updates(),
         },
+        stdout_colour: plan.stdout_colour(),
         stderr_colour: plan.stderr_colour(),
         diagnostic_style: plan.diagnostic_style(),
     }
@@ -173,6 +174,7 @@ struct Coverage {
     progress_values: u8,
     live_values: u8,
     text_values: u8,
+    stdout_colour: u8,
     stderr_colour: u8,
     diagnostic_colour: u8,
     diagnostic_unicode: u8,
@@ -207,6 +209,7 @@ impl Coverage {
         record_bool(&mut self.progress_values, plan.progress_enabled());
         record_bool(&mut self.live_values, plan.live_progress());
         record_bool(&mut self.text_values, plan.force_text_task_updates());
+        record_bool(&mut self.stdout_colour, plan.stdout_colour());
         record_bool(&mut self.stderr_colour, plan.stderr_colour());
         record_bool(&mut self.diagnostic_colour, plan.diagnostic_style().colour);
         record_bool(
@@ -228,6 +231,7 @@ impl Coverage {
         assert_domain_covered(self.progress_values, 2);
         assert_domain_covered(self.live_values, 2);
         assert_domain_covered(self.text_values, 2);
+        assert_domain_covered(self.stdout_colour, 2);
         assert_domain_covered(self.stderr_colour, 2);
         assert_domain_covered(self.diagnostic_colour, 2);
         assert_domain_covered(self.diagnostic_unicode, 2);

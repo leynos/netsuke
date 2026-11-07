@@ -14,6 +14,7 @@ struct PlanProjection {
     emoji_allowed: bool,
     reporter: &'static str,
     progress: ProgressProjection,
+    stdout_colour: bool,
     stderr_colour: bool,
     diagnostics: DiagnosticProjection,
 }
@@ -233,6 +234,7 @@ fn project(plan: DisplayPlan) -> PlanProjection {
             live: plan.live_progress(),
             force_text_task_updates: plan.force_text_task_updates(),
         },
+        stdout_colour: plan.stdout_colour(),
         stderr_colour: plan.stderr_colour(),
         diagnostics: DiagnosticProjection {
             colour: plan.diagnostic_style().colour,

@@ -290,7 +290,35 @@ pub fn resolve_theme<F>(
 where
     F: Fn(&str) -> Option<String>,
 {
-    let env = EnvSignals::read(read_env);
+    resolve_theme_from_signals(theme, context, EnvSignals::read(read_env))
+}
+
+/// Resolve a theme from environment signals that a caller already reduced.
+///
+/// [`resolve_theme`] reads the environment itself, which is right for a caller
+/// holding an environment seam but wrong for one holding an [`EnvSignals`]: a
+/// second reading would have to reconstruct environment strings from the
+/// reduced facts. This entry point takes the facts as they are.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::theme::{ThemeContext, resolve_theme_from_signals};
+/// use netsuke::output_mode::{EnvSignals, OutputMode};
+///
+/// let signals = EnvSignals {
+///     no_color_set: true,
+///     ..EnvSignals::default()
+/// };
+/// let theme = resolve_theme_from_signals(None, ThemeContext::new(None, None, OutputMode::Standard), signals);
+/// assert_eq!(theme.tokens.symbols.success, "+");
+/// ```
+#[must_use]
+pub const fn resolve_theme_from_signals(
+    theme: Option<ThemePreference>,
+    context: ThemeContext,
+    env: EnvSignals,
+) -> ResolvedTheme {
     let use_unicode = should_use_unicode(
         theme,
         context.no_emoji,

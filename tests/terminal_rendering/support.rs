@@ -232,6 +232,30 @@ impl TerminalWorkspace {
     }
 }
 
+/// Create a terminal workspace whose staged manifest has been removed.
+///
+/// Removing the manifest is what makes a run fail during manifest resolution,
+/// which is the only way to reach the Miette diagnostic path from a test.
+///
+/// # Examples
+///
+/// ```ignore
+/// let workspace = empty_workspace()?;
+/// let output = workspace.run_piped(&["--color", "never", "generate"], &[])?;
+/// assert!(!output.status.success());
+/// ```
+///
+/// # Errors
+///
+/// Returns an error if the workspace cannot be created or the staged manifest
+/// cannot be removed.
+pub(super) fn empty_workspace() -> Result<TerminalWorkspace> {
+    let workspace = TerminalWorkspace::new()?;
+    test_support::fs::remove_file(workspace.root_path().join("Netsukefile"))
+        .context("remove the staged manifest")?;
+    Ok(workspace)
+}
+
 /// Return the executable name for the current platform.
 ///
 /// # Examples

@@ -176,6 +176,36 @@ where
     OutputPrefs::from_theme(resolved_theme)
 }
 
+/// Resolve preferences from environment signals a caller already reduced.
+///
+/// Use this when the caller holds an [`crate::output_mode::EnvSignals`] rather
+/// than an environment seam, so the facts are not converted back into
+/// environment strings only to be reduced a second time.
+///
+/// # Examples
+///
+/// ```
+/// use netsuke::output_prefs::resolve_from_signals;
+/// use netsuke::output_mode::{EnvSignals, OutputMode};
+/// use netsuke::theme::ThemeContext;
+///
+/// let signals = EnvSignals {
+///     no_color_set: true,
+///     ..EnvSignals::default()
+/// };
+/// let prefs = resolve_from_signals(None, ThemeContext::new(None, None, OutputMode::Standard), signals);
+/// assert!(!prefs.emoji_allowed());
+/// ```
+#[must_use]
+pub const fn resolve_from_signals(
+    theme: Option<ThemePreference>,
+    context: ThemeContext,
+    env: crate::output_mode::EnvSignals,
+) -> OutputPrefs {
+    let resolved_theme = theme::resolve_theme_from_signals(theme, context, env);
+    OutputPrefs::from_theme(resolved_theme)
+}
+
 /// Resolve output preferences from explicit configuration and environment.
 ///
 /// Precedence:
