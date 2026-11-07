@@ -5795,7 +5795,12 @@ Use the Make targets for day-to-day formal-verification checks:
   its output with the file. The query is deliberately local and read-only: it
   never resolves `rust-prover-tools` through `uv`, so it works without network
   access and does not write the uv cache. A version mismatch, a failing
-  verifier, or unparsable output fails the target.
+  verifier, or unparsable output fails the target. Every failure names a stable
+  `category=` — `pin-unreadable`, `verifier-failed`, `version-unparsable`, or
+  `version-mismatch` — so a caller can branch on the cause without parsing
+  prose. The two categories that quote verifier output cap it at 200 characters
+  and strip control characters first, because that text comes from an external
+  binary and must not be able to forge log lines or flood a terminal.
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
@@ -5821,6 +5826,18 @@ Use the Make targets for day-to-day formal-verification checks:
   status 2, so that diagnostic, not make's status, is what carries the
   verifier's code. These targets are not part of the ordinary pull-request gate.
 
+`tests/prover_tools_verus_e2e_tests.rs` is the real-verifier lane. It drives
+`make verus` against the pinned Verus install for the default proof, an ordered
+batch, and a genuine verification failure. Two property cases then run the
+pinned CLI against a fake verifier so the batching contract is checked over
+generated batch lengths, failure positions, and exit statuses: a successful
+batch must run every proof exactly once in order, and a failing batch must run
+exactly the prefix up to and including the failing proof and report that
+proof's status. Verus is an optional maintainer tool and the repository has no
+Verus CI job, so the cases skip when the pinned install is absent;
+`make test-verus-e2e` sets `NETSUKE_VERUS_E2E_STRICT=1` to turn that skip into
+a failure for a maintainer who means to run them.
+
 `tests/prover_tools_kani_check_tests.rs` holds the boundary around
 `make kani-check`: that the query reads the pin, asks the installed verifier for
 `--version` and nothing else, and never resolves `rust-prover-tools` through a
@@ -5833,6 +5850,11 @@ failure, and `kani-smoke` runs that target as its own step so the required lane
 exercises the boundary instead of reporting green without it. The capability
 probe names the sandbox operation a host refused, which is the evidence to
 collect before changing the lane.
+
+`tests/prover_tools_kani_check_command_tests.rs` drives the recipe itself with
+a fake verifier, covering a matching pin, a mismatched pin, a missing pin, a
+pin that is not a file, and a failing verifier whose diagnostic must carry its
+category, its status, and a bounded, control-character-free quote.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`. `Cargo.toml` declares `cfg(kani)` under

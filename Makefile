@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper test-kani-check-isolation install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper test-kani-check-isolation test-verus-e2e install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -663,22 +663,28 @@ install-kani: ## Install the pinned Kani verifier
 # its version, and compare. Resolving the shared CLI through `uv tool run` here
 # would fetch a Git package and write the uv cache on a cold host, so that work
 # stays in `install-kani` alone.
+#
+# Every failure names a stable `category=` so a caller can branch on the cause
+# without parsing prose. The two categories that quote verifier output bound it
+# to 200 characters and strip control characters first: the text comes from an
+# external binary, so it must not be able to forge log lines or flood a
+# terminal.
 kani-check: ## Check the installed Kani verifier version
 	@version_file='$(subst ','"'"',$(KANI_VERSION_FILE))'; \
-	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
+	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check category=pin-unreadable could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
 	printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$expected" >&2; \
 	output="$$($(KANI) --version 2>&1)"; status=$$?; \
 	if [ "$$status" -ne 0 ]; then \
-		printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; \
+		printf 'prover-tools: target=kani-check category=verifier-failed failed exit=%s diagnostic=%s\n' "$$status" "$$(printf '%s' "$$output" | tr -d '[:cntrl:]' | cut -c1-200)" >&2; \
 		exit "$$status"; \
 	fi; \
 	actual="$$(printf '%s\n' "$$output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"; \
 	if [ -z "$$actual" ]; then \
-		printf 'prover-tools: target=kani-check could not parse Kani version from: %s\n' "$$output" >&2; \
+		printf 'prover-tools: target=kani-check category=version-unparsable could not parse Kani version from: %s\n' "$$(printf '%s' "$$output" | tr -d '[:cntrl:]' | cut -c1-200)" >&2; \
 		exit 1; \
 	fi; \
 	if [ "$$actual" != "$$expected" ]; then \
-		printf 'prover-tools: target=kani-check expected Kani %s from %s, found %s\n' "$$expected" "$$version_file" "$$actual" >&2; \
+		printf 'prover-tools: target=kani-check category=version-mismatch expected Kani %s from %s, found %s\n' "$$expected" "$$version_file" "$$actual" >&2; \
 		exit 1; \
 	fi; \
 	printf 'Kani %s matches %s.\n' "$$actual" "$$version_file"
@@ -720,6 +726,15 @@ KANI_CHECK_ISOLATION_STRICT ?= 1
 test-kani-check-isolation: ## Verify the kani-check boundary inside a read-only sandbox
 	NETSUKE_KANI_CHECK_SANDBOX_STRICT=$(KANI_CHECK_ISOLATION_STRICT) \
 		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test prover_tools_kani_check_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+# The real-verifier end-to-end lane. Verus is an optional maintainer tool and
+# the repository deliberately has no Verus CI job, so the cases skip on a host
+# without the pinned install. This target is for a maintainer who has run
+# `make install-verus` and wants the skip to be a failure instead.
+VERUS_E2E_STRICT ?= 1
+test-verus-e2e: ## Verify make verus against the pinned real verifier
+	NETSUKE_VERUS_E2E_STRICT=$(VERUS_E2E_STRICT) \
+		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test prover_tools_verus_e2e_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2

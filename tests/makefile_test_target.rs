@@ -44,7 +44,9 @@ use toml::Value;
 /// the same runner over the `#[ignore]`-gated mutation compile gate, which is
 /// too expensive for the default profile.
 /// `test-rfc-stdlib-coverage` runs the RFC parser and coverage contract in
-/// isolation. `proptest` runs the property suites alone, which the roadmap
+/// isolation. `test-verus-e2e` drives the real pinned verifier, which the
+/// default profile skips on a host without it, so a maintainer runs that lane
+/// deliberately. `proptest` runs the property suites alone, which the roadmap
 /// determinism work added as a focused inner loop; it is a subset of what
 /// `test-nextest` already covers, but it invokes the runner directly, so it
 /// shares the bounds for the same reason every other entry does.
@@ -56,7 +58,7 @@ use toml::Value;
 /// [`behavioural_nextest_targets_forward_both_worker_bounds`] discovers the
 /// targets that actually invoke the runner and fails when the two disagree, so
 /// a new recipe joins the contract or breaks the build.
-const NEXTEST_TARGETS: [&str; 8] = [
+const NEXTEST_TARGETS: [&str; 9] = [
     "proptest",
     "test-default-features",
     "test-documentation-contracts",
@@ -65,6 +67,7 @@ const NEXTEST_TARGETS: [&str; 8] = [
     "test-kani-scope-wrapper",
     "test-nextest",
     "test-rfc-stdlib-coverage",
+    "test-verus-e2e",
 ];
 
 /// True when `line` is a tab-indented recipe line that invokes the nextest

@@ -60,7 +60,7 @@ fn kani_check_preserves_the_verifier_exit_status() -> Result<()> {
     let (stderr, marker) = fixture.run_failing_check("#!/bin/sh\nexit 42\n")?;
 
     ensure!(
-        stderr.contains("prover-tools: target=kani-check failed exit=42"),
+        stderr.contains("prover-tools: target=kani-check category=verifier-failed failed exit=42"),
         "the diagnostic should preserve the verifier status, got `{stderr}`"
     );
     fixture.ensure_remote_runner_unused(&marker)

@@ -380,6 +380,17 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       and runs the case as `make test-kani-check-isolation` with
       `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` from its own `kani-smoke` step.
       All 16 gate targets pass on tree `bc8771006`. See Revision 46.
+- [x] (2026-11-06) Close the remaining pre-merge rows from review
+      `5803947003`. Two new suites cover the recipe and the real verifier:
+      `tests/prover_tools_kani_check_command_tests.rs` drives `make kani-check`
+      with a fake verifier for a matching pin, a mismatched pin, a missing pin,
+      a pin that is not a file, and a failing verifier; and
+      `tests/prover_tools_verus_e2e_tests.rs` gains two property cases that run
+      the pinned CLI against a fake verifier over generated batch lengths,
+      failure positions, and exit statuses. `make kani-check` now names a
+      stable `category=` on every failure and bounds and sanitizes the verifier
+      output it quotes. `make test-verus-e2e` is the strict lane for the
+      real-verifier cases. See Revision 48.
 
 ## Surprises & discoveries
 
@@ -558,8 +569,24 @@ read-only chroot rather than a single repository bind, so the query is verified
 to run with no writable path outside the repository and fixture; on a host that
 forbids unprivileged user namespaces the case reports the reason and returns
 success, which `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` converts into a failure.
-Current-head review reconciliation and trusted-main warm-cache acceptance
-remain open.
+The review at `5803947003` recorded six failed pre-merge checks, and the
+working candidate now addresses each while leaving every published repair above
+unchanged. Two new suites carry the coverage.
+`tests/prover_tools_verus_e2e_tests.rs` drives `make verus` through the pinned
+CLI and the real verifier, checking the default proof, an ordered batch and
+failure propagation, and adds two property cases that generate batch length,
+failure position and exit status against a fake verifier while the CLI stays
+real. `tests/prover_tools_kani_check_command_tests.rs` drives the `kani-check`
+recipe through a matching pin, a mismatch, a missing pin, an unreadable pin and
+a failing verifier, and asserts that the verifier receives `--version` in every
+reachable case. The recipe now reports a stable `category=` and bounds the
+verifier's own diagnostic to 200 characters with control characters removed,
+because that text comes from an external binary. The read-only chroot boundary
+remains the evidence for the blocked-network and blocked-write requirement, and
+it runs strictly in the required `kani-smoke` lane rather than skipping.
+Version checking is described as the local read-only `--version` query, not a
+delegation to the pinned CLI. Current-head review reconciliation and
+trusted-main warm-cache acceptance remain open.
 
 ## Context and orientation
 
@@ -1423,3 +1450,80 @@ The committed tree hash is `d4627899165a7826d471f17de458df6997aad26d`, and all
 `9430d0f93`. This plan-only revision follows it. Next, post the corrective
 follow-up comment, await the CodeRabbit review, request the final approval, and
 merge once equilibrium holds. Keep Status: IN PROGRESS.
+
+Revision 48 (2026-11-06): The review at `5803947003` recorded six failed
+pre-merge checks. Each names a concrete gap, and all six are now addressed by
+the working candidate; the published repairs recorded above are unchanged.
+
+*Testing (Overall)* asked for different and unreadable version files, a
+`--version` requirement on the fake verifier, and detection of network and
+filesystem or cache write attempts, including attempts whose errors are ignored.
+`tests/prover_tools_kani_check_command_tests.rs` now drives the recipe through
+a matching pin, a mismatch, a missing pin and a pin replaced by a directory,
+and asserts `invocation_args() == ["--version"]` wherever the verifier is
+reachable. The write-attempt half stays with the read-only chroot boundary in
+`tests/prover_tools_kani_check_tests.rs`, which the required `kani-smoke` lane
+runs strictly, so a host that cannot enforce the boundary fails instead of
+recording a skip.
+
+*Testing (Unit And Behavioural)* asked for an end-to-end run of `make verus`
+with the pinned CLI and a real verifier, covering the default proof, an ordered
+batch and failure propagation. `tests/prover_tools_verus_e2e_tests.rs` adds
+those three cases. They skip on a host without the pinned install, which is the
+documented Verus policy; the new `test-verus-e2e` target sets
+`NETSUKE_VERUS_E2E_STRICT=1` so a maintainer who means to run them gets a
+failure rather than a skip.
+
+*Testing (Property / Proof)* asked for a property test over batch lengths,
+proof orders, failure positions and exit statuses. The check is implemented with
+`proptest` rather than Hypothesis: the suite is Rust, the repository's
+property-testing convention is `proptest`, and the pinned CLI is driven from
+Rust here. `verus_runs_every_proof_of_a_successful_batch_in_order` asserts the
+full invocation order, `--version` then every proof, and
+`verus_stops_at_the_first_failing_proof_and_propagates_its_status` asserts the
+exact executed prefix plus the reported status. Only the verifier is fake; the
+batching loop under test is the pinned CLI's own, and the real-verifier cases
+cover the same behaviour end to end. Both property cases sit behind the same
+installed-verifier gate as the rest of the module, so a host without the pinned
+Verus skips them rather than fetching the pinned CLI from the network during
+`make test`.
+
+*Developer Documentation* asked for Progress and Outcomes to separate published
+repairs from the newest candidate, for the chroot isolation change and its
+validation to be recorded, for the version-checking description to be
+corrected, and for the pending review and trusted-main warm-cache items to stay
+visible. The Outcomes section now makes those distinctions, and Revision 47
+records the AppArmor lift together with the hosted run that confirmed it.
+
+*Unit Architecture* asked that the installed verifier be exercised through
+`make kani-check` with network access and filesystem writes blocked, that a
+required lane run the isolation test rather than skip it, and that the version
+file, mismatch, verifier-failure and remote-runner checks be retained. The
+boundary suite, its strict lane and all four checks are retained; the new
+command suite adds coverage of the recipe itself without replacing any of them.
+
+*Observability* asked for a safe, redacted verifier diagnostic or an actionable
+error category on failure, plus a regression test. The `kani-check` recipe now
+emits one of `category=pin-unreadable`, `category=verifier-failed`,
+`category=version-unparsable` or `category=version-mismatch`, and quotes the
+verifier's own output only after stripping control characters and capping it at
+200 characters. The cap and the strip are deliberate: the text comes from an
+external binary, so it could otherwise forge log lines or flood a terminal.
+`kani_check_reports_a_sanitized_diagnostic_when_the_verifier_fails` asserts the
+category, the propagated status, the cap and the absence of control characters,
+and the existing exit-status case now asserts its category too.
+
+`tests/makefile_test_target.rs` enumerates every target that invokes
+`cargo nextest run` and fails when that list and the file disagree, so the new
+`test-verus-e2e` target joins `NEXTEST_TARGETS`; it forwards both worker bounds
+like every other entry. `dylint.toml` lists both new integration crates under
+`no_std_fs_operations.excluded_crates`, because each manipulates its own
+temporary fixture directory. The local batch then ran sequentially to
+completion: `make check-fmt`, `make lint`, `make typecheck`,
+`make doc-coverage`, `make markdownlint`, `make nixie`, `make test`,
+`make test-workflow-contracts`, `make test-kani-check-isolation` and
+`make test-verus-e2e` each exited zero. The last two are the load-bearing ones
+here: the isolation lane ran the read-only chroot case with strict mode on
+rather than skipping it, and the Verus lane ran all five cases against the
+pinned real verifier. Keep Status: IN PROGRESS pending review at the new head
+and trusted-main warm-cache acceptance.
