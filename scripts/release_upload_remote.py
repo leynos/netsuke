@@ -292,6 +292,7 @@ def upload(
     rejection as a refused transfer would report a failure for a run that had
     every declared asset already attached.
 
+    >>> upload("v1", [], pathlib.Path("/payload"), runner=_never_called)
     >>> upload("v1", ["a"], pathlib.Path("/payload"), runner=_never_called)
     Traceback (most recent call last):
         ...

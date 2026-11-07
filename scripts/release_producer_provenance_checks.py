@@ -190,6 +190,12 @@ def trusted_digests(
     one name would make the trusted record describe bytes neither producer is
     answerable for alone, so the union is never attempted.
 
+    ``provenances`` is an iterable and both passes read it, so it is
+    materialised once first. A generator would be exhausted by
+    :func:`declared_names`, and this function would then return an empty
+    mapping, which a caller checking staged digests against it would accept
+    vacuously.
+
     Examples
     --------
     >>> provenance = ProducerProvenance(
@@ -198,9 +204,15 @@ def trusted_digests(
     ... )
     >>> trusted_digests([provenance])
     {'a.deb': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}
+
+    A generator yields the same mapping as a list, rather than an empty one:
+
+    >>> trusted_digests(claim for claim in [provenance])
+    {'a.deb': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}
     """
-    declared_names(provenances)
+    claims = tuple(provenances)
+    declared_names(claims)
     digests: dict[str, str] = {}
-    for provenance in provenances:
+    for provenance in claims:
         digests.update(provenance.assets)
     return dict(sorted(digests.items()))

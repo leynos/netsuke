@@ -39,6 +39,7 @@ import sys
 import release_digest_record
 import release_digest_record_files
 import release_reconcile_github
+import release_upload_plan
 
 # The shared GitHub digest conversion, imported under the private name this
 # module has always used. The uploader needs the same conversion, and a private
@@ -257,7 +258,7 @@ def _reconcile_listing(
     )
     conflicting = release_reconcile_github.conflicts(actions)
     try:
-        _write_plan(output_path, actions, conflicting)
+        release_upload_plan.write_plan(output_path, actions, conflicting)
     except OSError as error:
         print(
             f"reconciliation plan write failed: {output_path}: {error}", file=sys.stderr
@@ -274,32 +275,6 @@ def _reconcile_listing(
     if output_error is not None:
         return EXIT_OUTPUT_UNWRITABLE
     return _verdict(actions)
-
-
-def _write_plan(
-    output: pathlib.Path,
-    actions: tuple[tuple[str, release_reconcile_github.AssetAction], ...],
-    conflicting: tuple[str, ...],
-) -> None:
-    """Write the reconciliation plan the job's artefacts expose.
-
-    The plan is written for refusing runs too, so an operator sees which
-    action every asset was assigned rather than only the first name that
-    stopped the run. The caller maps ``Path.write_text`` failures to a distinct
-    output-unwritable exit status.
-    """
-    output.write_text(
-        json.dumps(
-            {
-                "actions": [[name, action.value] for name, action in actions],
-                "conflicts": list(conflicting),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
 
 
 def _verdict(

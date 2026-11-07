@@ -222,3 +222,21 @@ def test_main_reports_success_only_when_the_release_holds_the_bytes(
     assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK, (
         "a re-run over a completed release must also succeed"
     )
+
+
+def test_an_undeclared_undigested_asset_is_never_downloaded(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Leave an unrelated attached asset alone even when it has no digest.
+
+    The trusted record is what this step acts on. An asset it never declared
+    is another stage's finding, and backfilling that asset's digest would spend
+    a transfer on bytes nothing here consults.
+    """
+    exchange = Exchange(attached={"unrelated.tgz": None})
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_OK, (
+        "an undeclared asset must not change the declared run's status"
+    )
+    assert not [call for call in exchange.calls if call[2] == "download"], (
+        f"an undeclared asset must not be downloaded, got {exchange.calls}"
+    )
