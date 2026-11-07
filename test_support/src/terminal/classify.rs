@@ -93,8 +93,15 @@ fn classify_escape(bytes: &[u8], facts: &mut TerminalBytes) -> usize {
             facts.has_redraw = true;
             2
         }
-        Some(_) => 2,
-        None => 1,
+        // A two-byte escape ends in a final byte from 0x30-0x7e. Anything else
+        // is a stray control that the introducer merely precedes, so only the
+        // introducer is consumed and the caller classifies the next byte on its
+        // own. Consuming `\x1b\r` as one escape would report a stream with a
+        // bare carriage return as having none.
+        Some(byte) if (0x30..=0x7e).contains(byte) => 2,
+        // Both a stray control and the end of the stream consume only the
+        // introducer, so the caller resumes at the next byte or stops.
+        Some(_) | None => 1,
     }
 }
 
@@ -107,16 +114,27 @@ fn classify_escape(bytes: &[u8], facts: &mut TerminalBytes) -> usize {
 /// assert!(facts.has_redraw);
 /// ```
 fn classify_csi(bytes: &[u8], facts: &mut TerminalBytes) -> usize {
-    let Some((index, final_byte)) = bytes
+    // A CSI is parameters (0x30-0x3f) and intermediates (0x20-0x2f) up to one
+    // final byte (0x40-0x7e). Scanning for the first final byte alone would
+    // step over a control that cannot belong to the sequence, so a truncated
+    // capture such as `\x1b[\r` would consume the carriage return and report
+    // no redraw where the stream plainly contains one. Stopping at the first
+    // byte outside the parameter range leaves that control for the caller,
+    // which classifies it and resumes after it.
+    let Some((index, byte)) = bytes
         .iter()
         .enumerate()
-        .find(|(_, byte)| (0x40..=0x7e).contains(*byte))
+        .find(|(_, byte)| !(0x20..=0x3f).contains(*byte))
     else {
         return bytes.len();
     };
 
-    facts.has_sgr |= *final_byte == b'm';
-    facts.has_redraw |= is_redraw_csi_final(*final_byte);
+    if !(0x40..=0x7e).contains(byte) {
+        return index;
+    }
+
+    facts.has_sgr |= *byte == b'm';
+    facts.has_redraw |= is_redraw_csi_final(*byte);
     index + 1
 }
 
