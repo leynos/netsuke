@@ -15,7 +15,14 @@ import typing as typ
 
 import pytest
 import release_upload_plan
-from release_upload_support import DEB, Destinations, Exchange, Scenario, run_cli
+from release_upload_support import (
+    DEB,
+    Destinations,
+    Exchange,
+    Invocation,
+    Scenario,
+    run_cli,
+)
 from upload_declared_assets_cli import (
     EXIT_CONFLICT,
     EXIT_INPUT_UNREADABLE,
@@ -98,7 +105,9 @@ def test_main_reports_an_absent_record_as_unreadable_input(
         scenario,
         exchange,
         monkeypatch,
-        destinations=Destinations(record=scenario.root / "absent.json"),
+        invocation=Invocation(
+            destinations=Destinations(record=scenario.root / "absent.json")
+        ),
     )
     assert status == EXIT_INPUT_UNREADABLE, "an absent record must be input trouble"
     assert not exchange.calls, "an unreadable record must not reach the network"
@@ -142,8 +151,10 @@ def test_main_reports_an_unwritable_plan(
         scenario,
         Exchange(attached={}),
         monkeypatch,
-        destinations=Destinations(
-            plan=scenario.root / "absent" / release_upload_plan.PLAN_NAME
+        invocation=Invocation(
+            destinations=Destinations(
+                plan=scenario.root / "absent" / release_upload_plan.PLAN_NAME
+            )
         ),
     )
     assert status == EXIT_OUTPUT_UNWRITABLE, (
@@ -186,7 +197,9 @@ def test_a_dry_run_still_succeeds_with_every_asset_planned_for_upload(
 ) -> None:
     """Leave a dry run's planned uploads alone: sending nothing is the point."""
     exchange = Exchange(attached={})
-    status = run_cli(scenario, exchange, monkeypatch, dry_run=True)
+    status = run_cli(
+        scenario, exchange, monkeypatch, invocation=Invocation(dry_run=True)
+    )
     assert status == EXIT_OK, "a dry run must not report an unattempted upload"
     assert scenario.stored_plan()["actions"] == [
         ["b.rpm", "upload"],
