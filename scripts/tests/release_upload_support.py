@@ -56,6 +56,28 @@ class Destinations:
     plan: pathlib.Path | None = None
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Invocation:
+    """Name how one run is launched, as distinct from what it acts on.
+
+    Attributes
+    ----------
+    destinations
+        The files the run reads and writes. Defaults to the scenario's own.
+    dry_run
+        Whether the run plans without transferring. Defaults to a real run.
+
+    Notes
+    -----
+    Grouped rather than passed loose because the two travel together: a case
+    rehearses a run by choosing both the mode and, usually, the destinations,
+    and the repository keeps call surfaces to four arguments.
+    """
+
+    destinations: Destinations | None = None
+    dry_run: bool = False
+
+
 class Scenario:
     """Hold one run's payload, trusted record, and plan destination."""
 
@@ -261,9 +283,7 @@ class Exchange:
 def main_argv(
     scenario: Scenario,
     *,
-    payload: pathlib.Path | None = None,
-    record: pathlib.Path | None = None,
-    plan: pathlib.Path | None = None,
+    destinations: Destinations | None = None,
     dry_run: bool = False,
 ) -> list[str]:
     """Return the command line a run of ``scenario`` passes to ``main``.
@@ -276,18 +296,23 @@ def main_argv(
     Notes
     -----
     Kept here rather than in each suite so a case that makes one destination
-    hostile still passes the other two exactly as a real run would.
+    hostile still passes the other two exactly as a real run would. The three
+    overrides travel together as :class:`Destinations` rather than as three
+    separate parameters, which keeps this call surface inside the repository's
+    four-argument ceiling and matches how a case names the one it is making
+    hostile.
     """
+    chosen = destinations or Destinations()
     mode = ["--dry-run"] if dry_run else []
     return [
         "--release-tag",
         TAG,
         "--payload-dir",
-        str(scenario.payload if payload is None else payload),
+        str(scenario.payload if chosen.payload is None else chosen.payload),
         "--digest-record",
-        str(scenario.record if record is None else record),
+        str(scenario.record if chosen.record is None else chosen.record),
         "--plan",
-        str(scenario.plan if plan is None else plan),
+        str(scenario.plan if chosen.plan is None else chosen.plan),
         *mode,
     ]
 
@@ -297,8 +322,7 @@ def run_cli(
     exchange: Exchange,
     monkeypatch: pytest.MonkeyPatch,
     *,
-    destinations: Destinations | None = None,
-    dry_run: bool = False,
+    invocation: Invocation | None = None,
 ) -> int:
     """Run ``main`` over ``scenario`` with ``exchange`` answering ``gh``.
 
@@ -306,19 +330,20 @@ def run_cli(
     -------
     int
         The exit status ``main`` reported.
+
+    Notes
+    -----
+    ``invocation`` groups the two choices a case makes about *how* the run is
+    launched — which destinations it reads and writes, and whether it is a dry
+    run — so the call surface stays within the repository's argument ceiling
+    and a case names only the one it is varying.
     """
     import upload_declared_assets_cli as cli
 
+    chosen = invocation or Invocation()
     monkeypatch.setattr(cli, "PRODUCTION_RUNNER", exchange)
-    chosen = destinations or Destinations()
     return cli.main(
-        main_argv(
-            scenario,
-            payload=chosen.payload,
-            record=chosen.record,
-            plan=chosen.plan,
-            dry_run=dry_run,
-        )
+        main_argv(scenario, destinations=chosen.destinations, dry_run=chosen.dry_run)
     )
 
 
@@ -328,6 +353,7 @@ __all__ = [
     "TAG",
     "Destinations",
     "Exchange",
+    "Invocation",
     "Scenario",
     "digest_of",
     "failed",

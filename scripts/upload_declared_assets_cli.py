@@ -44,23 +44,24 @@ import pathlib
 import sys
 import typing as typ
 
-import release_digest_record
 import release_digest_record_files
 import release_payload_tree
 import release_reconcile_github
 import release_upload_plan
 import release_upload_remote
+import upload_declared_assets_refusals
 from release_upload_plan import PLAN_NAME, UploadRequest
-from release_upload_remote import PRODUCTION_RUNNER, SubprocessRunner, UploadError
+from release_upload_remote import PRODUCTION_RUNNER, SubprocessRunner
+from upload_declared_assets_refusals import (
+    EXIT_CONFLICT,
+    EXIT_INPUT_UNREADABLE,
+    EXIT_OK,
+    EXIT_OUTPUT_UNWRITABLE,
+    EXIT_UPLOAD_FAILED,
+)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
-
-EXIT_OK = 0
-EXIT_CONFLICT = 1
-EXIT_INPUT_UNREADABLE = 2
-EXIT_UPLOAD_FAILED = 3
-EXIT_OUTPUT_UNWRITABLE = 4
 
 __all__ = [
     "EXIT_CONFLICT",
@@ -74,42 +75,6 @@ __all__ = [
     "main",
     "settle",
 ]
-
-
-class _UnclassifiedRefusalError(AssertionError):
-    """Report a refusal the exit-code table does not name.
-
-    Unreachable while the handler's tuple and the table are derived from one
-    another; it guards against a future edit that breaks that tie.
-    """
-
-
-#: Every refusal this step reports, most specific first, with the exit code and
-#: the label its log line uses. Order matters: a subclass must precede its base,
-#: or the base's label would describe the wrong failure.
-_REFUSAL_LABELS: tuple[tuple[type[Exception], int, str], ...] = (
-    (
-        release_digest_record.RecordedDigestMismatchError,
-        EXIT_CONFLICT,
-        "the payload disagrees with the trusted record",
-    ),
-    (
-        release_digest_record.DigestRecordError,
-        EXIT_INPUT_UNREADABLE,
-        "the trusted record is unusable",
-    ),
-    (
-        release_payload_tree.PayloadHandoffError,
-        EXIT_CONFLICT,
-        "the selected payload is not the declared one",
-    ),
-    (UploadError, EXIT_UPLOAD_FAILED, "the upload could not be completed"),
-    (OSError, EXIT_INPUT_UNREADABLE, "the payload could not be read"),
-)
-
-#: The classes above, for ``except``. Kept as a tuple literal so the handler
-#: never swallows an exception it cannot classify.
-_REFUSALS = tuple(entry[0] for entry in _REFUSAL_LABELS)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -187,8 +152,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         actions = settle(request, runner=PRODUCTION_RUNNER)
-    except _REFUSALS as error:
-        exit_code, label = _refusal(error)
+    except upload_declared_assets_refusals.REFUSALS as error:
+        exit_code, label = upload_declared_assets_refusals.refusal(error)
         print(f"{label}: {error}", file=sys.stderr)
         return exit_code
     conflicts = release_reconcile_github.conflicts(actions)
@@ -213,28 +178,6 @@ def main(argv: list[str] | None = None) -> int:
         print(f"declared assets not attached after upload: {missing}", file=sys.stderr)
         return EXIT_UPLOAD_FAILED
     return EXIT_OK
-
-
-def _refusal(error: Exception) -> tuple[int, str]:
-    """Classify one refusal into its exit code and the label it logs under.
-
-    Returns
-    -------
-    tuple[int, str]
-        The exit code and log label of the first entry that names the error's
-        own class or one of its bases.
-
-    Raises
-    ------
-    _UnclassifiedRefusalError
-        If no entry names the error. Unreachable while the handler's tuple and
-        this table come from one another; it turns a future break of that tie
-        into a bug report rather than a mislabelled release failure.
-    """
-    for refusal, exit_code, label in _REFUSAL_LABELS:
-        if isinstance(error, refusal):
-            return exit_code, label
-    raise _UnclassifiedRefusalError(type(error).__name__) from error
 
 
 def settle(
@@ -355,7 +298,7 @@ def _expected(digest_record: pathlib.Path) -> dict[str, str]:
 
     Notes
     -----
-    :class:`release_digest_record.DigestRecordError` and its
+    ``release_digest_record.DigestRecordError`` and its
     ``RecordedDigestMismatchError`` subclass reach the caller from the record
     reader; nothing here raises one.
     """
@@ -395,11 +338,6 @@ def _reconcile(
     return release_reconcile_github.plan_asset_actions(
         expected=expected, present=present
     )
-
-
-def _never_called(*_arguments: object, **_keywords: object) -> typ.NoReturn:
-    """Fail the caller that reaches the network, which no doctest may do."""
-    raise release_upload_remote.NoNetworkInDoctestError
 
 
 if __name__ == "__main__":

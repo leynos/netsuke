@@ -2756,7 +2756,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - [x] (2026-11-06) Issue #1066 delivered the candidate-bound declared-asset
   upload, so `publish-release` no longer calls the shared
   `upload-release-assets` action. Its replacement,
-  `./.github/actions/upload-declared-assets`, has four steps. `select` runs
+  `./.github/actions/upload-declared-assets`, has five steps. `select` runs
   `scripts/select_release_payload_cli.py`, which reads the producer records the
   packaging jobs retained, checks each against the candidate commit, the
   workflow run, the target table in `.github/release-staging.toml`, and the
@@ -2774,12 +2774,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   reconciles it against the release's attached assets through
   `scripts/release_reconcile_github.py`, skips a name GitHub already holds with
   the recorded digest, and refuses the whole run on a conflict rather than
-  replacing the attached bytes: no invocation carries `--clobber`. Retained
-  workspace material (`netsuke`, `LICENSE`, `README.md`, completions, manual
-  pages) is excluded before declaration and hashing, and never reaches the
-  network. The policy stays mapping-based, and provenance orchestration lives
-  in the adapters, so no suffix or count check is claimed as proof of origin.
-  Four workflow-contract modules exercise the executed step bodies against a
+  replacing the attached bytes: no invocation carries `--clobber`. The transfer
+  is re-listed afterwards, so a declared name still absent is a failed upload
+  rather than a clean run. `retain-plan` keeps the plan under `if: always()`,
+  so a refusing run still hands the operator the file naming the assets that
+  disagreed. The exit statuses and their log labels are
+  `scripts/upload_declared_assets_refusals.py`, a table with no I/O, which
+  keeps the CLI inside the module-length ceiling. Retained workspace material
+  (`netsuke`, `LICENSE`, `README.md`, completions, manual pages) is excluded
+  before declaration and hashing, and never reaches the network. The policy
+  stays mapping-based, and provenance orchestration lives in the adapters, so
+  no suffix or count check is claimed as proof of origin. Five
+  workflow-contract modules exercise the executed step bodies against a
   checkout-shaped tree and a recorded `gh` stub rather than asserting on YAML
   tokens. `release.yml` still carries no verifier or finalizer step, so the
   release remains draft and a human still publishes it; the crates.io

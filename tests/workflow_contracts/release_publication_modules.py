@@ -104,6 +104,7 @@ SOURCE_MODULES = (
     "scripts/release_upload_plan.py",
     "scripts/release_upload_remote.py",
     "scripts/upload_declared_assets_cli.py",
+    "scripts/upload_declared_assets_refusals.py",
 )
 
 #: Sources that decide from already parsed, in-memory values.
@@ -128,6 +129,7 @@ POLICY_MODULES = (
     "scripts/release_payload_errors.py",
     "scripts/release_payload_names.py",
     "scripts/release_payload_selection.py",
+    "scripts/upload_declared_assets_refusals.py",
 )
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
