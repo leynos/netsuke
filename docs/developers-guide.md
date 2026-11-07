@@ -761,7 +761,7 @@ startup event is held rather than written. The buffer is bounded at
 truncation marker once if the bound is reached, and drops the remainder, so its
 size never depends on how much a run emits.
 
-`settle_startup_diagnostics` in `src/main.rs` decides where the buffer goes
+`settle_startup_diagnostics` in `src/main_startup/mod.rs` decides where the buffer goes
 once the effective mode is known: human mode releases it to stderr, JSON mode
 discards it so stderr carries only the diagnostic document. In `run_with_args`,
 settlement happens after the JSON mode is resolved but before the configuration

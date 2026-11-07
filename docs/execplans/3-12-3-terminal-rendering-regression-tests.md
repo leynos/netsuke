@@ -865,6 +865,28 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   test, so a newtype would add a conversion at every case while enforcing
   nothing. Date/Author: 2026-11-07, implementation agent.
 
+- **D26. The pre-merge checks found one real defect, one real test gap, and
+  three stale rows.** CodeRabbit's second-round findings arrived as pre-merge
+  check rows rather than inline threads, so each was verified against current
+  source rather than applied. `Testing (Overall)` was correct: every colour
+  case passed its policy on the command line, which exercises
+  `resolve_startup_colour`, and the merged path this branch adds had no
+  configuration-file case at all. `Testing (Property / Proof)` was correct in a
+  way the row did not state — `test_support::terminal::classify` consumed an
+  unterminated escape sequence wholesale, so a bare carriage return after
+  `\x1b[` was reported absent. A truncated capture with a live redraw would
+  have read as a static stream. Both are fixed.
+  `User-Facing Documentation` was correct that the README still claimed colour
+  rendering was unimplemented, which this branch makes false, and that the
+  guide's `NO_COLOR` sentence omitted the `--color always` precedence.
+  `Developer Documentation` was correct that `settle_startup_diagnostics` was
+  still placed in `src/main.rs` after D20 moved it. `Unit Architecture` and
+  `Domain Architecture` were not adopted: the startup side effects it names
+  (`observability::init_metrics`, `localization::set_localizer`) are unchanged
+  from the base commit and merely moved with the function, and the
+  policy-type dependency it names already exists at base in `src/theme/mod.rs`
+  and `src/output/mode.rs`. Date/Author: 2026-11-08, implementation agent.
+
 ## Outcomes & retrospective
 
 ### Milestone EP-M0 to EP-M4: complete
