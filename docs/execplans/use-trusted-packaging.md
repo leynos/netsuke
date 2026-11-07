@@ -2841,6 +2841,23 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Both are fixed, and `make lint` now reaches yamllint, actionlint, and
   ambrleaks and exits 0.
 
+- [x] (2026-11-07) Cleared the four findings of the fourth CodeRabbit pass.
+  `trusted_digests` is typed over an iterable but read it twice, so a generator
+  was exhausted by `declared_names` and the function returned an empty mapping
+  -- which a caller checking staged digests against it would accept vacuously.
+  It now materializes the claims once, and its doctest passes a generator as
+  well as a list. `_reconcile` backfilled the digest of every attached asset
+  whose listing digest was absent, so an asset the trusted record never
+  declared was downloaded to learn a digest nothing consults; the backfill is
+  now filtered by the declared names, with a test that an undeclared asset
+  triggers no download. The finalizer's private plan writer is gone in favour of
+  `release_upload_plan.write_plan`, so one function decides the shape both
+  jobs read. `upload`'s doctest now exercises the empty-name path its prose
+  describes, as well as the path that must reach `gh`.
+
+  All four are proved by damage: reverting each fix fails its test or doctest,
+  and damaging the shared plan writer fails four finalizer tests.
+
 ## Surprises & discoveries
 
 - Observation: **A policy module may import its annotated type only for type
