@@ -2607,11 +2607,10 @@ artefact, and only then uploads the declared names. The upload plan it wrote,
 which names the assets of a refusing run, is retained afterwards under the same
 naming. The attempt suffix keeps a job re-run from colliding with the first
 attempt's record, which v7 refuses to overwrite. The shared action remains in
-use by the rehearsal, so the
-same `dry-run` expression decides both lanes' mode. `publish-release` checks
-out the candidate commit rather than the triggering ref, because the selection,
-the declaration, and the uploader all read repository files and those files
-must be the ones the producers built.
+use by the rehearsal, so the same `dry-run` expression decides both lanes' mode.
+`publish-release` checks out the candidate commit rather than the triggering
+ref, because the selection, the declaration, and the uploader all read
+repository files and those files must be the ones the producers built.
 
 The publishing lane's upload action never fails its own step. It captures the
 uploader's status, writes `upload-error` and `error-message` outputs, and exits
