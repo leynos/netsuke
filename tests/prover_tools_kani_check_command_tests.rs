@@ -3,8 +3,9 @@
 //! `make kani-check` reads the pinned version from `KANI_VERSION_FILE`, asks
 //! the installed verifier for `--version`, and compares the two. These tests
 //! drive the recipe with a fake verifier so every branch is exercised without
-//! installing Kani: a match, a mismatch, a missing pin, and a pin that cannot
-//! be read at all.
+//! installing Kani: a match, a mismatch, a missing pin, a pin that cannot be
+//! read at all, a failing verifier, and the boundary that keeps the query off
+//! the network and out of any cache.
 
 #![cfg(unix)]
 
@@ -15,57 +16,49 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
+/// How the fake verifier answers a `--version` request.
+#[derive(Clone, Copy)]
+enum Behaviour<'a> {
+    /// Print `version` and succeed.
+    Reports(&'a str),
+    /// Print `noise` to standard error and exit with `status`.
+    Fails { status: i32, noise: &'a str },
+}
+
 /// A fake verifier plus the files the recipe reads.
 struct FakeKani {
-    _temp: TempDir,
+    temp: TempDir,
     executable: PathBuf,
     invocation_log: PathBuf,
     version_file: PathBuf,
 }
 
 impl FakeKani {
-    /// Create a fake verifier that reports `reported_version`.
+    /// Create a fake verifier that answers `--version` as `behaviour` describes.
     ///
     /// # Errors
     ///
     /// Returns an error if the temporary directory, the fake executable, or the
     /// version file cannot be created.
-    fn new(pinned_version: &str, reported_version: &str) -> Result<Self> {
+    fn new(pinned_version: &str, behaviour: Behaviour<'_>) -> Result<Self> {
         let temp = tempdir().context("create fake Kani directory")?;
         let executable = temp.path().join("fake-kani");
         let invocation_log = temp.path().join("invocations.log");
         let version_file = temp.path().join("KANI_VERSION");
-        write_fake_kani(&executable, &invocation_log, reported_version)?;
+        write_fake_kani(&executable, &invocation_log, behaviour)?;
         fs::write(&version_file, pinned_version).context("write fake Kani version file")?;
 
         Ok(Self {
-            _temp: temp,
+            temp,
             executable,
             invocation_log,
             version_file,
         })
     }
 
-    /// Create a fake verifier that fails with `status` after printing `noise`.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the temporary directory, the fake executable, or the
-    /// version file cannot be created.
-    fn failing(pinned_version: &str, status: i32, noise: &str) -> Result<Self> {
-        let temp = tempdir().context("create fake Kani directory")?;
-        let executable = temp.path().join("fake-kani");
-        let invocation_log = temp.path().join("invocations.log");
-        let version_file = temp.path().join("KANI_VERSION");
-        write_failing_kani(&executable, &invocation_log, status, noise)?;
-        fs::write(&version_file, pinned_version).context("write fake Kani version file")?;
-
-        Ok(Self {
-            _temp: temp,
-            executable,
-            invocation_log,
-            version_file,
-        })
+    /// Resolve a name inside the fixture directory.
+    fn path(&self, name: &str) -> PathBuf {
+        self.temp.path().join(name)
     }
 
     /// Read the arguments the fake verifier received.
@@ -84,51 +77,85 @@ impl FakeKani {
             }
         }
     }
+
+    /// Write a recorder that marks its invocation before failing.
+    ///
+    /// The recorder stands in for a network-capable tool. It appends to a
+    /// marker file *before* exiting non-zero, so an attempt is visible even
+    /// when the caller ignores the failure.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the recorder cannot be written or marked executable.
+    fn write_recorder(&self) -> Result<(PathBuf, PathBuf)> {
+        let marker = self.path("network-attempt.log");
+        let recorder = self.path("network-recorder");
+        write_executable(
+            &recorder,
+            &format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$0\" >> '{}'\nexit 99\n",
+                marker.display()
+            ),
+        )?;
+        Ok((recorder, marker))
+    }
+
+    /// Build a `make kani-check` invocation against this fixture.
+    fn command(&self) -> Command {
+        let mut command = Command::new("make");
+        command
+            .arg("--no-print-directory")
+            .arg("-f")
+            .arg("Makefile")
+            .arg(format!("KANI={}", self.executable.display()))
+            .arg(format!("KANI_VERSION_FILE={}", self.version_file.display()));
+        command
+    }
+
+    /// Run `make kani-check` against this fixture.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the Make invocation cannot be spawned.
+    fn run(&self) -> Result<Output> {
+        self.command()
+            .arg("kani-check")
+            .output()
+            .context("run make kani-check")
+    }
 }
 
-/// Write an executable that records its arguments and prints a version.
-///
-/// # Errors
-///
-/// Returns an error if the script cannot be written or marked executable.
-fn write_fake_kani(executable: &Path, invocation_log: &Path, reported_version: &str) -> Result<()> {
-    let script = format!(
-        r#"#!/bin/sh
-for argument do
-    printf '%s\n' "$argument" >> '{}'
-done
-printf 'kani {}\n'
-"#,
-        invocation_log.display(),
-        reported_version
+/// Render the shell line that makes the verifier answer as `behaviour` says.
+fn response_line(behaviour: Behaviour<'_>) -> String {
+    match behaviour {
+        Behaviour::Reports(version) => format!("printf 'kani {version}\\n'\n"),
+        Behaviour::Fails { status, noise } => {
+            format!("printf '%s\\n' '{noise}' >&2\nexit {status}\n")
+        }
+    }
+}
+
+/// Build the fake verifier script `behaviour` describes.
+fn script_for(behaviour: Behaviour<'_>, invocation_log: &Path) -> String {
+    let mut script = format!(
+        "#!/bin/sh\nfor argument do\n    printf '%s\\n' \"$argument\" >> '{}'\ndone\n",
+        invocation_log.display()
     );
-    write_executable(executable, &script)
+    script.push_str(&response_line(behaviour));
+    script
 }
 
-/// Write an executable that records its arguments, complains, and fails.
+/// Write an executable that records its arguments and answers as described.
 ///
 /// # Errors
 ///
 /// Returns an error if the script cannot be written or marked executable.
-fn write_failing_kani(
+fn write_fake_kani(
     executable: &Path,
     invocation_log: &Path,
-    status: i32,
-    noise: &str,
+    behaviour: Behaviour<'_>,
 ) -> Result<()> {
-    let script = format!(
-        r#"#!/bin/sh
-for argument do
-    printf '%s\n' "$argument" >> '{}'
-done
-printf '%s\n' '{}' >&2
-exit {}
-"#,
-        invocation_log.display(),
-        noise,
-        status
-    );
-    write_executable(executable, &script)
+    write_executable(executable, &script_for(behaviour, invocation_log))
 }
 
 /// Write `script` to `executable` and mark it executable.
@@ -147,30 +174,13 @@ fn write_executable(executable: &Path, script: &str) -> Result<()> {
         .with_context(|| format!("mark {} executable", executable.display()))
 }
 
-/// Run `make kani-check` against the fake verifier and version file.
-///
-/// # Errors
-///
-/// Returns an error if the Make invocation cannot be spawned.
-fn run_kani_check(fake: &FakeKani) -> Result<Output> {
-    Command::new("make")
-        .arg("--no-print-directory")
-        .arg("-f")
-        .arg("Makefile")
-        .arg(format!("KANI={}", fake.executable.display()))
-        .arg(format!("KANI_VERSION_FILE={}", fake.version_file.display()))
-        .arg("kani-check")
-        .output()
-        .context("run make kani-check")
-}
-
 /// Check that a matching pin succeeds and that the verifier is asked for its
 /// version rather than being run as a proof command.
 #[test]
 fn kani_check_accepts_a_matching_version_and_queries_the_verifier() -> Result<()> {
-    let fake = FakeKani::new("0.67.0", "0.67.0")?;
+    let fake = FakeKani::new("0.67.0", Behaviour::Reports("0.67.0"))?;
 
-    let output = run_kani_check(&fake)?;
+    let output = fake.run()?;
 
     ensure!(
         output.status.success(),
@@ -193,9 +203,9 @@ fn kani_check_accepts_a_matching_version_and_queries_the_verifier() -> Result<()
 /// Check that a pin naming a different release fails and names both versions.
 #[test]
 fn kani_check_rejects_a_different_pinned_version() -> Result<()> {
-    let fake = FakeKani::new("0.66.0", "0.67.0")?;
+    let fake = FakeKani::new("0.66.0", Behaviour::Reports("0.67.0"))?;
 
-    let output = run_kani_check(&fake)?;
+    let output = fake.run()?;
 
     ensure!(!output.status.success(), "make kani-check should fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -217,10 +227,10 @@ fn kani_check_rejects_a_different_pinned_version() -> Result<()> {
 /// Check that a missing pin fails before the verifier is consulted.
 #[test]
 fn kani_check_reports_a_missing_version_file() -> Result<()> {
-    let fake = FakeKani::new("0.67.0", "0.67.0")?;
+    let fake = FakeKani::new("0.67.0", Behaviour::Reports("0.67.0"))?;
     fs::remove_file(&fake.version_file).context("remove fake Kani version file")?;
 
-    let output = run_kani_check(&fake)?;
+    let output = fake.run()?;
 
     ensure!(!output.status.success(), "make kani-check should fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -245,11 +255,11 @@ fn kani_check_reports_a_missing_version_file() -> Result<()> {
 /// even when the suite runs as a user that can read anything.
 #[test]
 fn kani_check_reports_a_version_path_that_is_not_a_file() -> Result<()> {
-    let fake = FakeKani::new("0.67.0", "0.67.0")?;
+    let fake = FakeKani::new("0.67.0", Behaviour::Reports("0.67.0"))?;
     fs::remove_file(&fake.version_file).context("remove fake Kani version file")?;
     fs::create_dir(&fake.version_file).context("replace the pin with a directory")?;
 
-    let output = run_kani_check(&fake)?;
+    let output = fake.run()?;
 
     ensure!(!output.status.success(), "make kani-check should fail");
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -274,9 +284,15 @@ fn kani_check_reports_a_version_path_that_is_not_a_file() -> Result<()> {
 #[test]
 fn kani_check_reports_a_sanitized_diagnostic_when_the_verifier_fails() -> Result<()> {
     let noise = format!("kani 9.9.9 \u{1b}[31m{}\ttail", "x".repeat(300));
-    let fake = FakeKani::failing("0.67.0", 9, &noise)?;
+    let fake = FakeKani::new(
+        "0.67.0",
+        Behaviour::Fails {
+            status: 9,
+            noise: &noise,
+        },
+    )?;
 
-    let output = run_kani_check(&fake)?;
+    let output = fake.run()?;
 
     ensure!(!output.status.success(), "make kani-check should fail");
     ensure!(
@@ -312,5 +328,55 @@ fn kani_check_reports_a_sanitized_diagnostic_when_the_verifier_fails() -> Result
         diagnostic.contains("kani 9.9.9"),
         "the diagnostic should keep the useful prefix, got `{diagnostic}`"
     );
+    Ok(())
+}
+
+/// Check that the query never reaches the network, a cache, or the remote
+/// runner, even when such a call would fail silently.
+///
+/// The recipe has no reason to resolve the shared CLI, fetch anything, or write
+/// a cache. A recorder stands in for both network-capable tools the repository
+/// defines and marks the attempt *before* failing, so an ignored error is still
+/// visible. The cache and home directories start empty and must stay empty,
+/// which catches a write that succeeded rather than one that failed.
+#[test]
+fn kani_check_makes_no_network_or_cache_attempts() -> Result<()> {
+    let fake = FakeKani::new("0.67.0", Behaviour::Reports("0.67.0"))?;
+    let (recorder, marker) = fake.write_recorder()?;
+    let cache = fake.path("cache");
+    let home = fake.path("home");
+    fs::create_dir_all(&cache).context("create isolated cache directory")?;
+    fs::create_dir_all(&home).context("create isolated home directory")?;
+
+    let output = fake
+        .command()
+        .arg(format!("PROVER_TOOLS={}", recorder.display()))
+        .arg(format!("UV={}", recorder.display()))
+        .env("UV_CACHE_DIR", &cache)
+        .env("XDG_CACHE_HOME", &cache)
+        .env("HOME", &home)
+        .arg("kani-check")
+        .output()
+        .context("run make kani-check with a recorder in place of the network tools")?;
+
+    ensure!(
+        output.status.success(),
+        "the query must succeed without reaching the network: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    ensure!(
+        !marker.exists(),
+        "the query must not attempt to reach the remote runner or a fetcher"
+    );
+    for directory in [&cache, &home] {
+        let entries = fs::read_dir(directory)
+            .with_context(|| format!("read {}", directory.display()))?
+            .count();
+        ensure!(
+            entries == 0,
+            "the query must not write to {}, found {entries} entries",
+            directory.display()
+        );
+    }
     Ok(())
 }

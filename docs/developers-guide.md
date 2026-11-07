@@ -5847,7 +5847,13 @@ Use the Make targets for day-to-day formal-verification checks:
   default proof, an ordered batch, and a failing proof whose diagnostic names
   the verifier's status. GNU make normalizes any failed recipe to its own exit
   status 2, so that diagnostic, not make's status, is what carries the
-  verifier's code. These targets are not part of the ordinary pull-request gate.
+  verifier's code. The fake verifier and the single-word `PROVER_TOOLS` shim
+  live in `scripts/tests/prover_tools_integration_support.py`; both are started
+  through a POSIX launcher rather than a shebang, so an interpreter path
+  containing spaces still resolves. Every subprocess in that module runs under
+  a deadline that kills the whole process group, so a stalled fetch fails the
+  test with the offending command instead of holding the captured pipes open.
+  These targets are not part of the ordinary pull-request gate.
 
 `tests/prover_tools_verus_e2e_tests.rs` is the real-verifier lane. It drives
 `make verus` against the pinned Verus install for the default proof, an ordered
@@ -5865,19 +5871,29 @@ a failure for a maintainer who means to run them.
 `make kani-check`: that the query reads the pin, asks the installed verifier for
 `--version` and nothing else, and never resolves `rust-prover-tools` through a
 network path. Its isolation case goes further and runs the real recipe inside a
-read-only chroot with no network, proving the query still answers. That case
-needs unprivileged user namespaces, so a host that forbids them reports a skip
-rather than failing `make test`. `make test-kani-check-isolation` runs the same
-binary with `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`, turning the skip into a
-failure, and `kani-smoke` runs that target as its own step so the required lane
-exercises the boundary instead of reporting green without it. The capability
-probe names the sandbox operation a host refused, which is the evidence to
-collect before changing the lane.
+read-only chroot with no network, proving the query still answers. Every
+mounted path is read-only — `/usr`, `/etc`, the repository, the fixture
+directory, the chroot root, `/tmp` and the caller's home — and the one
+deliberately writable path is the `control` probe at `/proc/self/comm`, which
+proves the probe can report a plain failure instead of classifying everything
+as blocked. That case needs unprivileged user namespaces, so a host that
+forbids them reports a skip rather than failing `make test`.
+`make test-kani-check-isolation` runs the same binary with
+`NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`, turning the skip into a failure, and
+`kani-smoke` runs that target as its own step so the required lane exercises
+the boundary instead of reporting green without it. The capability probe binds
+the same `/etc`, repository and fixture paths the sandbox will use and names
+the operation a host refused, which is the evidence to collect before changing
+the lane.
 
 `tests/prover_tools_kani_check_command_tests.rs` drives the recipe itself with
 a fake verifier, covering a matching pin, a mismatched pin, a missing pin, a
 pin that is not a file, and a failing verifier whose diagnostic must carry its
-category, its status, and a bounded, control-character-free quote.
+category, its status, and a bounded, control-character-free quote. A further
+case puts a recorder in place of both network-capable tools the repository
+defines; the recorder marks its invocation before failing, so an attempt is
+visible even if the recipe ignores the error, and the isolated cache and home
+directories must still be empty afterwards.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`. `Cargo.toml` declares `cfg(kani)` under

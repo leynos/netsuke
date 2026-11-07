@@ -129,11 +129,14 @@ exit "$rc"
 /// host may allow `unshare` and still deny a bind mount, a read-only remount, a
 /// procfs mount, or `chroot`. Probing the same sequence on a throwaway
 /// directory turns that into a reported prerequisite skip instead of a failure
-/// inside the real script. Each stage has its own exit status so the reason
+/// inside the real script. The probe binds the same `/etc`, repository and
+/// fixture paths the sandbox will use, because a non-recursive bind of a
+/// directory that contains an inherited submount can fail even when the
+/// simpler binds succeed. Each stage has its own exit status so the reason
 /// names the operation that was refused.
 const PROBE: &str = r#"set -u
-root=$1
-mkdir -p "$root/usr" "$root/proc" || exit 90
+root=$1; repo=$2; fixture=$3
+mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root$repo" "$root$fixture" || exit 90
 ln -s usr/bin "$root/bin" || exit 90
 ln -s usr/sbin "$root/sbin" || exit 90
 ln -s usr/lib "$root/lib" || exit 90
@@ -141,8 +144,12 @@ ln -s usr/lib64 "$root/lib64" || exit 90
 mount --make-rprivate / || true
 mount --bind "$root" "$root" && mount -o remount,ro,bind "$root" || exit 91
 mount --bind /usr "$root/usr" && mount -o remount,ro,bind "$root/usr" || exit 92
-mount -t proc proc "$root/proc" || exit 93
-chroot "$root" /bin/sh -c 'exit 0' || exit 94
+mount --bind /etc "$root/etc" && mount -o remount,ro,bind "$root/etc" || exit 93
+mount --bind "$repo" "$root$repo" && mount -o remount,ro,bind "$root$repo" || exit 94
+mount --bind "$fixture" "$root$fixture" || exit 95
+mount -o remount,ro,bind "$root$fixture" || exit 96
+mount -t proc proc "$root/proc" || exit 97
+chroot "$root" /bin/sh -c 'exit 0' || exit 98
 "#;
 
 /// Name the sandbox operation a probe exit status stands for.
@@ -151,8 +158,12 @@ fn probe_stage(status: Option<i32>) -> &'static str {
         Some(90) => "create the probe directories",
         Some(91) => "bind and remount the chroot root read-only",
         Some(92) => "bind and remount /usr read-only",
-        Some(93) => "mount a fresh procfs",
-        Some(94) => "chroot into the probe root",
+        Some(93) => "bind and remount /etc read-only",
+        Some(94) => "bind and remount the repository read-only",
+        Some(95) => "bind the fixture directory",
+        Some(96) => "remount the fixture directory read-only",
+        Some(97) => "mount a fresh procfs",
+        Some(98) => "chroot into the probe root",
         _ => "run the capability probe",
     }
 }
@@ -163,12 +174,13 @@ fn probe_stage(status: Option<i32>) -> &'static str {
 /// host that creates them may still refuse one of the mount operations the
 /// chroot needs. The probe asks for the same namespace set the sandbox uses,
 /// including the process namespace that `mount -t proc` requires, and then
-/// performs the same bind, read-only remount, procfs mount, and `chroot` on a
-/// throwaway directory, so a host that can do only part of it is reported as
-/// unavailable rather than failing later inside the script. The case reports
-/// that as a skip, which strict mode turns back into a failure so a lane that
-/// requires the boundary test cannot pass without exercising it.
-pub(crate) fn unavailable() -> Option<String> {
+/// performs the same binds — `/usr`, `/etc`, the repository and the fixture —
+/// the same read-only remounts, the procfs mount, and `chroot` on a throwaway
+/// directory, so a host that can do only part of it is reported as unavailable
+/// rather than failing later inside the script. The case reports that as a
+/// skip, which strict mode turns back into a failure so a lane that requires
+/// the boundary test cannot pass without exercising it.
+pub(crate) fn unavailable(repo: &Path, fixture: &Path) -> Option<String> {
     let root = match tempdir() {
         Ok(root) => root,
         Err(error) => return Some(format!("cannot create a sandbox probe directory: {error}")),
@@ -188,6 +200,8 @@ pub(crate) fn unavailable() -> Option<String> {
             "sh",
         ])
         .arg(root.path())
+        .arg(repo)
+        .arg(fixture)
         .output();
     match probe {
         Ok(output) if output.status.success() => None,

@@ -54,6 +54,15 @@ impl Fixture {
         self.temp.path().join(name)
     }
 
+    /// Return the fixture's temporary directory.
+    ///
+    /// Only the isolation case needs the directory itself rather than a named
+    /// path inside it, and that case is Linux-only, so the accessor is too.
+    #[cfg(target_os = "linux")]
+    pub(super) fn root(&self) -> &Path {
+        self.temp.path()
+    }
+
     /// Create a directory inside the fixture.
     ///
     /// # Errors

@@ -566,7 +566,11 @@ edge-test file scores 10.0 with no review findings, and the hosted CodeScene
 check reports six quality gates passed. The repair is published in the
 candidate. The isolation boundary test now enforces the write boundary with a
 read-only chroot rather than a single repository bind, so the query is verified
-to run with no writable path outside the repository and fixture; on a host that
+to run with every mounted path read-only: `/usr`, `/etc`, the repository, the
+fixture directory, the chroot root, `/tmp` and the caller's home. The one
+deliberately writable path is the `control` probe at `/proc/self/comm`, which
+exists to prove the probe can report a plain failure rather than classifying
+every path as blocked because redirection itself is broken. On a host that
 forbids unprivileged user namespaces the case reports the reason and returns
 success, which `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` converts into a failure.
 The review at `5803947003` recorded six failed pre-merge checks, and the
@@ -585,8 +589,13 @@ because that text comes from an external binary. The read-only chroot boundary
 remains the evidence for the blocked-network and blocked-write requirement, and
 it runs strictly in the required `kani-smoke` lane rather than skipping.
 Version checking is described as the local read-only `--version` query, not a
-delegation to the pinned CLI. Current-head review reconciliation and
-trusted-main warm-cache acceptance remain open.
+delegation to the pinned CLI.
+
+The gate evidence above is historical: it was collected on the candidate that
+carried Revision 48, before the review at `5808594893` and the CodeScene delta
+on `adeb43dd6` raised their findings. The latest candidate is the one described
+in Revision 49, and its own gate evidence is recorded there. Current-head
+review reconciliation and trusted-main warm-cache acceptance remain open.
 
 ## Context and orientation
 
@@ -1527,3 +1536,84 @@ here: the isolation lane ran the read-only chroot case with strict mode on
 rather than skipping it, and the Verus lane ran all five cases against the
 pinned real verifier. Keep Status: IN PROGRESS pending review at the new head
 and trusted-main warm-cache acceptance.
+
+Revision 49 (2026-11-07): The review at `5808594893`, taken on `5b682a908`,
+repeated the six pre-merge rows with sharper wording and added four inline
+findings; the CodeScene delta on `adeb43dd6` then raised two new issues against
+the new command suite. All are addressed on the working candidate.
+
+*Testing (Overall)* and *Unit Architecture* asked for detection of network and
+cache write attempts, including attempts whose errors are ignored, and for
+attempted writes that fail silently.
+`kani_check_makes_no_network_or_cache_attempts` now runs the recipe with a
+recorder in place of both network-capable tools the repository defines. The
+recorder marks its invocation *before* exiting non-zero, so an attempt is
+visible even when the caller ignores the failure, and the isolated cache and
+home directories must still be empty afterwards, which catches a write that
+succeeded rather than one that failed. The read-only chroot remains the
+evidence that the boundary holds for real, and the required `kani-smoke` lane
+still runs it strictly.
+
+*Developer Documentation* asked for the older gate run to be marked historical,
+for the isolation summary to name the writable control path, and for the
+current-head review and warm-cache items to stay open. The Outcomes section now
+says the Revision 48 evidence is historical, names `/proc/self/comm` as the one
+deliberately writable control path, and keeps both acceptance items open.
+
+*Module-Level Documentation* asked the integration module to say that it also
+exercises `make verus` through the pinned CLI and a fake verifier. The module
+docstring now states that, and names the Rust suite that covers the same paths
+against the real verifier.
+
+The four inline findings are fixed. The Python fixtures now write a `#!/bin/sh`
+launcher that passes the interpreter and the script as separate quoted
+arguments, so a `sys.executable` path containing spaces no longer breaks the
+shebang. Every subprocess runs through one bounded runner that starts the child
+in its own session, kills the whole process group on expiry, and reports the
+command, so a stalled fetch cannot hold the captured pipes open. The
+default-proof test scrubs `VERUS_FLAGS` and `MAKEFLAGS` from the child
+environment so an inherited override cannot change the recipe under test. The
+sandbox capability probe now binds `/etc`, the repository and the fixture with
+the same paths and read-only remounts the real sandbox uses, because a
+non-recursive bind of a directory containing an inherited submount can fail
+even when the simpler binds succeed; an unavailable mount is still a reported
+skip in normal mode and a failure in strict mode.
+
+The two CodeScene issues were real. The command suite had four near-identical
+constructors and script writers, and its string-argument ratio was 43.8%
+against a 39.0% threshold. A single `Behaviour` enum now selects the fake
+verifier's response, one script builder renders it, and one constructor stages
+the fixture, which removes the duplication and drops the string-argument share
+below the threshold. The Python integration suite crossed the 400-line cap once
+the bounded runner and launcher were added, so its fixtures and runners moved to
+`scripts/tests/prover_tools_integration_support.py`, following the existing
+`*_support.py` convention in that directory.
+
+Three Python lints fired on the relocated code and are fixed at the source
+rather than suppressed. The bounded runner raised `AssertionError` with a long
+formatted message, which the df12 house lints reject twice over, so it now
+raises a `CommandTimeoutError` that builds the message itself and names the
+stalled command and its captured output. Pylint's `consider-using-with` then
+required the `Popen` call to be a context manager; that is safe here because
+both paths reap the child before the block exits, which the comment at the call
+site records. Moving `pathlib` into a `TYPE_CHECKING` block broke collection
+instead: Hypothesis resolves a decorated test's annotations through
+`inspect.signature`, so the import is needed at runtime. It stays a runtime
+import with a scoped ignore and that reason, matching the existing Cyclopts
+precedent in `scripts/ci_test_evidence.py`.
+
+The eleven commit gates then ran sequentially, one at a time, each started
+once, and all passed on this candidate: `make check-fmt`, `make lint`,
+`make typecheck`, `make doc-coverage`, `make markdownlint`, `make nixie`,
+`make test`, `make test-workflow-contracts`,
+`make test-prover-tools-integration`, `make test-kani-check-isolation`, and
+`make test-verus-e2e`. They reported 5,180 nextest tests passed with 7 skipped,
+every doctest target passing, 1,785 workflow-contract tests passed with 3
+skipped plus 28 further cases, 11 prover-tools integration tests, 9
+`kani-check` isolation tests, 5 Verus end-to-end tests, and 98% doc-comment
+coverage. Compile admission was healthy throughout; queueing under four held
+slots lengthened `make lint` and `make doc-coverage`, and neither queued gate
+was treated as failed or restarted.
+
+Keep Status: IN PROGRESS pending review at the new head and trusted-main
+warm-cache acceptance.

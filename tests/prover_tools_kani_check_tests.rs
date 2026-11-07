@@ -198,10 +198,11 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
 #[test]
 fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
     let fixture = Fixture::new()?;
-    if let Some(reason) = support::sandbox::unavailable() {
+    let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
+    if let Some(reason) = support::sandbox::unavailable(repo, fixture.root()) {
         return support::sandbox::skip(&reason);
     }
-    let (output, marker) = fixture.run_sandboxed_check(Path::new(env!("CARGO_MANIFEST_DIR")))?;
+    let (output, marker) = fixture.run_sandboxed_check(repo)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
