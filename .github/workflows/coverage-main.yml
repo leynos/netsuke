@@ -199,6 +199,9 @@ jobs:
         # suite still needs it, because tests drive `make` recipes gated on
         # `check-build-tools`, which refuses to run without the pinned `mold`.
         run: make install-build-tools
+      - name: Fetch dependencies
+        # Tests start their own cargo offline; fetch once so none resolves cold.
+        run: cargo fetch --locked
       - name: Test and Measure Coverage
         env:
           # One of the two exclusions from the build standard. A build whose

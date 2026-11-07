@@ -314,7 +314,7 @@ test-package-verify: check-build-tools ## Verify that the packaged crate builds 
 # and test exactly that set; `lint-clippy` and `test` above cover
 # `--all-features`. See ADR-056 and "Feature-gated code" in the developers'
 # guide.
-test-default-features: check-build-tools ## Run every Rust test with only the default features, as release binaries build
+test-default-features: check-build-tools | fetch ## Run every Rust test with only the default features, as release binaries build
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc $(BUILD_JOBS)
 
@@ -322,7 +322,7 @@ lint-default-features: check-build-tools ## Run rustdoc and Clippy with only the
 	$(GATE_RUSTFLAGS) $(CARGO) doc --workspace --no-deps
 	$(GATE_RUSTFLAGS) $(CARGO) clippy --workspace --all-targets -- -D warnings
 
-test-kani-mutations: check-build-tools ## Compile each mutation patch's patched tree under the Kani configuration
+test-kani-mutations: check-build-tools | fetch ## Compile each mutation patch's patched tree under the Kani configuration
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test kani_mutation_evidence_tests --all-features --run-ignored ignored-only $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 # The first uv run mirrors the exact Cuprum/Cyclopts pins in
