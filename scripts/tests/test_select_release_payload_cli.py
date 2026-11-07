@@ -6,178 +6,35 @@ packages -- and asserts on what the CLI left behind. Asserting on the exit code
 alone would pass for a run that refused everything, so every case also states
 whether a payload exists and which names it holds.
 
+The staging itself lives in ``select_release_payload_support``, so a case here
+states only the contradiction it introduces and the evidence it expects.
+
 Run via ``make test-release-publication``.
 """
 
-import dataclasses
-import json
 import typing as typ
 
 import pytest
 import release_digest_files
 import release_digest_record_files
 import select_release_payload_cli as cli
+from select_release_payload_support import (
+    ARCHIVE,
+    DEB,
+    RETAINED,
+    RPM,
+    SIDECAR,
+    Provenance,
+    installed_names,
+    record_provenance,
+    run_cli,
+    stage,
+    staged_assets,
+    staged_tree,
+)
 
 if typ.TYPE_CHECKING:
     import pathlib
-
-CANDIDATE = "a" * 40
-RUN_ID = "1234"
-VERSION = "1.0.0"
-ARCHIVE = f"netsuke-{VERSION}-x86_64-unknown-linux-gnu.tar.gz"
-SIDECAR = f"{ARCHIVE}.sha256"
-DEB = f"netsuke_{VERSION}_amd64.deb"
-RPM = f"netsuke-{VERSION}-1.x86_64.rpm"
-TARGET = "linux-x86_64"
-
-#: The smallest staging configuration that still exercises the platform count:
-#: one Linux target must stage exactly one ``.deb`` and one ``.rpm``.
-STAGING_CONFIG = """
-[common]
-bin_name = "netsuke"
-
-[targets.linux-x86_64]
-target = "x86_64-unknown-linux-gnu"
-platform = "linux"
-"""
-
-MANIFEST = """
-[package]
-name = "netsuke"
-version = "1.0.0"
-"""
-
-#: Files a real download carries that no release publishes. Selection must
-#: exclude them rather than refusing a perfectly good build.
-RETAINED = ("netsuke", "LICENSE", "completions/bash/netsuke")
-
-
-def stage(dist: pathlib.Path, relative: str, content: bytes = b"bytes") -> bytes:
-    """Write ``content`` below ``dist`` and return it.
-
-    Returns
-    -------
-    bytes
-        The content written.
-    """
-    path = dist / relative
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _ = path.write_bytes(content)
-    return content
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
-class Provenance:
-    """Name the fields a case varies in the producer record it stages.
-
-    Attributes
-    ----------
-    commit
-        Candidate the producer checked out.
-    run_id
-        Workflow run the producer belongs to.
-    platform
-        Operating system the target package is built for.
-    target
-        Target name the record is filed under.
-    """
-
-    commit: str = CANDIDATE
-    run_id: str = RUN_ID
-    platform: str = "linux"
-    target: str = TARGET
-
-
-def record_provenance(
-    dist: pathlib.Path,
-    *,
-    fields: Provenance | None = None,
-    assets: dict[str, str] | None = None,
-) -> None:
-    """Write a producer record below ``dist`` the way a producer job would."""
-    fields = fields or Provenance()
-    payload = {
-        "schema": 1,
-        "commit": fields.commit,
-        "run_id": fields.run_id,
-        "run_attempt": "1",
-        "target": fields.target,
-        "platform": fields.platform,
-        "assets": assets if assets is not None else {},
-    }
-    path = dist / fields.target / "producer-provenance.json"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _ = path.write_text(json.dumps(payload), encoding="utf-8")
-
-
-def staged_tree(tmp_path: pathlib.Path, *, producer: bool = True) -> dict[str, object]:
-    """Build a complete, publishable staged tree and its inputs.
-
-    Returns
-    -------
-    dict[str, object]
-        The keyword arguments :func:`run_cli` needs, plus the staged bytes.
-    """
-    dist = tmp_path / "dist"
-    for name in (ARCHIVE, SIDECAR, DEB, RPM):
-        stage(dist, name, name.encode("utf-8"))
-    for retained in RETAINED:
-        stage(dist, retained)
-    if producer:
-        record_provenance(dist, assets=_staged_assets({"dist": dist}))
-    staging_config = tmp_path / "release-staging.toml"
-    _ = staging_config.write_text(STAGING_CONFIG, encoding="utf-8")
-    manifest = tmp_path / "Cargo.toml"
-    _ = manifest.write_text(MANIFEST, encoding="utf-8")
-    return {
-        "dist": dist,
-        "staging_config": staging_config,
-        "manifest": manifest,
-        "output": tmp_path / "artifacts",
-        "record": tmp_path / "artifacts" / "trusted-record.json",
-    }
-
-
-def run_cli(tree: dict[str, object], **overrides: object) -> int:
-    """Invoke the CLI over ``tree``, overriding any argument by name.
-
-    Returns
-    -------
-    int
-        The CLI's exit status.
-    """
-    arguments: dict[str, object] = {
-        "dist": tree["dist"],
-        "staging_config": tree["staging_config"],
-        "manifest": tree["manifest"],
-        "output": tree["output"],
-        "record": tree["record"],
-    }
-    arguments |= overrides
-    return cli.main([
-        "--dist-dir",
-        str(arguments["dist"]),
-        "--staging-config",
-        str(arguments["staging_config"]),
-        "--manifest",
-        str(arguments["manifest"]),
-        "--version",
-        VERSION,
-        "--commit",
-        str(arguments.get("commit", CANDIDATE)),
-        "--run-id",
-        str(arguments.get("run_id", RUN_ID)),
-        "--output-dir",
-        str(arguments["output"]),
-        "--digest-record",
-        str(arguments["record"]),
-    ])
-
-
-def installed_names(output: pathlib.Path) -> list[str]:
-    """Return the names the CLI copied into ``output``, sorted."""
-    payload = output / cli.PAYLOAD_DIRECTORY
-    return sorted(path.name for path in payload.iterdir())
 
 
 def test_a_complete_tree_installs_exactly_the_declared_names(
@@ -238,7 +95,7 @@ def test_a_producer_from_another_commit_is_refused(tmp_path: pathlib.Path) -> No
     record_provenance(
         tree["dist"],
         fields=Provenance(commit="b" * 40),
-        assets=_staged_assets(tree),
+        assets=staged_assets(tree),
     )
     assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
         "a stale candidate must be refused"
@@ -250,7 +107,7 @@ def test_a_producer_from_another_run_is_refused(tmp_path: pathlib.Path) -> None:
     """Refuse a record whose producer belongs to a different workflow run."""
     tree = staged_tree(tmp_path, producer=False)
     record_provenance(
-        tree["dist"], fields=Provenance(run_id="9999"), assets=_staged_assets(tree)
+        tree["dist"], fields=Provenance(run_id="9999"), assets=staged_assets(tree)
     )
     assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, "a foreign run must be refused"
     assert not tree["output"].exists(), "a refusal must not leave a payload"
@@ -265,7 +122,7 @@ def test_a_record_naming_an_unknown_platform_is_unusable_input(
     """
     tree = staged_tree(tmp_path, producer=False)
     record_provenance(
-        tree["dist"], fields=Provenance(platform="beos"), assets=_staged_assets(tree)
+        tree["dist"], fields=Provenance(platform="beos"), assets=staged_assets(tree)
     )
     assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT, (
         "an unknown platform is input trouble, not a refusal"
@@ -306,7 +163,7 @@ def test_a_missing_declared_asset_is_refused(tmp_path: pathlib.Path) -> None:
 def test_replaced_bytes_are_refused_before_the_copy(tmp_path: pathlib.Path) -> None:
     """Refuse a staged file whose bytes the producer did not record."""
     tree = staged_tree(tmp_path, producer=False)
-    record_provenance(tree["dist"], assets=_staged_assets(tree))
+    record_provenance(tree["dist"], assets=staged_assets(tree))
     stage(tree["dist"], DEB, b"rebuilt from another commit")
     assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
         "bytes the producer did not record must be refused"
@@ -348,21 +205,6 @@ def test_a_malformed_staging_config_is_unusable_input(
         "a malformed config must be reported as input trouble"
     )
     assert not tree["output"].exists(), "a refusal must not leave a payload"
-
-
-def _staged_assets(tree: dict[str, object]) -> dict[str, str]:
-    """Return the published name to digest mapping the tree stages.
-
-    Returns
-    -------
-    dict[str, str]
-        Each declared name and the digest of its staged bytes.
-    """
-    dist = tree["dist"]
-    return {
-        name: release_digest_files.digest_of_file(dist / name)
-        for name in (ARCHIVE, SIDECAR, DEB, RPM)
-    }
 
 
 @pytest.mark.parametrize("name", [ARCHIVE, SIDECAR, DEB, RPM])
