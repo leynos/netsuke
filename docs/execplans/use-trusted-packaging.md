@@ -2858,6 +2858,64 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   All four are proved by damage: reverting each fix fails its test or doctest,
   and damaging the shared plan writer fails four finalizer tests.
 
+- [x] (2026-11-07) Cleared the fifth CodeRabbit pass and re-gated the branch.
+  `downloaded_digests` was the same generator-exhaustion defect as
+  `trusted_digests`, one call further along the same path: it walked its
+  `names` iterable once to download and again to hash, so a generator left the
+  backfill with nothing downloaded and every undeclared-digest asset reported
+  as differing. It now materializes the names before either pass, and its
+  doctest drives a generator through a recorder, because a failing download
+  answers `None` either way and the mapping alone cannot show the difference.
+  The remaining three findings were test-side: `selection_for` took a mutable
+  default (`config: dict = CONFIG`, one shared dict across every case) and now
+  defaults to `None` and substitutes the constant; the import of the moved
+  helper left the suite naming `release_upload_remote.downloaded_digests` after
+  the split; and `_basename` split a recorded path on `/` where a pure POSIX
+  path names the segment.
+
+  Splitting the digest path out of `release_upload_remote` to clear Pylint's
+  `C0302` (416 lines against a 400 ceiling) moved the last `subprocess` import
+  out of it, which the process-boundary contract caught: a module listed in
+  `PROCESS_MODULES` that imports no process module has a stale recorded reason.
+  The entry is gone rather than reworded, because the new module spawns nothing
+  -- it asks `release_upload_remote.gh` for the download, and `gh` remains the
+  one place the release path launches a command. Two further gate findings were
+  self-inflicted: an unsorted import block, and a `PROCESS_MODULES` value one
+  character past the line limit.
+
+- [x] (2026-11-07) Turned CI's red Typecheck step green and re-gated.
+  `make typecheck` reported 33 diagnostics at `1ff2bf525`, and CI's
+  `build-test` job was red at step 23 "Typecheck" on the same commit -- every
+  step after it, including the workflow-contract and release-publication
+  suites, was skipped. The gate set I had been running covered both suites but
+  not the checker, so the branch's own verification had a hole exactly where CI
+  failed.
+
+  Every diagnostic had one shape: a test decoded JSON and returned
+  `dict[str, object]`, leaving each key read unsupported at analysis time and
+  therefore unchecked. Three `TypedDict`s name the shapes (`UploadPlan`,
+  `DigestRecord`, `StagedTree`), and one `config` local is annotated where ty
+  will not narrow a `dict` literal into a `dict[str, object]` parameter. Two
+  cases needed a runtime `pathlib` import: they build `pathlib.Path(...)`
+  directly rather than using the `tmp_path` fixture, so a `TYPE_CHECKING`-only
+  import is a `NameError` at run time -- which is how the first attempt failed.
+
+  Two constraints shaped the repairs rather than being worked around. The
+  frozen-request case is parametrized on its field name, because a typed store
+  to a frozen dataclass field is rejected at analysis time and the runtime
+  refusal would then be unreachable; a name the checker cannot resolve keeps
+  the case testing the dataclass. And typing `StagedTree` pushed
+  `test_select_release_payload_cli.py` to 417 lines, past Pylint's ceiling, so
+  the staging moved to `select_release_payload_support` and the test module now
+  holds its 18 cases and nothing else.
+
+  Proved by damage, not by inspection. Removing `frozen=True` makes both
+  immutability cases fail with `DID NOT RAISE AttributeError`, and typing a
+  wrong key makes ty name the `TypedDict` and suggest the right one. A probe
+  that returned a wrong record path from `staged_tree` passed every case, which
+  is worth recording: that helper's value is checked by the checker, not by the
+  suite, so the checker is what has to stay green.
+
 ## Surprises & discoveries
 
 - Observation: **A policy module may import its annotated type only for type
