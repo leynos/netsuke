@@ -1,4 +1,4 @@
-.PHONY: help all clean test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean fetch test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -240,9 +240,12 @@ all: release ## Default target builds release binary
 clean: ## Remove build artefacts
 	$(CARGO) clean
 
+fetch: ## Download the locked dependencies once, so nested cargo runs offline
+	$(CARGO) fetch --locked
+
 test: test-nextest doctest ## Run every Rust test with warnings treated as errors
 
-test-nextest: check-build-tools ## Run all non-doctest Rust tests through cargo-nextest
+test-nextest: check-build-tools | fetch ## Run all non-doctest Rust tests through cargo-nextest
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --workspace --all-targets --all-features $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 .PHONY: test-rfc-stdlib-coverage
@@ -294,7 +297,7 @@ proptest: check-build-tools ## Run the property-test suites alone
 test-documentation-contracts: check-build-tools ## Validate marked documentation examples and semantic contracts
 	$(GATE_RUSTFLAGS) $(CARGO) nextest run --test documentation_examples_loader_tests --test documentation_examples_tests --all-features --no-tests fail -E 'test(malformed_documented_examples_are_rejected) | test(every_documented_fence_has_a_known_unique_identifier) | test(help_targets_edges_example_matches_live_schema) | test(release_wix_extension)' $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
-doctest: check-build-tools ## Run doctests, which cargo-nextest cannot execute
+doctest: check-build-tools | fetch ## Run doctests, which cargo-nextest cannot execute
 	$(GATE_RUSTFLAGS) $(CARGO) test --workspace --doc --all-features $(BUILD_JOBS)
 
 # Cargo's publish verification: extract the packaged crate and compile it with

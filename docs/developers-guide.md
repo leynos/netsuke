@@ -39,6 +39,24 @@ invoice savings. Publish evidence before enabling an optimization. The
 collection floor, overhead budget and adoption criteria. It does not authorize
 additional paid benchmark jobs.
 
+## Fetching dependencies before tests
+
+Several tests start their own `cargo`: the metadata, unit-graph and
+configuration reads, and the Kani compile guard. Cargo resolves dependencies
+while it holds the package-cache lock in `$CARGO_HOME`, so a nested `cargo`
+that resolves cold can wait on another repository's build for many minutes. The
+fix is to fetch once, before any test starts, and to run the nested calls
+offline:
+
+- `make test` depends on the `fetch` target, which runs
+  `cargo fetch --locked`. A failed fetch stops the run.
+- The Windows job runs the same command as its own step before `make test`.
+- Each of those spawns sets `CARGO_NET_OFFLINE=true`, after any environment
+  operation that could rewrite it.
+
+Prepare a direct or offline run with `cargo fetch --locked` first. The estate
+lint rule `nested-cargo-offline-tests` checks all three.
+
 ## Command-line interface architecture
 
 The governing command-line interface (CLI) architecture record is ADR-0046,

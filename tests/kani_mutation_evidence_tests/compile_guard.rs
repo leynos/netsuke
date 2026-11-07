@@ -198,6 +198,10 @@ fn compile_patched_tree(sandbox: &Sandbox, target_dir: &Utf8Path) -> Result<Opti
         .envs(sandbox.isolation_env())
         .env("RUSTFLAGS", DENY_WARNINGS)
         .env("CARGO_TARGET_DIR", target_dir)
+        // The dependencies are fetched before the tests start, so this build
+        // needs no network and must not wait on the index. Set last so it is
+        // the latest operation on the variable.
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
         .context("run cargo kani over the patched tree")?;
     if output.status.success() {

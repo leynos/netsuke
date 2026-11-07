@@ -312,6 +312,9 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Fetch dependencies
+        # Tests start their own cargo offline; fetch once so none resolves cold.
+        run: cargo fetch --locked
       - name: Test
         # cargo-nextest plus doctests under `-D warnings`,
         # compiling and running the `#[cfg(windows)]` test tree. A failure

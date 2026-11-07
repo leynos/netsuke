@@ -69,6 +69,9 @@ fn assert_units_have_no_debuginfo_or_incremental(subcommand: &[&str]) -> Result<
             "--offline",
         ])
         .current_dir(env!("CARGO_MANIFEST_DIR"))
+        // The arguments above already ask for --locked --offline; the variable
+        // also covers the subcommand words passed in by the caller.
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
         .context("failed to run cargo --unit-graph")?;
     ensure!(

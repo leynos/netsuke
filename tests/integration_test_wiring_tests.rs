@@ -37,6 +37,8 @@ fn cargo_discovered_test_targets(
         .args(["metadata", "--no-deps", "--format-version", "1"])
         .arg("--manifest-path")
         .arg(manifest_path.as_str())
+        // `--no-deps` reads only the workspace's own manifests.
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
         .context("run cargo metadata")?;
     ensure!(
