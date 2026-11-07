@@ -161,6 +161,39 @@ def test_main_reports_a_transport_failure_with_its_own_status(
     )
 
 
+def test_main_reports_an_asset_absent_after_upload_as_a_failed_upload(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuse to call the release complete when a declared asset never arrived.
+
+    ``gh release upload`` can report success while the asset does not appear on
+    the release. The re-listed plan then still asks to upload that name, which
+    is not a conflict, so without an explicit check the step would exit zero
+    over a release that is missing an asset.
+    """
+    exchange = Exchange(attached={}, drop_uploads=True)
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_UPLOAD_FAILED, (
+        "an asset still absent after the upload must not report success"
+    )
+    assert scenario.stored_plan()["actions"] == [
+        ["b.rpm", "upload"],
+        [DEB, "upload"],
+    ], "the plan must record that the assets are still outstanding"
+
+
+def test_a_dry_run_still_succeeds_with_every_asset_planned_for_upload(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Leave a dry run's planned uploads alone: sending nothing is the point."""
+    exchange = Exchange(attached={})
+    status = run_cli(scenario, exchange, monkeypatch, dry_run=True)
+    assert status == EXIT_OK, "a dry run must not report an unattempted upload"
+    assert scenario.stored_plan()["actions"] == [
+        ["b.rpm", "upload"],
+        [DEB, "upload"],
+    ], "a dry run's plan must still name the assets it would send"
+
+
 def test_main_reports_success_only_when_the_release_holds_the_bytes(
     scenario: Scenario, monkeypatch: pytest.MonkeyPatch
 ) -> None:

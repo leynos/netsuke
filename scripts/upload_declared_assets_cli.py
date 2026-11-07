@@ -164,7 +164,8 @@ def main(argv: list[str] | None = None) -> int:
         ``EXIT_CONFLICT`` when the payload or the release disagrees with the
         trusted record, ``EXIT_INPUT_UNREADABLE`` when the record or the
         payload cannot be read, ``EXIT_UPLOAD_FAILED`` when ``gh`` cannot
-        complete a required call, or ``EXIT_OUTPUT_UNWRITABLE`` when the plan
+        complete a required call or the release still lacks a declared asset
+        after the transfer, or ``EXIT_OUTPUT_UNWRITABLE`` when the plan
         cannot be recorded.
 
     Examples
@@ -200,6 +201,17 @@ def main(argv: list[str] | None = None) -> int:
     if conflicts:
         print(release_upload_plan.conflict_message(conflicts), file=sys.stderr)
         return EXIT_CONFLICT
+    # A plan that still asks for an upload means GitHub does not hold that
+    # asset: `gh release upload` can succeed while the asset never appears, and
+    # `plan_asset_actions` reports an absent name as UPLOAD rather than
+    # CONFLICT. The docstring above promises this exit means every declared
+    # asset is attached and verified, so an absent one is a failed upload, not
+    # a clean run. A dry run legitimately ends in UPLOAD and is left alone.
+    unverified = () if request.is_dry_run else release_reconcile_github.uploads(actions)
+    if unverified:
+        missing = ", ".join(unverified)
+        print(f"declared assets not attached after upload: {missing}", file=sys.stderr)
+        return EXIT_UPLOAD_FAILED
     return EXIT_OK
 
 

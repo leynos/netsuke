@@ -2602,8 +2602,12 @@ The publishing lane takes the same download and hoist path but hands the result
 to `./.github/actions/upload-declared-assets` instead. That action selects only
 the artefacts this run's producer records vouch for, writes the declaration and
 the trusted digest record from the staged bytes, retains all three files as the
-`declared-assets-${{ github.job }}` workflow artefact, and only then uploads
-the declared names. The shared action remains in use by the rehearsal, so the
+`declared-assets-${{ github.job }}-${{ github.run_attempt }}` workflow
+artefact, and only then uploads the declared names. The upload plan it wrote,
+which names the assets of a refusing run, is retained afterwards under the same
+naming. The attempt suffix keeps a job re-run from colliding with the first
+attempt's record, which v7 refuses to overwrite. The shared action remains in
+use by the rehearsal, so the
 same `dry-run` expression decides both lanes' mode. `publish-release` checks
 out the candidate commit rather than the triggering ref, because the selection,
 the declaration, and the uploader all read repository files and those files

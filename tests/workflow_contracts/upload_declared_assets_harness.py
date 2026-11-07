@@ -30,6 +30,7 @@ import sys
 import typing as typ
 
 from upload_declared_assets_manifest import run_bodies, step_environment
+from upload_declared_assets_stubs import GH_HELPER, GH_STUB, UV_STUB
 from workflow_loading import REPO_ROOT
 
 if typ.TYPE_CHECKING:
@@ -40,39 +41,6 @@ if typ.TYPE_CHECKING:
 #: The Makefile declaration every step must agree with when it names an
 #: interpreter, read rather than restated so a pin bump changes one file.
 BASELINE_PATTERN = r"^PYTHON_BASELINE \?= (\S+)$"
-
-UV_STUB = """\
-#!/bin/sh
-# Stands in for `uv run --no-project --python <baseline>`, which fetches the
-# baseline interpreter on demand. The subject here is the action's own script,
-# so the prefix is checked as spelled and the remainder is handed to the test's
-# interpreter. Nothing downloads, so nothing needs the network.
-set -eu
-test "$1" = run
-test "$2" = --no-project
-test "$3" = --python
-printf '%s\\n' "$4" >> "$UV_BASELINE_LOG"
-shift 4
-exec "$UV_PYTHON" "$@"
-"""
-
-GH_STUB = """\
-#!/bin/sh
-# Stands in for the GitHub CLI. The listing is served from a file so a case can
-# describe a release that already holds assets; every invocation is recorded so
-# a case can assert which transfers were sent, and with which flags.
-set -eu
-printf '%s\\n' "$*" >> "$GH_LOG"
-case "${1:-} ${2:-}" in
-  "release view") cat "$GH_ATTACHED" ;;
-  "release download") exit 1 ;;
-  "release upload") exit 0 ;;
-  *)
-    printf 'unexpected gh invocation: %s\\n' "$*" >&2
-    exit 1
-    ;;
-esac
-"""
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -122,6 +90,8 @@ class Sandbox:
         Every ``gh`` invocation the stub recorded.
     attached
         The release listing the ``gh`` stub serves.
+    helper
+        The Python program the ``gh`` stub runs to read and update the listing.
     baseline_log
         Every interpreter the ``uv`` stub was told to use.
     declared_root
@@ -133,6 +103,7 @@ class Sandbox:
     output_file: Path
     gh_log: Path
     attached: Path
+    helper: Path
     baseline_log: Path
     declared_root: Path
 
@@ -214,6 +185,10 @@ def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
     stubs.mkdir()
     _write_stub(stubs / "uv", UV_STUB)
     _write_stub(stubs / "gh", GH_STUB)
+    # The helper lives beside the stubs but is run, not exec'd from PATH, so it
+    # needs no execute bit and cannot be picked up as a command by accident.
+    helper = stubs / "gh_state.py"
+    helper.write_text(GH_HELPER, encoding="utf-8")
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     baseline_log = tmp_path / "uv-baselines.txt"
@@ -230,6 +205,7 @@ def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
         output_file=output_file,
         gh_log=gh_log,
         attached=listing,
+        helper=helper,
         baseline_log=baseline_log,
         declared_root=tmp_path / "runner" / "declared-assets",
     )
@@ -256,6 +232,8 @@ def _environment(sandbox: Sandbox) -> dict[str, str]:
         "GITHUB_RUN_ID": "4242",
         "GH_LOG": str(sandbox.gh_log),
         "GH_ATTACHED": str(sandbox.attached),
+        "GH_HELPER": str(sandbox.helper),
+        "GH_PYTHON": sys.executable,
         "UV_BASELINE_LOG": str(sandbox.baseline_log),
         "UV_PYTHON": sys.executable,
     }

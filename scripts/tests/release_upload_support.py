@@ -176,11 +176,15 @@ class Exchange:
         attached: dict[str, str | None],
         downloads: dict[str, bytes] | None = None,
         fail_upload: bool = False,
+        drop_uploads: bool = False,
     ) -> None:
         """Hold the release's attached digests, staged downloads, and failure mode."""
         self.attached = attached
         self.downloads = downloads or {}
         self.fail_upload = fail_upload
+        # Models the failure the status check exists for: `gh` reports the
+        # upload as accepted, but the asset never appears on the release.
+        self.drop_uploads = drop_uploads
         self.calls: list[list[str]] = []
 
     def __call__(
@@ -214,6 +218,10 @@ class Exchange:
         """Attach each sent file's bytes, or fail as a rejected transfer would."""
         if self.fail_upload:
             return failed(arguments, "HTTP 502 Bad Gateway")
+        if self.drop_uploads:
+            # Accepted, but nothing is attached. The caller only learns this
+            # from the re-listing.
+            return succeeded(arguments, "")
         self.attached |= {
             pathlib.Path(name).name: f"sha256:{digest_of(pathlib.Path(name))}"
             for name in arguments[4:]
@@ -256,6 +264,7 @@ def main_argv(
     payload: pathlib.Path | None = None,
     record: pathlib.Path | None = None,
     plan: pathlib.Path | None = None,
+    dry_run: bool = False,
 ) -> list[str]:
     """Return the command line a run of ``scenario`` passes to ``main``.
 
@@ -269,6 +278,7 @@ def main_argv(
     Kept here rather than in each suite so a case that makes one destination
     hostile still passes the other two exactly as a real run would.
     """
+    mode = ["--dry-run"] if dry_run else []
     return [
         "--release-tag",
         TAG,
@@ -278,6 +288,7 @@ def main_argv(
         str(scenario.record if record is None else record),
         "--plan",
         str(scenario.plan if plan is None else plan),
+        *mode,
     ]
 
 
@@ -287,6 +298,7 @@ def run_cli(
     monkeypatch: pytest.MonkeyPatch,
     *,
     destinations: Destinations | None = None,
+    dry_run: bool = False,
 ) -> int:
     """Run ``main`` over ``scenario`` with ``exchange`` answering ``gh``.
 
@@ -305,6 +317,7 @@ def run_cli(
             payload=chosen.payload,
             record=chosen.record,
             plan=chosen.plan,
+            dry_run=dry_run,
         )
     )
 
