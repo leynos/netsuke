@@ -72,7 +72,7 @@ def selection_for(
     staged: dict[str, list[str]],
     *,
     archive_names: list[str] | None = None,
-    config: dict[str, object] = CONFIG,
+    config: dict[str, object] | None = None,
 ) -> selection.PayloadSelection[str]:
     """Select a payload from ``staged``, with a caller-chosen source per name.
 
@@ -84,7 +84,9 @@ def selection_for(
     return selection.select_payload(
         provenances,
         identity=selection.ReleaseIdentity(
-            candidate=CANDIDATE, run_id=RUN_ID, target_config=config
+            candidate=CANDIDATE,
+            run_id=RUN_ID,
+            target_config=CONFIG if config is None else config,
         ),
         archive_names=[ARCHIVE] if archive_names is None else archive_names,
         staged=staged,
@@ -142,7 +144,7 @@ def test_a_record_from_another_run_is_refused() -> None:
 
 def test_a_target_without_a_record_is_refused() -> None:
     """Refuse a release that would ship without one configured target."""
-    config = {
+    config: dict[str, object] = {
         "targets": {TARGET: {"platform": "linux"}, "macos-arm64": {"platform": "macos"}}
     }
     with pytest.raises(MissingTargetError):

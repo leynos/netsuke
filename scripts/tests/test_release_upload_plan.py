@@ -10,6 +10,7 @@ Run via ``make test-release-publication``.
 
 import json
 import pathlib
+import typing as typ
 
 import pytest
 import release_reconcile_github
@@ -17,15 +18,38 @@ from release_reconcile_github import AssetAction
 from release_upload_plan import PLAN_NAME, UploadRequest, conflict_message, write_plan
 
 
-def read_plan(path: pathlib.Path) -> object:
+class UploadPlan(typ.TypedDict):
+    """Describe the decoded plan a run wrote.
+
+    Attributes
+    ----------
+    actions
+        One ``[name, action]`` pair per decided asset, in the order written.
+    conflicts
+        The names a refused run named as blocking it.
+
+    Notes
+    -----
+    Typed rather than left as ``object`` so a case reading ``["conflicts"]`` is
+    checked against a mapping. A case still compares the whole plan against a
+    literal, which is what pins the serialized shape, so the value types stay
+    wide: the point of the comparison is the encoding, not the payload.
+    """
+
+    actions: list[list[str]]
+    conflicts: list[str]
+
+
+def read_plan(path: pathlib.Path) -> UploadPlan:
     """Return the decoded plan at ``path``.
 
     Returns
     -------
-    object
-        The decoded JSON, left unchecked so a case can assert its shape.
+    UploadPlan
+        The decoded JSON, described by what the writer records.
     """
-    return json.loads(path.read_text(encoding="utf-8"))
+    decoded: UploadPlan = json.loads(path.read_text(encoding="utf-8"))
+    return decoded
 
 
 def test_the_plan_name_is_a_plain_file_name() -> None:
@@ -140,8 +164,18 @@ def test_an_upload_request_holds_the_whole_run() -> None:
     )
 
 
-def test_an_upload_request_is_immutable() -> None:
-    """Refuse a mutation that would change what a run was asked to do."""
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [("tag", "v2.0.0"), ("is_dry_run", False)],
+)
+def test_an_upload_request_is_immutable(field: str, replacement: object) -> None:
+    """Refuse a mutation that would change what a run was asked to do.
+
+    The field name is a parameter rather than a literal so the assignment is a
+    store to a value the checker cannot resolve, which leaves the runtime
+    refusal reachable: a typed store to a frozen field is rejected at analysis
+    time, and the case would then test the checker instead of the dataclass.
+    """
     request = UploadRequest(
         tag="v1.0.0",
         payload_dir=pathlib.Path("payload"),
@@ -150,7 +184,7 @@ def test_an_upload_request_is_immutable() -> None:
         is_dry_run=True,
     )
     with pytest.raises(AttributeError):
-        request.tag = "v2.0.0"
+        setattr(request, field, replacement)
 
 
 def test_the_plan_round_trips_through_the_reconciliation_vocabulary(

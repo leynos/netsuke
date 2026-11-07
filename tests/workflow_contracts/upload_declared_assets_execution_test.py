@@ -17,6 +17,7 @@ Run via ``make test-workflow-contracts``.
 
 import hashlib
 import json
+import pathlib
 import shutil
 import typing as typ
 
@@ -56,15 +57,45 @@ if typ.TYPE_CHECKING:
 _UPLOAD_PREFIX = "release upload"
 
 
+class UploadPlan(typ.TypedDict):
+    """Describe the plan the upload step retained.
+
+    Attributes
+    ----------
+    actions
+        One ``[name, action]`` pair per decided asset.
+    conflicts
+        The names the run reported as blocking it.
+    """
+
+    actions: list[list[str]]
+    conflicts: list[str]
+
+
+class DigestRecord(typ.TypedDict):
+    """Describe one retained digest record.
+
+    Attributes
+    ----------
+    assets
+        Published name mapped to the SHA-256 of the bytes the record covers.
+    """
+
+    assets: dict[str, str]
+
+
 def _basename(argument: str) -> str:
     """Return the last path segment of one recorded path argument.
+
+    The recorded arguments are POSIX paths from the runner, so the segment is
+    taken with a pure POSIX path rather than by splitting the string.
 
     Returns
     -------
     str
         The segment ``gh`` would name the asset from.
     """
-    return argument.rsplit("/", 1)[-1]
+    return pathlib.PurePosixPath(argument).name
 
 
 def _uploads(run: ActionRun) -> list[list[str]]:
@@ -82,28 +113,30 @@ def _uploads(run: ActionRun) -> list[list[str]]:
     ]
 
 
-def _plan(run: ActionRun) -> dict[str, object]:
+def _plan(run: ActionRun) -> UploadPlan:
     """Return the upload plan the uploader wrote.
 
     Returns
     -------
-    dict[str, object]
+    UploadPlan
         The decoded plan, holding ``actions`` and ``conflicts``.
     """
     path = run.declared_root / "upload-plan.json"
-    return json.loads(path.read_text(encoding="utf-8"))
+    decoded: UploadPlan = json.loads(path.read_text(encoding="utf-8"))
+    return decoded
 
 
-def _read_record(run: ActionRun, name: str) -> dict[str, object]:
+def _read_record(run: ActionRun, name: str) -> DigestRecord:
     """Return one decoded digest record the action retained.
 
     Returns
     -------
-    dict[str, object]
-        The decoded record.
+    DigestRecord
+        The decoded record, holding the asset digests under ``assets``.
     """
     path = run.declared_root / name
-    return json.loads(path.read_text(encoding="utf-8"))
+    decoded: DigestRecord = json.loads(path.read_text(encoding="utf-8"))
+    return decoded
 
 
 def _require_payload_matches_records(run: ActionRun, expected: tuple[str, ...]) -> None:
