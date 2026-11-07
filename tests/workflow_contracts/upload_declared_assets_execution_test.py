@@ -238,6 +238,32 @@ def test_the_upload_plan_is_retained_after_the_upload() -> None:
     )
 
 
+@pytest.mark.parametrize("step_name", [RETAIN_STEP, PLAN_STEP])
+def test_a_job_rerun_retains_its_own_artefact(step_name: str) -> None:
+    """Keep each attempt's evidence apart instead of colliding or replacing it.
+
+    ``upload-artifact`` v7 refuses to overwrite an existing artefact and a job
+    re-run keeps the run id, so a name without the attempt would fail the
+    re-run's retention step. Recording ``overwrite: true`` instead would
+    resolve that collision by deleting the first attempt's record, which is the
+    opposite of what these steps exist to preserve.
+    """
+    document = action_document()
+    steps = action_steps(ACTION, document)
+    step = steps[require_action_step(ACTION, document, step_name)]
+    with_block = require_mapping(step.get("with"), f"{ACTION} {step_name} with")
+    name = str(with_block["name"]).strip()
+    assert name.endswith("-${{ github.run_attempt }}"), (
+        f"{step_name} must distinguish attempts, got {name!r}"
+    )
+    # The job name separates these artefacts from each other, and from any
+    # other job that retains its own record in the same run.
+    assert "${{ github.job }}" in name, f"{step_name} must name its job: {name!r}"
+    assert "overwrite" not in with_block, (
+        f"{step_name} must preserve an earlier attempt's artefact, not replace it"
+    )
+
+
 def _stale_commit(workspace: Path, facts: Facts) -> None:
     """Claim the records were built from another commit."""
     rewrite_record(workspace, facts.targets[0], commit="b" * 40)

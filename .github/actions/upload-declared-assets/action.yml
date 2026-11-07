@@ -110,7 +110,13 @@ runs:
         # v7.0.1. The record is retained before the upload because a conflicting
         # release fails the job later, and a failure must not cost the operator
         # the evidence of what this run declared.
-        name: declared-assets-${{ github.job }}
+        #
+        # The attempt suffix keeps a job re-run from colliding with the first
+        # attempt: a re-run keeps the run id, and v7 refuses to overwrite an
+        # existing artefact. `overwrite: true` would resolve the collision by
+        # deleting the earlier attempt's evidence, which is the opposite of
+        # what this step is for.
+        name: declared-assets-${{ github.job }}-${{ github.run_attempt }}
         path: |
           ${{ runner.temp }}/declared-assets/declaration.txt
           ${{ runner.temp }}/declared-assets/selection.json
@@ -173,7 +179,9 @@ runs:
       if: always()
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
       with:
-        # v7.0.1.
-        name: declared-assets-plan-${{ github.job }}
+        # v7.0.1. The attempt suffix is for the same reason as the record
+        # above: a re-run must not collide with, or overwrite, its own earlier
+        # plan.
+        name: declared-assets-plan-${{ github.job }}-${{ github.run_attempt }}
         path: ${{ runner.temp }}/declared-assets/upload-plan.json
         if-no-files-found: warn
