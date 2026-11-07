@@ -291,6 +291,10 @@ fn workflows_agree_with_the_pinned_toolchain(
     )
 }
 
+// The script is bash for Linux and Windows runners alike; the Windows jobs run
+// it under Git Bash, which a Windows test host cannot count on finding as
+// `bash`, so the behaviour is exercised where bash is the system shell.
+#[cfg(unix)]
 #[test]
 fn resolve_toolchain_action_exports_the_channel_from_the_toolchain_file() -> Result<()> {
     let path = ".github/actions/resolve-toolchain/action.yml";
@@ -308,37 +312,46 @@ fn resolve_toolchain_action_exports_the_channel_from_the_toolchain_file() -> Res
     // Run the real script against throwaway toolchain files and read what it
     // exports, rather than matching its text.
     for channel in ["nightly-2030-01-02", "nightly-2031-03-04"] {
-        let exported = run_resolver(script, &format!("[toolchain]\nchannel = \"{channel}\"\n"))?
-            .with_context(|| format!("{path} should succeed for {channel}"))?;
+        let toolchain = format!("[toolchain]\nchannel = \"{channel}\"\n");
+        let (succeeded, exported) = run_resolver(script, Some(&toolchain))?;
+        ensure!(succeeded, "{path} should succeed for {channel}");
         ensure!(
             exported == format!("NETSUKE_RUST_TOOLCHAIN={channel}\n"),
             "{path} exported {exported:?} for {channel}"
         );
     }
+    // A missing, empty or channel-less file must fail and export nothing, so a
+    // later step cannot read a half-resolved value.
     for broken in [
-        "",
-        "[toolchain]\ncomponents = []\n",
-        "[toolchain]\nchannel = \"\"\n",
+        None,
+        Some(""),
+        Some("[toolchain]\ncomponents = []\n"),
+        Some("[toolchain]\nchannel = \"\"\n"),
     ] {
+        let (succeeded, exported) = run_resolver(script, broken)?;
         ensure!(
-            run_resolver(script, broken)?.is_none(),
-            "{path} should fail, exporting nothing, for {broken:?}"
+            !succeeded && exported.is_empty(),
+            "{path} should fail and export nothing for {broken:?}, exported {exported:?}"
         );
     }
     Ok(())
 }
 
-/// Runs the resolver script in a scratch directory holding `toolchain` as
-/// `rust-toolchain.toml`. Returns what it appended to `GITHUB_ENV` on success
-/// and `None` when it failed.
-fn run_resolver(script: &str, toolchain: &str) -> Result<Option<String>> {
+/// Runs the resolver script under bash in a scratch directory holding
+/// `toolchain` as `rust-toolchain.toml` (or no file at all for `None`).
+/// Returns whether it succeeded and what it appended to `GITHUB_ENV`, read
+/// after failures too.
+#[cfg(unix)]
+fn run_resolver(script: &str, toolchain: Option<&str>) -> Result<(bool, String)> {
     let scratch = tempfile::tempdir().context("create a scratch directory")?;
     let dir = cap_std::fs_utf8::Dir::open_ambient_dir(
         Utf8Path::from_path(scratch.path()).context("scratch path should be UTF-8")?,
         cap_std::ambient_authority(),
     )
     .context("open the scratch directory")?;
-    dir.write("rust-toolchain.toml", toolchain)?;
+    if let Some(contents) = toolchain {
+        dir.write("rust-toolchain.toml", contents)?;
+    }
     dir.write("github-env", "")?;
     let status = std::process::Command::new("bash")
         .arg("-c")
@@ -347,8 +360,5 @@ fn run_resolver(script: &str, toolchain: &str) -> Result<Option<String>> {
         .env("GITHUB_ENV", scratch.path().join("github-env"))
         .status()
         .context("run the resolver with bash")?;
-    Ok(status
-        .success()
-        .then(|| dir.read_to_string("github-env"))
-        .transpose()?)
+    Ok((status.success(), dir.read_to_string("github-env")?))
 }
