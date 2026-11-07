@@ -13,7 +13,6 @@ import pytest
 import yaml
 from fork_fallback import owned_runner, read_placement
 from nextest_budgets import global_timeout
-from timeout_budgets import NEXTEST_CONFIG
 from runner_placement_invariants import (
     GITHUB_HOSTED_LABELS,
     INSTRUMENTED_BUILD_JOBS,
@@ -22,6 +21,7 @@ from runner_placement_invariants import (
     UBICLOUD_LABELS,
     is_bounded_worker_count,
 )
+from timeout_budgets import NEXTEST_CONFIG
 from workflow_loading import (
     REPO_ROOT,
     job_steps,
