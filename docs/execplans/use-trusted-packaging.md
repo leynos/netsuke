@@ -2811,6 +2811,35 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the uploader's own diagnostic. Both contracts were checked against
   deliberately damaged manifests and files to confirm they fail rather than
   pass vacuously.
+- [x] (2026-11-07) Cleared the five findings of the third CodeRabbit pass
+  over the #1066 head. Two were vacuous tests rather than wrong production code.
+
+  The first built four reference tokens with `dict.fromkeys(..., object())`,
+  which evaluates `object()` once, so every key held the same object and the
+  identity assertion held whatever source the selection returned. The second
+  carried a directory case whose leaf never existed, so the leaf check fired
+  first and the directory match passed only because the path string named a
+  directory; the ancestor branch is now covered solely by the symlink test,
+  with a FIFO case for the leaf. Both are proved by deliberate damage: a
+  selection mutated to give every declared name the first declared source
+  raises on the per-key assertion and did not on the shared object, and the
+  FIFO case fails if the leaf check is deleted.
+
+  `upload` gained an early return for an empty `names`, because a
+  `gh release upload` carrying no file is a request the endpoint may reject;
+  the pinning test had asserted that rejected invocation rather than its
+  absence. Two copies of the banned-module predicate became one exported
+  `is_banned` in `release_publication_imports`, imported by the process module,
+  which also pins the submodule arm that the network set had masked by naming
+  `urllib.request` outright. A comma before an essential `because` left the
+  developers' guide.
+
+  The nine-gate run on this candidate went red twice, both from the new code
+  and both caught by the gate rather than by review: a Ruff section-order
+  violation where the new `Notes` paragraph sat after `Examples`, and a Pylint
+  comparison-to-empty-list where the new assertion did not use its truth value.
+  Both are fixed, and `make lint` now reaches yamllint, actionlint, and
+  ambrleaks and exits 0.
 
 ## Surprises & discoveries
 
