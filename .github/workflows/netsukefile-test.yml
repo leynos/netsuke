@@ -40,9 +40,10 @@ jobs:
     permissions:
       contents: read
     env:
-      # Match rust-toolchain.toml: the tree needs the nightly-default Polonius
-      # borrow checker (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
+      # The tree needs the nightly-default Polonius borrow checker (see
+      # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md);
+      # the "Resolve the pinned toolchain" step exports rust-toolchain.toml's
+      # channel as NETSUKE_RUST_TOOLCHAIN.
       # `ubicloud-standard-2-ubuntu-2204` supplies two vCPUs; BUILD_JOBS is
       # derived from that one number.
       LINUX_LANE_VCPUS: '2'
@@ -56,6 +57,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Resolve the pinned toolchain
+        uses: ./.github/actions/resolve-toolchain
       - name: Setup uv
         # The sccache report is a scripts/ci helper run through
         # `uv run --script`; uv's own cache is not part of this lane's keys.

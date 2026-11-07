@@ -297,7 +297,8 @@ jobs:
       run:
         shell: pwsh
     env:
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
+      # The "Resolve the pinned toolchain" step exports NETSUKE_RUST_TOOLCHAIN
+      # from rust-toolchain.toml.
       # The GitHub-hosted `windows-latest` standard runner has four vCPUs.
       WINDOWS_LANE_VCPUS: '4'
       CARGO_BUILD_JOBS: '4'
@@ -312,6 +313,8 @@ jobs:
         # v7.0.1
         with:
           persist-credentials: false
+      - name: Resolve the pinned toolchain
+        uses: ./.github/actions/resolve-toolchain
       - name: Restore gate caches
         # Restore only. `build-test-windows` in ci-windows.yml is the single
         # writer for both Windows key families; a tag run reads the trunk
