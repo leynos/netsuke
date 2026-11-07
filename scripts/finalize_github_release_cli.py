@@ -39,6 +39,14 @@ import sys
 import release_digest_record
 import release_digest_record_files
 import release_reconcile_github
+import release_upload_plan
+
+# The shared GitHub digest conversion, imported under the private name this
+# module has always used. The uploader needs the same conversion, and a private
+# copy in each CLI would let the two drift on what an unusable digest means.
+from release_github_assets_adapter import (
+    normalise_github_digest as _normalise_github_digest,
+)
 
 EXIT_OK = 0
 EXIT_CONFLICT = 1
@@ -97,24 +105,6 @@ def build_parser() -> argparse.ArgumentParser:
 
 class InputUnreadableError(ValueError):
     """Report a digest record that cannot support a publish decision."""
-
-
-def _normalise_github_digest(reported: object) -> str | None:
-    """Convert GitHub's vendor digest into the policy's bare digest value.
-
-    GitHub reports ``sha256:<hex>`` while the trusted record stores bare
-    hexadecimal. Keeping that representation at this adapter boundary leaves
-    the reconciliation policy independent of the provider's response format.
-
-    Returns
-    -------
-    str | None
-        The bare lowercase digest, or ``None`` when GitHub's value is unusable.
-    """
-    if not isinstance(reported, str) or not reported.startswith("sha256:"):
-        return None
-    digest = reported.removeprefix("sha256:").strip().lower()
-    return digest or None
 
 
 def _expected(identity_path: pathlib.Path) -> dict[str, str]:
@@ -265,7 +255,7 @@ def _reconcile_listing(
     )
     conflicting = release_reconcile_github.conflicts(actions)
     try:
-        _write_plan(output_path, actions, conflicting)
+        release_upload_plan.write_plan(output_path, actions, conflicting)
     except OSError as error:
         print(
             f"reconciliation plan write failed: {output_path}: {error}", file=sys.stderr
@@ -282,32 +272,6 @@ def _reconcile_listing(
     if output_error is not None:
         return EXIT_OUTPUT_UNWRITABLE
     return _verdict(actions)
-
-
-def _write_plan(
-    output: pathlib.Path,
-    actions: tuple[tuple[str, release_reconcile_github.AssetAction], ...],
-    conflicting: tuple[str, ...],
-) -> None:
-    """Write the reconciliation plan the job's artefacts expose.
-
-    The plan is written for refusing runs too, so an operator sees which
-    action every asset was assigned rather than only the first name that
-    stopped the run. The caller maps ``Path.write_text`` failures to a distinct
-    output-unwritable exit status.
-    """
-    output.write_text(
-        json.dumps(
-            {
-                "actions": [[name, action.value] for name, action in actions],
-                "conflicts": list(conflicting),
-            },
-            indent=2,
-            sort_keys=True,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
 
 
 def _verdict(

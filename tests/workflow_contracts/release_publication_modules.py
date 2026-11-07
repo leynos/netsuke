@@ -44,6 +44,16 @@ SECTION_MODULES = (
     "scripts/tests/test_release_digest_record.py",
     "scripts/tests/test_release_digest_record_files.py",
     "scripts/tests/test_release_staged_digests.py",
+    "scripts/tests/test_release_producer_provenance.py",
+    "scripts/tests/test_record_producer_provenance_cli.py",
+    "scripts/tests/test_release_payload_names.py",
+    "scripts/tests/test_release_payload_selection.py",
+    "scripts/tests/test_release_payload_tree.py",
+    "scripts/tests/test_select_release_payload_cli.py",
+    "scripts/tests/test_release_upload_plan.py",
+    "scripts/tests/test_release_upload_remote.py",
+    "scripts/tests/test_upload_declared_assets_cli.py",
+    "scripts/tests/test_upload_declared_assets_status.py",
 )
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
@@ -80,6 +90,21 @@ SOURCE_MODULES = (
     "scripts/release_digest_record.py",
     "scripts/release_digest_record_files.py",
     "scripts/release_staged_digests.py",
+    "scripts/release_producer_provenance.py",
+    "scripts/release_producer_provenance_checks.py",
+    "scripts/release_producer_provenance_errors.py",
+    "scripts/record_producer_provenance_cli.py",
+    "scripts/record_producer_provenance_errors.py",
+    "scripts/record_producer_provenance_record.py",
+    "scripts/release_payload_errors.py",
+    "scripts/release_payload_names.py",
+    "scripts/release_payload_selection.py",
+    "scripts/release_payload_tree.py",
+    "scripts/select_release_payload_cli.py",
+    "scripts/release_upload_plan.py",
+    "scripts/release_upload_remote.py",
+    "scripts/upload_declared_assets_cli.py",
+    "scripts/upload_declared_assets_refusals.py",
 )
 
 #: Sources that decide from already parsed, in-memory values.
@@ -98,6 +123,13 @@ POLICY_MODULES = (
     "scripts/release_reconcile_crates.py",
     "scripts/release_reconcile_github.py",
     "scripts/verify_crates_io_bytes.py",
+    "scripts/release_producer_provenance.py",
+    "scripts/release_producer_provenance_checks.py",
+    "scripts/release_producer_provenance_errors.py",
+    "scripts/release_payload_errors.py",
+    "scripts/release_payload_names.py",
+    "scripts/release_payload_selection.py",
+    "scripts/upload_declared_assets_refusals.py",
 )
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
@@ -120,6 +152,14 @@ ADAPTER_MODULES = (
     "scripts/release_github_assets_adapter.py",
     "scripts/release_digest_record_files.py",
     "scripts/release_staged_digests.py",
+    "scripts/record_producer_provenance_cli.py",
+    "scripts/record_producer_provenance_errors.py",
+    "scripts/record_producer_provenance_record.py",
+    "scripts/release_payload_tree.py",
+    "scripts/select_release_payload_cli.py",
+    "scripts/release_upload_plan.py",
+    "scripts/release_upload_remote.py",
+    "scripts/upload_declared_assets_cli.py",
 )
 
 #: Sources that own the network boundary. The boundary test uses this same
@@ -137,11 +177,25 @@ NETWORK_FREE_MODULES = tuple(
     module for module in SOURCE_MODULES if module not in TRANSPORT_MODULES
 )
 
+#: Sources allowed to launch a child process, each with the reason it must.
+#:
+#: A spawner is not a network client, but it is a way for a release step to
+#: reach an outside service, so the pairing is deliberate rather than an
+#: omission. ``package_crate_cli`` runs ``cargo package``, a local build with
+#: no remote of its own. ``release_upload_remote`` runs ``gh release upload``
+#: and ``gh release view``, which do reach GitHub: it is the upload boundary.
+#: A new entry here is a reviewed decision, not a registration.
+PROCESS_MODULES = {
+    "scripts/package_crate_cli.py": "runs `cargo package`, a local build",
+    "scripts/release_upload_remote.py": "runs `gh release upload`, the upload boundary",
+}
+
 
 __all__ = [
     "ADAPTER_MODULES",
     "NETWORK_FREE_MODULES",
     "POLICY_MODULES",
+    "PROCESS_MODULES",
     "SECTION_MODULES",
     "SOURCE_MODULES",
     "TRANSPORT_MODULES",

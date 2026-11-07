@@ -96,6 +96,10 @@ jobs:
             steps.release_modes.outputs['dry-run'] == 'true' }}
       wix_extension_version: ${{ steps.wix_extension_version.outputs.value }}
       repo_name: ${{ steps.repo_name.outputs.value }}
+      # The commit every producer checks out and every later job binds its
+      # bytes to. Downstream policy compares this value rather than trusting a
+      # manifest or an asset name, both of which say nothing about origin.
+      candidate_commit: ${{ steps.candidate_commit.outputs.value }}
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
@@ -108,6 +112,30 @@ jobs:
       - id: repo_name
         name: Determine repository name
         run: echo "value=${GITHUB_REPOSITORY#*/}" >>"$GITHUB_OUTPUT"
+      - id: candidate_commit
+        name: Bind the release candidate commit
+        shell: bash
+        env:
+          CANDIDATE_COMMIT: ${{ github.sha }}
+        # `scripts/release_candidate.py` accepts a candidate only as a full
+        # lowercase 40-character commit, so the same rule is applied here
+        # before any producer checks it out. A short or symbolic value would
+        # leave the later equality checks comparing two equally vague names.
+        run: |
+          set -euo pipefail
+          case "$CANDIDATE_COMMIT" in
+            *[!0-9a-f]*|'')
+              printf 'the release candidate must be a lowercase hexadecimal commit, got %s\n' \
+                "$CANDIDATE_COMMIT" >&2
+              exit 1
+              ;;
+          esac
+          if [[ "${#CANDIDATE_COMMIT}" -ne 40 ]]; then
+            printf 'the release candidate must be a full commit, got %s\n' \
+              "$CANDIDATE_COMMIT" >&2
+            exit 1
+          fi
+          printf 'value=%s\n' "$CANDIDATE_COMMIT" >>"$GITHUB_OUTPUT"
       - id: release_modes
         name: Determine release modes
         uses: >-
@@ -197,6 +225,7 @@ jobs:
       # measurements from three warm runs.
       runner: ubicloud-standard-2-ubuntu-2404
       target: ${{ matrix.target }}
+      commit: ${{ needs.metadata.outputs.candidate_commit }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       package-manifest: ${{ needs.metadata.outputs.package_manifest }}
@@ -233,6 +262,7 @@ jobs:
       # Ubicloud offers Linux runners only.
       runner: windows-latest
       target: ${{ matrix.target }}
+      commit: ${{ needs.metadata.outputs.candidate_commit }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-windows-${{ matrix.package_arch }}
@@ -264,6 +294,7 @@ jobs:
       platform: macos
       runner: ${{ matrix.runner }}
       target: ${{ matrix.target }}
+      commit: ${{ needs.metadata.outputs.candidate_commit }}
       bin-name: ${{ needs.metadata.outputs.bin_name }}
       version: ${{ needs.metadata.outputs.version }}
       artifact-name: ${{ needs.metadata.outputs.repo_name }}-${{ matrix.artefact_suffix }}
@@ -438,11 +469,26 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
+          # The archive must be built from the candidate the declaration names,
+          # not from whatever the triggering ref resolved to.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
           persist-credentials: false
       - id: release_operation_start
         name: Start release operation timing
         shell: bash
         run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+      - name: Verify the checkout is the release candidate
+        shell: bash
+        env:
+          CANDIDATE_COMMIT: ${{ needs.metadata.outputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          actual_commit="$(git rev-parse HEAD)"
+          if [[ "$actual_commit" != "$CANDIDATE_COMMIT" ]]; then
+            printf 'checkout is %s but the release candidate is %s\n' \
+              "$actual_commit" "$CANDIDATE_COMMIT" >&2
+            exit 1
+          fi
       - name: Install Rust
         uses: >-
           leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
@@ -456,7 +502,7 @@ jobs:
         uses: ./.github/actions/package-crate
         with:
           tag: ${{ needs.metadata.outputs.release_tag }}
-          commit: ${{ github.sha }}
+          commit: ${{ needs.metadata.outputs.candidate_commit }}
           # A rehearsal runs on a pull request, where `github.ref_name` is the
           # merge ref (`903/merge`), not a release tag. The same mode output
           # that tells `upload-release-assets` it is not publishing tells this
@@ -559,6 +605,8 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
+          # Verify the candidate with the candidate's own scripts.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
           persist-credentials: false
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
@@ -584,7 +632,7 @@ jobs:
           identity-path: release-crate-package/artifacts/package/identity.json
           archive-directory: release-crate-package/target/package
           tag: ${{ needs.metadata.outputs.release_tag }}
-          commit: ${{ github.sha }}
+          commit: ${{ needs.metadata.outputs.candidate_commit }}
           package-name: ${{ needs.metadata.outputs.package_name }}
           version: ${{ needs.metadata.outputs.version }}
       - name: Record release operation observability
@@ -770,6 +818,11 @@ jobs:
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         # v7.0.1
         with:
+          # The declaration, the digest record, and the uploader all read
+          # repository files. Pinning the checkout to the candidate keeps them
+          # at the revision the producers built rather than at whatever the
+          # triggering ref resolved to when this job started.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
           persist-credentials: false
       - name: Install uv
         # Pins the interpreter the release helper scripts run under to the
@@ -840,13 +893,16 @@ jobs:
         run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - id: upload_assets
         name: Upload artefacts to release
-        uses: >-
-          leynos/shared-actions/.github/actions/upload-release-assets@0606ca899ce2995a0c4bc78e660e80832e6e8855
+        # Selects, declares, and digests this run's assets before uploading
+        # only the declared names, and refuses to replace attached bytes. The
+        # trusted record it retains is what verification and finalization
+        # compare against.
+        uses: ./.github/actions/upload-declared-assets
         with:
           release-tag: ${{ needs.metadata.outputs.release_tag }}
-          bin-name: ${{ needs.metadata.outputs.bin_name }}
-          dist-dir: dist
           dry-run: ${{ needs.metadata.outputs.should_publish != 'true' }}
+          commit: ${{ needs.metadata.outputs.candidate_commit }}
+          version: ${{ needs.metadata.outputs.version }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

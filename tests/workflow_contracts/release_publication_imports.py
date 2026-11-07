@@ -1,9 +1,11 @@
 """Check network and external-effect boundaries in release modules.
 
 Only the registry transport CLI and its HTTP adapters may import a network
-client; policy modules additionally avoid filesystem access, serialization,
-HTTP response vocabulary, and provider formats. Import spellings are easy to
-get subtly wrong:
+client. Sources that launch a process are a separate matter, checked by
+:mod:`release_publication_processes`: a child process is not a socket, but it
+is still a way for the release to reach an outside service. Policy modules
+additionally avoid filesystem access, serialization, HTTP response vocabulary,
+and provider formats. Import spellings are easy to get subtly wrong:
 ``import urllib.request``, ``from urllib import request``, and
 ``import urllib.request as fetch`` all reach the same client, while
 ``import release_digest`` reaches nothing.
@@ -21,9 +23,9 @@ import typing as typ
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
-#: Modules no release source may import, because each one opens a socket, a
-#: URL, or a process. A bare name also bans its submodules: ``urllib`` covers
-#: ``urllib.request``, which is where the client lives.
+#: Modules no release source may import, because each one reaches the network.
+#: A bare name also bans its submodules: ``urllib`` covers ``urllib.request``,
+#: which is where the client lives.
 NETWORK_MODULES = frozenset({
     "ftplib",
     "http",
@@ -104,6 +106,47 @@ def imported_modules(source: str) -> set[str]:
     return imported
 
 
+def is_banned(module: str, banned_names: frozenset[str]) -> bool:
+    """Report whether ``module`` is, or is nested under, one of ``banned_names``.
+
+    Exported because more than one boundary is drawn with the same rule: a
+    banned name also bans its submodules, and a second copy of this predicate
+    would let the two boundaries disagree about what a nested import is.
+
+    Parameters
+    ----------
+    module
+        A module name, as :func:`imported_modules` records it.
+    banned_names
+        The names a boundary forbids.
+
+    Returns
+    -------
+    bool
+        ``True`` when the name matches a banned module or its submodule.
+
+    Examples
+    --------
+    >>> is_banned("urllib.request", NETWORK_MODULES)
+    True
+    >>> is_banned("release_digest", NETWORK_MODULES)
+    False
+
+    The submodule arm is pinned against a set naming only the parent, because
+    :data:`NETWORK_MODULES` names ``urllib.request`` outright and would satisfy
+    an exact-match rule on its own. The second case pins the arm's edge: a
+    longer name that merely starts with the same characters is not nested.
+
+    >>> is_banned("pkg.sub", frozenset({"pkg"}))
+    True
+    >>> is_banned("pkgother", frozenset({"pkg"}))
+    False
+    """
+    return any(
+        module == banned or module.startswith(f"{banned}.") for banned in banned_names
+    )
+
+
 def opens_a_socket(module: str) -> bool:
     """Report whether an imported module name is a network client or a parent of one.
 
@@ -115,19 +158,18 @@ def opens_a_socket(module: str) -> bool:
     Returns
     -------
     bool
-        ``True`` when the name is, or is nested under, a banned module.
+        ``True`` when the name is, or is nested under, a network module.
 
     Examples
     --------
     >>> opens_a_socket("urllib.request")
     True
+    >>> opens_a_socket("subprocess")
+    False
     >>> opens_a_socket("release_digest")
     False
     """
-    return any(
-        module == banned or module.startswith(f"{banned}.")
-        for banned in NETWORK_MODULES
-    )
+    return is_banned(module, NETWORK_MODULES)
 
 
 def network_offenders(source: str) -> list[str]:
@@ -164,7 +206,7 @@ def any_offender(names: cabc.Iterable[str]) -> bool:
     Returns
     -------
     bool
-        ``True`` when at least one name is banned.
+        ``True`` when at least one name is a network client.
     """
     return any(opens_a_socket(name) for name in names)
 
@@ -316,6 +358,7 @@ __all__ = [
     "NETWORK_MODULES",
     "any_offender",
     "imported_modules",
+    "is_banned",
     "network_offenders",
     "opens_a_socket",
     "policy_boundary_offenders",

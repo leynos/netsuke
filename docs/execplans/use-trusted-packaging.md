@@ -9,10 +9,11 @@ Status: IN PROGRESS
 
 The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
-contracts; Stage C remains partial because inventory verification, GitHub
-finalization, and consumer smoke are still open. Stage D is in progress. No
-release, tag, registry publication, live credential exchange, GitHub Release,
-or account setting has been changed by this work.
+contracts, and #1066 replaces the shared upload action in `publish-release`
+with a candidate-bound declared-asset upload. Stage C remains partial because
+inventory verification, GitHub finalization, and consumer smoke are still open.
+Stage D is in progress. No release, tag, registry publication, live credential
+exchange, GitHub Release, or account setting has been changed by this work.
 
 ## Purpose / big picture
 
@@ -81,17 +82,21 @@ Its jobs are:
    `ready_for_review` event.
 4. `release-admission-canaries` — the ADR-020 admission-evidence gate.
 5. `release` — the read-only **rehearsal**. It runs only when
-   `dry_run == 'true'` (`release.yml:415`), holds `contents: read`, downloads
-   the workflow artefacts into `dist/`, hoists the cargo-binstall archives to
-   the release root, and calls the shared `upload-release-assets` action at pin
-   `a5765019…` with `dry-run: true`. It creates no release and uploads nothing.
+   `dry_run == 'true'`, holds `contents: read`, downloads the workflow
+   artefacts into `dist/`, hoists the cargo-binstall archives to the release
+   root, and calls the shared `upload-release-assets` action at pin `a5765019…`
+   with `dry-run: true`. It creates no release and uploads nothing. This job is
+   the only remaining caller of that shared action.
 6. `publish-release` — added by #834 after this plan was drafted. It runs only
-   when `should_publish == 'true'` (`release.yml:548`), holds
-   `contents: write`, and creates the draft release
-   (`scripts/ensure_draft_release.py` at `release.yml:589`), then runs the same
-   download, hoist and upload sequence. It calls the shared
-   `upload-release-assets` action at the newer pin `0606ca89…`, so the
-   repository now invokes one shared action at two revisions, chosen by job.
+   when `should_publish == 'true'`, holds `contents: write`, and creates the
+   draft release (`scripts/ensure_draft_release.py`), then runs the same
+   download and hoist sequence. Since #1066 it no longer calls the shared
+   action: it calls the repository's own
+   `./.github/actions/upload-declared-assets`, which selects the declared
+   payload, writes the declaration and the trusted digest record from the
+   staged bytes, retains both, and only then uploads the declared names without
+   ever replacing attached bytes. The checkout is pinned to the candidate
+   commit so those files are read at the revision the producers built.
 
 The two jobs are mutually exclusive: a dry run takes `release`, a tag push takes
 `publish-release`, and a job that needs a skipped job is itself skipped.
@@ -121,18 +126,24 @@ archive would publish under its last path segment. The hoist's docstring and the
 `conftest.py` that describes it were corrected on 2026-10-19; the behaviour is
 unchanged and no test asserted the false reason.
 
-**The upload action's real selection rule.** Read from `leynos/shared-actions`
-at pin `0606ca899ce2995a0c4bc78e660e80832e6e8855` (the newer of the two pins
-`main` now carries; the `release` job still runs
-`a5765019912a8ab6882b12db049c7cde635f3a85`), its `_is_candidate` accepts
-exactly: a file named `{bin-name}`, `{bin-name}.exe`, or `{bin-name}.1`; any
-file whose name ends `.sha256`; and any file whose suffix is `.deb`, `.rpm`,
-`.pkg`, or `.msi`. It therefore **rejects** `.tar.gz`, `.crate`, `.json`, and
-`.sigstore` bundles. `clobber` defaults to `"true"`, and the action never fails
-its own step: a `gh` failure sets `upload_error=true` and `uploaded_count=0`,
+**The shared upload action's real selection rule.** Read from
+`leynos/shared-actions` at pin `0606ca899ce2995a0c4bc78e660e80832e6e8855`, its
+`_is_candidate` accepts exactly: a file named `{bin-name}`, `{bin-name}.exe`, or
+`{bin-name}.1`; any file whose name ends `.sha256`; and any file whose suffix
+is `.deb`, `.rpm`, `.pkg`, or `.msi`. It therefore **rejects** `.tar.gz`,
+`.crate`, `.json`, and `.sigstore` bundles. `clobber` defaults to `"true"`. Its
+selection rule is unchanged between the two pins, so this plan's
+asset-selection findings hold at either revision. That rule is exactly the
+defect #1066 removes from the publishing path: the suffix-and-count heuristics
+say what an artefact *is*, never which commit produced it, and `clobber: true`
+lets a second run replace the first run's bytes. `publish-release` no longer
+invokes the shared action; only the rehearsal job, which uploads nothing, still
+does, and it is unaffected because a dry run performs no transfer.
+
+Both actions never fail their own step: a `gh` failure sets an error output,
 which `release.yml`'s `Check asset upload errors` step converts into an exit 1.
-The selection rule is unchanged between the two pins, so this plan's
-asset-selection findings hold at either revision.
+The replacement action keeps that hand-off so the operation telemetry that
+follows still runs and records the plan.
 
 **The dry run.** `.github/workflows/release-dry-run.yml` calls `release.yml`
 with `dry-run: true` on `pull_request` events `opened`, `synchronize`,
@@ -227,14 +238,14 @@ tests/workflow_contracts/actions_expression_evaluator.py          -> EP-M6  -> e
 ```
 
 External dependencies, cited by revision and treated as axioms. The shared
-action now carries two pins on `main`, because `release` and the new
-`publish-release` job were bumped separately; this plan must pin whichever it
-invokes to the newer of the two:
+action is now invoked from one job only, so one pin survives in the release
+workflow; the second remains a historical citation for the findings recorded
+against it:
 
 ```plaintext
-rust-lang/crates-io-auth-action  3268eb413133e2960fa4ae0e963ca76380c54cd9
-leynos/shared-actions (release job)         a5765019912a8ab6882b12db049c7cde635f3a85
-leynos/shared-actions (publish-release job) 0606ca899ce2995a0c4bc78e660e80832e6e8855
+rust-lang/crates-io-auth-action           3268eb413133e2960fa4ae0e963ca76380c54cd9
+leynos/shared-actions (release job)        a5765019912a8ab6882b12db049c7cde635f3a85
+leynos/shared-actions (cited findings)     0606ca899ce2995a0c4bc78e660e80832e6e8855
 ```
 
 Cuprum (`leynos/cuprum`) is a motivating context only. Its release design — a
@@ -858,7 +869,11 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   `release_publication_boundary_test.py` over `NETWORK_FREE_MODULES`. The only
   network sources are `scripts/crates_io_transport_cli.py` and
   `scripts/crates_io_transport_http.py`, covered by
-  `test_transport_sources_are_the_only_network_sources`. The `POLICY_MODULES`
+  `test_transport_sources_are_the_only_network_sources`. A source that launches
+  a child process is a separate question, held by
+  `test_every_process_spawner_is_a_named_decision` against `PROCESS_MODULES` in
+  `release_publication_modules.py`: a process is not a socket, so the two are
+  banned apart, and each spawner names the reason it must. The `POLICY_MODULES`
   contract also rejects file IO, JSON/TOML parsing, HTTP status codes, and
   GitHub digest syntax in policy code. Both boundaries have positive controls;
   Ruff, Pylint, Interrogate, and ty pass.
@@ -1614,11 +1629,13 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   existing upload sequence. Since that reconnaissance, the `package-crate` and
   `publish-crates-io` actions and jobs have landed, with workflow contracts for
   publisher permissions, prerequisite reachability, artefact use, action order,
-  and dry-run isolation. Three job-matched actions and jobs remain
-  (`verify-release-inventory`, `finalize-github-release`, and
-  `consumer-smoke`), together with the planned `upload-declared-assets` helper
-  for `publish-release`. No live exchange or release has exercised the
-  publisher; the external GitHub `crates-io` environment and crates.io
+  and dry-run isolation, and #1066 has replaced the shared upload action in
+  `publish-release` with `./.github/actions/upload-declared-assets`. Two
+  job-matched actions and jobs remain (`verify-release-inventory` and
+  `consumer-smoke`), as does `finalize-github-release`; since #1066 the
+  declaration and trusted digest record are retained for exactly that
+  finalizer, but it is not yet wired. No live exchange or release has exercised
+  the publisher; the external GitHub `crates-io` environment and crates.io
   publisher registration remain unverified, so Stage C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
@@ -2736,6 +2753,110 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   registered in `SECTION_MODULES` and the `test-release-publication` recipe,
   the developers' guide's module inventory was corrected from nine to eleven,
   and the focused four-module run passed 37 tests.
+- [x] (2026-11-06) Issue #1066 delivered the candidate-bound declared-asset
+  upload, so `publish-release` no longer calls the shared
+  `upload-release-assets` action. Its replacement,
+  `./.github/actions/upload-declared-assets`, has five steps. `select` runs
+  `scripts/select_release_payload_cli.py`, which reads the producer records the
+  packaging jobs retained, checks each against the candidate commit, the
+  workflow run, the target table in `.github/release-staging.toml`, and the
+  platform each target declares, and then refuses a stale candidate, a foreign
+  run, a missing or duplicated target, a declared asset that was not staged or
+  was staged twice, and a release-shaped stray that nobody declared. The
+  judgement itself is `scripts/release_payload_selection.py`, which never opens
+  a file: it receives the staged index from `scripts/release_payload_tree.py`
+  and returns the declared set with each name's recorded digest and the
+  adapter's own source value. `declare` hashes exactly those staged bytes and
+  writes the declaration and the trusted digest record before any transfer, so
+  both describe one set of bytes. `retain` uploads them as artefacts, which is
+  how they cross a job boundary. `upload` runs
+  `scripts/upload_declared_assets_cli.py`, which re-reads the trusted record,
+  reconciles it against the release's attached assets through
+  `scripts/release_reconcile_github.py`, skips a name GitHub already holds with
+  the recorded digest, and refuses the whole run on a conflict rather than
+  replacing the attached bytes: no invocation carries `--clobber`. The transfer
+  is re-listed afterwards, so a declared name still absent is a failed upload
+  rather than a clean run. `retain-plan` keeps the plan under `if: always()`,
+  so a refusing run still hands the operator the file naming the assets that
+  disagreed. The exit statuses and their log labels are
+  `scripts/upload_declared_assets_refusals.py`, a table with no I/O, which
+  keeps the CLI inside the module-length ceiling. Retained workspace material
+  (`netsuke`, `LICENSE`, `README.md`, completions, manual pages) is excluded
+  before declaration and hashing, and never reaches the network. The policy
+  stays mapping-based, and provenance orchestration lives in the adapters, so
+  no suffix or count check is claimed as proof of origin. Five
+  workflow-contract modules exercise the executed step bodies against a
+  checkout-shaped tree and a recorded `gh` stub rather than asserting on YAML
+  tokens. `release.yml` still carries no verifier or finalizer step, so the
+  release remains draft and a human still publishes it; the crates.io
+  publication is untouched by this change.
+- [x] (2026-11-07) Answered the two CodeRabbit rows for the #1066 head. The
+  boundary module described its ban as covering modules that open "a socket, a
+  URL, or a process" while `subprocess` was absent from the set, so the
+  documentation and the check disagreed. Adding `subprocess` to
+  `NETWORK_MODULES` was the suggested repair and would have been wrong twice
+  over: `package_crate_cli` runs `cargo package`, a local build that touches no
+  network, and `test_transport_sources_are_the_only_network_sources` requires
+  each transport module to carry a genuine network import, which no
+  process-launching source could satisfy. The process question now lives in
+  `release_publication_processes.py` as its own ban, and
+  `test_every_process_spawner_is_a_named_decision` requires every source that
+  imports one to be named in `PROCESS_MODULES` with its reason: the packaging
+  seam, and `release_upload_remote`, which runs `gh release upload` and
+  `gh release view`. The second row was a real gap: `release_upload_plan`
+  documents that the plan is written for a refusing run, and it was, but no
+  step retained it, so the record the module promises never left the runner. A
+  third retention step now runs after the upload under `always()` with
+  `if-no-files-found: warn`, so a failure before the uploader runs cannot mask
+  the uploader's own diagnostic. Both contracts were checked against
+  deliberately damaged manifests and files to confirm they fail rather than
+  pass vacuously.
+- [x] (2026-11-07) Cleared the five findings of the third CodeRabbit pass
+  over the #1066 head. Two were vacuous tests rather than wrong production code.
+
+  The first built four reference tokens with `dict.fromkeys(..., object())`,
+  which evaluates `object()` once, so every key held the same object and the
+  identity assertion held whatever source the selection returned. The second
+  carried a directory case whose leaf never existed, so the leaf check fired
+  first and the directory match passed only because the path string named a
+  directory; the ancestor branch is now covered solely by the symlink test,
+  with a FIFO case for the leaf. Both are proved by deliberate damage: a
+  selection mutated to give every declared name the first declared source
+  raises on the per-key assertion and did not on the shared object, and the
+  FIFO case fails if the leaf check is deleted.
+
+  `upload` gained an early return for an empty `names`, because a
+  `gh release upload` carrying no file is a request the endpoint may reject;
+  the pinning test had asserted that rejected invocation rather than its
+  absence. Two copies of the banned-module predicate became one exported
+  `is_banned` in `release_publication_imports`, imported by the process module,
+  which also pins the submodule arm that the network set had masked by naming
+  `urllib.request` outright. A comma before an essential `because` left the
+  developers' guide.
+
+  The nine-gate run on this candidate went red twice, both from the new code
+  and both caught by the gate rather than by review: a Ruff section-order
+  violation where the new `Notes` paragraph sat after `Examples`, and a Pylint
+  comparison-to-empty-list where the new assertion did not use its truth value.
+  Both are fixed, and `make lint` now reaches yamllint, actionlint, and
+  ambrleaks and exits 0.
+
+- [x] (2026-11-07) Cleared the four findings of the fourth CodeRabbit pass.
+  `trusted_digests` is typed over an iterable but read it twice, so a generator
+  was exhausted by `declared_names` and the function returned an empty mapping
+  -- which a caller checking staged digests against it would accept vacuously.
+  It now materializes the claims once, and its doctest passes a generator as
+  well as a list. `_reconcile` backfilled the digest of every attached asset
+  whose listing digest was absent, so an asset the trusted record never
+  declared was downloaded to learn a digest nothing consults; the backfill is
+  now filtered by the declared names, with a test that an undeclared asset
+  triggers no download. The finalizer's private plan writer is gone in favour of
+  `release_upload_plan.write_plan`, so one function decides the shape both
+  jobs read. `upload`'s doctest now exercises the empty-name path its prose
+  describes, as well as the path that must reach `gh`.
+
+  All four are proved by damage: reverting each fix fails its test or doctest,
+  and damaging the shared plan writer fails four finalizer tests.
 
 ## Surprises & discoveries
 
@@ -2878,10 +2999,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   outright, because `Path("x.tar.gz").suffix` is `.gz`. Evidence: read from its
   `scripts/upload_release_assets.py` at pin
   `a5765019912a8ab6882b12db049c7cde635f3a85`; the rule is unchanged at the newer
-  `0606ca899ce2995a0c4bc78e660e80832e6e8855` that `publish-release` uses.
-  Impact: binstall archives reach the release root only through
-  `scripts/hoist_binstall_archives.py`, and any new asset type (`.crate`, a
-  provenance bundle) will need the same treatment or a different uploader.
+  `0606ca899ce2995a0c4bc78e660e80832e6e8855`. That pin is now a citation only:
+  `publish-release` no longer invokes the action, and the rehearsal lane that
+  still does uploads nothing. Impact: binstall archives reach the release root
+  only through `scripts/hoist_binstall_archives.py`, and any new asset type
+  (`.crate`, a provenance bundle) will need the same treatment or a different
+  uploader.
 
 - Observation: the action's `clobber` defaults to `"true"`, so the current
   upload path already overwrites same-named assets on a re-run. Evidence: same
@@ -4084,18 +4207,19 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   not reach it. The name states what it does — it uploads exactly the declared
   names — rather than repeating the job it serves.
 
-  Two couplings follow, both measured. First, `tests/workflow_release.rs:25`
-  pins the raw substring `upload-release-assets@`, and `release.yml` carries
-  that substring twice — once in `release` at line 493 (pin `a5765019…`) and
-  once in `publish-release` at line 634 (pin `0606ca89…`). Changing only
-  `publish-release`'s `uses:` leaves exactly one occurrence, so the Rust pin
-  stays satisfied with no edit to the Rust suite. Substituting **both** lanes
-  would delete the substring and turn that assertion red, which is a second
-  reason the rehearsal lane is out of scope for this change. Second, the
-  orientation sentence "the repository now invokes one shared action at two
-  revisions, chosen by job" describes the current tree and goes stale in the
-  same commit that lands this change; it must be corrected there rather than
-  left as a description of a file that no longer has that shape.
+  Two couplings followed, both measured and both since discharged. First,
+  `tests/workflow_release.rs:25` pins the raw substring
+  `upload-release-assets@`, and `release.yml` carried that substring twice —
+  once in `release` (pin `a5765019…`) and once in `publish-release` (pin
+  `0606ca89…`). Changing only `publish-release`'s `uses:` left exactly one
+  occurrence, so the Rust pin stays satisfied with no edit to the Rust suite,
+  and that is what the landed change did: the rehearsal lane remains the sole
+  caller. Substituting **both** lanes would delete the substring and turn that
+  assertion red, which is a second reason the rehearsal lane is out of scope.
+  Second, the orientation sentence "the repository now invokes one shared
+  action at two revisions, chosen by job" described the tree before this change
+  and was corrected in the same commit that landed it, rather than left as a
+  description of a file that no longer has that shape.
 
   The rehearsal lane is left on the shared action deliberately, and the gap is
   recorded rather than closed: `release` runs with `dry-run: true` and uploads
