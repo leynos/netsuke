@@ -312,6 +312,12 @@ jobs:
           cargo --version
       - name: Show Ninja version
         run: ninja --version
+      - name: Fetch dependencies
+        # Tests start their own cargo offline; fetch once so none resolves cold.
+        # `make test` fetches again as its first step, a no-op on a warm cache;
+        # this step stays because the lint rule cannot read the delegated
+        # `make SHELL=bash test`.
+        run: cargo fetch --locked
       - name: Test
         # cargo-nextest plus doctests under `-D warnings`,
         # compiling and running the `#[cfg(windows)]` test tree. A failure

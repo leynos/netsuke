@@ -73,7 +73,12 @@ fn gate_targets_deny_warnings_and_apply_the_standard(
     let flags = standard_flags()?;
     let borrowed: Vec<&str> = flags.iter().map(String::as_str).collect();
 
-    for invocation in &recorded {
+    // `cargo fetch --locked` downloads the locked dependencies and compiles
+    // nothing, so it carries neither the warning policy nor the standard.
+    for invocation in recorded
+        .iter()
+        .filter(|invocation| !invocation.contains_sequence(&["fetch", "--locked"]))
+    {
         ensure!(
             invocation.rustflags_contain_sequence(&["-D", "warnings"]),
             "`{}` should deny warnings, got `{:?}`",

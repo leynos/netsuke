@@ -71,6 +71,8 @@ fn cargo_resolves_the_committed_configuration_to_the_intended_settings(
     let output = Command::new(env!("CARGO"))
         .arg("-Zunstable-options")
         .args(["config", "get", query])
+        // Reads configuration only; nothing here needs the network.
+        .env("CARGO_NET_OFFLINE", "true")
         .output()
         .with_context(|| format!("ask cargo for {query}"))?;
     let reported = String::from_utf8_lossy(&output.stdout);

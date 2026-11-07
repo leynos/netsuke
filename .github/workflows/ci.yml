@@ -242,6 +242,9 @@ jobs:
         run: make test-package-verify
       - name: Release publication tests
         run: make test-release-publication
+      - name: Fetch dependencies
+        # Tests start their own cargo offline; fetch once so none resolves cold.
+        run: cargo fetch --locked
       - name: Test and Measure Coverage
         # The only test execution on this lane: measuring and testing in one
         # instrumented run costs one compile instead of two, so the flags must
