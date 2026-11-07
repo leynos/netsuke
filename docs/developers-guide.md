@@ -54,8 +54,13 @@ offline:
 - Each of those spawns sets `CARGO_NET_OFFLINE=true`, after any environment
   operation that could rewrite it.
 
-Prepare a direct or offline run with `cargo fetch --locked` first. The estate
-lint rule `nested-cargo-offline-tests` checks all three.
+Prepare a direct or offline run with `cargo fetch --locked` first. The fetch
+covers every target, so an offline run needs an all-target cache (for example
+the Windows-only dependencies too); that is deliberate. Offline mode stops a
+nested `cargo` resolving or downloading, but it still takes the shared
+package-cache lock for a moment, so it does not remove every wait on another
+repository's build. The estate lint rule `nested-cargo-offline-tests` checks
+all three.
 
 ## Command-line interface architecture
 
