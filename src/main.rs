@@ -114,42 +114,27 @@ where
     C: MonotonicClock,
     E: cli::ConfigEnvProvider,
 {
-    let startup_signals = StartupSignals::resolve(
-        &args,
-        dependencies.locale_env,
-        dependencies.stdout_is_terminal,
-        dependencies.stderr_is_terminal,
-    );
-    let terminal_facts = startup_signals.terminal_facts;
-    // Recorded at `WARN` but written to a buffer, not to stderr. The JSON hint
-    // is only a hint — configuration can still turn JSON on — and the JSON
-    // diagnostic goes to stderr, so an event emitted now could corrupt it.
-    // Buffering keeps the locale fallback report without taking that risk.
-    let startup_mode = DiagMode::from_json_enabled(startup_signals.json_hint);
-    observability::init_metrics();
-    let localizer = startup_localizer(&args, dependencies.locale_env, dependencies.system_locale);
-    let startup_parse = StartupParse {
-        args,
-        localizer: &localizer,
-        mode: startup_mode,
-        color_choice: startup_signals.parser_color,
-        startup_writer,
-    };
-    let (parsed_cli, matches) = match parse_cli_or_exit(startup_parse) {
-        Ok(parsed) => parsed,
-        // The buffer was settled inside, before the branch that exits.
+    let window = match resolve_startup_window(args, dependencies, startup_writer) {
+        Ok(window) => window,
+        // The startup buffer was settled inside, before the branch that exits.
         Err(code) => return code,
     };
+    let terminal_facts = window.startup_signals.terminal_facts;
+    let startup_mode = window.mode;
+    let parsed_cli = window.parsed_cli;
+    let matches = window.matches;
     let verbose = parsed_cli.verbose;
     let startup_plan = resolve_display_plan(
-        startup_signals.policies_before_configuration(&parsed_cli),
+        window
+            .startup_signals
+            .policies_before_configuration(&parsed_cli),
         terminal_facts,
     );
     main_tracing::set_tracing_ansi(startup_plan.stderr_colour());
     if is_informational_help(&parsed_cli) {
         settle_startup_diagnostics(startup_writer, startup_mode);
         return finish_run(
-            run_cli(
+            run_informational_help(
                 &parsed_cli,
                 dependencies.system_locale,
                 startup_mode,
@@ -173,16 +158,102 @@ where
         Ok(merged) => merged,
         Err(code) => return finish_run(code, verbose),
     };
-    let merged_verbose = merged_cli.verbose;
-    let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
+    run_merged_command(&merged_cli, dependencies.system_locale, terminal_facts)
+}
 
-    let exit_code = run_configured_command(
-        &merged_cli,
-        dependencies.system_locale,
-        runtime_mode,
-        terminal_facts,
+/// Resolve the pre-configuration startup window, or the exit code that ends it.
+///
+/// This is the run's first stage: capture terminal facts, decide the startup
+/// diagnostics mode, build a localizer, and parse argv. Parsing may itself end
+/// the run — `--help`, `--version`, and parse failures all render and exit —
+/// so the outcome is a `Result` whose error is the code already returned to the
+/// shell, not a failure the caller can inspect.
+fn resolve_startup_window<L, S, C, E>(
+    args: Vec<OsString>,
+    dependencies: &RunWithArgsDependencies<'_, L, S, C, E>,
+    startup_writer: &StartupWriter,
+) -> Result<StartupWindow, ExitCode>
+where
+    L: locale_resolution::LocaleEnvProvider,
+    S: locale_resolution::SystemLocale,
+    C: MonotonicClock,
+    E: cli::ConfigEnvProvider,
+{
+    let startup_signals = StartupSignals::resolve(
+        &args,
+        dependencies.locale_env,
+        dependencies.stdout_is_terminal,
+        dependencies.stderr_is_terminal,
     );
-    finish_run(exit_code, merged_verbose)
+    // Recorded at `WARN` but written to a buffer, not to stderr. The JSON hint
+    // is only a hint — configuration can still turn JSON on — and the JSON
+    // diagnostic goes to stderr, so an event emitted now could corrupt it.
+    // Buffering keeps the locale fallback report without taking that risk.
+    let mode = DiagMode::from_json_enabled(startup_signals.json_hint);
+    observability::init_metrics();
+    let localizer = startup_localizer(&args, dependencies.locale_env, dependencies.system_locale);
+    let (parsed_cli, matches) = match parse_cli_or_exit(StartupParse {
+        args,
+        localizer: &localizer,
+        mode,
+        color_choice: startup_signals.parser_color,
+        startup_writer,
+    }) {
+        Ok(parsed) => parsed,
+        Err(code) => return Err(code),
+    };
+    Ok(StartupWindow {
+        startup_signals,
+        mode,
+        parsed_cli,
+        matches,
+    })
+}
+
+/// The values the startup window produces before configuration is merged.
+struct StartupWindow {
+    /// Terminal facts and argv-derived hints captured at process entry.
+    startup_signals: StartupSignals,
+    /// Diagnostics mode the startup buffer was created in.
+    mode: DiagMode,
+    /// The parsed command line, which the window does not re-derive.
+    parsed_cli: cli::Cli,
+    /// Raw clap matches retained for the configuration merge.
+    matches: clap::ArgMatches,
+}
+
+/// Render the informational-help route from the pre-configuration plan.
+///
+/// The runner-rendered `help` topics never reach the configuration merge, so
+/// this route must apply the startup plan's colour rather than re-deriving it.
+fn run_informational_help<S>(
+    parsed_cli: &cli::Cli,
+    system_locale: &S,
+    startup_mode: DiagMode,
+    startup_plan: DisplayPlan,
+) -> ExitCode
+where
+    S: locale_resolution::SystemLocale,
+{
+    run_cli(parsed_cli, system_locale, startup_mode, startup_plan)
+}
+
+/// Run the command after the configuration merge has settled its own mode.
+///
+/// Resolution happens here so the tracing formatter, the status reporter, the
+/// diagnostic hook, and the runner all act on one plan. The JSON mode comes
+/// from the merged configuration, so it is read here rather than at startup.
+fn run_merged_command<S>(
+    merged_cli: &cli::Cli,
+    system_locale: &S,
+    terminal_facts: TerminalFacts,
+) -> ExitCode
+where
+    S: locale_resolution::SystemLocale,
+{
+    let runtime_mode = DiagMode::from_json_enabled(merged_cli.json);
+    let exit_code = run_configured_command(merged_cli, system_locale, runtime_mode, terminal_facts);
+    finish_run(exit_code, merged_cli.verbose)
 }
 
 /// Resolve the runtime display plan, configure the process, and run the command.

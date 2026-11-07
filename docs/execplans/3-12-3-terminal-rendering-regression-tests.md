@@ -817,6 +817,31 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   assertion that keeps it true is the stronger "no escape", not "stripping SGR
   changes nothing". Date/Author: 2026-11-07, implementation agent.
 
+- **D25. The rebase onto `921320086` needed two CodeScene clearances, and the
+  CLI reproduced both.** After replaying 22 commits onto the newer main, four
+  conflicts were resolved and one merge artifact was removed:
+  `test_support/src/lib.rs` had gained a second copy of the re-export block,
+  because weave reported the file "auto-resolved" while the duplicated
+  `pub use` lines produced ten E0252 errors. The hosted CodeScene delta then
+  flagged the final commit for `Large Method` in `src/main.rs`
+  (`run_with_args`, score 9.58) and `String Heavy Function Arguments` in
+  `src/main_startup/tests.rs` (9.68). `cs check` reproduced both scores on the
+  pre-fix files, so the local tool is a usable oracle for this job rather than
+  a guess.
+
+  Neither finding was suppressed. `run_with_args` was split along the three
+  stages it already contained — resolve the startup window, render the
+  informational-help route, run after the merge — which took the function from
+  74 to 59 lines and its file to 10.00. `src/main_startup/tests.rs` collapsed
+  three near-identical `LocaleEnvProvider` implementations into one table-driven
+  `FixedEnv`, which is a genuine deduplication and not an evasion; the file
+  moved to 10.00 with the `String Heavy Function Arguments` biomarker clear.
+  What remains in that file is four rstest `#[case] args: &[&str]` tables,
+  which the repository already spells the same way in
+  `src/shell_selection/built_in/tests.rs`: the case *is* the raw argv under
+  test, so a newtype would add a conversion at every case while enforcing
+  nothing. Date/Author: 2026-11-07, implementation agent.
+
 ## Outcomes & retrospective
 
 ### Milestone EP-M0 to EP-M4: complete

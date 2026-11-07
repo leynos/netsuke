@@ -9,32 +9,31 @@ use super::*;
 use clap::Parser;
 use rstest::rstest;
 
-/// An environment reporting nothing, leaving argv to decide.
-struct EmptyEnv;
+/// An environment reporting exactly the entries it was given.
+///
+/// The window reads only two variables, so one table-driven provider expresses
+/// every case the tests need. Spelling each case as data keeps the empty,
+/// colour-forcing, and dumb-terminal environments from drifting apart as three
+/// near-identical trait implementations.
+struct FixedEnv(&'static [(&'static str, &'static str)]);
 
-impl locale_resolution::LocaleEnvProvider for EmptyEnv {
-    fn var(&self, _key: &str) -> Option<String> {
-        None
+impl locale_resolution::LocaleEnvProvider for FixedEnv {
+    fn var(&self, key: &str) -> Option<String> {
+        self.0
+            .iter()
+            .find(|(name, _)| *name == key)
+            .map(|(_, value)| String::from(*value))
     }
 }
+
+/// An environment reporting nothing, leaving argv to decide.
+const EMPTY_ENV: FixedEnv = FixedEnv(&[]);
 
 /// An environment asking for colour, as a shell export would.
-struct ColourAlwaysEnv;
-
-impl locale_resolution::LocaleEnvProvider for ColourAlwaysEnv {
-    fn var(&self, key: &str) -> Option<String> {
-        (key == locale_resolution::NETSUKE_COLOR_ENV).then(|| String::from("always"))
-    }
-}
+const COLOUR_ALWAYS_ENV: FixedEnv = FixedEnv(&[(locale_resolution::NETSUKE_COLOR_ENV, "always")]);
 
 /// An environment reporting a dumb terminal, which suppresses auto colour.
-struct DumbTerm;
-
-impl locale_resolution::LocaleEnvProvider for DumbTerm {
-    fn var(&self, key: &str) -> Option<String> {
-        (key == "TERM").then(|| String::from("dumb"))
-    }
-}
+const DUMB_TERM: FixedEnv = FixedEnv(&[("TERM", "dumb")]);
 
 /// Collect argv from string literals, keeping the program name.
 fn argv(args: &[&str]) -> Vec<OsString> {
@@ -92,9 +91,9 @@ fn help_colour_follows_the_resolved_policy(
     #[case] expected: ColorChoice,
 ) {
     let signals = if is_dumb_terminal {
-        StartupSignals::resolve(&argv(args), &DumbTerm, stdout_is_terminal, true)
+        StartupSignals::resolve(&argv(args), &DUMB_TERM, stdout_is_terminal, true)
     } else {
-        StartupSignals::resolve(&argv(args), &EmptyEnv, stdout_is_terminal, true)
+        StartupSignals::resolve(&argv(args), &EMPTY_ENV, stdout_is_terminal, true)
     };
     assert_eq!(signals.parser_color, expected);
 }
@@ -108,7 +107,7 @@ fn help_colour_follows_the_resolved_policy(
 #[case(&["netsuke", "--help"], false)]
 #[case(&["netsuke", "--json", "generate"], true)]
 fn the_json_hint_comes_from_argv(#[case] args: &[&str], #[case] expected: bool) {
-    let signals = StartupSignals::resolve(&argv(args), &EmptyEnv, false, false);
+    let signals = StartupSignals::resolve(&argv(args), &EMPTY_ENV, false, false);
     assert_eq!(signals.json_hint, expected);
 }
 
@@ -132,9 +131,9 @@ fn informational_help_takes_the_startup_colour_hint(
 ) {
     let raw = argv(args);
     let signals = if is_colour_always_env {
-        StartupSignals::resolve(&raw, &ColourAlwaysEnv, true, true)
+        StartupSignals::resolve(&raw, &COLOUR_ALWAYS_ENV, true, true)
     } else {
-        StartupSignals::resolve(&raw, &EmptyEnv, true, true)
+        StartupSignals::resolve(&raw, &EMPTY_ENV, true, true)
     };
     let parsed = cli::Cli::try_parse_from(raw.iter()).expect("argv should parse");
     assert_eq!(
