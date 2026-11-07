@@ -47,6 +47,7 @@ import typing as typ
 import release_digest_record_files
 import release_payload_tree
 import release_reconcile_github
+import release_upload_digests
 import release_upload_plan
 import release_upload_remote
 import upload_declared_assets_refusals
@@ -338,7 +339,7 @@ def _reconcile(
         name for name, digest in present.items() if digest is None and name in expected
     }
     if undigested:
-        present |= release_upload_remote.downloaded_digests(
+        present |= release_upload_digests.downloaded_digests(
             tag, undigested, runner=runner
         )
     return release_reconcile_github.plan_asset_actions(

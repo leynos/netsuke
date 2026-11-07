@@ -14,13 +14,13 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import] - the seam under
 import pytest
 import release_digest_files
 import release_upload_remote
+from release_upload_digests import downloaded_digests
 from release_upload_remote import (
     GhCommandFailedError,
     RemoteListingError,
     StaticRunner,
     UploadError,
     attached_digests,
-    downloaded_digests,
     upload,
 )
 

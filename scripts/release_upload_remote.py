@@ -27,17 +27,14 @@ in ``scripts/tests/test_upload_declared_assets_cli.py``.
 """
 
 import json
-import pathlib
-import stat
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - upload boundary.
-import tempfile
 import typing as typ
 
-import release_digest_files
 import release_github_assets_adapter
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
+    import pathlib
 
 __all__ = [
     "ASSETS_MEMBER",
@@ -49,7 +46,6 @@ __all__ = [
     "SubprocessRunner",
     "UploadError",
     "attached_digests",
-    "downloaded_digests",
     "upload",
 ]
 
@@ -161,101 +157,6 @@ def _decoded_assets(stdout: str | None) -> list[object]:
     return assets
 
 
-def downloaded_digests(
-    tag: str, names: cabc.Iterable[str], *, runner: SubprocessRunner
-) -> dict[str, str | None]:
-    """Establish digests for attached assets GitHub would not report.
-
-    Parameters
-    ----------
-    tag
-        The validated release tag to download from.
-    names
-        The attached asset names whose listing carried no usable digest.
-    runner
-        The injected subprocess seam.
-
-    Returns
-    -------
-    dict[str, str | None]
-        Name mapped to the digest of the downloaded bytes, or ``None`` when
-        the download or the hash failed.
-
-    Notes
-    -----
-    A download that fails is not an error here: the asset stays ``None``, and
-    reconciliation reads that as a conflict rather than as a match. A whole
-    directory is downloaded rather than a single ``--output`` file so a name
-    that also matches a glob cannot hand back another asset's bytes -- the
-    exact name is what gets hashed, and its absence yields ``None``.
-
-    Examples
-    --------
-    >>> downloaded_digests("v1", [], runner=_never_called)
-    {}
-    """
-    with tempfile.TemporaryDirectory() as temporary:
-        directory = pathlib.Path(temporary)
-        for name in sorted(names):
-            _download(tag, name, directory, runner=runner)
-        return {name: _digest_if_present(directory / name) for name in names}
-
-
-def _download(
-    tag: str, name: str, directory: pathlib.Path, *, runner: SubprocessRunner
-) -> None:
-    """Fetch one attached asset into ``directory``, tolerating failure.
-
-    Parameters
-    ----------
-    tag
-        The validated release tag to download from.
-    name
-        The exact attached asset name to fetch.
-    directory
-        The directory the asset is written into.
-    runner
-        The injected subprocess seam.
-
-    Notes
-    -----
-    ``required=False`` keeps a failed download from raising: it leaves the name
-    without a digest, and reconciliation turns that into a conflict rather than
-    into a match on no evidence.
-    """
-    gh(
-        ("release", "download", tag, "--pattern", name, "--dir", str(directory)),
-        runner=runner,
-        required=False,
-    )
-
-
-def _digest_if_present(path: pathlib.Path) -> str | None:
-    """Hash ``path`` when it is a regular file, or answer ``None``.
-
-    Parameters
-    ----------
-    path
-        A candidate downloaded asset.
-
-    Returns
-    -------
-    str | None
-        The lowercase SHA-256 of the bytes, or ``None`` when the path is not a
-        readable regular file.
-
-    Examples
-    --------
-    >>> _digest_if_present(pathlib.Path("/nonexistent/asset"))
-    """
-    try:
-        if not stat.S_ISREG(path.lstat().st_mode):
-            return None
-        return release_digest_files.digest_of_file(path)
-    except OSError:
-        return None
-
-
 def upload(
     tag: str,
     names: cabc.Iterable[str],
@@ -292,6 +193,7 @@ def upload(
     rejection as a refused transfer would report a failure for a run that had
     every declared asset already attached.
 
+    >>> import pathlib
     >>> upload("v1", [], pathlib.Path("/payload"), runner=_never_called)
     >>> upload("v1", ["a"], pathlib.Path("/payload"), runner=_never_called)
     Traceback (most recent call last):

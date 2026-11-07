@@ -102,6 +102,7 @@ SOURCE_MODULES = (
     "scripts/release_payload_selection.py",
     "scripts/release_payload_tree.py",
     "scripts/select_release_payload_cli.py",
+    "scripts/release_upload_digests.py",
     "scripts/release_upload_plan.py",
     "scripts/release_upload_remote.py",
     "scripts/upload_declared_assets_cli.py",
@@ -158,6 +159,7 @@ ADAPTER_MODULES = (
     "scripts/record_producer_provenance_record.py",
     "scripts/release_payload_tree.py",
     "scripts/select_release_payload_cli.py",
+    "scripts/release_upload_digests.py",
     "scripts/release_upload_plan.py",
     "scripts/release_upload_remote.py",
     "scripts/upload_declared_assets_cli.py",
@@ -183,9 +185,11 @@ NETWORK_FREE_MODULES = tuple(
 #: A spawner is not a network client, but it is a way for a release step to
 #: reach an outside service, so the pairing is deliberate rather than an
 #: omission. ``package_crate_cli`` runs ``cargo package``, a local build with
-#: no remote of its own. ``release_upload_remote`` runs ``gh release upload``
-#: and ``gh release view``, which do reach GitHub: it is the upload boundary.
-#: A new entry here is a reviewed decision, not a registration.
+#: no remote of its own. ``release_upload_remote`` runs ``gh release upload``,
+#: ``gh release view``, and ``gh release download`` (asked for by
+#: ``release_upload_digests``), which do reach GitHub: it is the release's
+#: attachment boundary, and every ``gh`` call in the release path goes through
+#: it. A new entry here is a reviewed decision, not a registration.
 PROCESS_MODULES = {
     "scripts/package_crate_cli.py": "runs `cargo package`, a local build",
     "scripts/release_upload_remote.py": "runs `gh release upload`, the upload boundary",
