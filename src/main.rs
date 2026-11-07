@@ -192,16 +192,15 @@ where
     let mode = DiagMode::from_json_enabled(startup_signals.json_hint);
     observability::init_metrics();
     let localizer = startup_localizer(&args, dependencies.locale_env, dependencies.system_locale);
-    let (parsed_cli, matches) = match parse_cli_or_exit(StartupParse {
+    // Parsing may itself end the run, so its exit code is propagated as the
+    // window's error rather than inspected here.
+    let (parsed_cli, matches) = parse_cli_or_exit(StartupParse {
         args,
         localizer: &localizer,
         mode,
         color_choice: startup_signals.parser_color,
         startup_writer,
-    }) {
-        Ok(parsed) => parsed,
-        Err(code) => return Err(code),
-    };
+    })?;
     Ok(StartupWindow {
         startup_signals,
         mode,
