@@ -36,6 +36,7 @@ SELECT_STEP = "Select the declared release payload"
 DECLARE_STEP = "Declare the release asset names"
 RETAIN_STEP = "Retain the declared asset record"
 UPLOAD_STEP = "Upload the declared release assets"
+PLAN_STEP = "Retain the upload plan"
 RUN_STEPS = (SELECT_STEP, DECLARE_STEP, UPLOAD_STEP)
 
 

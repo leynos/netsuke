@@ -19,8 +19,13 @@ from release_publication_modules import (
     ADAPTER_MODULES,
     NETWORK_FREE_MODULES,
     POLICY_MODULES,
+    PROCESS_MODULES,
     SOURCE_MODULES,
     TRANSPORT_MODULES,
+)
+from release_publication_processes import (
+    any_process_offender,
+    process_offenders,
 )
 from workflow_loading import REPO_ROOT
 
@@ -34,6 +39,32 @@ def test_release_sources_import_no_network_client(module: str) -> None:
         f"{module} imports {offenders!r}, so the release source is no longer "
         "network-free; move the request into the workflow step"
     )
+
+
+@pytest.mark.parametrize("module", SOURCE_MODULES)
+def test_every_process_spawner_is_a_named_decision(module: str) -> None:
+    """Require each source that launches a process to say so explicitly.
+
+    ``subprocess`` is not a network module: the command it runs decides that.
+    Banning it outright would misreport the packaging seam, and banning it by
+    silence would let a new spawner reach a credentialled service unnoticed.
+    So each spawner is named in :data:`PROCESS_MODULES` with its reason, and
+    that named set is asserted to be exactly the set of sources that import
+    one.
+    """
+    source = (REPO_ROOT / module).read_text(encoding="utf-8")
+    offenders = process_offenders(source)
+    if module in PROCESS_MODULES:
+        assert offenders, (
+            f"{module} is listed in PROCESS_MODULES but imports no process "
+            "module, so its recorded reason is stale"
+        )
+    else:
+        assert not offenders, (
+            f"{module} imports {offenders!r}, so it can launch a process. "
+            "Add it to PROCESS_MODULES in release_publication_modules.py with "
+            "the reason it must, or keep the work in a workflow step"
+        )
 
 
 @pytest.mark.parametrize("module", TRANSPORT_MODULES)
@@ -65,6 +96,28 @@ def test_the_network_import_detector_has_positive_and_negative_controls() -> Non
     for source in negatives:
         assert not any_offender(imported_modules(source)), (
             f"the detector must accept {source!r}, a non-network import"
+        )
+
+
+def test_the_process_import_detector_has_positive_and_negative_controls() -> None:
+    """Prove the process detector finds spawners and ignores sockets."""
+    positives = (
+        "import subprocess",
+        "import subprocess as sp",
+        "from subprocess import run",
+    )
+    for source in positives:
+        assert any_process_offender(imported_modules(source)), (
+            f"the detector must flag {source!r}, or the spawner check is vacuous"
+        )
+    negatives = (
+        "import socket",
+        "import urllib.request",
+        "from pathlib import Path",
+    )
+    for source in negatives:
+        assert not any_process_offender(imported_modules(source)), (
+            f"the detector must accept {source!r}, which launches no process"
         )
 
 

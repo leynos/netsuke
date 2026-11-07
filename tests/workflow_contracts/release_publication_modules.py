@@ -175,11 +175,25 @@ NETWORK_FREE_MODULES = tuple(
     module for module in SOURCE_MODULES if module not in TRANSPORT_MODULES
 )
 
+#: Sources allowed to launch a child process, each with the reason it must.
+#:
+#: A spawner is not a network client, but it is a way for a release step to
+#: reach an outside service, so the pairing is deliberate rather than an
+#: omission. ``package_crate_cli`` runs ``cargo package``, a local build with
+#: no remote of its own. ``release_upload_remote`` runs ``gh release upload``
+#: and ``gh release view``, which do reach GitHub: it is the upload boundary.
+#: A new entry here is a reviewed decision, not a registration.
+PROCESS_MODULES = {
+    "scripts/package_crate_cli.py": "runs `cargo package`, a local build",
+    "scripts/release_upload_remote.py": "runs `gh release upload`, the upload boundary",
+}
+
 
 __all__ = [
     "ADAPTER_MODULES",
     "NETWORK_FREE_MODULES",
     "POLICY_MODULES",
+    "PROCESS_MODULES",
     "SECTION_MODULES",
     "SOURCE_MODULES",
     "TRANSPORT_MODULES",
