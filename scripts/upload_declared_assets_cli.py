@@ -330,7 +330,13 @@ def _reconcile(
     ``RemoteListingError`` from :mod:`release_upload_remote`.
     """
     present = release_upload_remote.attached_digests(tag, runner=runner)
-    undigested = {name for name, digest in present.items() if digest is None}
+    # Only declared names are backfilled. An unrelated attached asset with no
+    # listing digest is not this step's concern, and downloading its bytes to
+    # learn a digest nothing consults would spend a transfer on a file the
+    # trusted record never named.
+    undigested = {
+        name for name, digest in present.items() if digest is None and name in expected
+    }
     if undigested:
         present |= release_upload_remote.downloaded_digests(
             tag, undigested, runner=runner
