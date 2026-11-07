@@ -2312,15 +2312,19 @@ the three cached homes, so raising the pin in `tools/kani/VERSION` cannot be
 satisfied by a binary an earlier run left behind. A missing binary is a CI
 failure, not permission to compile a tool from source.
 
-`NETSUKE_RUST_TOOLCHAIN` follows a separate rule. The CI jobs and Netsukefile
-pin it to the channel in `rust-toolchain.toml` so those jobs provision the
-dated nightly explicitly; coverage and packaging must leave it unset, because
-they select their toolchain through the action's own `toolchain` input and a
-second, independently edited pin would let the two disagree. The
-`default-features` lane is a reusable workflow, which cannot read its caller's
-`env`, so the channel reaches it as a required `rust-toolchain` input from
-`ci.yml` rather than a literal inside the lane. That keeps one authoritative
-value per pin, as the nextest pin does.
+`NETSUKE_RUST_TOOLCHAIN` follows a separate rule. No workflow declares it: the
+`resolve-toolchain` composite action reads the channel from
+`rust-toolchain.toml` and exports it through `GITHUB_ENV`, and each job that
+provisions the dated nightly explicitly runs that action after checkout and
+before the step that reads the variable (the Kani job runs it after its scope
+decision, under the same guard as its other proof steps). The value is always a
+non-empty explicit channel, so `setup-rust` keeps its explicit-toolchain arm.
+Packaging selects its toolchain through its own action and leaves the variable
+unset. The `default-features` lane is a reusable workflow that resolves the
+channel itself rather than receiving it from `ci.yml`. The channel therefore
+has exactly one source, `rust-toolchain.toml`, and Dependabot's bumps reach
+every job. The action fails with an annotation when the file declares no
+channel.
 
 [`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
 enforces all seven callers. For each one it asserts:
@@ -2332,10 +2336,12 @@ enforces all seven callers. For each one it asserts:
 - the `with.rustflags` value matches the table above exactly, including the
   two jobs that must pass no `rustflags` input at all;
 - the job declares no `env.RUSTFLAGS`;
-- the `NETSUKE_RUST_TOOLCHAIN` policy above — pinned to the
-  `rust-toolchain.toml` channel for the CI jobs and Netsukefile, read from the
-  caller's input for the default-feature lane, absent for coverage and
-  packaging.
+- the `NETSUKE_RUST_TOOLCHAIN` policy above — no job declares a channel, the
+  `resolve-toolchain` action runs before the shared action that reads it (for
+  the CI jobs, Netsukefile, the default-feature lane and coverage), and
+  packaging leaves it absent. A separate test runs the action's script against
+  throwaway toolchain files and checks what it exports and that it fails on a
+  missing or empty channel.
 
 The same test carries the two toolchain-level assertions: that the pinned
 channel is a dated nightly at or after 2026-08-04, the first nightly on which

@@ -301,18 +301,54 @@ fn resolve_toolchain_action_exports_the_channel_from_the_toolchain_file() -> Res
         .and_then(|runs| runs.get("steps"))
         .and_then(YamlValue::as_sequence)
         .with_context(|| format!("{path} should declare composite steps"))?;
-    let scripts: Vec<&str> = steps
+    let script = steps
         .iter()
-        .filter_map(|step| yaml_str(step, &["run"]))
-        .collect();
-    ensure!(
-        scripts
-            .iter()
-            .any(|script| script.contains("rust-toolchain.toml")
-                && script.contains("NETSUKE_RUST_TOOLCHAIN=")
-                && script.contains("GITHUB_ENV")),
-        "{path} should read rust-toolchain.toml and export NETSUKE_RUST_TOOLCHAIN \
-         through GITHUB_ENV"
-    );
+        .find_map(|step| yaml_str(step, &["run"]))
+        .with_context(|| format!("{path} should run a script"))?;
+    // Run the real script against throwaway toolchain files and read what it
+    // exports, rather than matching its text.
+    for channel in ["nightly-2030-01-02", "nightly-2031-03-04"] {
+        let exported = run_resolver(script, &format!("[toolchain]\nchannel = \"{channel}\"\n"))?
+            .with_context(|| format!("{path} should succeed for {channel}"))?;
+        ensure!(
+            exported == format!("NETSUKE_RUST_TOOLCHAIN={channel}\n"),
+            "{path} exported {exported:?} for {channel}"
+        );
+    }
+    for broken in [
+        "",
+        "[toolchain]\ncomponents = []\n",
+        "[toolchain]\nchannel = \"\"\n",
+    ] {
+        ensure!(
+            run_resolver(script, broken)?.is_none(),
+            "{path} should fail, exporting nothing, for {broken:?}"
+        );
+    }
     Ok(())
+}
+
+/// Runs the resolver script in a scratch directory holding `toolchain` as
+/// `rust-toolchain.toml`. Returns what it appended to `GITHUB_ENV` on success
+/// and `None` when it failed.
+fn run_resolver(script: &str, toolchain: &str) -> Result<Option<String>> {
+    let scratch = tempfile::tempdir().context("create a scratch directory")?;
+    let dir = cap_std::fs_utf8::Dir::open_ambient_dir(
+        Utf8Path::from_path(scratch.path()).context("scratch path should be UTF-8")?,
+        cap_std::ambient_authority(),
+    )
+    .context("open the scratch directory")?;
+    dir.write("rust-toolchain.toml", toolchain)?;
+    dir.write("github-env", "")?;
+    let status = std::process::Command::new("bash")
+        .arg("-c")
+        .arg(script)
+        .current_dir(scratch.path())
+        .env("GITHUB_ENV", scratch.path().join("github-env"))
+        .status()
+        .context("run the resolver with bash")?;
+    Ok(status
+        .success()
+        .then(|| dir.read_to_string("github-env"))
+        .transpose()?)
 }
