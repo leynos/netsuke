@@ -52,10 +52,9 @@ pub(super) fn resolve_manifest_path(cli: &Cli) -> Result<Utf8PathBuf> {
 #[must_use]
 pub(super) fn resolve_output_path<'a>(cli: &Cli, path: &'a Path) -> Cow<'a, Path> {
     if path.is_relative() {
-        cli.directory.as_ref().map_or_else(
-            || Cow::Borrowed(path),
-            |dir| Cow::Owned(dir.as_std_path().join(path)),
-        )
+        cli.directory.as_ref().map_or(Cow::Borrowed(path), |dir| {
+            Cow::Owned(dir.as_std_path().join(path))
+        })
     } else {
         Cow::Borrowed(path)
     }

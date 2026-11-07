@@ -229,17 +229,14 @@ impl PreparedGlob {
 
     /// Build glob search text from a validated pattern and resolved base.
     fn from_pattern_and_base(pattern: GlobPattern, base: Option<Utf8PathBuf>) -> Self {
-        let (search, strip) = base.map_or_else(
-            || (None, None),
-            |dir| {
-                let escaped = escape_glob_literal_path(&dir);
-                let separator = std::path::MAIN_SEPARATOR;
-                (
-                    Some(format!("{escaped}{separator}{}", pattern.normalized())),
-                    Some(dir),
-                )
-            },
-        );
+        let (search, strip) = base.map_or((None, None), |dir| {
+            let escaped = escape_glob_literal_path(&dir);
+            let separator = std::path::MAIN_SEPARATOR;
+            (
+                Some(format!("{escaped}{separator}{}", pattern.normalized())),
+                Some(dir),
+            )
+        });
         Self {
             pattern,
             search,
