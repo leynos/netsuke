@@ -35,17 +35,16 @@ const SETUP_RUST_ACTION: &str = "leynos/shared-actions/.github/actions/setup-rus
 const RUST_BUILD_RELEASE_ACTION: &str = "leynos/shared-actions/.github/actions/rust-build-release";
 const DENY_WARNINGS_RUSTFLAGS: &str = "-D warnings";
 const ENV_TOOLCHAIN_INPUT: &str = "${{ env.NETSUKE_RUST_TOOLCHAIN }}";
-const INPUT_TOOLCHAIN_ENV: &str = "${{ inputs['rust-toolchain'] }}";
+/// The composite action that exports `rust-toolchain.toml`'s channel.
+const RESOLVE_TOOLCHAIN_ACTION: &str = "./.github/actions/resolve-toolchain";
 
 /// Where a workflow obtains the channel it provisions.
 #[derive(Clone, Copy)]
 enum ToolchainPin {
-    /// The job declares `NETSUKE_RUST_TOOLCHAIN` and passes
-    /// [`ENV_TOOLCHAIN_INPUT`] to the shared action.
-    JobEnv,
-    /// The caller passes the channel to a reusable workflow, whose job declares
-    /// `NETSUKE_RUST_TOOLCHAIN` and passes [`INPUT_TOOLCHAIN_ENV`].
-    CallerInput,
+    /// The job runs [`RESOLVE_TOOLCHAIN_ACTION`] before the shared action, which
+    /// exports `NETSUKE_RUST_TOOLCHAIN`, and passes [`ENV_TOOLCHAIN_INPUT`] to
+    /// the shared action. The job declares no channel of its own.
+    FromFile,
     /// The job neither declares nor reads the pin.
     Absent,
 }
@@ -91,7 +90,7 @@ const CI_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     job: "build-test",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
-    pin: ToolchainPin::JobEnv,
+    pin: ToolchainPin::FromFile,
 };
 /// The second `ci.yml` job on the shared-action contract.
 ///
@@ -102,44 +101,37 @@ const CI_KANI_SMOKE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     job: "kani-smoke",
     action: SETUP_RUST_ACTION,
     rustflags: None,
-    pin: ToolchainPin::JobEnv,
+    pin: ToolchainPin::FromFile,
 };
 const CI_WINDOWS_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/ci-windows.yml",
     job: "build-test-windows",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
-    pin: ToolchainPin::JobEnv,
+    pin: ToolchainPin::FromFile,
 };
-/// The default-feature lane, a reusable workflow whose caller owns the pin.
-///
-/// GitHub does not pass the caller's `env` to a reusable workflow, so the
-/// channel travels as a `with` input and the job maps it to
-/// `NETSUKE_RUST_TOOLCHAIN`. That gives the repository one authoritative pin —
-/// the `env` block in `ci.yml` — instead of a second literal here that could
-/// drift from it without any call changing. This check holds the lane's
-/// expression; `ci_default_features_test.py` holds its value equal to the
-/// caller's.
+/// The default-feature lane, a reusable workflow that resolves the channel
+/// from `rust-toolchain.toml` itself rather than receiving it from the caller.
 const CI_DEFAULT_FEATURES_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/ci-default-features.yml",
     job: "default-features",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
-    pin: ToolchainPin::CallerInput,
+    pin: ToolchainPin::FromFile,
 };
 const NETSUKEFILE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/netsukefile-test.yml",
     job: "netsukefile",
     action: SETUP_RUST_ACTION,
     rustflags: None,
-    pin: ToolchainPin::JobEnv,
+    pin: ToolchainPin::FromFile,
 };
 const COVERAGE_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/coverage-main.yml",
     job: "coverage-upload",
     action: SETUP_RUST_ACTION,
     rustflags: Some(DENY_WARNINGS_RUSTFLAGS),
-    pin: ToolchainPin::Absent,
+    pin: ToolchainPin::FromFile,
 };
 const PACKAGING_WORKFLOW: WorkflowExpectation = WorkflowExpectation {
     path: ".github/workflows/build-and-package.yml",
@@ -292,32 +284,35 @@ fn workflows_agree_with_the_pinned_toolchain(
             named,
             toolchain_env: yaml_str(&workflow, &["jobs", job, "env", "NETSUKE_RUST_TOOLCHAIN"]),
             toolchain_input: yaml_str(shared_action, &["with", "toolchain"]),
+            steps,
+            shared_action,
         },
         pin,
     )
 }
 
 #[test]
-fn coverage_workflow_setup_matches_the_pinned_toolchain() -> Result<()> {
-    let path = ".github/workflows/coverage-main.yml";
-    let workflow: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
+fn resolve_toolchain_action_exports_the_channel_from_the_toolchain_file() -> Result<()> {
+    let path = ".github/actions/resolve-toolchain/action.yml";
+    let action: YamlValue = serde_yaml::from_str(&read_repo_file(Utf8Path::new(path))?)
         .with_context(|| format!("parse {path}"))?;
-    let steps = workflow
-        .get("jobs")
-        .and_then(|jobs| jobs.get("coverage-upload"))
-        .and_then(|job| job.get("steps"))
+    let steps = action
+        .get("runs")
+        .and_then(|runs| runs.get("steps"))
         .and_then(YamlValue::as_sequence)
-        .with_context(|| format!("{path} should declare coverage-upload steps"))?;
-    let setup = steps
+        .with_context(|| format!("{path} should declare composite steps"))?;
+    let scripts: Vec<&str> = steps
         .iter()
-        .find(|step| yaml_str(step, &["name"]) == Some("Setup Rust"))
-        .with_context(|| format!("{path} should include a Setup Rust step"))?;
-    let toolchain = yaml_str(setup, &["with", "toolchain"])
-        .with_context(|| format!("{path} Setup Rust should request a toolchain"))?;
-    let expected = pinned_toolchain()?;
+        .filter_map(|step| yaml_str(step, &["run"]))
+        .collect();
     ensure!(
-        toolchain == expected,
-        "{path} requests {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
+        scripts
+            .iter()
+            .any(|script| script.contains("rust-toolchain.toml")
+                && script.contains("NETSUKE_RUST_TOOLCHAIN=")
+                && script.contains("GITHUB_ENV")),
+        "{path} should read rust-toolchain.toml and export NETSUKE_RUST_TOOLCHAIN \
+         through GITHUB_ENV"
     );
     Ok(())
 }

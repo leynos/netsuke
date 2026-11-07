@@ -111,42 +111,30 @@ jobs:
         with:
           mode: start
       - name: Resolve the pinned toolchain
-        # Read from `rust-toolchain.toml` rather than restated. The `Setup
-        # Rust` step below must spell the toolchain as a literal, because
-        # tests/polonius_toolchain_contract.rs reads that literal and holds it
-        # equal to this file, and the same test forbids this job from
-        # declaring NETSUKE_RUST_TOOLCHAIN at job scope. Deriving the
-        # cache-key component from the same file anchors both to one source,
-        # so a toolchain bump cannot silently leave this job restoring a
-        # different Cargo generation from the merge gate's. A cold download
-        # store on the trunk is not visible as a failure, which is why this is
-        # checked rather than trusted.
-        run: |
-          set -euo pipefail
-          toolchain="$(
-            sed -n 's/^[[:space:]]*channel[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' \
-              rust-toolchain.toml | head -n 1
-          )"
-          test -n "${toolchain}"
-          printf 'COVERAGE_TOOLCHAIN=%s\n' "${toolchain}" >> "$GITHUB_ENV"
+        # Read from `rust-toolchain.toml` rather than restated, and used for
+        # both the cache-key component and `Setup Rust`, so a toolchain bump
+        # cannot silently leave this job restoring a different Cargo
+        # generation from the merge gate's. A cold download store on the trunk
+        # is not visible as a failure, which is why this is checked rather
+        # than trusted.
+        uses: ./.github/actions/resolve-toolchain
       - name: Render cache key
         # Renders the same Cargo download-store key that
         # `.github/actions/linux-gate-cache` renders for the merge gate: this
         # job runs on the same shape and image, so it reads the generation the
         # gate publishes on the trunk. It is a reader only.
         # tests/workflow_contracts/cache_ownership_test.py holds the shapes
-        # equal. The toolchain arrives in COVERAGE_TOOLCHAIN from the step
-        # above rather than from NETSUKE_RUST_TOOLCHAIN, which
-        # tests/polonius_toolchain_contract.rs holds absent from this job.
+        # equal. The toolchain arrives in NETSUKE_RUST_TOOLCHAIN from the step
+        # above.
         run: |
           set -euo pipefail
           lane="${RUNNER_OS}-${RUNNER_ARCH}-${RUNNER_ENVIRONMENT}-${NETSUKE_RUNNER_IMAGE}"
           sources="$(sha256sum Cargo.lock rust-toolchain.toml | sha256sum | cut -c1-16)"
           {
             printf 'CARGO_CACHE_PREFIX=netsuke-cargo-v1-%s-%s-\n' \
-              "${lane}" "${COVERAGE_TOOLCHAIN}"
+              "${lane}" "${NETSUKE_RUST_TOOLCHAIN}"
             printf 'CARGO_CACHE_KEY=netsuke-cargo-v1-%s-%s-%s\n' \
-              "${lane}" "${COVERAGE_TOOLCHAIN}" "${sources}"
+              "${lane}" "${NETSUKE_RUST_TOOLCHAIN}" "${sources}"
           } >> "$GITHUB_ENV"
       - name: Restore Cargo download store
         id: cargo_registry
@@ -180,10 +168,10 @@ jobs:
         # Pinned to the shared-actions revision that adds `cache-provider`.
         uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
         with:
-          # Match rust-toolchain.toml: the tree needs the nightly-default
-          # Polonius borrow checker (see
+          # The channel rust-toolchain.toml pins: the tree needs the
+          # nightly-default Polonius borrow checker (see
           # docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md).
-          toolchain: nightly-2026-10-22
+          toolchain: ${{ env.NETSUKE_RUST_TOOLCHAIN }}
           # Preserve warnings-as-errors through toolchain setup;
           # cargo-llvm-cov appends its instrumentation flags to this value.
           rustflags: -D warnings
