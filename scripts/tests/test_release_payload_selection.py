@@ -111,7 +111,10 @@ def test_the_sources_are_returned_opaque() -> None:
 
     Selection never opens a file, so it must not assume a source is a path.
     """
-    tokens = dict.fromkeys(("archive", "sidecar", "deb", "rpm"), object())
+    # One token per key: ``dict.fromkeys`` would evaluate ``object()`` once and
+    # hand every key the same object, which would make the identity assertion
+    # below pass whatever source the selection returned.
+    tokens = {key: object() for key in ("archive", "sidecar", "deb", "rpm")}
     staged = {ARCHIVE: [tokens["archive"]], SIDECAR: [tokens["sidecar"]]}
     staged |= {DEB: [tokens["deb"]], RPM: [tokens["rpm"]]}
     selected = selection.select_payload(

@@ -9,7 +9,6 @@ Run via ``make test-release-publication``.
 
 import json
 import os
-import stat
 import typing as typ
 
 import pytest
@@ -152,27 +151,18 @@ def test_require_regular_refuses_a_symlinked_ancestor(tmp_path: pathlib.Path) ->
         release_payload_tree.require_regular(linked_dir / asset.name)
 
 
-@pytest.mark.parametrize(
-    ("mode", "expected"),
-    [(stat.S_IFDIR, "directory"), (stat.S_IFIFO, "regular file")],
-)
-def test_require_regular_refuses_non_file_modes(
-    tmp_path: pathlib.Path, *, mode: int, expected: str
-) -> None:
-    """Refuse every non-regular mode, not only links.
+def test_require_regular_refuses_a_fifo(tmp_path: pathlib.Path) -> None:
+    """Refuse a non-regular leaf that is not a link.
 
     A FIFO in a downloaded tree would block a copy indefinitely, which a release
-    job cannot distinguish from a slow transfer.
+    job cannot distinguish from a slow transfer. The leaf is checked before the
+    ancestors, so a directory cannot be reached through this path; the
+    ancestor branch is covered by
+    :func:`test_require_regular_refuses_a_symlinked_ancestor`.
     """
-    if mode == stat.S_IFDIR:
-        candidate = tmp_path / "a-directory"
-        candidate.mkdir()
-        with pytest.raises(StagedFileMissingError, match="directory"):
-            release_payload_tree.require_regular(candidate / "a.deb")
-        return
     fifo = tmp_path / "a-fifo"
     os.mkfifo(fifo)
-    with pytest.raises(StagedFileMissingError, match=expected):
+    with pytest.raises(StagedFileMissingError, match="regular file"):
         release_payload_tree.require_regular(fifo)
 
 
