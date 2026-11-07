@@ -25,6 +25,7 @@ from action_run_sources import action_steps, require_action_step
 from upload_declared_assets_harness import execute, interpreter_baseline
 from upload_declared_assets_manifest import (
     ACTION,
+    PLAN_STEP,
     RETAIN_STEP,
     RUN_STEPS,
     action_document,
@@ -206,6 +207,34 @@ def test_the_declared_record_is_retained_before_the_upload() -> None:
     assert names == {"declaration.txt", "selection.json", "trusted.json"}, names
     assert with_block["if-no-files-found"] == "error", (
         "a missing record must fail the step rather than silently upload"
+    )
+
+
+def test_the_upload_plan_is_retained_after_the_upload() -> None:
+    """Keep the plan for a refusing run, without masking the uploader."""
+    document = action_document()
+    steps = action_steps(ACTION, document)
+    plan_index = require_action_step(ACTION, document, PLAN_STEP)
+    upload_index = require_action_step(ACTION, document, RUN_STEPS[-1])
+    # The plan is written by the upload step, so its retention has to come
+    # after it. A retention declared earlier would upload nothing.
+    assert plan_index > upload_index, (
+        "the plan must be retained after the step that writes it"
+    )
+    plan = steps[plan_index]
+    with_block = require_mapping(plan.get("with"), f"{ACTION} {PLAN_STEP} with")
+    # `always()` is the whole point: a refused run is exactly when an operator
+    # needs the plan, and a default `if:` would skip it on failure.
+    assert plan.get("if") == "always()", (
+        "the plan must be retained even when the upload was refused"
+    )
+    assert _basename(str(with_block["path"]).strip()) == "upload-plan.json", (
+        "the retained file must be the plan the uploader wrote"
+    )
+    # `warn`, not `error`: a failure before the uploader runs leaves no plan,
+    # and that must not replace the uploader's diagnostic with a second one.
+    assert with_block["if-no-files-found"] == "warn", (
+        "a missing plan must not mask the uploader's own diagnostic"
     )
 
 
