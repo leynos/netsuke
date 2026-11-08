@@ -3,14 +3,15 @@
 Status: COMPLETE
 
 The decision is recorded as ADR-0074, the migration has landed, and the branch
-is rebased onto `origin/main` at `e5d57c583`, whose tree is identical to the
-previous target `9bfb3e117`, with the deterministic gate set re-run on the
-rebased head. Review found one edge case where the new record refuses an empty
-`platform` string earlier than the old policy did; the tightening is recorded
-under *Outcomes and retrospective* and pinned by a malformed-configuration
-case. CodeRabbit reported no findings on its first review, then raised the
-record invariants, a duplicate adapter check, and a property-test gap on review
-of the rebased head; all three are addressed. Draft pull request
+is rebased onto `origin/main` at `fb8486ff3`, with the deterministic gate set
+re-run on the rebased head. Review found one edge case where the new record
+refuses an empty `platform` string earlier than the old policy did; the
+tightening is recorded under *Outcomes and retrospective* and pinned by a
+malformed-configuration case. CodeRabbit reported no findings on its first
+review, then raised the record invariants, a duplicate adapter check, and a
+property-test gap on review of the rebased head; a later review asked for
+structured record docstrings, a sorted-order invariant, a frozen-field test,
+and consistent ADR citations. All are addressed. Draft pull request
 [#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
 maintainer review; merging is outside this plan's scope.
 
@@ -313,14 +314,26 @@ records and are unchanged.
       against a mutant that drops the factory's sort: each fails on it, so the
       evidence is a detected defect rather than a green run beside the code.
 - [x] Answer the second CodeRabbit review. The plan's remaining ADR-0068
-      citations became ADR-0074, except the two that describe the allocation
-      and the earlier contents-index collision, which now name both serials.
-      `StagingTarget`, `StagingTargets`, `StagingTargets.from_targets`, and
-      `platform_target_counts` gained NumPy-style attribute and parameter
+      citations were renumbered, except the two that describe the allocation
+      and the earlier contents-index collision, which now name the serials in
+      order. `StagingTarget`, `StagingTargets`, `StagingTargets.from_targets`,
+      and `platform_target_counts` gained NumPy-style attribute and parameter
       sections; `DigestRecord.__post_init__` refuses entries whose names are
       out of sorted order after the uniqueness check, with a doctest and a
       direct-construction table row; and a test pins the frozen record's
       refusal message, including the field name.
+- [x] Replay onto `fb8486ff3` ("Bump rust-toolchain from nightly-2026-11-06 to
+      nightly-2026-11-07"), the target current when the review fixes landed.
+      The replay conflicted twice, both times in the `docs/contents.md` ADR
+      index: main had claimed ADR-0071 for binding Windows recipe interpreters
+      to a trusted absolute path while open pull requests already held
+      ADR-0072 and ADR-0073. The decision therefore became ADR-0074, and the
+      resolution keeps main's entry and appends this one after it. The replay
+      used Git's built-in text merge with `zdiff3` for the same reason as the
+      earlier ones: Weave was selected only by the host's global attributes
+      file. `range-diff` reports every other commit unchanged, and the
+      intervening main commits touch the toolchain pin rather than a
+      release-policy seam.
 
 ## Outcomes and retrospective
 
@@ -382,12 +395,11 @@ be compared, and it refuses entries whose names are not in sorted order, which
 the type's documented contract promises to every consumer. Both are new
 refusals rather than replacements for an older diagnosis: a directly
 constructed record with either shape used to be accepted. `StagingTarget`
-likewise refuses a platform that is not a
-non-empty string, since counting and sorting the configured platforms would
-otherwise compare a mixed-type key set; an unknown platform *name* remains a
-policy refusal. One `_validated_entry` helper holds the digest record's type
-and hexadecimal checks, so the factory's case normalization and the record's
-canonical-form rule cannot drift apart.
+likewise refuses a platform that is not a non-empty string, since counting and
+sorting the configured platforms would otherwise compare a mixed-type key set;
+an unknown platform *name* remains a policy refusal. One `_validated_entry`
+helper holds the digest record's type and hexadecimal checks, so the factory's
+case normalization and the record's canonical-form rule cannot drift apart.
 
 Every configuration error exits with the same code, so the malformed
 configuration suite now asserts the category-specific diagnosis on standard
