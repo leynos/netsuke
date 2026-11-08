@@ -34,10 +34,20 @@ CHECKOUT_ACTION = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1"
 SETUP_UV_ACTION = "astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884"
 ARTIFACT_ACTION = "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"
 
-#: The one artefact this job may trust: the declaration and digest record the
-#: publishing run retained. The attempt suffix keeps a re-run from reading the
-#: first attempt's evidence.
-TRUSTED_ARTIFACT = "declared-assets-publish-release-${{ github.run_attempt }}"
+#: The download must name the publisher's recorded output rather than repeat
+#: the value. A "Re-run failed jobs" reuses a successful publisher without
+#: running it again, so this job's own attempt number would name an artefact
+#: the publisher never uploaded.
+TRUSTED_ARTIFACT_OUTPUT = "${{ needs.publish-release.outputs.trusted-artifact }}"
+#: The value that output must carry: the name the upload action retains its
+#: declaration and digest record under, with the publishing job substituted
+#: for `github.job`.
+TRUSTED_ARTIFACT_VALUE = "declared-assets-publish-release-${{ github.run_attempt }}"
+PUBLISH_JOB = "publish-release"
+UPLOAD_ACTION_PATH: Path = (
+    REPO_ROOT / ".github" / "actions" / "upload-declared-assets" / "action.yml"
+)
+UPLOAD_RETAIN_STEP = "Retain the declared asset record"
 
 VALIDATE_STEP = "Validate inputs"
 LIST_RELEASES_STEP = "List draft releases"
@@ -137,6 +147,27 @@ EXPECTED_JOB_INPUTS = {
     "output-path": "verified/verified-digests.json",
     "github-token": "${{ github.token }}",
 }
+
+
+def retained_artifact_name() -> str:
+    """Return the name the publisher retains its declared-asset record under.
+
+    Read from the upload action rather than restated, so the verifier's trusted
+    artefact and the publisher's retention cannot drift apart without a test
+    noticing.
+
+    Returns
+    -------
+    str
+        The upload step's `with.name` expression, still carrying
+        ``github.job``.
+    """
+    action = require_mapping(
+        yaml.safe_load(UPLOAD_ACTION_PATH.read_text(encoding="utf-8")),
+        "upload-declared-assets action",
+    )
+    retain = named_step(load_action_steps(action), UPLOAD_RETAIN_STEP)
+    return str(require_mapping(retain.get("with"), "retain inputs")["name"])
 
 
 def load_action() -> dict[str, object]:
@@ -259,5 +290,18 @@ def mutate_workflow(workflow: dict[str, object], mutation: str) -> None:
             with_values = require_mapping(download["with"], "artifact inputs")
             del with_values["name"]
             with_values["pattern"] = "declared-assets-*"
+        case "artifact-literal":
+            download = next(
+                step
+                for step in job_steps(workflow, VERIFY_JOB)
+                if str(step.get("uses", "")).startswith("actions/download-artifact@")
+            )
+            require_mapping(download["with"], "artifact inputs")["name"] = (
+                TRUSTED_ARTIFACT_VALUE
+            )
+        case "publisher-output":
+            publisher = workflow_job(workflow, PUBLISH_JOB)
+            outputs = require_mapping(publisher.get("outputs"), "publisher outputs")
+            outputs["trusted-artifact"] = "declared-assets-publish-release-1"
         case other:
             pytest.fail(f"unknown workflow mutation {other!r}")

@@ -3036,9 +3036,10 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   runs `scripts/verify_release_inventory_cli.py` with exactly its directory,
   declaration, trusted record, and output. The job needs `metadata` and both
   publishers, declares no `environment`, references no secret, checks out the
-  candidate commit with `persist-credentials: false`, and downloads exactly
-  `declared-assets-publish-release-${{ github.run_attempt }}` by name into
-  `trusted/`, never by pattern.
+  candidate commit with `persist-credentials: false`, and downloads exactly one
+  artefact by name into `trusted/`, never by pattern: the name is
+  `publish-release`'s `trusted-artifact` output, whose value is
+  `declared-assets-publish-release-${{ github.run_attempt }}`.
 
   The guard names every dependency result explicitly. `!cancelled()` is a
   status function, and GitHub suppresses the implicit `success()` check for a
@@ -3052,9 +3053,20 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   plus the realistic dry run in which both publishers are skipped while the
   rehearsal job runs. The action and job also carry mutation cases
   (`gh release`, an API write flag, a secret token, an `id-token` grant, a
-  `release` dependency, a trusted input inside the download directory, and an
-  artefact pattern), so each assertion is shown to notice a change rather than
-  merely to pass.
+  `release` dependency, a trusted input inside the download directory, an
+  artefact pattern, an attempt-scoped artefact literal, and a publisher output
+  naming a different attempt), so each assertion is shown to notice a change
+  rather than merely to pass.
+
+  Review found the first form of the download name wrong. Recomputing
+  `declared-assets-publish-release-${{ github.run_attempt }}` inside the
+  verifier fails under "Re-run failed jobs": GitHub reuses the successful
+  publisher's result and outputs without running it again, so the verifier's
+  own attempt number names an artefact nothing uploaded. The repair carries the
+  name through a `publish-release` job output. `retained_artifact_name()` reads
+  the name back out of `upload-declared-assets/action.yml` and substitutes the
+  publishing job for `github.job`, so the output and the retention step cannot
+  drift apart unnoticed.
 
   `tests/workflow_contracts` is collected by directory, so the three new
   modules needed no inventory entry; no test compares a module list, and
@@ -3070,7 +3082,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   passed, 2 skipped. The figures are from those runs; the batch was rerun
   against the rebased tree.
 
-  **Deviation, retained:** `release.yml` is 1015 lines, and `Verification plan`
+  **Deviation, retained:** `release.yml` is 1023 lines, and `Verification plan`
   row 5 still asks for 400 or fewer. That row is unsatisfiable as written and
   stays unedited so the deviation remains visible; no repository contract caps
   workflow YAML. Finalization and consumer smoke remain open, and the ExecPlan
@@ -5047,12 +5059,14 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - Decision: download the trusted declaration and digest record by exact
   artefact name and verify the release tokenlessly. Rationale: the record must
   come from before the upload, so it cannot be read from the draft it is meant
-  to judge. Selecting the artefact by `name`
-  (`declared-assets-publish-release-<run_attempt>`) keeps a re-run on its own
-  attempt's evidence, where a `pattern` could match another run's. The verifier
-  then reads only bytes already on disk, so it receives no token; `GH_TOKEN`
-  reaches the release and asset listings and each attachment download, and
-  nothing else. The action is required to contain no `gh release` call and no
+  to judge. Selecting the artefact by `name`, where a `pattern` could match
+  another run's, and taking that name from `publish-release`'s
+  `trusted-artifact` output rather than recomputing it, keeps a re-run on the
+  evidence the publisher actually retained: "Re-run failed jobs" reuses the
+  publisher's recorded output without running the job again. The verifier then
+  reads only bytes already on disk, so it receives no token; `GH_TOKEN` reaches
+  the release and asset listings and each attachment download, and nothing
+  else. The action is required to contain no `gh release` call and no
   write-implying `gh api` flag, which is what keeps the job's
   `contents: write` — needed because a draft is invisible without it — from
   becoming mutation. Date/Author: 2026-11-08, implementation agent.

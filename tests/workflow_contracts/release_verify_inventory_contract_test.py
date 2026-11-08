@@ -26,9 +26,11 @@ from release_verify_inventory_support import (
     FORBIDDEN_GH_FLAGS,
     LOCAL_ACTION,
     NETWORK_STEPS,
+    PUBLISH_JOB,
     SETUP_UV_ACTION,
     STEP_NAMES,
-    TRUSTED_ARTIFACT,
+    TRUSTED_ARTIFACT_OUTPUT,
+    TRUSTED_ARTIFACT_VALUE,
     VERIFY_COMMAND,
     VERIFY_JOB,
     VERIFY_STEP,
@@ -38,6 +40,7 @@ from release_verify_inventory_support import (
     mutate_action,
     mutate_workflow,
     reject_secrets,
+    retained_artifact_name,
     run_tokens,
 )
 from workflow_loading import (
@@ -216,8 +219,10 @@ def _assert_job_contract(workflow: dict[str, object]) -> None:
 
     download = steps[step_index_by_key(steps, "uses", ARTIFACT_ACTION)]
     download_with = require_mapping(download.get("with"), "artifact inputs")
-    assert download_with.get("name") == TRUSTED_ARTIFACT, (
-        "the job must download the artefact this run produced"
+    assert download_with.get("name") == TRUSTED_ARTIFACT_OUTPUT, (
+        "the job must download the artefact the publisher recorded, not one "
+        "recomputed from this job's attempt; a failed-jobs re-run reuses the "
+        "publisher without running it again"
     )
     assert "pattern" not in download_with, (
         "a pattern could select another run's declaration or digest record"
@@ -241,12 +246,36 @@ def _assert_job_contract(workflow: dict[str, object]) -> None:
     reject_secrets(job)
 
 
+def _assert_publisher_records_the_artifact_name(workflow: dict[str, object]) -> None:
+    """Require the publisher's output to name the artefact it really retained.
+
+    The output is what survives a "Re-run failed jobs", so it has to carry the
+    name of the attempt that uploaded the record. Deriving the expected value
+    from the upload action keeps the two manifests from drifting apart: a
+    changed retention name would otherwise leave the verifier downloading a
+    path that nothing writes.
+    """
+    publisher = workflow_job(workflow, PUBLISH_JOB)
+    outputs = require_mapping(publisher.get("outputs"), "publisher outputs")
+    assert outputs.get("trusted-artifact") == TRUSTED_ARTIFACT_VALUE, (
+        "the publisher must record the retained artefact's name as an output"
+    )
+    retained = retained_artifact_name()
+    assert retained.replace("${{ github.job }}", PUBLISH_JOB) == (
+        TRUSTED_ARTIFACT_VALUE
+    ), (
+        "the publisher's output must match the name the upload action retains "
+        f"its record under, got {retained!r}"
+    )
+
+
 def _assert_complete_contract(
     action: dict[str, object], workflow: dict[str, object]
 ) -> None:
     """Require the action, the job, and the job's reachability to agree."""
     _assert_action_contract(action)
     _assert_job_contract(workflow)
+    _assert_publisher_records_the_artifact_name(workflow)
     violations: list[str] = []
     check_verify_inventory(workflow, _tag_publish(), PUBLISH_OUTPUTS, violations)
     assert not violations, f"verify-job reachability contract: {violations}"
@@ -268,7 +297,14 @@ def test_action_mutations_are_rejected(mutation: str) -> None:
 
 @pytest.mark.parametrize(
     "mutation",
-    ["id-token", "release-dependency", "trusted-in-download", "artifact-pattern"],
+    [
+        "id-token",
+        "release-dependency",
+        "trusted-in-download",
+        "artifact-pattern",
+        "artifact-literal",
+        "publisher-output",
+    ],
 )
 def test_workflow_mutations_are_rejected(mutation: str) -> None:
     """Prove the job contract detects each dependency and trust mutation."""

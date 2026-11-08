@@ -3226,12 +3226,16 @@ un-drafted: are the bytes GitHub holds the bytes the publishers built? It is
 the downloaded-side counterpart of the pre-upload checks, and it needs no
 registry or GitHub credential beyond the visibility a draft requires.
 
-The job downloads exactly one artefact, named
-`declared-assets-publish-release-<run_attempt>`, into `trusted/`. That artefact
-is the declaration and digest record `publish-release` retained from the same
-attempt, so a re-run reads its own evidence rather than the first attempt's.
-The artefact is selected by its exact `name`, never a `pattern`, because a
-pattern could match another run's record. The checkout is pinned to
+The job downloads exactly one artefact into `trusted/`, selecting it by the
+exact name in `publish-release`'s `trusted-artifact` output, never a `pattern`,
+because a pattern could match another run's record. That output is
+`declared-assets-publish-release-<run_attempt>`, the declaration and digest
+record the publisher retained. Verification reads the name from the output
+instead of recomputing it: "Re-run failed jobs" reuses a successful publisher
+without running it again, so the recorded output still names the attempt that
+actually uploaded the record, while the verifier's own attempt number would
+name an artefact that does not exist. A full re-run runs both jobs and reads
+the new attempt's evidence. The checkout is pinned to
 `needs.metadata.outputs.candidate_commit` with `persist-credentials: false`, so
 the verifier script is the candidate's own and the checkout leaves no
 credential behind.
