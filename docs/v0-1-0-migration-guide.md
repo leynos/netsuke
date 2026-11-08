@@ -280,12 +280,13 @@ rules.
 
 Rust callers of the output API must migrate:
 
-- `netsuke::output_prefs::resolve_from_theme` and
-  `resolve_from_theme_with` are removed. Use `resolve_from_signals` with
-  captured `EnvSignals`, or the existing `resolve` and `resolve_with` when an
-  environment seam is what you hold. `resolve_from_signals` takes the reduced
-  signals directly so captured facts are not turned back into environment
-  strings and reduced a second time.
+- `netsuke::output_prefs::resolve_from_theme` is removed. Use
+  `resolve_from_signals` with captured `EnvSignals`, or the existing `resolve`
+  and `resolve_with` when an environment seam is what you hold.
+  `resolve_from_signals` takes the reduced signals directly so captured facts
+  are not turned back into environment strings and reduced a second time.
+  `resolve_from_theme_with` remains available for callers that hold a theme
+  preference and an environment reader rather than captured signals.
 - `netsuke::display_plan` is new. `resolve_display_plan` is a `const fn` over
   `DisplayPolicies` and `TerminalFacts` that returns the whole `DisplayPlan`,
   so a caller can make every presentation decision once instead of re-deriving
