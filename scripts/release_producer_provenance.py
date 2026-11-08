@@ -4,8 +4,14 @@ A declaration says *which names* a release publishes, not which commit
 produced them, and neither a package suffix nor a per-platform count can
 establish that: both describe a file, not its origin. Each producer therefore
 records the candidate it built, the run it built under, and the SHA-256 digest
-of every artefact it hands on, and that record reaches publication
-independently of the downloaded trees.
+of every artefact it hands on.
+
+The record travels with that producer's own artefacts: the artifact upload
+carries the directory the step wrote into, and publication downloads all of
+them back into one tree. What makes the record independent is *where* it is
+kept, not how it arrives -- it is never derived from the downloaded bytes it
+describes, and a tree that reaches publication without it is refused rather
+than trusted.
 
 This module owns the record's shape and the reader that re-validates it.
 Cross-record checks belong to :mod:`release_producer_provenance_checks`, the

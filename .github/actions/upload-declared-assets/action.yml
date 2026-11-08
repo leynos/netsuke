@@ -93,8 +93,9 @@ runs:
         set -euo pipefail
         # The declaration and its digest record are produced from the staged
         # bytes, not from the selection, so the uploader compares the payload
-        # against an independent account of the same tree. This record is what
-        # travels to verification and finalization.
+        # against an independent account of the same tree. Both files are
+        # retained as artefacts for the inventory verifier and finalizer, which
+        # are not wired into the release workflow yet.
         uv run --no-project --python 3.14 scripts/release_declaration_cli.py \
           --dist-dir "$RELEASE_DIST_DIR" \
           --staging-config "$RELEASE_STAGING_CONFIG" \

@@ -7,9 +7,13 @@ staged-digest reader can still associate a published name with its source file.
 
 It also owns the digest *representation*: GitHub reports ``sha256:<hex>`` while
 the trusted record stores bare hexadecimal. Both the upload reconciliation and
-the finalizer need that conversion, so it lives here rather than being copied
-into each CLI -- a second copy is a second place for the two to disagree about
-what an unusable digest is.
+the release finalizer need that conversion, so it lives here rather than being
+copied into each CLI -- a second copy is a second place for the two to disagree
+about what an unusable digest is.
+
+The release workflow runs the declaration CLI, the staged-digest collector, and
+the uploader today; the finalizer is written and its suite passes but no job
+invokes it yet.
 
 Run through the declaration CLI, staged-digest collector, uploader, and
 finalizer; behavioural coverage lives in

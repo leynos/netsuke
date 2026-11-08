@@ -898,8 +898,9 @@ jobs:
         name: Upload artefacts to release
         # Selects, declares, and digests this run's assets before uploading
         # only the declared names, and refuses to replace attached bytes. The
-        # trusted record it retains is what verification and finalization
-        # compare against.
+        # declaration and both digest records it retains are the account the
+        # inventory verifier and finalizer will compare against once those
+        # jobs run here; neither is wired into this workflow yet.
         uses: ./.github/actions/upload-declared-assets
         with:
           release-tag: ${{ needs.metadata.outputs.release_tag }}

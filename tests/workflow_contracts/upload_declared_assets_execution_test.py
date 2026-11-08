@@ -65,11 +65,17 @@ class UploadPlan(typ.TypedDict):
     actions
         One ``[name, action]`` pair per decided asset.
     conflicts
-        The names the run reported as blocking it.
+        The names whose attached bytes disagreed with the trusted record.
+    unverifiable
+        The names the run could not establish anything about. Separate from
+        ``conflicts`` because "the release holds different bytes" and "the
+        release could not be read" call for different operator responses, and
+        a plan that folded them together would report one as the other.
     """
 
     actions: list[list[str]]
     conflicts: list[str]
+    unverifiable: list[str]
 
 
 class DigestRecord(typ.TypedDict):
@@ -119,7 +125,8 @@ def _plan(run: ActionRun) -> UploadPlan:
     Returns
     -------
     UploadPlan
-        The decoded plan, holding ``actions`` and ``conflicts``.
+        The decoded plan, holding ``actions``, ``conflicts``, and
+        ``unverifiable``.
     """
     path = run.declared_root / "upload-plan.json"
     decoded: UploadPlan = json.loads(path.read_text(encoding="utf-8"))
@@ -222,6 +229,42 @@ def test_a_conflicting_attachment_blocks_every_upload(tmp_path: Path) -> None:
     # The plan is written even though the upload is refused, so the operator
     # can see which asset the release disagreed over.
     assert _plan(run)["conflicts"] == [offender], "the plan must name the conflict"
+    assert _plan(run)["unverifiable"] == [], (
+        "bytes that were read and disagreed are not an unreadable asset"
+    )
+
+
+def test_an_asset_github_cannot_vouch_for_is_reported_as_unverifiable(
+    tmp_path: Path,
+) -> None:
+    """Keep "could not tell" apart from "holds different bytes".
+
+    GitHub may list an attached asset with no usable digest, and the only
+    remaining evidence is a download. When that download fails, the run knows
+    nothing about the bytes -- which stops the upload just as a conflict does,
+    but calls for a different remedy. The plan must record the two under their
+    own keys, or an operator is sent hunting for wrong bytes that may not
+    exist.
+    """
+    facts = release_facts()
+    workspace = stage_workspace(tmp_path, facts)
+    offender = min(recorded_digests(workspace))
+    # A digest the adapter cannot normalise, over a download the stub refuses:
+    # the listing names the asset and nothing establishes its bytes.
+    attached = [{"name": offender, "digest": "md5:00000000000000000000000000000000"}]
+    run = execute(tmp_path, workspace, facts, attached=attached)
+    assert run.outputs.get("upload-error") == "true", (
+        "an unverifiable asset must block the upload"
+    )
+    message = run.outputs.get("error-message", "")
+    assert offender in message, message
+    assert "could not be verified" in message, message
+    plan = _plan(run)
+    assert plan["unverifiable"] == [offender], plan
+    assert plan["conflicts"] == [], (
+        "an asset nobody could read must not be reported as a conflict"
+    )
+    assert not _uploads(run), run.gh_log
 
 
 def test_the_declared_record_is_retained_before_the_upload() -> None:

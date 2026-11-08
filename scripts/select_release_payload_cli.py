@@ -13,9 +13,13 @@ claims. The action retains it with the declaration record as a workflow
 artefact, and the uploader reads it back as the independent account of what the
 payload must contain: a staged tree replaced between the two hashes yields a
 declaration record that faithfully describes the replacement, so only the two
-records answering for one another close that window. The record is retained
-beyond the upload for the inventory verifier and the release finalizer, which
-do not exist yet, so nothing downstream consumes it today.
+records answering for one another close that window.
+
+The inventory verifier and the release finalizer are written and their suites
+pass, but neither job runs in the release workflow yet, so the action's own
+upload step is the only consumer today. Both files are retained beyond the
+upload because they are what will hand the same account on once those jobs are
+wired.
 
 Tree observation and the verified copy live in :mod:`release_payload_tree`, so
 this module is the argument surface and nothing else.
