@@ -27,6 +27,10 @@ CANDIDATE_STEP = "Bind the release candidate commit"
 CHECKOUT_STEP = "Verify the checkout is the release candidate"
 CANDIDATE_OUTPUT_EXPRESSION = "${{ steps.candidate_commit.outputs.value }}"
 CANDIDATE_FORWARD = "${{ needs.metadata.outputs.candidate_commit }}"
+PUBLISH_JOB = "publish-release"
+UPLOAD_STEP = "Upload artefacts to release"
+UPLOAD_ACTION = "./.github/actions/upload-declared-assets"
+VERSION_FORWARD = "${{ needs.metadata.outputs.version }}"
 PRODUCER_JOBS = ("build-linux", "build-windows", "build-macos")
 
 #: What the HEAD comparison must contain, paired with why each fragment
@@ -159,4 +163,27 @@ def test_the_workflow_call_does_not_fall_back_to_the_run_sha() -> None:
     text = PACKAGE_WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "github.sha" not in text, (
         "the reusable workflow must take the candidate from its caller"
+    )
+
+
+def test_publication_action_receives_the_candidate_and_version() -> None:
+    """Give the declaration step the candidate it binds records to.
+
+    The action compares every producer record's ``commit`` against this input,
+    so an action wired without it, or wired to a nearby output, would either
+    refuse every release or accept a tree from another run. The version is
+    asserted alongside because the same step interpolates it into the archive
+    names it expects.
+    """
+    steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), PUBLISH_JOB)
+    upload = named_step(steps, UPLOAD_STEP)
+    assert upload.get("uses") == UPLOAD_ACTION, (
+        "publication must call the declared-asset action that binds the candidate"
+    )
+    inputs = require_mapping(upload.get("with"), "upload action inputs")
+    assert inputs.get("commit") == CANDIDATE_FORWARD, (
+        "the action must receive the validated candidate, not a ref name"
+    )
+    assert inputs.get("version") == VERSION_FORWARD, (
+        "the action must receive the version the archive names interpolate"
     )
