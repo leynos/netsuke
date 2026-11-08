@@ -40,12 +40,99 @@ class AssetAction(enum.Enum):
     #: The attached asset's digest matches the expected one; leave it alone.
     SKIP_VERIFIED = "skip-verified"
 
-    #: An asset is attached whose digest differs, or cannot be read.
+    #: An attached asset's digest was read and differs from the expected one.
     CONFLICT = "conflict"
 
+    #: An attached asset is present, but its digest could not be established.
+    UNVERIFIABLE = "unverifiable"
 
-class AssetConflictError(ValueError):
-    """Report assets that a release run must not overwrite."""
+
+def present_assets(
+    listed: cabc.Mapping[str, str | None],
+    downloaded: cabc.Mapping[str, str | None],
+) -> dict[str, str | None]:
+    """Combine a release listing with the digests a download established.
+
+    Parameters
+    ----------
+    listed
+        Attached asset name mapped to the digest the listing carried, or
+        ``None`` where it carried none this release can compare.
+    downloaded
+        Attached asset name mapped to the digest of its downloaded bytes, or
+        ``None`` where the download or the hash failed. May name assets the
+        listing did not ask about; those are ignored.
+
+    Returns
+    -------
+    dict[str, str | None]
+        Every listed asset, with a ``None`` replaced by a downloaded digest
+        where one exists.
+
+    Notes
+    -----
+    Only a ``None`` in the listing is filled. A listing digest that is present
+    is authoritative for its name: a download exists to supply evidence the
+    listing withheld, not to overrule it. Taking the downloaded value whenever
+    the two differ would let a truncated transfer contradict a digest GitHub
+    itself reported.
+
+    This is the join between the two effectful operations. Keeping it a pure
+    function means the decision that consumes it can be tested from a plain
+    mapping, with no listing, no transfer, and no stub in the way.
+
+    Examples
+    --------
+    >>> present_assets({"a": None, "b": "bb"}, {"a": "aa", "b": "zz"})
+    {'a': 'aa', 'b': 'bb'}
+    >>> present_assets({"a": None}, {})
+    {'a': None}
+    """
+    return {
+        name: digest if digest is not None else downloaded.get(name)
+        for name, digest in listed.items()
+    }
+
+
+def undigested(
+    expected: cabc.Mapping[str, str], listed: cabc.Mapping[str, str | None]
+) -> tuple[str, ...]:
+    """Return the declared names a listing left without a digest.
+
+    Parameters
+    ----------
+    expected
+        Published name mapped to the digest the release must publish.
+    listed
+        Attached asset name mapped to the digest the listing carried.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Sorted declared names that are attached but have no listing digest.
+
+    Notes
+    -----
+    Only declared names are returned. An unrelated attached asset with no
+    digest is not this step's concern, and downloading its bytes to learn a
+    digest nothing consults would spend a transfer on a file the trusted
+    record never named.
+
+    Selecting *which* names need a transfer is a decision, so it lives here
+    rather than in the boundary that performs it. The boundary then downloads
+    exactly what this returns and asks nothing further.
+
+    Examples
+    --------
+    >>> undigested(
+    ...     {"a": "aa", "b": "bb"},
+    ...     {"a": None, "b": "bb", "stray": None},
+    ... )
+    ('a',)
+    """
+    return tuple(
+        sorted(name for name in expected if name in listed and listed[name] is None)
+    )
 
 
 def plan_asset_actions(
@@ -77,6 +164,14 @@ def plan_asset_actions(
     as UPLOAD would be wrong (it is present) and as CONFLICT would block a
     release over a file the plan never claimed.
 
+    A name present without a digest is ``UNVERIFIABLE``, not ``CONFLICT``.
+    Both stop the upload -- nothing may be overwritten on no evidence -- but
+    they are different diagnoses with different remedies. A conflict says the
+    release holds demonstrably wrong bytes and a person must decide what to do
+    with them; an unverifiable name says the run could not tell, so the fault
+    may be a listing or download problem rather than a bad release. Collapsing
+    them would send an operator hunting for wrong bytes that may not exist.
+
     Sorting makes the result a value a caller can compare, log, or snapshot
     without depending on mapping order.
 
@@ -89,6 +184,9 @@ def plan_asset_actions(
     ... )
     (('a.tar.gz', <AssetAction.SKIP_VERIFIED: 'skip-verified'>), \
 ('a.tar.gz.sha256', <AssetAction.CONFLICT: 'conflict'>))
+    >>> plan_asset_actions(expected=expected, present={"a.tar.gz": None})
+    (('a.tar.gz', <AssetAction.UNVERIFIABLE: 'unverifiable'>), \
+('a.tar.gz.sha256', <AssetAction.UPLOAD: 'upload'>))
     >>> plan_asset_actions(expected=expected, present={})
     (('a.tar.gz', <AssetAction.UPLOAD: 'upload'>), \
 ('a.tar.gz.sha256', <AssetAction.UPLOAD: 'upload'>))
@@ -100,7 +198,9 @@ def plan_asset_actions(
             continue
         attached = present[name]
         wanted = expected[name].lower()
-        if attached is not None and attached == wanted:
+        if attached is None:
+            actions.append((name, AssetAction.UNVERIFIABLE))
+        elif attached == wanted:
             actions.append((name, AssetAction.SKIP_VERIFIED))
         else:
             actions.append((name, AssetAction.CONFLICT))
@@ -142,7 +242,7 @@ def uploads(
 
 
 def conflicts(actions: cabc.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...]:
-    """Return the names a planned action set refuses to overwrite.
+    """Return the names whose attached bytes were read and disagreed.
 
     Parameters
     ----------
@@ -161,13 +261,85 @@ def conflicts(actions: cabc.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...
     would report one asset per re-run, which for a partial release is a slow
     way to learn what is wrong.
 
+    An unverifiable name is *not* a conflict. It stops the upload just the
+    same, but the operator is told a different thing: the bytes were never
+    read, so there is no disagreement to describe.
+
     Examples
     --------
     >>> conflicts([
     ...     ("a", AssetAction.CONFLICT),
     ...     ("b", AssetAction.UPLOAD),
     ...     ("c", AssetAction.CONFLICT),
+    ...     ("d", AssetAction.UNVERIFIABLE),
     ... ])
     ('a', 'c')
     """
     return tuple(name for name, action in actions if action is AssetAction.CONFLICT)
+
+
+def unverifiable(
+    actions: cabc.Iterable[tuple[str, AssetAction]],
+) -> tuple[str, ...]:
+    """Return the names whose attached digests could not be established.
+
+    Parameters
+    ----------
+    actions
+        Output of :func:`plan_asset_actions`.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Unverifiable asset names, in the order given.
+
+    Notes
+    -----
+    Kept apart from :func:`conflicts` because the two need different words in
+    the diagnostic and different next steps from an operator. Grouping them
+    would report a listing or download failure as though the release held
+    demonstrably wrong bytes.
+
+    Examples
+    --------
+    >>> unverifiable([
+    ...     ("a", AssetAction.CONFLICT),
+    ...     ("b", AssetAction.UNVERIFIABLE),
+    ...     ("c", AssetAction.UPLOAD),
+    ... ])
+    ('b',)
+    """
+    return tuple(name for name, action in actions if action is AssetAction.UNVERIFIABLE)
+
+
+def blocked(actions: cabc.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...]:
+    """Return every name that stops this run from uploading anything.
+
+    Parameters
+    ----------
+    actions
+        Output of :func:`plan_asset_actions`.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Conflicting and unverifiable names together, in the order given.
+
+    Notes
+    -----
+    A conflict blocks the run because uploading the other names would leave the
+    release holding a mixture of this run's bytes and an earlier run's, which
+    is harder to unwind than a refusal. An unverifiable name blocks it for the
+    same reason: if the bytes already attached cannot be read, nothing shows
+    the missing names are this run's either.
+
+    Examples
+    --------
+    >>> blocked([
+    ...     ("a", AssetAction.CONFLICT),
+    ...     ("b", AssetAction.UNVERIFIABLE),
+    ...     ("c", AssetAction.UPLOAD),
+    ... ])
+    ('a', 'b')
+    """
+    return (*conflicts(actions), *unverifiable(actions))

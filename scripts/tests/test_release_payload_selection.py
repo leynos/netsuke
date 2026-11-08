@@ -328,6 +328,54 @@ def test_a_record_claiming_a_sibling_targets_package_is_refused() -> None:
         )
 
 
+def test_a_one_for_one_package_exchange_is_not_caught_by_the_count() -> None:
+    """Record exactly what the package check does and does not guarantee.
+
+    The package half of the per-record check is a format *count*. This case
+    is the one that shows where that stops being enough: the x86 record claims
+    the ARM ``.deb`` instead of its own, and the ARM record claims the x86 one
+    in exchange. Each record still claims one ``.deb`` and one ``.rpm``, each
+    still claims its own archive and sidecar, and the union of everything
+    claimed is exactly the release's declaration.
+
+    So selection accepts it, and this case asserts that it accepts it. That is
+    the honest guarantee: package names are owned by three external shared
+    actions, so a format and a count are all this repository can know about
+    them, and package-to-target identity is beyond it. The archives *are*
+    caught, because the configuration names them (see
+    :func:`test_two_records_exchanging_their_archive_and_sidecar_are_refused`);
+    the packages are not.
+
+    Asserting the acceptance rather than the refusal is the point. A case that
+    documented a guarantee the code does not make would read, to the next
+    person to touch this check, as a regression to be restored.
+    """
+    traded_x86 = provenance(
+        assets={
+            ARCHIVE: "1" * 64,
+            SIDECAR: "2" * 64,
+            ARM_DEB: "3" * 64,
+            RPM: "4" * 64,
+        }
+    )
+    traded_arm = arm_record(packages=(DEB, ARM_RPM))
+    assert set(traded_x86.assets) | set(traded_arm.assets) == {*two_target_staged()}, (
+        "the case must preserve the union, or it tests the wrong refusal"
+    )
+    selected = selection_for(
+        [traded_x86, traded_arm],
+        two_target_staged(),
+        archives=TWO_TARGET_ARCHIVES,
+        config=TWO_TARGET_CONFIG,
+    )
+    assert set(selected.declared) == set(two_target_staged()), (
+        "a same-format package exchange is not refused by the count"
+    )
+    assert selected.trusted[ARM_DEB] == "3" * 64, (
+        "the digest that travels is the claiming record's, not the target's build"
+    )
+
+
 def test_require_staged_digests_accepts_the_recorded_bytes() -> None:
     """Accept a payload whose bytes match what its producers recorded."""
     selection.require_staged_digests({DEB: "3" * 64}, trusted={DEB: "3" * 64})

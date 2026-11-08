@@ -27,7 +27,13 @@ if typ.TYPE_CHECKING:
 
     import release_reconcile_github
 
-__all__ = ["PLAN_NAME", "UploadRequest", "conflict_message", "write_plan"]
+__all__ = [
+    "PLAN_NAME",
+    "UploadRequest",
+    "blocked_message",
+    "conflict_message",
+    "write_plan",
+]
 
 #: Name of the JSON plan the step exposes to the job.
 PLAN_NAME = "upload-plan.json"
@@ -81,6 +87,7 @@ def write_plan(
     plan_path: pathlib.Path,
     actions: cabc.Iterable[tuple[str, release_reconcile_github.AssetAction]],
     conflicts: cabc.Iterable[str],
+    unverifiable: cabc.Iterable[str] = (),
 ) -> None:
     """Write the per-asset plan in the shape the release jobs already read.
 
@@ -91,7 +98,12 @@ def write_plan(
     actions
         One ``(name, action)`` pair per declared asset.
     conflicts
-        The names whose attached bytes disagree with the trusted record.
+        The names whose attached bytes were read and disagreed with the
+        trusted record.
+    unverifiable
+        The names whose attached bytes could not be read at all. Recorded
+        separately from ``conflicts`` because the operator's next step differs:
+        one is a wrong release, the other may be a broken listing.
 
     Notes
     -----
@@ -99,6 +111,11 @@ def write_plan(
     identically, which lets a job diff two runs' plans. An unwritable
     destination propagates ``OSError`` to the caller, which reports it as a
     distinct exit status rather than as an upload failure.
+
+    ``unverifiable`` already appears in ``actions`` under its own action. It is
+    repeated at the top level because a reader -- human or job -- that looks
+    only at the blocking summary should not have to scan the per-asset rows to
+    learn which kind of blockage it is looking at.
 
     Examples
     --------
@@ -116,7 +133,8 @@ def write_plan(
           "upload"
         ]
       ],
-      "conflicts": []
+      "conflicts": [],
+      "unverifiable": []
     }
     <BLANKLINE>
     """
@@ -125,6 +143,7 @@ def write_plan(
             {
                 "actions": [[name, action.value] for name, action in actions],
                 "conflicts": list(conflicts),
+                "unverifiable": list(unverifiable),
             },
             indent=2,
             sort_keys=True,
@@ -156,3 +175,83 @@ def conflict_message(conflicts: cabc.Iterable[str]) -> str:
         "the release holds assets that disagree with the trusted record: "
         + ", ".join(conflicts)
     )
+
+
+def unverifiable_message(unverifiable: cabc.Iterable[str]) -> str:
+    """Describe the attached assets whose bytes a run could not read.
+
+    Parameters
+    ----------
+    unverifiable
+        The names attached to the release whose digest neither the listing nor
+        a download could establish.
+
+    Returns
+    -------
+    str
+        One line naming every unreadable asset.
+
+    Notes
+    -----
+    The wording deliberately does not say the bytes disagree. Nothing compared
+    them: GitHub reported no digest and the download did not yield the file.
+    Reporting that as a disagreement would promise evidence the run does not
+    have and send an operator looking for wrong bytes that may be correct.
+
+    Examples
+    --------
+    >>> unverifiable_message(["a.deb"]) == (
+    ...     "the release attaches assets whose bytes could not be verified: a.deb"
+    ... )
+    True
+    """
+    return (
+        "the release attaches assets whose bytes could not be verified: "
+        + ", ".join(unverifiable)
+    )
+
+
+def blocked_message(
+    conflicts: cabc.Iterable[str], unverifiable: cabc.Iterable[str]
+) -> str:
+    """Describe every reason the run refused, one clause per kind present.
+
+    Parameters
+    ----------
+    conflicts
+        The names whose attached bytes were read and disagreed.
+    unverifiable
+        The names whose attached bytes could not be read.
+
+    Returns
+    -------
+    str
+        One line, naming each distinct reason that actually applies.
+
+    Notes
+    -----
+    Kept whole rather than composed by the caller so a run with both kinds
+    cannot report one and drop the other. Only the clauses with names are
+    emitted: reporting "no unverifiable assets" beside a conflict would bury
+    the finding in a statement about an absence.
+
+    Examples
+    --------
+    >>> blocked_message(["a.deb"], ["b.rpm"]) == (
+    ...     "the release holds assets that disagree with the trusted record: "
+    ...     "a.deb; the release attaches assets whose bytes could not be "
+    ...     "verified: b.rpm"
+    ... )
+    True
+    >>> blocked_message(["a.deb"], [])
+    'the release holds assets that disagree with the trusted record: a.deb'
+    >>> blocked_message([], [])
+    ''
+    """
+    disputed = tuple(conflicts)
+    unread = tuple(unverifiable)
+    clauses = [
+        conflict_message(disputed) if disputed else "",
+        unverifiable_message(unread) if unread else "",
+    ]
+    return "; ".join(clause for clause in clauses if clause)

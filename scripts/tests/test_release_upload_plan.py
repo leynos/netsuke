@@ -15,7 +15,14 @@ import typing as typ
 import pytest
 import release_reconcile_github
 from release_reconcile_github import AssetAction
-from release_upload_plan import PLAN_NAME, UploadRequest, conflict_message, write_plan
+from release_upload_plan import (
+    PLAN_NAME,
+    UploadRequest,
+    blocked_message,
+    conflict_message,
+    unverifiable_message,
+    write_plan,
+)
 
 
 class UploadPlan(typ.TypedDict):
@@ -26,7 +33,9 @@ class UploadPlan(typ.TypedDict):
     actions
         One ``[name, action]`` pair per decided asset, in the order written.
     conflicts
-        The names a refused run named as blocking it.
+        The names whose attached bytes were read and disagreed.
+    unverifiable
+        The names whose attached bytes could not be read at all.
 
     Notes
     -----
@@ -38,6 +47,7 @@ class UploadPlan(typ.TypedDict):
 
     actions: list[list[str]]
     conflicts: list[str]
+    unverifiable: list[str]
 
 
 def read_plan(path: pathlib.Path) -> UploadPlan:
@@ -73,6 +83,7 @@ def test_write_plan_records_every_action_in_name_order(
     assert read_plan(destination) == {
         "actions": [["a.deb", "upload"], ["b.rpm", "skip-verified"]],
         "conflicts": [],
+        "unverifiable": [],
     }, "every action must be recorded in the order given"
 
 
@@ -150,6 +161,58 @@ def test_conflict_message_leads_with_the_reason() -> None:
     ), "the reason must lead the message"
 
 
+def test_unverifiable_message_does_not_claim_a_disagreement() -> None:
+    """Describe an unread digest without asserting the bytes are wrong.
+
+    Nothing compared them. Reporting a disagreement would promise evidence the
+    run does not have and send an operator hunting for wrong bytes that may be
+    correct.
+    """
+    message = unverifiable_message(["a.deb"])
+    assert "could not be verified" in message, message
+    assert "disagree" not in message, "an unread digest is not a disagreement"
+
+
+def test_blocked_message_names_both_kinds_when_both_appear() -> None:
+    """Report every reason that applies, not just the first found."""
+    message = blocked_message(["a.deb"], ["b.rpm"])
+    assert "disagree with the trusted record: a.deb" in message, message
+    assert "could not be verified: b.rpm" in message, message
+
+
+def test_blocked_message_omits_a_kind_with_no_names() -> None:
+    """Withhold a clause about an absence that is not the finding."""
+    assert blocked_message(["a.deb"], []) == conflict_message(["a.deb"]), (
+        "a run with no unverifiable names must not mention them"
+    )
+    assert blocked_message([], ["b.rpm"]) == unverifiable_message(["b.rpm"]), (
+        "a run with no conflicts must not mention them"
+    )
+
+
+def test_a_plan_records_the_two_kinds_of_blocker_apart(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Serialize conflicts and unverifiable names under their own keys."""
+    destination = tmp_path / PLAN_NAME
+    actions = release_reconcile_github.plan_asset_actions(
+        expected={"a.deb": "aa", "b.rpm": "bb"},
+        present={"a.deb": "zz", "b.rpm": None},
+    )
+    write_plan(
+        destination,
+        actions,
+        release_reconcile_github.conflicts(actions),
+        release_reconcile_github.unverifiable(actions),
+    )
+    plan = read_plan(destination)
+    assert plan["conflicts"] == ["a.deb"], "the disagreement must be recorded"
+    assert plan["unverifiable"] == ["b.rpm"], "the unread digest must be recorded"
+    assert plan["actions"] == [["a.deb", "conflict"], ["b.rpm", "unverifiable"]], (
+        "each name must carry the action that describes it"
+    )
+
+
 def test_an_upload_request_holds_the_whole_run() -> None:
     """Carry the tag, payload, record, plan, and mode in one value."""
     request = UploadRequest(
@@ -211,5 +274,6 @@ def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
             ["c.pkg", "upload"],
         ],
         "conflicts": ["b.rpm"],
+        "unverifiable": [],
     }
     assert recorded == expected, "the plan must express every reconciliation action"

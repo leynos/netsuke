@@ -15,13 +15,23 @@ before any byte moved, and only the names that record declares:
 
 - an attached asset whose digest matches is skipped, silently and safely;
 - an asset the release has not attached is uploaded;
-- an attached asset whose digest differs -- or whose digest GitHub cannot
-  report and a download cannot establish -- is a conflict, and *every* conflict
-  is reported before the first upload, so a run never publishes a partial
-  inventory over a wrong one;
+- an attached asset whose digest was read and differs is a conflict;
+- an attached asset whose digest GitHub did not report and a download could
+  not establish is *unverifiable* -- a different finding from a conflict, with
+  a different remedy, because nothing disagrees and the fault may be in the
+  listing or the transfer rather than in the release;
+- *every* conflict and unverifiable name is reported before the first upload,
+  so a run never publishes a partial inventory over a wrong one;
 - an attached asset the record does not declare is ignored here. It is not
   this step's to reconcile, and treating it as a conflict would block a
   release over a file the plan never claimed.
+
+Listing the release and downloading an asset it hid are effectful and live in
+:mod:`release_upload_observation`; deciding what to do about what was observed
+is the pure query beside them. Separating the two lets the decision be stated
+as a table of observations and tested without a stub, and leaves exactly one
+function that reaches the outside world. This module is the argument surface
+and the exit-status contract over that boundary.
 
 Two records arrive with the payload, and the step requires them to agree before
 it acts. Neither proves the copy on its own: a staged tree replaced between
@@ -48,13 +58,12 @@ in ``scripts/tests/test_upload_declared_assets_cli.py``.
 import argparse
 import pathlib
 import sys
-import typing as typ
 
 import release_digest_record
 import release_digest_record_files
 import release_payload_tree
 import release_reconcile_github
-import release_upload_digests
+import release_upload_observation
 import release_upload_plan
 import release_upload_remote
 import upload_declared_assets_refusals
@@ -67,9 +76,6 @@ from upload_declared_assets_refusals import (
     EXIT_OUTPUT_UNWRITABLE,
     EXIT_UPLOAD_FAILED,
 )
-
-if typ.TYPE_CHECKING:
-    import collections.abc as cabc
 
 __all__ = [
     "EXIT_CONFLICT",
@@ -174,14 +180,20 @@ def main(argv: list[str] | None = None) -> int:
         print(f"{label}: {error}", file=sys.stderr)
         return exit_code
     conflicts = release_reconcile_github.conflicts(actions)
+    unverifiable = release_reconcile_github.unverifiable(actions)
     try:
-        release_upload_plan.write_plan(request.plan_path, actions, conflicts)
+        release_upload_plan.write_plan(
+            request.plan_path, actions, conflicts, unverifiable
+        )
     except OSError as error:
         destination = request.plan_path
         print(f"upload plan write failed: {destination}: {error}", file=sys.stderr)
         return EXIT_OUTPUT_UNWRITABLE
-    if conflicts:
-        print(release_upload_plan.conflict_message(conflicts), file=sys.stderr)
+    if conflicts or unverifiable:
+        print(
+            release_upload_plan.blocked_message(conflicts, unverifiable),
+            file=sys.stderr,
+        )
         return EXIT_CONFLICT
     # A plan that still asks for an upload means GitHub does not hold that
     # asset: `gh release upload` can succeed while the asset never appears, and
@@ -251,13 +263,15 @@ def settle(
     ['upload']
     """
     expected = verified_payload(request)
-    actions = _reconcile(request.tag, expected, runner=runner)
+    actions = release_upload_observation.reconcile(request.tag, expected, runner=runner)
     pending = release_reconcile_github.uploads(actions)
-    if _should_upload(request, actions, pending):
+    if release_upload_observation.should_upload(request, actions, pending):
         release_upload_remote.upload(
             request.tag, pending, request.payload_dir, runner=runner
         )
-        return _reconcile(request.tag, expected, runner=runner)
+        return release_upload_observation.reconcile(
+            request.tag, expected, runner=runner
+        )
     return actions
 
 
@@ -313,87 +327,6 @@ def verified_payload(request: UploadRequest) -> dict[str, str]:
     release_digest_record.require_records_agree(selected, declaration=declaration)
     release_payload_tree.require_payload_matches(request.payload_dir, declaration)
     return declaration
-
-
-def _should_upload(
-    request: UploadRequest,
-    actions: cabc.Iterable[tuple[str, release_reconcile_github.AssetAction]],
-    pending: cabc.Iterable[str],
-) -> bool:
-    """Report whether this run has a transfer to make.
-
-    Returns
-    -------
-    bool
-        ``False`` for a dry run, a plan with nothing to upload, or a plan that
-        already contains a conflict.
-
-    Notes
-    -----
-    A conflict blocks every upload even when other names are missing. Sending
-    the missing ones first would leave the release holding a mixture of this
-    run's bytes and an earlier run's, which is harder to unwind than a refusal.
-
-    Examples
-    --------
-    >>> from release_reconcile_github import AssetAction
-    >>> request = UploadRequest("v1", pathlib.Path(), pathlib.Path(),
-    ...                         pathlib.Path(), pathlib.Path(), is_dry_run=True)
-    >>> _should_upload(request, [("a", AssetAction.UPLOAD)], ("a",))
-    False
-    >>> _should_upload(UploadRequest("v1", pathlib.Path(), pathlib.Path(),
-    ...                              pathlib.Path(), pathlib.Path(),
-    ...                              is_dry_run=False),
-    ...                [("a", AssetAction.CONFLICT), ("b", AssetAction.UPLOAD)],
-    ...                ("b",))
-    False
-    """
-    return (
-        not request.is_dry_run
-        and bool(tuple(pending))
-        and not tuple(release_reconcile_github.conflicts(actions))
-    )
-
-
-def _reconcile(
-    tag: str, expected: cabc.Mapping[str, str], *, runner: SubprocessRunner
-) -> tuple[tuple[str, release_reconcile_github.AssetAction], ...]:
-    """Plan the release's assets from a listing, backfilling absent digests.
-
-    Parameters
-    ----------
-    tag
-        The validated release tag to list.
-    expected
-        Published name mapped to the digest the trusted record demands.
-    runner
-        The injected subprocess seam.
-
-    Returns
-    -------
-    tuple[tuple[str, release_reconcile_github.AssetAction], ...]
-        One ``(name, action)`` pair per declared asset, sorted by name.
-
-    Notes
-    -----
-    A listing that cannot be taken surfaces ``GhCommandFailedError`` or
-    ``RemoteListingError`` from :mod:`release_upload_remote`.
-    """
-    present = release_upload_remote.attached_digests(tag, runner=runner)
-    # Only declared names are backfilled. An unrelated attached asset with no
-    # listing digest is not this step's concern, and downloading its bytes to
-    # learn a digest nothing consults would spend a transfer on a file the
-    # trusted record never named.
-    undigested = {
-        name for name, digest in present.items() if digest is None and name in expected
-    }
-    if undigested:
-        present |= release_upload_digests.downloaded_digests(
-            tag, undigested, runner=runner
-        )
-    return release_reconcile_github.plan_asset_actions(
-        expected=expected, present=present
-    )
 
 
 if __name__ == "__main__":

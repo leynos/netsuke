@@ -123,16 +123,21 @@ def test_an_unreported_digest_is_established_by_downloading(
     assert not exchange.uploads(), "a verified asset must not be sent again"
 
 
-def test_a_download_that_fails_makes_the_asset_a_conflict(
+def test_a_download_that_fails_makes_the_asset_unverifiable(
     scenario: Scenario,
 ) -> None:
-    """Refuse an attached asset whose bytes cannot be established at all."""
+    """Refuse an attached asset whose bytes cannot be established at all.
+
+    Refused, but *not* called a conflict: nothing read the bytes, so the run
+    has no evidence they disagree. Calling it a disagreement would send an
+    operator to inspect a release whose fault may be in the listing instead.
+    """
     exchange = Exchange(attached={DEB: None})
     actions = settle(scenario.request(), runner=exchange)
-    assert dict(actions)[DEB].value == "conflict", (
+    assert dict(actions)[DEB].value == "unverifiable", (
         "an unestablishable digest must be refused, not assumed"
     )
-    assert not exchange.uploads(), "a conflict must block the whole transfer"
+    assert not exchange.uploads(), "an unverifiable asset must block the transfer"
 
 
 def test_downloaded_bytes_that_differ_are_a_conflict(scenario: Scenario) -> None:

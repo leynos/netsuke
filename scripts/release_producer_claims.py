@@ -11,10 +11,17 @@ attach one target's bytes under another target's name.
 The archive is bound by *name*, because a target's archive interpolates its
 Rust triple and the staging configuration is the only authority for that. A
 package name cannot be derived: three external shared actions own those names,
-so only the format suffix and the per-target count are knowable. The package
-half of this check therefore holds a record to the right number and shape of
-packages for its own platform. It cannot establish that the bytes are that
-target's, and this module does not claim otherwise.
+so only the format suffix and the per-target count are knowable.
+
+That is exactly what the package half of this check enforces, and no more. A
+record must claim one package per format its platform stages, and a claim that
+matches no format at all is refused. It does **not** establish that a package
+belongs to the record's own target: two same-platform targets that trade one
+package each leave every count unchanged and the union identical, and this
+check accepts the trade. `test_release_payload_selection` records that
+acceptance so no reader mistakes the count for an identity proof. Establishing
+package-to-target identity would need a boundary that could read the package's
+own metadata, which nothing here does.
 
 Nothing here reads a file, parses JSON, or hashes bytes. Claims arrive
 validated from :mod:`release_producer_provenance`, and the refusals live in
@@ -45,7 +52,7 @@ def require_target_claims(
     archives: cabc.Mapping[str, str],
     targets: cabc.Mapping[str, str],
 ) -> None:
-    """Refuse a record that claims artefacts another target stages.
+    """Refuse a record that claims artefacts its own target cannot have staged.
 
     Parameters
     ----------
@@ -69,6 +76,15 @@ def require_target_claims(
     :func:`_package_claim_offenders` when a record's configured platform
     stages no package format at all, and so stays out of the ``Raises``
     section.
+
+    The archive half is an identity check and the package half is a
+    suffix-and-count check, and the difference is load-bearing rather than
+    incidental. A record claiming a sibling's archive is refused, because the
+    configuration names every archive. A record claiming a sibling's package
+    of the *same format* is not refused, because nothing here can tell two
+    Linux ``.deb`` files apart. Callers may rely on the archive guarantee; the
+    package guarantee is that a record's package claims are the right number
+    and shape for its platform, not that they are its own build's output.
 
     A target with no entry in ``archives`` or ``targets`` is skipped rather
     than reported here. Coverage reports it as an uncovered or undeclared

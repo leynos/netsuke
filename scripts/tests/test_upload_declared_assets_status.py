@@ -97,6 +97,27 @@ def test_a_conflicting_run_uploads_nothing(
     assert not exchange.uploads(), "a conflict must block the whole transfer"
 
 
+def test_an_unverifiable_asset_blocks_the_transfer(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stop the upload over bytes nobody could read, as for a conflict.
+
+    Sending the other names would publish a partial inventory beside a file
+    whose contents are unknown, which is exactly the state this step exists to
+    prevent.
+    """
+    exchange = Exchange(attached={DEB: None})
+    status = run_cli(scenario, exchange, monkeypatch)
+    assert status == EXIT_CONFLICT, "an unread digest must not report success"
+    assert not exchange.uploads(), "an unverifiable asset must block the transfer"
+    assert scenario.stored_plan()["unverifiable"] == [DEB], (
+        "the plan must record which asset went unread"
+    )
+    assert scenario.stored_plan()["conflicts"] == [], (
+        "an unread digest must not be recorded as a disagreement"
+    )
+
+
 def test_main_reports_an_absent_record_as_unreadable_input(
     scenario: Scenario, monkeypatch: pytest.MonkeyPatch
 ) -> None:

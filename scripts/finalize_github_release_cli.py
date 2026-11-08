@@ -62,6 +62,12 @@ ACTION_EXITS = {
     "skip-verified": EXIT_OK,
     "upload": EXIT_UPLOAD_REQUIRED,
     "conflict": EXIT_CONFLICT,
+    # An unverifiable asset is reported exactly like a conflict because it must
+    # stop the run just as firmly: nothing may be published over bytes no one
+    # could read. The plan distinguishes the two; the exit status deliberately
+    # does not, so a caller that only branches on the status cannot mistake one
+    # for permission to proceed.
+    "unverifiable": EXIT_CONFLICT,
 }
 
 
