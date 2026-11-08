@@ -963,8 +963,8 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
     by this branch or by earlier decisions (D21, D22, D26, D27), and re-reading
     each against the current tree found nothing further to change. The
     task-update row in particular is satisfied: `progress_pty.rs` collects each
-    whole task line and classifies it, which includes the bytes before
-    `Task `. Date/Author: 2026-11-08, implementation agent, after
+    whole task line and classifies it, which includes the bytes that precede
+    the task-name field. Date/Author: 2026-11-08, implementation agent, after
     `5815758338`.
 
 ## Outcomes & retrospective
