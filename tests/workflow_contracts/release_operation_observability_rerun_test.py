@@ -17,7 +17,6 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
-import typing as typ
 
 import pytest
 from release_operation_observability_support import (
@@ -30,9 +29,6 @@ from workflow_loading import (
     load_workflow,
     require_mapping,
 )
-
-if typ.TYPE_CHECKING:
-    import pathlib
 
 #: The events GitHub substitutes into a workflow expression. Only ``run_id`` and
 #: ``run_attempt`` distinguish one attempt of a job from another, so any other
@@ -125,19 +121,20 @@ def _artefact_name(workflow: dict[str, object], job: str) -> str:
     str
         The ``name`` input, unrendered.
 
-    Raises
-    ------
-    AssertionError
-        If the job has no telemetry upload or declares no name, which would make
-        every rerun assertion below vacuously pass.
+    Notes
+    -----
+    Both checks fail the calling test rather than returning a placeholder. A
+    job with no upload, or one whose upload names nothing, would leave every
+    rerun assertion below comparing a missing value against itself.
     """
     step = named_step(job_steps(workflow, job), OBSERVABILITY_ARTIFACT_STEP)
     with_ = step.get("with")
     assert isinstance(with_, dict), f"{job} telemetry upload must declare inputs"
     name = with_.get("name")
-    assert isinstance(name, str) and name, (
-        f"{job} telemetry upload must declare a non-empty artefact name"
+    assert isinstance(name, str), (
+        f"{job} telemetry upload must declare a string artefact name"
     )
+    assert name, f"{job} telemetry upload must declare a non-empty artefact name"
     return name
 
 

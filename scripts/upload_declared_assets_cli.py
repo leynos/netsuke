@@ -24,12 +24,10 @@ before any byte moved, and only the names that record declares:
   release over a file the plan never claimed.
 
 Two records arrive with the payload, and the step requires them to agree before
-it acts. The *selection* record was written from the sources selection hashed
-and approved; the *declaration* record was written independently from the
-staged tree. Neither proves the copy on its own: a tree replaced between the
-two hashes produces a declaration record that faithfully describes the
-replacement. Requiring the two records to name the same bytes is what closes
-that window, and it happens before the first network call.
+it acts. Neither proves the copy on its own: a staged tree replaced between
+the two hashes yields a declaration record that faithfully describes the
+replacement. Only the two records answering for one another closes that
+window, and it happens before the first network call.
 
 The digests are checked twice: once against the payload on disk before any
 network call, and again from the release listing after the upload. The second
@@ -219,12 +217,11 @@ def settle(
 
     Notes
     -----
-    :func:`verified_payload` establishes that both records name the same
-    bytes and that the payload holds them, and it runs before the first
-    network call. The release is re-listed after the upload so the returned
-    plan describes what GitHub actually holds rather than what was sent. Every
-    conflict is reported before any upload, so a run with one conflicting
-    asset publishes none of the others.
+    :func:`verified_payload` runs before the first network call. The release
+    is re-listed after the upload, so the returned plan describes what GitHub
+    actually holds rather than what was sent. Every conflict is reported
+    before any upload, so a run with one conflicting asset publishes none of
+    the others.
 
     Examples
     --------
@@ -279,11 +276,10 @@ def verified_payload(request: UploadRequest) -> dict[str, str]:
 
     Notes
     -----
-    Two records must agree before the payload is examined. The declaration
-    record is written from the staged tree after selection has already hashed
-    the sources it approved, so a tree replaced in between yields a
-    declaration record that faithfully describes the replacement; the
-    selection record is the independent account. Only after the two name the
+    The declaration record is written from the staged tree after selection has
+    hashed the sources it approved, so a tree replaced in between yields a
+    declaration record that faithfully describes the replacement. The
+    selection record is the independent account; only once the two name the
     same bytes is the payload compared with either.
 
     ``release_digest_record.DigestRecordError`` and its
@@ -312,10 +308,9 @@ def verified_payload(request: UploadRequest) -> dict[str, str]:
     ...     ) == digests
     True
     """
-    declaration = _expected(request.digest_record)
-    release_digest_record.require_records_agree(
-        _expected(request.selection_record), declaration=declaration
-    )
+    declaration = release_digest_record_files.read_digest_record(request.digest_record)
+    selected = release_digest_record_files.read_digest_record(request.selection_record)
+    release_digest_record.require_records_agree(selected, declaration=declaration)
     release_payload_tree.require_payload_matches(request.payload_dir, declaration)
     return declaration
 
@@ -358,23 +353,6 @@ def _should_upload(
         and bool(tuple(pending))
         and not tuple(release_reconcile_github.conflicts(actions))
     )
-
-
-def _expected(digest_record: pathlib.Path) -> dict[str, str]:
-    """Read the trusted record that names every declared asset and its digest.
-
-    Returns
-    -------
-    dict[str, str]
-        Published name mapped to the digest selection recorded for it.
-
-    Notes
-    -----
-    ``release_digest_record.DigestRecordError`` and its
-    ``RecordedDigestMismatchError`` subclass reach the caller from the record
-    reader; nothing here raises one.
-    """
-    return release_digest_record_files.read_digest_record(digest_record)
 
 
 def _reconcile(

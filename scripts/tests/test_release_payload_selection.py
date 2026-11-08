@@ -248,17 +248,6 @@ def staged_assets() -> dict[str, str]:
     }
 
 
-def x86_record(assets: dict[str, str]) -> ProducerProvenance:
-    """Build the x86_64 target's record over the names a case chooses.
-
-    Returns
-    -------
-    ProducerProvenance
-        A record filed under the single-target cases' Linux target.
-    """
-    return provenance(assets=assets)
-
-
 def test_two_targets_claiming_their_own_assets_are_accepted() -> None:
     """Accept two same-platform records that each claim their own target's set.
 
@@ -266,7 +255,7 @@ def test_two_targets_claiming_their_own_assets_are_accepted() -> None:
     must select cleanly, so a refusal there can only be about the exchange.
     """
     selected = selection_for(
-        [x86_record(staged_assets()), arm_record()],
+        [provenance(), arm_record()],
         two_target_staged(),
         archives=TWO_TARGET_ARCHIVES,
         config=TWO_TARGET_CONFIG,
@@ -284,12 +273,14 @@ def test_two_records_exchanging_their_archive_and_sidecar_are_refused() -> None:
     ``.rpm``, and the union of every claimed name is exactly what the release
     declares -- yet each record now vouches for the other target's archive.
     """
-    swapped_x86 = x86_record({
-        ARM_ARCHIVE: "1" * 64,
-        f"{ARM_ARCHIVE}.sha256": "2" * 64,
-        DEB: "3" * 64,
-        RPM: "4" * 64,
-    })
+    swapped_x86 = provenance(
+        assets={
+            ARM_ARCHIVE: "1" * 64,
+            f"{ARM_ARCHIVE}.sha256": "2" * 64,
+            DEB: "3" * 64,
+            RPM: "4" * 64,
+        }
+    )
     swapped_arm = arm_record(archive=ARCHIVE, packages=(ARM_DEB, ARM_RPM))
     union = set(swapped_x86.assets) | set(swapped_arm.assets)
     assert union == {*two_target_staged()}, (
@@ -310,7 +301,7 @@ def test_a_record_claiming_a_second_archive_is_refused() -> None:
     A record that keeps its own archive *and* adds a sibling target's leaves
     the union complete, so only a per-record check can see it.
     """
-    greedy = x86_record(staged_assets() | {ARM_ARCHIVE: "5" * 64})
+    greedy = provenance(assets=staged_assets() | {ARM_ARCHIVE: "5" * 64})
     with pytest.raises(TargetClaimMismatchError, match="neither its archive"):
         selection_for(
             [greedy, arm_record()],
@@ -327,7 +318,7 @@ def test_a_record_claiming_a_sibling_targets_package_is_refused() -> None:
     and format. A record claiming three ``.rpm`` files -- one of them its
     sibling's -- is still refused, which is what a count is for.
     """
-    doubled = x86_record(staged_assets() | {ARM_RPM: "5" * 64})
+    doubled = provenance(assets=staged_assets() | {ARM_RPM: "5" * 64})
     with pytest.raises(TargetClaimMismatchError, match="must claim 1"):
         selection_for(
             [doubled, arm_record()],
