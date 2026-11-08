@@ -1167,6 +1167,15 @@ same rolling-release boundary a few minutes earlier.
 That census is what makes the claim checkable rather than plausible: the
 archive identity, not the commit, separates every green run from every red one.
 
+**An independent branch confirms it.** PR #1063 (`import-prover-tools`) is a
+separate piece of work based on `main`, with a diff disjoint from this one. Its
+CI run 42462280610 on `772834947` failed `build-test` (job `128673939794`) and
+`Windows / lint-windows` (job `128673939997`) on the identical panic, from the
+same `whitaker-lints-9fc35c0` archive, while every other job passed. The
+parent-commit reproduction shows the failure precedes this branch's work; this
+shows it crosses to a branch that shares no code with it. That is a stronger
+claim, and it is the one recorded.
+
 **Why this branch cannot fix it.** The action refuses a suite pin by design, so
 no caller input can select a different artefact, and the installer version is
 pinned at the action's own ref. The correct repair is in Whitaker's
