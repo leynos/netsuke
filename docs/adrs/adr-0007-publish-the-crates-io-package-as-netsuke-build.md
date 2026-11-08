@@ -246,12 +246,40 @@ developers' guides rather than implied.
 
 **Status.** Implemented and exercised by an executed-shell harness in
 `tests/workflow_contracts/`; not yet exercised by a live release. The inventory
-verifier, the GitHub release finalizer, and the consumer smoke test remain open
-in the trusted-packaging ExecPlan, so the retained records have no consumer in
-the workflow yet and the release is not published by this decision.
+verifier is delivered in *inventory verification stage implemented* below; the
+GitHub release finalizer and the consumer smoke test remain open in the
+trusted-packaging ExecPlan, so the retained records have no consumer in the
+workflow yet and the release is not published by this decision.
 
 Only a release the workflow *creates* is a draft: `ensure_draft_release.py`
 returns as soon as the tag already has a release, without checking whether it
 is public. A rerun therefore attaches assets to whatever release the tag
 already names, which may well be public by then. Nothing here can widen that
 guarantee, so it is recorded rather than assumed.
+
+## Addendum (2026-11-08): inventory verification stage implemented
+
+`release.yml` now declares `verify-release-inventory`, which downloads the
+draft release's attached assets with GET-only API calls and compares every one
+of them against the declaration and the pre-upload digest record
+`publish-release` retained. The job needs `metadata`, `publish-crates-io`, and
+`publish-release`, and runs only when all three succeeded and
+`should_publish == 'true'`. Every dependency result is named explicitly in its
+guard: `!cancelled()` is a status function, and GitHub suppresses its implicit
+`success()` check for a condition containing one, so the mode output alone
+would let verification run after a failed or skipped publisher.
+
+The job holds `contents: write` and nothing else. A draft release is visible
+only with write access, so the listings need that scope; the action itself
+performs no write, and the verifier step receives no token at all, because
+every byte it reads is already on disk. The job declares no `environment` and no
+`id-token`, so it stays disjoint from the registry exchange's credentials and
+protection rules.
+
+`publish-release` is still not gated on `publish-crates-io`; the two remain
+independent siblings so that an upload interrupted on one surface can be
+resumed without repeating the other. The gate sits one step later:
+`verify-release-inventory` observes both, and the finalizer that will un-draft
+the release depends on it. The finalizer and the consumer smoke test remain
+open in the trusted-packaging ExecPlan. No live release, tag, registry
+publication, or credential exchange has exercised this stage.

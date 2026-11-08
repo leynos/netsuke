@@ -3175,6 +3175,7 @@ the separate GitHub release writer after their prerequisites succeed.
 | `publish-crates-io`           | all six validation jobs and `package-crate`                 | `contents: read`, `id-token: write` | `should_publish == 'true'`     |
 | `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
 | `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
+| `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
 
 *Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
@@ -3211,10 +3212,104 @@ and digest before it probes crates.io. Its action consumes the recorded
 `.crate` bytes directly. It does not call `cargo package`, `cargo publish`, or
 `cargo build`.
 
-The registry job and `publish-release` are independent siblings. The GitHub
-release job is not yet gated on crates.io publication; until
-`verify-release-inventory` lands, a tagged run can publish GitHub assets even
-when crates.io publication fails, leaving the two release surfaces out of sync.
+The registry job and `publish-release` remain independent siblings: neither
+needs the other, so an upload interrupted on one surface can be resumed without
+repeating the other. `verify-release-inventory` needs both. A tagged run in
+which either publisher fails or is skipped therefore leaves the draft
+unverified, and the finalizer that will un-draft the release depends on this
+job, so the two surfaces cannot diverge at the point the release becomes public.
+
+### Verifying the downloaded release inventory
+
+`verify-release-inventory` answers one question before a draft release is
+un-drafted: are the bytes GitHub holds the bytes the publishers built? It is
+the downloaded-side counterpart of the pre-upload checks, and it needs no
+registry or GitHub credential beyond the visibility a draft requires.
+
+The job downloads exactly one artefact, named
+`declared-assets-publish-release-<run_attempt>`, into `trusted/`. That artefact
+is the declaration and digest record `publish-release` retained from the same
+attempt, so a re-run reads its own evidence rather than the first attempt's.
+The artefact is selected by its exact `name`, never a `pattern`, because a
+pattern could match another run's record. The checkout is pinned to
+`needs.metadata.outputs.candidate_commit` with `persist-credentials: false`, so
+the verifier script is the candidate's own and the checkout leaves no
+credential behind.
+
+`.github/actions/verify-release-inventory` holds the sequence:
+
+| Step                  | Network calls                                | Token      |
+| --------------------- | -------------------------------------------- | ---------- |
+| Validate inputs       | none                                         | none       |
+| List draft releases   | one `gh api --method GET --paginate --slurp` | `GH_TOKEN` |
+| List draft assets     | one `gh api --method GET --paginate --slurp` | `GH_TOKEN` |
+| Download draft assets | one GET per planned asset                    | `GH_TOKEN` |
+| Verify inventory      | none                                         | none       |
+
+*Table 2: The verification action's steps and credential routing.*
+
+The listings are read with `--slurp`, which wraps every page in one array, and
+the selection and download-plan policy lives in
+`scripts/release_draft_assets.py` rather than in shell. The download step sets
+`noclobber`, so a name repeated in the plan fails rather than letting the
+second download replace the first, and it does not retry: a partial download
+must stop the job, because the verifier cannot distinguish a truncated
+attachment from one that somehow matched.
+
+Two inputs decide what the verifier trusts. `trusted-directory` must be
+disjoint from `download-directory` and from `output-path`, and both
+`declaration-file` and `trusted-record-file` must sit inside it; a downloaded
+file standing in for a trusted input would make the verification compare bytes
+with themselves. The action checks this at run time as well as in the job's
+contract, and it also refuses a `download-directory` that exists but is not a
+directory, or that is not empty, so a re-run cannot count a previous attempt's
+bytes as this release's attachments.
+
+Only the three network steps receive `GH_TOKEN`, and the job passes
+`github.token` for that purpose; no `secrets.*` reference appears in the action
+or the job. The verification step itself is tokenless and runs the verifier
+with exactly four arguments:
+
+```sh
+uv run --no-project --python 3.14 scripts/verify_release_inventory_cli.py \
+  --directory "$DOWNLOAD_DIRECTORY" --expected "$DECLARATION_FILE" \
+  --trusted "$TRUSTED_RECORD_FILE" --output "$OUTPUT_PATH"
+```
+
+The job holds `contents: write` and nothing else. Write scope is what makes a
+draft's assets visible at all: with `contents: read` the listing returns
+nothing and the verifier compares an empty directory against the declaration.
+The job's own calls remain read-only — the action must contain no `gh release`
+call and no `gh api` flag that implies a write (`-f`, `-F`, `--field`,
+`--raw-field`, `--input`) — so holding the scope cannot drift into using it. No
+`environment` is declared and no `id-token` is granted: verification exchanges
+no credential and needs no protection rules.
+
+The job's guard names every dependency result explicitly:
+
+```yaml
+if: >-
+  !cancelled() &&
+  needs.metadata.result == 'success' &&
+  needs.publish-crates-io.result == 'success' &&
+  needs.publish-release.result == 'success' &&
+  needs.metadata.outputs.should_publish == 'true'
+```
+
+Naming `!cancelled()` alone would not be enough. It is a status function, and
+GitHub suppresses the implicit `success()` check for a condition that contains
+one, so a guard reading only `!cancelled() && should_publish == 'true'` runs
+after a failed or skipped publisher. The explicit comparisons restore that
+check for exactly the dependencies this job must observe.
+
+`tests/workflow_contracts/release_verify_inventory_contract_test.py` pins the
+action's shape, the job's wiring, and the credential routing, and proves each
+assertion against a deliberate mutation of the checked documents. The job's
+reachability is computed independently in
+`release_publish_path_verification.py`, from the scenario table in
+`release_publish_path_scenarios.py`; that table includes a publisher failure
+and a publisher skip for each publisher, plus the realistic dry run in which
+both are skipped while the rehearsal job runs.
 
 ### Crate-package operation telemetry
 
@@ -3313,7 +3408,7 @@ one from the other.
 | Installed binary | `netsuke`                       | `[[bin]] name`   |
 | Packaged archive | `netsuke-build-<version>.crate` | `cargo package`  |
 
-*Table 2: The package-versus-binary identity contract.* (ADR-0007 records why
+*Table 3: The package-versus-binary identity contract.* (ADR-0007 records why
 the crate cannot be called `netsuke`.)
 
 The trusted-publication plan targets a flat set of twenty names: the six
@@ -3331,7 +3426,7 @@ Linux, two `.pkg` for macOS, two `.msi` for Windows.
 | Hoist adapter's `expected_archive_names`        | six archives and their six sidecars |
 | `PLATFORM_FORMATS` held against the staged tree | eight operating-system packages     |
 
-*Table 3: The two sources of the planned twenty-name declaration.*
+*Table 4: The two sources of the planned twenty-name declaration.*
 
 Holding the staged tree to a count is what makes a failed package build a
 refusal rather than a smaller declaration. The
@@ -3372,7 +3467,7 @@ state determines whether the workflow exchanges credentials or stops:
 | `yanked`        | Fail without mutation                    | No                  | None                      |
 | `indeterminate` | Fail closed without mutation             | No                  | None                      |
 
-*Table 4: crates.io version-state decisions.*
+*Table 5: crates.io version-state decisions.*
 
 The `crates_io_registry_http.py` adapter permits HTTPS requests only to
 `crates.io` and `static.crates.io`. urllib applies the same host and scheme
@@ -3452,7 +3547,7 @@ check run for both `publish` and `skip` decisions.
 | Upload failure or ambiguous response              | 2         | Stop; do not retry in the same job     |
 | Downloaded bytes match / fail verification        | 0 / 2     | Verified / fail the job                |
 
-*Table 5: Exit statuses used by the candidate and registry CLIs.*
+*Table 6: Exit statuses used by the candidate and registry CLIs.*
 
 ### Recovering a partial crates.io publication
 

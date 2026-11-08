@@ -9,11 +9,12 @@ Status: IN PROGRESS
 
 The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
-contracts, and #1066 replaces the shared upload action in `publish-release`
-with a candidate-bound declared-asset upload. Stage C remains partial because
-inventory verification, GitHub finalization, and consumer smoke are still open.
-Stage D is in progress. No release, tag, registry publication, live credential
-exchange, GitHub Release, or account setting has been changed by this work.
+contracts, #1066 replaces the shared upload action in `publish-release` with a
+candidate-bound declared-asset upload, and #1067 adds the downloaded-inventory
+verifier. Stage C remains partial because GitHub finalization and consumer
+smoke are still open. Stage D is in progress. No release, tag, registry
+publication, live credential exchange, GitHub Release, or account setting has
+been changed by this work.
 
 ## Purpose / big picture
 
@@ -650,20 +651,21 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 
 ### Stage C — implementation
 
-`.github/actions/` contains the delivered `package-crate` and
-`publish-crates-io` actions. The publisher consumes the exact
+`.github/actions/` contains the delivered `package-crate`, `publish-crates-io`,
+and `verify-release-inventory` actions. The publisher consumes the exact
 `release-crate-package` artefact, validates the candidate, probes the version,
 publishes only an absent version, skips an identical version, fails closed for
 other states, and verifies the downloaded registry bytes against the candidate
 digest. It is declared in `release.yml` with the seven successful validation
 dependencies, the `crates-io` environment, and only `contents: read` plus
 `id-token: write`. The credential is exchanged for the publish decision only;
-no live exchange has exercised it.
+no live exchange has exercised it. The verifier downloads the draft release's
+assets with GET-only API calls and compares them against the declaration and
+the pre-upload digest record the publisher retained; its job needs both
+publishers and holds `contents: write` for draft visibility alone.
 
-Three job-matched actions remain open:
+Two job-matched actions remain open:
 
-- `verify-release-inventory/` — compare the whole release against the
-  identity record and gate GitHub publication on the registry outcome.
 - `finalize-github-release/` — reconcile the draft, then un-draft.
 - `consumer-smoke/` — download, verify, extract and run the published bytes.
 
@@ -774,8 +776,9 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
 
 The intended end-state in `.github/workflows/release.yml` adds the sequence
 below after the existing `metadata`, `build-*`, `windows-native-recipe-smoke`,
-and `release-admission-canaries` jobs. `package-crate` and `publish-crates-io`
-are delivered; inventory verification, finalization, and consumer smoke remain:
+and `release-admission-canaries` jobs. `package-crate`, `publish-crates-io`, and
+`verify-release-inventory` are delivered; finalization and consumer smoke
+remain:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
@@ -3015,11 +3018,62 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Method threshold once it gained the comparison, so the verification preamble
   moved to `verified_payload`, which is where it belonged anyway.
 
-  The retained `trusted.json` still has no consuming verifier or finalizer, and
-  that deferral is now recorded in Stage C and EP-M3 with its owner: the three
-  open job-matched actions. #1066's acceptance criterion is that the record is
-  retained for downstream jobs, which it is; wiring a consumer is their work,
-  not a gap in this one.
+  The retained `trusted.json` had no consuming verifier or finalizer when this
+  pass closed, and that deferral is recorded in Stage C and EP-M3 with its
+  owners: the job-matched actions. #1066's acceptance criterion is that the
+  record is retained for downstream jobs, which it is; wiring a consumer is
+  their work, not a gap in this one. #1067 has since supplied the verifier, so
+  the finalizer is the only consumer still outstanding.
+
+- [x] (2026-11-08) Landed `verify-release-inventory`, the downloaded-side
+  counterpart of the pre-upload checks (issue #1067). The composite action
+  takes eight required inputs and exposes one output, `verified-record-path`.
+  Three network steps make GET-only `gh api --method GET` calls, and only those
+  steps receive `GH_TOKEN`. The action may contain no `gh release` call and no
+  flag that implies a write, so the job's `contents: write` buys draft
+  visibility without buying mutation. The verification step is tokenless and
+  runs `scripts/verify_release_inventory_cli.py` with exactly its directory,
+  declaration, trusted record, and output. The job needs `metadata` and both
+  publishers, declares no `environment`, references no secret, checks out the
+  candidate commit with `persist-credentials: false`, and downloads exactly
+  `declared-assets-publish-release-${{ github.run_attempt }}` by name into
+  `trusted/`, never by pattern.
+
+  The guard names every dependency result explicitly. `!cancelled()` is a
+  status function, and GitHub suppresses the implicit `success()` check for a
+  condition containing one, so a guard reading only `!cancelled()` and
+  `should_publish == 'true'` runs after a failed or skipped publisher. That
+  defect was live until the new failure and skip scenarios exposed it; the
+  explicit `needs.<job>.result == 'success'` comparisons are the repair, and
+  the reachability oracle in `release_publish_path_verification.py` computes
+  the expected outcome independently of the expression it checks. The scenario
+  table gained a publisher failure and a publisher skip for each publisher,
+  plus the realistic dry run in which both publishers are skipped while the
+  rehearsal job runs. The action and job also carry mutation cases
+  (`gh release`, an API write flag, a secret token, an `id-token` grant, a
+  `release` dependency, a trusted input inside the download directory, and an
+  artefact pattern), so each assertion is shown to notice a change rather than
+  merely to pass.
+
+  `tests/workflow_contracts` is collected by directory, so the three new
+  modules needed no inventory entry; no test compares a module list, and
+  fabricating one would have been an unenforced claim. Verification did not run
+  a local action or reach GitHub: the contracts assert against the checked
+  documents, and no live release, tag, or credential was exercised.
+
+  Nine gates passed on the frozen tree before the branch was rebased:
+  `check-fmt` (4s), `lint` (147s), `typecheck` (37s), `doc-coverage` (316s),
+  `test` (492s), `markdownlint` (32s), `nixie` (2s),
+  `test-release-publication` (15s), and `test-workflow-contracts` (336s), each
+  `EXIT 0`, and the full `pytest tests/workflow_contracts` run reported 1872
+  passed, 2 skipped. The figures are from those runs; the batch was rerun
+  against the rebased tree.
+
+  **Deviation, retained:** `release.yml` is 1015 lines, and `Verification plan`
+  row 5 still asks for 400 or fewer. That row is unsatisfiable as written and
+  stays unedited so the deviation remains visible; no repository contract caps
+  workflow YAML. Finalization and consumer smoke remain open, and the ExecPlan
+  is not complete.
 
 - [x] (2026-11-09) Closed the seventh CodeRabbit pass's remaining obligations:
   executed coverage for the producer hand-off and the candidate checks, a
@@ -3045,13 +3099,16 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   fails rather than falsely reporting a mismatch.
 
   **Six module docstrings and two workflow comments said the retained records
-  are consumed downstream.** They are not: `verify_release_inventory_cli.py` and
-  `finalize_github_release_cli.py` exist and their suites pass, but no
-  workflow job invokes either. Each docstring now names what runs today and
-  says that the two jobs are written but unwired. The producer-record docstring
-  also stops claiming the record "reaches publication independently of the
-  downloaded trees" -- it travels inside the producer's own artefact, and its
-  independence is that it is never derived from the bytes it describes.
+  are consumed downstream.** They were not: `verify_release_inventory_cli.py`
+  and `finalize_github_release_cli.py` existed and their suites passed, but no
+  workflow job invoked either. Each docstring was corrected to name what ran at
+  that point and to say that the two jobs were written but unwired; #1067 has
+  since wired the verifier through `verify-release-inventory`, so
+  `finalize_github_release_cli.py` is now the only unwired one. The
+  producer-record docstring also stops claiming the record "reaches
+  publication independently of the downloaded trees" -- it travels inside the
+  producer's own artefact, and its independence is that it is never derived
+  from the bytes it describes.
 
   **The upload plan keeps "unread" apart from "disagrees".** `unverifiable` is
   now its own key, and a case proves that an attached asset whose digest
@@ -4210,6 +4267,38 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   modules genuinely owned two responsibilities. Date/Author: 2026-10-23,
   implementation agent.
 
+- Observation: **a GitHub Actions status function suppresses the implicit
+  `success()` check on the jobs it names, so `!cancelled()` alone is not a
+  guard against a failed dependency.** Evidence: `verify-release-inventory`
+  declared
+  `if: !cancelled() && needs.metadata.outputs.should_publish == 'true'`, and
+  the scenario table's `publish-crates-io-failure` and
+  `publish-release-failure` rows resolved it to `true` where the expectation was
+  `false`. The repository's evaluator reproduces GitHub by skipping the
+  implicit check when the condition contains a status function
+  (`tests/workflow_contracts/actions_expression_evaluator.py:122-129`), and
+  `publish-release` already names every dependency result for the same reason.
+  Impact: a job written to run only after both publishers could record an
+  inventory for a release that was never completed, and it would have done so
+  silently — the joint condition looks like a conjunction and reads as one. The
+  repair is the explicit `needs.<job>.result == 'success'` comparison for every
+  dependency, not a different framing of `!cancelled()`. The durable rule is
+  that any guard containing a status function must name each dependency's
+  result itself. Date/Author: 2026-11-08, implementation agent.
+
+- Observation: **a mutation contract can verify the wrong layer: the action's
+  interface and the job's wiring both passed while the job's reachability was
+  wrong.** Evidence: the first contract test asserted the action's eight
+  inputs, its GET-only calls, its token routing, the job's dependency list, and
+  its permissions, and every one of those assertions was true while the guard
+  ran the job after a failed publisher. Only evaluating the guard against the
+  failed and skipped scenarios exposed it. Impact: a shape assertion is not a
+  behaviour assertion, and a job whose guard is untested is a job whose
+  position in the graph is untested. The oracle added for this job computes
+  `should_verify` from the scenario rather than from the job's expression, so
+  the two have to agree instead of the test agreeing with whatever the
+  expression says. Date/Author: 2026-11-08, implementation agent.
+
 ## Decision log
 
 - Decision: keep the existing `release` job's name and identity.
@@ -4940,6 +5029,32 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   target-specific dependencies at this CLI boundary; do not reparse the
   checkout's manifest or rewrite the archive. Date/Author: 2026-11-01,
   implementation agent.
+
+- Decision: name every dependency result in the verification job's guard
+  rather than relying on `!cancelled()` to imply success. Rationale: GitHub
+  skips its implicit `success()` check for a condition that contains a status
+  function, so `!cancelled()` plus the mode output is not a conjunction over
+  the dependencies — it runs after a failed or skipped publisher, and would
+  record an inventory for a release that was never completed. `publish-release`
+  already states its results explicitly for the same reason, so the
+  verification job follows the established shape instead of inventing a second
+  guard idiom. The scenario table carries a failure and a skip for each
+  publisher, and the reachability oracle computes the expected outcome
+  independently, so a guard that stops matching is reported rather than agreed
+  with. Date/Author: 2026-11-08, implementation agent.
+
+- Decision: download the trusted declaration and digest record by exact
+  artefact name and verify the release tokenlessly. Rationale: the record must
+  come from before the upload, so it cannot be read from the draft it is meant
+  to judge. Selecting the artefact by `name`
+  (`declared-assets-publish-release-<run_attempt>`) keeps a re-run on its own
+  attempt's evidence, where a `pattern` could match another run's. The verifier
+  then reads only bytes already on disk, so it receives no token; `GH_TOKEN`
+  reaches the release and asset listings and each attachment download, and
+  nothing else. The action is required to contain no `gh release` call and no
+  write-implying `gh api` flag, which is what keeps the job's
+  `contents: write` — needed because a draft is invisible without it — from
+  becoming mutation. Date/Author: 2026-11-08, implementation agent.
 
 ## Outcomes & retrospective
 
