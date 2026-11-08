@@ -1134,6 +1134,53 @@ is queued (`81edf7a8`).
 
 Date/Author: 2026-11-08, implementation agent.
 
+### D32: the hosted Lint failure has a named upstream cause
+
+**Decision.** Record the two red lanes as an upstream defect with a tracked
+fix, not as an unexplained infrastructure anomaly. The parent-commit
+reproduction was enough to show the failure was not this branch's, but it could
+not say *why* it started, and an unexplained failure invites a re-litigation
+every time someone re-runs the sweep. The cause is now published.
+
+**Evidence.** Whitaker issue
+[#565](https://github.com/leynos/whitaker/issues/565) names the mechanism. The
+`install-whitaker` action pins installer `v0.2.11`, whose compiled-in
+`LINT_CRATES` has nine entries and does not know about
+`string_continuation_style`. Whitaker's rolling-release archive changed at
+`cfa208c` (upstream PR #563, merged 2026-11-08T02:13:31Z) to ship that lint as
+a standalone library *as well as* inside `libwhitaker_suite`. The installer's
+`prune_prebuilt_libraries` iterates its own known-crate list, so a library it
+has never heard of is never pruned: it is left staged beside the suite, and
+`cargo dylint --all` loads both. The second registration trips rustc's lint
+store.
+
+The timing matches. Four green netsuke `build-test` jobs — on `957cfa04a`,
+`87dcb8265`, `755c5db25` and `2048255fb` — all downloaded
+`whitaker-lints-3a370bf-…` and logged no duplicate-lint line. The first run
+after the archive changed, `c987accb9` at 02:37Z, is the first failure, and
+every run since downloads a later archive (`cfa208c`, `a04bc79`, `4cf0fd2` or
+`ff3bd23`) and logs the panic. Netsuke's last green `build-test` (`120b55da3`,
+job `128593736345`) is still inside the `3a370bf` window. The parent commit's
+failure is therefore not a property of the parent commit either: it crossed the
+same rolling-release boundary a few minutes earlier.
+
+That census is what makes the claim checkable rather than plausible: the
+archive identity, not the commit, separates every green run from every red one.
+
+**Why this branch cannot fix it.** The action refuses a suite pin by design, so
+no caller input can select a different artefact, and the installer version is
+pinned at the action's own ref. The correct repair is in Whitaker's
+`prune_prebuilt_libraries`; the issue's suggested fix prunes by staged filename
+instead of by an enumerated crate list. That is another repository's diff.
+
+**Consequence for the disposition.** This is an intractable impasse owned by
+`leynos/whitaker` issue #565, and it clears itself for this branch once
+Whitaker publishes an installer that prunes unknown libraries — no change to
+netsuke is required or appropriate. Recorded here so the next sweep reads the
+cause rather than re-deriving it.
+
+Date/Author: 2026-11-08, implementation agent.
+
 ## Outcomes & retrospective
 
 ### Milestone EP-M0 to EP-M4: complete
