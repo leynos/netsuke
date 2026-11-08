@@ -7,8 +7,10 @@ asset and hash it. That work is here rather than in
 :mod:`release_upload_remote`, which keeps the listing and upload sides of the
 same boundary small enough to read.
 
-A failed download is not an error. The name keeps ``None``, and reconciliation
-reads that as a conflict rather than as a match on no evidence.
+A failed download is not an error here. The name keeps ``None``, and
+reconciliation reads that as unverifiable: the run still refuses to upload,
+but it reports "could not tell" rather than "the release holds wrong bytes",
+because those two call for different operator responses.
 
 ``names`` is an iterable read twice, so it is materialized before either pass.
 A generator would be exhausted by the first and nothing would be downloaded or
@@ -57,7 +59,7 @@ def downloaded_digests(
     Notes
     -----
     A download that fails is not an error here: the asset stays ``None``, and
-    reconciliation reads that as a conflict rather than as a match. A whole
+    reconciliation reads that as unverifiable rather than as a match. A whole
     directory is downloaded rather than a single ``--output`` file so a name
     that also matches a glob cannot hand back another asset's bytes -- the
     exact name is what gets hashed, and its absence yields ``None``.
@@ -115,8 +117,8 @@ def _download(
     Notes
     -----
     ``required=False`` keeps a failed download from raising: it leaves the name
-    without a digest, and reconciliation turns that into a conflict rather than
-    into a match on no evidence.
+    without a digest, and reconciliation turns that into an unverifiable asset
+    rather than into a match on no evidence.
     """
     from release_upload_remote import gh
 

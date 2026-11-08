@@ -194,6 +194,7 @@ impact
 | Build graph                  | **Breaking for callers of the unstable Rust API:** each logical build edge is stored once and indexed by output through `EdgeId`; `BuildGraph::targets` is no longer public.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | [Graph accessors](#resolve-build-graph-outputs-through-the-accessors)                                                    |
 | Cycle detection              | **Breaking:** cycles through `sources`, `deps`, or `order_only_deps` are rejected during IR validation, even when Ninja would not be asked to build the affected target. Remove latent prerequisite cycles; the whole manifest is checked before Ninja starts.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Dependency and build-graph semantics](users-guide.md#dependency-and-build-graph-semantics)                              |
 | Release packaging            | The release workflow validates the packaged candidate offline before upload: the identity, the archive digest, and the packaged manifest must agree, and a dry run must record no release tag.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          | [Release packaging validation](#release-packaging-validates-its-candidate-offline)                                       |
+| Release upload               | The publishing lane uploads only the assets this run declared: producer records are bound to the candidate commit and the workflow run, and a stale, missing, doubled, or undeclared release-shaped artefact is refused before any network call. An attached asset with the recorded digest is skipped; one with different bytes stops the run and is never replaced.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | [Release uploads](#release-uploads-only-the-assets-this-run-declared)                                                    |
 
 ## Remove order-only dependency cycles
 
@@ -871,6 +872,40 @@ Manifests, local builds, and the crate's published contents are unchanged. Only
 the release workflow runs this check, and it needs no new input. The
 [users' guide](users-guide.md) states the candidate contract and the recovery
 path for an interrupted publication.
+
+## Release uploads only the assets this run declared
+
+The publishing lane now hands the downloaded tree to
+`./.github/actions/upload-declared-assets` rather than uploading everything it
+found. The action binds every producer record to the candidate commit and the
+workflow run, assembles the declaration from the staging configuration and
+those records, and refuses the release before any network call when a record
+belongs to another commit or run, a configured target is missing or claimed
+twice, or a staged file that carries a release suffix is not one of the
+declared names.
+
+Release-shaped files are named by suffix, and a suffix describes a file rather
+than its origin, so the count and suffix checks narrow what can reach the
+upload; they do not prove where those bytes came from. The producer records are
+what bind the bytes to a commit.
+
+Two consequences matter to anyone re-running a release:
+
+- An attached asset GitHub already reports with the recorded digest is skipped.
+  An attached asset with different bytes stops the run, and the uploader never
+  replaces an existing asset, so a re-run cannot swap a release's bytes for a
+  second build's.
+- The declaration and both digest records are retained as a
+  `declared-assets-<job>-<attempt>` workflow artefact before the transfer, so a
+  refusal later in the run does not cost the operator the evidence of what was
+  declared. No later job consumes those artefacts yet; the release stays a
+  draft that a person publishes.
+
+Manifests, local builds, and the published contents are unchanged, and no new
+release input was added: the dry run and the publishing lane keep using the same
+`dry-run` output. The [users' guide](users-guide.md) describes the upload
+policy and the [developers' guide](developers-guide.md#release-publication)
+records the job graph and the runbook.
 
 ## Tolerate the forwarding-failure warning on stdout
 

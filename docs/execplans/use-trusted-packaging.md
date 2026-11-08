@@ -2990,6 +2990,51 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   retained for downstream jobs, which it is; wiring a consumer is their work,
   not a gap in this one.
 
+- [x] (2026-11-09) Closed the seventh CodeRabbit pass's remaining obligations:
+  executed coverage for the producer hand-off and the candidate checks, a
+  correction to six module docstrings, and the documentation work that pass
+  asked for.
+
+  **The producer hand-off is now executed, not only asserted.** The recording
+  step in `build-and-package.yml` is read out of the workflow, its `${{ }}`
+  expressions are resolved to the values a run would supply, and the body is
+  run as a shell script against a staged tree. All six configured producers run
+  the real step: each writes its record to the directory the workflow names
+  (`dist/` for Linux, the staging directory for Windows and macOS), claims only
+  its own published names, and the six records seal into one tree that drives
+  the action to upload exactly the declared set. Five damage cases -- a stale
+  candidate, a missing target, a surplus target, a duplicated record, and a
+  substituted archive -- are refused before `gh` is invoked.
+
+  **The candidate chain is executed too.** The metadata job's binding step is
+  run over a valid 40-character commit and seven invalid spellings (uppercase,
+  non-hexadecimal, short, long, empty, a tag, a branch), and the producer's
+  checkout check is run against a real repository: a matching `HEAD` passes, a
+  mismatch fails naming both SHAs, and a directory that is not a repository
+  fails rather than falsely reporting a mismatch.
+
+  **Six module docstrings and two workflow comments said the retained records
+  are consumed downstream.** They are not: `verify_release_inventory_cli.py` and
+  `finalize_github_release_cli.py` exist and their suites pass, but no
+  workflow job invokes either. Each docstring now names what runs today and
+  says that the two jobs are written but unwired. The producer-record docstring
+  also stops claiming the record "reaches publication independently of the
+  downloaded trees" -- it travels inside the producer's own artefact, and its
+  independence is that it is never derived from the bytes it describes.
+
+  **The upload plan keeps "unread" apart from "disagrees".** `unverifiable` is
+  now its own key, and a case proves that an attached asset whose digest
+  neither the listing nor a download could establish is reported there rather
+  than as a conflict.
+
+  **Documentation.** `docs/users-guide.md` and `docs/developers-guide.md`
+  already stated the draft-release ending correctly and were verified rather
+  than rewritten. The migration guide gains a *Release uploads only the assets
+  this run declared* section and an at-a-glance row, and both say that suffix
+  and count checks narrow what can reach the upload without proving origin.
+  ADR-0007 gains the addendum the plan's documentation list requires, naming
+  `./.github/actions/upload-declared-assets` as the publisher.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

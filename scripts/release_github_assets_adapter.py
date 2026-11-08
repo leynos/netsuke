@@ -65,9 +65,9 @@ def normalise_github_digest(reported: object) -> str | None:
     -----
     ``None`` is a distinct answer from any digest: it says the provider
     supplied nothing this release can compare against, which reconciliation
-    treats as a conflict rather than a match. Keeping that distinction here,
-    rather than folding an unusable value into an empty string, is what stops
-    "nothing verifiable" from reading as "nothing wrong".
+    reports as unverifiable rather than as a match. Keeping that distinction
+    here, rather than folding an unusable value into an empty string, is what
+    stops "nothing verifiable" from reading as "nothing wrong".
 
     Examples
     --------
