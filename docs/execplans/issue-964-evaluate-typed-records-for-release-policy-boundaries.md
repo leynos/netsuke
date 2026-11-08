@@ -2,7 +2,7 @@
 
 Status: COMPLETE
 
-The decision is recorded as ADR-0068, the migration has landed, and the branch
+The decision is recorded as ADR-0071, the migration has landed, and the branch
 is rebased onto `origin/main` at `e5d57c583`, whose tree is identical to the
 previous target `9bfb3e117`, with the deterministic gate set re-run on the
 rebased head. Review found one edge case where the new record refuses an empty
@@ -273,8 +273,9 @@ records and are unchanged.
       builder (#1062)"), because main advanced while the branch was under
       review. The first two replays were conflict-free; the third conflicted
       once, in the `docs/contents.md` ADR index, where main adds ADR-0069 and
-      the branch adds ADR-0068. The resolution keeps both entries in
-      ADR-number order. The branch's own "Refresh the generated typos
+      the branch adds its release-policy decision, then numbered ADR-0068 and
+      renumbered ADR-0071 by the later replay. The resolution keeps both
+      entries in ADR-number order. The branch's own "Refresh the generated typos
       configuration" commit became empty, because main had already landed the
       same regeneration: `git diff 9bfb3e117:typos.toml fb36476f0:typos.toml`
       is empty, so the commit was dropped rather than recreated. `range-diff`
@@ -290,7 +291,7 @@ records and are unchanged.
       reports every commit unchanged, and `git diff --check` is clean.
 - [x] Address the post-review qualification about `platform = ""`. The
       malformed-configuration table gains a `platform-is-empty` case, and
-      ADR-0068, this plan, and the trusted-packaging decision log now record
+      ADR-0071, this plan, and the trusted-packaging decision log now record
       that the record refuses the value earlier than policy did, with the same
       exit status and no weakened release check.
 - [x] Remove the adapter's duplicate empty-assets refusal, raised by the
@@ -308,6 +309,15 @@ records and are unchanged.
       construction equals the factory's record. Both properties were checked
       against a mutant that drops the factory's sort: each fails on it, so the
       evidence is a detected defect rather than a green run beside the code.
+- [x] Answer the second CodeRabbit review. The plan's remaining ADR-0068
+      citations became ADR-0071, except the two that describe the allocation
+      and the earlier contents-index collision, which now name both serials.
+      `StagingTarget`, `StagingTargets`, `StagingTargets.from_targets`, and
+      `platform_target_counts` gained NumPy-style attribute and parameter
+      sections; `DigestRecord.__post_init__` refuses entries whose names are
+      out of sorted order after the uniqueness check, with a doctest and a
+      direct-construction table row; and a test pins the frozen record's
+      refusal message, including the field name.
 
 ## Outcomes and retrospective
 
@@ -365,7 +375,11 @@ staging suite exercises both construction paths, and the digest suite rebuilds
 each refusal without the factory. The digest record also refuses a repeated
 asset name on that path, because a mapping cannot repeat a key and every
 accessor collapses the repetition, so the earlier digest would otherwise never
-be compared. `StagingTarget` likewise refuses a platform that is not a
+be compared, and it refuses entries whose names are not in sorted order, which
+the type's documented contract promises to every consumer. Both are new
+refusals rather than replacements for an older diagnosis: a directly
+constructed record with either shape used to be accepted. `StagingTarget`
+likewise refuses a platform that is not a
 non-empty string, since counting and sorting the configured platforms would
 otherwise compare a mixed-type key set; an unknown platform *name* remains a
 policy refusal. One `_validated_entry` helper holds the digest record's type
@@ -393,7 +407,7 @@ passed, 7 skipped, doctests clean), and `make test-workflow-contracts` (1665
 passed, 3 skipped). The full set is re-run on the branch head that carries the
 review fixes and this update. Roadmap item 9.1.1 stays open, because its
 success criterion covers thresholds, freshness rules, waivers, and retention as
-well; its policy-boundary sub-item is checked against ADR-0068.
+well; its policy-boundary sub-item is checked against ADR-0071.
 
 ## References
 
