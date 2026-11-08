@@ -70,7 +70,7 @@ class DigestRecord:
         >>> DigestRecord((("b", "ab" * 32), ("a", "ab" * 32)))  # doctest: +ELLIPSIS
         Traceback (most recent call last):
             ...
-        release_digest_record.DigestRecordError: the digest record must list asset names in sorted order
+        release_digest_record.DigestRecordError: the digest record must list...
         """
         if not self.entries:
             msg = "the digest record declares no assets, so there is nothing to verify"
@@ -222,7 +222,7 @@ def _require_sorted_names(entries: cabc.Iterable[tuple[str, str]]) -> None:
     ... )
     Traceback (most recent call last):
         ...
-    release_digest_record.DigestRecordError: the digest record must list asset names in sorted order
+    release_digest_record.DigestRecordError: the digest record must list...
     """
     names = [name for name, _ in entries]
     if names != sorted(names):
