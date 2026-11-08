@@ -85,11 +85,7 @@ impl Cli {
     /// ```
     #[must_use]
     pub const fn theme_preference(&self) -> Option<ThemePreference> {
-        match self.emoji.unicode_override() {
-            None => None,
-            Some(true) => Some(ThemePreference::Unicode),
-            Some(false) => Some(ThemePreference::Ascii),
-        }
+        ThemePreference::from_unicode_override(self.emoji.unicode_override())
     }
 
     /// Return an explicit accessible-output override, if configured.

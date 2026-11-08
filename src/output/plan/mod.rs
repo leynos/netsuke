@@ -212,7 +212,7 @@ pub const fn resolve_display_plan(policies: DisplayPolicies, facts: TerminalFact
         Some(policies.colour),
     );
     let prefs = output_prefs::resolve_from_signals(
-        theme_preference(policies.emoji),
+        ThemePreference::from_unicode_override(policies.emoji.unicode_override()),
         ThemeContext::new(None, Some(policies.colour), output_mode),
         facts.env,
     );
@@ -281,19 +281,6 @@ const fn colour_enabled(
         ColourPolicy::Auto => stream_is_terminal && !env.no_color_set && !env.term_dumb,
         ColourPolicy::Always => true,
         ColourPolicy::Never => false,
-    }
-}
-
-/// Convert emoji policy into the theme preference consumed by the theme facade.
-///
-/// The forced/unforced decision belongs to [`EmojiPolicy::unicode_override`],
-/// so the plan cannot disagree with the CLI accessors about what `always` and
-/// `never` mean; this only names the two theme variants.
-const fn theme_preference(policy: EmojiPolicy) -> Option<ThemePreference> {
-    match policy.unicode_override() {
-        None => None,
-        Some(true) => Some(ThemePreference::Unicode),
-        Some(false) => Some(ThemePreference::Ascii),
     }
 }
 

@@ -65,6 +65,40 @@ impl ThemePreference {
             _ => Err(Self::VALID_OPTIONS),
         }
     }
+
+    /// Name the theme variant that a forced emoji decision selects.
+    ///
+    /// Every caller that turns an emoji policy into a theme preference goes
+    /// through here, so exactly one place decides which variant `true` and
+    /// `false` name. The callers own the separate question of whether the
+    /// policy is forced at all, which they answer with
+    /// `EmojiPolicy::unicode_override`; this only names the variants for the
+    /// forced cases. Passing `None` yields `None` rather than `Auto`, because
+    /// an unforced policy leaves the choice to the theme facade.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use netsuke::theme::ThemePreference;
+    ///
+    /// assert_eq!(
+    ///     ThemePreference::from_unicode_override(Some(true)),
+    ///     Some(ThemePreference::Unicode),
+    /// );
+    /// assert_eq!(
+    ///     ThemePreference::from_unicode_override(Some(false)),
+    ///     Some(ThemePreference::Ascii),
+    /// );
+    /// assert_eq!(ThemePreference::from_unicode_override(None), None);
+    /// ```
+    #[must_use]
+    pub const fn from_unicode_override(forced: Option<bool>) -> Option<Self> {
+        match forced {
+            None => None,
+            Some(true) => Some(Self::Unicode),
+            Some(false) => Some(Self::Ascii),
+        }
+    }
 }
 
 impl fmt::Display for ThemePreference {
