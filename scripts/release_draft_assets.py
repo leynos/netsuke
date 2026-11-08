@@ -8,23 +8,20 @@ listing can support the decision at all.
 
 Two refusals are deliberately stricter than GitHub's own behaviour. Selecting a
 release requires exactly one *draft* with the requested tag, because a published
-release with that tag means the draft this job was asked to verify is gone, and
-two drafts mean the listing does not identify one release. Planning downloads
-requires every asset to be an uploaded, non-empty regular attachment with a
-bare, safe name that the tab-separated download plan can carry, because a name
-that could escape the download directory would place attacker-chosen bytes
-beside the trusted inputs, and a zero-byte asset would be hashed as an empty
-file rather than as the artefact it claims to be.
+release carrying it means the draft this job was asked to verify is gone, and
+two drafts do not identify one release. Planning downloads requires every asset
+to be an uploaded, non-empty attachment with a bare, safe name the tab-separated
+plan can carry: a name that could escape the download directory would place
+attacker-chosen bytes beside the trusted inputs.
 
 Nothing here parses JSON, touches a file, or reaches the network:
-:mod:`release_draft_assets_cli` owns those effects. The name judgement is
-:mod:`release_asset_names`, shared with inventory verification, so the download
-plan and the later inventory check agree on what a publishable name is.
-
-Run via ``scripts/release_draft_assets_cli.py``; behavioural coverage lives in
-``scripts/tests/test_release_draft_assets.py``.
+:mod:`release_draft_assets_cli` owns those effects, and
+:mod:`release_asset_names` supplies the name judgement it shares with inventory
+verification. Run via ``scripts/release_draft_assets_cli.py``; behavioural
+coverage lives in ``scripts/tests/test_release_draft_assets.py``.
 """
 
+import collections
 import typing as typ
 
 import release_asset_names
@@ -55,8 +52,8 @@ class AssetListingError(DraftAssetError):
 def _is_integer(value: object) -> bool:
     """Report whether ``value`` is an integer rather than a boolean.
 
-    ``bool`` is a subclass of ``int`` in Python, so an unguarded check would
-    accept ``True`` as an asset identifier and hand ``gh`` a nonsense argument.
+    ``bool`` subclasses ``int``, so an unguarded check would pass ``True`` to
+    ``gh`` as an identifier.
 
     Returns
     -------
@@ -80,16 +77,9 @@ def _is_integer(value: object) -> bool:
 def _entries(pages: object, *, what: str) -> list[cabc.Mapping[str, object]]:
     """Flatten the pages ``gh api --paginate --slurp`` produced into objects.
 
-    Parameters
-    ----------
-    pages
-        Decoded JSON, expected to be an array of page arrays of objects.
-    what
-        Noun naming the listing in any diagnostic, such as ``"release"``.
-
     Returns
     -------
-    list[dict[str, object]]
+    list[collections.abc.Mapping[str, object]]
         Every object the pages hold, in listing order.
 
     Raises
@@ -100,9 +90,9 @@ def _entries(pages: object, *, what: str) -> list[cabc.Mapping[str, object]]:
 
     Notes
     -----
-    A listing that is merely empty is *not* refused here. Emptiness means
-    different things to the two callers -- no draft matches the tag versus a
-    release with no attachments -- so each decides it after flattening.
+    An empty listing is not refused here: no draft matching the tag and a
+    release with no attachments are different problems, so each caller decides
+    after flattening.
 
     Examples
     --------
@@ -153,6 +143,26 @@ def _draft_identifier(entry: cabc.Mapping[str, object], *, tag: str) -> int:
     return typ.cast("int", identifier)
 
 
+def _partition_drafts(
+    matching: list[cabc.Mapping[str, object]],
+) -> tuple[list[cabc.Mapping[str, object]], int]:
+    """Split the tagged releases into the drafts and a count of the rest.
+
+    Returns
+    -------
+    tuple[list[collections.abc.Mapping[str, object]], int]
+        The draft entries in listing order, and the count of the rest.
+    """
+    drafts: list[cabc.Mapping[str, object]] = []
+    published = 0
+    for entry in matching:
+        if entry.get("draft") is True:
+            drafts.append(entry)
+        else:
+            published += 1
+    return drafts, published
+
+
 def select_draft_release(pages: object, *, tag: str) -> int:
     """Return the identifier of the one draft release carrying ``tag``.
 
@@ -173,9 +183,7 @@ def select_draft_release(pages: object, *, tag: str) -> int:
     Raises
     ------
     ReleaseSelectionError
-        If no draft carries ``tag``, a release carrying it is already
-        published, more than one draft carries it, or the chosen draft has no
-        integer identifier.
+        If ``tag`` does not identify exactly one draft with an integer id.
 
     Examples
     --------
@@ -192,14 +200,13 @@ def select_draft_release(pages: object, *, tag: str) -> int:
         for entry in _entries(pages, what="release")
         if entry.get("tag_name") == tag
     ]
-    published = [entry for entry in matching if entry.get("draft") is not True]
+    drafts, published = _partition_drafts(matching)
     if published:
         msg = (
             f"the release tagged {tag!r} is published, not a draft, so there is "
             "no draft inventory to verify"
         )
         raise ReleaseSelectionError(msg)
-    drafts = [entry for entry in matching if entry.get("draft") is True]
     if not drafts:
         msg = f"no draft release is tagged {tag!r}"
         raise ReleaseSelectionError(msg)
@@ -241,9 +248,8 @@ def _require_safe_names(names: list[str]) -> None:
 
     Notes
     -----
-    Escaping is reported before malformed, matching
-    :func:`release_inventory.validate_inventory`: a traversal attempt is the
-    security diagnosis, and naming it as mere malformation would bury it.
+    Escaping is reported before malformed, as in
+    :func:`release_inventory.validate_inventory`: traversal is the diagnosis.
     """
     escaping, malformed = release_asset_names.rejected_names(names)
     if escaping:
@@ -269,15 +275,11 @@ def _require_plan_safe(names: list[str]) -> None:
 
     Notes
     -----
-    A bare file name may still hold a delimiter. A line feed would forge an
-    extra ``id<TAB>name`` record, so the download step would fetch an asset the
-    listing never planned; a tab or carriage return would truncate or corrupt
-    the name the step writes. Both are refused here rather than escaped,
-    because an asset name is published data and nothing legitimate needs one.
+    A line feed would forge an extra ``id<TAB>name`` record, so the download
+    step would fetch an asset the listing never planned; a tab or carriage
+    return would truncate the name it writes. Both are refused, not escaped.
     """
-    unrepresentable = [
-        name for name in names if any(char in name for char in PLAN_DELIMITERS)
-    ]
+    unrepresentable = [name for name in names if set(name) & set(PLAN_DELIMITERS)]
     if unrepresentable:
         msg = (
             "release asset names cannot be represented in the download plan: "
@@ -296,12 +298,10 @@ def _require_unique(names: list[str]) -> None:
 
     Notes
     -----
-    A duplicated name would make the download plan write the second asset over
-    the first, so only one of the two would ever be verified.
+    A duplicate would write the second asset over the first, so only one would
+    ever be verified.
     """
-    counts: dict[str, int] = {}
-    for name in names:
-        counts[name] = counts.get(name, 0) + 1
+    counts = collections.Counter(names)
     repeated = sorted(name for name, count in counts.items() if count > 1)
     if repeated:
         msg = "release asset names are duplicated: " + ", ".join(
@@ -320,21 +320,39 @@ def _entry_problems(entry: cabc.Mapping[str, object], name: str) -> list[str]:
 
     Notes
     -----
-    An identifier is required because the download endpoint addresses assets by
-    number, not by name. The state and size are required because an attachment
-    GitHub has not finished storing, or one with no bytes, is not the artefact
-    the trusted record describes; hashing it would compare the wrong thing.
+    Assets are addressed by number, and an attachment not finished storing, or
+    one with no bytes, is not the artefact the trusted record describes.
     """
-    problems: list[str] = []
-    if not _is_integer(entry.get("id")):
-        problems.append(f"{name!r} carries no integer id: {entry.get('id')!r}")
+    identifier = entry.get("id")
     state = entry.get("state")
-    if state != UPLOADED_STATE:
-        problems.append(f"{name!r} is not uploaded (state {state!r})")
     size = entry.get("size")
-    if not _is_integer(size) or size == 0:
-        problems.append(f"{name!r} does not report a usable byte size: {size!r}")
-    return problems
+    checks = (
+        (_is_integer(identifier), f"{name!r} carries no integer id: {identifier!r}"),
+        (state == UPLOADED_STATE, f"{name!r} is not uploaded (state {state!r})"),
+        (
+            _is_integer(size) and size != 0,
+            f"{name!r} does not report a usable byte size: {size!r}",
+        ),
+    )
+    return [message for holds, message in checks if not holds]
+
+
+def _require_usable(entries: list[cabc.Mapping[str, object]], names: list[str]) -> None:
+    """Refuse the listing if any entry cannot be downloaded as claimed.
+
+    Raises
+    ------
+    AssetListingError
+        If one or more entries report a defect, naming every one of them.
+    """
+    problems = [
+        problem
+        for entry, name in zip(entries, names, strict=True)
+        for problem in _entry_problems(entry, name)
+    ]
+    if problems:
+        msg = "the release asset listing is unusable: " + "; ".join(problems)
+        raise AssetListingError(msg)
 
 
 def plan_downloads(pages: object) -> list[tuple[int, str]]:
@@ -343,8 +361,7 @@ def plan_downloads(pages: object) -> list[tuple[int, str]]:
     Parameters
     ----------
     pages
-        Decoded ``gh api --method GET --paginate --slurp`` asset pages for one
-        release.
+        Decoded ``gh api --method GET --paginate --slurp`` asset pages.
 
     Returns
     -------
@@ -354,10 +371,8 @@ def plan_downloads(pages: object) -> list[tuple[int, str]]:
     Raises
     ------
     AssetListingError
-        If the listing is empty, names an unsafe, malformed, or
-        plan-unrepresentable attachment, repeats a name, or holds an entry
-        without an integer identifier, a non-``uploaded`` state, or a usable
-        byte size.
+        If the listing is empty, or any name or entry cannot be downloaded as
+        claimed.
 
     Examples
     --------
@@ -374,14 +389,7 @@ def plan_downloads(pages: object) -> list[tuple[int, str]]:
     _require_safe_names(names)
     _require_plan_safe(names)
     _require_unique(names)
-    problems = [
-        problem
-        for entry, name in zip(entries, names, strict=True)
-        for problem in _entry_problems(entry, name)
-    ]
-    if problems:
-        msg = "the release asset listing is unusable: " + "; ".join(problems)
-        raise AssetListingError(msg)
+    _require_usable(entries, names)
     return [
         (typ.cast("int", entry["id"]), name)
         for entry, name in zip(entries, names, strict=True)
