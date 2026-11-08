@@ -8,6 +8,7 @@ The record is constructed directly, as a decoded adapter would construct it;
 that produce each refusal.
 """
 
+import dataclasses
 import operator
 import string
 import typing as typ
@@ -122,6 +123,11 @@ def test_a_canonical_record_is_the_same_however_it_was_built(
             "each asset name once",
             id="duplicate-name",
         ),
+        pytest.param(
+            (("b", DIGEST), ("a", DIGEST)),
+            "in sorted order",
+            id="unsorted-names",
+        ),
     ],
 )
 def test_a_directly_constructed_record_is_validated(
@@ -137,6 +143,23 @@ def test_a_directly_constructed_record_is_validated(
 
     with pytest.raises(release_digest_record.DigestRecordError, match=message):
         _ = release_digest_record.DigestRecord(malformed)
+
+
+def test_a_record_is_immutable() -> None:
+    """Reject mutation, so a verified record cannot be rewritten in place.
+
+    The assignment is written through ``setattr`` on purpose. A literal
+    ``record.entries = ...`` is refused statically by the typechecker, so the
+    only way to reach the runtime guard is to bypass its static twin.
+    """
+    record = _trusted({"a": DIGEST})
+    rewritten = "entries"
+
+    with pytest.raises(dataclasses.FrozenInstanceError) as raised:
+        setattr(record, rewritten, ())
+    assert str(raised.value) == "cannot assign to field 'entries'", (
+        "the frozen error must name the field a caller tried to rewrite"
+    )
 
 
 def test_a_non_string_asset_name_is_refused_before_sorting() -> None:

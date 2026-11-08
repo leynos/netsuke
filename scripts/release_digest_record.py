@@ -55,8 +55,9 @@ class DigestRecord:
         ------
         DigestRecordError
             If the record declares no asset, names an asset with a non-string
-            key, lists an asset name more than once, or carries a digest that
-            is not a lowercase hexadecimal value.
+            key, lists an asset name more than once, carries a digest that is
+            not a lowercase hexadecimal value, or lists its asset names out of
+            order.
 
         Examples
         --------
@@ -66,6 +67,10 @@ class DigestRecord:
         Traceback (most recent call last):
             ...
         release_digest_record.DigestRecordError: the digest record declares no assets...
+        >>> DigestRecord((("b", "ab" * 32), ("a", "ab" * 32)))  # doctest: +ELLIPSIS
+        Traceback (most recent call last):
+            ...
+        release_digest_record.DigestRecordError: the digest record must list asset names in sorted order
         """
         if not self.entries:
             msg = "the digest record declares no assets, so there is nothing to verify"
@@ -75,6 +80,7 @@ class DigestRecord:
                 msg = f"the digest record must carry lowercase digests, got {digest!r}"
                 raise DigestRecordError(msg)
         _require_unique_names(self.entries)
+        _require_sorted_names(self.entries)
 
     @classmethod
     def from_mapping(cls, declared: cabc.Mapping[str, object]) -> DigestRecord:
@@ -191,6 +197,36 @@ def _require_unique_names(entries: cabc.Iterable[tuple[str, str]]) -> None:
     names = [name for name, _ in entries]
     if len(set(names)) != len(names):
         msg = "the digest record must list each asset name once"
+        raise DigestRecordError(msg)
+
+
+def _require_sorted_names(entries: cabc.Iterable[tuple[str, str]]) -> None:
+    """Refuse a record whose asset names are not in sorted order.
+
+    A mapping cannot preserve a surprising order, so only a direct
+    construction can reach this state. Sorting is part of the record's
+    documented contract: callers may rely on iterating an ordered view of the
+    release assets without re-sorting it themselves, and an out-of-order
+    record would silently break that expectation.
+
+    Raises
+    ------
+    DigestRecordError
+        If the asset names are not in sorted order.
+
+    Examples
+    --------
+    >>> _require_sorted_names([("a", "ab" * 32), ("b", "ab" * 32)])
+    >>> _require_sorted_names(  # doctest: +ELLIPSIS
+    ...     [("b", "ab" * 32), ("a", "ab" * 32)]
+    ... )
+    Traceback (most recent call last):
+        ...
+    release_digest_record.DigestRecordError: the digest record must list asset names in sorted order
+    """
+    names = [name for name, _ in entries]
+    if names != sorted(names):
+        msg = "the digest record must list asset names in sorted order"
         raise DigestRecordError(msg)
 
 
