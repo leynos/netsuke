@@ -2616,9 +2616,8 @@ Only *the upload step itself* defers its failure; the action as a whole can
 still fail. That step captures the uploader's status, writes `upload-error` and
 `error-message` outputs, and exits 0, and the job's own
 `Check asset upload errors` step turns a `true` into a diagnostic and an exit
-
-1. That hand-off is what the shared action already did, and keeping it means
-the surrounding steps did not move: the outcome record still reads
+status of 1. That hand-off is what the shared action already did, and keeping
+it means the surrounding steps did not move: the outcome record still reads
 `UPLOAD_ERROR_PRESENT` from the output, and `release_operation_records` still
 classifies a planned-but-refused upload as `upload_plan_validation` from the
 flag rather than from a phase outcome.
@@ -2631,6 +2630,15 @@ the release. Retention uploads the record with `if-no-files-found: error`, so a
 selector that wrote nothing fails there rather than at the uploader. Each of
 those fails the action's own step, which is what stops a bad tree from reaching
 the network at all.
+
+The upload path ends here for now. The retained `trusted.json` is consumed by
+nothing in this workflow: `verify-release-inventory`,
+`finalize-github-release`, and `consumer-smoke` are planned job-matched actions
+that do not exist yet, so the release this job attaches assets to stays a draft
+a person publishes. The record is retained *for* those jobs, which is what the
+issue asks for; wiring a consumer is their work. Read the section above as
+describing the implemented upload path, not a completed verification and
+finalisation hand-off.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;

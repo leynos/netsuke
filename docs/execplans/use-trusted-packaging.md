@@ -2909,9 +2909,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `make typecheck` reported 33 diagnostics at `1ff2bf525`, and CI's
   `build-test` job was red at step 23 "Typecheck" on the same commit -- every
   step after it, including the workflow-contract and release-publication
-  suites, was skipped. The gate set I had been running covered both suites but
-  not the checker, so the branch's own verification had a hole exactly where CI
-  failed.
+  suites, was skipped. The local gate set covered both suites but not the
+  checker, so the branch's own verification had a hole exactly where CI failed.
 
   Every diagnostic had one shape: a test decoded JSON and returned
   `dict[str, object]`, leaving each key read unsupported at analysis time and
@@ -3004,9 +3003,9 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   reverted within the same second can be missed. Evidence:
   `PYTHONPYCACHEPREFIX=/tmp/<fresh> python -B` enumerated the table correctly
   and `refusal()` returned `(1, ...)` for the mismatch subclass. Impact: when a
-  suite disagrees with a source you have just verified, delete the
-  `__pycache__` directories before rewriting correct code to match a stale
-  import. Date/Author: 2026-11-08, implementation agent.
+  suite disagrees with freshly verified source, delete the `__pycache__`
+  directories before rewriting correct code to match a stale import.
+  Date/Author: 2026-11-08, implementation agent.
 
 - Observation: **A policy module may import its annotated type only for type
   checking, but its doctests then have to import that type themselves.** Ruff's

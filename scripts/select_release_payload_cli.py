@@ -8,9 +8,14 @@ asks :mod:`release_payload_selection` what the release declares, and copies
 exactly those files -- under their published names -- into a directory the
 uploader then treats as the whole payload.
 
-The trusted digest record written here is the selection's own view of the
-producers' claims. It travels to the verifier and the finalizer, which is what
-keeps the comparison anchored outside the downloaded tree.
+The selection record written here is the selection's own view of the producers'
+claims. The action retains it with the declaration record as a workflow
+artefact, and the uploader reads it back as the independent account of what the
+payload must contain: a staged tree replaced between the two hashes yields a
+declaration record that faithfully describes the replacement, so only the two
+records answering for one another close that window. The record is retained
+beyond the upload for the inventory verifier and the release finalizer, which
+do not exist yet, so nothing downstream consumes it today.
 
 Tree observation and the verified copy live in :mod:`release_payload_tree`, so
 this module is the argument surface and nothing else.

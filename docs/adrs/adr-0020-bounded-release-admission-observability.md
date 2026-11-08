@@ -144,16 +144,11 @@ The `release` and `publish-release` jobs call
 `scripts/release_operation_observability.py` after their staging or publication
 steps. Each job writes an always-run outcome to `GITHUB_STEP_SUMMARY`. The
 publication job uploads `release-operation-observability.jsonl` as the
-`release-operation-observability-${{ github.job }}-${{ github.run_attempt }}`
-workflow artefact. The attempt suffix is load-bearing: a job re-run keeps the
-run id and increments only the attempt, so a job-only name collides with the
-first attempt's artefact and the upload action refuses to overwrite it. Setting
-`overwrite: true` would clear that collision by deleting the earlier attempt's
-record, which is the evidence an operator compares a re-run against, so the
-name distinguishes attempts instead. The staging job keeps its JSONL file on
-the runner and does not upload a diagnostic artefact, preserving the dry-run
-contract. The workflow does not set an artefact retention override; the
-configured GitHub Actions retention policy applies to the publication artefact.
+`release-operation-observability-${{ github.job }}` workflow artefact. The
+staging job keeps its JSONL file on the runner and does not upload a diagnostic
+artefact, preserving the dry-run contract. The workflow does not set an
+artefact retention override; the configured GitHub Actions retention policy
+applies to the publication artefact.
 
 The JSONL records use fixed operation labels (`release_staging` and
 `release_publication`), fixed phase labels (`draft_release`,
@@ -289,14 +284,39 @@ An always-run step writes the bounded operation summary to
 `GITHUB_STEP_SUMMARY` and writes metric and phase-event records to
 `release-operation-observability.jsonl` under `runner.temp`. A separate
 always-run step uploads that file as
-`release-operation-observability-package-crate-<run attempt>`, the attempt
-suffix keeping a job re-run from colliding with the record the first attempt
-retained. The package and telemetry artefacts do not set a retention override,
-so GitHub Actions applies the configured retention policy. The records use
-fixed operation, phase, outcome, and error-category values and omit release
-tags, artefact names, raw errors, and secrets.
+`release-operation-observability-package-crate`. The package and telemetry
+artefacts do not set a retention override, so GitHub Actions applies the
+configured retention policy. The records use fixed operation, phase, outcome,
+and error-category values and omit release tags, artefact names, raw errors,
+and secrets.
 
 The helper remains diagnostic: it does not change the release mode or convert a
 failed package or artefact-upload step into success. The package job is not a
 dependency of either publication job until the registry publisher consumes its
 artefact.
+
+## Addendum (2026-11-08): Attempt-specific telemetry artefact names
+
+This addendum amends, and does not replace, the 2026-10-03 and 2026-10-26
+addenda above. Their text is preserved as written; the artefact names they
+specify are superseded here.
+
+Every retained observability artefact name now carries
+`-${{ github.run_attempt }}` after the job scope, so
+`release-operation-observability-${{ github.job }}` becomes
+`release-operation-observability-${{ github.job }}-${{ github.run_attempt }}`,
+and the package job's `release-operation-observability-package-crate` becomes
+`release-operation-observability-package-crate-${{ github.run_attempt }}`.
+
+The suffix is load-bearing. A job re-run keeps the run id and increments only
+the attempt, so an artefact named for the job alone collides with the first
+attempt's artefact, and `actions/upload-artifact` v7 refuses to overwrite an
+existing one rather than replacing it. Resolving that with `overwrite: true`
+would be worse than the collision: the retained record exists so an operator
+can compare a re-run against the attempt that failed, and overwriting deletes
+the comparison. The name distinguishes attempts instead, which costs one extra
+artefact per re-run and loses nothing.
+
+Nothing else in either addendum changes. The retention policy, the dry-run
+carve-out for the staging job, the fixed operation and phase labels, and the
+bounded error-category set all stand.

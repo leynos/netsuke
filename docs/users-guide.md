@@ -109,13 +109,17 @@ The publishing job attaches only the assets this run declared. Before it
 uploads anything it checks the retained producer records against the candidate
 commit and the workflow run, and refuses the release when a record belongs to
 an earlier commit or another run, when a configured target is missing or
-claimed twice, or when a staged file is not one of the declared names. It then
-hashes those exact bytes and retains the declaration and the digest record
-alongside them, so a later job verifies the bytes that were actually uploaded
-rather than re-deriving them. An attached asset GitHub already reports with the
-recorded digest is skipped; an attached asset with different bytes stops the
-run, and the uploader never replaces an existing asset. Rerunning a job is
-therefore safe, and a rerun cannot swap a release's bytes for a second build's.
+claimed twice, or when a staged file carries a release asset suffix but is not
+one of the declared names. Build material that ships inside the packages -- the
+binary, licences, completions, and manual pages -- carries no release suffix
+and is simply left out of the upload. The job then hashes the declared bytes
+and retains the declaration and the digest record as workflow artefacts, so
+what was uploaded stays on record. No later job consumes those artefacts yet:
+the release remains a draft that a person publishes. An attached asset GitHub
+already reports with the recorded digest is skipped; an attached asset with
+different bytes stops the run, and the uploader never replaces an existing
+asset. Rerunning a job is therefore safe, and a rerun cannot swap a release's
+bytes for a second build's.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
