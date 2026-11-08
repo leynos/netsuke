@@ -272,6 +272,10 @@ Behaviour users should know about:
   disabled.
 - `--accessibility on` and `--accessibility off` name the output mode directly
   and take precedence over every inferred choice.
+- An empty `NO_COLOR` no longer suppresses colour. The variable counts as set
+  only when it has a non-empty value, which is what the `NO_COLOR` convention
+  asks for; a bare `NO_COLOR=` in a shell or CI environment now leaves colour
+  and accessible mode alone. Previously any presence of the variable was enough.
 - Usage errors and the human-readable configuration-load error stay plain under
   every policy, because the configuration that would select a policy has not
   been read yet. The structured `tracing` events emitted beside them do follow

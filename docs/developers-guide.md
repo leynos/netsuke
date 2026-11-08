@@ -157,8 +157,11 @@ the adapters apply them differently because their libraries do:
 
 - The tracing formatter installs `ansi` from the plan's stderr decision when
   `init_tracing` runs, so every event after that follows the same answer.
-- The Miette hook maps `diagnostic_style().colour` to a graphical or narratable
-  handler and passes `unicode` and `links` alongside it.
+- The Miette hook builds one `MietteHandlerOpts` handler per report from
+  `diagnostic_style()`, passing its `colour`, `unicode` and `links` fields to
+  `color`, `unicode` and `terminal_links`. It does not choose between graphical
+  and narratable handlers; Miette decides the rendering, and the plan only
+  supplies those three facts.
 - Clap's own `--help` path uses the plan's stdout decision for `colour_choice`;
   the runner's `help` renderers take the same `bool` and choose between
   `StyledStr::ansi` and `StyledStr::Display`, because Clap's `Display` never
