@@ -78,6 +78,22 @@ fn case_substitution_real_closer_before_hash_fails_closed() {
     );
 }
 
+/// Verify the ambiguous closer keeps its quote context on a later executable line.
+///
+/// The `)` before `#` is the substitution's real closer, so it stays in the
+/// surrounding word. A scanner that instead read `#` as a comment start would
+/// leave the following double quote inert and encode the marker on the next
+/// line for the wrong context. The guard must fail closed before that encoding,
+/// through both interpolators.
+#[test]
+fn case_real_closer_preserves_quote_context_by_rejecting() {
+    let (template, _) = executable_quote_case("echo $(case x in x) :;; esac)");
+    assert_both_reject(
+        &template,
+        "an ambiguous case boundary must fail closed instead of flipping the quote context",
+    );
+}
+
 /// Verify the guard still fires beyond the truncated diagnostic snippet.
 ///
 /// The invalid-command diagnostic quotes only the first 160 characters of the
