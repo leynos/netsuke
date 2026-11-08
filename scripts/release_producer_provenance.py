@@ -1,24 +1,20 @@
 """Read the provenance record one producer writes for the artefacts it built.
 
-A declaration says *which names* a release publishes. It does not say which
-commit produced them, and neither a package suffix nor a per-platform count
-can establish that -- both describe a file, not its origin. Each producer
-therefore records the candidate it built, the run it built under, and the
-SHA-256 digest of every artefact it is handing on, and that record travels to
-publication independently of the downloaded trees.
+A declaration says *which names* a release publishes, not which commit
+produced them, and neither a package suffix nor a per-platform count can
+establish that: both describe a file, not its origin. Each producer therefore
+records the candidate it built, the run it built under, and the SHA-256 digest
+of every artefact it hands on, and that record reaches publication
+independently of the downloaded trees.
 
-This module owns the record's shape and the reader that re-validates it. The
-checks made *across* records, and against the release's own identity, belong to
-:mod:`release_producer_provenance_checks`; the refusal vocabulary belongs to
-:mod:`release_producer_provenance_errors`; and reading JSON, hashing files, and
-scanning a downloaded tree belong to the adapters.
+This module owns the record's shape and the reader that re-validates it.
+Cross-record checks belong to :mod:`release_producer_provenance_checks`, the
+refusal vocabulary to :mod:`release_producer_provenance_errors`, and JSON,
+hashing, and tree scanning to the adapters.
 
-The record only binds bytes to a claim *by the producer*. It is evidence that
-the job that ran under a given commit produced these digests; it is not a proof
-that the commit was honest, and this module makes no such claim.
-
-Run via the release publication adapters; behavioural coverage lives in
-``scripts/tests/test_release_producer_provenance.py``.
+The record binds bytes to a claim *by the producer*: evidence the job running
+under a given commit produced these digests, not proof the commit was honest.
+Coverage: ``scripts/tests/test_release_producer_provenance.py``.
 """
 
 import dataclasses
@@ -81,13 +77,12 @@ _MEMBERS = (
     ASSETS_MEMBER,
 )
 
-#: A candidate is a full lowercase hexadecimal commit. The same rule
-#: :mod:`release_candidate` applies, restated here so a producer record is
-#: judged without importing the resolver that consumes it.
+#: A full lowercase hexadecimal commit: the rule :mod:`release_candidate`
+#: applies, restated so a record is judged without the resolver that reads it.
 _COMMIT = re.compile(r"\A[0-9a-f]{40}\Z")
 
-#: Run identities are decimal counters. They are compared as text only, so the
-#: rule exists to refuse an empty or malformed claim, not to do arithmetic.
+#: Run identities are decimal counters, compared as text only: the rule
+#: refuses a malformed claim rather than doing arithmetic.
 _RUN_IDENTITY = re.compile(r"\A[1-9][0-9]*\Z")
 
 #: One SHA-256 digest, lowercase hexadecimal.
@@ -114,7 +109,7 @@ class ProducerProvenance:
     platform
         The platform whose package formats the target stages.
     assets
-        Published asset name mapped to its lowercase SHA-256 digest.
+        Published name mapped to its lowercase SHA-256 digest.
     """
 
     schema: int
@@ -129,11 +124,6 @@ class ProducerProvenance:
 def validate_provenance(record: object) -> ProducerProvenance:
     """Return the provenance a decoded record describes, re-validated in full.
 
-    Parameters
-    ----------
-    record
-        Decoded producer record, normally parsed by the JSON adapter.
-
     Returns
     -------
     ProducerProvenance
@@ -141,15 +131,10 @@ def validate_provenance(record: object) -> ProducerProvenance:
 
     Notes
     -----
-    Commit *shape* is checked here; whether it is *this release's* candidate is
-    checked by :func:`release_producer_provenance_checks.require_candidate`,
-    because a well-formed record for an older commit is a different diagnosis
-    from a malformed one.
-
-    The shape checks are delegated to private helpers, each of which raises
-    the diagnosis it owns: ``MalformedRecordError``, ``MissingMemberError``,
-    ``UnknownPlatformError``, ``UnsafeAssetNameError``, ``InvalidDigestError``,
-    and ``EmptyAssetsError`` all surface from this call.
+    Commit *shape* is checked here; whether it is *this release's* candidate
+    is :func:`release_producer_provenance_checks.require_candidate`'s, because
+    a well-formed record for an older commit is a different diagnosis from a
+    malformed one.
 
     Examples
     --------
@@ -258,11 +243,6 @@ def _commit(record: cabc.Mapping[str, object]) -> str:
     ------
     MalformedCommitError
         If the commit is not a full lowercase hexadecimal commit.
-
-    Examples
-    --------
-    >>> _commit({"commit": "a" * 40})[:8]
-    'aaaaaaaa'
     """
     commit = _required_text(record, COMMIT_MEMBER)
     if not _COMMIT.match(commit):
@@ -282,11 +262,6 @@ def _required_run_identity(record: cabc.Mapping[str, object], member: str) -> st
     ------
     MalformedRunIdentityError
         If the member is not positive-integer text.
-
-    Examples
-    --------
-    >>> _required_run_identity({"run_attempt": "2"}, "run_attempt")
-    '2'
     """
     value = _required_text(record, member)
     if not _RUN_IDENTITY.match(value):
@@ -306,11 +281,6 @@ def _platform(record: cabc.Mapping[str, object]) -> str:
     ------
     UnknownPlatformError
         If the platform stages no package format.
-
-    Examples
-    --------
-    >>> _platform({"platform": "linux"})
-    'linux'
     """
     platform = _required_text(record, PLATFORM_MEMBER)
     if platform not in release_package_formats.PLATFORM_FORMATS:
@@ -362,10 +332,11 @@ def _validated_assets(declared: object, *, target: str) -> dict[str, str]:
         If ``declared`` is not a mapping.
     EmptyAssetsError
         If it holds no entry.
-    UnsafeAssetNameError
-        If a name is not one bare file name.
-    InvalidDigestError
-        If a digest is malformed.
+
+    Notes
+    -----
+    ``UnsafeAssetNameError`` and ``InvalidDigestError`` surface from the two
+    helpers below.
 
     Examples
     --------
@@ -380,11 +351,50 @@ def _validated_assets(declared: object, *, target: str) -> dict[str, str]:
         raise MalformedRecordError(msg)
     if not declared:
         raise EmptyAssetsError(target)
-    assets: dict[str, str] = {}
-    for name, digest in declared.items():
-        if not isinstance(name, str) or not release_asset_names.is_bare_file_name(name):
-            raise UnsafeAssetNameError(target, str(name))
-        if not isinstance(digest, str) or not _DIGEST.match(digest):
-            raise InvalidDigestError(target, name)
-        assets[name] = digest
-    return assets
+    return {
+        _validated_name(name, target=target): _validated_digest(
+            name, digest, target=target
+        )
+        for name, digest in declared.items()
+    }
+
+
+def _validated_name(name: object, *, target: str) -> str:
+    """Return one claimed asset name, refusing anything but a bare file name.
+
+    Returns
+    -------
+    str
+        The name, once it is a string a release may publish.
+
+    Raises
+    ------
+    UnsafeAssetNameError
+        If the name is not a string, or names anything but one bare file.
+
+    Notes
+    -----
+    The name is judged first because the digest's refusal quotes it, and a
+    value that is not a string cannot be quoted as one.
+    """
+    if not isinstance(name, str) or not release_asset_names.is_bare_file_name(name):
+        raise UnsafeAssetNameError(target, str(name))
+    return name
+
+
+def _validated_digest(name: str, digest: object, *, target: str) -> str:
+    """Return the digest claimed for ``name``, refusing a malformed one.
+
+    Returns
+    -------
+    str
+        The lowercase SHA-256 digest the producer recorded.
+
+    Raises
+    ------
+    InvalidDigestError
+        If the digest is not a string of the expected hexadecimal length.
+    """
+    if not isinstance(digest, str) or not _DIGEST.match(digest):
+        raise InvalidDigestError(target, name)
+    return digest
