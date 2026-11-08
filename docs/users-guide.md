@@ -1988,11 +1988,13 @@ non-empty value, or when `--color never` is selected. Select it explicitly with
 `--accessibility on`, or force standard output with `--accessibility off`.
 
 Precedence is explicit configuration first, then the environment.
-`--color always` and `NETSUKE_COLOR=always` suppress the `NO_COLOR` and
-`TERM=dumb` triggers, because an operator who asked for colour has overridden
-the ambient hint. `--accessibility on` and `--accessibility off` take
-precedence over all of them: they name the output mode directly rather than
-inferring it from colour.
+`--color always` and `NETSUKE_COLOR=always` suppress the `NO_COLOR` trigger,
+because an operator who asked for colour has overridden that ambient hint.
+`TERM=dumb` is not a colour hint, though: it says the terminal cannot render
+live redraws, so it still selects accessible mode under `--color always`. Use
+`--accessibility off` to force standard output against it. `--accessibility on`
+and `--accessibility off` take precedence over all of them: they name the
+output mode directly rather than inferring it from colour.
 
 A typical accessible build reports:
 

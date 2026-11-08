@@ -131,8 +131,9 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   harness tests, and the packaging test leave `nested-cargo-builds`, along with
   the three 900 s allowances they carried. With no build left in the default
   suite, the generated-completion readers leave the group too, and the
-  `#[ignore]`-gated mutation compile gate is its only member. Its original
-  allowance of 600 s was then the largest per-test allowance.
+  `#[ignore]`-gated mutation compile gate is its only member. Its 600 s
+  allowance was then the largest per-test allowance; the dated reassessments
+  below record why it was raised and on what evidence.
 - **Discovery.** The child-Cargo discovery used by the workflow contracts no
   longer treats `cargo package --list` as build-capable, and a contract now
   requires that no test outside the mutation compile gate starts a

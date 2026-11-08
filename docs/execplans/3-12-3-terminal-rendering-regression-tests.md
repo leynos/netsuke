@@ -914,6 +914,59 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
     the message, where the old form passed. Date/Author: 2026-11-08,
     implementation agent, after `5815758338`.
 
+- **D28. Six further pre-merge rows were adopted and one was found already
+  satisfied.** Each was checked against current source first; two were real
+  documentation defects and one was a real coverage gap.
+  - *User-Facing Documentation* was correct, and the error was mine. I had
+    written that `--color always` suppresses both the `NO_COLOR` and
+    `TERM=dumb` triggers. `no_color_active` special-cases `ColourPolicy::Always`
+    to `false`, but `resolve_output_mode` tests `self.term_dumb` with a plain
+    `||` that no colour policy reaches. A probe confirms `always + TERM=dumb`
+    still resolves to accessible mode. ADR-0072 states the intended rule —
+    `TERM=dumb` is not a colour hint but a statement that the terminal cannot
+    redraw, and it prevents live redraws even under `--accessibility off` — so
+    the code is right and the prose was wrong. The guide now says what happens
+    and points at `--accessibility off` as the override.
+  - The same row asked for the output changes and the Rust API migration in
+    `docs/v0-1-0-migration-guide.md`. The API part is a genuine breaking
+    change: `output_prefs::resolve_from_theme` and `resolve_from_theme_with`
+    were public at base and are gone, replaced by `resolve_from_signals`, and
+    `netsuke::display_plan` is new. A "Colour, emoji and progress are resolved
+    once" section now carries both halves.
+  - It also asked to remove the obsolete colour limitation from the translated
+    READMEs. All six carried it — `README.de.md:349`, `README.es.md:355`,
+    `README.fr.md:357`, `README.ja.md:308`, `README.pt-BR.md:338` and
+    `README.zh-CN.md:280` — while the English `README.md` was already clean, so
+    the translations had drifted. Limitations tracked the English bullet at
+    the printed line numbers, and all six are removed.
+  - *Developer Documentation* was right that the tracing module path was stale:
+    `src/main_tracing/mod.rs` is now `src/main_tracing.rs`. The same row asked
+    for how the display plan sets ANSI output, which was not documented; the
+    guide now records that each adapter applies the plan's own decision —
+    tracing via `ansi` at `init_tracing`, Miette by choosing a graphical or
+    narratable handler, Clap via `StyledStr::ansi` rather than `Display`, and
+    the reporter via `live_progress`.
+  - *Testing (Unit And Behavioural)* asked for bounded PTY tests of the timeout
+    error and of cleanup when a descendant holds a descriptor open. Neither
+    existed, though the harness implements both. `pty_reports_a_child_that
+    _exceeds_its_timeout` and `pty_stops_reading_when_a_descendant_holds_the
+    _terminal` now cover them. The second takes the full five-second timeout,
+    so it exercises the process-group kill rather than the ordinary exit; the
+    first fails when its timeout is raised, so neither is vacuous.
+  - *Module-Level Documentation* asked `json.rs` to describe the
+    configuration-error and tracing checks accurately. The docstring now states
+    the split: JSON mode carries no escape at all, while a configuration-load
+    failure keeps its human-readable message plain and lets the tracing events
+    beside it follow the startup colour hint.
+  - *Testing (Overall)*, *Testing (Property / Proof)*, *Testing (Compile-Time /
+    Ui)*, *Unit Architecture* and *Domain Architecture* were already addressed
+    by this branch or by earlier decisions (D21, D22, D26, D27), and re-reading
+    each against the current tree found nothing further to change. The
+    task-update row in particular is satisfied: `progress_pty.rs` collects each
+    whole task line and classifies it, which includes the bytes before
+    `Task `. Date/Author: 2026-11-08, implementation agent, after
+    `5815758338`.
+
 ## Outcomes & retrospective
 
 ### Milestone EP-M0 to EP-M4: complete

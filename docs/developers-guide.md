@@ -150,6 +150,26 @@ The application composition root builds the `DisplayPlan` once from
 `Cli::display_policies()` and captured environment and terminal facts. Runner
 adapters consume the plan instead of resolving output preferences themselves.
 
+The plan is the only place a presentation decision is made, so each adapter
+reads the answer rather than re-deriving it. `DisplayPlan::stdout_colour()` and
+`stderr_colour()` decide whether ANSI escapes are emitted on each stream, and
+the adapters apply them differently because their libraries do:
+
+- The tracing formatter installs `ansi` from the plan's stderr decision when
+  `init_tracing` runs, so every event after that follows the same answer.
+- The Miette hook maps `diagnostic_style().colour` to a graphical or narratable
+  handler and passes `unicode` and `links` alongside it.
+- Clap's own `--help` path uses the plan's stdout decision for `colour_choice`;
+  the runner's `help` renderers take the same `bool` and choose between
+  `StyledStr::ansi` and `StyledStr::Display`, because Clap's `Display` never
+  colours.
+- The status reporter selects live or static progress from `live_progress`,
+  which already accounts for accessible mode and a non-redraw-capable `TERM`.
+
+`resolve_display_plan` is a `const fn` over plain data and performs no I/O.
+Keep it that way: a presentation decision that needs the environment belongs in
+the facts the caller captures, not in the resolver.
+
 The process boundary is parser-independent; callers without CLI state construct
 `NinjaProcessOptions` directly.
 
@@ -754,7 +774,7 @@ is known, yet the JSON diagnostic document is also written to stderr: an
 eagerly emitted warning could corrupt it. `StartupWriter` in
 `src/startup_tracing/mod.rs` closes that window. It implements
 `tracing_subscriber`'s `MakeWriter` and is installed by the `main` entrypoint
-through `main_tracing::init_tracing` in `src/main_tracing/mod.rs`, after `main`
+through `main_tracing::init_tracing` in `src/main_tracing.rs`, after `main`
 captures stderr's terminal status and before locale resolution runs. Every
 startup event is held rather than written. The buffer is bounded at
 `MAX_BUFFERED_BYTES` (64 KiB): it keeps the earliest bytes, appends a
@@ -9060,8 +9080,8 @@ is confined to the child.
 ### `tracing_capture`
 
 Production tracing has one process-wide subscriber, installed by the `main`
-entrypoint through `main_tracing::init_tracing` in `src/main_tracing/mod.rs`,
-with a reloadable filter starting at `WARN`. The entrypoint passes the captured
+entrypoint through `main_tracing::init_tracing` in `src/main_tracing.rs`, with
+a reloadable filter starting at `WARN`. The entrypoint passes the captured
 stderr-terminal fact into that setup. Events are written through
 `StartupWriter`, which buffers startup tracing until the effective diagnostic
 mode is known — no startup tracing reaches stdout. The buffer is bounded (64

@@ -354,7 +354,6 @@ Les limitations connues comprennent :
 - `--json` émet exactement un document de résultat ou de diagnostic
   versionné par commande, mais le schéma peut encore changer avant la version
   1.0 ;
-- le rendu en couleur n'est pas implémenté ;
 - l'accessibilité nécessite encore une vérification avec des technologies
   d'assistance.
 

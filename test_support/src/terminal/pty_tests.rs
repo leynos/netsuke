@@ -64,3 +64,61 @@ fn pty_smoke_attaches_stdout_and_pipes_stderr() {
     assert!(output.terminal.ends_with(b"terminal"));
     assert_eq!(output.piped, b"piped");
 }
+
+/// A child that outstays its timeout must be reported and killed.
+///
+/// Without this the harness could return a truncated capture from a hung child
+/// as if it were a completed run, and every assertion built on that capture
+/// would quietly measure less than it claims.
+#[test]
+fn pty_reports_a_child_that_exceeds_its_timeout() {
+    let mut command = Command::new("/bin/sh");
+    command.args(["-c", "sleep 30"]);
+    let started = std::time::Instant::now();
+    let error = run_in_pty(PtyRequest {
+        command,
+        attach: Attach::Both,
+        timeout: Duration::from_millis(200),
+    })
+    .expect_err("a child that outlives its timeout must fail the run");
+
+    let elapsed = started.elapsed();
+    assert!(
+        format!("{error:#}").contains("exceeded"),
+        "the timeout must be named in the error: {error:#}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(10),
+        "the run must stop near its timeout, not wait for the child: {elapsed:?}"
+    );
+}
+
+/// A descendant holding the terminal open must not keep the capture blocked.
+///
+/// The direct child exits immediately, but its background child still owns the
+/// pseudo-terminal. A harness that waits only for the direct child would block
+/// until that descendant finished, so this pins the process-group kill rather
+/// than the ordinary exit path.
+#[test]
+fn pty_stops_reading_when_a_descendant_holds_the_terminal() {
+    let mut command = Command::new("/bin/sh");
+    command.args(["-c", "sleep 30 & printf started; exit 0"]);
+    let started = std::time::Instant::now();
+    let output = run_in_pty(PtyRequest {
+        command,
+        attach: Attach::Both,
+        timeout: Duration::from_secs(5),
+    })
+    .expect("the descendant must be stopped rather than waited for");
+
+    let elapsed = started.elapsed();
+    assert_eq!(
+        output.terminal.as_slice(),
+        b"started",
+        "the direct child's output must still be captured"
+    );
+    assert!(
+        elapsed < Duration::from_secs(20),
+        "the descendant must not hold the capture open: {elapsed:?}"
+    );
+}

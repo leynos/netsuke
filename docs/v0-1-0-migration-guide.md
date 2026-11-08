@@ -252,6 +252,45 @@ case-insensitive and are listed in the users' guide's
 [policy values and parsing](users-guide.md#policy-values-and-parsing) section.
 Clap-specific validation and help metadata remain an internal CLI concern.
 
+## Colour, emoji and progress are resolved once
+
+Netsuke now resolves colour, emoji, progress, accessibility and JSON into a
+single display plan before any output is written. Existing command lines and
+configuration files keep working; the change is visible in behaviour and in the
+Rust API.
+
+Behaviour users should know about:
+
+- `--color always` styles Netsuke's own tracing messages, Miette diagnostics,
+  and Clap help and version output even when the stream is a pipe. Generated
+  artefacts and forwarded subprocess output stay unstyled.
+- `--color always` overrides `NO_COLOR`, but not `TERM=dumb`. A dumb terminal
+  still selects accessible mode because it cannot render live redraws; use
+  `--accessibility off` to force standard output against it.
+- `--accessibility on` and `--accessibility off` name the output mode directly
+  and take precedence over every inferred choice.
+- Usage errors and the human-readable configuration-load error stay plain under
+  every policy, because the configuration that would select a policy has not
+  been read yet. The structured `tracing` events emitted beside them do follow
+  `--color`.
+
+See [Colour](users-guide.md#colour) and
+[Accessible output](users-guide.md#accessible-output) for the full precedence
+rules.
+
+Rust callers of the output API must migrate:
+
+- `netsuke::output_prefs::resolve_from_theme` and
+  `resolve_from_theme_with` are removed. Use `resolve_from_signals` with
+  captured `EnvSignals`, or the existing `resolve` and `resolve_with` when an
+  environment seam is what you hold. `resolve_from_signals` takes the reduced
+  signals directly so captured facts are not turned back into environment
+  strings and reduced a second time.
+- `netsuke::display_plan` is new. `resolve_display_plan` is a `const fn` over
+  `DisplayPolicies` and `TerminalFacts` that returns the whole `DisplayPlan`,
+  so a caller can make every presentation decision once instead of re-deriving
+  it per adapter.
+
 ## Opting into ordered command lists
 
 Existing scalar `command` recipes remain valid, and command lists remain

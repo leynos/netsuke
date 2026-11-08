@@ -1,4 +1,13 @@
-//! Check that JSON output and early configuration errors remain free of escapes.
+//! Check JSON output and configuration-error output.
+//!
+//! JSON mode suppresses the status reporter and every tracing event, so its
+//! bytes carry no escape at all. A configuration-load failure is the awkward
+//! case: it happens before the configuration that would select a colour policy
+//! has been read, so the human-readable message stays plain under every policy
+//! while the structured tracing events beside it follow the startup colour
+//! hint. Both halves are asserted here, because a change that styled the
+//! message or unstyled the events would break one contract and satisfy the
+//! other.
 
 use super::support::{TerminalWorkspace, visible_text};
 use anyhow::{Context, Result, ensure};
