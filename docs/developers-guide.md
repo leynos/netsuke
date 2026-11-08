@@ -3277,8 +3277,8 @@ uv run --no-project --python 3.14 scripts/verify_release_inventory_cli.py \
 ```
 
 The job holds `contents: write` and nothing else. Write scope is what makes a
-draft's assets visible at all: with `contents: read` the listing returns
-nothing and the verifier compares an empty directory against the declaration.
+draft's assets visible at all: with `contents: read` the release listing omits
+the draft, so `select-release` refuses the run before any asset is downloaded.
 The job's own calls remain read-only — the action must contain no `gh release`
 call and no `gh api` flag that implies a write (`-f`, `-F`, `--field`,
 `--raw-field`, `--input`) — so holding the scope cannot drift into using it. No
