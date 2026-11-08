@@ -2,7 +2,9 @@
 
 use super::{ChildCleanup, netsuke_build, runtime_workspace, wait_for_exit, workspace_dir};
 use anyhow::{Context, Result, ensure};
-use std::io::Read;
+use std::io::{Read, pipe};
+use std::os::fd::OwnedFd;
+use std::process::Stdio;
 
 /// Report a failed stdout destination on stderr, which is still readable.
 ///
@@ -60,10 +62,11 @@ fn a_failed_stdout_destination_is_reported_on_stderr() -> Result<()> {
 /// output that users watch to stdout, so the forwarded stderr stream carries
 /// Ninja's own warnings; a corrupt `.ninja_log` is the one such warning a
 /// successful build emits on demand. The first build proves that warning
-/// really reaches Netsuke's stderr. The second closes that destination and
-/// requires the build to succeed, the recipe to run, and the loss to be
-/// reported on stdout — a channel the closed pipe cannot carry, so the
-/// assertion fails unless the forwarded write really was rejected.
+/// really reaches Netsuke's stderr. The second hands the child a destination
+/// that is already closed and requires the build to succeed, the recipe to
+/// run, and the loss to be reported on stdout — a channel the closed pipe
+/// cannot carry, so the assertion fails unless the forwarded write really was
+/// rejected.
 #[test]
 fn a_closed_stderr_destination_does_not_fail_the_build() -> Result<()> {
     let Some(workspace) = runtime_workspace()? else {
@@ -94,16 +97,18 @@ fn a_closed_stderr_destination_does_not_fail_the_build() -> Result<()> {
     );
 
     corrupt_build_log(&root)?;
-    let mut lost = netsuke_build(&workspace, &["build", "lost"])?
+    // Close the read end before the child starts, so its very first write to
+    // stderr meets a closed pipe. Closing it after `spawn` leaves a window in
+    // which the child can fill the pipe buffer successfully, which would make
+    // the rejection depend on scheduling rather than on the closed
+    // destination.
+    let (stderr_reader, stderr_writer) = pipe().context("create a stderr pipe")?;
+    drop(stderr_reader);
+    let mut lost_command = netsuke_build(&workspace, &["build", "lost"])?;
+    lost_command.stderr(Stdio::from(OwnedFd::from(stderr_writer)));
+    let lost = lost_command
         .spawn()
         .context("spawn Netsuke forwarding-loss build")?;
-    // Dropping the read end closes the pipe before Ninja runs, so every write
-    // to it fails.
-    drop(
-        lost.stderr
-            .take()
-            .context("Netsuke child should expose stderr")?,
-    );
     let mut cleanup = ChildCleanup::new(lost, root.try_clone()?, Vec::new());
     let mut stdout = String::new();
     cleanup
