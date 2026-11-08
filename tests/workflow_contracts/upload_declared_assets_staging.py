@@ -47,11 +47,24 @@ RECORD_NAME = "producer-provenance.json"
 #: them: the format suffix alone is what the declaration counts, so a package
 #: that carried a different middle segment would still be counted and still be
 #: the wrong name.
+#:
+#: The macOS name carries the *binary* and the matrix's suffix, because its
+#: stamp step interpolates ``inputs['bin-name']`` and ``inputs['artifact-suffix']``
+#: rather than the crate name -- which for this repository differ, so a fixture
+#: built from the crate name would stage a package the producer never reads.
+#: ``suffix`` is expanded from :data:`MACOS_SUFFIX` so the name a case stages
+#: and the value it resolves ``inputs['artifact-suffix']`` to cannot drift.
 PACKAGE_TEMPLATES = {
     "linux": ("{package}_{version}_{arch}.deb", "{package}-{version}-1.{arch}.rpm"),
-    "macos": ("{package}-{version}-{arch}.pkg",),
+    "macos": ("{bin_name}-{version}-{suffix}.pkg",),
     "windows": ("{package}-{version}-{arch}.msi",),
 }
+
+#: The ``artifact-suffix`` the macOS matrix passes, which its stamp step
+#: interpolates into the package name. One source, because a case that
+#: resolved the input to something else would stage a package the producer
+#: reads under a name the case never created.
+MACOS_SUFFIX = "macos-{arch}"
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -84,24 +97,35 @@ class Facts:
     ----------
     package
         The Cargo package name every name interpolates.
+    bin_name
+        The binary's name, which the macOS package name carries instead of the
+        package's.
     version
         The release version every name interpolates.
+    staging_template
+        The configured ``staging_dir_template`` a staging directory expands.
     targets
         Every configured target, sorted by key.
     """
 
     package: str
+    bin_name: str
     version: str
+    staging_template: str
     targets: tuple[Target, ...]
 
 
 def release_facts() -> Facts:
     """Read the release facts from the repository's own configuration.
 
+    The binary name comes from the staging configuration rather than from
+    ``Cargo.toml``'s ``[[bin]]``, because that is the value the release
+    workflow passes as ``bin-name`` and therefore the one every name carries.
+
     Returns
     -------
     Facts
-        The package, version, and every configured target, sorted by key.
+        The package, binary name, version, and every configured target.
     """
     config = tomllib.loads(
         (REPO_ROOT / ".github" / "release-staging.toml").read_text(encoding="utf-8")
@@ -119,8 +143,23 @@ def release_facts() -> Facts:
     assert targets, "the staging configuration must declare a release target"
     return Facts(
         package=str(manifest["package"]["name"]),
+        bin_name=str(config["common"]["bin_name"]),
         version=str(manifest["package"]["version"]),
+        staging_template=str(config["common"]["staging_dir_template"]),
         targets=targets,
+    )
+
+
+def staging_directory(facts: Facts, target: Target) -> str:
+    """Return the directory name the shared staging action creates.
+
+    Returns
+    -------
+    str
+        The configured ``staging_dir_template`` expanded for ``target``.
+    """
+    return facts.staging_template.format(
+        bin_name=facts.bin_name, platform=target.platform, arch=target.arch
     )
 
 
@@ -138,6 +177,10 @@ def archive_name(facts: Facts, target: Target) -> str:
 def package_names(facts: Facts, target: Target) -> tuple[str, ...]:
     """Return the operating-system package names one target stages.
 
+    The binary name and the Cargo package's are not interchangeable here: this
+    repository names its crate ``netsuke-build`` and ships a ``netsuke``
+    binary, and the macOS package name carries the binary's.
+
     Returns
     -------
     tuple[str, ...]
@@ -145,7 +188,13 @@ def package_names(facts: Facts, target: Target) -> tuple[str, ...]:
     """
     templates = PACKAGE_TEMPLATES[target.platform]
     return tuple(
-        template.format(package=facts.package, version=facts.version, arch=target.arch)
+        template.format(
+            package=facts.package,
+            bin_name=facts.bin_name,
+            version=facts.version,
+            arch=target.arch,
+            suffix=MACOS_SUFFIX.format(arch=target.arch),
+        )
         for template in templates
     )
 
@@ -233,19 +282,21 @@ def _stage_dist(workspace: Path, facts: Facts) -> None:
         )
 
 
-def stage_workspace(tmp_path: Path, facts: Facts) -> Path:
-    """Lay out the workspace the action runs in, with a complete staged tree.
+def stage_repository(tmp_path: Path, *, name: str = "workspace") -> Path:
+    """Lay out the repository files a release step reads, and nothing else.
 
-    The scripts are copied because the action's steps invoke them by their
+    The scripts are copied because the steps invoke them by their
     repository-relative path; they are read from the real checkout so the cases
-    exercise the code under review rather than a stand-in.
+    exercise the code under review rather than a stand-in. The staged tree is
+    *not* created: a case that runs a producer builds that producer's own tree,
+    and one that runs the action builds the downloaded union.
 
     Returns
     -------
     Path
         The workspace root the steps run in.
     """
-    workspace = tmp_path / "workspace"
+    workspace = tmp_path / name
     (workspace / "scripts").mkdir(parents=True)
     for module in sorted((REPO_ROOT / "scripts").glob("*.py")):
         shutil.copy2(module, workspace / "scripts" / module.name)
@@ -255,6 +306,18 @@ def stage_workspace(tmp_path: Path, facts: Facts) -> Path:
         workspace / ".github" / "release-staging.toml",
     )
     shutil.copy2(REPO_ROOT / "Cargo.toml", workspace / "Cargo.toml")
+    return workspace
+
+
+def stage_workspace(tmp_path: Path, facts: Facts) -> Path:
+    """Lay out the workspace the action runs in, with a complete staged tree.
+
+    Returns
+    -------
+    Path
+        The workspace root the steps run in.
+    """
+    workspace = stage_repository(tmp_path)
     _stage_dist(workspace, facts)
     return workspace
 

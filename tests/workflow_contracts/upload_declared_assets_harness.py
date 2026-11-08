@@ -181,7 +181,15 @@ def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
     Sandbox
         The paths the run writes.
     """
-    stubs = tmp_path / "stubs"
+    # Each call gets a directory of its own. A case that proves a refusal after
+    # sealing a good tree runs the action twice in one workspace, and a shared
+    # log or release listing would carry the first run's uploads into the
+    # second run's assertions.
+    runs = tmp_path / "runs"
+    runs.mkdir(exist_ok=True)
+    root = runs / f"run-{len(tuple(runs.iterdir()))}"
+    root.mkdir()
+    stubs = root / "stubs"
     stubs.mkdir()
     _write_stub(stubs / "uv", UV_STUB)
     _write_stub(stubs / "gh", GH_STUB)
@@ -189,15 +197,15 @@ def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
     # needs no execute bit and cannot be picked up as a command by accident.
     helper = stubs / "gh_state.py"
     helper.write_text(GH_HELPER, encoding="utf-8")
-    scratch = tmp_path / "scratch"
+    scratch = root / "scratch"
     scratch.mkdir()
-    baseline_log = tmp_path / "uv-baselines.txt"
+    baseline_log = root / "uv-baselines.txt"
     baseline_log.touch()
-    gh_log = tmp_path / "gh.log"
+    gh_log = root / "gh.log"
     gh_log.touch()
-    listing = tmp_path / "gh-attached.json"
+    listing = root / "gh-attached.json"
     listing.write_text(json.dumps({"assets": attached or []}), encoding="utf-8")
-    output_file = tmp_path / "github-output"
+    output_file = root / "github-output"
     output_file.touch()
     return Sandbox(
         stubs=stubs,
@@ -207,7 +215,7 @@ def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
         attached=listing,
         helper=helper,
         baseline_log=baseline_log,
-        declared_root=tmp_path / "runner" / "declared-assets",
+        declared_root=root / "runner" / "declared-assets",
     )
 
 
