@@ -89,6 +89,14 @@ fn classify_escape(bytes: &[u8], facts: &mut TerminalBytes) -> usize {
             facts.has_osc = true;
             osc_length(bytes.get(2..).unwrap_or_default()) + 2
         }
+        // Device Control, Start of String, Privacy Message and Application
+        // Program Command strings also carry opaque payload: the terminal does
+        // not render what is inside them, so a carriage return there is string
+        // content rather than a redraw. Only OSC sets `has_osc`; these are a
+        // distinct class and are reported through `has_any_escape` alone.
+        Some(b'P' | b'X' | b'^' | b'_') => {
+            control_string_length(bytes.get(2..).unwrap_or_default()) + 2
+        }
         Some(b'7' | b'8') => {
             facts.has_redraw = true;
             2
@@ -178,6 +186,33 @@ fn osc_length(bytes: &[u8]) -> usize {
         match byte {
             b'\x07' => return index + 1,
             b'\x1b' if bytes.get(index + 1) == Some(&b'\\') => return index + 2,
+            _ => index += 1,
+        }
+    }
+    bytes.len()
+}
+
+/// Return the number of bytes in a control-string body, including its end.
+///
+/// Only String Terminator ends a DCS, SOS, PM or APC string; unlike OSC, a BEL
+/// inside the payload is data and does not close it. CAN and SUB cancel the
+/// string and return the terminal to ground, so they end the payload too. A
+/// capture that stops before any terminator consumes the remainder rather than
+/// leaking payload bytes to the caller as if they were controls.
+///
+/// # Examples
+///
+/// ```
+/// let facts = test_support::terminal::classify(b"\x1b_payload\rmore\x1b\\");
+/// assert!(facts.has_any_escape);
+/// assert!(!facts.has_bare_carriage_return);
+/// ```
+fn control_string_length(bytes: &[u8]) -> usize {
+    let mut index = 0;
+    while let Some(byte) = bytes.get(index).copied() {
+        match byte {
+            b'\x1b' if bytes.get(index + 1) == Some(&b'\\') => return index + 2,
+            b'\x18' | b'\x1a' => return index + 1,
             _ => index += 1,
         }
     }

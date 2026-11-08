@@ -130,6 +130,60 @@ fn osc_payload_hides_its_carriage_returns(#[case] bytes: &[u8]) {
     );
 }
 
+/// Every escapable string kind hides its payload, and only OSC is an OSC.
+///
+/// DCS, SOS, PM and APC payloads are not rendered, so a carriage return inside
+/// one is string content. They are not OSC sequences, though, and reporting
+/// them as such would claim a hyperlink or title where there is none.
+#[rstest]
+#[case::apc(b"\x1b_payload\rmore\x1b\\")]
+#[case::dcs(b"\x1bPpayload\rmore\x1b\\")]
+#[case::sos(b"\x1bXpayload\rmore\x1b\\")]
+#[case::pm(b"\x1b^payload\rmore\x1b\\")]
+fn control_string_payload_hides_its_carriage_returns(#[case] bytes: &[u8]) {
+    let facts = classify(bytes);
+    assert!(
+        facts.has_any_escape,
+        "the introducer is still an escape: {facts:?}"
+    );
+    assert!(
+        !facts.has_bare_carriage_return,
+        "a carriage return inside a control string is not a redraw: {facts:?}"
+    );
+    assert!(
+        !facts.has_osc,
+        "only an OSC introducer sets has_osc: {facts:?}"
+    );
+}
+
+/// A BEL is payload inside DCS, SOS, PM and APC, unlike in an OSC.
+///
+/// Reusing the OSC scanner unchanged would end the string at the BEL and then
+/// classify the rest of the payload as live controls, which is the defect this
+/// witness pins. Only ST terminates these strings.
+#[rstest]
+#[case::apc(b"\x1b_payload\x07\rmore\x1b\\")]
+#[case::dcs(b"\x1bPpayload\x07\rmore\x1b\\")]
+fn bel_does_not_terminate_a_control_string(#[case] bytes: &[u8]) {
+    let facts = classify(bytes);
+    assert!(
+        !facts.has_bare_carriage_return,
+        "the carriage return after the BEL is still inside the payload: {facts:?}"
+    );
+}
+
+/// A CAN or SUB cancels the string, so the terminal renders what follows.
+#[rstest]
+#[case::can(b"\x1b_payload\x18next\rmore")]
+#[case::sub(b"\x1b_payload\x1anext\rmore")]
+fn cancel_ends_a_control_string(#[case] bytes: &[u8]) {
+    let facts = classify(bytes);
+    assert!(
+        facts.has_bare_carriage_return,
+        "a carriage return after the cancellation is live: {facts:?}"
+    );
+}
+
 proptest! {
     /// Compare bare-carriage-return detection against a byte-level oracle.
     ///

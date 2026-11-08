@@ -101,10 +101,26 @@ fn clippy_confines_terminal_probing_to_the_entrypoint() -> Result<()> {
         .split("#[expect(")
         .find(|block| block.contains("clippy::disallowed_methods"))
         .context("src/main.rs should carry one disallowed_methods exception")?;
+    // Only the item the attribute decorates counts. Searching the whole rest
+    // of the file would pass on any later `fn main()` even after the exception
+    // moved onto a helper, so the header is cut off at the attribute's closing
+    // `)]` and read up to the item's opening brace.
+    let header = exception
+        .split_once(")]")
+        .map(|(_, rest)| rest)
+        .context("the disallowed_methods exception should close its attribute")?
+        .split_once('{')
+        .map(|(header, _)| header)
+        .context("the disallowed_methods exception should decorate an item")?;
     ensure!(
-        exception.contains("fn main()"),
+        header.contains("fn main()"),
         "the terminal-probe exception must sit on `main`, not on a helper that \
-         could be called from anywhere"
+         could be called from anywhere, found {header:?}"
+    );
+    ensure!(
+        header.matches("fn ").count() == 1,
+        "the terminal-probe exception must decorate exactly one item, found \
+         {header:?}"
     );
     // The reason is part of the contract: an unexplained suppression is what
     // the repository's suppression policy forbids, and a later edit that drops

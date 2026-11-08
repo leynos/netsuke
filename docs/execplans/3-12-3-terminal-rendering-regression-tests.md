@@ -887,6 +887,33 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   exists at base in `src/theme/mod.rs` and `src/output/mode.rs`. Date/Author:
   2026-11-08, implementation agent.
 
+- **D27. Three findings from CodeRabbit review `5815758338` were real, and one
+  of them was a genuine defect in the classifier fix.** All three were
+  reproduced before changing anything.
+  - The classifier treated DCS, SOS, PM and APC introducers as two-byte
+    escapes, so `ESC _` consumed only the introducer and the string's payload
+    was scanned as live control bytes. An APC payload containing `\r` therefore
+    reported a bare carriage return, which is redraw evidence the terminal
+    never acted on. The D26 fix for truncated CSI sequences had closed the same
+    class of hole for CSI but left it open for the other control strings. They
+    are now scanned to their terminator, with two rules the finding is right to
+    insist on: only ST ends them, so a BEL inside the payload is data, and CAN
+    or SUB cancels the string so the terminal renders what follows. `has_osc`
+    stays specific to OSC. Reverting the parser fails six of the new witnesses,
+    so they are not vacuous.
+  - The nested-cargo-timeout guidance said `ci` and `default` both have a
+    960-second whole-run cap. Only `ci` declares one; it inherits the rest of
+    its settings from `default`, and `.config/nextest.toml` states explicitly
+    that a local `default` run has no whole-run cap. The guidance now
+    distinguishes the CI cap from the shared-setting reason, which is what the
+    restriction actually rests on.
+  - The Clippy terminal-probe contract searched the whole remainder of
+    `src/main.rs` after the `#[expect(...)]`, so any later `fn main()` satisfied
+    it. It now reads only the decorated item's header. Moving the attribute
+    onto `pub fn probe_terminal()` fails the test with that function's name in
+    the message, where the old form passed. Date/Author: 2026-11-08,
+    implementation agent, after `5815758338`.
+
 ## Outcomes & retrospective
 
 ### Milestone EP-M0 to EP-M4: complete
