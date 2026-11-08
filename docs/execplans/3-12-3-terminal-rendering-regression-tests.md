@@ -469,9 +469,10 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `string_continuation_style@nightly-2026-05-28.dll`. The duplicate-lint panic
   is confirmed on the parent commit `0131235af`, so it precedes this work.
   Reported as an infrastructure impasse (see Outcomes). Re-confirmed on
-  `245515675`: the `Lint` panic reports the same two-library `DYLINT_LIBS`
-  value, and the Windows lane prints the same `dylint_version` diagnostic.
-  Everything else on that run passed — `Default features`,
+  `245515675` and again on `0abe086d4` (run jobs `128658183191` and
+  `128658182341`): each time the `Lint` panic reports the same two-library
+  `DYLINT_LIBS` value, and the Windows lane prints the same `dylint_version`
+  diagnostic. Everything else on that run passed — `Default features`,
   `Windows / build-test-windows`, `Windows / windows-msi-upgrade`,
   `kani-smoke`, and the CodeScene advisory gate, which now reports **Quality
   Gate Passed** with all six gates green. The CodeScene turnaround is the
