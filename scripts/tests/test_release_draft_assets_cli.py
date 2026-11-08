@@ -212,7 +212,7 @@ def _complete_values(tmp_path: pathlib.Path, mode: str) -> dict[str, str]:
     Each mode is given a listing of the shape it reads, so the control below
     runs the real command path rather than failing on an unreadable input. Only
     ``select-release`` receives ``--tag``; passing it to ``plan-downloads``
-    would make every row fail on an unrecognised argument instead of on the
+    would make every row fail on an unrecognized argument instead of on the
     value the row removes.
 
     Returns
