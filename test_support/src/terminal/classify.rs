@@ -87,7 +87,7 @@ fn classify_escape(bytes: &[u8], facts: &mut TerminalBytes) -> usize {
         Some(b'[') => classify_csi(bytes.get(2..).unwrap_or_default(), facts) + 2,
         Some(b']') => {
             facts.has_osc = true;
-            osc_length(bytes.get(2..).unwrap_or_default()) + 2
+            scan_to_terminator(bytes.get(2..).unwrap_or_default(), Terminators::Osc) + 2
         }
         // Device Control, Start of String, Privacy Message and Application
         // Program Command strings also carry opaque payload: the terminal does
@@ -95,7 +95,10 @@ fn classify_escape(bytes: &[u8], facts: &mut TerminalBytes) -> usize {
         // content rather than a redraw. Only OSC sets `has_osc`; these are a
         // distinct class and are reported through `has_any_escape` alone.
         Some(b'P' | b'X' | b'^' | b'_') => {
-            control_string_length(bytes.get(2..).unwrap_or_default()) + 2
+            scan_to_terminator(
+                bytes.get(2..).unwrap_or_default(),
+                Terminators::ControlString,
+            ) + 2
         }
         Some(b'7' | b'8') => {
             facts.has_redraw = true;
@@ -172,33 +175,51 @@ const fn is_redraw_csi_final(byte: u8) -> bool {
     )
 }
 
-/// Return the number of bytes in an OSC body, including its terminator.
+/// Name the bytes that end one class of escapable string.
 ///
-/// # Examples
-///
-/// ```ignore
-/// let facts = test_support::terminal::classify(b"\x1b]8;;url\x07");
-/// assert!(facts.has_osc);
-/// ```
-fn osc_length(bytes: &[u8]) -> usize {
-    let mut index = 0;
-    while let Some(byte) = bytes.get(index).copied() {
-        match byte {
-            b'\x07' => return index + 1,
-            b'\x1b' if bytes.get(index + 1) == Some(&b'\\') => return index + 2,
-            _ => index += 1,
-        }
-    }
-    bytes.len()
+/// The two classes differ only in their terminators, so they share one scan.
+/// Keeping the difference in an enum rather than in two loops makes it
+/// impossible for a later edit to teach one class a rule that the other
+/// silently lacks.
+#[derive(Clone, Copy)]
+enum Terminators {
+    /// OSC strings: BEL, or String Terminator.
+    Osc,
+    /// DCS, SOS, PM and APC strings: String Terminator, or a cancellation.
+    ControlString,
 }
 
-/// Return the number of bytes in a control-string body, including its end.
+impl Terminators {
+    /// Return the length of the terminator starting at `index`, if one does.
+    ///
+    /// # Examples
+    ///
+    /// ```ignore
+    /// assert_eq!(Terminators::Osc.length_at(b"\x07", 0), Some(1));
+    /// ```
+    fn length_at(self, bytes: &[u8], index: usize) -> Option<usize> {
+        // String Terminator closes both classes, so it is checked first.
+        if bytes.get(index) == Some(&b'\x1b') && bytes.get(index + 1) == Some(&b'\\') {
+            return Some(2);
+        }
+        match self {
+            // A BEL is data inside a control string, so only OSC ends on it.
+            Self::Osc if bytes.get(index) == Some(&b'\x07') => Some(1),
+            // CAN and SUB cancel the string and return the terminal to
+            // ground, which ends the payload just as a terminator would.
+            Self::ControlString if matches!(bytes.get(index), Some(b'\x18' | b'\x1a')) => Some(1),
+            _ => None,
+        }
+    }
+}
+
+/// Advance past an escapable string body up to and including its terminator.
 ///
-/// Only String Terminator ends a DCS, SOS, PM or APC string; unlike OSC, a BEL
-/// inside the payload is data and does not close it. CAN and SUB cancel the
-/// string and return the terminal to ground, so they end the payload too. A
-/// capture that stops before any terminator consumes the remainder rather than
-/// leaking payload bytes to the caller as if they were controls.
+/// A capture that stops before any terminator consumes the remainder rather
+/// than leaking payload bytes to the caller as if they were controls. The scan
+/// asks `terminators` about every byte rather than pre-filtering the candidates
+/// itself, so a later edit can add a terminator in one place and have both
+/// classes honour it.
 ///
 /// # Examples
 ///
@@ -207,16 +228,18 @@ fn osc_length(bytes: &[u8]) -> usize {
 /// assert!(facts.has_any_escape);
 /// assert!(!facts.has_bare_carriage_return);
 /// ```
-fn control_string_length(bytes: &[u8]) -> usize {
-    let mut index = 0;
-    while let Some(byte) = bytes.get(index).copied() {
-        match byte {
-            b'\x1b' if bytes.get(index + 1) == Some(&b'\\') => return index + 2,
-            b'\x18' | b'\x1a' => return index + 1,
-            _ => index += 1,
-        }
-    }
-    bytes.len()
+///
+/// ```ignore
+/// assert_eq!(scan_to_terminator(b"payload\x07", Terminators::Osc), 8);
+/// ```
+fn scan_to_terminator(bytes: &[u8], terminators: Terminators) -> usize {
+    (0..bytes.len())
+        .find_map(|index| {
+            terminators
+                .length_at(bytes, index)
+                .map(|length| index + length)
+        })
+        .unwrap_or(bytes.len())
 }
 
 /// Classify valid non-ASCII text without counting bidi control marks as glyphs.
