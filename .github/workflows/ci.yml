@@ -397,14 +397,19 @@ jobs:
     #
     # Run 41840367244 spent 824s before nextest started the mutation test and
     # hit the former 600s test cap. A later local run also reached the 900s
-    # cap without a compiler diagnostic. The gate now runs a prewarm and a
-    # patch sweep as two Nextest invocations under the `kani` profile: the
-    # prewarm carries 900s, the sweep 2,400s, and each invocation gets a
-    # 2,520s whole-run cap. Sizing the ceiling from one cap would cancel the
-    # job while the second invocation was still reporting, and a cancellation
-    # discards the log that explains the overrun. Including the measured 824s
-    # setup and 7s finalisation, two capped runs total 5,871s; the 6,000s job
-    # ceiling leaves 129s for runner variance and post-step reporting.
+    # cap without a compiler diagnostic. The gate now runs a prewarm, a
+    # negative control, and a patch sweep as two Nextest invocations under the
+    # `kani` profile: the prewarm and the negative check carry 900s each, the
+    # sweep 2,400s, and each invocation gets a 2,520s whole-run cap. Sizing the
+    # ceiling from one cap would cancel the job while the second invocation
+    # was still reporting, and a cancellation discards the log that
+    # explains the overrun. Including the measured 824s setup and 7s
+    # finalisation, two capped runs total 5,871s; the 6,000s job ceiling
+    # leaves 129s for runner variance and post-step reporting. The ceiling is
+    # sized from those caps rather than from the per-test allowances: an
+    # allowance bounds one test's own duration and does not sum to a budget,
+    # so this timeout is the backstop for a gate that has hung, not a cost
+    # the ceiling contains.
     timeout-minutes: 100
     permissions:
       contents: read

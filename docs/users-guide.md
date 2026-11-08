@@ -2050,9 +2050,11 @@ with `netsuke build 2>&-` — the closed pipe cannot carry its own report, so
 Netsuke writes a line beginning
 `netsuke: warning: failed to forward child stderr` to stdout instead. Only a
 rejected write or flush triggers that fallback: failing to read the child
-stream says nothing about the destination. JSON mode is unaffected, because it
-drains both child streams to a sink, so forwarding cannot fail there and stdout
-stays one result document.
+stream says nothing about the destination. JSON mode does not reach that
+fallback because it drains both child streams to a sink, so no write or flush
+can be rejected and stdout stays one result document. Reading a child stream,
+or draining it after a failure, can still fail there; that failure is counted
+and warned about like any other, but it is never reported on stdout.
 
 ### Policy values and parsing
 

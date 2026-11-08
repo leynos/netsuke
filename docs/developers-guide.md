@@ -11606,10 +11606,14 @@ status remains authoritative, and a truncated output stream is reported through
 the classified counter and warning event instead. This keeps a deliberately
 closed parent pipe, as produced by `netsuke build | head`, from being reported
 as a build failure. `finalize_streaming` therefore joins the stderr forwarding
-thread for its command-list attribution and discards the forwarding statistics
-the helper has already published. The policy tests in
-`src/runner/process/tests/mod.rs` cover a successful child, a failing child,
-and a failed wait, each with forwarding loss.
+thread for its command-list attribution and returns that thread's forwarding
+statistics, discarding the stdout statistics it is also given.
+`spawn_and_stream_output` inspects the returned stderr statistics and, when the
+failure kind is a rejected write or flush on the stderr stream, writes the
+warning to stdout instead, because the destination that would normally carry it
+is the one that failed. The policy tests in `src/runner/process/tests/mod.rs`
+cover a successful child, a failing child, and a failed wait, each with
+forwarding loss.
 
 ### Module: `runner::process::ninja::program`
 
@@ -12089,6 +12093,8 @@ sandbox path and target, under the `kani` profile: 900 s each for the prewarm
 and its negative-compile check, and 2,400 s for the sweep. The profile's
 2,520 s whole-run cap contains any of those allowances together with the window
 nextest needs to stop the run, and the two invocations are capped separately.
+The job's ceiling is a backstop sized from those two caps rather than a sum of
+the per-test allowances, which bound one test each and add up to no budget.
 The packaging smoke test once carried a 900 s override of the same kind: under
 a private-target harness it passed at 145 s and timed out at 300.047 s on heads
 that differed by a word in a plan, and later full-suite runs passed at 208.921 s
