@@ -264,9 +264,12 @@ Behaviour users should know about:
 - `--color always` styles Netsuke's own tracing messages, Miette diagnostics,
   and Clap help and version output even when the stream is a pipe. Generated
   artefacts and forwarded subprocess output stay unstyled.
-- `--color always` overrides `NO_COLOR`, but not `TERM=dumb`. A dumb terminal
-  still selects accessible mode because it cannot render live redraws; use
-  `--accessibility off` to force standard output against it.
+- `--color always` overrides colour suppression from both `NO_COLOR` and
+  `TERM=dumb`, so Netsuke's own output is still styled. Output mode is a
+  separate decision: with `--accessibility auto` a dumb terminal still selects
+  accessible mode, because it cannot render live redraws. Use
+  `--accessibility off` to force standard mode against it; live redraws stay
+  disabled.
 - `--accessibility on` and `--accessibility off` name the output mode directly
   and take precedence over every inferred choice.
 - Usage errors and the human-readable configuration-load error stay plain under
