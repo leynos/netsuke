@@ -229,7 +229,9 @@ def test_the_producers_record_reaches_publication(
     uploads = _uploads(run)
     assert len(uploads) == 1, run.gh_log
     assert uploads[0][2] == release_tag(facts), uploads[0][2]
-    assert {pathlib.PurePosixPath(arg).name for arg in uploads[0][3:]} == set(expected)
+    assert {pathlib.PurePosixPath(arg).name for arg in uploads[0][3:]} == set(
+        expected
+    ), "the transferred asset names must be the declared set"
     assert "--clobber" not in run.gh_log, "publication must never clobber"
 
 

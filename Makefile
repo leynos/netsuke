@@ -529,6 +529,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_digest_record.py scripts/release_digest_record_files.py \
 		scripts/release_staged_digests.py \
 		scripts/release_producer_claims.py \
+		scripts/release_producer_assets.py \
 		scripts/release_producer_provenance.py \
 		scripts/release_producer_provenance_checks.py \
 		scripts/release_producer_provenance_errors.py \

@@ -41,11 +41,6 @@ from upload_declared_assets_stubs import UV_STUB
 if typ.TYPE_CHECKING:
     import pathlib
 
-#: The record's file name, read from the module that writes it rather than
-#: restated, so a rename fails here instead of leaving the cases looking for a
-#: file nothing produces.
-RECORD_NAME = staging.RECORD_NAME
-
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class ProducerRun:
@@ -163,7 +158,7 @@ def run_producer(tmp_path: pathlib.Path, facts: Facts, target: Target) -> Produc
         | {"UV_BASELINE_LOG": str(baseline_log)},
         label=target.key,
     )
-    record_path = workspace / tree.record_location(target, facts) / RECORD_NAME
+    record_path = workspace / tree.record_location(target, facts) / staging.RECORD_NAME
     return ProducerRun(
         target=target,
         workspace=workspace,

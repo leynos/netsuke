@@ -14,9 +14,10 @@ describes, and a tree that reaches publication without it is refused rather
 than trusted.
 
 This module owns the record's shape and the reader that re-validates it.
-Cross-record checks belong to :mod:`release_producer_provenance_checks`, the
-refusal vocabulary to :mod:`release_producer_provenance_errors`, and JSON,
-hashing, and tree scanning to the adapters.
+The asset map it carries is :mod:`release_producer_assets`'s, cross-record
+checks belong to :mod:`release_producer_provenance_checks`, the refusal
+vocabulary to :mod:`release_producer_provenance_errors`, and JSON, hashing,
+and tree scanning to the adapters.
 
 The record binds bytes to a claim *by the producer*: evidence the job running
 under a given commit produced these digests, not proof the commit was honest.
@@ -27,12 +28,9 @@ import dataclasses
 import re
 import typing as typ
 
-import release_asset_names
-import release_digest
 import release_package_formats
+import release_producer_assets
 from release_producer_provenance_errors import (
-    EmptyAssetsError,
-    InvalidDigestError,
     MalformedCommitError,
     MalformedRecordError,
     MalformedRunIdentityError,
@@ -41,7 +39,6 @@ from release_producer_provenance_errors import (
     SchemaNotIntegerError,
     UnknownPlatformError,
     UnknownSchemaError,
-    UnsafeAssetNameError,
 )
 
 if typ.TYPE_CHECKING:
@@ -90,9 +87,6 @@ _COMMIT = re.compile(r"\A[0-9a-f]{40}\Z")
 #: Run identities are decimal counters, compared as text only: the rule
 #: refuses a malformed claim rather than doing arithmetic.
 _RUN_IDENTITY = re.compile(r"\A[1-9][0-9]*\Z")
-
-#: One SHA-256 digest, lowercase hexadecimal.
-_DIGEST = re.compile(rf"\A[0-9a-f]{{{release_digest.DIGEST_HEX_LENGTH}}}\Z")
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -163,7 +157,9 @@ def validate_provenance(record: object) -> ProducerProvenance:
         run_attempt=_required_run_identity(mapping, RUN_ATTEMPT_MEMBER),
         target=target,
         platform=_platform(mapping),
-        assets=_validated_assets(mapping[ASSETS_MEMBER], target=target),
+        assets=release_producer_assets.validated_assets(
+            mapping[ASSETS_MEMBER], target=target
+        ),
     )
 
 
@@ -322,85 +318,3 @@ def _required_text(record: cabc.Mapping[str, object], member: str) -> str:
         msg = f"the producer record {member} must be a non-empty string, got {value!r}"
         raise MalformedRecordError(msg)
     return value
-
-
-def _validated_assets(declared: object, *, target: str) -> dict[str, str]:
-    """Return a validated name-to-digest mapping for one producer.
-
-    Returns
-    -------
-    dict[str, str]
-        Published asset name mapped to its lowercase digest.
-
-    Raises
-    ------
-    MalformedRecordError
-        If ``declared`` is not a mapping.
-    EmptyAssetsError
-        If it holds no entry.
-
-    Notes
-    -----
-    ``UnsafeAssetNameError`` and ``InvalidDigestError`` surface from the two
-    helpers below.
-
-    Examples
-    --------
-    >>> _validated_assets({"a.deb": "b" * 64}, target="linux-x86_64")
-    {'a.deb': 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'}
-    """
-    if not isinstance(declared, dict):
-        msg = (
-            f"the producer record assets must be a mapping, got "
-            f"{type(declared).__name__}"
-        )
-        raise MalformedRecordError(msg)
-    if not declared:
-        raise EmptyAssetsError(target)
-    return {
-        _validated_name(name, target=target): _validated_digest(
-            name, digest, target=target
-        )
-        for name, digest in declared.items()
-    }
-
-
-def _validated_name(name: object, *, target: str) -> str:
-    """Return one claimed asset name, refusing anything but a bare file name.
-
-    Returns
-    -------
-    str
-        The name, once it is a string a release may publish.
-
-    Raises
-    ------
-    UnsafeAssetNameError
-        If the name is not a string, or names anything but one bare file.
-
-    Notes
-    -----
-    The name is judged first because the digest's refusal quotes it, and a
-    value that is not a string cannot be quoted as one.
-    """
-    if not isinstance(name, str) or not release_asset_names.is_bare_file_name(name):
-        raise UnsafeAssetNameError(target, str(name))
-    return name
-
-
-def _validated_digest(name: str, digest: object, *, target: str) -> str:
-    """Return the digest claimed for ``name``, refusing a malformed one.
-
-    Returns
-    -------
-    str
-        The lowercase SHA-256 digest the producer recorded.
-
-    Raises
-    ------
-    InvalidDigestError
-        If the digest is not a string of the expected hexadecimal length.
-    """
-    if not isinstance(digest, str) or not _DIGEST.match(digest):
-        raise InvalidDigestError(target, name)
-    return digest
