@@ -465,11 +465,19 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   neither caused by this branch: `build-test`'s `Lint` step panics with
   `duplicate specification of lint string_continuation_style` because the
   action loads both `libstring_continuation_style` and `libwhitaker_suite`, and
-  `Windows / lint-windows` fails with
-  `could not find dylint_version in
-  …lib\string_continuation_style@nightly-2026-05-28.dll`.
-  The duplicate-lint panic is confirmed on the parent commit `0131235af`, so
-  it precedes this work. Reported as an infrastructure impasse (see Outcomes).
+  `Windows / lint-windows` fails with `could not find dylint_version` in
+  `string_continuation_style@nightly-2026-05-28.dll`. The duplicate-lint panic
+  is confirmed on the parent commit `0131235af`, so it precedes this work.
+  Reported as an infrastructure impasse (see Outcomes). Re-confirmed on
+  `245515675`: the `Lint` panic reports the same two-library `DYLINT_LIBS`
+  value, and the Windows lane prints the same `dylint_version` diagnostic.
+  Everything else on that run passed — `Default features`,
+  `Windows / build-test-windows`, `Windows / windows-msi-upgrade`,
+  `kani-smoke`, and the CodeScene advisory gate, which now reports **Quality
+  Gate Passed** with all six gates green. The CodeScene turnaround is the
+  measurement that matters here: the same gate failed on `e3786ad2f` and passed
+  on `245515675`, so the cursor rewrite cleared the only red check that was
+  this branch's.
 
 ## Surprises & discoveries
 
@@ -1031,6 +1039,33 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
     `netsuke::cli::ColorChoice` is a new re-export. Each was checked against
     base and HEAD source before being written up. Date/Author: 2026-11-08,
     implementation agent.
+  - **Measured, not inferred, on 2026-11-08** with a throwaway probe test that
+    ran the same `--progress always` scenario and classified the spans. The
+    probe has been deleted; its numbers are recorded here so the row can be
+    reconciled without re-deriving them. For the first task update at byte
+    13844:
+
+    ```text
+    enclosing [12927..13889] len=962  has_any_escape=true  has_redraw=true
+    from label    len=45              has_any_escape=false has_redraw=false
+    TASK occurrences at a line start: 0
+    ```
+
+    Three facts follow, and together they settle the row. The enclosing span is
+    962 bytes and *does* carry redraw sequences, so a whole-line assertion would
+    require `has_redraw == false` on evidence the stage animation produced — the
+    assertion would be false for exactly the reason D29 gives. No `Task`
+    occurrence in the entire capture starts a line (count 0), so there is no
+    scenario in which the enclosing-line reading is available: the bytes before
+    every task label are always stage output. And the label-forward span is 45
+    bytes with neither escapes nor redraws, which is the property the row is
+    actually protecting.
+  - `--progress never` does not provide an alternative capture. Running the same
+    scenario with it emits **no task updates at all** (the PTY capture decodes to
+    zero bytes), because task reporting is part of the same progress animation.
+    The scenario that would make a whole-line assertion meaningful therefore does
+    not exist in this binary, which is the strongest form of the rebuttal: the
+    row asks for an observation the system cannot produce.
 
 ### D30: the oracle's state machine returns a cursor, not loose parts
 
@@ -1063,6 +1098,38 @@ that reason. `elidable_lifetime_names` also required eliding the lifetimes on
 `step` and `advance` (`Cursor<'_>`), which is why those signatures carry no
 named lifetime. Both are recorded so a later reader does not "restore" the
 explicit form and re-break the lint.
+
+Date/Author: 2026-11-08, implementation agent.
+
+### D31: disposition of the nine failed pre-merge rows
+
+**Decision.** Reconciled each row from CodeRabbit review `5816350946` against
+the tree at `245515675`. All nine are now satisfied, and the run below names
+the evidence so a reviewer can re-check rather than take the claim.
+
+| Row                                         | Disposition                       | Evidence in the current tree                                                                                                                                                                                                                                                                                                                                                                           |
+| ------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Testing (Overall)                           | Rebutted, with a measurement      | The enclosing-line reading is unsatisfiable; see D29's probe numbers. `--progress never` emits no task updates at all, so no capture exists in which the bytes before a label are task text. The label-forward span is 45 bytes, plain and redraw-free.                                                                                                                                                |
+| User-Facing Documentation                   | Satisfied                         | `docs/v0-1-0-migration-guide.md:301-315` documents the removed `output_mode::resolve`, the `DisplayPlan` arguments on `runner::run` and `run_with_ninja_program`, and the `parse_with_localizer_from` colour argument.                                                                                                                                                                                 |
+| Developer Documentation                     | Satisfied                         | `docs/developers-guide.md:158-160` describes `with_ansi(false)` plus the `set_tracing_ansi` reload, which is the mechanism `main` actually uses.                                                                                                                                                                                                                                                       |
+| Module-Level Documentation                  | Satisfied                         | `tests/terminal_rendering/json.rs` opens with the configuration-error and tracing contract; `json_pty.rs` opens with "Verify JSON output stays plain when attached to a Unix pseudo-terminal", which is its role.                                                                                                                                                                                      |
+| Testing (Property / Proof)                  | Satisfied                         | `test_support/src/terminal/classify_tests.rs` compares against an independent byte-level oracle over arbitrary streams, and `escapable_strings_hide_payload_carriage_returns` generates both terminated and unterminated strings (`is_terminated` is a generated boolean).                                                                                                                             |
+| Testing (Compile-Time / Ui)                 | Satisfied                         | `tests/clippy_env_policy_ui_tests.rs` locates the `disallowed_methods` exception by its attribute and asserts it decorates `fn main` specifically.                                                                                                                                                                                                                                                     |
+| Unit Architecture                           | Rebutted                          | `src/main.rs` separates the boundary already: `run_with_args` (106), `resolve_startup_window` (171), `run_merged_command` (245) and `run_configured_command` (265) name the signal resolution, the merge, and the configuration step, with `run_cli` and `configure_runtime` after them. The startup side effects the row names are unchanged from base. Recorded earlier as D26 and re-verified here. |
+| Domain Architecture                         | Rebutted                          | The policy enums live in `src/cli/config/mod.rs` and the resolver consumes them through `DisplayPolicies`, which is the adapter boundary the row asks for. Recorded earlier as D26.                                                                                                                                                                                                                    |
+| Outside-diff: document the removed resolver | Satisfied, and broader than asked | `docs/v0-1-0-migration-guide.md:301-305` names both replacements — `EnvSignals::read` with `resolve_output_mode`, and `resolve_with` — where the finding suggested only `resolve_with`.                                                                                                                                                                                                                |
+
+**Why the rebuttals are not stonewalling.** Two rows ask for changes that are
+already present, and one asks for an observation the binary cannot produce. In
+each case the disposition names a file, a line, or a measured span, so the next
+reviewer can falsify it directly instead of re-litigating prose.
+
+**Consequence for the review decision.** `reviewDecision` still reads
+`CHANGES_REQUESTED`, but that decision belongs to earlier review submissions.
+The most recent review (`5816350946`, 03:19) is `COMMENTED`, every one of its
+threads is resolved, and its failed pre-merge rows are the nine above. A fresh
+formal review of the current head is what clears the decision, and that request
+is queued (`81edf7a8`).
 
 Date/Author: 2026-11-08, implementation agent.
 
@@ -1153,12 +1220,18 @@ as a failure.
 
 The function genuinely was a Large Method, 84 lines doing four separable
 things, so the remedy is the extraction the rule asks for rather than a
-suppression. `resolve_startup_signals` now owns everything that depends only on
+suppression. `resolve_startup_window` now owns everything that depends only on
 raw argv and the environment — the JSON hint, the terminal facts, and Clap's
 help colour choice — and returns them as a `StartupSignals` value.
 `run_configured_command` owns resolving the runtime display plan, configuring
 the process, and dispatching the runner. `run_with_args` keeps the sequence
-between them and is now 69 lines.
+between them and is now 65 lines.
+
+A later reader should note that this paragraph named the extraction
+`resolve_startup_signals`, which is not a function in the tree; the type it
+returns is `StartupSignals`, and the function is `resolve_startup_window`
+(`src/main.rs:171`). The misnomer is recorded rather than quietly corrected so
+that a search for the old name finds this note instead of nothing.
 
 `make lint`'s Clippy pass accepts that; CodeScene did not, on the first
 attempt: extracting the configuration load gave `load_merged_cli` five
