@@ -23,6 +23,7 @@ __all__ = [
     "PayloadError",
     "PayloadRefusedError",
     "StagedFileMissingError",
+    "StagedFileUnreadableError",
     "TargetPlatformMismatchError",
 ]
 
@@ -83,6 +84,35 @@ class StagedFileMissingError(PayloadError):
         '/tmp/x is not a regular file'
         """
         super().__init__(f"{path} is not {expected}")
+
+
+class StagedFileUnreadableError(PayloadError):
+    """Report a staged path whose type could not be determined at all.
+
+    Distinct from :class:`StagedFileMissingError` on purpose. "There is no such
+    file" and "the operating system refused to tell me anything about this
+    file" are different diagnoses with different remedies: the first is a
+    staging bug, the second is a permission, mount, or I/O fault. Reading the
+    second as the first would send an operator to the producer's staging step
+    when the fault is in the environment.
+    """
+
+    def __init__(self, path: object, error: OSError) -> None:
+        """Build the diagnosis quoting the operating system's own refusal.
+
+        Parameters
+        ----------
+        path
+            The staged path whose type could not be read.
+        error
+            The failure ``lstat`` raised.
+
+        Examples
+        --------
+        >>> str(StagedFileUnreadableError("/tmp/x", PermissionError(13, "nope")))
+        '/tmp/x could not be inspected: [Errno 13] nope'
+        """
+        super().__init__(f"{path} could not be inspected: {error}")
 
 
 class ClaimedDeclarationMismatchError(PayloadError):

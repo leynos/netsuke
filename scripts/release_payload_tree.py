@@ -34,7 +34,11 @@ import release_digest_record_files
 import release_github_assets_adapter
 import release_producer_provenance
 from record_producer_provenance_record import RECORD_NAME
-from release_payload_errors import PayloadError, StagedFileMissingError
+from release_payload_errors import (
+    PayloadError,
+    StagedFileMissingError,
+    StagedFileUnreadableError,
+)
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
@@ -313,16 +317,19 @@ def require_regular(path: pathlib.Path) -> pathlib.Path:
 
     Notes
     -----
-    ``lstat`` is used throughout so a link is judged as itself. Following a
-    symlinked producer directory would let the payload hold bytes from outside
-    the downloaded tree, which is exactly the substitution the trusted record
-    exists to catch -- and catching it here is cheaper than catching it after
-    an upload.
+    ``StagedFileUnreadableError`` reaches the caller from :func:`_has_mode`
+    when ``lstat`` refuses to describe the leaf or an ancestor, so it is
+    described here rather than in ``Raises``.
 
-    A vanished source is reported as ``StagedFileMissingError`` rather than as
-    ``FileNotFoundError``: from the caller's side a source that disappeared
-    between observation and copy is the same refusal as one that was never
-    regular, and the CLI maps the typed family to one exit code.
+    ``lstat`` is used throughout so a link is judged as itself: following a
+    symlinked producer directory would let the payload hold bytes from outside
+    the downloaded tree, which is the substitution the trusted record exists to
+    catch. A vanished source is ``StagedFileMissingError`` rather than
+    ``FileNotFoundError``, because from the caller's side a source that
+    disappeared between observation and copy is the same refusal as one that
+    was never regular, and the CLI maps the typed family to one exit code. A
+    source the operating system will not describe keeps its own refusal: that
+    is an environment fault, not a staging one.
 
     Examples
     --------
@@ -354,7 +361,23 @@ def _has_mode(path: pathlib.Path, predicate: cabc.Callable[[int], bool]) -> bool
     -------
     bool
         ``True`` when the entry exists and its ``lstat`` mode satisfies
-        ``predicate``; ``False`` when it is absent or of another type.
+        ``predicate``; ``False`` when it is genuinely absent or of another
+        type.
+
+    Raises
+    ------
+    StagedFileUnreadableError
+        If ``lstat`` fails for any reason other than absence, such as a
+        permission refusal or an I/O fault.
+
+    Notes
+    -----
+    Absence and unreadability are answered differently on purpose: a path the
+    operating system will not describe is not evidence the file is not there,
+    and calling it absent would send an operator to fix a staging step that did
+    the right thing. Only ``ENOENT`` and ``ENOTDIR`` mean "no such entry"; the
+    rest is an environment fault, and ``walk_files`` reaches this predicate
+    too, so an unreadable entry stops selection rather than being skipped.
 
     Examples
     --------
@@ -369,5 +392,7 @@ def _has_mode(path: pathlib.Path, predicate: cabc.Callable[[int], bool]) -> bool
     """
     try:
         return predicate(path.lstat().st_mode)
-    except OSError:
+    except FileNotFoundError, NotADirectoryError:
         return False
+    except OSError as error:
+        raise StagedFileUnreadableError(path, error) from error

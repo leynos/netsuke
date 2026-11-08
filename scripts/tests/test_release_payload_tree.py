@@ -9,7 +9,7 @@ Run via ``make test-release-publication``.
 
 import json
 import os
-import typing as typ
+import pathlib
 
 import pytest
 import release_digest_files
@@ -17,11 +17,8 @@ import release_digest_record
 import release_digest_record_files
 import release_payload_selection
 import release_payload_tree
-from release_payload_errors import StagedFileMissingError
+from release_payload_errors import StagedFileMissingError, StagedFileUnreadableError
 from release_payload_tree import RECORD_NAME
-
-if typ.TYPE_CHECKING:
-    import pathlib
 
 
 def write_asset(
@@ -170,6 +167,53 @@ def test_require_regular_refuses_a_missing_file(tmp_path: pathlib.Path) -> None:
     """Surface the absent path rather than a bare ``FileNotFoundError``."""
     with pytest.raises(StagedFileMissingError, match="regular file"):
         release_payload_tree.require_regular(tmp_path / "absent.deb")
+
+
+def test_require_regular_reports_an_unreadable_leaf(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Keep a permission refusal distinct from an absent file.
+
+    Absence and unreadability need different fixes: one is a staging bug, the
+    other is a permission, mount, or I/O fault. Reporting the second as the
+    first would send an operator to a step that did the right thing.
+
+    ``lstat`` is patched rather than the mode changed, because a test may run
+    as a user that ignores the permission bits entirely -- root certainly does
+    -- and the refusal would then never be reached.
+    """
+    asset = write_asset(tmp_path, "a.deb")
+
+    def refuse(_path: pathlib.Path) -> os.stat_result:
+        """Refuse every ``lstat``, as an unreadable file would."""
+        raise PermissionError(13, "Permission denied")
+
+    monkeypatch.setattr(pathlib.Path, "lstat", refuse)
+    with pytest.raises(StagedFileUnreadableError, match="could not be inspected"):
+        release_payload_tree.require_regular(asset)
+
+
+def test_require_regular_reports_an_unreadable_ancestor(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Apply the same distinction to an ancestor probe.
+
+    The leaf is read first and is genuine here, so only the ancestor loop can
+    raise; that is what makes this the ancestor's case rather than a repeat of
+    the leaf's.
+    """
+    asset = write_asset(tmp_path, "a.deb")
+    genuine_lstat = pathlib.Path.lstat
+
+    def refuse_ancestors(path: pathlib.Path) -> os.stat_result:
+        """Refuse the ancestor probe while leaving the leaf readable."""
+        if path == tmp_path:
+            raise PermissionError(13, "Permission denied")
+        return genuine_lstat(path)
+
+    monkeypatch.setattr(pathlib.Path, "lstat", refuse_ancestors)
+    with pytest.raises(StagedFileUnreadableError, match="could not be inspected"):
+        release_payload_tree.require_regular(asset)
 
 
 def test_copy_verified_copies_the_bytes(tmp_path: pathlib.Path) -> None:
