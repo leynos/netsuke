@@ -156,8 +156,10 @@ impl Fixture {
         self.write_executable(
             "poison-runner",
             &format!(
-                "#!/bin/sh\nprintf 'prover-tools runner invoked\\n' >&2\n\
-                 printf invoked > '{}'\nexit 99\n",
+                concat!(
+                    "#!/bin/sh\nprintf 'prover-tools runner invoked\\n' >&2\n",
+                    "printf invoked > '{}'\nexit 99\n",
+                ),
                 marker.display()
             ),
         )?;

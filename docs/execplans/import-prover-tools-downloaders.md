@@ -1726,3 +1726,37 @@ All eleven commit gates were run sequentially on this candidate and each exited
 `test-prover-tools-integration` (11 passed), `test-kani-check-isolation` (9
 passed, 0 skipped) and `test-verus-e2e` (5 passed, 0 skipped). Keep Status: IN
 PROGRESS pending review at the new head and trusted-main warm-cache acceptance.
+
+Revision 53 (2026-11-08): Hosted CI on `68afdf0ad` finally reached the Linux
+lint step and failed there on a real finding rather than a download.
+`build-test` attempt 6 cleared `Install Whitaker` and stopped in step 23,
+`Lint`, with
+
+```text
+error: Join the physical lines in this cooked string with `concat!()`.
+   --> tests/prover_tools_kani_check_tests/support.rs:159:17
+error: could not compile `netsuke-build` (test "prover_tools_kani_check_tests")
+```
+
+The rule is `string-continuation-style`, and the trigger was a shell script
+written as one Rust string literal continued with a trailing backslash.
+`poison_runner` now builds it from two `concat!()` arguments. The cooked bytes
+are unchanged: the continuation had already swallowed the second line's leading
+indentation, so the second argument starts at `printf` with no padding.
+
+Attempts 2 to 5 were extinguished by the GitHub incident "Increase in timeouts
+for some unauthenticated users" (opened 2026-11-08T10:36Z), which failed the
+sccache, cargo-binstall, kani-verifier, mdtablefix and Whitaker downloads; the
+same URLs timed out from this host while `codeload.github.com` answered. Local
+`make lint` had been green on the identical tree because the locally installed
+suite library dated from 2026-11-04 and predated the lint. The rolling archive
+is republished on every push to Whitaker's `main`, so a green local run does
+not cover a lint the archive has gained since: `whitaker-installer install` now
+fetches the prebuilt `whitaker-lints-9fc35c0-nightly-2026-05-28` suite, and
+`make lint-whitaker` passes both workspace packages against it.
+
+All eleven commit gates were then run sequentially on this candidate and each
+exited `0`: `check-fmt`, `lint`, `typecheck`, `doc-coverage`, `markdownlint`,
+`nixie`, `test`, `test-workflow-contracts`, `test-prover-tools-integration`,
+`test-kani-check-isolation` and `test-verus-e2e`. Keep Status: IN PROGRESS
+pending review at the new head and trusted-main warm-cache acceptance.
