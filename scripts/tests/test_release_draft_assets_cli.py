@@ -206,6 +206,28 @@ def test_a_successful_run_replaces_an_existing_record(
     )
 
 
+def _complete_values(tmp_path: pathlib.Path, mode: str) -> dict[str, str]:
+    """Return the arguments a successful invocation of ``mode`` needs.
+
+    Each mode is given a listing of the shape it reads, so the control below
+    runs the real command path rather than failing on an unreadable input. Only
+    ``select-release`` receives ``--tag``; passing it to ``plan-downloads``
+    would make every row fail on an unrecognised argument instead of on the
+    value the row removes.
+
+    Returns
+    -------
+    dict[str, str]
+        Every flag and value the mode needs to succeed, keyed by flag.
+    """
+    pages = [[_release(7)]] if mode == "select-release" else [[_asset(11, "a")]]
+    listing = _write_listing(tmp_path / f"{mode}.json", pages)
+    values = {"--listing": str(listing), "--output": str(tmp_path / "result.txt")}
+    if mode == "select-release":
+        values["--tag"] = TAG
+    return values
+
+
 @pytest.mark.parametrize(
     ("mode", "missing"),
     [
@@ -216,21 +238,38 @@ def test_a_successful_run_replaces_an_existing_record(
         pytest.param("plan-downloads", "--output", id="plan-output"),
     ],
 )
-def test_the_commands_refuse_to_guess_an_argument(mode: str, missing: str) -> None:
+def test_the_commands_refuse_to_guess_an_argument(
+    tmp_path: pathlib.Path, mode: str, missing: str
+) -> None:
     """Refuse an invocation that omits one of the values it needs."""
-    values = {
-        "--listing": "listing.json",
-        "--tag": TAG,
-        "--output": "result.txt",
-    }
     argv = [
         mode,
         *[
             part
-            for flag, value in values.items()
+            for flag, value in _complete_values(tmp_path, mode).items()
             if flag != missing
             for part in (flag, value)
         ],
     ]
 
     assert main(argv) == EXIT_INPUT_UNREADABLE, "an invalid invocation must not succeed"
+
+
+@pytest.mark.parametrize("mode", ["select-release", "plan-downloads"])
+def test_a_complete_invocation_is_accepted(tmp_path: pathlib.Path, mode: str) -> None:
+    """Control: the arguments the refusal rows remove are sufficient on their own.
+
+    Without this case a row could pass because every invocation of that mode
+    fails, which would leave the refusal test proving nothing about the
+    argument it removes.
+    """
+    argv = [
+        mode,
+        *[
+            part
+            for flag, value in _complete_values(tmp_path, mode).items()
+            for part in (flag, value)
+        ],
+    ]
+
+    assert main(argv) == EXIT_OK, "a complete invocation must be accepted"
