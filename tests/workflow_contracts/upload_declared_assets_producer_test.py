@@ -196,10 +196,10 @@ def test_an_unrecorded_platform_is_refused(
     tree.stage_producer_tree(workspace, facts, target)
     baseline_log = tmp_path / "uv-unrecorded.txt"
     baseline_log.touch()
-    environment = (
-        producer_env.step_environment(facts, target)
-        | {"PLATFORM": "solaris", "UV_BASELINE_LOG": str(baseline_log)}
-    )
+    environment = producer_env.step_environment(facts, target) | {
+        "PLATFORM": "solaris",
+        "UV_BASELINE_LOG": str(baseline_log),
+    }
     completed = producer.run_producer_step(workspace, environment, label="solaris")
     assert completed.returncode == 1, completed.stdout
     assert "::error title=Unrecorded platform::solaris" in completed.stdout, (
@@ -245,8 +245,10 @@ def test_a_replaced_archive_is_refused_before_upload(
     """
     runs = _runs(tmp_path, facts)
     publication = producer.assemble_publication(tmp_path, facts, runs)
-    archive = publication.workspace / staging.DIST / staging.archive_name(
-        facts, runs[0].target
+    archive = (
+        publication.workspace
+        / staging.DIST
+        / staging.archive_name(facts, runs[0].target)
     )
     archive.write_bytes(b"substituted\n")
     diagnosis = _refused(execute(tmp_path, publication.workspace, facts))

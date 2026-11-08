@@ -56,9 +56,7 @@ _GITHUB_CONTEXT = {
 
 #: A staging or packaging action's step output, resolved by
 #: :func:`upload_declared_assets_producer_tree.stage_paths`.
-_STEP_OUTPUT = re.compile(
-    r"\A\$\{\{ steps\.[a-z_]+\.outputs\['([a-z-]+)'\] \}\}\Z"
-)
+_STEP_OUTPUT = re.compile(r"\A\$\{\{ steps\.[a-z_]+\.outputs\['([a-z-]+)'\] \}\}\Z")
 
 
 def producer_step() -> dict[str, object]:
