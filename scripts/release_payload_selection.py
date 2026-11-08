@@ -23,6 +23,15 @@ the tree and passes published name to source paths; this module decides. That
 keeps every refusal reachable from a plain dictionary, which is what makes the
 stale, duplicate, unrelated, and ambiguous cases testable at all.
 
+Every refusal below belongs to the helper that makes it, and the adapter
+distinguishes them: ``StaleCandidateError``, ``ForeignRunError``,
+``MissingTargetError``, ``DuplicateTargetError``, and
+``TargetClaimMismatchError`` say the downloaded tree is not this release's,
+while ``PayloadRefusedError`` and ``ClaimedDeclarationMismatchError`` say the
+configuration and the records disagree. ``MissingPackageError``,
+``DuplicatePackageError``, ``UnknownPlatformError``, and
+``TargetPlatformMismatchError`` complete the inventory.
+
 The sources are opaque here and are returned untouched, so the adapter copies
 exactly what selection approved.
 
@@ -35,13 +44,19 @@ import typing as typ
 
 import release_declaration
 import release_digest
+import release_payload_identity
 import release_payload_names
+import release_producer_claims
 import release_producer_provenance_checks
 from release_payload_errors import (
     ClaimedDeclarationMismatchError,
     PayloadRefusedError,
-    TargetPlatformMismatchError,
 )
+
+# Re-exported so the adapter and the suites keep one import site for the
+# identity a selection is judged against, without this module's own policy
+# code depending on the alias.
+from release_payload_identity import ReleaseIdentity
 
 # Re-exported so callers reach the naming policy through the module that
 # consumes it, without this module's own policy code depending on the alias.
@@ -68,25 +83,6 @@ __all__ = [
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
-class ReleaseIdentity:
-    """Name the release that a selected payload must serve.
-
-    Attributes
-    ----------
-    candidate
-        The full lowercase commit the release publishes.
-    run_id
-        The workflow run whose producers may contribute artefacts.
-    target_config
-        Parsed staging TOML naming the configured targets and platforms.
-    """
-
-    candidate: str
-    run_id: str
-    target_config: object
-
-
-@dataclasses.dataclass(frozen=True, slots=True)
 class PayloadSelection[Source]:
     """The declared assets selection approved, and where each one lives.
 
@@ -109,7 +105,7 @@ def select_payload[Source](
     provenances: cabc.Iterable[ProducerProvenance],
     *,
     identity: ReleaseIdentity,
-    archive_names: cabc.Iterable[str],
+    archives: cabc.Mapping[str, str],
     staged: cabc.Mapping[str, cabc.Sequence[Source]],
 ) -> PayloadSelection[Source]:
     """Select the staged files that make up the declared release payload.
@@ -120,8 +116,11 @@ def select_payload[Source](
         Every validated producer record found in the downloaded tree.
     identity
         The candidate, run, and configured targets the release must serve.
-    archive_names
-        Archive names the configuration and manifest expect.
+    archives
+        Configured target key mapped to the archive name that target stages.
+        Selection needs the mapping rather than a flat name list so each
+        record can be held to its *own* target's archive, which is what stops
+        two same-platform records exchanging claims.
     staged
         Published name mapped to each observed file claiming it.
 
@@ -131,23 +130,10 @@ def select_payload[Source](
         The declared names, their producer-recorded digests, and one source
         path per name.
 
-    Raises
-    ------
-    PayloadRefusedError
-        If a declared name is unstaged or ambiguous, a staged name is unsafe,
-        or a release-shaped file claims a name the declaration does not.
-    ClaimedDeclarationMismatchError
-        If the producer records do not claim exactly the declared names.
-
     Notes
     -----
-    Binding, coverage, and naming refusals reach the caller from
-    :mod:`release_producer_provenance_checks` and :mod:`release_declaration`
-    with their own diagnoses: ``StaleCandidateError``, ``ForeignRunError``,
-    ``MissingTargetError``, ``DuplicateTargetError``, ``DuplicateAssetError``,
-    ``MissingPackageError``, ``DuplicatePackageError``, and
-    ``TargetPlatformMismatchError`` from :func:`_require_platforms`. None is
-    raised here, so Ruff's DOC501 keeps them out of the ``Raises`` section.
+    Every refusal reaches the caller from one of the helpers below, so none is
+    listed under ``Raises``. The module docstring inventories them.
 
     Examples
     --------
@@ -155,43 +141,114 @@ def select_payload[Source](
     >>> provenance = ProducerProvenance(
     ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
     ...     target="linux-x86_64", platform="linux",
-    ...     assets={
-    ...         "netsuke.deb": "b" * 64, "netsuke.rpm": "c" * 64,
-    ...         "netsuke.tar.gz": "d" * 64,
-    ...         "netsuke.tar.gz.sha256": "e" * 64,
-    ...     },
+    ...     assets={"pkg.deb": "b" * 64, "pkg.rpm": "c" * 64,
+    ...             "pkg.tar.gz": "d" * 64, "pkg.tar.gz.sha256": "e" * 64},
     ... )
     >>> selection = select_payload(
     ...     [provenance],
     ...     identity=ReleaseIdentity(
-    ...         candidate="a" * 40, run_id="7",
-    ...         target_config={"targets": {"linux-x86_64": {"platform": "linux"}}},
+    ...         "a" * 40, "7", {"targets": {"linux-x86_64": {"platform": "linux"}}}
     ...     ),
-    ...     archive_names=["netsuke.tar.gz"],
-    ...     staged={
-    ...         "netsuke.deb": ["deb"],
-    ...         "netsuke.rpm": ["rpm"],
-    ...         "netsuke.tar.gz": ["archive"],
-    ...         "netsuke.tar.gz.sha256": ["sidecar"],
-    ...     },
+    ...     archives={"linux-x86_64": "pkg.tar.gz"},
+    ...     staged={"pkg.deb": ["deb"], "pkg.rpm": ["rpm"],
+    ...             "pkg.tar.gz": ["archive"], "pkg.tar.gz.sha256": ["sidecar"]},
     ... )
-    >>> selection.declared[0]
-    'netsuke.deb'
-    >>> selection.sources["netsuke.tar.gz"]
+    >>> selection.sources["pkg.tar.gz"]
     'archive'
     """
     claims = list(provenances)
-    _require_bound(claims, identity)
-    targets = release_declaration.target_platforms(identity.target_config)
-    release_producer_provenance_checks.require_target_coverage(
-        claims, expected_targets=targets
+    targets = release_payload_identity.require_bound_claims(claims, identity)
+    claimed = _require_claims(
+        claims, identity=identity, archives=archives, targets=targets
     )
-    _require_platforms(claims, targets)
-    claimed = release_producer_provenance_checks.declared_names(claims)
-    # The declaration counts targets, so it takes the typed record. The
-    # coverage check above needs the configured keys instead, which the
-    # typed record does not carry, so the same configuration is read both
-    # ways from one parsed value.
+    declared = _require_declaration(
+        archive_names=archives.values(),
+        targets=targets,
+        claimed=claimed,
+    )
+    _require_staged(declared, staged)
+    return PayloadSelection(
+        declared=declared,
+        trusted=release_producer_provenance_checks.trusted_digests(claims),
+        sources={name: staged[name][0] for name in declared},
+    )
+
+
+def _require_claims(
+    claims: cabc.Sequence[ProducerProvenance],
+    *,
+    identity: ReleaseIdentity,
+    archives: cabc.Mapping[str, str],
+    targets: cabc.Mapping[str, str],
+) -> tuple[str, ...]:
+    """Hold each record to its own target's archive and package formats.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Every published name the producers claim, flat and sorted.
+
+    Notes
+    -----
+    ``TargetClaimMismatchError`` surfaces from
+    :func:`release_producer_claims.require_target_claims` and
+    ``DuplicateAssetError`` from
+    :func:`release_producer_provenance_checks.declared_names`; neither is
+    raised here.
+
+    Examples
+    --------
+    >>> _require_claims(
+    ...     [], identity=ReleaseIdentity("a" * 40, "7", {}), archives={}, targets={}
+    ... )
+    ()
+    """
+    release_producer_claims.require_target_claims(
+        claims, archives=archives, targets=targets
+    )
+    return release_producer_provenance_checks.declared_names(claims)
+
+
+def _require_declaration(
+    *,
+    archive_names: cabc.Iterable[str],
+    targets: cabc.Mapping[str, str],
+    claimed: tuple[str, ...],
+) -> tuple[str, ...]:
+    """Assemble the declaration and require it to be exactly what was claimed.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Sorted archive names, sidecars, and observed packages.
+
+    Raises
+    ------
+    ClaimedDeclarationMismatchError
+        If the records do not claim exactly the declared names.
+
+    Notes
+    -----
+    The per-target check has already bound each record, so a remaining
+    disagreement is between the *configuration* and the records as a whole.
+    ``MissingPackageError``, ``DuplicatePackageError``, and
+    ``UnknownPlatformError`` surface from :mod:`release_declaration` instead.
+
+    The declaration counts targets by platform, so it takes the typed record.
+    The per-target claim check needs the configured keys instead, which the
+    typed record does not carry, so the caller passes the same mapping it
+    already derived from one parsed configuration.
+
+    Examples
+    --------
+    >>> _require_declaration(
+    ...     archive_names=["crate.tar.gz"],
+    ...     targets={"linux": "linux"},
+    ...     claimed=("crate-1.deb", "crate-1.rpm", "crate.tar.gz",
+    ...              "crate.tar.gz.sha256"),
+    ... )[:2]
+    ('crate-1.deb', 'crate-1.rpm')
+    """
     declared = release_declaration.declared_asset_names(
         archive_names=archive_names,
         targets=release_declaration.StagingTargets.from_targets(
@@ -202,14 +259,32 @@ def select_payload[Source](
     )
     if set(declared) != set(claimed):
         raise ClaimedDeclarationMismatchError(declared, claimed)
+    return declared
+
+
+def _require_staged[Source](
+    declared: cabc.Iterable[str], staged: cabc.Mapping[str, cabc.Sequence[Source]]
+) -> None:
+    """Refuse a staged tree that does not hold exactly the declared files.
+
+    Raises
+    ------
+    PayloadRefusedError
+        If any declared name is unstaged or ambiguous, a staged name is unsafe,
+        or a release-shaped file claims a name the declaration does not.
+
+    Examples
+    --------
+    >>> _require_staged(("a.deb",), {"a.deb": ["x"]})
+    >>> try:
+    ...     _require_staged(("a.deb",), {})
+    ... except PayloadRefusedError as refusal:
+    ...     print("was not staged" in str(refusal))
+    True
+    """
     offenders = release_payload_names.describe_offenders(declared, staged)
     if offenders:
         raise PayloadRefusedError(offenders)
-    return PayloadSelection(
-        declared=declared,
-        trusted=release_producer_provenance_checks.trusted_digests(claims),
-        sources={name: staged[name][0] for name in declared},
-    )
 
 
 def require_staged_digests(
@@ -253,81 +328,3 @@ def require_staged_digests(
     ]
     if offenders:
         raise PayloadRefusedError(offenders)
-
-
-def _require_bound(
-    provenances: cabc.Iterable[ProducerProvenance], identity: ReleaseIdentity
-) -> None:
-    """Refuse a producer record from another commit or another run.
-
-    Parameters
-    ----------
-    provenances
-        Every validated producer record found in the downloaded tree.
-    identity
-        The candidate and run the release is publishing from.
-
-    Notes
-    -----
-    A producer from another commit surfaces ``StaleCandidateError`` and one
-    from another run ``ForeignRunError``, both from
-    :func:`release_producer_provenance_checks.require_candidate`.
-
-    Examples
-    --------
-    >>> _require_bound([], ReleaseIdentity("a" * 40, "7", {}))
-    >>> from release_producer_provenance import ProducerProvenance
-    >>> stale = ProducerProvenance(
-    ...     schema=1, commit="b" * 40, run_id="7", run_attempt="1",
-    ...     target="t", platform="linux", assets={"a.deb": "c" * 64},
-    ... )
-    >>> try:
-    ...     _require_bound([stale], ReleaseIdentity("a" * 40, "7", {}))
-    ... except ValueError as refusal:
-    ...     print("not candidate" in str(refusal))
-    True
-    """
-    for provenance in provenances:
-        release_producer_provenance_checks.require_candidate(
-            provenance, commit=identity.candidate, run_id=identity.run_id
-        )
-
-
-def _require_platforms(
-    provenances: cabc.Iterable[ProducerProvenance],
-    targets: cabc.Mapping[str, str],
-) -> None:
-    """Refuse a record whose platform its configured target does not serve.
-
-    Parameters
-    ----------
-    provenances
-        Every validated producer record found in the downloaded tree.
-    targets
-        Configured target key mapped to the platform it stages for.
-
-    Raises
-    ------
-    TargetPlatformMismatchError
-        If any record disagrees with the configuration.
-
-    Examples
-    --------
-    >>> from release_producer_provenance import ProducerProvenance
-    >>> wrong = ProducerProvenance(
-    ...     schema=1, commit="a" * 40, run_id="7", run_attempt="1",
-    ...     target="linux-x86_64", platform="macos", assets={"a.deb": "b" * 64},
-    ... )
-    >>> try:
-    ...     _require_platforms([wrong], {"linux-x86_64": "linux"})
-    ... except TargetPlatformMismatchError as refusal:
-    ...     print("'macos'" in str(refusal))
-    True
-    """
-    offenders = [
-        (provenance.target, provenance.platform, targets[provenance.target])
-        for provenance in provenances
-        if targets[provenance.target] != provenance.platform
-    ]
-    if offenders:
-        raise TargetPlatformMismatchError(offenders)

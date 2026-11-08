@@ -68,10 +68,73 @@ def _validate_targets(staging_config: Path, targets: list[str]) -> None:
         raise ValueError(msg)
 
 
+def archives_by_target(
+    staging_config: Path, manifest: Path, version: str
+) -> dict[str, str]:
+    r"""Derive each configured target's archive file name, keyed by target.
+
+    Parameters
+    ----------
+    staging_config
+        Path to the staging configuration
+        (``.github/release-staging.toml``); its ``[targets.*]`` tables supply
+        the target triples.
+    manifest
+        Path to the Cargo manifest supplying the package name.
+    version
+        Release version interpolated into each archive name.
+
+    Returns
+    -------
+    dict[str, str]
+        Configured target key mapped to the
+        ``{package}-{version}-{triple}.tar.gz`` name that target stages.
+
+    Notes
+    -----
+    The archive's *name* interpolates the Rust triple, but a producer record is
+    filed under the target *key*. A caller that only wants the flat name set
+    cannot tell which target a given archive belongs to, so publication asks
+    for this mapping and holds every record to its own entry. The keys are the
+    staging configuration's, and the values are exactly the names
+    :func:`expected_archive_names` returns, so the two cannot drift.
+
+    A configuration that defines no release targets or repeats a target triple
+    raises ``ValueError`` from :func:`_validate_targets`. An unreadable
+    configuration file propagates ``OSError``, and a malformed one
+    ``tomllib.TOMLDecodeError``.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     root = Path(root)
+    ...     _ = (root / "s.toml").write_text(
+    ...         '[targets.linux]\ntarget = "x86_64-unknown-linux-gnu"\n',
+    ...         encoding="utf-8",
+    ...     )
+    ...     _ = (root / "Cargo.toml").write_text(
+    ...         '[package]\nname = "pkg"\n', encoding="utf-8"
+    ...     )
+    ...     archives_by_target(root / "s.toml", root / "Cargo.toml", "1.0.0")
+    {'linux': 'pkg-1.0.0-x86_64-unknown-linux-gnu.tar.gz'}
+    """
+    config = tomllib.loads(staging_config.read_text(encoding="utf-8"))
+    package = tomllib.loads(manifest.read_text(encoding="utf-8"))["package"]["name"]
+    triples = {
+        key: entry["target"] for key, entry in config.get("targets", {}).items()
+    }
+    _validate_targets(staging_config, list(triples.values()))
+    return {
+        key: f"{package}-{version}-{triple}.tar.gz"
+        for key, triple in sorted(triples.items())
+    }
+
+
 def expected_archive_names(
     staging_config: Path, manifest: Path, version: str
 ) -> list[str]:
-    """Derive the expected archive file names for every staged target.
+    r"""Derive the expected archive file names for every staged target.
 
     Parameters
     ----------
@@ -91,16 +154,25 @@ def expected_archive_names(
 
     Notes
     -----
-    A configuration that omits the ``[targets]`` table, defines no release
-    targets, or repeats a target triple raises ``ValueError`` from
-    :func:`_validate_targets`. An unreadable configuration file propagates
-    ``OSError``, and a malformed one ``tomllib.TOMLDecodeError``.
+    The same configuration diagnoses reach the caller as
+    :func:`archives_by_target`, whose values this sorts.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> with tempfile.TemporaryDirectory() as root:
+    ...     root = Path(root)
+    ...     _ = (root / "s.toml").write_text(
+    ...         '[targets.linux]\ntarget = "x86_64-unknown-linux-gnu"\n',
+    ...         encoding="utf-8",
+    ...     )
+    ...     _ = (root / "Cargo.toml").write_text(
+    ...         '[package]\nname = "pkg"\n', encoding="utf-8"
+    ...     )
+    ...     expected_archive_names(root / "s.toml", root / "Cargo.toml", "1.0.0")
+    ['pkg-1.0.0-x86_64-unknown-linux-gnu.tar.gz']
     """
-    config = tomllib.loads(staging_config.read_text(encoding="utf-8"))
-    package = tomllib.loads(manifest.read_text(encoding="utf-8"))["package"]["name"]
-    targets = [entry["target"] for entry in config.get("targets", {}).values()]
-    _validate_targets(staging_config, targets)
-    return [f"{package}-{version}-{target}.tar.gz" for target in sorted(targets)]
+    return sorted(archives_by_target(staging_config, manifest, version).values())
 
 
 def _is_file(path: Path) -> bool:

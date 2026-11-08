@@ -13,9 +13,17 @@ Run via ``make test-release-publication``.
 import pytest
 import release_payload_selection as selection
 from release_payload_errors import (
-    ClaimedDeclarationMismatchError,
     PayloadRefusedError,
     TargetPlatformMismatchError,
+)
+from release_payload_selection_support import (
+    ARM_ARCHIVE,
+    ARM_DEB,
+    ARM_RPM,
+    TWO_TARGET_ARCHIVES,
+    TWO_TARGET_CONFIG,
+    arm_record,
+    two_target_staged,
 )
 from release_producer_provenance import ProducerProvenance
 from release_producer_provenance_errors import (
@@ -23,6 +31,7 @@ from release_producer_provenance_errors import (
     ForeignRunError,
     MissingTargetError,
     StaleCandidateError,
+    TargetClaimMismatchError,
 )
 
 CANDIDATE = "a" * 40
@@ -71,7 +80,7 @@ def selection_for(
     provenances: list[ProducerProvenance],
     staged: dict[str, list[str]],
     *,
-    archive_names: list[str] | None = None,
+    archives: dict[str, str] | None = None,
     config: dict[str, object] | None = None,
 ) -> selection.PayloadSelection[str]:
     """Select a payload from ``staged``, with a caller-chosen source per name.
@@ -88,7 +97,7 @@ def selection_for(
             run_id=RUN_ID,
             target_config=CONFIG if config is None else config,
         ),
-        archive_names=[ARCHIVE] if archive_names is None else archive_names,
+        archives={TARGET: ARCHIVE} if archives is None else archives,
         staged=staged,
     )
 
@@ -122,7 +131,7 @@ def test_the_sources_are_returned_opaque() -> None:
     selected = selection.select_payload(
         [provenance()],
         identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, CONFIG),
-        archive_names=[ARCHIVE],
+        archives={TARGET: ARCHIVE},
         staged=staged,
     )
     assert selected.sources[DEB] is tokens["deb"], (
@@ -219,8 +228,113 @@ def test_a_record_claiming_a_name_the_declaration_does_not_is_refused() -> None:
             RPM: "4" * 64,
         }
     )
-    with pytest.raises(ClaimedDeclarationMismatchError):
+    with pytest.raises(TargetClaimMismatchError):
         selection_for([straying], {other_archive: ["archive"]})
+
+
+def staged_assets() -> dict[str, str]:
+    """Return the x86_64 target's own claims, one distinct digest per name.
+
+    Returns
+    -------
+    dict[str, str]
+        The archive, its sidecar, and two packages.
+    """
+    return {
+        ARCHIVE: "1" * 64,
+        SIDECAR: "2" * 64,
+        DEB: "3" * 64,
+        RPM: "4" * 64,
+    }
+
+
+def x86_record(assets: dict[str, str]) -> ProducerProvenance:
+    """Build the x86_64 target's record over the names a case chooses.
+
+    Returns
+    -------
+    ProducerProvenance
+        A record filed under the single-target cases' Linux target.
+    """
+    return provenance(assets=assets)
+
+
+def test_two_targets_claiming_their_own_assets_are_accepted() -> None:
+    """Accept two same-platform records that each claim their own target's set.
+
+    The control for the swap below: the same two records, correctly bound,
+    must select cleanly, so a refusal there can only be about the exchange.
+    """
+    selected = selection_for(
+        [x86_record(staged_assets()), arm_record()],
+        two_target_staged(),
+        archives=TWO_TARGET_ARCHIVES,
+        config=TWO_TARGET_CONFIG,
+    )
+    assert selected.sources[ARM_ARCHIVE] == "arm-archive", (
+        "each target's archive must come from its own record's staging directory"
+    )
+
+
+def test_two_records_exchanging_their_archive_and_sidecar_are_refused() -> None:
+    """Refuse two records that swap archives while their union is unchanged.
+
+    This is the case a union comparison cannot see. Both records are for
+    Linux, each claims one archive, one sidecar, one ``.deb`` and one
+    ``.rpm``, and the union of every claimed name is exactly what the release
+    declares -- yet each record now vouches for the other target's archive.
+    """
+    swapped_x86 = x86_record({
+        ARM_ARCHIVE: "1" * 64,
+        f"{ARM_ARCHIVE}.sha256": "2" * 64,
+        DEB: "3" * 64,
+        RPM: "4" * 64,
+    })
+    swapped_arm = arm_record(archive=ARCHIVE, packages=(ARM_DEB, ARM_RPM))
+    union = set(swapped_x86.assets) | set(swapped_arm.assets)
+    assert union == {*two_target_staged()}, (
+        "the case must preserve the union, or it tests the wrong refusal"
+    )
+    with pytest.raises(TargetClaimMismatchError, match="omits its own"):
+        selection_for(
+            [swapped_x86, swapped_arm],
+            two_target_staged(),
+            archives=TWO_TARGET_ARCHIVES,
+            config=TWO_TARGET_CONFIG,
+        )
+
+
+def test_a_record_claiming_a_second_archive_is_refused() -> None:
+    """Refuse a record claiming two archives, even when the union still fits.
+
+    A record that keeps its own archive *and* adds a sibling target's leaves
+    the union complete, so only a per-record check can see it.
+    """
+    greedy = x86_record(staged_assets() | {ARM_ARCHIVE: "5" * 64})
+    with pytest.raises(TargetClaimMismatchError, match="neither its archive"):
+        selection_for(
+            [greedy, arm_record()],
+            two_target_staged(),
+            archives=TWO_TARGET_ARCHIVES,
+            config=TWO_TARGET_CONFIG,
+        )
+
+
+def test_a_record_claiming_a_sibling_targets_package_is_refused() -> None:
+    """Refuse a record whose package claim belongs to its sibling's platform.
+
+    Both targets are Linux, so the package half can only be judged by count
+    and format. A record claiming three ``.rpm`` files -- one of them its
+    sibling's -- is still refused, which is what a count is for.
+    """
+    doubled = x86_record(staged_assets() | {ARM_RPM: "5" * 64})
+    with pytest.raises(TargetClaimMismatchError, match="must claim 1"):
+        selection_for(
+            [doubled, arm_record()],
+            two_target_staged(),
+            archives=TWO_TARGET_ARCHIVES,
+            config=TWO_TARGET_CONFIG,
+        )
 
 
 def test_require_staged_digests_accepts_the_recorded_bytes() -> None:

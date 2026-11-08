@@ -46,6 +46,7 @@ from release_producer_provenance_errors import (
     MissingTargetError,
     ProvenanceError,
     StaleCandidateError,
+    TargetClaimMismatchError,
 )
 
 __all__ = [
@@ -166,6 +167,7 @@ def main(argv: list[str] | None = None) -> int:
         ForeignRunError,
         MissingTargetError,
         StaleCandidateError,
+        TargetClaimMismatchError,
     ) as error:
         # These describe a tree that is *readable* but is not this release's:
         # a stale download, a foreign run, a missing or doubled producer. The
@@ -217,7 +219,7 @@ def select_and_copy(
     """
     config = _read_staging_config(arguments.staging_config)
     provenances = release_payload_tree.read_provenances(arguments.dist_dir)
-    archive_names = hoist_binstall_discovery.expected_archive_names(
+    archives = hoist_binstall_discovery.archives_by_target(
         arguments.staging_config, arguments.manifest, arguments.version
     )
     staged = release_payload_tree.observe_payload(arguments.dist_dir)
@@ -228,7 +230,7 @@ def select_and_copy(
             run_id=arguments.run_id,
             target_config=config,
         ),
-        archive_names=archive_names,
+        archives=archives,
         staged=staged,
     )
     computed = _digests(selection)

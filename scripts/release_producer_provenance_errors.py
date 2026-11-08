@@ -12,6 +12,12 @@ nothing: it holds no schema version, no digest rule, and no record reader, and
 it imports nothing. That is what lets both sides of the record's own split
 depend on it without a cycle.
 
+The two renderers below exist because the same sentence shape recurred. One
+names a summary and the single value it fixes; the other names the producer's
+target and the asset at fault. Centralizing them is not cosmetic: every
+diagnosis here is pinned by a doctest or a test, so a change to how a value is
+quoted must reach all of them at once rather than one class at a time.
+
 Kept apart from :mod:`release_producer_provenance` so each file stays under the
 repository's 400-line cap.
 
@@ -34,14 +40,94 @@ __all__ = [
     "ProvenanceError",
     "SchemaNotIntegerError",
     "StaleCandidateError",
+    "TargetClaimMismatchError",
     "UnknownPlatformError",
     "UnknownSchemaError",
     "UnsafeAssetNameError",
 ]
 
 
+def _quoted_tail(summary: str, value: object) -> str:
+    """Join a diagnosis summary to the quoted value it names.
+
+    Parameters
+    ----------
+    summary
+        The sentence stem, ending where the value belongs.
+    value
+        The offending value, rendered so its text is visible literally.
+
+    Returns
+    -------
+    str
+        The summary followed by the value's ``repr``.
+
+    Examples
+    --------
+    >>> _quoted_tail("the schema must be an integer, got", 3)
+    'the schema must be an integer, got 3'
+    """
+    return f"{summary} {value!r}"
+
+
+def _target_asset_diagnosis(summary: str, target: str, name: str) -> str:
+    """Name the producer's target and the asset at fault in one sentence.
+
+    Parameters
+    ----------
+    summary
+        What the producer did with the asset, such as
+        ``"claims unsafe asset name"``.
+    target
+        The configured target whose producer made the claim.
+    name
+        The asset name the claim concerned.
+
+    Returns
+    -------
+    str
+        The composed diagnosis.
+
+    Examples
+    --------
+    >>> _target_asset_diagnosis("claims unsafe asset name", "linux", "../x")
+    "producer for target 'linux' claims unsafe asset name '../x'"
+    """
+    return f"producer for target {target!r} {summary} {name!r}"
+
+
 class ProvenanceError(ValueError):
     """Report a producer record that cannot support a publication decision."""
+
+
+class _OneValueError(ProvenanceError):
+    """Report a refusal whose message ends in one quoted value.
+
+    A subclass declares the sentence stem as ``_summary``; this class appends
+    the value. Five diagnoses share the shape ``<stem> <value>``, and writing
+    that forwarding once keeps the stem beside the class that owns it without
+    repeating the same ``__init__`` in each.
+    """
+
+    _summary: str
+
+    def __init__(self, value: object) -> None:
+        """Build the diagnosis from the declared stem and ``value``."""
+        super().__init__(_quoted_tail(self._summary, value))
+
+
+class _TargetAssetError(ProvenanceError):
+    """Report a refusal naming the producer's target and the asset at fault.
+
+    A subclass declares the verb phrase as ``_summary``; this class composes
+    ``producer for target <target> <summary> <asset>``.
+    """
+
+    _summary: str
+
+    def __init__(self, target: str, name: str) -> None:
+        """Build the diagnosis naming ``target`` and ``name``."""
+        super().__init__(_target_asset_diagnosis(self._summary, target, name))
 
 
 class MalformedRecordError(ProvenanceError):
@@ -71,20 +157,10 @@ class NonMappingRecordError(MalformedRecordError):
         )
 
 
-class SchemaNotIntegerError(MalformedRecordError):
+class SchemaNotIntegerError(_OneValueError, MalformedRecordError):
     """Report a record whose schema member is not an integer."""
 
-    def __init__(self, schema: object) -> None:
-        """Build the diagnosis naming the schema value.
-
-        Parameters
-        ----------
-        schema
-            The schema value the record carried.
-        """
-        super().__init__(
-            f"the producer record schema must be an integer, got {schema!r}"
-        )
+    _summary = "the producer record schema must be an integer, got"
 
 
 class UnknownSchemaError(MalformedRecordError):
@@ -103,21 +179,10 @@ class UnknownSchemaError(MalformedRecordError):
         super().__init__(f"the producer record schema is {schema!r}, not {expected}")
 
 
-class MalformedCommitError(MalformedRecordError):
+class MalformedCommitError(_OneValueError, MalformedRecordError):
     """Report a record whose commit is not a full lowercase commit."""
 
-    def __init__(self, commit: str) -> None:
-        """Build the diagnosis naming the refused commit.
-
-        Parameters
-        ----------
-        commit
-            The commit text the record carried.
-        """
-        super().__init__(
-            "the producer record commit must be a full lowercase commit, got "
-            f"{commit!r}"
-        )
+    _summary = "the producer record commit must be a full lowercase commit, got"
 
 
 class MalformedRunIdentityError(MalformedRecordError):
@@ -206,56 +271,22 @@ class ForeignRunError(ProvenanceError):
         )
 
 
-class UnsafeAssetNameError(ProvenanceError):
+class UnsafeAssetNameError(_TargetAssetError):
     """Report a claimed asset name that is not one bare file name."""
 
-    def __init__(self, target: str, name: str) -> None:
-        """Build the diagnosis naming the producer and the refused name.
-
-        Parameters
-        ----------
-        target
-            The configured target whose producer made the claim.
-        name
-            The name the producer claimed.
-        """
-        super().__init__(
-            f"producer for target {target!r} claims unsafe asset name {name!r}"
-        )
+    _summary = "claims unsafe asset name"
 
 
-class UnknownPlatformError(ProvenanceError):
+class UnknownPlatformError(_OneValueError):
     """Report a record whose platform stages no package format at all."""
 
-    def __init__(self, platform: object) -> None:
-        """Build the diagnosis naming the platform.
-
-        Parameters
-        ----------
-        platform
-            The value the record carried.
-        """
-        super().__init__(
-            f"producer record declares unpackageable platform {platform!r}"
-        )
+    _summary = "producer record declares unpackageable platform"
 
 
-class InvalidDigestError(ProvenanceError):
+class InvalidDigestError(_TargetAssetError):
     """Report a recorded digest that is not a lowercase SHA-256 value."""
 
-    def __init__(self, target: str, name: str) -> None:
-        """Build the diagnosis naming the producer and the digest's asset.
-
-        Parameters
-        ----------
-        target
-            The configured target whose producer made the claim.
-        name
-            The asset name whose digest was malformed.
-        """
-        super().__init__(
-            f"producer for target {target!r} records a malformed digest for {name!r}"
-        )
+    _summary = "records a malformed digest for"
 
 
 class EmptyAssetsError(ProvenanceError):
@@ -298,6 +329,35 @@ class DuplicateTargetError(ProvenanceError):
             Configured target keys more than one record claims.
         """
         super().__init__(f"more than one producer record covers targets {duplicated!r}")
+
+
+class TargetClaimMismatchError(ProvenanceError):
+    """Report a producer whose claims are not the ones its target stages.
+
+    A record names the target it served, so its archive, that archive's
+    sidecar, and the package formats its platform stages are all knowable
+    before any name is compared with another record's. Checking the union of
+    claims alone would let two same-platform records exchange their claims
+    and still agree with the release.
+
+    Examples
+    --------
+    >>> error = TargetClaimMismatchError(["target 'a' claims archives []"])
+    >>> "producer claims are not their own target's" in str(error)
+    True
+    """
+
+    def __init__(self, offenders: list[str]) -> None:
+        """Build the diagnosis naming every disagreeing target at once.
+
+        Parameters
+        ----------
+        offenders
+            Human-readable descriptions, in target order.
+        """
+        super().__init__(
+            "producer claims are not their own target's: " + "; ".join(offenders)
+        )
 
 
 class DuplicateAssetError(ProvenanceError):
