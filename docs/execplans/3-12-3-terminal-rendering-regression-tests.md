@@ -454,6 +454,22 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   both were shown non-vacuous with a compiling mutant that failed three tests.
   `terminal_rendering_tests` passed 67/67 and `test_support` 171/171. Remaining
   for this batch: the ten-gate set, the commit, and the lifecycle.
+- [x] (2026-11-08) Cleared the hosted CodeScene advisory that blocked the PR
+  check on `e3786ad2f`. The check reported `classify_oracle.rs` at 9.69 with a
+  Primitive Obsession rule, so the oracle's tuple-returning state handlers were
+  rewritten around a `Cursor<'_>` newtype and a `Step<'_>` enum (D30). The local
+  `cs check` reproduces the hosted score and now reports 10.00. Clippy is
+  clean and the classifier's 31 cases still pass. Remaining: the ten-gate set
+  on the rewritten tree, then the refactor's own commit and push.
+- [ ] Hosted CI still red on two lanes, both from the same pinned action and
+  neither caused by this branch: `build-test`'s `Lint` step panics with
+  `duplicate specification of lint string_continuation_style` because the
+  action loads both `libstring_continuation_style` and `libwhitaker_suite`, and
+  `Windows / lint-windows` fails with
+  `could not find dylint_version in
+  …lib\string_continuation_style@nightly-2026-05-28.dll`.
+  The duplicate-lint panic is confirmed on the parent commit `0131235af`, so
+  it precedes this work. Reported as an infrastructure impasse (see Outcomes).
 
 ## Surprises & discoveries
 
@@ -1016,6 +1032,40 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
     base and HEAD source before being written up. Date/Author: 2026-11-08,
     implementation agent.
 
+### D30: the oracle's state machine returns a cursor, not loose parts
+
+**Decision.** `test_support/src/terminal/classify_oracle.rs` carries a
+`Cursor<'_>` newtype pairing a stream with the offset and byte at that offset,
+and an `enum Step<'_> { Advance { state, cursor }, FoundRedraw }` that names
+the two possible answers of one transition. Each state's rule is a flat helper
+that returns `(OracleState, Option<Cursor<'_>>)`; a single `advance`
+constructor wraps that pair in `Step::Advance`.
+
+**Why.** The hosted CodeScene check failed on the previous shape with a
+Primitive Obsession advisory at 9.69 (delta 8328107): every handler returned a
+bare tuple of state, slice and index, and the driver loop unpacked those parts
+by hand. That is precisely the "data clumps" case — values that always travel
+together and always mean the same thing. The newtype also removed a real defect
+risk: the `ESC \` terminator needs the introducer *and* the final byte consumed
+together, which is now `after_string_terminator()`, a named operation, rather
+than index arithmetic repeated at each string-terminator site.
+
+**Evidence.** `cs check test_support/src/terminal/classify_oracle.rs` reports
+`Code health score: 10.00`, clearing the advisory. Clippy is clean with
+`-D warnings`; `cargo nextest run -p test_support -E 'test(classify)'` passes
+31/31. The refactor is behaviour-preserving: no test was added, changed or
+removed alongside it, so the same 31 witnesses that passed before the rewrite
+pass after it.
+
+**Cost I accepted.** `bumpy_road_function` previously fired on this module when
+one function held all five state tables; the rewrite keeps them separate for
+that reason. `elidable_lifetime_names` also required eliding the lifetimes on
+`step` and `advance` (`Cursor<'_>`), which is why those signatures carry no
+named lifetime. Both are recorded so a later reader does not "restore" the
+explicit form and re-break the lint.
+
+Date/Author: 2026-11-08, implementation agent.
+
 ## Outcomes & retrospective
 
 ### Milestone EP-M0 to EP-M4: complete
@@ -1153,6 +1203,44 @@ arrangement the repository's gate rules forbid, so it was stopped immediately
 rather than left to finish. Nothing had reached a verdict, so no gate result
 was contaminated; the mutation gate kept exclusive use of the candidate for the
 remainder of its run.
+
+### The hosted Lint lanes fail on a pinned action, not on this branch
+
+Two of the three red checks on `e3786ad2f` come from the same pinned
+`install-whitaker` action and reproduce without this branch's code. They are an
+infrastructure impasse: the remedy is a change to a shared action this branch
+has no authority over, so it belongs in the report rather than in the diff.
+
+- `build-test`'s `Lint` step panics in `rustc` with
+  `duplicate specification of lint string_continuation_style`. The failing
+  command in the log names both libraries on `DYLINT_LIBS`:
+  `libstring_continuation_style@nightly-2026-05-28.so` and
+  `libwhitaker_suite@nightly-2026-05-28.so`. Both register a lint of that name,
+  so `rustc` rejects the second registration and aborts. Running the same
+  workflow against the parent commit `0131235af` produced the identical panic
+  in job `128611817731`, which is the evidence that this is not caused by the
+  change under review.
+- `Windows / lint-windows` fails earlier and differently: the dylint driver
+  cannot read a version from the standalone library. The diagnostic names a
+  path that is too long for a wrapped paragraph, so it is quoted here as a
+  block:
+
+  ```text
+  could not find `dylint_version` in C:\Users\runneradmin\AppData\Roaming\github\whitaker\data\lints\nightly-2026-05-28\x86_64-pc-windows-msvc\lib\string_continuation_style@nightly-2026-05-28.dll
+  ```
+
+  The same standalone library is installed but unusable, which is consistent
+  with the same action shipping a library that the suite also provides.
+
+A green local `make lint` cannot see either: the local installation holds only
+`libwhitaker_suite`, so there is no second registration to conflict. That
+asymmetry is worth recording, because a local pass here is genuine evidence
+about the code and no evidence at all about these two lanes.
+
+The third red check, `CodeScene Code Health Review`, *was* this branch's and is
+cleared above. Every remaining required check — `Default features`,
+`kani-smoke`, `netsukefile`, `release / metadata`, and the Windows build lanes
+— passed on `e3786ad2f`.
 
 ## Context and orientation
 
