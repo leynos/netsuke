@@ -61,7 +61,13 @@ SIDECAR_SUFFIX = ".sha256"
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class StagingTarget:
-    """One configured staging target, reduced to the platform it builds for."""
+    """One configured staging target, reduced to the platform it builds for.
+
+    Attributes
+    ----------
+    platform : str
+        The platform value that selects this target's package formats.
+    """
 
     #: The platform value that selects this target's package formats.
     platform: str
@@ -95,7 +101,13 @@ class StagingTarget:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class StagingTargets:
-    """The configured staging targets, in configuration order."""
+    """The configured staging targets, in configuration order.
+
+    Attributes
+    ----------
+    targets : tuple[StagingTarget, ...]
+        One entry per configured target.
+    """
 
     #: One entry per configured target.
     targets: tuple[StagingTarget, ...]
@@ -128,6 +140,11 @@ class StagingTargets:
     @classmethod
     def from_targets(cls, targets: cabc.Iterable[StagingTarget]) -> StagingTargets:
         """Build the record from a decoded configuration.
+
+        Parameters
+        ----------
+        targets : collections.abc.Iterable[StagingTarget]
+            The decoded staging targets, in configuration order.
 
         Returns
         -------
@@ -171,6 +188,11 @@ def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
 
 def platform_target_counts(targets: StagingTargets) -> dict[str, int]:
     """Count decoded staging targets by the platform each one builds for.
+
+    Parameters
+    ----------
+    targets : StagingTargets
+        The decoded staging targets to count.
 
     Returns
     -------
