@@ -4,13 +4,21 @@
 //! and inspects the exact `pool` binding of every emitted statement. Coverage
 //! includes the inherited case where the shared action already selects the
 //! console pool, so a generated edge must clear it rather than silently
-//! inherit console scheduling.
+//! inherit console scheduling, and the custom-pool case, where an action's own
+//! pool must stay in force.
 
-use super::{aggregate_gates, generate_bundle, serial_graph};
-use crate::ir::{BuildGraph, DependencyOrder, EdgeOutputVisibility};
+use super::{aggregate_gates, generate, generate_bundle, serial_graph};
+use crate::ast::{CommandIsolation, Recipe};
+use crate::ir::{Action, BuildEdge, BuildGraph, DependencyOrder, EdgeOutputVisibility};
 use camino::{Utf8Path, Utf8PathBuf};
 use proptest::prelude::*;
 use test_support::ninja_edge::edge_pool_bindings;
+
+/// Ninja's name for the console pool, as validation and rendering spell it.
+const CONSOLE_POOL_NAME: &str = "console";
+
+/// A custom pool a non-console action can select.
+const CUSTOM_POOL: &str = "link_pool";
 
 /// Return the exact edge-local bindings a console state must emit.
 ///
@@ -25,19 +33,17 @@ fn expected_pool_bindings(console: bool, inherits_console_pool: bool) -> Vec<Str
     }
 }
 
-/// Build the serial fixture, optionally inheriting a console action pool.
+/// Build the serial fixture with the supplied action pool.
 fn console_graph(
     dependencies: Vec<Utf8PathBuf>,
-    inherits_console_pool: bool,
+    action_pool: Option<&str>,
 ) -> Result<BuildGraph, TestCaseError> {
     let mut graph = serial_graph(dependencies);
-    if inherits_console_pool {
-        graph
-            .actions
-            .get_mut("a")
-            .ok_or_else(|| TestCaseError::fail("fixture action must exist"))?
-            .pool = Some("console".into());
-    }
+    graph
+        .actions
+        .get_mut("a")
+        .ok_or_else(|| TestCaseError::fail("fixture action must exist"))?
+        .pool = action_pool.map(str::to_owned);
     Ok(graph)
 }
 
@@ -45,12 +51,12 @@ fn console_graph(
 fn generate_console_bundle(
     selections: &[bool],
     parent_console: bool,
-    inherits_console_pool: bool,
+    action_pool: Option<&str>,
 ) -> Result<super::GeneratedNinja, TestCaseError> {
     let outputs: Vec<_> = (0..selections.len())
         .map(|index| Utf8PathBuf::from(format!("dep{index}")))
         .collect();
-    let mut graph = console_graph(outputs.clone(), inherits_console_pool)?;
+    let mut graph = console_graph(outputs.clone(), action_pool)?;
     let mut parent = graph
         .target_for_output(Utf8Path::new("aggregate"))
         .map(|(_, edge)| edge.clone())
@@ -80,6 +86,50 @@ fn generate_console_bundle(
     }
 
     generate_bundle(&graph).map_err(|error| TestCaseError::fail(error.to_string()))
+}
+
+/// Build one parallel edge per output, all sharing a custom-pool action.
+///
+/// The direct path has no serial parent or synthetic gates, so it renders the
+/// shared rule and its edges alone. That is what makes it a check of the rule
+/// binding rather than of the bundle's staging.
+fn custom_pool_direct_graph(count: usize) -> BuildGraph {
+    let mut graph = BuildGraph::default();
+    graph.actions.insert(
+        "a".into(),
+        Action {
+            recipe: Recipe::Command {
+                command: "touch out".into(),
+                isolation: CommandIsolation::Shared,
+            },
+            description: None,
+            depfile: None,
+            deps_format: None,
+            pool: Some(CUSTOM_POOL.into()),
+            restat: false,
+        },
+    );
+    for index in 0..count {
+        assert!(
+            graph
+                .insert_edge(BuildEdge {
+                    action_id: "a".into(),
+                    inputs: Vec::new(),
+                    implicit_deps: Vec::new(),
+                    dependency_order: DependencyOrder::Parallel,
+                    explicit_outputs: vec![Utf8PathBuf::from(format!("out{index}"))],
+                    implicit_outputs: Vec::new(),
+                    order_only_deps: Vec::new(),
+                    progress_label: None,
+                    phony: false,
+                    always: false,
+                    output_visibility: EdgeOutputVisibility::Buffered,
+                })
+                .is_ok(),
+            "direct fixture outputs must be unique",
+        );
+    }
+    graph
 }
 
 /// Assert every user, synthetic gate, and sidecar binding for one case.
@@ -145,6 +195,35 @@ fn assert_console_bindings(
     Ok(())
 }
 
+/// Assert a custom action pool stays on the shared rule and off every edge.
+///
+/// The empty `pool =` binding exists only to clear an inherited *console*
+/// pool. A custom pool is the action's own selection, so an edge that did not
+/// opt into console scheduling must leave the rule's binding in force instead
+/// of clearing it.
+fn assert_custom_pool_survives(ninja: &str, outputs: &[String]) -> Result<(), TestCaseError> {
+    let rule_binding = format!("  pool = {CUSTOM_POOL}");
+    prop_assert_eq!(
+        ninja.lines().filter(|line| *line == rule_binding).count(),
+        1,
+        "the shared rule must keep exactly one custom pool binding: {}",
+        ninja
+    );
+    prop_assert!(
+        !ninja.lines().any(|line| line == "  pool ="),
+        "no edge may clear a custom pool with an empty binding: {ninja}"
+    );
+    for output in outputs {
+        let bindings = edge_pool_bindings(ninja, output)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        prop_assert!(
+            bindings.is_empty(),
+            "edge {output} must not carry a pool binding of its own: {bindings:?}"
+        );
+    }
+    Ok(())
+}
+
 /// Generate sibling console selections that always cover both states.
 ///
 /// Two fixed states lead the list so every case pairs a console sibling with a
@@ -166,7 +245,7 @@ proptest! {
         selections in console_selections(),
         parent_console in any::<bool>(),
     ) {
-        let bundle = generate_console_bundle(&selections, parent_console, false)?;
+        let bundle = generate_console_bundle(&selections, parent_console, None)?;
         assert_console_bindings(&bundle, &selections, parent_console, false)?;
     }
 
@@ -175,7 +254,36 @@ proptest! {
         selections in console_selections(),
         parent_console in any::<bool>(),
     ) {
-        let bundle = generate_console_bundle(&selections, parent_console, true)?;
+        let bundle = generate_console_bundle(
+            &selections,
+            parent_console,
+            Some(CONSOLE_POOL_NAME),
+        )?;
         assert_console_bindings(&bundle, &selections, parent_console, true)?;
+    }
+
+    #[test]
+    fn a_custom_action_pool_survives_bundled_generation(count in 1usize..5) {
+        let selections = vec![false; count];
+        let bundle = generate_console_bundle(&selections, false, Some(CUSTOM_POOL))?;
+        let mut outputs: Vec<String> = (0..count).map(|index| format!("dep{index}")).collect();
+        outputs.push("aggregate".to_owned());
+        assert_custom_pool_survives(bundle.build_file(), &outputs)?;
+        prop_assert_eq!(bundle.console_edge_count(), 0);
+        prop_assert!(
+            bundle
+                .dyndep_files()
+                .iter()
+                .all(|sidecar| !sidecar.content().contains("pool"))
+        );
+    }
+
+    #[test]
+    fn a_custom_action_pool_survives_direct_generation(count in 1usize..5) {
+        let graph = custom_pool_direct_graph(count);
+        let ninja = generate(&graph)
+            .map_err(|error| TestCaseError::fail(error.to_string()))?;
+        let outputs: Vec<String> = (0..count).map(|index| format!("out{index}")).collect();
+        assert_custom_pool_survives(&ninja, &outputs)?;
     }
 }
