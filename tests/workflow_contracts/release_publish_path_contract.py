@@ -34,6 +34,7 @@ from release_publish_path_scenarios import (
     SCENARIOS,
     Scenario,
 )
+from release_publish_path_verification import check_verify_inventory
 from workflow_loading import (
     REPO_ROOT,
     job_steps,
@@ -323,6 +324,7 @@ def _check_scenario(check: ScenarioCheck) -> None:
         "github": {"event": {"action": scenario.event_action}},
     }
     check_crates_io_publication(publisher_job, publication_check, publisher_contexts)
+    check_verify_inventory(check.release, scenario, outputs, check.violations)
 
 
 def _check_publisher_action(

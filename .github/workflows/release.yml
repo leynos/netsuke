@@ -961,3 +961,67 @@ jobs:
           name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-operation-observability.jsonl
           if-no-files-found: ignore
+
+  verify-release-inventory:
+    # Verifies what both publishers produced, so it runs only once each has
+    # succeeded. The rehearsal job `release` is deliberately absent: a dry run
+    # never publishes a release, so there is no draft inventory to verify.
+    # Every dependency result is named explicitly because `!cancelled()` is a
+    # status function, and a status function suppresses the implicit success
+    # check GitHub would otherwise apply. Omitting one would let the job run
+    # after a failed or skipped publisher and record an inventory that was
+    # never completed.
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.publish-crates-io.result == 'success' &&
+      needs.publish-release.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    needs:
+      - metadata
+      - publish-crates-io
+      - publish-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Draft releases are visible only to a token with write access, which is
+    # why the listing steps need it. The verification step itself receives no
+    # token, because it reads only bytes already downloaded.
+    permissions:
+      contents: write
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          # Verify the published inventory with the candidate's own scripts, as
+          # the publisher does, rather than with whatever the tag resolves to.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          # The release helpers are stdlib-only, so a dependency cache would add
+          # an unnecessary supply-chain input.
+          enable-cache: false
+      - name: Download the trusted inventory record
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1. One exact name, never a pattern: the declaration and digest
+        # record this run produced are the only ones this verification trusts,
+        # and the attempt suffix stops a re-run from reading the first
+        # attempt's evidence.
+        with:
+          name: declared-assets-publish-release-${{ github.run_attempt }}
+          path: trusted
+      - name: Verify the downloaded release inventory
+        uses: ./.github/actions/verify-release-inventory
+        with:
+          tag: ${{ needs.metadata.outputs.release_tag }}
+          repository: ${{ github.repository }}
+          trusted-directory: trusted
+          declaration-file: trusted/declaration.txt
+          trusted-record-file: trusted/trusted.json
+          download-directory: release-download
+          output-path: verified/verified-digests.json
+          github-token: ${{ github.token }}

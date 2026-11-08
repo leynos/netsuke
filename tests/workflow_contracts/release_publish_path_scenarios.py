@@ -41,6 +41,11 @@ CRATES_IO_NEEDS = {
     "windows-native-recipe-smoke",
     "release-admission-canaries",
 }
+PUBLISHER_NEEDS = {"publish-crates-io", "publish-release"}
+#: The verification job depends on both publishers and on nothing else, so a
+#: failed or skipped publisher leaves the inventory unverified rather than
+#: verified against a release that was never completed.
+VERIFY_NEEDS = {"metadata", *PUBLISHER_NEEDS}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -58,19 +63,24 @@ class Scenario:
 def _needs_results(
     *,
     smoke: str = "success",
-    failed_build: str | None = None,
-    failed_need: str | None = None,
-    skipped_need: str | None = None,
+    outcomes: cabc.Mapping[str, str] | None = None,
 ) -> dict[str, str]:
-    """Build a complete needs-result map with one selected outcome."""
-    results = dict.fromkeys(CRATES_IO_NEEDS, "success")
+    """Build a complete needs-result map from the selected outcomes.
+
+    Every dependency defaults to success, so a scenario names only the ones it
+    changes. ``outcomes`` is applied last and therefore wins over ``smoke``,
+    which keeps the smoke shortcut from silently overriding an explicit
+    outcome for the same job.
+
+    Returns
+    -------
+    dict[str, str]
+        One result per dependency named by the release scenarios.
+    """
+    results = dict.fromkeys(CRATES_IO_NEEDS | PUBLISHER_NEEDS, "success")
     results["windows-native-recipe-smoke"] = smoke
-    if failed_build is not None:
-        results[failed_build] = "failure"
-    if failed_need is not None:
-        results[failed_need] = "failure"
-    if skipped_need is not None:
-        results[skipped_need] = "skipped"
+    if outcomes is not None:
+        results.update(outcomes)
     return results
 
 
@@ -81,10 +91,7 @@ def _prerequisite_scenarios(outcome: str) -> tuple[Scenario, ...]:
             f"publish-{need}-{outcome}",
             "publish",
             "",
-            _needs_results(
-                failed_need=need if outcome == "failure" else None,
-                skipped_need=need if outcome == "skipped" else None,
-            ),
+            _needs_results(outcomes={need: outcome}),
             cancelled=False,
             release_runs=False,
         )
@@ -126,10 +133,23 @@ SCENARIOS = (
         release_runs=True,
     ),
     Scenario(
+        # The realistic dry run: neither publisher runs, so the verification
+        # job must be skipped even though the release staging job runs.
+        "dry-run-publishers-skipped",
+        "dry-run",
+        "opened",
+        _needs_results(
+            smoke="skipped",
+            outcomes={"publish-crates-io": "skipped", "publish-release": "skipped"},
+        ),
+        cancelled=False,
+        release_runs=True,
+    ),
+    Scenario(
         "dry-run-failed-build",
         "dry-run",
         "opened",
-        _needs_results(smoke="skipped", failed_build="build-linux"),
+        _needs_results(smoke="skipped", outcomes={"build-linux": "failure"}),
         cancelled=False,
         release_runs=False,
     ),
@@ -161,7 +181,39 @@ SCENARIOS = (
         "tag-publish-failed-build",
         "publish",
         "",
-        _needs_results(failed_build="build-linux"),
+        _needs_results(outcomes={"build-linux": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "publish-crates-io-failure",
+        "publish",
+        "",
+        _needs_results(outcomes={"publish-crates-io": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "publish-crates-io-skipped",
+        "publish",
+        "",
+        _needs_results(outcomes={"publish-crates-io": "skipped"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "publish-release-failure",
+        "publish",
+        "",
+        _needs_results(outcomes={"publish-release": "failure"}),
+        cancelled=False,
+        release_runs=False,
+    ),
+    Scenario(
+        "publish-release-skipped",
+        "publish",
+        "",
+        _needs_results(outcomes={"publish-release": "skipped"}),
         cancelled=False,
         release_runs=False,
     ),
