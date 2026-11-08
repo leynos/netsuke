@@ -652,17 +652,18 @@ Each gains a `scripts/tests/test_<module>.py`. The contract tests gain:
 ### Stage C — implementation
 
 `.github/actions/` contains the delivered `package-crate`, `publish-crates-io`,
-and `verify-release-inventory` actions. The publisher consumes the exact
-`release-crate-package` artefact, validates the candidate, probes the version,
-publishes only an absent version, skips an identical version, fails closed for
-other states, and verifies the downloaded registry bytes against the candidate
-digest. It is declared in `release.yml` with the seven successful validation
-dependencies, the `crates-io` environment, and only `contents: read` plus
-`id-token: write`. The credential is exchanged for the publish decision only;
-no live exchange has exercised it. The verifier downloads the draft release's
-assets with GET-only API calls and compares them against the declaration and
-the pre-upload digest record the publisher retained; its job needs both
-publishers and holds `contents: write` for draft visibility alone.
+`upload-declared-assets`, and `verify-release-inventory` actions. The publisher
+consumes the exact `release-crate-package` artefact, validates the candidate,
+probes the version, publishes only an absent version, skips an identical
+version, fails closed for other states, and verifies the downloaded registry
+bytes against the candidate digest. It is declared in `release.yml` with the
+seven successful validation dependencies, the `crates-io` environment, and only
+`contents: read` plus `id-token: write`. The credential is exchanged for the
+publish decision only; no live exchange has exercised it. The verifier
+downloads the draft release's assets with GET-only API calls and compares them
+against the declaration and the pre-upload digest record the publisher
+retained; its job needs both publishers and holds `contents: write` for draft
+visibility alone.
 
 Two job-matched actions remain open:
 
