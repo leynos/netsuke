@@ -74,8 +74,13 @@ fn kani_check_rejects_unparseable_version_output() -> Result<()> {
     let (stderr, marker) = fixture.run_failing_check("#!/bin/sh\nprintf 'unknown build\\n'\n")?;
 
     ensure!(
-        stderr.contains("could not parse Kani version"),
-        "the diagnostic should report the unparseable output, got `{stderr}`"
+        stderr.contains("category=version-unparsable")
+            && stderr.contains("could not parse a Kani version from the verifier output"),
+        "the diagnostic should categorise the unparseable output, got `{stderr}`"
+    );
+    ensure!(
+        !stderr.contains("unknown build"),
+        "the diagnostic must not echo the verifier's own output, got `{stderr}`"
     );
     fixture.ensure_remote_runner_unused(&marker)
 }

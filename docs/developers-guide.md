@@ -5821,9 +5821,11 @@ Use the Make targets for day-to-day formal-verification checks:
   verifier, or unparsable output fails the target. Every failure names a stable
   `category=` — `pin-unreadable`, `verifier-failed`, `version-unparsable`, or
   `version-mismatch` — so a caller can branch on the cause without parsing
-  prose. The two categories that quote verifier output cap it at 200 characters
-  and strip control characters first, because that text comes from an external
-  binary and must not be able to forge log lines or flood a terminal.
+  prose. The verifier's own output is never echoed. It comes from an external
+  binary, so it could carry a credential, forge a log line, or flood a
+  terminal, and no amount of bounding or escaping makes arbitrary text safe to
+  print. The category and the exit status are the actionable facts; re-running
+  the verifier by hand supplies anything else.
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.

@@ -281,7 +281,10 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       existing 14-test Makefile target. The two regressions have since been
       moved to tests/prover_tools_make_edge_tests.rs to keep the original
       test file within the repository's 400-line limit. The new target and all
-      12 repository gates now pass on the final candidate; see Revision 41.
+      12 repository gates passed on the candidate described in Revision 41.
+      That run is historical: it predates the review rounds and rebase, and
+      describes neither the current head nor the current gate set. Revisions
+      49, 50 and 51 record the candidates that followed and their own evidence.
 - [x] (2026-11-06) Make `make kani-check` a local read-only version query.
       Commit `475d15409` removes `KANI_CHECK_FLAGS` and the delegated
       `check-version` invocation; the target reads `tools/kani/VERSION`, runs
@@ -583,19 +586,22 @@ failure position and exit status against a fake verifier while the CLI stays
 real. `tests/prover_tools_kani_check_command_tests.rs` drives the `kani-check`
 recipe through a matching pin, a mismatch, a missing pin, an unreadable pin and
 a failing verifier, and asserts that the verifier receives `--version` in every
-reachable case. The recipe now reports a stable `category=` and bounds the
-verifier's own diagnostic to 200 characters with control characters removed,
-because that text comes from an external binary. The read-only chroot boundary
-remains the evidence for the blocked-network and blocked-write requirement, and
-it runs strictly in the required `kani-smoke` lane rather than skipping.
-Version checking is described as the local read-only `--version` query, not a
-delegation to the pinned CLI.
+reachable case. The recipe now reports a stable `category=` and never echoes
+the verifier's own output, because that text comes from an external binary and
+no amount of bounding or escaping makes arbitrary text safe to print. The
+read-only chroot boundary remains the evidence for the blocked-network and
+blocked-write requirement, and it runs strictly in the required `kani-smoke`
+lane rather than skipping. Version checking is described as the local read-only
+`--version` query, not a delegation to the pinned CLI.
 
 The gate evidence above is historical: it was collected on the candidate that
 carried Revision 48, before the review at `5808594893` and the CodeScene delta
-on `adeb43dd6` raised their findings. The latest candidate is the one described
-in Revision 49, and its own gate evidence is recorded there. Current-head
-review reconciliation and trusted-main warm-cache acceptance remain open.
+on `adeb43dd6` raised their findings. Three further candidates have since been
+gated: Revision 49 for those findings, Revision 50 after the rebase onto `main`
+at `6ff836603`, and Revision 51 for the review at `5816957501`. Each records
+its own gate evidence at its own revision entry, and the Revision 41 run quoted
+above is the earliest of them and no longer describes the branch head. Review
+at the current head and trusted-main warm-cache acceptance remain open.
 
 ## Context and orientation
 
@@ -1514,13 +1520,17 @@ command suite adds coverage of the recipe itself without replacing any of them.
 *Observability* asked for a safe, redacted verifier diagnostic or an actionable
 error category on failure, plus a regression test. The `kani-check` recipe now
 emits one of `category=pin-unreadable`, `category=verifier-failed`,
-`category=version-unparsable` or `category=version-mismatch`, and quotes the
-verifier's own output only after stripping control characters and capping it at
-200 characters. The cap and the strip are deliberate: the text comes from an
-external binary, so it could otherwise forge log lines or flood a terminal.
-`kani_check_reports_a_sanitized_diagnostic_when_the_verifier_fails` asserts the
-category, the propagated status, the cap and the absence of control characters,
-and the existing exit-status case now asserts its category too.
+`category=version-unparsable` or `category=version-mismatch`, and never echoes
+the verifier's own output at all. Redaction was rejected: the text comes from
+an external binary, so it could carry a credential, forge a surrounding log
+line or flood a terminal, and bounding plus escaping does not make arbitrary
+text safe to print. The category and the exit status are the actionable facts,
+and a hand-run of the verifier supplies anything else.
+`kani_check_reports_a_category_without_echoing_verifier_output` presents a fake
+secret, an ANSI escape and a forged `category=` line and asserts that none of
+them reach the diagnostic, while
+`kani_check_reports_unparsable_output_without_echoing_it` does the same for the
+unparsable branch.
 
 `tests/makefile_test_target.rs` enumerates every target that invokes
 `cargo nextest run` and fails when that list and the file disagree, so the new
@@ -1631,3 +1641,37 @@ of the pre-rebase head against the rebased head confirms: only the ten files
 beginning on the rebased candidate and all passed, with the same counts the
 preceding paragraph records. Keep Status: IN PROGRESS pending review at the new
 head and trusted-main warm-cache acceptance.
+
+Revision 51 (2026-11-08): The review at `5816957501` raised two inline findings
+and six pre-merge rows against the rebased head. Both inline findings are fixed.
+`run_make_verus` and `run_make_verus_with_env` now remove `VERUS_FLAGS` and
+`MAKEFLAGS` from the child environment, so an inherited value cannot change the
+proof set a test runs. The repeated stdout/stderr merge became one
+`output_text` helper, and the file was then split: the fixtures and runners
+moved to `tests/prover_tools_verus_e2e_tests/support.rs`, leaving the parent at
+206 lines and the support module at 303, both inside the 400-line cap.
+
+The ordered-batch case now runs two distinguishable proofs through the real
+verifier. The verifier prints one result line per proof and names no file, so
+the case uses a minimal proof whose verified count differs from the canonical
+kernel's, runs the pair in both orders, and asserts that reversing the proof
+order reverses the result order. The default-proof and failure-propagation
+cases are retained unchanged.
+
+The Observability row asked for a safe redacted diagnostic or an actionable
+category. Redaction was rejected in favour of the category alone: the
+`kani-check` recipe no longer echoes the verifier's output at all, because
+bounding and escaping arbitrary text from an external binary does not make it
+safe to print. `kani_check_reports_a_category_without_echoing_verifier_output`
+presents a fake secret, an ANSI escape and a forged `category=` line and
+asserts that none reach the diagnostic, and the boundary suite's unparsable
+case now asserts the category and the absence of the verifier's text.
+
+All eleven commit gates were run sequentially on this candidate and each exited
+`0`: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.33% against an 80%
+threshold), `markdownlint` (218 files, zero issues), `nixie`, `test` (5,181
+nextest passed, 7 skipped, plus all doctests), `test-workflow-contracts` (1,785
+passed, 3 skipped, plus 28), `test-prover-tools-integration` (11 passed),
+`test-kani-check-isolation` (9 passed, 0 skipped) and `test-verus-e2e` (5
+passed, 0 skipped). Keep Status: IN PROGRESS pending review at the new head and
+trusted-main warm-cache acceptance.

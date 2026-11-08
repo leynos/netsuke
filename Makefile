@@ -668,22 +668,23 @@ install-kani: ## Install the pinned Kani verifier
 # stays in `install-kani` alone.
 #
 # Every failure names a stable `category=` so a caller can branch on the cause
-# without parsing prose. The two categories that quote verifier output bound it
-# to 200 characters and strip control characters first: the text comes from an
-# external binary, so it must not be able to forge log lines or flood a
-# terminal.
+# without parsing prose. The verifier's own output is never echoed: it comes
+# from an external binary, so it could carry a secret, forge a log line or
+# flood a terminal, and no bounding or escaping makes arbitrary text safe to
+# print. The category and the exit status are the actionable facts; re-running
+# the verifier by hand supplies the rest.
 kani-check: ## Check the installed Kani verifier version
 	@version_file='$(subst ','"'"',$(KANI_VERSION_FILE))'; \
 	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check category=pin-unreadable could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
 	printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$expected" >&2; \
 	output="$$($(KANI) --version 2>&1)"; status=$$?; \
 	if [ "$$status" -ne 0 ]; then \
-		printf 'prover-tools: target=kani-check category=verifier-failed failed exit=%s diagnostic=%s\n' "$$status" "$$(printf '%s' "$$output" | tr -d '[:cntrl:]' | cut -c1-200)" >&2; \
+		printf 'prover-tools: target=kani-check category=verifier-failed failed exit=%s\n' "$$status" >&2; \
 		exit "$$status"; \
 	fi; \
 	actual="$$(printf '%s\n' "$$output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"; \
 	if [ -z "$$actual" ]; then \
-		printf 'prover-tools: target=kani-check category=version-unparsable could not parse Kani version from: %s\n' "$$(printf '%s' "$$output" | tr -d '[:cntrl:]' | cut -c1-200)" >&2; \
+		printf 'prover-tools: target=kani-check category=version-unparsable could not parse a Kani version from the verifier output\n' >&2; \
 		exit 1; \
 	fi; \
 	if [ "$$actual" != "$$expected" ]; then \

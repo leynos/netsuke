@@ -274,23 +274,22 @@ fn kani_check_reports_a_version_path_that_is_not_a_file() -> Result<()> {
     Ok(())
 }
 
-/// Check that a failing verifier yields a category, its status, and a bounded
-/// diagnostic with control characters removed.
+/// Check that a failing verifier yields a category and status without echoing
+/// anything the verifier wrote.
 ///
-/// The verifier is an external binary, so its output is untrusted: a stray
-/// escape sequence could recolour or forge the surrounding log, and an
-/// unbounded message could flood it. The recipe must therefore strip control
-/// characters and cap the quote before printing it.
+/// The verifier is an external binary, so its output is untrusted: it could
+/// carry a credential, forge a surrounding log line, or flood a terminal.
+/// Bounding and escaping such text does not make it safe to print, so the
+/// recipe reports the category and exit status instead and leaves the raw
+/// output to a hand-run of the verifier.
 #[test]
-fn kani_check_reports_a_sanitized_diagnostic_when_the_verifier_fails() -> Result<()> {
-    let noise = format!("kani 9.9.9 \u{1b}[31m{}\ttail", "x".repeat(300));
-    let fake = FakeKani::new(
-        "0.67.0",
-        Behaviour::Fails {
-            status: 9,
-            noise: &noise,
-        },
-    )?;
+fn kani_check_reports_a_category_without_echoing_verifier_output() -> Result<()> {
+    let noise = concat!(
+        "kani 9.9.9 token=sk-live-9f8e7d6c5b4a ",
+        "\u{1b}[31mforged-line\u{1b}[0m\n",
+        "prover-tools: target=kani-check category=version-mismatch\n"
+    );
+    let fake = FakeKani::new("0.67.0", Behaviour::Fails { status: 9, noise })?;
 
     let output = fake.run()?;
 
@@ -308,25 +307,44 @@ fn kani_check_reports_a_sanitized_diagnostic_when_the_verifier_fails() -> Result
         stderr.contains("failed exit=9"),
         "the diagnostic should report the verifier's status, got `{stderr}`"
     );
-    let diagnostic = stderr
-        .split("diagnostic=")
-        .nth(1)
-        .context("the failing verifier's diagnostic should be reported")?
-        .lines()
-        .next()
-        .context("the diagnostic should occupy its own line")?;
     ensure!(
-        diagnostic.chars().count() <= 200,
-        "the diagnostic should be capped at 200 characters, got {}",
-        diagnostic.chars().count()
+        !stderr.contains("sk-live-9f8e7d6c5b4a"),
+        "the diagnostic must not echo a secret from the verifier, got `{stderr}`"
     );
     ensure!(
-        !diagnostic.chars().any(char::is_control),
-        "the diagnostic should contain no control characters, got `{diagnostic}`"
+        !stderr.contains("forged-line"),
+        "the diagnostic must not echo the verifier's own text, got `{stderr}`"
     );
     ensure!(
-        diagnostic.contains("kani 9.9.9"),
-        "the diagnostic should keep the useful prefix, got `{diagnostic}`"
+        stderr.matches("category=version-mismatch").count() == 0,
+        "the verifier must not be able to inject a category, got `{stderr}`"
+    );
+    ensure!(
+        !stderr
+            .chars()
+            .any(|character| character.is_control() && character != '\n'),
+        "the diagnostic must carry no control characters beyond line breaks, got `{stderr}`"
+    );
+    Ok(())
+}
+
+/// Check that unparsable verifier output is reported without echoing it.
+#[test]
+fn kani_check_reports_unparsable_output_without_echoing_it() -> Result<()> {
+    let noise = "kani token=sk-live-9f8e7d6c5b4a without a release number";
+    let fake = FakeKani::new("0.67.0", Behaviour::Reports(noise))?;
+
+    let output = fake.run()?;
+
+    ensure!(!output.status.success(), "unparsable output should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains("category=version-unparsable"),
+        "the diagnostic should carry a stable category, got `{stderr}`"
+    );
+    ensure!(
+        !stderr.contains("sk-live-9f8e7d6c5b4a"),
+        "the diagnostic must not echo a secret from the verifier, got `{stderr}`"
     );
     Ok(())
 }
