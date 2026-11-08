@@ -240,9 +240,15 @@ def assert_retained_telemetry_policy(steps: list[dict[str, object]]) -> None:
     artifact_with = require_mapping(
         artifact.get("with"), "observability artifact inputs"
     )
+    # The attempt suffix is what makes a re-run safe. A job re-run keeps the
+    # run id, so a job-only name collides with the previous attempt's
+    # artefact, and upload-artifact v7 refuses to overwrite one. The collision
+    # cannot be resolved with `overwrite: true` either: that would delete the
+    # earlier attempt's evidence, which is exactly what an operator diagnosing
+    # a re-run needs to compare against.
     assert artifact_with.get("name") == (
-        "release-operation-observability-${{ github.job }}"
-    ), "telemetry must use a job-specific artifact name"
+        "release-operation-observability-${{ github.job }}-${{ github.run_attempt }}"
+    ), "telemetry must use a job- and attempt-specific artifact name"
     assert artifact_with.get("path") == (
         "${{ runner.temp }}/release-operation-observability.jsonl"
     ), "the uploaded artifact must contain the bounded JSONL records"

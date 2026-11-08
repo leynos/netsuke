@@ -14,6 +14,7 @@ Run via ``make test-release-publication``.
 import typing as typ
 
 import pytest
+import release_digest_record_files
 import release_upload_plan
 from release_upload_support import (
     DEB,
@@ -141,6 +142,27 @@ def test_a_payload_that_disagrees_with_the_record_is_a_conflict(
         "replaced bytes must report as a conflict"
     )
     assert not exchange.calls, "a conflicting payload must not reach the network"
+
+
+def test_a_declaration_matching_replaced_bytes_still_conflicts(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Refuse bytes swapped between selection's hash and the copy.
+
+    The declaration record is written from the *staged tree*, after selection
+    has already hashed the sources it approved. A tree replaced in between
+    produces a declaration record that faithfully describes the replacement,
+    so a run that compares the payload only against that record would accept
+    it. ``selection.json`` is the second account, and only the two records
+    answer for one another.
+    """
+    _ = (scenario.payload / DEB).write_bytes(b"rebuilt")
+    release_digest_record_files.write_digest_record(scenario.digests(), scenario.record)
+    exchange = Exchange(attached={})
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_CONFLICT, (
+        "a declaration matching replaced bytes must not vouch for them"
+    )
+    assert not exchange.calls, "a swapped payload must not reach the network"
 
 
 def test_main_reports_an_unwritable_plan(

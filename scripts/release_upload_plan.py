@@ -44,7 +44,13 @@ class UploadRequest:
     payload_dir
         Directory holding exactly the selected assets, under published names.
     digest_record
-        The trusted record selection wrote from the staged producer bytes.
+        The declaration record: digests the declaration stage wrote from the
+        staged tree, which is what the payload and the release are judged
+        against.
+    selection_record
+        The selection record: digests the selection stage wrote from the
+        staged sources it verified, before copying them. Upload compares the
+        two records so neither is the only account of the release.
     plan_path
         Where to write the per-asset reconciliation plan.
     is_dry_run
@@ -56,6 +62,7 @@ class UploadRequest:
     >>> request = UploadRequest(
     ...     tag="v1.0.0", payload_dir=pathlib.Path("payload"),
     ...     digest_record=pathlib.Path("trusted.json"),
+    ...     selection_record=pathlib.Path("selection.json"),
     ...     plan_path=pathlib.Path("plan.json"), is_dry_run=True,
     ... )
     >>> request.tag, request.is_dry_run
@@ -65,6 +72,7 @@ class UploadRequest:
     tag: str
     payload_dir: pathlib.Path
     digest_record: pathlib.Path
+    selection_record: pathlib.Path
     plan_path: pathlib.Path
     is_dry_run: bool
 

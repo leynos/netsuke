@@ -121,9 +121,7 @@ def archives_by_target(
     """
     config = tomllib.loads(staging_config.read_text(encoding="utf-8"))
     package = tomllib.loads(manifest.read_text(encoding="utf-8"))["package"]["name"]
-    triples = {
-        key: entry["target"] for key, entry in config.get("targets", {}).items()
-    }
+    triples = {key: entry["target"] for key, entry in config.get("targets", {}).items()}
     _validate_targets(staging_config, list(triples.values()))
     return {
         key: f"{package}-{version}-{triple}.tar.gz"

@@ -156,6 +156,7 @@ def test_an_upload_request_holds_the_whole_run() -> None:
         tag="v1.0.0",
         payload_dir=pathlib.Path("payload"),
         digest_record=pathlib.Path("trusted.json"),
+        selection_record=pathlib.Path("selection.json"),
         plan_path=pathlib.Path("plan.json"),
         is_dry_run=False,
     )
@@ -180,6 +181,7 @@ def test_an_upload_request_is_immutable(field: str, replacement: object) -> None
         tag="v1.0.0",
         payload_dir=pathlib.Path("payload"),
         digest_record=pathlib.Path("trusted.json"),
+        selection_record=pathlib.Path("selection.json"),
         plan_path=pathlib.Path("plan.json"),
         is_dry_run=True,
     )

@@ -23,6 +23,14 @@ before any byte moved, and only the names that record declares:
   this step's to reconcile, and treating it as a conflict would block a
   release over a file the plan never claimed.
 
+Two records arrive with the payload, and the step requires them to agree before
+it acts. The *selection* record was written from the sources selection hashed
+and approved; the *declaration* record was written independently from the
+staged tree. Neither proves the copy on its own: a tree replaced between the
+two hashes produces a declaration record that faithfully describes the
+replacement. Requiring the two records to name the same bytes is what closes
+that window, and it happens before the first network call.
+
 The digests are checked twice: once against the payload on disk before any
 network call, and again from the release listing after the upload. The second
 pass is what proves the transfer delivered the bytes that were selected rather
@@ -44,6 +52,7 @@ import pathlib
 import sys
 import typing as typ
 
+import release_digest_record
 import release_digest_record_files
 import release_payload_tree
 import release_reconcile_github
@@ -93,6 +102,7 @@ def build_parser() -> argparse.ArgumentParser:
     ...     "--release-tag", "v1.0.0",
     ...     "--payload-dir", "artifacts/payload/payload",
     ...     "--digest-record", "artifacts/record/trusted.json",
+    ...     "--selection-record", "artifacts/record/selection.json",
     ...     "--plan", "artifacts/record/upload-plan.json",
     ... ])
     >>> arguments.dry_run
@@ -108,7 +118,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--digest-record",
         required=True,
         type=pathlib.Path,
-        help="the trusted record selection wrote from the staged bytes",
+        help="the declaration record written from the staged tree",
+    )
+    parser.add_argument(
+        "--selection-record",
+        required=True,
+        type=pathlib.Path,
+        help="the record selection wrote from the staged sources it verified",
     )
     parser.add_argument("--plan", required=True, type=pathlib.Path)
     parser.add_argument("--dry-run", action="store_true")
@@ -140,6 +156,7 @@ def main(argv: list[str] | None = None) -> int:
 
     >>> main(["--release-tag", "v1.0.0", "--payload-dir", "/nonexistent",
     ...       "--digest-record", "/nonexistent/record.json",
+    ...       "--selection-record", "/nonexistent/selection.json",
     ...       "--plan", "/dev/null"])
     2
     """
@@ -148,6 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         tag=arguments.release_tag,
         payload_dir=arguments.payload_dir,
         digest_record=arguments.digest_record,
+        selection_record=arguments.selection_record,
         plan_path=arguments.plan,
         is_dry_run=arguments.dry_run,
     )
@@ -201,21 +219,20 @@ def settle(
 
     Notes
     -----
-    The payload is verified against the trusted record before the first
-    network call, and the release is re-listed after the upload so the
-    returned plan describes what GitHub actually holds rather than what was
-    sent. Every conflict is reported before any upload, so a run with one
-    conflicting asset publishes none of the others.
+    :func:`verified_payload` establishes that both records name the same
+    bytes and that the payload holds them, and it runs before the first
+    network call. The release is re-listed after the upload so the returned
+    plan describes what GitHub actually holds rather than what was sent. Every
+    conflict is reported before any upload, so a run with one conflicting
+    asset publishes none of the others.
 
     Examples
     --------
-    A dry run plans the upload but sends nothing, and grants no digest it did
-    not itself compute:
+    A dry run plans the upload but sends nothing:
 
     >>> import tempfile
     >>> from pathlib import Path
-    >>> import release_digest_files
-    >>> import release_digest_record_files
+    >>> import release_digest_record_files, release_digest_files
     >>> import release_upload_remote
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     root = Path(tmp)
@@ -223,23 +240,20 @@ def settle(
     ...     payload.mkdir()
     ...     asset = payload / "a.deb"
     ...     _ = asset.write_bytes(b"deb")
-    ...     record = root / "record.json"
-    ...     release_digest_record_files.write_digest_record(
-    ...         {"a.deb": release_digest_files.digest_of_file(asset)}, record
-    ...     )
-    ...     request = UploadRequest(
-    ...         tag="v1", payload_dir=payload, digest_record=record,
-    ...         plan_path=root / "plan.json", is_dry_run=True,
-    ...     )
+    ...     digests = {"a.deb": release_digest_files.digest_of_file(asset)}
+    ...     record, selection = root / "r.json", root / "s.json"
+    ...     for destination in (record, selection):
+    ...         release_digest_record_files.write_digest_record(
+    ...             digests, destination)
     ...     actions = settle(
-    ...         request,
+    ...         UploadRequest("v1", payload, record, selection,
+    ...                       root / "plan.json", is_dry_run=True),
     ...         runner=release_upload_remote.StaticRunner('{"assets": []}'),
     ...     )
     >>> [action.value for _name, action in actions]
     ['upload']
     """
-    expected = _expected(request.digest_record)
-    release_payload_tree.require_payload_matches(request.payload_dir, expected)
+    expected = verified_payload(request)
     actions = _reconcile(request.tag, expected, runner=runner)
     pending = release_reconcile_github.uploads(actions)
     if _should_upload(request, actions, pending):
@@ -248,6 +262,62 @@ def settle(
         )
         return _reconcile(request.tag, expected, runner=runner)
     return actions
+
+
+def verified_payload(request: UploadRequest) -> dict[str, str]:
+    """Return the digests the payload must hold, refusing any other bytes.
+
+    Parameters
+    ----------
+    request
+        The payload directory and the two records that describe it.
+
+    Returns
+    -------
+    dict[str, str]
+        Published name mapped to the digest both records agree on.
+
+    Notes
+    -----
+    Two records must agree before the payload is examined. The declaration
+    record is written from the staged tree after selection has already hashed
+    the sources it approved, so a tree replaced in between yields a
+    declaration record that faithfully describes the replacement; the
+    selection record is the independent account. Only after the two name the
+    same bytes is the payload compared with either.
+
+    ``release_digest_record.DigestRecordError`` and its
+    ``RecordedDigestMismatchError`` subclass reach the caller from the record
+    readers and the comparison, and ``release_payload_tree.PayloadHandoffError``
+    from :func:`release_payload_tree.require_payload_matches`.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> import release_digest_record_files, release_digest_files
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     root = Path(tmp)
+    ...     (root / "payload").mkdir()
+    ...     asset = root / "payload" / "a.deb"
+    ...     _ = asset.write_bytes(b"deb")
+    ...     digests = {"a.deb": release_digest_files.digest_of_file(asset)}
+    ...     record, selection = root / "r.json", root / "s.json"
+    ...     for destination in (record, selection):
+    ...         release_digest_record_files.write_digest_record(
+    ...             digests, destination)
+    ...     verified_payload(
+    ...         UploadRequest("v1", root / "payload", record, selection,
+    ...                       root / "plan.json", is_dry_run=False)
+    ...     ) == digests
+    True
+    """
+    declaration = _expected(request.digest_record)
+    release_digest_record.require_records_agree(
+        _expected(request.selection_record), declaration=declaration
+    )
+    release_payload_tree.require_payload_matches(request.payload_dir, declaration)
+    return declaration
 
 
 def _should_upload(
@@ -273,11 +343,12 @@ def _should_upload(
     --------
     >>> from release_reconcile_github import AssetAction
     >>> request = UploadRequest("v1", pathlib.Path(), pathlib.Path(),
-    ...                         pathlib.Path(), is_dry_run=True)
+    ...                         pathlib.Path(), pathlib.Path(), is_dry_run=True)
     >>> _should_upload(request, [("a", AssetAction.UPLOAD)], ("a",))
     False
     >>> _should_upload(UploadRequest("v1", pathlib.Path(), pathlib.Path(),
-    ...                              pathlib.Path(), is_dry_run=False),
+    ...                              pathlib.Path(), pathlib.Path(),
+    ...                              is_dry_run=False),
     ...                [("a", AssetAction.CONFLICT), ("b", AssetAction.UPLOAD)],
     ...                ("b",))
     False

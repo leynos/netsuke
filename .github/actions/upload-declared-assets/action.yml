@@ -145,6 +145,7 @@ runs:
           --release-tag "$RELEASE_TAG" \
           --payload-dir "$DECLARED_ASSETS_ROOT/selected/payload" \
           --digest-record "$DECLARED_ASSETS_ROOT/trusted.json" \
+          --selection-record "$DECLARED_ASSETS_ROOT/selection.json" \
           --plan "$DECLARED_ASSETS_ROOT/upload-plan.json" \
           "${upload_mode[@]}" \
           2>"$DECLARED_ASSETS_ROOT/upload-error.txt" || upload_status=$?

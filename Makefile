@@ -527,13 +527,15 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_declaration.py scripts/release_declaration_cli.py \
 		scripts/release_digest_record.py scripts/release_digest_record_files.py \
 		scripts/release_staged_digests.py \
+		scripts/release_producer_claims.py \
 		scripts/release_producer_provenance.py \
 		scripts/release_producer_provenance_checks.py \
 		scripts/release_producer_provenance_errors.py \
 		scripts/record_producer_provenance_cli.py \
 		scripts/record_producer_provenance_errors.py \
 		scripts/record_producer_provenance_record.py \
-		scripts/release_payload_errors.py scripts/release_payload_names.py \
+		scripts/release_payload_errors.py scripts/release_payload_identity.py \
+		scripts/release_payload_names.py \
 		scripts/release_payload_selection.py scripts/release_payload_tree.py \
 		scripts/select_release_payload_cli.py \
 		scripts/release_upload_digests.py scripts/release_upload_plan.py \

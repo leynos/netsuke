@@ -2612,26 +2612,46 @@ use by the rehearsal, so the same `dry-run` expression decides both lanes' mode.
 ref because the selection, the declaration, and the uploader all read
 repository files and those files must be the ones the producers built.
 
-The publishing lane's upload action never fails its own step. It captures the
-uploader's status, writes `upload-error` and `error-message` outputs, and exits
-0; the job's own `Check asset upload errors` step turns a `true` into a
-diagnostic and an exit 1. That hand-off is what the shared action already did,
-and keeping it means the surrounding steps did not move: the outcome record
-still reads `UPLOAD_ERROR_PRESENT` from the output, and
-`release_operation_records` still classifies a planned-but-refused upload as
-`upload_plan_validation` from the flag rather than from a phase outcome.
+Only *the upload step itself* defers its failure; the action as a whole can
+still fail. That step captures the uploader's status, writes `upload-error` and
+`error-message` outputs, and exits 0, and the job's own
+`Check asset upload errors` step turns a `true` into a diagnostic and an exit
+
+1. That hand-off is what the shared action already did, and keeping it means
+the surrounding steps did not move: the outcome record still reads
+`UPLOAD_ERROR_PRESENT` from the output, and `release_operation_records` still
+classifies a planned-but-refused upload as `upload_plan_validation` from the
+flag rather than from a phase outcome.
+
+Three earlier steps have no such treatment, and a reader who takes "the action
+never fails" literally will misdiagnose their failures. Selection can refuse a
+stale candidate, a missing target, an ambiguous staged file, or an artefact
+claimed by another target. Declaration can refuse a record that does not cover
+the release. Retention uploads the record with `if-no-files-found: error`, so a
+selector that wrote nothing fails there rather than at the uploader. Each of
+those fails the action's own step, which is what stops a bad tree from reaching
+the network at all.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
-its JSONL telemetry file remains on the runner. Publication uploads a per-job
-artefact named `release-operation-observability-${{ github.job }}`. It contains
-`release-operation-observability.jsonl` with bounded operation and phase
-counters, duration samples, and phase start/completion events. If cancellation
-interrupts a phase before its end marker, it records a phase interruption event
-named `release_phase_interrupted`. The summary records job and phase outcomes
-with a fixed error category. The publication artefact uses the repository's
-default GitHub Actions retention policy. These records omit release tags,
-filenames, raw error text, and secrets.
+its JSONL telemetry file remains on the runner. Publication uploads a
+per-job-and-per-attempt artefact named
+`release-operation-observability-${{ github.job }}-${{ github.run_attempt }}`.
+It contains `release-operation-observability.jsonl` with bounded operation and
+phase counters, duration samples, and phase start/completion events. If
+cancellation interrupts a phase before its end marker, it records a phase
+interruption event named `release_phase_interrupted`. The summary records job
+and phase outcomes with a fixed error category. The publication artefact uses
+the repository's default GitHub Actions retention policy. These records omit
+release tags, filenames, raw error text, and secrets.
+
+The attempt suffix is what makes a job re-run safe. A re-run keeps the run id
+and increments only the attempt, so a job-only name collides with the first
+attempt's artefact, and `actions/upload-artifact` v7 refuses to overwrite one
+rather than replacing it. `overwrite: true` would resolve the collision by
+deleting the earlier attempt's evidence, which is the opposite of what the
+retained record is for: an operator diagnosing a re-run needs both attempts to
+compare.
 
 The skip applies only to events that `ci.yml` also answers. The dry run answers
 `ready_for_review` and `ci.yml` does not, so a draft marked ready after its
@@ -2998,10 +3018,11 @@ An always-run step writes the job and phase outcomes, durations, dry-run mode,
 and fixed error category to `GITHUB_STEP_SUMMARY`. It also writes
 `release-operation-observability.jsonl` under `runner.temp`; a following
 always-run step uploads that file as
-`release-operation-observability-package-crate`. The JSONL contains bounded
-metrics and phase events. Both workflow artefacts use the repository's
-configured GitHub Actions retention policy because neither upload overrides
-retention.
+`release-operation-observability-package-crate-<attempt>`, where the attempt is
+`github.run_attempt`, so a re-run of the job keeps its own record instead of
+colliding with the first attempt's. The JSONL contains bounded metrics and
+phase events. Both workflow artefacts use the repository's configured GitHub
+Actions retention policy because neither upload overrides retention.
 
 The CLI captures the observation end time and passes it into the environment
 parser. Tests supply a fixed timestamp to keep duration calculations
@@ -3260,17 +3281,32 @@ publish. That statement is the digest record: `{"assets": {name: digest}}`,
 written by `release_declaration_cli --digest-record` from the staged tree in
 the same run that declares the names, and read by both later consumers.
 
-The provenance chain has five links and each one refuses rather than
+Selection writes a record of its own, and the difference between the two is the
+point. `select_release_payload_cli` hashes the staged sources it approved and
+writes those digests to `selection.json` *before* copying them; the declaration
+record is written independently from the staged tree afterwards. A record
+compared only with a later hash of the copied tree would accept bytes swapped
+between the two hashes, so `release_digest_record.require_records_agree` makes
+the two records answer for one another before either is used against the
+payload. A run that presents a payload matching its declaration record but not
+its selection record is refused as a conflict.
+
+The provenance chain has six links and each one refuses rather than
 interpolates.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
-2. `release_declaration_cli --digest-record` writes those digests to the record.
-3. `upload_declared_assets_cli --digest-record` refuses a payload whose bytes
-   disagree with the record, and uploads only names the record covers.
-4. `verify_release_inventory_cli --trusted` compares every downloaded asset
+2. `select_release_payload_cli` hashes the sources it approves and writes
+   `selection.json` before copying them.
+3. `release_declaration_cli --digest-record` writes its own record from the
+   staged tree, and `upload_declared_assets_cli` requires the two records to
+   name the same bytes.
+4. `upload_declared_assets_cli --digest-record --selection-record` refuses a
+   payload whose bytes disagree with the records, and uploads only names they
+   cover.
+5. `verify_release_inventory_cli --trusted` compares every downloaded asset
    against the record, and refuses a record that does not cover exactly the
    declared set.
-5. `finalize_github_release_cli --identity` reads the same record to decide what
+6. `finalize_github_release_cli --identity` reads the same record to decide what
    a re-run should do.
 
 The record is never derived from downloaded bytes, and that is the whole point.

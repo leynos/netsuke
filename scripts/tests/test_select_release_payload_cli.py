@@ -89,28 +89,45 @@ def test_the_producer_record_is_not_uploaded_as_an_asset(
     )
 
 
+def refused_after_reprovenance(
+    tmp_path: pathlib.Path, *, fields: Provenance, why: str
+) -> None:
+    """Stage a tree whose producer record differs only in ``fields``.
+
+    Parameters
+    ----------
+    tmp_path
+        The case's scratch directory.
+    fields
+        The producer-record fields the case is making hostile.
+    why
+        What the refusal proves, used as the assertion's message.
+
+    Notes
+    -----
+    Both identity refusals share this shape: a complete, otherwise legitimate
+    tree, with one field of its provenance rewritten to belong to a different
+    commit or run. Only the field and the sentence differ, so the staging and
+    the two assertions live here.
+    """
+    tree = staged_tree(tmp_path, producer=False)
+    record_provenance(tree["dist"], fields=fields, assets=staged_assets(tree))
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, why
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
+
+
 def test_a_producer_from_another_commit_is_refused(tmp_path: pathlib.Path) -> None:
     """Refuse a tree left over from an earlier candidate."""
-    tree = staged_tree(tmp_path, producer=False)
-    record_provenance(
-        tree["dist"],
-        fields=Provenance(commit="b" * 40),
-        assets=staged_assets(tree),
+    refused_after_reprovenance(
+        tmp_path, fields=Provenance(commit="b" * 40), why="a stale candidate was used"
     )
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
-        "a stale candidate must be refused"
-    )
-    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_a_producer_from_another_run_is_refused(tmp_path: pathlib.Path) -> None:
     """Refuse a record whose producer belongs to a different workflow run."""
-    tree = staged_tree(tmp_path, producer=False)
-    record_provenance(
-        tree["dist"], fields=Provenance(run_id="9999"), assets=staged_assets(tree)
+    refused_after_reprovenance(
+        tmp_path, fields=Provenance(run_id="9999"), why="a foreign run was used"
     )
-    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, "a foreign run must be refused"
-    assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
 def test_a_record_naming_an_unknown_platform_is_unusable_input(

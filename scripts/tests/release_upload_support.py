@@ -41,7 +41,9 @@ class Destinations:
     payload
         Directory holding the selected assets. Defaults to the scenario's.
     record
-        The trusted record to compare against. Defaults to the scenario's.
+        The declaration record to compare against. Defaults to the scenario's.
+    selection
+        The selection record. Defaults to the scenario's.
     plan
         Where the run writes its plan. Defaults to the scenario's.
 
@@ -53,6 +55,7 @@ class Destinations:
 
     payload: pathlib.Path | None = None
     record: pathlib.Path | None = None
+    selection: pathlib.Path | None = None
     plan: pathlib.Path | None = None
 
 
@@ -90,7 +93,9 @@ class Scenario:
         for name, content in contents.items():
             _ = (self.payload / name).write_bytes(content)
         self.record = root / "trusted.json"
+        self.selection = root / "selection.json"
         release_digest_record_files.write_digest_record(self.digests(), self.record)
+        release_digest_record_files.write_digest_record(self.digests(), self.selection)
         self.plan = root / release_upload_plan.PLAN_NAME
 
     def digests(self) -> dict[str, str]:
@@ -118,6 +123,7 @@ class Scenario:
             tag=TAG,
             payload_dir=self.payload,
             digest_record=self.record,
+            selection_record=self.selection,
             plan_path=self.plan,
             is_dry_run=is_dry_run,
         )
@@ -149,29 +155,47 @@ def listing(**attached: str | None) -> str:
     return json.dumps({"assets": assets})
 
 
-def succeeded(arguments: list[str], stdout: str) -> subprocess.CompletedProcess[str]:
-    """Return a successful result for ``arguments``.
+def completed(
+    arguments: list[str],
+    *,
+    returncode: int = 0,
+    stdout: str = "",
+    stderr: str = "",
+) -> subprocess.CompletedProcess[str]:
+    """Return the result of one invocation for the stub to hand back.
+
+    Parameters
+    ----------
+    arguments
+        The command line the stub received, echoed into the result.
+    returncode
+        The status a real ``gh`` would exit with.
+    stdout
+        The body to answer with, for a listing.
+    stderr
+        The diagnostic to answer with, for a refusal.
 
     Returns
     -------
     subprocess.CompletedProcess
-        A zero-status invocation carrying ``stdout``.
+        The fabricated result.
+
+    Notes
+    -----
+    One builder rather than a ``succeeded``/``failed`` pair. The pair differed
+    only in which stream carried the body and in the status, and every new
+    answer the stub needed -- accepted but dropped, transient 502, 404 -- cost
+    two more nearly identical functions.
+
+    Examples
+    --------
+    >>> completed(["gh", "release", "view"], stdout='{"assets": []}').returncode
+    0
+    >>> completed(["gh", "release", "upload"], returncode=1, stderr="502").stderr
+    '502'
     """
     return subprocess.CompletedProcess(
-        args=list(arguments), returncode=0, stdout=stdout, stderr=""
-    )
-
-
-def failed(arguments: list[str], stderr: str) -> subprocess.CompletedProcess[str]:
-    """Return a failed result for ``arguments``.
-
-    Returns
-    -------
-    subprocess.CompletedProcess
-        A non-zero invocation carrying ``stderr``.
-    """
-    return subprocess.CompletedProcess(
-        args=list(arguments), returncode=1, stdout="", stderr=stderr
+        args=list(arguments), returncode=returncode, stdout=stdout, stderr=stderr
     )
 
 
@@ -234,30 +258,30 @@ class Exchange:
             return self._upload(arguments)
         if subcommand == "download":
             return self._download(arguments)
-        return succeeded(arguments, listing(**self.attached))
+        return completed(arguments, stdout=listing(**self.attached))
 
     def _upload(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         """Attach each sent file's bytes, or fail as a rejected transfer would."""
         if self.fail_upload:
-            return failed(arguments, "HTTP 502 Bad Gateway")
+            return completed(arguments, returncode=1, stderr="HTTP 502 Bad Gateway")
         if self.drop_uploads:
             # Accepted, but nothing is attached. The caller only learns this
             # from the re-listing.
-            return succeeded(arguments, "")
+            return completed(arguments)
         self.attached |= {
             pathlib.Path(name).name: f"sha256:{digest_of(pathlib.Path(name))}"
             for name in arguments[4:]
         }
-        return succeeded(arguments, "")
+        return completed(arguments)
 
     def _download(self, arguments: list[str]) -> subprocess.CompletedProcess[str]:
         """Write the requested asset's bytes, or fail as a 404 would."""
         name = arguments[arguments.index("--pattern") + 1]
         if name not in self.downloads:
-            return failed(arguments, "HTTP 404 Not Found")
+            return completed(arguments, returncode=1, stderr="HTTP 404 Not Found")
         directory = pathlib.Path(arguments[arguments.index("--dir") + 1])
         _ = (directory / name).write_bytes(self.downloads[name])
-        return succeeded(arguments, "")
+        return completed(arguments)
 
     def uploads(self) -> list[list[str]]:
         """Return every upload invocation the exchange received.
@@ -311,6 +335,8 @@ def main_argv(
         str(scenario.payload if chosen.payload is None else chosen.payload),
         "--digest-record",
         str(scenario.record if chosen.record is None else chosen.record),
+        "--selection-record",
+        str(scenario.selection if chosen.selection is None else chosen.selection),
         "--plan",
         str(scenario.plan if chosen.plan is None else chosen.plan),
         *mode,
@@ -355,10 +381,9 @@ __all__ = [
     "Exchange",
     "Invocation",
     "Scenario",
+    "completed",
     "digest_of",
-    "failed",
     "listing",
     "main_argv",
     "run_cli",
-    "succeeded",
 ]

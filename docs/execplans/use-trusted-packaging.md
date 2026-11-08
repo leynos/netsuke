@@ -667,21 +667,41 @@ Three job-matched actions remain open:
 - `finalize-github-release/` — reconcile the draft, then un-draft.
 - `consumer-smoke/` — download, verify, extract and run the published bytes.
 
-The separate `upload-declared-assets/` helper also remains to be added for the
-existing `publish-release` job; the Decision log records why the upload step
-becomes a composite action instead of an inline `run` block.
+The separate `upload-declared-assets/` helper is **delivered** (#1066) and
+called by `publish-release`; the Decision log records why the upload step
+became a composite action instead of an inline `run` block.
 
-**Open integration requirement — bind operating-system packages to this release
-run.** CodeRabbit confirmed that `release_declaration` checks package suffixes,
-per-platform counts, and duplicate names, but those checks do not prove that a
-package came from the current release candidate. The declaration CLI observes
-staged basenames; it does not establish artefact provenance. The workflow
-wiring must bind checkout and inputs to the candidate commit, download only the
-current run's expected artefacts for each target, exclude retained or otherwise
-unrelated files, and hash the resulting staged set before declaring it. Add
-negative workflow-contract cases for stale artefacts, a missing target, and
-duplicate target artefacts. This remains open work; the existing suffix and
-count policy is not evidence that same-run provenance is enforced.
+**Integration requirement — bind operating-system packages to this release run
+— resolved in the adapter, open at the consumer.** CodeRabbit confirmed that
+`release_declaration` checks package suffixes, per-platform counts, and
+duplicate names, but those checks do not prove that a package came from the
+current release candidate. The declaration CLI observes staged basenames; it
+does not establish artefact provenance.
+
+Issue #1066 closes that at selection. `publish-release` checks out the
+candidate commit, the download step names only this run's producer artefacts,
+selection binds every producer record to the candidate and the run before any
+name is trusted, `release_producer_claims.require_target_claims` binds each
+record's claims to its *own* target so two same-platform records cannot
+exchange them, and non-release-shaped retained files are excluded while
+release-shaped strays are refused. Negative cases for each refusal live in
+`scripts/tests/test_release_payload_selection.py` and
+`test_select_release_payload_cli.py`, and the executed-shell harness runs the
+action's own steps end to end.
+
+What remains open is narrower and is recorded rather than implied: the archive
+half binds by name, but a package name cannot be derived, because three
+external shared actions own those names. The package half therefore holds a
+record to the right count and format for its platform only. It refuses a record
+that claims a sibling's count, and it does not claim to prove origin.
+
+The `trusted.json` record is now produced and retained for downstream
+consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
+it to agree with `selection.json` before acting. No verifier or finalizer job
+consumes it *yet*: `verify-release-inventory/` and `finalize-github-release/`
+are the unchanged open actions listed above, and wiring that hand-off belongs
+to them rather than to the upload path. This is an explicitly agreed deferral,
+not an unnoticed gap.
 
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
@@ -900,14 +920,16 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
-- Remaining gaps: `package-crate` and `publish-crates-io` are in the workflow
+- Remaining gaps: `package-crate`, `publish-crates-io`, and
+  `upload-declared-assets` (called by `publish-release`) are in the workflow
   graph. Three job-matched actions and jobs remain (`verify-release-inventory`,
-  `finalize-github-release`, and `consumer-smoke`), together with
-  `upload-declared-assets` and the separate LEM-5 suite. No live exchange or
-  release has exercised the publisher, and trusted-publisher registration and
-  account settings remain maintainer actions. The package already exists on
-  crates.io (`0.1.0-beta1` through `beta4`), so no initial publication is
-  outstanding.
+  `finalize-github-release`, and `consumer-smoke`), together with the separate
+  LEM-5 suite. Those three are also the consumers the retained `trusted.json`
+  is waiting for; #1066 produces and retains that record, and its consumption
+  is their work. No live exchange or release has exercised the publisher, and
+  trusted-publisher registration and account settings remain maintainer
+  actions. The package already exists on crates.io (`0.1.0-beta1` through
+  `beta4`), so no initial publication is outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -2916,7 +2938,75 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   is worth recording: that helper's value is checked by the checker, not by the
   suite, so the checker is what has to stay green.
 
+- [x] (2026-11-08) Cleared the six findings of the sixth pass and closed the
+  three real gaps it named.
+
+  **Copied bytes are now bound to the producer record.** Selection hashed the
+  staged sources before copying them and wrote those digests to
+  `selection.json`, but the uploader compared the payload only with
+  `trusted.json`, which the declaration step writes from the staged tree
+  *afterwards*. A tree replaced between the two hashes produced a declaration
+  record that faithfully described the replacement, so the uploader accepted it.
+  `release_digest_record.require_records_agree` now makes the two records
+  answer for one another before either is used against the payload, and
+  `UploadRequest` carries `selection_record` so the CLI can reach it. The
+  regression test rewrites the payload *and* re-hashes the declaration record
+  from the same tree, which is the only case the payload-versus-declaration
+  check cannot see; disabling the new comparison makes that run exit 0.
+
+  **Each producer's claims are bound to its own target.**
+  `release_payload_selection` compared the union of every record's claims with
+  the global declaration, so two same-platform records could exchange their
+  archive, sidecar, and packages while the union stayed identical.
+  `release_producer_claims.require_target_claims` binds the archive by name
+  (the staging configuration is the authority for the target's Rust triple) and
+  the packages by format and per-target count. The count half is a stated
+  limitation rather than an assurance: three external shared actions own the
+  package names, so origin cannot be proved from a name, and the module header
+  says so. Four two-target cases cover the swap, a second archive, and a
+  sibling's package; the swap case asserts its own union equals the staged set
+  first, so it cannot pass by testing a different refusal.
+
+  **Telemetry retention survives a job re-run.** All three uploads used
+  `release-operation-observability-${{ github.job }}`, and a re-run keeps the
+  run id, so attempt 2 collided with attempt 1's artefact and `upload-artifact`
+  v7 refuses to overwrite one. All three now carry `-${{ github.run_attempt }}`.
+  `overwrite: true` was rejected deliberately: deleting the earlier attempt's
+  record is the opposite of what retention is for. A new contract file
+  discovers every retaining job and compares two attempts of the *same* job,
+  which is the only comparison a job-scoped name can fail; reverting one site
+  fails it and names that job.
+
+  Three further repairs came from the same report. The developers' guide said
+  the upload action never fails its own step, which is true only of the upload
+  step: selection, declaration, and retention can each fail the action, and the
+  paragraph now says which and why. Its five-link provenance chain omitted
+  selection's record and became six links. `settle` crossed CodeScene's Large
+  Method threshold once it gained the comparison, so the verification preamble
+  moved to `verified_payload`, which is where it belonged anyway.
+
+  The retained `trusted.json` still has no consuming verifier or finalizer, and
+  that deferral is now recorded in Stage C and EP-M3 with its owner: the three
+  open job-matched actions. #1066's acceptance criterion is that the record is
+  retained for downstream jobs, which it is; wiring a consumer is their work,
+  not a gap in this one.
+
 ## Surprises & discoveries
+
+- Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
+  previous revision of a module, and `-B` does not dislodge it.** A status test
+  reported `assert 2 == 1` while the source on disk, `git show HEAD:<path>`, and
+  `inspect.getsource` all showed the correct order. The runtime tuple was the
+  source tuple rotated left by one entry, which is the shape of an earlier
+  revision rather than a bug in the file. `python -B` stops *writing* bytecode;
+  it does not stop *reading* an existing cache, and CPython's freshness check
+  compares source mtime at one-second granularity plus size, so an edit
+  reverted within the same second can be missed. Evidence:
+  `PYTHONPYCACHEPREFIX=/tmp/<fresh> python -B` enumerated the table correctly
+  and `refusal()` returned `(1, ...)` for the mismatch subclass. Impact: when a
+  suite disagrees with a source you have just verified, delete the
+  `__pycache__` directories before rewriting correct code to match a stale
+  import. Date/Author: 2026-11-08, implementation agent.
 
 - Observation: **A policy module may import its annotated type only for type
   checking, but its doctests then have to import that type themselves.** Ruff's

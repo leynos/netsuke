@@ -575,7 +575,7 @@ jobs:
           actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         # v7.0.1
         with:
-          name: release-operation-observability-${{ github.job }}
+          name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-operation-observability.jsonl
 
   publish-crates-io:
@@ -658,7 +658,7 @@ jobs:
           actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         # v7.0.1
         with:
-          name: release-operation-observability-${{ github.job }}
+          name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-operation-observability.jsonl
 
   release:
@@ -949,6 +949,6 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         # v7.0.1
         with:
-          name: release-operation-observability-${{ github.job }}
+          name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-operation-observability.jsonl
           if-no-files-found: ignore
