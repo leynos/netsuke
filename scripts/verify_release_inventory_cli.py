@@ -167,6 +167,34 @@ def _digests_of_downloads(
     return computed
 
 
+def _declared_names(declared_text: str) -> list[str]:
+    r"""Return the declaration's asset names, refusing any repetition.
+
+    Parameters
+    ----------
+    declared_text
+        The declaration file's text, one asset name per line.
+
+    Returns
+    -------
+    list[str]
+        The non-blank names, in declaration order.
+
+    Notes
+    -----
+    A repeated name is refused by
+    :func:`release_inventory.require_unique_declaration`, which raises
+    :class:`release_inventory.DuplicateDeclarationError`.
+
+    Examples
+    --------
+    >>> _declared_names("a.tar.gz\n\na.tar.gz.sha256\n")
+    ['a.tar.gz', 'a.tar.gz.sha256']
+    """
+    names = [line.strip() for line in declared_text.splitlines() if line.strip()]
+    return release_inventory.require_unique_declaration(names)
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the parser for the inventory-verification CLI.
 
@@ -262,6 +290,45 @@ def _record_verification(output: pathlib.Path, verified: dict[str, str]) -> int:
     return EXIT_OK
 
 
+def _verify_and_record(
+    arguments: argparse.Namespace,
+    *,
+    expected: list[str],
+    trusted: dict[str, str],
+) -> int:
+    """Verify the download and record the digests, reporting either fault.
+
+    Returns
+    -------
+    int
+        ``EXIT_OK`` when the release verified and the record was written,
+        ``EXIT_INVENTORY_REJECTED`` when an agreement failed, or
+        ``EXIT_INPUT_UNREADABLE`` when the download could not be read.
+
+    Notes
+    -----
+    The policy modules raise one distinct type per agreement, and all of them
+    reach this single translation point so the exit code never depends on
+    parsing a message. An ``OSError`` here is about the downloaded tree rather
+    than the Cargo inputs, which is why it stays an input fault while a
+    malformed trusted record is a rejection.
+    """
+    try:
+        verified = verify(arguments.directory, expected=expected, trusted=trusted)
+    except (
+        release_inventory.InventoryError,
+        release_digest.DigestError,
+        release_digest_record.DigestRecordError,
+        UnicodeDecodeError,
+    ) as error:
+        print(f"release inventory rejected: {error}", file=sys.stderr)
+        return EXIT_INVENTORY_REJECTED
+    except OSError as error:
+        print(f"release inventory unreadable: {error}", file=sys.stderr)
+        return EXIT_INPUT_UNREADABLE
+    return _record_verification(arguments.output, verified)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Verify the inventory and write the digests that were confirmed.
 
@@ -322,21 +389,12 @@ def main(argv: list[str] | None = None) -> int:
     except release_digest_record.DigestRecordError as error:
         print(f"trusted digest record rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
-    expected = [line.strip() for line in declared_text.splitlines() if line.strip()]
     try:
-        verified = verify(arguments.directory, expected=expected, trusted=trusted)
-    except (
-        release_inventory.InventoryError,
-        release_digest.DigestError,
-        release_digest_record.DigestRecordError,
-        UnicodeDecodeError,
-    ) as error:
-        print(f"release inventory rejected: {error}", file=sys.stderr)
+        expected = _declared_names(declared_text)
+    except release_inventory.DuplicateDeclarationError as error:
+        print(f"declaration rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
-    except OSError as error:
-        print(f"release inventory unreadable: {error}", file=sys.stderr)
-        return EXIT_INPUT_UNREADABLE
-    return _record_verification(arguments.output, verified)
+    return _verify_and_record(arguments, expected=expected, trusted=trusted)
 
 
 if __name__ == "__main__":

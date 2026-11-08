@@ -473,6 +473,9 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_publish_crates_io_cli.py \
 		scripts/tests/test_verify_release_inventory_cli.py \
 		scripts/tests/test_verify_release_inventory_command.py \
+		scripts/tests/test_verify_release_inventory_command_failures.py \
+		scripts/tests/test_release_draft_assets.py \
+		scripts/tests/test_release_draft_assets_cli.py \
 		scripts/tests/test_finalize_github_release_cli.py \
 		scripts/tests/test_finalize_github_release_cli_status.py \
 		scripts/tests/test_release_inventory.py \
@@ -531,6 +534,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_crates_io_adapter.py \
 		scripts/release_github_assets_adapter.py \
 		scripts/verify_release_inventory_cli.py \
+		scripts/release_draft_assets.py scripts/release_draft_assets_cli.py \
 		scripts/finalize_github_release_cli.py \
 		scripts/release_inventory.py \
 		scripts/release_semver.py scripts/release_digest.py \

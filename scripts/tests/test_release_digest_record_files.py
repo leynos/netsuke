@@ -66,6 +66,39 @@ def test_unreadable_path_uses_the_adapter_error(tmp_path: pathlib.Path) -> None:
         read_digest_record(tmp_path / "missing.json")
 
 
+@pytest.mark.parametrize(
+    "document",
+    [
+        pytest.param(
+            '{"assets": {"a": "' + DIGEST + '"}, "assets": {"b": "' + DIGEST + '"}}',
+            id="repeated-assets-member",
+        ),
+        pytest.param(
+            '{"assets": {"a": "' + DIGEST + '", "a": "' + DIGEST + '"}}',
+            id="repeated-asset-name",
+        ),
+    ],
+)
+def test_a_repeated_json_key_is_a_record_rejection(
+    tmp_path: pathlib.Path, document: str
+) -> None:
+    """Refuse a record that repeats a key rather than keeping the last value.
+
+    Ordinary JSON decoding keeps the last value silently, so a record carrying
+    two digests for one asset would verify against whichever happened to be
+    second. The record cannot say which digest it means, so the record is the
+    defect.
+    """
+    path = tmp_path / "record.json"
+    _ = path.write_text(document, encoding="utf-8")
+
+    with pytest.raises(release_digest_record.DigestRecordError) as caught:
+        read_digest_record(path)
+    assert "repeats the JSON key" in str(caught.value), (
+        f"the diagnostic must name the repetition: {caught.value}"
+    )
+
+
 def test_json_shape_errors_are_policy_errors_not_adapter_errors(
     tmp_path: pathlib.Path,
 ) -> None:
