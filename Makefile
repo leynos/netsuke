@@ -495,6 +495,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_record_producer_provenance_cli.py \
 		scripts/tests/test_release_payload_names.py \
 		scripts/tests/test_release_payload_selection.py \
+		scripts/tests/test_release_payload_selection_properties.py \
 		scripts/tests/test_release_payload_tree.py \
 		scripts/tests/test_select_release_payload_cli.py \
 		scripts/tests/test_release_upload_plan.py \
