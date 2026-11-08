@@ -3068,6 +3068,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   publishing job for `github.job`, so the output and the retention step cannot
   drift apart unnoticed.
 
+  A later round added three repairs. `plan_downloads` now refuses an asset name
+  holding a tab, a line feed, or a carriage return: the plan is written as
+  `id<TAB>name<NEWLINE>` and read by `read -r`, so a line feed in a name would
+  forge a second record and make the step download an asset the listing never
+  planned. `release_draft_assets.py` now decomposes the untrusted listing with
+  structural pattern matching instead of an `isinstance()` chain, through two
+  small narrowing helpers that keep each level's diagnostic. And the guide now
+  records the duplicate-key refusal in digest records, the status 1 a repeated
+  declaration name returns, the four `release_draft_assets_cli` statuses, and
+  the fact that `verify-release-inventory` exists — a sentence that still said
+  the job was open.
+
   `tests/workflow_contracts` is collected by directory, so the three new
   modules needed no inventory entry; no test compares a module list, and
   fabricating one would have been an unenforced claim. Verification did not run
@@ -3079,8 +3091,9 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `test` (492s), `markdownlint` (32s), `nixie` (2s),
   `test-release-publication` (15s), and `test-workflow-contracts` (336s), each
   `EXIT 0`, and the full `pytest tests/workflow_contracts` run reported 1872
-  passed, 2 skipped. The figures are from those runs; the batch was rerun
-  against the rebased tree.
+  passed, 2 skipped. Each review repair was re-gated with the same nine targets
+  on a frozen tree, and every target exited 0 in each batch. The figures are
+  from those runs; the batch was rerun against the rebased tree.
 
   **Deviation, retained:** `release.yml` is 1023 lines, and `Verification plan`
   row 5 still asks for 400 or fewer. That row is unsatisfiable as written and
@@ -4311,6 +4324,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `should_verify` from the scenario rather than from the job's expression, so
   the two have to agree instead of the test agreeing with whatever the
   expression says. Date/Author: 2026-11-08, implementation agent.
+
+- Observation: **a "bare file name" can still break the format that carries
+  it.** Evidence: `release_asset_names.is_bare_file_name` accepted
+  `"11\ta\n99\tb"` — one component, no separator — and the plan writer emits
+  `id<TAB>name<NEWLINE>`, so that name became two records and the download step
+  fetched asset 99 under a name the listing never mentioned. The path-shape
+  judgement and the plan's representable-name judgement are different
+  questions, and the second one has to be asked where the format is chosen.
+  Impact: a validator shared by several consumers answers only the weakest
+  question they all need; each consumer that imposes a format must add its own
+  refusal. Date/Author: 2026-11-08, implementation agent.
 
 ## Decision log
 

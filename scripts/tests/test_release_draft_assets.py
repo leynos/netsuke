@@ -149,6 +149,21 @@ def test_a_name_that_is_not_a_bare_file_name_is_refused(name: str) -> None:
         _ = plan_downloads([[_asset(11, name)]])
 
 
+@pytest.mark.parametrize(
+    "name",
+    ["a\tb.tar.gz", "a\nb.tar.gz", "a\rb.tar.gz", "11\ta\n99\tb"],
+)
+def test_a_name_the_download_plan_cannot_carry_is_refused(name: str) -> None:
+    r"""Refuse delimiters that would forge or truncate a plan record.
+
+    A line feed in a name is the dangerous one: the plan is read line by line
+    and split on tabs, so ``"11\ta\n99\tb"`` would plan a second download of
+    asset 99 that the listing never named.
+    """
+    with pytest.raises(AssetListingError, match="download plan"):
+        _ = plan_downloads([[_asset(11, name)]])
+
+
 @pytest.mark.parametrize("identifier", [None, "11", 11.5, True, 11.0])
 def test_an_asset_without_an_integer_id_is_refused(identifier: object) -> None:
     """Require the identifier the download endpoint addresses."""

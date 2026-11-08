@@ -11,9 +11,10 @@ release requires exactly one *draft* with the requested tag, because a published
 release with that tag means the draft this job was asked to verify is gone, and
 two drafts mean the listing does not identify one release. Planning downloads
 requires every asset to be an uploaded, non-empty regular attachment with a
-bare, safe name, because a name that could escape the download directory would
-place attacker-chosen bytes beside the trusted inputs, and a zero-byte asset
-would be hashed as an empty file rather than as the artefact it claims to be.
+bare, safe name that the tab-separated download plan can carry, because a name
+that could escape the download directory would place attacker-chosen bytes
+beside the trusted inputs, and a zero-byte asset would be hashed as an empty
+file rather than as the artefact it claims to be.
 
 Nothing here parses JSON, touches a file, or reaches the network:
 :mod:`release_draft_assets_cli` owns those effects. The name judgement is
@@ -33,6 +34,10 @@ if typ.TYPE_CHECKING:
 
 #: The asset state GitHub reports for a fully uploaded attachment.
 UPLOADED_STATE = "uploaded"
+
+#: Characters that would split or truncate one line of the download plan, which
+#: is written as ``id<TAB>name<NEWLINE>`` and read back field by field.
+PLAN_DELIMITERS = ("\t", "\n", "\r")
 
 
 class DraftAssetError(ValueError):
@@ -63,7 +68,13 @@ def _is_integer(value: object) -> bool:
     >>> _is_integer(7), _is_integer(True), _is_integer("7")
     (True, False, False)
     """
-    return isinstance(value, int) and not isinstance(value, bool)
+    match value:
+        case bool():
+            return False
+        case int():
+            return True
+        case _:
+            return False
 
 
 def _entries(pages: object, *, what: str) -> list[cabc.Mapping[str, object]]:
@@ -98,19 +109,27 @@ def _entries(pages: object, *, what: str) -> list[cabc.Mapping[str, object]]:
     >>> _entries([[{"id": 1}], [{"id": 2}]], what="release")
     [{'id': 1}, {'id': 2}]
     """
-    if not isinstance(pages, list):
-        msg = f"the {what} listing is not the array of pages --slurp produces"
-        raise DraftAssetError(msg)
-    entries: list[cabc.Mapping[str, object]] = []
-    for page in pages:
-        if not isinstance(page, list):
-            msg = f"one page of the {what} listing is not an array"
+    match pages:
+        case list() as page_list:
+            pass
+        case _:
+            msg = f"the {what} listing is not the array of pages --slurp produces"
             raise DraftAssetError(msg)
-        for entry in page:
-            if not isinstance(entry, dict):
-                msg = f"one entry in the {what} listing is not an object"
+    entries: list[cabc.Mapping[str, object]] = []
+    for page in page_list:
+        match page:
+            case list() as entry_list:
+                pass
+            case _:
+                msg = f"one page of the {what} listing is not an array"
                 raise DraftAssetError(msg)
-            entries.append(entry)
+        for entry in entry_list:
+            match entry:
+                case dict() as mapping:
+                    entries.append(mapping)
+                case _:
+                    msg = f"one entry in the {what} listing is not an object"
+                    raise DraftAssetError(msg)
     return entries
 
 
@@ -203,11 +222,12 @@ def _asset_name(entry: cabc.Mapping[str, object]) -> str:
     AssetListingError
         If the entry carries no string ``name``.
     """
-    name = entry.get("name")
-    if not isinstance(name, str):
-        msg = f"a release asset entry carries no string name: {name!r}"
-        raise AssetListingError(msg)
-    return name
+    match entry.get("name"):
+        case str() as name:
+            return name
+        case other:
+            msg = f"a release asset entry carries no string name: {other!r}"
+            raise AssetListingError(msg)
 
 
 def _require_safe_names(names: list[str]) -> None:
@@ -235,6 +255,33 @@ def _require_safe_names(names: list[str]) -> None:
     if malformed:
         msg = "release asset names are not bare file names: " + ", ".join(
             repr(name) for name in malformed
+        )
+        raise AssetListingError(msg)
+
+
+def _require_plan_safe(names: list[str]) -> None:
+    """Refuse names the tab-separated download plan cannot represent.
+
+    Raises
+    ------
+    AssetListingError
+        If any name contains a tab, a line feed, or a carriage return.
+
+    Notes
+    -----
+    A bare file name may still hold a delimiter. A line feed would forge an
+    extra ``id<TAB>name`` record, so the download step would fetch an asset the
+    listing never planned; a tab or carriage return would truncate or corrupt
+    the name the step writes. Both are refused here rather than escaped,
+    because an asset name is published data and nothing legitimate needs one.
+    """
+    unrepresentable = [
+        name for name in names if any(char in name for char in PLAN_DELIMITERS)
+    ]
+    if unrepresentable:
+        msg = (
+            "release asset names cannot be represented in the download plan: "
+            + ", ".join(repr(name) for name in unrepresentable)
         )
         raise AssetListingError(msg)
 
@@ -307,9 +354,10 @@ def plan_downloads(pages: object) -> list[tuple[int, str]]:
     Raises
     ------
     AssetListingError
-        If the listing is empty, names an unsafe or malformed attachment,
-        repeats a name, or holds an entry without an integer identifier, a
-        non-``uploaded`` state, or a usable byte size.
+        If the listing is empty, names an unsafe, malformed, or
+        plan-unrepresentable attachment, repeats a name, or holds an entry
+        without an integer identifier, a non-``uploaded`` state, or a usable
+        byte size.
 
     Examples
     --------
@@ -324,6 +372,7 @@ def plan_downloads(pages: object) -> list[tuple[int, str]]:
         raise AssetListingError(msg)
     names = [_asset_name(entry) for entry in entries]
     _require_safe_names(names)
+    _require_plan_safe(names)
     _require_unique(names)
     problems = [
         problem

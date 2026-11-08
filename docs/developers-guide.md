@@ -3254,11 +3254,15 @@ credential behind.
 
 The listings are read with `--slurp`, which wraps every page in one array, and
 the selection and download-plan policy lives in
-`scripts/release_draft_assets.py` rather than in shell. The download step sets
-`noclobber`, so a name repeated in the plan fails rather than letting the
-second download replace the first, and it does not retry: a partial download
-must stop the job, because the verifier cannot distinguish a truncated
-attachment from one that somehow matched.
+`scripts/release_draft_assets.py` rather than in shell. A name the plan cannot
+carry — one holding a tab, a line feed, or a carriage return — is refused when
+planning, because the step reads the plan line by line and splits each line on
+tabs, so a line feed in a name would forge a second record and download an
+asset the listing never named. The download step sets `noclobber`, so a name
+repeated in the plan fails rather than letting the second download replace the
+first, and it does not retry: a partial download must stop the job, because the
+verifier cannot distinguish a truncated attachment from one that somehow
+matched.
 
 Two inputs decide what the verifier trusts. `trusted-directory` must be
 disjoint from `download-directory` and from `output-path`, and both
@@ -3584,9 +3588,11 @@ The crates.io environment and trusted-publisher account entry are operator
 configuration. Configure GitHub environment `crates-io` and register the
 repository, `release.yml`, and that environment with crates.io. The workflow
 contains the pinned short-lived OIDC exchange, but no live exchange or release
-has exercised this publisher. The later `verify-release-inventory` job is also
-still open, so `publish-release` does not yet wait for crates.io success and a
-tagged run can temporarily leave the GitHub Release and crate out of sync.
+has exercised this publisher. `publish-release` still starts without waiting
+for crates.io, so the two surfaces can be briefly out of step; the later
+`verify-release-inventory` job needs both publishers and records what each
+surface holds, but the finalizer that would refuse to make the release public
+while either is unproven is still open.
 
 ### Selecting the declared payload
 
@@ -3727,6 +3733,12 @@ wiring fault from a content fault. A vacuous default — reading a missing
 `assets` member as an empty mapping — would plan no work and refuse nothing,
 and every consumer reads this record as permission to act on a release.
 
+The reader refuses a repeated JSON key at any depth, including a repeated
+`assets` member or a repeated asset name, with `DuplicateKeyError`. JSON keeps
+only the last of two equal keys, so a record that named an asset twice would
+otherwise verify against half of what it appears to state, and a reader that
+accepted it would report agreement with a document nobody wrote.
+
 The inventory verifier records each asset's **own** digest, sidecars included.
 A sidecar is first checked against the archive beside it, which proves the
 pair, and then hashed in its own right, because the sidecar is published too
@@ -3827,11 +3839,26 @@ boundaries, so this helper is not a general release-record writer.
 
 `verify_release_inventory_cli` reports unreadable inputs, including directory
 scans and asset reads, with status 2; a verified-record write failure returns
-status 3. Its private `_write_verified_record` stages only this CLI's verified
-digest record beside its destination before replacement. Keep it inside the
-verifier: other records have their own schemas and persistence boundaries. Its
-private `_record_verification` maps only this write to the verifier's exit
-status and diagnostic.
+status 3. A declaration that names the same asset twice is a policy rejection,
+status 1, rather than an input fault: both lines are readable, and the
+declaration itself is what cannot be satisfied. Its private
+`_write_verified_record` stages only this CLI's verified digest record beside
+its destination before replacement. Keep it inside the verifier: other records
+have their own schemas and persistence boundaries. Its private
+`_record_verification` maps only this write to the verifier's exit status and
+diagnostic.
+
+`release_draft_assets_cli` uses the same four statuses, so the verification
+action's steps can classify an outcome without inspecting stderr. It returns 0
+when the listing supports the decision and the result was recorded, 1 when the
+listing is readable but cannot support the decision — no draft carrying the
+tag, a published release instead of a draft, or assets that cannot be planned —
+2 when a listing cannot be read or is not JSON, and 3 when the result cannot be
+recorded. An invalid invocation also returns 2, because `argparse` has already
+written its own usage diagnostic. The decision helpers are `select-release` and
+`plan-downloads`; both write their result through a temporary sibling
+directory, so a consumer must read the status rather than infer success from
+the output file's existence.
 
 `release_declaration_cli` stages its declaration and digest record before
 replacing either destination. Its private `_write_outputs` owns this pair only:
