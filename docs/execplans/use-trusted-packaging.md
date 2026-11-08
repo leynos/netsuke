@@ -4164,7 +4164,7 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `UnknownPlatformError`, with the same CLI exit status. This resolves the
   2026-10-28 deferral and does not change the trusted-publishing Stage C or
   Stage D status: Stage C remains partial and Stage D remains open. See
-  [ADR-0071](../adrs/adr-0071-typed-records-for-release-policy-boundaries.md)
+  [ADR-0074](../adrs/adr-0074-typed-records-for-release-policy-boundaries.md)
   and
   [the issue 964 plan](issue-964-evaluate-typed-records-for-release-policy-boundaries.md).
   Date/Author: 2026-10-30, implementation agent.

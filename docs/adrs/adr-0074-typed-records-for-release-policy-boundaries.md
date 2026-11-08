@@ -1,4 +1,4 @@
-# Architectural decision record (ADR) 0071: Typed records at release policy boundaries
+# Architectural decision record (ADR) 0074: Typed records at release policy boundaries
 
 ## Status
 

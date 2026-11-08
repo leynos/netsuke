@@ -2032,7 +2032,7 @@ must share.
     developer documentation.
   - [x] Decide the release policy boundary: frozen slotted records at every
     external-shape seam, with domain-shaped mappings retained. See
-    [ADR-0071](adrs/adr-0071-typed-records-for-release-policy-boundaries.md).
+    [ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md).
   - See [RFC 0005 §Open
     questions](rfcs/rfc-0005-harden-release-integrity-and-admission.md#open-questions)
     and

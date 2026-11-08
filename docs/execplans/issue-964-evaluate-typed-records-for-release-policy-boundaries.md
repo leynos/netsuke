@@ -2,7 +2,7 @@
 
 Status: COMPLETE
 
-The decision is recorded as ADR-0071, the migration has landed, and the branch
+The decision is recorded as ADR-0074, the migration has landed, and the branch
 is rebased onto `origin/main` at `e5d57c583`, whose tree is identical to the
 previous target `9bfb3e117`, with the deterministic gate set re-run on the
 rebased head. Review found one edge case where the new record refuses an empty
@@ -219,7 +219,7 @@ records and are unchanged.
 
 ## Delivery plan
 
-1. Record the decision as ADR-0071, indexed from `docs/contents.md`, linked
+1. Record the decision as ADR-0074, indexed from `docs/contents.md`, linked
    from the release automation design section and roadmap task 9.1.1, and
    appended to the trusted-packaging decision log. Add the boundary convention
    to the developers' guide.
@@ -248,8 +248,11 @@ records and are unchanged.
       pull requests. ADR-0068 was free across all 77 remote heads and every
       open pull request. Main then landed its own ADR-0068 for whole-manifest
       cycle detection before this branch was rebased, so the replay renumbered
-      this decision to ADR-0071 and updated every citation.
-- [x] Write ADR-0071 and update the documentation index, design section,
+      this decision to ADR-0071 and updated every citation. Main then claimed
+      ADR-0071 for Windows recipe interpreters, and ADR-0072 and ADR-0073 were
+      already held by open pull requests, so a later replay renumbered this
+      decision to ADR-0074.
+- [x] Write ADR-0074 and update the documentation index, design section,
       roadmap item, developers' guide, and trusted-packaging decision log.
 - [x] Add characterization tests. Commit `032c503ec` pins eight malformed
       staging configurations and nine decoded digest-record shapes at the
@@ -273,9 +276,9 @@ records and are unchanged.
       builder (#1062)"), because main advanced while the branch was under
       review. The first two replays were conflict-free; the third conflicted
       once, in the `docs/contents.md` ADR index, where main adds ADR-0069 and
-      the branch adds its release-policy decision, then numbered ADR-0068 and
-      renumbered ADR-0071 by the later replay. The resolution keeps both
-      entries in ADR-number order. The branch's own "Refresh the generated typos
+      the branch adds its release-policy decision, then numbered ADR-0068. The
+      resolution keeps both entries in ADR-number order. The branch's own
+      "Refresh the generated typos
       configuration" commit became empty, because main had already landed the
       same regeneration: `git diff 9bfb3e117:typos.toml fb36476f0:typos.toml`
       is empty, so the commit was dropped rather than recreated. `range-diff`
@@ -291,7 +294,7 @@ records and are unchanged.
       reports every commit unchanged, and `git diff --check` is clean.
 - [x] Address the post-review qualification about `platform = ""`. The
       malformed-configuration table gains a `platform-is-empty` case, and
-      ADR-0071, this plan, and the trusted-packaging decision log now record
+      ADR-0074, this plan, and the trusted-packaging decision log now record
       that the record refuses the value earlier than policy did, with the same
       exit status and no weakened release check.
 - [x] Remove the adapter's duplicate empty-assets refusal, raised by the
@@ -310,7 +313,7 @@ records and are unchanged.
       against a mutant that drops the factory's sort: each fails on it, so the
       evidence is a detected defect rather than a green run beside the code.
 - [x] Answer the second CodeRabbit review. The plan's remaining ADR-0068
-      citations became ADR-0071, except the two that describe the allocation
+      citations became ADR-0074, except the two that describe the allocation
       and the earlier contents-index collision, which now name both serials.
       `StagingTarget`, `StagingTargets`, `StagingTargets.from_targets`, and
       `platform_target_counts` gained NumPy-style attribute and parameter
@@ -323,7 +326,7 @@ records and are unchanged.
 
 The evaluation adopted Option B, narrowed to the external-shape seams, and
 recorded it as
-[ADR-0071](../adrs/adr-0071-typed-records-for-release-policy-boundaries.md).
+[ADR-0074](../adrs/adr-0074-typed-records-for-release-policy-boundaries.md).
 Two records now cross the boundary: `StagingTargets` (with `StagingTarget`
 entries) in `release_declaration`, and `DigestRecord` in
 `release_digest_record`. `release_declaration_cli` owns the `targets` and
@@ -407,7 +410,7 @@ passed, 7 skipped, doctests clean), and `make test-workflow-contracts` (1665
 passed, 3 skipped). The full set is re-run on the branch head that carries the
 review fixes and this update. Roadmap item 9.1.1 stays open, because its
 success criterion covers thresholds, freshness rules, waivers, and retention as
-well; its policy-boundary sub-item is checked against ADR-0071.
+well; its policy-boundary sub-item is checked against ADR-0074.
 
 ## References
 

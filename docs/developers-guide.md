@@ -3290,7 +3290,7 @@ domain-shaped name-to-value relation that no external format defines, such as
 the name-to-digest plans in `release_reconcile_github` and the computed side of
 a download comparison; adding a decoder for one of those would invent a format
 boundary that does not exist. See
-[ADR-0071](adrs/adr-0071-typed-records-for-release-policy-boundaries.md).
+[ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md).
 
 Each adapter has a narrow scope and named callers. File adapters do not own
 release policy, response adapters do not choose whether a run publishes, and

@@ -4289,7 +4289,7 @@ full observability policy are documented in
 [ADR-0020](adrs/adr-0020-bounded-release-admission-observability.md). Release
 policy decides from frozen slotted records at each boundary where an external
 record shape arrives, while adapters and CLIs own field names and decoding, as
-[ADR-0071](adrs/adr-0071-typed-records-for-release-policy-boundaries.md)
+[ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md)
 records. This automated pipeline guarantees parity across Windows, Linux, and
 macOS through the shared actions.
 
