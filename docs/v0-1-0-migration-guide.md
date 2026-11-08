@@ -298,6 +298,21 @@ Rust callers of the output API must migrate:
   `DisplayPolicies` and `TerminalFacts` that returns the whole `DisplayPlan`,
   so a caller can make every presentation decision once instead of re-deriving
   it per adapter.
+- `netsuke::output_mode::resolve` is removed, because it read the environment
+  itself and so could not take part in the single resolution above. Capture
+  `EnvSignals::read` with the caller's own environment seam and pass it to
+  `EnvSignals::resolve_output_mode`, or use `resolve_with`, which keeps its
+  signature and now delegates to those two steps.
+- `netsuke::runner::run` and `run_with_ninja_program` take a `DisplayPlan` in
+  place of the `OutputPrefs` they used to accept. Pass the plan the caller has
+  already resolved; the runner reads the reporter, progress, and colour
+  decisions from it rather than re-deriving them.
+- `netsuke::cli::parse_with_localizer_from` takes a third argument, the Clap
+  `ColorChoice` for help and version output. `netsuke::cli::ColorChoice` is
+  re-exported so a caller need not depend on Clap directly.
+- `Cli::display_policies` is new, and `AccessibilityPolicy::explicit_override`,
+  `EmojiPolicy::unicode_override` and `ProgressPolicy::is_enabled` expose the
+  policy values a caller needs to build `DisplayPolicies` by hand.
 
 ## Opting into ordered command lists
 

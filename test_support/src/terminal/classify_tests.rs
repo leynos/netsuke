@@ -1,6 +1,12 @@
 //! Exercise terminal-byte classification with witness tokens and generated streams.
 
+// The oracle lives beside this file rather than under a `classify_tests/`
+// directory, so the path is explicit instead of relying on the default layout.
+#[path = "classify_oracle.rs"]
+mod oracle;
+
 use super::{TerminalBytes, classify};
+use oracle::oracle_has_bare_carriage_return;
 use proptest::prelude::*;
 use rstest::rstest;
 
@@ -187,35 +193,64 @@ fn cancel_ends_a_control_string(#[case] bytes: &[u8]) {
 proptest! {
     /// Compare bare-carriage-return detection against a byte-level oracle.
     ///
-    /// The oracle is deliberately independent of the parser: it walks the
-    /// stream remembering only whether a `\r` is followed by `\n`. Escape
-    /// handling is not modelled at all, so agreement means the parser is not
-    /// letting escape scanning suppress a control plainly present in the
-    /// bytes.
+    /// The oracle in `oracle.rs` is deliberately independent of the classifier:
+    /// it is a state machine over the same bytes, where the classifier is a set
+    /// of scanners that each return a consumed length. The two shapes fail
+    /// differently, so agreement is evidence that two implementations concur
+    /// rather than one test restating itself.
     ///
-    /// OSC introducers are excluded from the alphabet rather than from the
-    /// oracle. An OSC body is opaque payload by definition — a `\r` inside one
-    /// is not a redraw — so generating them would test a semantics question
-    /// this property does not ask. Coverage of that boundary is pinned
-    /// separately by `osc_payload_hides_its_carriage_returns`.
+    /// The alphabet covers every introducer the classifier knows: CSI, OSC and
+    /// the four control-string introducers, plus both terminators, the two
+    /// cancellations, a BEL and a bare carriage return. Generating only CSI
+    /// bytes would leave the payload rules for OSC, DCS, SOS, PM and APC
+    /// unexercised here, and a regression that scanned one of them as live
+    /// controls would still pass.
     #[test]
     fn classifier_reports_bare_carriage_returns_that_the_oracle_finds(
         bytes in prop::collection::vec(
             prop::sample::select(vec![
-                0x1b_u8, b'[', b'\\', b'\r', b'\n', b'm', b'7', b'A', b'0', b'x', b'8',
-                b'?', b';', b'\x07', 0x20, 0x2f, 0x3f,
+                0x1b_u8, b'[', b'\\', b']', b'P', b'X', b'^', b'_', b'\x07', 0x18, 0x1a,
+                b'\r', b'\n', b'm', b'7', b'A', b'0', b'x', b'8', b'?', b';', 0x20, 0x2f,
+                0x3f,
             ]),
             0..64,
         )
     ) {
-        let expected = bytes
-            .iter()
-            .enumerate()
-            .any(|(index, byte)| *byte == b'\r' && bytes.get(index + 1) != Some(&b'\n'));
         prop_assert_eq!(
             classify(&bytes).has_bare_carriage_return,
-            expected,
+            oracle_has_bare_carriage_return(&bytes),
             "stream {:?}",
+            bytes
+        );
+    }
+
+    /// Complete and truncated escapable strings both hide their payload.
+    ///
+    /// The payload alphabet starts at `0x20`, so it holds no control byte that
+    /// could terminate the string early: the `\r` is the only control inside,
+    /// and it is placed by the generator rather than drawn from the pool. An
+    /// unterminated string runs to end-of-stream, which is what a capture cut
+    /// short mid-payload looks like, so both cases must report no redraw.
+    #[test]
+    fn escapable_strings_hide_payload_carriage_returns(
+        introducer in prop::sample::select(vec![b']', b'P', b'X', b'^', b'_']),
+        head in prop::collection::vec(0x20_u8..0x7f, 0..8),
+        tail in prop::collection::vec(0x20_u8..0x7f, 0..8),
+        is_terminated in prop::bool::ANY,
+    ) {
+        let mut bytes = vec![0x1b, introducer];
+        bytes.extend(head);
+        bytes.push(b'\r');
+        bytes.extend(tail);
+        if is_terminated {
+            bytes.extend_from_slice(b"\x1b\\");
+        }
+
+        let facts = classify(&bytes);
+        prop_assert!(facts.has_any_escape, "stream {:?}", bytes);
+        prop_assert!(
+            !facts.has_bare_carriage_return,
+            "a carriage return inside an escapable string is not a redraw: {:?}",
             bytes
         );
     }

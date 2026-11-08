@@ -63,6 +63,66 @@ fn terminal_progress_never_suppresses_stage_output() -> Result<()> {
     Ok(())
 }
 
+/// Slice out the text of each task update, from its label to its line end.
+///
+/// A line ends at `\r` as well as `\n`: the progress animation terminates each
+/// repaint with a bare carriage return, so only counting line feeds merges the
+/// whole capture into one line.
+///
+/// The return stops at the label rather than at the start of the line because
+/// the stage reporter and the task reporter write to the same terminal line.
+/// The capture this test reads contains the stage-6 repaint, its padding, and
+/// then `Task 1/2` in one line with no terminator between them. Starting the
+/// slice at the line start would classify the stage animation's cursor moves
+/// as task redraw, so the assertion would fail on evidence the task update
+/// never produced. The stage animation is asserted on its own by
+/// `standard_progress_redraws_on_a_capable_terminal`.
+fn task_lines(bytes: &[u8]) -> Vec<&[u8]> {
+    let ends_line = |byte: &u8| matches!(*byte, b'\r' | b'\n');
+    bytes
+        .windows(b"Task ".len())
+        .enumerate()
+        .filter_map(|(start, window)| {
+            if window != b"Task " {
+                return None;
+            }
+            let remainder = bytes.get(start..)?;
+            let line_length = remainder
+                .iter()
+                .position(ends_line)
+                .map_or(remainder.len(), |terminator| terminator + 1);
+            let line_end = start.saturating_add(line_length);
+            bytes.get(start..line_end)
+        })
+        .collect()
+}
+
+/// A task update is sliced from its label to its line end, nothing earlier.
+///
+/// This is the shape the real capture has: the stage animation repaints, then
+/// the task text follows on the same terminal line with no terminator between
+/// them. Slicing from the start of the line would hand the stage redraw to the
+/// task assertion; slicing from the label stops at the last possible point and
+/// so proves the assertion is about the task text alone.
+///
+/// The carriage return in the fixture is what ends the *task* update, so a
+/// slice that ignored it would run on into the next line.
+#[test]
+fn a_task_update_is_sliced_from_its_label_to_its_line_end() {
+    // The bidi isolates are U+2068 and U+2069: the reporter wraps each number
+    // in them so a right-to-left terminal keeps the counts in order.
+    let capture =
+        "\x1b[2Kstage one\r  \u{2068}Task \u{2068}1\u{2069}/\u{2068}2\u{2069}\u{2069}: x\r\n";
+    let expected = "Task \u{2068}1\u{2069}/\u{2068}2\u{2069}\u{2069}: x\r";
+    let lines = task_lines(capture.as_bytes());
+    assert_eq!(lines.len(), 1, "one task line expected");
+    assert_eq!(
+        lines.first().copied(),
+        Some(expected.as_bytes()),
+        "the slice starts at the label and stops after the terminator",
+    );
+}
+
 #[googletest::gtest]
 #[test]
 fn task_updates_stay_plain_when_stdout_is_piped_and_stderr_is_terminal() -> Result<()> {
@@ -78,22 +138,7 @@ fn task_updates_stay_plain_when_stdout_is_piped_and_stderr_is_terminal() -> Resu
     let terminal = visible_text(&output.terminal);
     expect_that!(terminal.as_str(), contains_substring("Task 1/2"));
     expect_that!(terminal.as_str(), contains_substring("Task 2/2"));
-    let task_lines = output
-        .terminal
-        .windows(b"Task ".len())
-        .enumerate()
-        .filter_map(|(start, window)| {
-            if window != b"Task " {
-                return None;
-            }
-            let remainder = output.terminal.get(start..)?;
-            let line_length = remainder
-                .iter()
-                .position(|byte| *byte == b'\n')
-                .map_or(remainder.len(), |newline| newline + 1);
-            remainder.get(..line_length)
-        })
-        .collect::<Vec<_>>();
+    let task_lines = task_lines(&output.terminal);
     expect_that!(task_lines.len(), eq(2));
     for line in task_lines {
         expect_that!(

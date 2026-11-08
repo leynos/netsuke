@@ -155,8 +155,11 @@ reads the answer rather than re-deriving it. `DisplayPlan::stdout_colour()` and
 `stderr_colour()` decide whether ANSI escapes are emitted on each stream, and
 the adapters apply them differently because their libraries do:
 
-- The tracing formatter installs `ansi` from the plan's stderr decision when
-  `init_tracing` runs, so every event after that follows the same answer.
+- The tracing formatter starts with `with_ansi(false)` so buffered startup
+  events are plain, and `set_tracing_ansi(plan.stderr_colour())` reloads that
+  layer once the plan is resolved. The reload is the mechanism: `main` calls it
+  twice, from the startup plan and again from the merged plan, so every event
+  after the second call follows the merged answer.
 - The Miette hook builds one `MietteHandlerOpts` handler per report from
   `diagnostic_style()`, passing its `colour`, `unicode` and `links` fields to
   `color`, `unicode` and `terminal_links`. It does not choose between graphical

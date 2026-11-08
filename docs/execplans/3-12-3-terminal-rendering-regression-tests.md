@@ -442,6 +442,18 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
 - [x] EP-M3: bind colour and glyph decisions to the emitters.
 - [x] EP-M4: contract snapshots, pinning scenarios, documentation, ADR,
   roadmap.
+- [x] (2026-11-08) Closed the re-raised pre-merge rows. The task-update
+  assertion is now scoped to the task text (D29) and the migration guide
+  records the four Rust API breaks the row named — `output_mode::resolve`
+  removed, `runner::run` and `run_with_ninja_program` taking `DisplayPlan`, and
+  the `ColorChoice` argument on `parse_with_localizer_from` with its new
+  `netsuke::cli::ColorChoice` re-export. The developer guide's tracing
+  paragraph was corrected to describe the reload mechanism rather than an
+  `ansi` argument `init_tracing` does not take. The classifier gained an
+  independent state-machine oracle and a property over escapable strings, and
+  both were shown non-vacuous with a compiling mutant that failed three tests.
+  `terminal_rendering_tests` passed 67/67 and `test_support` 171/171. Remaining
+  for this batch: the ten-gate set, the commit, and the lifecycle.
 
 ## Surprises & discoveries
 
@@ -962,10 +974,47 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
     Ui)*, *Unit Architecture* and *Domain Architecture* were already addressed
     by this branch or by earlier decisions (D21, D22, D26, D27), and re-reading
     each against the current tree found nothing further to change. The
-    task-update row in particular is satisfied: `progress_pty.rs` collects each
-    whole task line and classifies it, which includes the bytes that precede
-    the task-name field. Date/Author: 2026-11-08, implementation agent, after
-    `5815758338`.
+    task-update row was **not** satisfied, as D29 records; the claim I made
+    here that the helper "collects each whole task line … which includes the
+    bytes that precede the task-name field" was false, because the code sliced
+    from the `Task` window itself rather than from the line start. Date/Author:
+    2026-11-08, implementation agent, after `5815758338`.
+
+- **D29. The task-update assertion is scoped to the task text, not to the
+  enclosing terminal line.** CodeRabbit asked for each complete task-update
+  line to be checked "including bytes before the `Task` label". I first
+  implemented that literally, extending the slice back to the nearest `\r` or
+  `\n`, and the live test failed. Decoding the real capture explained why: the
+  last escape before the label is `\x1b[5A` at offset 12931, and the stage-6
+  repaint occupies every byte from there to `Task 1/2` at 13844 with no
+  terminator between them. Task 1/2 therefore shares its physical line with the
+  final stage repaint, so "the enclosing line contains no escape" is
+  unsatisfiable for that task while the stage animation is doing its job.
+  Widening the slice also made the assertion partly about the stage reporter,
+  which `standard_progress_redraws_on_a_capable_terminal` already covers on its
+  own.
+  - The slice now runs from the `Task` label to the next `\r` or `\n`, which is
+    the task update's own text and nothing else. The escape assertion is
+    `has_any_escape == !plan.force_text_task_updates()`; with stdout piped that
+    flag is true, so the test requires the task text to be plain and fails if
+    the reporter emits a colour or redraw of its own.
+  - Treating `\r` as a line terminator is still required. The stage animation
+    ends each repaint with a bare carriage return, so a line-feed-only rule
+    merged the whole capture into one 13,890-byte "line". The unit witness
+    `a_task_update_is_sliced_from_its_label_to_its_line_end` pins both ends of
+    the slice so neither can regress silently.
+  - I recorded in D28 that this row was already satisfied. That was wrong: the
+    earlier helper sliced from the label too, so it never examined the bytes
+    before the label at all, and my description of it was a claim I had not
+    checked against the code. The corrected record is above.
+  - The row's remaining requirement — that the migration guide cover the Rust
+    API break — was a genuine gap and is now filled. `output_mode::resolve` was
+    public at base and is removed (`src/output/mode.rs`); `runner::run` and
+    `run_with_ninja_program` take `DisplayPlan` instead of `OutputPrefs`;
+    `parse_with_localizer_from` gained a `ColorChoice` argument and
+    `netsuke::cli::ColorChoice` is a new re-export. Each was checked against
+    base and HEAD source before being written up. Date/Author: 2026-11-08,
+    implementation agent.
 
 ## Outcomes & retrospective
 
