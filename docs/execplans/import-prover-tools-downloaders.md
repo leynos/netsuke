@@ -1675,3 +1675,54 @@ passed, 3 skipped, plus 28), `test-prover-tools-integration` (11 passed),
 `test-kani-check-isolation` (9 passed, 0 skipped) and `test-verus-e2e` (5
 passed, 0 skipped). Keep Status: IN PROGRESS pending review at the new head and
 trusted-main warm-cache acceptance.
+
+Revision 52 (2026-11-08): Hosted CI on `772834947` failed two checks, and
+neither was caused by this branch's diff. `build-test` aborted with
+`thread 'rustc' panicked … duplicate specification of lint
+string_continuation_style`,
+and `Windows / lint-windows` failed with
+`could not find dylint_version in …\lib\string_continuation_style@…dll`. Both
+are the same defect: the Whitaker rolling release now publishes a standalone
+library for every lint as well as `whitaker_suite`, and the suite already
+registers all of them, so `whitaker --all` loads several lints twice. On Linux
+the second registration trips rustc's lint-store assertion; on Windows the
+duplicated standalone DLL fails its own metadata check. The previous head,
+`24167c18e`, was green only because it ran before the archive changed: the
+rolling release is republished on every push to Whitaker's `main`, and the
+pinned installer (`installer-version: '0.2.11'`) predates the new crate, so its
+pruning loop never removes the extra library. Upstream tracks this as
+`leynos/whitaker#565`, which is still open and has no fixed installer release.
+
+The gate now selects the suite by name instead of taking `--all`. A new
+`WHITAKER_SUITE_SELECTION` Make variable carries
+`--lib whitaker_suite --fail-on-no-libraries`, and both `lint-whitaker`
+invocations compose it. The Windows job splats the same selection from a
+`$suite` array, because the explicit flags pushed the command past yamllint's
+120-column limit. This is still a whole-suite load, so a lint added upstream
+arrives without a change here; it is not the per-lint `pattern` selection the
+Whitaker guide's Netsuke deviation note rules out. `--fail-on-no-libraries` is
+the other half of the fix: without it a missing suite would leave Whitaker
+running a lint-free `cargo check` that reports success, which is exactly the
+"quietly stops being a gate" failure the Windows contract test exists to
+prevent.
+
+Two contract tests pin the new shape, and both were probed for liveness by
+reverting the change and watching them fail.
+`lint_whitaker_selects_the_suite_and_requires_it` in
+`tests/whitaker_boundary_contract.rs` asserts that every invocation composes
+the variable, that none passes `--all --no-deps`, and that the variable carries
+both fragments. The Windows fragments in
+`tests/workflow_contracts/ci_windows_lint_test.py` now require the `$suite`
+definition and the splatted invocations. `AGENTS.md`, the developers' guide
+(including its Windows reproduction snippet) and the Whitaker users' guide were
+updated to match, the last with a Netsuke deviation note so a re-import does
+not restore `--all`.
+
+All eleven commit gates were run sequentially on this candidate and each exited
+`0`: `check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.33% aggregate,
+6,762/6,877, against an 80% threshold), `markdownlint` (218 files, zero issues),
+`nixie`, `test` (5,182 nextest passed, 7 skipped, plus all doctests),
+`test-workflow-contracts` (1,785 passed, 3 skipped, plus 28),
+`test-prover-tools-integration` (11 passed), `test-kani-check-isolation` (9
+passed, 0 skipped) and `test-verus-e2e` (5 passed, 0 skipped). Keep Status: IN
+PROGRESS pending review at the new head and trusted-main warm-cache acceptance.

@@ -1526,6 +1526,19 @@ the route would carry the parallel frontend and the `mold` flag. The same test
 module parses the recipe and asserts that the route clears the encoded flags,
 assigns the warning policy alone, and composes no contracted variable.
 
+Both commands select the suite by name through `WHITAKER_SUITE_SELECTION`
+(`--lib whitaker_suite --fail-on-no-libraries`) rather than taking `--all`. The
+rolling release publishes a standalone library for every lint as well as the
+suite, and the suite already registers all of them, so `--all` loads several
+lints twice: on Linux rustc aborts with `duplicate specification of lint`, and
+on Windows one of the duplicated standalone libraries fails its own metadata
+check. Naming the suite loads the same lint set once. It is still a whole-suite
+load, so a lint added upstream arrives without a change here; it is not the
+per-lint `pattern` selection that the Whitaker guide's Netsuke deviation note
+rules out. `--fail-on-no-libraries` keeps the gate honest, because without it a
+missing suite would leave Whitaker running a lint-free `cargo check` that
+reports success.
+
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
 records the policy decision, and the [polonius migration notes](polonius.md)
 track every site whose design depends on the analysis. Sites tagged
@@ -9587,14 +9600,15 @@ provisioned and run the following in order:
    $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
    $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
    $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-   & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
+   $suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'
+   & $whitaker @suite --no-deps --package netsuke-build '--' --all-targets --all-features
    if ($LASTEXITCODE -ne 0) {
      exit $LASTEXITCODE
    }
    Push-Location test_support
    try {
      $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-     & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
+     & $whitaker @suite --no-deps --package test_support '--' --all-targets --all-features
      if ($LASTEXITCODE -ne 0) {
        exit $LASTEXITCODE
      }

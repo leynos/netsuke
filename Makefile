@@ -236,6 +236,22 @@ export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)
 VERUS_FLAGS ?= --proof-file verus/canonical_value/main.rs
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
+# Name the suite instead of taking `--all`, and refuse to run without it.
+#
+# The rolling release publishes a standalone library for every lint as well as
+# the suite, and the suite already registers all of them. `--all` therefore
+# loads several lints twice: on Linux rustc aborts with "duplicate
+# specification of lint", and on Windows one of the duplicated standalone
+# libraries fails its own metadata check. Selecting `whitaker_suite` loads the
+# same lint set once.
+#
+# This is still a whole-suite load, which is what the repository deliberately
+# relies on so a lint added upstream arrives without a change here. It is not
+# the per-lint `pattern` selection the Whitaker guide's Netsuke deviation note
+# rules out. `--fail-on-no-libraries` keeps the gate honest: without it a
+# missing suite would leave Whitaker running a lint-free `cargo check` that
+# reports success.
+WHITAKER_SUITE_SELECTION ?= --lib whitaker_suite --fail-on-no-libraries
 
 # The build-tools install prefix leads: `-fuse-ld=mold` resolves by PATH order, so
 # the pinned release must outrank any distribution `mold`. Every build target
@@ -566,10 +582,10 @@ lint-clippy: check-build-tools ## Run rustdoc and Clippy with warnings denied
 # assigns the warning policy as its own `RUSTFLAGS`. An unset value would leave
 # Cargo reading the configuration's `rustflags`.
 lint-whitaker: check-build-tools ## Run the Whitaker Dylint suite with warnings denied
-	env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
+	env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package netsuke-build -- --all-targets --all-features
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
-	cd test_support && env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+	cd test_support && env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package test_support -- --all-targets --all-features
 
 # actionlint is resolved in the recipe shell below, never while Make parses the
 # file: only the recipe shell receives the curated PATH, so a parse-time probe

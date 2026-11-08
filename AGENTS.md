@@ -210,7 +210,8 @@ directive anywhere.
     RUSTFLAGS="${RUSTFLAGS:+$RUSTFLAGS }-D warnings -Zthreads=8 -Clink-arg=-fuse-ld=mold" \
     cargo clippy --workspace --all-targets --all-features -- -D warnings
     env -u CARGO_ENCODED_RUSTFLAGS RUSTFLAGS="-D warnings" \
-    whitaker --all --no-deps --package netsuke-build -- --all-targets --all-features
+    whitaker --lib whitaker_suite --fail-on-no-libraries --no-deps \
+      --package netsuke-build -- --all-targets --all-features
     yamllint --config-file .yamllint.yml .github/workflows
     actionlint
     ```

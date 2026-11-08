@@ -3,7 +3,7 @@
 //! The capability policy is enforced by configuration rather than by code, so
 //! a regression here is silent: widening an entry from a module path to a whole
 //! crate, or dropping the second Whitaker run, stops the lint reporting real
-//! violations without failing anything. These tests pin the two invariants that
+//! violations without failing anything. These tests pin the invariants that
 //! keep the boundary honest.
 //!
 //! First, `test_support` is a Cargo workspace member, but its sanctioned
@@ -23,6 +23,14 @@
 //! pin, and it has been proposed as a defect more than once. A
 //! `[workspace.metadata.dylint]` block would quietly reverse it, so the absence
 //! is asserted here rather than left to review.
+//!
+//! Fourth, both invocations must select the suite by name and refuse to run
+//! without it. The rolling release publishes a standalone library for every
+//! lint as well as the suite, and the suite already registers all of them, so
+//! `--all` loads several lints twice and rustc aborts with `duplicate
+//! specification of lint`. `--fail-on-no-libraries` is the other half: without
+//! it a missing suite leaves Whitaker running a lint-free `cargo check` that
+//! reports success.
 //!
 //! These assertions are deterministic file checks. They do not invoke Whitaker:
 //! the suite needs its own pinned toolchain and driver, which `make test` does
@@ -207,6 +215,63 @@ fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
         ),
         root = format!("{root:?}")
     );
+    Ok(())
+}
+
+/// Both invocations must load the suite by name and fail when it is absent.
+///
+/// `--all` is the tempting spelling and the one the Whitaker guide shows, but
+/// it loads every installed library. The rolling release ships a standalone
+/// library per lint alongside the suite, so `--all` registers several lints
+/// twice and rustc aborts before any consumer source compiles. Naming the
+/// suite loads the same lint set once, and `--fail-on-no-libraries` keeps a
+/// missing suite from passing as a lint-free `cargo check`.
+#[test]
+fn lint_whitaker_selects_the_suite_and_requires_it() -> Result<()> {
+    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
+    let recipe = target_recipe(&makefile, "lint-whitaker")
+        .context("the Makefile should declare a lint-whitaker target")?;
+
+    let invocations: Vec<&str> = recipe
+        .lines()
+        .filter(|line| line.contains("$(WHITAKER)"))
+        .collect();
+    ensure!(
+        !invocations.is_empty(),
+        "lint-whitaker should invoke Whitaker, found {recipe:?}"
+    );
+    for line in &invocations {
+        ensure!(
+            line.contains("$(WHITAKER_SUITE_SELECTION)"),
+            concat!(
+                "every Whitaker invocation must select the suite through ",
+                "WHITAKER_SUITE_SELECTION; found {line:?}",
+            ),
+            line = line
+        );
+        // `--all-targets` is passed after the `--` separator and is not a
+        // library selection, so the forbidden spelling is the pair that only
+        // appears when `--all` is used as one.
+        ensure!(
+            !line.contains("--all --no-deps"),
+            concat!(
+                "`--all` loads the standalone per-lint libraries as well as the ",
+                "suite, which registers several lints twice; found {line:?}",
+            ),
+            line = line
+        );
+    }
+
+    let selection = makefile
+        .lines()
+        .find(|line| line.starts_with("WHITAKER_SUITE_SELECTION"))
+        .context("the Makefile should define WHITAKER_SUITE_SELECTION")?;
+    for fragment in ["--lib whitaker_suite", "--fail-on-no-libraries"] {
+        ensure!(
+            selection.contains(fragment),
+            "WHITAKER_SUITE_SELECTION should carry {fragment}, found {selection:?}"
+        );
+    }
     Ok(())
 }
 
