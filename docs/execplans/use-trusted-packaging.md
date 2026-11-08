@@ -3095,6 +3095,20 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   on a frozen tree, and every target exited 0 in each batch. The figures are
   from those runs; the batch was rerun against the rebased tree.
 
+  PR #1115's CodeScene check then refused the branch: `release_draft_assets.py`
+  scored 8.89, with `select_draft_release` and `plan_downloads` each at
+  cyclomatic complexity 10 and the module mean above threshold. Partitioning
+  the tagged releases in one helper, holding the per-entry checks in a table,
+  and moving the aggregate refusal into `_require_usable` restored the module
+  to 10.00, confirmed by `cs delta origin/issue-1066-… HEAD` before the push.
+  Condensing the same module's rationale prose brought it back under the
+  enabled 400-line Pylint cap, at 396 lines. The nine gates were re-run on that
+  tree and exited 0: `check-fmt` (5s), `lint` (116s), `typecheck` (35s),
+  `doc-coverage` (214s), `test` (260s), `markdownlint` (37s), `nixie` (3s),
+  `test-release-publication` (17s), and `test-workflow-contracts` (331s). A
+  `coderabbit review --agent` pass over the committed branch returned zero
+  findings across all 23 changed files.
+
   **Deviation, retained:** `release.yml` is 1023 lines, and `Verification plan`
   row 5 still asks for 400 or fewer. That row is unsatisfiable as written and
   stays unedited so the deviation remains visible; no repository contract caps
