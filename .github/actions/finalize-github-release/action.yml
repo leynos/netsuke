@@ -82,7 +82,10 @@ runs:
         IDENTITY_PATH: ${{ inputs['identity-path'] }}
         DIGEST_RECORD_PATH: ${{ inputs['digest-record-path'] }}
         WORK_DIRECTORY: ${{ inputs['work-directory'] }}
-        GITHUB_TOKEN: ${{ inputs['github-token'] }}
+        # A presence flag rather than the token: this step only checks that the
+        # caller supplied one, and a step that does not call GitHub must not
+        # hold the credential the snapshot and finalize steps need.
+        HAS_GITHUB_TOKEN: ${{ inputs['github-token'] != '' }}
       run: |
         set -euo pipefail
         require_value() {
@@ -102,10 +105,13 @@ runs:
         require_value tag "$RELEASE_TAG"
         require_value commit "$RELEASE_COMMIT"
         require_value repository "$RELEASE_REPOSITORY"
-        for name in IDENTITY_PATH DIGEST_RECORD_PATH WORK_DIRECTORY \
-          GITHUB_TOKEN; do
+        for name in IDENTITY_PATH DIGEST_RECORD_PATH WORK_DIRECTORY; do
           require_value "$name" "${!name}"
         done
+        if [[ "$HAS_GITHUB_TOKEN" != "true" ]]; then
+          printf 'github-token must not be empty\n' >&2
+          exit 1
+        fi
         # Both records are read-only inputs, and a mistyped path would
         # otherwise be reported later as an unreadable record rather than as
         # the wiring fault it is.

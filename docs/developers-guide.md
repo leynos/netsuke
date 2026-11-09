@@ -3187,11 +3187,11 @@ declared in `release.yml` itself because crates.io Trusted Publishing
 identifies the workflow that requests the OIDC token. It has exactly
 `contents: read` and `id-token: write`, plus the `crates-io` environment. The
 short-lived token is exchanged only after the registry decision says `publish`.
-`publish-release`, `verify-release-inventory` and
-`finalize-github-release` are the only jobs with `contents: write`; no other
-job holds it, and none of them receives another's authority. The verifier holds
-the scope only because a draft's assets are invisible without it, while its own
-calls stay read-only, as the verification section below describes. The
+`publish-release`, `verify-release-inventory`, and `finalize-github-release`
+are the only jobs with `contents: write`. Only the first and last change the
+release: the verifier holds the scope because a draft release is visible only
+with write access, and it reads without mutating, as the verification section
+below describes. Neither publishing job receives the other's authority, and the
 finalizer takes no `id-token` and declares no `environment`, so it can neither
 exchange nor hold a registry credential. `release-admission-canaries`
 additionally takes `actions: read` to inspect prior runs.
@@ -3405,7 +3405,10 @@ no call on its own, so a step ceiling is the only thing that stops a hung `gh`
 from holding the job open, and leaving one step unbounded is how a hang becomes
 a thirty-minute job timeout with no diagnosis. Expressions reach the shell only
 through `env`, so each is evaluated once, and both records the planner reads
-are checked to exist before anything is written.
+are checked to exist before anything is written. The validate step confirms
+that the caller supplied a token by testing a presence flag rather than by
+holding the token, so the credential exists in exactly the two steps that reach
+GitHub.
 
 `scripts/finalize_github_release.py` names the three commands the action
 invokes. `resolve` decodes the package record and refuses an identity whose
@@ -3416,6 +3419,12 @@ changes anything, and it decides from two records already on disk:
 - the candidate, which the resolved identity supplies; and
 - the reconciliation plan, which `finalize_github_release_cli.py` wrote from
   the trusted record and the snapshot's asset listing.
+
+Its PEP 723 block pins `cyclopts` and `cuprum` to exact versions, as the
+`scripts/ci` helpers do, rather than to the ranges most scripts declare. The
+other release scripts run earlier in the chain; this one un-drafts a release
+with a write token, and a fixed pair of wheels is one fewer thing that can
+differ between the run that was rehearsed and the run that publishes.
 
 The trusted record is the input, never the verifier's output. A record derived
 from GitHub agrees with GitHub however the upload was tampered with: replace an

@@ -1112,7 +1112,9 @@ jobs:
       - verify-release-inventory
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    # Only this stage and the publisher need write access to the release API.
+    # The publisher, the verifier, and this stage hold write access to the
+    # release API; only the publisher and this stage change the release, and
+    # the verifier needs the scope because a draft is visible only with it.
     # No OIDC permission and no registry credential is granted: the only
     # mutation here is the release's draft flag.
     permissions:
@@ -1131,8 +1133,10 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
-          # The finalizer's helpers are stdlib-only, so a dependency cache
-          # would add an unnecessary supply-chain input.
+          # The adapter pins its two dependencies exactly in a PEP 723 block, so
+          # `uv run` resolves that fixed pair on every attempt. A restored
+          # package cache buys nothing here and would add a mutable input to
+          # the one job that un-drafts a release.
           enable-cache: false
       - name: Download the package record
         uses: >-

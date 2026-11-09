@@ -1,7 +1,7 @@
 #!/usr/bin/env -S uv run --script
 # /// script
 # requires-python = ">=3.14"
-# dependencies = ["cyclopts>=4.25.3,<5", "cuprum>=0.1.0,<0.2.0"]
+# dependencies = ["cyclopts==4.25.3", "cuprum==0.1.0"]
 # ///
 """Finalize a verified GitHub release without ever replacing its bytes.
 

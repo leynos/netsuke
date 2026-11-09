@@ -78,7 +78,7 @@ EXPECTED_ENVIRONMENTS = {
         "IDENTITY_PATH": "${{ inputs['identity-path'] }}",
         "DIGEST_RECORD_PATH": "${{ inputs['digest-record-path'] }}",
         "WORK_DIRECTORY": "${{ inputs['work-directory'] }}",
-        "GITHUB_TOKEN": "${{ inputs['github-token'] }}",
+        "HAS_GITHUB_TOKEN": "${{ inputs['github-token'] != '' }}",
     },
     RESOLVE_STEP: {
         "RELEASE_TAG": "${{ inputs.tag }}",
@@ -183,6 +183,13 @@ def mutate_action(action: dict[str, object], mutation: str) -> None:
     """Change one dimension of an action step's command or environment."""
     steps = load_action_steps(action)
     match mutation:
+        case "token-on-validate":
+            validate = named_step(steps, VALIDATE_STEP)
+            # The shape this action actually had: the credential handed to a
+            # step that only needed to know whether one had been supplied.
+            require_mapping(validate["env"], "validate environment")["GITHUB_TOKEN"] = (
+                EXPECTED_ENVIRONMENTS[SNAPSHOT_STEP]["GH_TOKEN"]
+            )
         case "token-on-plan":
             plan = named_step(steps, PLAN_STEP)
             # Reuse the expression the snapshot step legitimately holds, so the

@@ -13,6 +13,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import copy
+import re
 
 import pytest
 from release_finalize_contract_support import (
@@ -59,6 +60,29 @@ JOB_TIMEOUT_MINUTES = 30
 def _workflow() -> dict[str, object]:
     """Read the release workflow for the finalization job contract."""
     return load_workflow(RELEASE_WORKFLOW_PATH)
+
+
+#: A whole `inputs['github-token'] != ''` comparison, which yields a boolean
+#: rather than the token. Removing it leaves any genuine reference in place.
+_PRESENCE_TEST = re.compile(
+    r"inputs(?:\[['\"]github-token['\"]\]|\.github-token)\s*[!=]=\s*''"
+)
+
+
+def _receives_token_value(value: object) -> bool:
+    """Report whether an environment value resolves to the token itself.
+
+    A comparison against the empty string asks only whether the caller supplied
+    one, which is all a validation step needs; any other mention of the input
+    hands the credential to a step that has no reason to hold it.
+
+    Returns
+    -------
+    bool
+        ``True`` when the value still names the token input once its presence
+        tests are removed.
+    """
+    return "github-token" in _PRESENCE_TEST.sub("", str(value))
 
 
 def _assert_step_shape(step: dict[str, object]) -> None:
@@ -112,6 +136,21 @@ def _assert_action_contract(action: dict[str, object]) -> None:
         name = str(step.get("name"))
         _assert_step_shape(step)
         environment = require_mapping(step.get("env"), f"{name} environment")
+        # The token rule is asserted before the environment comparison, and
+        # independently of it: the expected-environment map is what recorded
+        # the leak as correct in the first place — the validate step held the
+        # credential only to test that it was non-empty — so a rule that only
+        # restated that map could not catch the same mistake twice.
+        if name not in TOKEN_STEPS:
+            leaked = sorted(
+                variable
+                for variable, value in environment.items()
+                if _receives_token_value(value)
+            )
+            assert not leaked, (
+                f"{name} must not forward the token expression under any name; "
+                f"only {TOKEN_STEPS} reach GitHub, got {leaked}"
+            )
         assert environment == EXPECTED_ENVIRONMENTS[name], (
             f"{name} must forward exactly its contracted environment names"
         )
@@ -238,7 +277,13 @@ def _assert_complete_contract(
 
 @pytest.mark.parametrize(
     "mutation",
-    ["token-on-plan", "missing-timeout", "gh-in-run", "wrong-output"],
+    [
+        "token-on-validate",
+        "token-on-plan",
+        "missing-timeout",
+        "gh-in-run",
+        "wrong-output",
+    ],
 )
 def test_action_mutations_are_rejected(mutation: str) -> None:
     """Prove the action contract detects each finalizer mutation."""
