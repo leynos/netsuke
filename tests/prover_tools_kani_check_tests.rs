@@ -12,7 +12,7 @@
 #[path = "support/makefile.rs"]
 mod makefile;
 
-#[path = "prover_tools_kani_check_tests/support.rs"]
+#[path = "prover_tools_kani_check_tests/support/mod.rs"]
 mod support;
 
 // The static half of the read-only contract: the sandbox below proves a write
@@ -209,11 +209,18 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
 /// rather than pass.
 ///
 /// A refused attempt and no attempt look identical in an exit status once a
-/// caller discards the error, so the two queries are traced instead. The real
-/// trace must contain no write-intent open, mutation or network connection. The
+/// caller discards the error, so the queries are traced instead. The real trace
+/// must contain no write-intent open, mutation or network connection. The
 /// control verifier discards a write and a connection and still reports the
 /// pinned version, and its trace must name both — otherwise the reader, not the
-/// recipe, is what passed.
+/// recipe, is what passed. The trace wraps `make`, so the recipe's own commands
+/// are followed too, and the case asserts that by requiring the pin read to
+/// appear in the trace.
+///
+/// When `NETSUKE_KANI_ISOLATION_VERIFIER` names an installed verifier, a third
+/// traced query runs that binary through the same recipe and its trace must be
+/// equally clean. CI sets it to the pinned `cargo-kani` it installed, so the
+/// real executable — not only the stub — is exercised inside the boundary.
 ///
 /// # Errors
 ///
@@ -225,55 +232,24 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
 fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
     let fixture = Fixture::new()?;
     let repo = Path::new(env!("CARGO_MANIFEST_DIR"));
-    if let Some(reason) = support::sandbox::unavailable(repo, fixture.root()) {
+    let installed = support::installed_verifier()?;
+    if let Some(reason) = support::sandbox::unavailable(repo, fixture.root(), installed.as_ref()) {
         return support::sandbox::skip(&reason);
     }
     if !support::sandbox::tracer_available() {
         return support::sandbox::skip("strace is not installed, so attempts cannot be read back");
     }
-    let run = fixture.run_sandboxed_check(repo)?;
-    let output = &run.output;
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    let run = fixture.run_sandboxed_check(repo, installed.as_ref())?;
+    let stdout = String::from_utf8_lossy(&run.output.stdout);
+    let stderr = String::from_utf8_lossy(&run.output.stderr);
 
     ensure!(
-        output.status.success(),
+        run.output.status.success(),
         "the isolated query should succeed, got stdout `{stdout}` and stderr `{stderr}`"
     );
-    for expected in [
-        "control=writable",
-        "repo=read-only",
-        "fixture=read-only",
-        "rootdir=read-only",
-        "usr=read-only",
-        "etc=read-only",
-        "tmp=read-only",
-        "ifaces=lo,",
-        "dns=blocked",
-        "Kani 0.67.0 matches",
-    ] {
-        ensure!(
-            stdout.contains(expected),
-            "the isolated query should report `{expected}`, got `{stdout}`"
-        );
-    }
-    // `HOME` is inherited from the caller, so the chroot contains it only when
-    // the caller has one. Either way it must not be writable, and an absent
-    // path cannot be written.
-    ensure!(
-        stdout
-            .lines()
-            .any(|line| line == "home=read-only" || line == "home=absent"),
-        "the isolated query should report `home` as read-only or absent, got `{stdout}`"
-    );
-    // The control path is the only one allowed to be writable; anything else
-    // reporting `=writable` means the sandbox left a hole.
-    for line in stdout.lines().filter(|line| line.contains('=')) {
-        ensure!(
-            line == "control=writable" || !line.ends_with("=writable"),
-            "only the control path may be writable, got `{line}` in `{stdout}`"
-        );
-    }
+    ensure_restrictions_reported(&stdout)?;
+    ensure_home_unwritable(&stdout)?;
+    ensure_only_control_writable(&stdout)?;
     ensure!(
         !stderr.contains("prover-tools runner invoked"),
         "the isolated query must not resolve the remote runner, got `{stderr}`"
@@ -283,19 +259,140 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         "the control verifier must succeed while discarding its failed attempts, \
          got stdout `{stdout}` and stderr `{stderr}`"
     );
-    let reads = trace::attempts(&run.query_trace);
-    ensure!(
-        reads.is_empty(),
-        "the isolated query must attempt no write or connection, got {reads:?}"
-    );
-    let control_reads = trace::attempts(&run.control_trace);
-    for expected in ["write-intent", "network address"] {
+    ensure_query_attempts_nothing(&run.query_trace)?;
+    ensure_recipe_commands_traced(&run.query_trace)?;
+    ensure_control_attempts_traced(&run.control_trace)?;
+    ensure_installed_query_works(&run, &stdout, &stderr)?;
+    fixture.ensure_remote_runner_unused(&run.marker)
+}
+
+/// The reports a sandboxed query must make once the sandbox has applied every
+/// restriction: each blocked path, the absence of a usable interface and DNS,
+/// and the successful version match.
+#[cfg(target_os = "linux")]
+const REQUIRED_REPORTS: [&str; 10] = [
+    "control=writable",
+    "repo=read-only",
+    "fixture=read-only",
+    "rootdir=read-only",
+    "usr=read-only",
+    "etc=read-only",
+    "tmp=read-only",
+    "ifaces=lo,",
+    "dns=blocked",
+    "Kani 0.67.0 matches",
+];
+
+/// Assert the sandbox reported every restriction it applied.
+#[cfg(target_os = "linux")]
+fn ensure_restrictions_reported(stdout: &str) -> Result<()> {
+    for expected in REQUIRED_REPORTS {
         ensure!(
-            control_reads
-                .iter()
-                .any(|finding| finding.contains(expected)),
-            "the control must be reported as a {expected} attempt, got {control_reads:?}"
+            stdout.contains(expected),
+            "the isolated query should report `{expected}`, got `{stdout}`"
         );
     }
-    fixture.ensure_remote_runner_unused(&run.marker)
+    Ok(())
+}
+
+/// Assert the inherited home directory was reported unwritable or absent.
+///
+/// `HOME` comes from the caller, so the chroot contains it only when the caller
+/// has one. Either state satisfies the boundary; a writable one does not.
+#[cfg(target_os = "linux")]
+fn ensure_home_unwritable(stdout: &str) -> Result<()> {
+    let reported = stdout
+        .lines()
+        .any(|line| line == "home=read-only" || line == "home=absent");
+    ensure!(
+        reported,
+        "the isolated query should report `home` as read-only or absent, got `{stdout}`"
+    );
+    Ok(())
+}
+
+/// Assert no path other than the deliberate control is reported writable.
+///
+/// The control names a path that really is writable, so a sandbox that blocked
+/// everything — including its own probe — fails here rather than passing.
+#[cfg(target_os = "linux")]
+fn ensure_only_control_writable(stdout: &str) -> Result<()> {
+    for line in stdout.lines().filter(|line| line.contains('=')) {
+        ensure!(
+            line == "control=writable" || !line.ends_with("=writable"),
+            "only the control path may be writable, got `{line}` in `{stdout}`"
+        );
+    }
+    Ok(())
+}
+
+/// Assert the query's own trace names no attempted write or connection.
+#[cfg(target_os = "linux")]
+fn ensure_query_attempts_nothing(trace: &str) -> Result<()> {
+    let findings = trace::attempts(trace);
+    ensure!(
+        findings.is_empty(),
+        "the isolated query must attempt no write or connection, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// Assert the trace covers the recipe's own commands, not only the verifier.
+///
+/// The recipe reads the pin file before it runs anything, and the trace wraps
+/// `make`, so that read appears in it. A trace that only ever saw the verifier
+/// would leave a suppressed attempt on a recipe line unreported, and this
+/// assertion is what rules that out.
+#[cfg(target_os = "linux")]
+fn ensure_recipe_commands_traced(trace: &str) -> Result<()> {
+    ensure!(
+        trace.contains("KANI_VERSION"),
+        "the trace must include the recipe's own read of the pin file, got {trace:?}"
+    );
+    Ok(())
+}
+
+/// Assert the installed verifier answered through the recipe and attempted
+/// nothing.
+///
+/// The fixture's stub is what proves the reader fires; this proves the real
+/// executable behaves, which no stub can. It runs only where the caller named
+/// one, so a host without Kani still exercises the rest of the boundary.
+#[cfg(target_os = "linux")]
+fn ensure_installed_query_works(
+    run: &support::SandboxRun,
+    stdout: &str,
+    stderr: &str,
+) -> Result<()> {
+    let Some(trace) = run.installed_trace.as_deref() else {
+        ensure!(
+            stdout.contains("installed-exit=unset"),
+            "the sandbox must report an unexercised installed verifier, got `{stdout}`"
+        );
+        return Ok(());
+    };
+    ensure!(
+        stdout.contains("installed-exit=0"),
+        "the installed verifier must answer through the recipe inside the boundary, \
+         got stdout `{stdout}` and stderr `{stderr}`"
+    );
+    let findings = trace::attempts(trace);
+    ensure!(
+        findings.is_empty(),
+        "the installed verifier must attempt no write or connection, got {findings:?}"
+    );
+    Ok(())
+}
+
+/// Assert the control trace names both attempts the control discarded.
+#[cfg(target_os = "linux")]
+fn ensure_control_attempts_traced(trace: &str) -> Result<()> {
+    let findings = trace::attempts(trace);
+    for expected in ["write-intent", "network address"] {
+        ensure!(
+            findings.iter().any(|finding| finding.contains(expected)),
+            "the control must be reported as a {expected} attempt, got {findings:?}"
+        );
+    }
+    Ok(())
 }

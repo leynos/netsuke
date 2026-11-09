@@ -5893,29 +5893,54 @@ a failure for a maintainer who means to run them.
 network path. Its isolation case goes further and runs the real recipe inside a
 read-only chroot with no network, proving the query still answers. Every
 mounted path is read-only — `/usr`, `/etc`, the repository, the fixture
-directory, the chroot root, `/tmp` and the caller's home — and the one
-deliberately writable path is the `control` probe at `/proc/self/comm`, which
-proves the probe can report a plain failure instead of classifying everything
-as blocked. That case needs unprivileged user namespaces, so a host that
+directory, the chroot root, `/tmp`, the caller's home and, when an installed
+verifier is named, that verifier's directory and its Kani home — and there are
+exactly two writable mounts. The first is the `control` probe at
+`/proc/self/comm`, which proves the probe can report a plain failure instead of
+classifying everything as blocked. The second is the trace directory at
+`/var/trace`, which `strace` needs in order to record what the query attempted
+and which survives on the host for the case to read back; the recipe is never
+told about it. That case needs unprivileged user namespaces, so a host that
 forbids them reports a skip rather than failing `make test`.
 `make test-kani-check-isolation` runs the same binary with
 `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`, turning the skip into a failure, and
 `kani-smoke` runs that target as its own step so the required lane exercises
-the boundary instead of reporting green without it. The capability probe binds
-the same `/etc`, repository and fixture paths the sandbox will use and names
-the operation a host refused, which is the evidence to collect before changing
-the lane.
+the boundary instead of reporting green without it. That lane also sets
+`NETSUKE_KANI_ISOLATION_VERIFIER` to the `cargo-kani` it installed, so a third
+traced query runs the real executable through the recipe and its trace must be
+as clean as the stub's; the path is resolved before the sandbox is built, and a
+variable that names something unresolvable fails the case rather than skipping
+it. `cargo-kani` is a launcher as well as a driver, so that query also exposes
+the Kani home — `KANI_HOME`, or `$HOME/.kani` when it is unset — read-only at
+its own path and points the launcher at it. Without the payload the launcher
+starts a first-time setup, which downloads a release and installs a toolchain,
+so the query under test would be an installer rather than a version query. The
+capability probe binds the same `/etc`, repository, fixture, verifier-directory
+and Kani-home paths the sandbox will use and names the operation a host
+refused, which is the evidence to collect before changing the lane.
 
 The sandbox proves a write cannot succeed; it cannot show that the recipe never
 tries, because an attempt whose error is discarded (`2>/dev/null`, `|| true`)
-leaves success behind. `tests/prover_tools_kani_check_tests/recipe.rs` supplies
-the other half: it parses the shipped `kani-check` recipe and reports any
-error-suppression fragment, any write-intent command, and any redirect that
-names a path rather than duplicating a descriptor. Representative suppressions
-and writes are asserted to be reported, so the check is known to fire rather
-than merely known to pass, and adding `mkdir -p "$cache" 2>/dev/null || true`
-to the recipe fails it. A diagnostic that ever needed to print a literal `>` is
-reported too; that is deliberate, and such a change should be reviewed.
+leaves success behind. Two mechanisms supply that half. The runtime one runs
+each query under `strace` and reads the log back through
+`tests/prover_tools_kani_check_tests/trace.rs`: a write-intent open, a
+path-mutating call, or a socket address aimed at another host is reported
+whether the kernel refused it or not, and the syscall filter is templated from
+the reader, so a call the reader looks for cannot be missing from the trace it
+reads. The real query must report no attempts and the control verifier must
+report the write and the connection it discarded, which is what makes the
+reader known to fire rather than known to pass on a clean log. The trace wraps
+`make`, so the recipe's own commands are followed as well as the verifier it
+invokes, and the case asserts that by requiring the recipe's read of the pin
+file to appear in it. The static one is
+`tests/prover_tools_kani_check_tests/recipe.rs`: it parses the shipped
+`kani-check` recipe and reports any error-suppression fragment, any
+write-intent command, and any redirect that names a path rather than
+duplicating a descriptor. Representative suppressions and writes are asserted
+to be reported, so the check is known to fire rather than merely known to pass,
+and adding `mkdir -p "$cache" 2>/dev/null || true` to the recipe fails it. A
+diagnostic that ever needed to print a literal `>` is reported too; that is
+deliberate, and such a change should be reviewed.
 
 Ubuntu 24.04 ships `kernel.apparmor_restrict_unprivileged_userns=1`, which makes
 `unshare --user` fail before the sandbox script runs, so the `kani-smoke` step
@@ -5933,11 +5958,11 @@ diagnosis.
 `tests/prover_tools_kani_check_command_tests.rs` drives the recipe itself with
 a fake verifier, covering a matching pin, a mismatched pin, a missing pin, a
 pin that is not a file, and a failing verifier whose diagnostic must carry its
-category, its status, and a bounded, control-character-free quote. A further
-case puts a recorder in place of both network-capable tools the repository
-defines; the recorder marks its invocation before failing, so an attempt is
-visible even if the recipe ignores the error, and the isolated cache and home
-directories must still be empty afterwards.
+category and its status, echo nothing the verifier printed, and stay free of
+control characters. A further case puts a recorder in place of both
+network-capable tools the repository defines; the recorder marks its invocation
+before failing, so an attempt is visible even if the recipe ignores the error,
+and the isolated cache and home directories must still be empty afterwards.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`. `Cargo.toml` declares `cfg(kani)` under

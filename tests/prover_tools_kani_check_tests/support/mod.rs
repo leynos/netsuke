@@ -3,15 +3,14 @@
 //! The cases in the parent module all need the same three things: a temporary
 //! directory written through a capability handle, a fake `cargo-kani`, and a
 //! poisoned remote runner that fails loudly if the recipe ever tries to resolve
-//! the shared CLI. The isolation case needs the extra machinery that applies
-//! the read-only and no-network restrictions and reports whether each one took
-//! effect.
+//! the shared CLI. The isolation case needs more, so that machinery is split by
+//! concern: `sandbox` owns the scripts and the capability probe, `installed`
+//! locates the real verifier and the payload it loads, and `run` stages the
+//! queries and reads the traces back.
 
 use anyhow::{Context, Result, ensure};
 use cap_std::ambient_authority;
 use cap_std::fs::{Dir, PermissionsExt};
-#[cfg(target_os = "linux")]
-use sandbox::SandboxPaths;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
@@ -21,6 +20,18 @@ use tempfile::{TempDir, tempdir};
 // non-Linux Unix build free of dead-code warnings under `-D warnings`.
 #[cfg(target_os = "linux")]
 pub(super) mod sandbox;
+
+#[cfg(target_os = "linux")]
+pub(super) mod installed;
+
+#[cfg(target_os = "linux")]
+pub(super) mod run;
+
+#[cfg(target_os = "linux")]
+pub(crate) use installed::{InstalledKani, installed_verifier};
+
+#[cfg(target_os = "linux")]
+pub(crate) use run::SandboxRun;
 
 /// The version pin every case compares against.
 const PINNED_VERSION: &str = "0.67.0";
@@ -244,119 +255,4 @@ impl Fixture {
         let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
         Ok((stderr, marker))
     }
-
-    /// Query the pinned version inside a namespace with no network and no
-    /// writable storage.
-    ///
-    /// The sandbox builds a chroot whose every directory is a read-only bind,
-    /// so the inherited home directory, temporary paths, and any cache are
-    /// equally unwritable rather than merely outside a narrow allowlist. The
-    /// query runs in a fresh network namespace and process namespace. The
-    /// script reports each restriction it applied, and reports one deliberately
-    /// writable control path, so the caller can prove the sandbox was effective
-    /// rather than assume it.
-    ///
-    /// Two queries are traced: the real one, and a control whose verifier
-    /// attempts a suppressed write and a suppressed connection before reporting
-    /// the pinned version. Both traces come back so the caller can require the
-    /// first to be clean and the second to name both attempts.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the fake verifier, version file, sandbox root, trace
-    /// directory, or sandbox script cannot be created, if `unshare` cannot be
-    /// spawned, or if a trace cannot be read back.
-    #[cfg(target_os = "linux")]
-    pub(super) fn run_sandboxed_check(&self, repo: &Path) -> Result<SandboxRun> {
-        let (poison, marker) = self.poison_runner()?;
-        let kani = self.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
-        let control = self.write_control_verifier()?;
-        let version_file = self.write_version_file()?;
-        // Both directories must outlive the child; keep their handles in scope.
-        let chroot = tempdir().context("create kani-check sandbox root")?;
-        let trace = tempdir().context("create kani-check trace directory")?;
-        let paths = SandboxPaths {
-            repo,
-            fixture: self.temp.path(),
-            chroot: chroot.path(),
-            kani: &kani,
-            control: &control,
-            version_file: &version_file,
-            poison: &poison,
-            trace: trace.path(),
-        };
-        let output = Command::new("unshare")
-            .args([
-                "--user",
-                "--map-root-user",
-                "--net",
-                "--mount",
-                "--pid",
-                "--fork",
-                "--",
-                "sh",
-                "-c",
-            ])
-            .arg(sandbox::script(&paths))
-            .output()
-            .context("run make kani-check inside an isolation namespace")?;
-        Ok(SandboxRun {
-            query_trace: read_trace(trace.path(), "query.strace")?,
-            control_trace: read_trace(trace.path(), "control.strace")?,
-            output,
-            marker,
-        })
-    }
-
-    /// Write a verifier that attempts a suppressed write and connection.
-    ///
-    /// Both failures are discarded, as a caller that ignores them would, and
-    /// the verifier then reports the pinned version so the query still succeeds.
-    /// That is what makes the attempt invisible to the exit status and visible
-    /// only to the trace.
-    ///
-    /// The control gets its own name rather than reusing [`Fixture::fake_kani`]'s:
-    /// the two verifiers run in the same sandbox, and a shared name would leave
-    /// the control in place of the real query.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the script cannot be written or made executable.
-    #[cfg(target_os = "linux")]
-    fn write_control_verifier(&self) -> Result<PathBuf> {
-        let write_target = self.path("control-write");
-        let script = format!(
-            concat!(
-                "#!/bin/sh\n",
-                // The write runs in a subshell because `:` is a special
-                // builtin: a failed redirection on one aborts the shell that
-                // runs it, and only the subshell may pay that price.
-                "( : > '{}' ) 2>/dev/null || true\n",
-                "getent hosts example.com >/dev/null 2>&1 || true\n",
-                "printf 'cargo-kani 0.67.0\\n'\n",
-            ),
-            write_target.display()
-        );
-        self.write_executable("control-kani", &script)?;
-        Ok(self.path("control-kani"))
-    }
-}
-
-/// A completed isolation run and the two traces it recorded.
-#[cfg(target_os = "linux")]
-pub(super) struct SandboxRun {
-    pub(super) output: Output,
-    pub(super) marker: PathBuf,
-    pub(super) query_trace: String,
-    pub(super) control_trace: String,
-}
-
-/// Read one trace the sandboxed run wrote into the shared trace directory.
-#[cfg(target_os = "linux")]
-fn read_trace(directory: &Path, name: &str) -> Result<String> {
-    let handle = Dir::open_ambient_dir(directory, ambient_authority())
-        .with_context(|| format!("open the trace directory at {}", directory.display()))?;
-    handle
-        .read_to_string(name)
-        .with_context(|| format!("read the trace at {}", directory.join(name).display()))
 }

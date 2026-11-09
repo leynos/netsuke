@@ -603,6 +603,11 @@ jobs:
           # workflow contract can run this step body against a temporary file
           # instead of requiring root and a mutable kernel setting.
           KANI_APPARMOR_RESTRICTION: /proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          # The Kani installed above, so the boundary exercises the real
+          # executable through the recipe as well as the discriminating stub.
+          # The case fails rather than skips when this names a path it cannot
+          # resolve, so a lane that installs nothing cannot pass vacuously.
+          NETSUKE_KANI_ISOLATION_VERIFIER: ${{ env.CARGO_HOME }}/bin/cargo-kani
         run: |
           set -u
           restriction=${KANI_APPARMOR_RESTRICTION}

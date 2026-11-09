@@ -15,12 +15,21 @@
 ///
 /// The open family is included because a write-intent open is an attempt even
 /// when it is refused; the remaining calls create, remove, rename or re-time a
-/// path. `connect` is the one network call a version query could plausibly
-/// reach for.
+/// path. The network family is every call that can carry a socket address, so a
+/// datagram attempt is reported and not only a stream connection.
 pub(crate) const TRACE_SYSCALLS: &str = concat!(
-    "open,openat,creat,mkdir,mkdirat,unlink,unlinkat,rename,renameat,",
-    "renameat2,truncate,ftruncate,chmod,fchmodat,utimensat,connect",
+    "open,openat,openat2,creat,mkdir,mkdirat,unlink,unlinkat,rename,renameat,",
+    "renameat2,truncate,ftruncate,chmod,fchmodat,utimensat,connect,sendto,sendmsg",
 );
+
+/// Syscalls that open a path, with their flags in the arguments.
+///
+/// `openat2` carries the same flag text as `openat`, nested inside the
+/// `open_how` structure, so the same reading applies to all three.
+const OPEN_SYSCALLS: [&str; 3] = ["open", "openat", "openat2"];
+
+/// Syscalls that can address the network by carrying a socket address.
+const NETWORK_SYSCALLS: [&str; 3] = ["connect", "sendto", "sendmsg"];
 
 /// Open flags that ask for the path to be written rather than read.
 const WRITE_FLAGS: [&str; 5] = ["O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND"];
@@ -62,26 +71,56 @@ pub(crate) fn attempts(log: &str) -> Vec<String> {
 }
 
 /// Return the finding a single `strace` line describes, if it describes one.
+///
+/// The three families are tried in turn so each one's condition stays small
+/// enough to read on its own; a line matches at most one of them.
 fn finding(line: &str) -> Option<String> {
     let (prefix, arguments) = line.split_once('(')?;
     let name = prefix.split_whitespace().last()?;
-    if MUTATING_SYSCALLS.contains(&name) || name == "fchmodat" {
-        return Some(format!("`{name}` changes a path"));
-    }
-    if name == "connect" {
-        return (arguments.contains("AF_INET") || arguments.contains("AF_INET6"))
-            .then(|| format!("`connect` to a network address: {arguments}"));
-    }
-    if !(name == "open" || name == "openat") {
-        return None;
-    }
-    if !WRITE_FLAGS.iter().any(|flag| arguments.contains(flag)) {
-        return None;
-    }
-    if DEVICE_PATHS.iter().any(|device| arguments.contains(device)) {
-        return None;
-    }
-    Some(format!("a write-intent `{name}`: {arguments}"))
+    path_change(name)
+        .or_else(|| network_call(name, arguments))
+        .or_else(|| write_open(name, arguments))
+}
+
+/// Report a syscall that creates, removes, renames, re-times or resizes a path.
+///
+/// `fchmodat` is named here rather than in [`MUTATING_SYSCALLS`] so that list
+/// keeps the twelve calls the trace filter also names.
+fn path_change(name: &str) -> Option<String> {
+    let mutates = MUTATING_SYSCALLS.contains(&name) || name == "fchmodat";
+    mutates.then(|| format!("`{name}` changes a path"))
+}
+
+/// Report a call that addresses the network.
+///
+/// A Unix-domain address is local and accepted: only `AF_INET` and `AF_INET6`
+/// leave the host. `sendto` and `sendmsg` on a connected socket carry no
+/// address at all, but the `connect` that made the socket connected is itself
+/// in the traced set, so the attempt is still reported.
+fn network_call(name: &str, arguments: &str) -> Option<String> {
+    let is_network = NETWORK_SYSCALLS.contains(&name) && reaches_network(arguments);
+    is_network.then(|| format!("`{name}` to a network address: {arguments}"))
+}
+
+/// Report whether a socket address names another host.
+fn reaches_network(arguments: &str) -> bool {
+    arguments.contains("AF_INET") || arguments.contains("AF_INET6")
+}
+
+/// Report an open that asks to write a path other than a character device.
+fn write_open(name: &str, arguments: &str) -> Option<String> {
+    let writes = OPEN_SYSCALLS.contains(&name) && requests_write(arguments);
+    (writes && !is_device(arguments)).then(|| format!("a write-intent `{name}`: {arguments}"))
+}
+
+/// Report whether the open flags ask for the path to be written.
+fn requests_write(arguments: &str) -> bool {
+    WRITE_FLAGS.iter().any(|flag| arguments.contains(flag))
+}
+
+/// Report whether the path is one of the character devices a caller writes to.
+fn is_device(arguments: &str) -> bool {
+    DEVICE_PATHS.iter().any(|device| arguments.contains(device))
 }
 
 #[cfg(test)]
@@ -104,7 +143,9 @@ mod tests {
     #[case::create_only(r#"7     creat("/tmp/x", 0666) = -1 EROFS"#, "`creat`")]
     #[case::directory_creation(r#"7     mkdir("/tmp/x", 0777) = -1 EROFS"#, "`mkdir`")]
     #[case::removal(r#"7     unlinkat(AT_FDCWD, "/tmp/x", 0) = -1 EROFS"#, "`unlinkat`")]
+    #[case::extended_open(r#"7     openat2(AT_FDCWD, "/repo/probe", {flags=O_WRONLY|O_CREAT, mode=0666}, 24) = -1 EROFS"#, "write-intent")]
     #[case::network(r#"7     connect(3, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("1.1.1.1")}, 16) = -1 ENETUNREACH"#, "network address")]
+    #[case::datagram(r#"7     sendto(3, "x", 1, 0, {sa_family=AF_INET6, sin6_port=htons(53), sin6_addr=inet_pton(AF_INET6, "::1")}, 28) = -1 ENETUNREACH"#, "network address")]
     fn suppressed_attempts_are_reported(#[case] line: &str, #[case] expected: &str) {
         let findings = attempts(line);
 
@@ -116,8 +157,12 @@ mod tests {
 
     #[rstest]
     #[case::read_only("7     openat(AT_FDCWD, \"/etc/hosts\", O_RDONLY|O_CLOEXEC) = 3")]
+    #[case::extended_read_only("7     openat2(AT_FDCWD, \"/etc/hosts\", {flags=O_RDONLY}, 24) = 3")]
     #[case::null_device("7     openat(AT_FDCWD, \"/dev/null\", O_WRONLY|O_CREAT, 0666) = 3")]
     #[case::local_socket("7     connect(3, {sa_family=AF_UNIX, sun_path=\"/run/bus\"}, 110) = 0")]
+    #[case::local_datagram(
+        "7     sendto(3, \"x\", 1, 0, {sa_family=AF_UNIX, sun_path=\"/run/bus\"}, 110) = 1"
+    )]
     fn read_only_and_local_use_is_accepted(#[case] line: &str) {
         let findings = attempts(line);
 
