@@ -312,8 +312,9 @@ def unverifiable_message(
     ...     "the release attaches assets whose bytes could not be verified: a.deb"
     ... )
     True
+    >>> from release_upload_failures import DigestFailure
     >>> unverifiable_message(
-    ...     ["a.deb"], {"a.deb": release_upload_failures.DigestFailure.DOWNLOAD_FAILED}
+    ...     ["a.deb"], {"a.deb": DigestFailure.DOWNLOAD_FAILED}
     ... ) == (
     ...     "the release attaches assets whose bytes could not be verified: "
     ...     "a.deb (download-failed: retry the download)"

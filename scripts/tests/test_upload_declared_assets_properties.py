@@ -22,15 +22,17 @@ import dataclasses
 import enum
 import itertools
 import pathlib
-import typing as typ
 
+# Module scope rather than `TYPE_CHECKING` because Hypothesis reads each
+# `@given` test's signature as the decorator is applied, and under PEP 649 that
+# evaluates the annotations then and there: a name bound only for type checking
+# is unbound at exactly the moment it is needed, and the whole module fails to
+# collect.
+import pytest  # ruff: ignore[typing-only-third-party-import] - see note.
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from release_upload_support import Exchange, Invocation, Scenario, run_cli
 from upload_declared_assets_refusals import EXIT_CONFLICT, EXIT_OK
-
-if typ.TYPE_CHECKING:
-    import pytest
 
 #: Asset names the payload and the plan can both carry. Generated rather than
 #: drawn from a fixed list so a case cannot pass by being in a lucky order, and

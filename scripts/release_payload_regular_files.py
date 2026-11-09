@@ -134,11 +134,11 @@ def _has_mode(path: pathlib.Path, predicate: cabc.Callable[[int], bool]) -> bool
 
     Examples
     --------
+    >>> import pathlib
     >>> import tempfile
-    >>> from pathlib import Path
     >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     _ = (Path(tmp) / "a").write_bytes(b"x")
-    ...     _has_mode(Path(tmp) / "a", stat.S_ISREG)
+    ...     _ = (pathlib.Path(tmp) / "a").write_bytes(b"x")
+    ...     _has_mode(pathlib.Path(tmp) / "a", stat.S_ISREG)
     True
     >>> _has_mode(pathlib.Path("/nonexistent/a"), stat.S_ISREG)
     False
