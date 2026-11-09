@@ -31,7 +31,7 @@ const BASH_ARGUMENTS: &str = " -e -c ";
 /// Returns an error when `binding` is not a Bash transport, when it names a
 /// different executable, or when its script is not a single quoted word.
 pub fn decode_bash_transport(executable: &str, binding: &str) -> Result<String> {
-    let (named, argument) = binding
+    let (named, after_executable) = binding
         .strip_prefix('"')
         .and_then(|rest| rest.split_once('"'))
         .with_context(|| format!("Bash transport should name its executable: {binding}"))?;
@@ -39,9 +39,14 @@ pub fn decode_bash_transport(executable: &str, binding: &str) -> Result<String> 
         named == executable,
         "Bash transport should run {executable}, not {named}: {binding}"
     );
-    let argument = argument.strip_prefix(BASH_ARGUMENTS).with_context(|| {
-        format!("Bash transport should pass {BASH_ARGUMENTS:?} after its executable: {binding}")
-    })?;
+    // A distinct binding rather than a shadow: the workspace denies
+    // `clippy::shadow_reuse`, and reusing the name here would read as if the
+    // text before the fixed arguments and the text after them were one value.
+    let argument = after_executable
+        .strip_prefix(BASH_ARGUMENTS)
+        .with_context(|| {
+            format!("Bash transport should pass {BASH_ARGUMENTS:?} after its executable: {binding}")
+        })?;
     let inner = argument
         .strip_prefix('"')
         .and_then(|rest| rest.strip_suffix('"'))

@@ -106,7 +106,7 @@ impl CaseNesting {
     }
 
     /// End a comment when the line does, and ignore the rest of its text.
-    fn observe_comment_character(&mut self, ch: char) {
+    const fn observe_comment_character(&mut self, ch: char) {
         if ch == '\n' {
             self.in_comment = false;
         }
@@ -151,7 +151,7 @@ impl CaseNesting {
 /// text that follows is not word data, so a reserved word cannot continue into
 /// it. Both categories are kept in one predicate because the caller treats them
 /// identically.
-fn ends_word(ch: char) -> bool {
+const fn ends_word(ch: char) -> bool {
     is_word_terminator(ch) || matches!(ch, '\'' | '"' | '`')
 }
 
