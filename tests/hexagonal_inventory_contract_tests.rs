@@ -56,8 +56,11 @@ fn real_inventory_is_consistent() -> Result<()> {
     let dependents = dependents_of(&tasks, "26.1.1");
     ensure!(
         dependents.len() == EXPECTED_DEPENDENT_COUNT,
-        "roadmap should list {EXPECTED_DEPENDENT_COUNT} tasks depending on 26.1.1, found {}; \
-         update the inventory trace matrix and this count together",
+        concat!(
+            "roadmap should list {} tasks depending on 26.1.1, found {}; ",
+            "update the inventory trace matrix and this count together"
+        ),
+        EXPECTED_DEPENDENT_COUNT,
         dependents.len()
     );
     validate_populated(&inventory)?;
