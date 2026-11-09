@@ -1,10 +1,11 @@
-"""Hold the ``uv`` and ``gh`` stand-ins the execution harness installs.
+"""Hold the ``gh`` stand-ins the declared-asset harness installs.
 
 The harness runs the action's real shell bodies as child processes, which means
 the tools those bodies call have to exist. Both are stubbed at the *path*
 boundary rather than patched in Python: the steps invoke ``uv run ...`` and
 ``gh release ...`` as commands, so a stand-in on ``PATH`` is the only way to
-exercise the arguments as spelled.
+exercise the arguments as spelled. The ``uv`` prefix is not this action's own
+contract, so it lives in ``composite_action_stubs`` beside the verifier's copy.
 
 The ``gh`` stand-in is the interesting one. It keeps the release state in a
 JSON file, so a case can describe a release that already holds assets, and an
@@ -18,20 +19,7 @@ match.
 Run via ``make test-workflow-contracts``.
 """
 
-#: Stands in for ``uv run --no-project --python <baseline>``, which fetches the
-#: baseline interpreter on demand. The subject here is the action's own script,
-#: so the prefix is checked as spelled and the remainder is handed to the
-#: caller's interpreter. Nothing downloads, so nothing needs the network.
-UV_STUB = """\
-#!/bin/sh
-set -eu
-test "$1" = run
-test "$2" = --no-project
-test "$3" = --python
-printf '%s\\n' "$4" >> "$UV_BASELINE_LOG"
-shift 4
-exec "$UV_PYTHON" "$@"
-"""
+from composite_action_stubs import UV_STUB
 
 #: Stands in for the GitHub CLI. Every invocation is recorded, before the
 #: subcommand is dispatched, so a case can assert which transfers were sent and

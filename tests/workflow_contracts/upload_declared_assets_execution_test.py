@@ -20,12 +20,12 @@ import json
 import pathlib
 import typing as typ
 
+from composite_action_execution import interpreter_baseline
 from upload_declared_assets_harness import Release, execute
 from upload_declared_assets_manifest import (
     RUN_STEPS,
     release_tag,
 )
-from upload_declared_assets_records import interpreter_baseline
 from upload_declared_assets_staging import (
     DIST,
     declared_names,
