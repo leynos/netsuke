@@ -125,7 +125,11 @@ struct ManifestParse<'a, 'name> {
 ///
 /// Returns a parse diagnostic when YAML is invalid or the literal schema
 /// declaration is missing, malformed, or unsupported.
-fn parse_admitted_document(yaml: &str, name: &ManifestName) -> Result<ManifestValue> {
+fn parse_admitted_document(
+    yaml: &str,
+    name: &ManifestName,
+    records_admission: bool,
+) -> Result<ManifestValue> {
     let document: ManifestValue =
         serde_saphyr::from_str(yaml).map_err(|error| ManifestError::Parse {
             source: map_yaml_error(&error, &ManifestSource::from(yaml), name),
@@ -133,8 +137,15 @@ fn parse_admitted_document(yaml: &str, name: &ManifestName) -> Result<ManifestVa
         })?;
     // The decision is recorded before it is turned into a diagnostic, so the
     // counter sees every rejection exactly once and the mapping below stays a
-    // pure translation step.
-    let admission = schema_version::record_admission(schema_version::admit_document(&document));
+    // pure translation step. Discovery queries and test runs pass
+    // `records_admission = false`: they reach this gate without being an
+    // admission of a user's manifest.
+    let decision = schema_version::admit_document(&document);
+    let admission = if records_admission {
+        schema_version::record_admission(decision)
+    } else {
+        decision
+    };
     admission.map_err(|rejection| ManifestError::Parse {
         source: diagnostics::map_schema_version_error(rejection, name),
         message: localization::message(keys::MANIFEST_PARSE),
@@ -249,7 +260,8 @@ fn build_template_environment(
     budget
         .charge_source(yaml.len(), budget::ManifestBudgetStage::Source)
         .map_err(|exhaustion| exhaustion.into_error(minijinja::ErrorKind::InvalidOperation))?;
-    let doc = parse_admitted_document(yaml, name)?;
+    let records_admission = registration.records_schema_admission();
+    let doc = parse_admitted_document(yaml, name, records_admission)?;
     let mut jinja = Environment::new();
     jinja.set_undefined_behavior(UndefinedBehavior::Strict);
     // Expose custom helpers to templates.

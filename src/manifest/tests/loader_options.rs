@@ -43,10 +43,10 @@ enum Row {
 struct Expected {
     env: HostHelperDisposition,
     glob: HostHelperDisposition,
-    /// The four boolean decisions, each paired with the label the assertion
-    /// reports, so one table row covers them without four near-identical
+    /// The five boolean decisions, each paired with the label the assertion
+    /// reports, so one table row covers them without five near-identical
     /// assertions.
-    flags: [(&'static str, bool); 4],
+    flags: [(&'static str, bool); 5],
 }
 
 impl Row {
@@ -73,6 +73,7 @@ impl Row {
                 flags: [
                     ("render mode", false),
                     ("telemetry gate", true),
+                    ("admission recording", true),
                     ("refusal classifier gate", false),
                     ("overlay grant", false),
                 ],
@@ -83,6 +84,7 @@ impl Row {
                 flags: [
                     ("render mode", true),
                     ("telemetry gate", false),
+                    ("admission recording", false),
                     ("refusal classifier gate", true),
                     ("overlay grant", false),
                 ],
@@ -93,6 +95,7 @@ impl Row {
                 flags: [
                     ("render mode", false),
                     ("telemetry gate", false),
+                    ("admission recording", false),
                     ("refusal classifier gate", false),
                     ("overlay grant", true),
                 ],
@@ -126,6 +129,10 @@ fn registration_decides_each_capability(#[case] row: Row) {
             (
                 "telemetry gate",
                 registration.records_expansion_and_budget_telemetry()
+            ),
+            (
+                "admission recording",
+                registration.records_schema_admission()
             ),
             (
                 "refusal classifier gate",
