@@ -1917,3 +1917,63 @@ aggregate, 6,762/6,877), `markdownlint` (218 files, zero issues), `nixie`,
 skipped). The isolation and Verus counts rise by the ten trace-reader cases and
 the one generated-order property. Keep Status: IN PROGRESS pending review at
 the new head and trusted-main warm-cache acceptance.
+
+Revision 56 (2026-11-09): The pre-merge comment at `6731095126` re-emitted
+three rows as still Open — Testing (Overall), Unit Architecture and Developer
+Documentation — after Revision 55's changes. The trace reader proved that a
+discarded write or connection by the *stub* is caught; it did not yet show the
+real `cargo-kani` answering inside the boundary. The isolation case now runs a
+third traced query with the verifier named by
+`NETSUKE_KANI_ISOLATION_VERIFIER`, and the `kani-smoke` lane sets it to the
+`cargo-kani` that lane installed, so a lane that installs nothing cannot pass
+vacuously — the case fails rather than skips when the variable names a path it
+cannot resolve.
+
+That query needed more than the binary. `cargo-kani` is a launcher as well as a
+driver: it resolves its payload from the Kani home and, with no readable home,
+starts a first-time setup that downloads a release and installs a toolchain —
+which in a networkless read-only chroot exits `2` with no version. The sandbox
+therefore binds the verifier's directory at `/opt/verifier` and the Kani home
+at its own absolute path, both read-only, and exports `KANI_HOME`; the
+capability probe binds the same five path kinds and reports the operation a
+host refused, so a host that cannot build either mount names its prerequisite
+instead of failing inside the script. Run by hand with `KANI_HOME=$HOME/.kani`
+and the local `cargo-kani 0.67.0`, the case passes with `installed-exit=0` and
+an attempt-free trace.
+
+The trace reader also covers the calls it was missing: `openat2` and the whole
+`open` family, and `sendto` and `sendmsg` alongside `connect`, since a datagram
+can carry a peer address without a connection. Each has a positive case and a
+read-only or local negative case, and the three attempt families are split so a
+failure names one condition.
+
+The added machinery pushed `support` past the 400-line cap and `sandbox` to
+419, so both are decomposed along their seams rather than padded or suppressed:
+`support/` holds the installed-verifier lookup and payload resolution
+(`installed.rs`), the query staging and trace read-back (`run.rs`), and the
+fixture core; `support/sandbox/` holds the script and mount plan (`mod.rs`) and
+the capability probe (`probe.rs`). Clippy's `self_named_module_files` requires
+the `mod.rs` spelling once a directory sits beside a module of the same name,
+so that is the layout used, and the crate root's `#[path]` points at
+`support/mod.rs`. Every nested module is now at most 258 lines.
+
+The Developer Documentation row's remaining point was that the guide described
+one writable mount and two traced queries. The guide now states the second
+writable mount (`/var/trace` beside `/proc/self/comm`), the third query, the
+verifier and Kani-home binds and why the home is needed, and the capability
+probe's five path kinds; its attempt-detection paragraph presents the runtime
+and static halves as the two halves of one contract, and the command-test
+sentence now says the diagnostic must carry its category and status, echo
+nothing the verifier printed, and stay free of control characters.
+
+All nine commit gates were run on this candidate and each exited `0`:
+`check-fmt`, `lint`, `typecheck`, `doc-coverage` (98.33% aggregate,
+6,762/6,877, against an 80% threshold), `markdownlint` (218 files, zero issues),
+`nixie`, `test` (5,217 nextest passed, 7 skipped, plus the doctests),
+`test-workflow-contracts` (1,792 passed, 3 skipped, plus 28) and
+`test-kani-check-isolation` (43 passed, 0 skipped). The first `lint` run of the
+sequence exited `2` with three findings — two `clippy::shadow_reuse` and one
+`clippy::unused_self` — which the module decomposition and the associated
+lookup removed; the batch was then restarted from `check-fmt` and every gate on
+the finished tree passed. Keep Status: IN PROGRESS pending review at the new
+head and trusted-main warm-cache acceptance.
