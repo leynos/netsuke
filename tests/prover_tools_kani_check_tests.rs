@@ -265,13 +265,12 @@ fn kani_check_refuses_a_missing_payload() -> Result<()> {
 /// trace wraps `make`, so the recipe's own commands are followed too, and the
 /// case asserts that by requiring the pin read to appear in the trace.
 ///
-/// When `NETSUKE_KANI_ISOLATION_VERIFIER` names an installed verifier, a fourth
+/// When `NETSUKE_KANI_ISOLATION_VERIFIER` names an installed verifier, a further
 /// traced query runs that binary through the same recipe and its trace must be
 /// equally clean. CI sets it to the pinned `cargo-kani` it installed, so the
-/// real executable — not only the stub — is exercised inside the boundary. A
-/// fifth runs it against a Kani home with no payload, where the launcher would
-/// otherwise start a first-time setup; the recipe must refuse with
-/// `category=payload-missing`, and that trace must be clean too.
+/// real executable — not only the stub — is exercised inside the boundary. One
+/// more query points the stub at a Kani home with no payload; the recipe must
+/// refuse with `category=payload-missing`, and that trace must be clean too.
 ///
 /// # Errors
 ///

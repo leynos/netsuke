@@ -404,10 +404,12 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       documented as a read-only query — could become an installer. The recipe
       now checks that directory before invoking the verifier and refuses with
       `category=payload-missing`, naming `make install-kani`. The isolation
-      case runs a fifth traced query against a home with no payload and
-      requires both the refusal and an attempt-free trace, which is what fails
-      if the guard is removed. The trace filter moved from named calls to the
-      `%file,%network` classes, because `strace` refuses to start when a
+      case runs a further traced query against a home with no payload and
+      requires both the refusal and an attempt-free trace. The refusal is what
+      fails if the guard is removed, since the run uses the stub verifier and a
+      stub answers without installing anything; the trace only shows that the
+      refusal attempted nothing itself. The trace filter moved from named calls
+      to the `%file,%network` classes, because `strace` refuses to start when a
       qualifier names a call the host architecture lacks and `mkdir` has no
       syscall of its own on aarch64; the reader's mutating-call list grew to
       cover the calls those classes now deliver. `WHITAKER_SUITE_SELECTION` is
@@ -423,6 +425,22 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       review pass bounded the workflow's apt fetches, split the longest
       sentences in the guide's boundary section, corrected its writable-path
       count, and tightened three contract finders. See Revision 59.
+- [x] (2026-11-09) Split the `kani-check` command suite, correct the traced-run
+      order, and stop claiming the trace detects a removed guard. The
+      walkthrough's remaining rows named three things Revision 59 had not
+      fixed. `tests/prover_tools_kani_check_command_tests.rs` was 414 lines and
+      the empty-home case pushed it to 452; its fixture now lives in
+      `tests/prover_tools_kani_check_command_tests/fixture.rs`, leaving the
+      case list at 277 lines and the fixture at 192, both inside the cap. The
+      guide called the missing-payload query the third traced run when the
+      dirty-recipe control runs third, so the ordinals are gone rather than
+      corrected. And five places — the guide, `ensure_missing_payload_refused`,
+      the isolation case's doc comment, and the two ExecPlan passages — said
+      the payload-free run's clean trace is what fails if the guard is removed.
+      It cannot be: that run uses the stub verifier, which answers `--version`
+      without installing anything, so a removed guard would let the run
+      succeed. The refusal status is what catches it, and the clean trace only
+      adds that the refusal attempted nothing. See Revision 60.
 
 ## Surprises & discoveries
 
@@ -2073,9 +2091,12 @@ query that reaches that state installs. Proved by hand — an empty `KANI_HOME`
 makes `cargo-kani --version` populate the home and fetch — so the recipe now
 inspects the payload directory after reading the pin and before invoking
 anything, refusing with `category=payload-missing` and naming
-`make install-kani`. The isolation case gained a fifth traced run over a
+`make install-kani`. The isolation case gained a further traced run over a
 payload-free home: it requires the refusal and requires that trace to hold no
-attempt, which is exactly what fails if the guard is removed.
+attempt. The refusal is what fails if the guard is removed — the run uses the
+stub verifier, so a removed guard would let it succeed rather than leave a
+setup attempt behind — and the clean trace only adds that the refusal attempted
+nothing itself.
 
 The Developer Documentation row's premises were both live, and Revision 57's
 claim that they had already been corrected was wrong: the Progress item still
@@ -2182,5 +2203,37 @@ same. The re-run took all nine gates. `check-fmt`, `lint`, `typecheck`,
 `doc-coverage`, `markdownlint`, `nixie`, `test`, `test-workflow-contracts` and
 `test-kani-check-isolation` each exited `0` on commit `53d1cc32e`.
 
-Keep Status: IN PROGRESS pending review at the new head and trusted-main
-warm-cache acceptance.
+Revision 60 (2026-11-09): Revision 59 answered the eight inline findings, and
+the walkthrough comment then showed three pre-merge rows still open. Those rows
+are the review's ninth disposition item, and two of them were live: the guide's
+traced-run order, and the size of the command suite. The third — the trace
+reader — Revision 59 had already fixed.
+
+The order was simply wrong. The guide called the payload-free query "a third
+run", but the sandbox runs the query, then the control verifier, then the
+dirty-recipe control, and the payload-free run comes after that. The passage
+now says "a further run" rather than being renumbered, because a count that
+names no ordering cannot drift when a case is inserted between two others. The
+isolation case's own doc comment had the same fault from the other direction:
+it called the installed-verifier query the fourth traced run and the
+payload-free one the fifth, when the payload-free run is traced first.
+
+The size finding was live and getting worse: the command suite was 414 lines at
+`715970069`, and the empty-home case took it to 452. The fixture — the fake
+verifier, its behaviours, the recorder and the invocation builder — moved to
+`tests/prover_tools_kani_check_command_tests/fixture.rs` behind a `#[path]`
+module in the crate root, which is the layout the sibling boundary suite
+already uses. The case list is 277 lines and the fixture 192.
+
+The third row caught a claim of mine that was false. Five places said the
+payload-free run's attempt-free trace is what fails if the guard is removed.
+That run is traced against the stub, not the installed launcher, and a stub
+answers `--version` without installing anything: remove the guard and the run
+succeeds, leaving no setup attempt for the trace to hold. What catches a
+removed guard is the refusal status and category, together with the
+non-invocation assertion in `kani_check_refuses_a_missing_payload`. The trace's
+narrower claim is that the refusal itself attempted nothing, and the text now
+says exactly that.
+
+Keep Status: IN PROGRESS pending the gate batch at this head, review at the new
+head, and trusted-main warm-cache acceptance.

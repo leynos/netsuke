@@ -5946,18 +5946,21 @@ from the trace a reader entry expects, and no architecture-specific name can
 stop `strace` before it starts. The real query must report no attempts, and the
 control verifier must report the write and the connection it discarded. That
 pair is what makes the reader known to fire rather than known to pass on a
-clean log. A third run queries a Kani home with no payload. The recipe must
-refuse it with `payload-missing`, and its trace must also be clean; that is
-what would fail if the refusal were removed and the launcher started
-installing. The trace wraps `make`, so the recipe's own commands are followed
-as well as the verifier it invokes, and the case asserts it by requiring the
-recipe's read of the pin file to appear in the trace. A second control moves
-the attempt from the verifier to the recipe. A makefile whose own lines discard
-a write and a directory creation, and then report the version, runs to success,
-and the case requires both attempts in its trace. That shows an attempt added
-to the recipe — not just to the program the recipe runs — would be caught,
-because the discarded failures leave the run looking identical to one that
-never tried.
+clean log. A further run queries a Kani home with no payload. The recipe must
+refuse it with `payload-missing`, and its trace must also be clean. The refusal
+is what fails if the guard is removed, not the trace: this run uses the same
+stub verifier as the others, and a stub answers `--version` without installing
+anything, so a removed guard would let the run succeed rather than leave a
+setup attempt behind. The clean trace adds the narrower claim that the refusal
+itself attempted nothing. The trace wraps `make`, so the recipe's own commands
+are followed as well as the verifier it invokes, and the case asserts it by
+requiring the recipe's read of the pin file to appear in the trace. A second
+control moves the attempt from the verifier to the recipe. A makefile whose own
+lines discard a write and a directory creation, and then report the version,
+runs to success, and the case requires both attempts in its trace. That shows
+an attempt added to the recipe — not just to the program the recipe runs —
+would be caught, because the discarded failures leave the run looking identical
+to one that never tried.
 
 The static mechanism is `tests/prover_tools_kani_check_tests/recipe.rs`. It
 parses the shipped `kani-check` recipe and reports any error-suppression

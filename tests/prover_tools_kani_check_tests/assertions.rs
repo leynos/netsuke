@@ -139,9 +139,13 @@ pub(crate) fn ensure_installed_query_works(
 /// `cargo-kani` runs a first-time setup — a download and an extraction — when
 /// the pinned payload is absent, so the recipe refuses to invoke it there. This
 /// run binds a Kani home with no payload and requires the refusal, then requires
-/// the trace to hold no attempt at all. That second assertion is what would fail
-/// if the guard were removed: the launcher's setup writes under the home and
-/// reaches GitHub, and both would appear as findings.
+/// the trace to hold no attempt at all.
+///
+/// The refusal is what fails if the guard is removed, not the trace: the run
+/// uses the same stub verifier as the others, and a stub answers `--version`
+/// without installing anything, so a removed guard would let the run succeed
+/// rather than leave a setup attempt to find. The trace's claim is the narrower
+/// one that the refusal itself attempted nothing.
 pub(crate) fn ensure_missing_payload_refused(run: &SandboxRun) -> Result<()> {
     let stdout = String::from_utf8_lossy(&run.output.stdout);
     let stderr = String::from_utf8_lossy(&run.output.stderr);
