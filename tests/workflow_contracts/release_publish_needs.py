@@ -1,4 +1,4 @@
-"""Normalise a job's ``needs`` declaration into the names it lists.
+"""Normalize a job's ``needs`` declaration into the names it lists.
 
 GitHub accepts either a single job name or a list of names for ``needs``, and
 the release-publication contracts compare those declarations against what each
