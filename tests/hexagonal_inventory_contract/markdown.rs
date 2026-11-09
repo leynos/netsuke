@@ -4,6 +4,8 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use regex::Regex;
 
+use super::register::is_well_formed_register_id;
+
 /// Select a heading depth supported by the inventory contract parser.
 #[derive(Clone, Copy)]
 pub(super) enum HeadingLevel {
@@ -184,73 +186,6 @@ fn is_table_separator(cell: &str) -> bool {
         && cell
             .chars()
             .all(|character| matches!(character, '-' | ':' | ' '))
-}
-
-/// Check whether a register identifier follows the area and site grammar.
-pub(super) fn is_well_formed_register_id(identifier: &str) -> bool {
-    let Some((area, body)) = identifier.split_once('/') else {
-        return false;
-    };
-    has_valid_area_and_body(area, body) && has_valid_register_body(body)
-}
-
-/// Check whether the register body uses either a type or a site identifier.
-fn has_valid_register_body(body: &str) -> bool {
-    let Some((item, site)) = body.split_once('@') else {
-        return !body.contains('#');
-    };
-    has_valid_item(item) && has_valid_site(site)
-}
-
-/// Check whether the item before the site marker is non-empty and unambiguous.
-fn has_valid_item(item: &str) -> bool {
-    !item.is_empty() && !item.contains('#')
-}
-
-/// Check whether a site has a symbol and a supported kind.
-fn has_valid_site(site: &str) -> bool {
-    let Some((symbol, kind)) = site.split_once('#') else {
-        return false;
-    };
-    !symbol.is_empty()
-        && !has_site_delimiter(symbol)
-        && !has_site_delimiter(kind)
-        && has_supported_site_kind(kind)
-}
-
-/// Reject separators that would make a site split ambiguous.
-fn has_site_delimiter(value: &str) -> bool {
-    value
-        .chars()
-        .any(|character| matches!(character, '@' | '#'))
-}
-
-/// Check the closed set of site kinds and their numbered variants.
-fn has_supported_site_kind(kind: &str) -> bool {
-    ["constructor", "mutator", "consumer", "api-reachable"]
-        .iter()
-        .any(|known_kind| matches_site_kind(kind, known_kind))
-}
-
-/// Match a site kind or its numbered suffix.
-fn matches_site_kind(kind: &str, known_kind: &str) -> bool {
-    kind == known_kind
-        || kind
-            .strip_prefix(known_kind)
-            .and_then(|suffix| suffix.strip_prefix('-'))
-            .is_some_and(is_ascii_number)
-}
-
-/// Check that a numbered site-kind suffix contains only decimal digits.
-fn is_ascii_number(number: &str) -> bool {
-    !number.is_empty() && number.chars().all(|character| character.is_ascii_digit())
-}
-
-/// Check the register area's closed set and its non-empty, whitespace-free body.
-fn has_valid_area_and_body(area: &str, body: &str) -> bool {
-    matches!(area, "A1" | "A2" | "A3" | "A4" | "A5" | "A6" | "A7")
-        && !body.is_empty()
-        && !body.chars().any(char::is_whitespace)
 }
 
 /// Collect task identifiers from the first column of trace-matrix tables.

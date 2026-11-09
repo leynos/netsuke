@@ -8,8 +8,18 @@ use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
+#[path = "hexagonal_inventory_contract/fail_open_tests.rs"]
+mod fail_open_tests;
+#[cfg(test)]
+#[path = "hexagonal_inventory_contract/fixtures.rs"]
+mod fixtures;
 #[path = "hexagonal_inventory_contract/markdown.rs"]
 mod markdown;
+#[cfg(test)]
+#[path = "hexagonal_inventory_contract/parser_tests.rs"]
+mod parser_tests;
+#[path = "hexagonal_inventory_contract/register.rs"]
+mod register;
 #[path = "hexagonal_inventory_contract/roadmap.rs"]
 mod roadmap;
 #[cfg(test)]
