@@ -2638,7 +2638,7 @@ that do not exist yet, so the release this job attaches assets to stays a draft
 a person publishes. The record is retained *for* those jobs, which is what the
 issue asks for; wiring a consumer is their work. Read the section above as
 describing the implemented upload path, not a completed verification and
-finalisation hand-off.
+finalization hand-off.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
