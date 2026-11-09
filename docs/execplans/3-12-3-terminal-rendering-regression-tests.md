@@ -1260,6 +1260,105 @@ Photo of the state at the time of writing: `build-test`, `Default features`,
 
 Date/Author: 2026-11-09, implementation agent.
 
+### D34: six of the eight re-raised pre-merge rows were real defects
+
+**Decision.** Re-verify each row against the tree at `05a8181e2` rather than
+inheriting D31's dispositions. The re-raised table is not the table D31
+answered: four of its rows cite different evidence and three name findings D31
+never saw, so a disposition carried forward would have claimed a check passed
+without reading it again. Six rows were right and are fixed; two are rebutted
+against the code, one of them with the measurement D29 already recorded.
+
+**Six rows were correct, and are fixed.**
+
+- *Module-Level Documentation* — correct. `tests/terminal_rendering/json.rs`
+  opened "Check JSON output and configuration-error output" while containing no
+  `--json` invocation; only `json_pty.rs` runs JSON. The header now names the
+  configuration-error split as this file's subject and points at `json_pty.rs`
+  for JSON output.
+- *Testing (Property / Proof)* — correct, and the sharpest of the five.
+  `TerminalBytes::has_bare_carriage_return` documented itself as "a carriage
+  return not followed by a line feed" with no carve-out, while the classifier
+  deliberately skips carriage returns inside OSC, DCS, SOS, PM and APC
+  payloads. The carve-out lived in prose around the field, in a doc example,
+  and in two tests — everywhere except the field's own contract, which is what
+  a reader consults. The doc comment now states the rule the code implements: a
+  *live* carriage return, outside every escape class.
+- *User-Facing Documentation* — correct. The guide said the same colour
+  precedence applied to "every route that renders help — `--help`, `help`, and
+  `help <subcommand>`", which enumerates three routes and omits `help targets`.
+  That route is excluded from the informational-help set precisely because it
+  loads configuration, and it renders a plain catalogue that `--color always`
+  cannot style. The paragraph now scopes the precedence to the Clap-rendered
+  routes and gives `help targets` its own paragraph, including the JSON-mode
+  behaviour the row named.
+- *Developer Documentation* — three sub-claims, all correct.
+  1. "Buffered startup events are plain" is only true before the first
+     `set_tracing_ansi`. The configuration-load failure the guide discusses is
+     emitted *after* that reload. The guide also said the second call always
+     uses the merged plan, which informational help never reaches. Both are
+     corrected at `docs/developers-guide.md`.
+  2. "The entrypoint passes the captured stderr-terminal fact into that setup"
+     is false: `init_tracing` takes a `LevelFilter` and a `StartupWriter` and
+     nothing else; the facts arrive later through `set_tracing_ansi`. Corrected.
+  3. ADR-0059's historical Nextest sentence was altered by this branch, and
+     ADR-0072 did not record that `--color always` suppresses the `NO_COLOR`
+     accessibility trigger. The original sentence is restored verbatim, the two
+     dated reassessments below it are retained as the record of why the
+     allowance rose, and ADR-0072 gains both a table note and a paragraph
+     separating the overridable trigger (`NO_COLOR`) from `TERM=dumb`, which no
+     colour policy reaches.
+
+- *Testing (Compile-Time / Ui)* — correct, and accepted in full. The
+  prohibition existed in `clippy.toml` and the test only re-read the
+  configuration and the exception's placement, so a typo in the TOML would have
+  passed. `tests/ui/clippy_terminal_probe_uncontracted.rs` and its contracted
+  control are now compiled with `clippy-driver` by
+  `tests/clippy_terminal_probe_ui_tests.rs`: the first must fail with the
+  `disallowed_methods` diagnostic, the second must compile under an
+  `#[expect]`. Both halves are needed — a rejection test alone passes when the
+  invocation itself is broken. `clippy-driver` rather than `cargo clippy` keeps
+  the fixture from starting a nested build, and the compile runs with the
+  repository root as its working directory because `clippy.toml` is discovered
+  by walking up from there. A first probe from `/tmp` compiled clean, which is
+  exactly the vacuity the `current_dir` prevents.
+- *Unit Architecture* — accepted. `resolve_startup_window` both installed the
+  global metrics recorder and the process localizer and could exit the process,
+  under a name that promises a read-only computation. It is renamed
+  `run_startup`, and its doc comment now names the effects. The side effects
+  themselves are unchanged from base, so this is a naming and documentation
+  correction, not a behavioural one.
+
+**Two rows are rebutted.**
+
+- *Testing (Overall)* — the row is true as a statement about the test:
+  `task_lines` slices from the label (the literal `Task` followed by a space),
+  so an escape prefix immediately before it would pass unnoticed. D29 already
+  recorded that, together with why
+  the enclosing-line reading it asks for cannot be satisfied: the stage-6
+  repaint occupies every byte before the label with no terminator between them
+  (span 962 bytes, `has_redraw=true`), no `Task` occurrence in the whole
+  capture starts a line, and `--progress never` emits no task updates at all.
+  The row is therefore recorded as measured-unsatisfiable rather than re-fixed.
+- *Domain Architecture* — rebutted. The row asks the resolver not to use CLI
+  configuration types. It already does not: `resolve_display_plan` takes a
+  purpose-built `DisplayPolicies` struct of plain `Copy` enums, and
+  `Cli::display_policies` is the adapter that fills it. The enums do carry
+  Serde and `FromStr`, but nothing on the resolver's side exercises either —
+  the resolver calls `explicit_override` and `unicode_override`, which are pure
+  accessors. Moving four enums that 293 sites across 33 files name, to satisfy
+  a reading the code does not support, would be a large refactor with no
+  behavioural gain, and the plan's own tolerance caps production changes at 600
+  lines.
+
+**Consequence for the review decision.** All eight rows now have a disposition
+with a file, a line, or a measurement behind it. Six produced edits, one is
+recorded as unsatisfiable with its numbers, and one is rebutted on the code's
+own shape. A fresh formal review of the resulting head is what clears
+`CHANGES_REQUESTED`; the queue request and its outcome are recorded separately.
+
+Date/Author: 2026-11-09, implementation agent.
+
 ## Outcomes & retrospective
 
 ### Milestone EP-M0 to EP-M4: complete

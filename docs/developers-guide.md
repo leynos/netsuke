@@ -155,11 +155,17 @@ reads the answer rather than re-deriving it. `DisplayPlan::stdout_colour()` and
 `stderr_colour()` decide whether ANSI escapes are emitted on each stream, and
 the adapters apply them differently because their libraries do:
 
-- The tracing formatter starts with `with_ansi(false)` so buffered startup
-  events are plain, and `set_tracing_ansi(plan.stderr_colour())` reloads that
-  layer once the plan is resolved. The reload is the mechanism: `main` calls it
-  twice, from the startup plan and again from the merged plan, so every event
-  after the second call follows the merged answer.
+- The tracing formatter starts with `with_ansi(false)`, so every event emitted
+  before the first reload is plain. `main` calls
+  `set_tracing_ansi(plan.stderr_colour())` at two points: once with the startup
+  plan, immediately after parsing and before configuration loading, and again
+  with the merged plan just before the command runs. "Plain startup events"
+  therefore holds only for the window before the first call — the parse
+  diagnostics. A configuration-load failure is emitted *after* the startup
+  reload, so its structured events already follow the startup colour hint, and
+  that is the split `tests/terminal_rendering/json.rs` pins. Informational help
+  — `--help`, `help` and `help <subcommand>` — returns before the merge, so its
+  events keep the startup answer rather than a merged one.
 - The Miette hook builds one `MietteHandlerOpts` handler per report from
   `diagnostic_style()`, passing its `colour`, `unicode` and `links` fields to
   `color`, `unicode` and `terminal_links`. It does not choose between graphical
@@ -9087,16 +9093,19 @@ is confined to the child.
 
 Production tracing has one process-wide subscriber, installed by the `main`
 entrypoint through `main_tracing::init_tracing` in `src/main_tracing.rs`, with
-a reloadable filter starting at `WARN`. The entrypoint passes the captured
-stderr-terminal fact into that setup. Events are written through
-`StartupWriter`, which buffers startup tracing until the effective diagnostic
-mode is known — no startup tracing reaches stdout. The buffer is bounded (64
-KiB), with a truncation policy documented in the "Startup diagnostics
-buffering" subsection above. `settle_startup_diagnostics` then releases the
-buffer to stderr in human mode, or discards it in JSON mode. Once the mode is
-resolved, `set_tracing_filter` adjusts the level to the one `startup_filter`
-chooses for the mode, with a fallback filter on the paths where resolution
-itself fails. No library module installs a global subscriber.
+a reloadable filter starting at `WARN`. Installation takes only a level filter
+and the writer; the captured terminal facts do not reach it. They arrive later,
+indirectly, through `set_tracing_ansi(plan.stderr_colour())` once a display
+plan is resolved, which is the same reload path the display-plan section
+describes. Events are written through `StartupWriter`, which buffers startup
+tracing until the effective diagnostic mode is known — no startup tracing
+reaches stdout. The buffer is bounded (64 KiB), with a truncation policy
+documented in the "Startup diagnostics buffering" subsection above.
+`settle_startup_diagnostics` then releases the buffer to stderr in human mode,
+or discards it in JSON mode. Once the mode is resolved, `set_tracing_filter`
+adjusts the level to the one `startup_filter` chooses for the mode, with a
+fallback filter on the paths where resolution itself fails. No library module
+installs a global subscriber.
 
 Tests use a separate capture boundary:
 

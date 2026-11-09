@@ -19,7 +19,13 @@ pub struct TerminalBytes {
     pub has_osc: bool,
     /// Whether the stream contains any escape byte, including incomplete sequences.
     pub has_any_escape: bool,
-    /// Whether the stream contains a carriage return not followed by a line feed.
+    /// Whether the stream contains a *live* carriage return, not followed by a
+    /// line feed.
+    ///
+    /// "Live" means a carriage return the terminal acts on. One inside an OSC,
+    /// DCS, SOS, PM or APC payload is opaque string content and does not
+    /// count, because the terminal never renders it. Only carriage returns
+    /// outside every escape class are reported.
     pub has_bare_carriage_return: bool,
     /// Whether valid UTF-8 text contains a bidirectional isolate mark.
     pub has_bidi_isolates: bool,

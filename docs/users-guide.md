@@ -2045,12 +2045,20 @@ subprocess.
 - `never` disables ANSI styling and acts like an internal `NO_COLOR` for
   automatic accessibility selection.
 
-Help and version output use the last `--color` value on the command line, then
-`NETSUKE_COLOR`, then `auto`; configuration files are not read to choose help
-colour. The same precedence applies to every route that renders help — `--help`,
-`help`, and `help <subcommand>` — so a `NETSUKE_COLOR` value styles all of
-them or none of them. An explicit `--color always` can override the automatic
-colour suppression from `NO_COLOR` and `TERM=dumb`.
+Clap-rendered help and version output — `--help`, `help`, and
+`help <subcommand>` — use the last `--color` value on the command line, then
+`NETSUKE_COLOR`, then `auto`; configuration files are not read to choose their
+colour. A `NETSUKE_COLOR` value styles all of them or none of them. An explicit
+`--color always` can override the automatic colour suppression from `NO_COLOR`
+and `TERM=dumb`.
+
+`help targets` is the exception. It loads and validates the manifest, so it
+takes the ordinary configuration path and resolves colour from the merged
+configuration. It renders a plain catalogue with no ANSI styling under every
+policy, including `--color always`: the styling it applies is limited to the
+default and conditional markers and their emoji-or-ASCII form. JSON mode
+suppresses colour for it as well, because `--json` selects the structured
+document rather than the text catalogue.
 
 Usage errors stay plain under every policy. So does the human-readable
 configuration-load error message, because the configuration that would select a

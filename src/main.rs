@@ -114,7 +114,7 @@ where
     C: MonotonicClock,
     E: cli::ConfigEnvProvider,
 {
-    let window = match resolve_startup_window(args, dependencies, startup_writer) {
+    let window = match run_startup(args, dependencies, startup_writer) {
         Ok(window) => window,
         // The startup buffer was settled inside, before the branch that exits.
         Err(code) => return code,
@@ -161,14 +161,18 @@ where
     run_merged_command(&merged_cli, dependencies.system_locale, terminal_facts)
 }
 
-/// Resolve the pre-configuration startup window, or the exit code that ends it.
+/// Run the startup command and return the pre-configuration window it built.
 ///
-/// This is the run's first stage: capture terminal facts, decide the startup
-/// diagnostics mode, build a localizer, and parse argv. Parsing may itself end
-/// the run — `--help`, `--version`, and parse failures all render and exit —
+/// This is the run's first stage. It is a command, not a query: it installs the
+/// global metrics recorder and the process localizer, and parsing may itself
+/// end the run — `--help`, `--version`, and parse failures all render and exit —
 /// so the outcome is a `Result` whose error is the code already returned to the
 /// shell, not a failure the caller can inspect.
-fn resolve_startup_window<L, S, C, E>(
+///
+/// The name says "startup" rather than "resolve" because of those effects. A
+/// caller reading `resolve_startup_window` would reasonably expect a read-only
+/// computation over the arguments.
+fn run_startup<L, S, C, E>(
     args: Vec<OsString>,
     dependencies: &RunWithArgsDependencies<'_, L, S, C, E>,
     startup_writer: &StartupWriter,
