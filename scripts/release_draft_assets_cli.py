@@ -31,6 +31,7 @@ coverage lives in ``scripts/tests/test_release_draft_assets_cli.py``.
 """
 
 import argparse
+import functools
 import json
 import pathlib
 import sys
@@ -169,31 +170,53 @@ def _format_plan(plan: cabc.Sequence[tuple[int, str]]) -> str:
     return "".join(f"{identifier}\t{name}\n" for identifier, name in plan)
 
 
-def _select_release(arguments: argparse.Namespace) -> int:
-    """Select the draft release and record its identifier."""
+def _render_selection(pages: object, tag: str) -> str:
+    """Render the selected draft release's identifier as the record's text."""
+    return f"{release_draft_assets.select_draft_release(pages, tag=tag)}\n"
+
+
+def _render_plan(pages: object) -> str:
+    """Render the planned downloads as the record's tab-separated text."""
+    return _format_plan(release_draft_assets.plan_downloads(pages))
+
+
+def _record_decision(
+    arguments: argparse.Namespace,
+    decide: cabc.Callable[[object], str],
+) -> int:
+    """Decode the listing, apply ``decide``, and record the text it returns.
+
+    Each mode supplies only its own decision. Reading the listing, separating
+    the two failure classes, and the staged write are identical for both, so
+    keeping them here is what stops the status codes drifting apart.
+
+    Returns
+    -------
+    int
+        ``EXIT_OK`` when the result was recorded, or the status naming the
+        failure that stopped it.
+    """
     try:
-        pages = _read_listing(arguments.listing)
-        release_id = release_draft_assets.select_draft_release(pages, tag=arguments.tag)
+        text = decide(_read_listing(arguments.listing))
     except _InputUnreadableError as error:
         print(f"release listing unreadable: {error}", file=sys.stderr)
         return EXIT_INPUT_UNREADABLE
     except release_draft_assets.DraftAssetError as error:
         print(f"release inventory rejected: {error}", file=sys.stderr)
         return EXIT_POLICY_REJECTED
-    return _record(arguments.output, f"{release_id}\n")
+    return _record(arguments.output, text)
+
+
+def _select_release(arguments: argparse.Namespace) -> int:
+    """Select the draft release and record its identifier."""
+    return _record_decision(
+        arguments, functools.partial(_render_selection, tag=arguments.tag)
+    )
 
 
 def _plan_downloads(arguments: argparse.Namespace) -> int:
     """Plan the downloads and record them as identifier and name pairs."""
-    try:
-        plan = release_draft_assets.plan_downloads(_read_listing(arguments.listing))
-    except _InputUnreadableError as error:
-        print(f"release listing unreadable: {error}", file=sys.stderr)
-        return EXIT_INPUT_UNREADABLE
-    except release_draft_assets.DraftAssetError as error:
-        print(f"release inventory rejected: {error}", file=sys.stderr)
-        return EXIT_POLICY_REJECTED
-    return _record(arguments.output, _format_plan(plan))
+    return _record_decision(arguments, _render_plan)
 
 
 def main(argv: list[str] | None = None) -> int:

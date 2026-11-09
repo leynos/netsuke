@@ -30,6 +30,7 @@ from verify_release_inventory_cli import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     import pathlib
     import types
 
@@ -160,61 +161,51 @@ def test_an_undeclared_directory_or_symlink_is_not_observed(
     assert code == EXIT_OK, f"non-regular entries are not downloaded assets, got {code}"
 
 
-def test_a_failed_temporary_directory_preserves_the_previous_record(
-    tmp_path: pathlib.Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Report an output fault when the staging directory cannot be created."""
-    staging = tmp_path / "dist"
-    _stage(staging)
-    declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
-    trusted = _write_record(tmp_path / "trusted.json", _trusted(staging))
-    destination = tmp_path / "verified.json"
-    _ = destination.write_text("previous record\n", encoding="utf-8")
+def _fail_staging_directory(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make creating the staging directory raise an output fault."""
     monkeypatch.setattr(
         verifier.tempfile,
         "TemporaryDirectory",
         mock.Mock(side_effect=OSError("simulated directory failure")),
     )
 
-    code = main([
-        "--directory",
-        str(staging),
-        "--expected",
-        str(declaration),
-        "--trusted",
-        str(trusted),
-        "--output",
-        str(destination),
-    ])
 
-    assert code == EXIT_OUTPUT_UNWRITABLE, f"an output fault must be reported, {code}"
-    assert destination.read_text(encoding="utf-8") == "previous record\n", (
-        "a failed staging directory must not change the earlier record"
-    )
-    assert "unwritable" in capsys.readouterr().err, (
-        "the diagnostic must report the record as unwritable"
+def _fail_staged_write(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make writing the staged record raise an output fault."""
+    monkeypatch.setattr(
+        verifier.pathlib.Path,
+        "write_text",
+        mock.Mock(side_effect=PermissionError("simulated write failure")),
     )
 
 
-def test_a_failed_staged_write_preserves_the_previous_record(
+@pytest.mark.parametrize(
+    "install_fault",
+    [
+        pytest.param(_fail_staging_directory, id="staging-directory"),
+        pytest.param(_fail_staged_write, id="staged-write"),
+    ],
+)
+def test_a_failed_record_write_preserves_the_previous_record(
     tmp_path: pathlib.Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
+    install_fault: cabc.Callable[[pytest.MonkeyPatch], None],
 ) -> None:
-    """Report an output fault when the staged record cannot be written."""
+    """Report an output fault and leave an earlier record in place.
+
+    Both ways of failing part-way through the staged write must behave alike:
+    the run reports ``EXIT_OUTPUT_UNWRITABLE`` and the record from the previous
+    run survives, which is what makes the exit status, not the file's presence,
+    the thing consumers check. The case id names which step was made to fail.
+    """
     staging = tmp_path / "dist"
     _stage(staging)
     declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
     trusted = _write_record(tmp_path / "trusted.json", _trusted(staging))
     destination = tmp_path / "verified.json"
     _ = destination.write_text("previous record\n", encoding="utf-8")
-    monkeypatch.setattr(
-        verifier.pathlib.Path,
-        "write_text",
-        mock.Mock(side_effect=PermissionError("simulated write failure")),
-    )
+    install_fault(monkeypatch)
 
     code = main([
         "--directory",
