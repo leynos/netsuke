@@ -125,8 +125,10 @@ def test_publish_reports_an_unwritable_result_after_publishing(
     assert error.value.code == EXIT_OUTPUT_UNWRITABLE, (
         "an unrecordable outcome must fail the step even after publishing"
     )
-    assert "could not be written" in capsys.readouterr().err, (
-        "the write failure must be diagnosed"
+    message = capsys.readouterr().err
+    assert "could not be written" in message, "the write failure must be diagnosed"
+    assert "already final" in message, (
+        "the operator must be told the release is public despite the failure"
     )
 
 

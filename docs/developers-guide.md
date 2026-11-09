@@ -2835,17 +2835,18 @@ selector that wrote nothing fails there rather than at the uploader. Each of
 those fails the action's own step, which is what stops a bad tree from reaching
 the network at all.
 
-The upload path ends here for now. The retained `trusted.json` is consumed by
-the `verify-release-inventory` job, which compares the downloaded release
-assets against it. `finalize-github-release` and `consumer-smoke` are planned
-job-matched actions that do not exist yet, and no job in this workflow
-publishes a release. Only a release the workflow creates is a draft:
-`ensure_draft_release.py` returns as soon as the tag already has one, without
-checking whether it is public, so a rerun attaches assets to whatever release
-the tag already names. The record is retained *for* those jobs, and the
-verifier is the first of them; wiring the finalizer is its own work. Read the
-section above as describing the implemented upload path, not a completed
-finalization hand-off.
+The upload path ends here. The retained `trusted.json` is consumed by
+`verify-release-inventory`, which compares the downloaded release assets
+against it, and then by `finalize-github-release`, which reconciles the draft
+against the same record before un-drafting it. Only a release the workflow
+creates is a draft: `ensure_draft_release.py` returns as soon as the tag
+already has one, without checking whether it is public, so a rerun attaches
+assets to whatever release the tag already names. `consumer-smoke` remains a
+planned job-matched action, so the release path ends at a public release whose
+published bytes have not yet been exercised as a consumer would. Read the
+section above as describing the upload path; the verification and finalization
+hand-off is described under *Verifying the downloaded release inventory* and
+*Finalizing the verified release*.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
@@ -3176,6 +3177,7 @@ the separate GitHub release writer after their prerequisites succeed.
 | `release`                     | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: read`                    | `dry_run == 'true'`            |
 | `publish-release`             | `metadata`, the three builds, `windows-native-recipe-smoke` | `contents: write`                   | `should_publish == 'true'`     |
 | `verify-release-inventory`    | `metadata`, `publish-crates-io`, `publish-release`          | `contents: write`                   | both publishers succeeded      |
+| `finalize-github-release`     | `metadata`, `package-crate`, both publishers, the verifier  | `contents: write`                   | every prerequisite succeeded   |
 
 *Table 1: `release.yml` jobs, their dependencies, permissions, and mode.*
 
@@ -3185,12 +3187,14 @@ declared in `release.yml` itself because crates.io Trusted Publishing
 identifies the workflow that requests the OIDC token. It has exactly
 `contents: read` and `id-token: write`, plus the `crates-io` environment. The
 short-lived token is exchanged only after the registry decision says `publish`.
-`publish-release` and `verify-release-inventory` are the only jobs with
-`contents: write`; no other job holds it, and neither publishing job receives
-the other's authority. The verifier holds the scope only because a draft's
-assets are invisible without it, while its own calls stay read-only, as the
-verification section below describes. `release-admission-canaries` additionally
-takes `actions: read` to inspect prior runs.
+`publish-release`, `verify-release-inventory` and
+`finalize-github-release` are the only jobs with `contents: write`; no other
+job holds it, and none of them receives another's authority. The verifier holds
+the scope only because a draft's assets are invisible without it, while its own
+calls stay read-only, as the verification section below describes. The
+finalizer takes no `id-token` and declares no `environment`, so it can neither
+exchange nor hold a registry credential. `release-admission-canaries`
+additionally takes `actions: read` to inspect prior runs.
 
 `release` and `publish-release` carry the same five-job dependency list and
 mutually exclusive guards, so a run is a rehearsal or a publication and never
@@ -3219,10 +3223,8 @@ The registry job and `publish-release` remain independent siblings: neither
 needs the other, so an upload interrupted on one surface can be resumed without
 repeating the other. `verify-release-inventory` needs both. A tagged run in
 which either publisher fails or is skipped therefore leaves the draft
-unverified. Nothing gates publication on that result yet: a person can still
-publish the draft by hand. The planned finalizer closes that gap by depending
-on this job before it un-drafts the release, so the two surfaces cannot diverge
-at the point the release becomes public.
+unverified, and `finalize-github-release` needs the verifier as well, so the
+two surfaces cannot diverge at the point the release becomes public.
 
 ### Verifying the downloaded release inventory
 
@@ -3367,6 +3369,130 @@ JSONL carry only fixed operation, phase, outcome, and error-category labels.
 They name no asset, tag, path, or raw error text, and the record omits the
 upload error because the verifier never uploads.
 
+### Finalizing the verified release
+
+`finalize-github-release` is the last stage of the publication path and the
+only one whose effect cannot be undone: a release that becomes public cannot be
+made a draft again. It runs after `verify-release-inventory`, whose success is
+the permission to proceed, and it makes exactly one change — the draft flag. It
+never uploads, replaces, or deletes an asset; a release missing a declared
+asset is a failure for the uploader to repair, not an invitation to attach one
+here.
+
+The job needs `metadata`, `package-crate`, `publish-crates-io`,
+`publish-release`, and `verify-release-inventory`, and its guard names each
+result explicitly beside `!cancelled()` and `should_publish == 'true'`, for the
+same reason the verifier's does. It checks out
+`needs.metadata.outputs.candidate_commit` with `persist-credentials: false`, so
+the finalizer that decides is the code the publisher ran, and it downloads two
+artefacts by exact name: `release-crate-package` for the candidate identity and
+the publisher's `trusted-artifact` output for the pre-upload digest record.
+
+`.github/actions/finalize-github-release` holds five bounded steps:
+
+| Step                          | Network calls         | Token      |
+| ----------------------------- | --------------------- | ---------- |
+| Validate inputs               | none                  | none       |
+| Resolve the release candidate | none                  | none       |
+| Snapshot the release state    | one `gh release view` | `GH_TOKEN` |
+| Plan the reconciliation       | none                  | none       |
+| Finalize the release          | one `gh release edit` | `GH_TOKEN` |
+
+*Table 3: The finalization action's steps and credential routing.*
+
+Each step carries its own `timeout-minutes`. The pinned Cuprum release bounds
+no call on its own, so a step ceiling is the only thing that stops a hung `gh`
+from holding the job open, and leaving one step unbounded is how a hang becomes
+a thirty-minute job timeout with no diagnosis. Expressions reach the shell only
+through `env`, so each is evaluated once, and both records the planner reads
+are checked to exist before anything is written.
+
+`scripts/finalize_github_release.py` names the three commands the action
+invokes. `resolve` decodes the package record and refuses an identity whose
+tag, commit, or prerelease shape is not this run's candidate. `snapshot` reads
+the draft's flags and reported digests. `publish` is the only command that
+changes anything, and it decides from two records already on disk:
+
+- the candidate, which the resolved identity supplies; and
+- the reconciliation plan, which `finalize_github_release_cli.py` wrote from
+  the trusted record and the snapshot's asset listing.
+
+The trusted record is the input, never the verifier's output. A record derived
+from GitHub agrees with GitHub however the upload was tampered with: replace an
+archive together with its sidecar and the download still agrees perfectly.
+Comparing the draft against the record written before upload is what makes a
+substitution visible, and that comparison is only meaningful if the record
+comes from the build.
+
+`publish` exits with the vocabulary below, and the plan step treats the first
+three as normal: a conflict and a missing asset are both decisions the finalize
+step turns into a diagnosis, and only a run that produced no plan stops at the
+planner.
+
+| Exit | Meaning                                                  |
+| ---- | -------------------------------------------------------- |
+| 0    | every asset is attached with the recorded digest         |
+| 1    | an attached asset disagrees, or reports no usable digest |
+| 2    | assets are missing and nothing conflicts                 |
+| 3    | an input record could not be read                        |
+| 4    | an output record could not be written                    |
+| 5    | GitHub could not be read, or would not perform the edit  |
+
+*Table 4: `finalize_github_release.py` exit statuses.*
+
+Exits 1 and 2 leave the release a draft: an asset with different bytes is
+reported as a conflict and never overwritten, and a missing asset is reported
+with the name the declared upload contract owes. Exit 3 stops before the API is
+called. Exit 4 is always an output fault, and where it happens decides what it
+means: a candidate or snapshot record that could not be written leaves the
+draft untouched, while `publish` failing to record its outcome says the release
+itself is already final, because the edit succeeded before the record was
+written. Read the message rather than the status to tell those apart. Exit 5
+covers both an unreadable release and an edit GitHub accepted without
+publishing it; the read-back distinguishes them, and neither is retried by this
+stage.
+
+The finalize step neither sets `continue-on-error` nor swallows the adapter's
+exit status, which is how "leave the release a draft on failure" is
+implemented: any refusal fails the step, and a failed step leaves the draft
+exactly as the previous attempt left it.
+
+#### Recovering a release that was not finalized
+
+Recovery is a rerun, never a rebuild. Fix what the diagnosis names — usually by
+rerunning the uploader so the missing asset is attached, or by investigating
+the bytes for a conflict — and then rerun the finalization job in the same
+workflow run. It reuses the run's `release-crate-package` and
+`declared-assets-publish-release-<attempt>` artefacts, so the candidate and the
+trusted record are the ones the release was built from.
+
+Four states are worth recognizing:
+
+- **Interrupted after the edit.** The read-back establishes that the release is
+  public with the wanted flag, so the rerun records `already-finalized` and
+  makes no second edit. This is why the command reads before it writes.
+- **Interrupted before the edit.** The draft is unchanged, the rerun plans the
+  same reconciliation, and the one edit is still to come.
+- **Missing asset.** The planner reports `upload` for it and the finalize step
+  refuses with the name. Rerun the uploader first; there is no path here that
+  attaches an asset.
+- **Conflicting asset.** The planner reports `conflict` and the finalize step
+  refuses. A published digest is a promise to whoever already downloaded it, so
+  the release stays a draft until a person decides what the correct bytes are.
+
+A release left public with the wrong prerelease flag is the one state this
+stage cannot repair; it refuses rather than editing, because it cannot tell a
+mistaken flag from a deliberate one. The output `prerelease` names the flag the
+validated candidate required, which is what an operator needs to decide.
+
+`tests/workflow_contracts/release_finalize_contract_test.py` pins the action's
+steps, their environment, and their token routing, the job's guard,
+permissions, and artefact selection, and the exact command the finalize step
+runs, and proves each assertion against a deliberate mutation. The adapter's
+own behaviour is covered by `make test-release-publication`, which drives
+interrupted retries, an already-finalized release, missing and conflicting
+assets, and API and output failures through `cmd-mox`.
+
 ### Crate-package operation telemetry
 
 The `package-crate` job records the `release_package` operation through
@@ -3464,7 +3590,7 @@ one from the other.
 | Installed binary | `netsuke`                       | `[[bin]] name`   |
 | Packaged archive | `netsuke-build-<version>.crate` | `cargo package`  |
 
-*Table 3: The package-versus-binary identity contract.* (ADR-0007 records why
+*Table 5: The package-versus-binary identity contract.* (ADR-0007 records why
 the crate cannot be called `netsuke`.)
 
 The trusted-publication plan targets a flat set of twenty names: the six
@@ -3482,7 +3608,7 @@ Linux, two `.pkg` for macOS, two `.msi` for Windows.
 | Hoist adapter's `expected_archive_names`        | six archives and their six sidecars |
 | `PLATFORM_FORMATS` held against the staged tree | eight operating-system packages     |
 
-*Table 4: The two sources of the planned twenty-name declaration.*
+*Table 6: The two sources of the planned twenty-name declaration.*
 
 Holding the staged tree to a count is what makes a failed package build a
 refusal rather than a smaller declaration. The
@@ -3523,7 +3649,7 @@ state determines whether the workflow exchanges credentials or stops:
 | `yanked`        | Fail without mutation                    | No                  | None                      |
 | `indeterminate` | Fail closed without mutation             | No                  | None                      |
 
-*Table 5: crates.io version-state decisions.*
+*Table 7: crates.io version-state decisions.*
 
 The `crates_io_registry_http.py` adapter permits HTTPS requests only to
 `crates.io` and `static.crates.io`. urllib applies the same host and scheme
@@ -3603,7 +3729,7 @@ check run for both `publish` and `skip` decisions.
 | Upload failure or ambiguous response              | 2         | Stop; do not retry in the same job     |
 | Downloaded bytes match / fail verification        | 0 / 2     | Verified / fail the job                |
 
-*Table 6: Exit statuses used by the candidate and registry CLIs.*
+*Table 8: Exit statuses used by the candidate and registry CLIs.*
 
 ### Recovering a partial crates.io publication
 
@@ -3637,11 +3763,11 @@ configuration. Configure GitHub environment `crates-io` and register the
 repository, `release.yml`, and that environment with crates.io. The workflow
 contains the pinned short-lived OIDC exchange, but no live exchange or release
 has exercised this publisher. `publish-release` still starts without waiting
-for crates.io, so the two surfaces can be briefly out of step; the later
-`verify-release-inventory` job needs both publishers to succeed and records the
-digests of the GitHub assets. `publish-crates-io` alone verifies the registry
-bytes. The finalizer that would refuse to make the release public while either
-surface is unproven is still open.
+for crates.io, so the two surfaces can be briefly out of step;
+`verify-release-inventory` needs both publishers to succeed and records the
+digests of the GitHub assets, and `finalize-github-release` needs the verifier,
+so the release cannot become public while either surface is unproven.
+`publish-crates-io` alone verifies the registry bytes.
 
 ### Selecting the declared payload
 
@@ -3840,7 +3966,7 @@ named.
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 8: `finalize_github_release_cli` exit statuses.*
+*Table 9: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -4047,7 +4173,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 9: `package-crate` action inputs.*
+*Table 10: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote

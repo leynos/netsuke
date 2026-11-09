@@ -123,11 +123,15 @@ def read_json(path: pathlib.Path) -> object:
         fail(EXIT_INPUT_UNREADABLE, f"{path} could not be read as JSON: {error}")
 
 
-def write_json(path: pathlib.Path, value: object) -> None:
+def write_json(path: pathlib.Path, value: object, *, context: str = "") -> None:
     """Stage a deterministic JSON record and move it into place.
 
     The temporary path is a sibling of ``path``, so the replacement stays on
     one filesystem and a reader never observes a partially written record.
+
+    ``context`` is appended to the failure diagnosis. A record written after
+    an irreversible step needs it: an operator reading "could not be written"
+    alone cannot tell whether the release was left a draft.
     """
     text = json.dumps(value, indent=2, sort_keys=True) + "\n"
     try:
@@ -138,7 +142,8 @@ def write_json(path: pathlib.Path, value: object) -> None:
             _ = staged.write_text(text, encoding="utf-8")
             _ = staged.replace(path)
     except OSError as error:
-        fail(EXIT_OUTPUT_UNWRITABLE, f"{path} could not be written: {error}")
+        suffix = f"; {context}" if context else ""
+        fail(EXIT_OUTPUT_UNWRITABLE, f"{path} could not be written: {error}{suffix}")
 
 
 def write_github_output(

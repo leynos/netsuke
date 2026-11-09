@@ -10,11 +10,11 @@ Status: IN PROGRESS
 The plan is approved and implementation has begun. EP-M1 and EP-M2 are
 complete. Issue #1064 delivers the first crates.io publisher and its workflow
 contracts, #1066 replaces the shared upload action in `publish-release` with a
-candidate-bound declared-asset upload, and #1067 adds the downloaded-inventory
-verifier. Stage C remains partial because GitHub finalization and consumer
-smoke are still open. Stage D is in progress. No release, tag, registry
-publication, live credential exchange, GitHub Release, or account setting has
-been changed by this work.
+candidate-bound declared-asset upload, #1067 adds the downloaded-inventory
+verifier, and #1068 adds digest-aware GitHub release finalization. Stage C
+remains partial because the consumer smoke test is still open. Stage D is in
+progress. No release, tag, registry publication, live credential exchange,
+GitHub Release, or account setting has been changed by this work.
 
 ## Purpose / big picture
 
@@ -26,9 +26,9 @@ publishes the package through crates.io Trusted Publishing, verifies the
 registry bytes, and then finalizes the GitHub Release. Issue #1064 adds the
 candidate-backed crates.io publisher, and #1067 verifies the downloaded GitHub
 inventory against the digest record `publish-release` retained, not against the
-crates.io publisher or its package bytes. The finalizer that un-drafts the
-release only after both surfaces are proven, and the consumer smoke test,
-remain open before the full release path can make that end-to-end claim.
+crates.io publisher or its package bytes. #1068 un-drafts the release only
+after both surfaces are proven; the consumer smoke test remains open before the
+full release path can make that end-to-end claim.
 
 The registry upload itself stops depending on a long-lived secret. GitHub mints
 a short-lived, repository-scoped token from an OIDC identity; the token exists
@@ -103,8 +103,10 @@ Its jobs are:
 
 The two jobs are mutually exclusive: a dry run takes `release`, a tag push takes
 `publish-release`, and a job that needs a skipped job is itself skipped.
-Nothing in that path publishes to a registry, and nothing un-drafts the
-release: today a human publishes the draft.
+Nothing in that path publishes to a registry or un-drafts the release. The
+draft is created and populated there; `finalize-github-release` later un-drafts
+it, and only after the registry publication and the downloaded inventory have
+both been verified.
 
 **The packaging contract.** `.github/release-staging.toml` names six targets
 (`linux-x86_64`, `linux-aarch64`, `windows-x86_64`, `windows-aarch64`,
@@ -667,10 +669,13 @@ against the declaration and the pre-upload digest record the publisher
 retained; its job needs both publishers and holds `contents: write` for draft
 visibility alone.
 
-Two job-matched actions remain open:
+One job-matched action remains open:
 
-- `finalize-github-release/` — reconcile the draft, then un-draft.
 - `consumer-smoke/` — download, verify, extract and run the published bytes.
+
+`finalize-github-release/` is **delivered** (#1068): it reconciles the draft
+against the trusted digest record and un-drafts it only when every declared
+asset already holds its recorded bytes.
 
 The separate `upload-declared-assets/` helper is **delivered** (#1066) and
 called by `publish-release`; the Decision log records why the upload step
@@ -731,16 +736,15 @@ staged" rather than passed over. And it is supplied or omitted as a whole,
 which is why a caller that skips it falls back to the count alone rather than
 to a partial observation.
 
-The `trusted.json` record is now produced and retained for downstream
-consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
-it to agree with `selection.json` before acting. The `verify-release-inventory`
-job consumes it: it downloads the published assets and compares every digest
-with that record, which the producer computed from the staged payload before
-upload rather than from the copies GitHub later serves. The record is therefore
-an independent witness to the bytes, not a restatement of what was downloaded.
-`finalize-github-release/` is still one of the open actions listed above, so
-un-drafting the release on the verifier's result is the one hand-off this path
-does not yet perform.
+The `trusted.json` record is produced and retained for downstream consumption
+(`declared-assets-${job}-${attempt}`), and the upload step requires it to agree
+with `selection.json` before acting. Both intended consumers now read it:
+`verify-release-inventory` downloads every declared asset into its own
+directory and compares each one against the record, which the producer computed
+from its own build tree before upload and never from the bytes it describes,
+and `finalize-github-release` reconciles the recorded listing against the same
+record before un-drafting. Neither consumer reads the verifier's output, so the
+release is never compared against a set derived from GitHub itself.
 
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
@@ -782,9 +786,9 @@ non-vacuity, so the stricter rule cannot pass by having nothing to check.
 
 The intended end-state in `.github/workflows/release.yml` adds the sequence
 below after the existing `metadata`, `build-*`, `windows-native-recipe-smoke`,
-and `release-admission-canaries` jobs. `package-crate`, `publish-crates-io`, and
-`verify-release-inventory` are delivered; finalization and consumer smoke
-remain:
+and `release-admission-canaries` jobs. `package-crate`, `publish-crates-io`,
+`verify-release-inventory`, and `finalize-github-release` are delivered;
+consumer smoke remains:
 
 1. `package-crate` — `needs: metadata`; `contents: read`; ubuntu-latest. The
    order is: resolve candidate -> package -> verify.
@@ -825,10 +829,15 @@ remain:
    contain no `gh release` call at all, which is what keeps "holds write scope"
    from drifting into "writes". `id-token: write` stays out, so this job
    remains disjoint from the registry-exchange job's credentials.
-4. `finalize-github-release` — `needs: [verify-release-inventory]`;
-   `contents: write`, no `id-token`. Named `finalize-` rather than
-   `publish-github-` to keep it distinct from the existing `publish-release`,
-   which it follows rather than replaces.
+4. `finalize-github-release` — delivered by #1068.
+   `needs: [metadata, package-crate, publish-crates-io, publish-release,
+   verify-release-inventory]`;
+   `contents: write`, no `id-token`; the guard names every dependency's
+   `result` explicitly alongside `should_publish == 'true'`, because
+   `!cancelled()` is a status function and suppresses the implicit success
+   check. The rehearsal job `release` is absent: a dry run never creates a
+   draft. Named `finalize-` rather than `publish-github-` to keep it distinct
+   from the existing `publish-release`, which it follows rather than replaces.
 5. `consumer-smoke` — `needs: [finalize-github-release]`; verifies the
    published bytes without compiling anything (see `Surprises & discoveries`:
    `cargo install` is forbidden in CI by policy). It fetches
@@ -843,8 +852,9 @@ remain:
 running the draft-creation steps; `release` holds `contents: read` and runs the
 dry-run rehearsal. Issue #1064 leaves `publish-release` unchanged, with its
 existing five-job dependency list. `publish-crates-io` and `publish-release`
-are currently independent; the later inventory and finalizer work must define
-how their outcomes gate the completed release path. Stage C as first drafted
+remain independent of one another, and `finalize-github-release` is what makes
+their outcomes gate the completed release path: it needs both, so neither can
+finish unproven while the release becomes public. Stage C as first drafted
 attributed the write permission to `release`; that predates PR #834, which
 split rehearsal from publication.
 
@@ -961,16 +971,16 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
 - Remaining gaps: `package-crate`, `publish-crates-io`,
-  `verify-release-inventory`, and `upload-declared-assets` (called by
-  `publish-release`) are in the workflow graph. Two job-matched actions and
-  jobs remain (`finalize-github-release` and `consumer-smoke`), together with
-  the separate LEM-5 suite. The finalizer is the remaining consumer the retained
-  `trusted.json` is waiting for; #1066 produces and retains that record, #1067
-  verifies it against the downloaded assets, and un-drafting the release on
-  that result is the finalizer's work. No live exchange or release has
-  exercised the publisher, and trusted-publisher registration and account
-  settings remain maintainer actions. The package already exists on crates.io
-  (`0.1.0-beta1` through `beta4`), so no initial publication is outstanding.
+  `verify-release-inventory`, `finalize-github-release`, and
+  `upload-declared-assets` (called by `publish-release`) are in the workflow
+  graph. One job-matched action and job remains (`consumer-smoke`), together
+  with the separate LEM-5 suite. The retained `trusted.json` has both of its
+  consumers: #1066 produces and retains that record, #1067 verifies it against
+  the downloaded assets, and #1068 un-drafts the release only on that result.
+  No live exchange or release has exercised the publisher, and
+  trusted-publisher registration and account settings remain maintainer
+  actions. The package already exists on crates.io (`0.1.0-beta1` through
+  `beta4`), so no initial publication is outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -1002,24 +1012,28 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   version that was published before the interruption classifies as `identical`,
   so the rerun skips the upload and verifies the public bytes.
 - Remaining gaps: no live exchange or release has exercised the action; the
-  package archive file list, inventory verifier, release finalizer, and
-  consumer smoke remain open.
+  package archive file list and the consumer smoke remain open. The inventory
+  verifier (#1067) and the release finalizer (#1068) are delivered.
 - Compatibility decision: none.
 
 **EP-M5 — recoverability and reconciliation.**
 
-- Outcome (target): re-running a tag run reconciles rather than duplicating; the
-  finalizer completes a matching release and fails closed otherwise.
-- Requirements: LEM-3 and LEM-4 policy and CLI decisions are implemented;
-  workflow orchestration and recovery remain open.
+- Outcome: re-running a tag run reconciles rather than duplicating; the
+  finalizer completes a matching release and fails closed otherwise. Delivered
+  by #1066 (upload), #1067 (verification), and #1068 (finalization).
+- Requirements: LEM-3 and LEM-4 policy and CLI decisions are implemented, and
+  the finalizer's workflow orchestration and the documented recovery sequence
+  have landed. No live release has exercised the path yet.
 - Acceptance evidence: a simulated second run against a partially populated
-  release reports exactly the missing assets and uploads only those.
+  release reports exactly the missing assets and uploads only those, and the
+  finalizer's suites cover an interrupted retry, an already-finalized release,
+  a missing asset, a conflicting asset, and an output or API failure.
 - Conformance check: `cancel-in-progress` is `false` for a tag; no
   `--clobber` is used for reconciliation.
 - Recovery: a failed run leaves the draft and the published version intact
   and is safe to re-run.
-- Remaining gaps: the remote orchestration and partial-publication recovery
-  sequence have not landed. No cross-service atomicity is claimed.
+- Remaining gaps: the consumer smoke test and a live exercise of the release
+  path. No cross-service atomicity is claimed.
 - Compatibility decision: none.
 
 **EP-M6 — gates, guards, and documentation.**
@@ -1132,7 +1146,11 @@ missing and `EXIT_CONFLICT` when one disagrees, and only un-drafts when every
 asset is already the declared one. Its own upload path was removed by the
 2026-10-19 Decision entry, because a job that both verified and wrote could not
 report a missing asset as a failure. Nothing in this change deletes a remote
-object.
+object. The delivered job holds that shape: a verification failure, a
+reconciliation refusal, or a failed API call leaves the release as a draft, and
+a retry re-reads the retained records rather than rebuilding anything. An
+interruption after the edit but before the result is recorded converges on the
+next run, which recognizes the release as already finalized.
 
 Local recovery: `git switch --detach ebcedaef` restores the pre-change tree.
 Re-running a release is a maintainer action and is documented, not performed
@@ -1693,11 +1711,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `publish-crates-io` actions and jobs have landed, with workflow contracts for
   publisher permissions, prerequisite reachability, artefact use, action order,
   and dry-run isolation, #1066 has replaced the shared upload action in
-  `publish-release` with `./.github/actions/upload-declared-assets`, and #1067
-  has added `verify-release-inventory`, which compares the downloaded assets
-  with the retained declaration and digest record. `finalize-github-release` and
-  `consumer-smoke` remain; the finalizer un-drafts the release on the
-  verifier's result and is not yet wired. No live exchange or release has
+  `publish-release` with `./.github/actions/upload-declared-assets`, #1067 has
+  added `verify-release-inventory`, which compares the downloaded assets with
+  the retained declaration and digest record, and #1068 has added
+  `finalize-github-release`, which reconciles the recorded listing against that
+  record and un-drafts the release only when every declared asset already holds
+  its trusted digest. `consumer-smoke` remains. No live exchange or release has
   exercised the publisher; the external GitHub `crates-io` environment and
   crates.io publisher registration remain unverified, so Stage C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
@@ -3115,8 +3134,59 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   **Deviation, retained:** `release.yml` is 1023 lines, and `Verification plan`
   row 5 still asks for 400 or fewer. That row is unsatisfiable as written and
   stays unedited so the deviation remains visible; no repository contract caps
-  workflow YAML. Finalization and consumer smoke remain open, and the ExecPlan
-  is not complete.
+  workflow YAML. Consumer smoke remains open, and the ExecPlan is not complete.
+
+- [x] (2026-11-09) Landed `finalize-github-release`, the digest-aware
+  finalization stage (issue #1068). `publish-release` keeps creating and
+  populating the draft; this job only decides whether the draft may become
+  public. It needs `metadata`, `package-crate`, `publish-crates-io`,
+  `publish-release`, and `verify-release-inventory`, holds `contents: write`
+  and nothing else, and names every dependency's `result` explicitly beside
+  `should_publish == 'true'` because `!cancelled()` is a status function.
+
+  The action has five steps: validate the inputs, then `resolve`, `snapshot`,
+  and `publish` through `scripts/finalize_github_release.py`, with the
+  reconciliation between the second and third run by
+  `scripts/finalize_github_release_cli.py`. `resolve` reads the package stage's
+  retained identity and refuses a record that names another tag, another
+  commit, or no tag at all — a rehearsal identity cannot be finalized as a
+  release. `snapshot` takes one read-only `gh release view` for the draft flag,
+  prerelease flag, and reported digests, and refuses a response that names
+  another tag, omits a flag, or repeats an asset name. The planner reconciles
+  that listing against the **build's** trusted digest record rather than the
+  verifier's output, and `publish` makes the single mutating call,
+  `gh release edit`, only when every declared asset already holds its recorded
+  digest.
+
+  The asymmetry is the design. An asset GitHub reports with the recorded digest
+  is skipped; an identical release is recognized as already finalized, so a
+  retry after an interruption converges instead of failing; a missing asset is
+  reported as a missing asset rather than being uploaded here; and an asset
+  with different bytes is a conflict that stops the run, because a published
+  digest is a promise to whoever already downloaded it. A verification failure,
+  a reconciliation refusal, or a failed API call leaves the release as a draft,
+  and the guide records how to recover without rebuilding.
+
+  Exit statuses are the workflow's vocabulary: 0 final, 1 refused or
+  conflicting, 2 upload required, 3 input unreadable, 4 output unwritable, 5
+  remote failed. The action sets no `continue-on-error` and does not swallow
+  either status. Each step carries a per-step `timeout-minutes`, because Cuprum
+  0.1.0 offers no in-process timeout and a hung `gh` would otherwise hold the
+  job to its own 30-minute cap.
+
+  `release_finalize_contract_test.py` and
+  `release_finalize_contract_support.py` hold the job and action contracts,
+  each with mutation cases so a passing assertion is shown to notice a change: a
+  `GH_TOKEN` on the plan step, a missing step timeout, a `gh release` call
+  inside a `run`, a wrong output expression, an `id-token` grant, a `release`
+  dependency, a missing verifier dependency, a download pattern instead of a
+  name, an attempt-scoped artefact literal, and the verifier's record in place
+  of the build's. `docs/developers-guide.md` gains a *Finalizing the verified
+  release* section with the step, status, and recovery material;
+  `docs/users-guide.md` now describes the draft ending as the delivered two-job
+  hand-off; and ADR-0007 gains an addendum recording the decision. Finalization
+  is verified against checked documents and recorded responses only — no live
+  release, tag, or credential was exercised.
 
 - [x] (2026-11-09) Closed the seventh CodeRabbit pass's remaining obligations:
   executed coverage for the producer hand-off and the candidate checks, a
@@ -3752,6 +3822,10 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Evidence: the only `gh release` invocations in the repository are
   `gh release view` and `gh release create --draft`. Impact: "publish GitHub
   Release" is new behaviour, not a preserved one, and the runbook must say so.
+  Update 2026-11-09: #1068 adds the third reach.
+  `scripts/finalize_github_release_operations.py` makes exactly one
+  `gh release edit --draft=false` call, so "publish GitHub Release" is now
+  delivered rather than merely planned.
 
 - Observation: **the repository root holds a tracked `cyclopts/__init__.pyi`
   stub, and a namespace-package `cyclopts/` directory with no `__init__.py` wins

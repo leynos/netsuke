@@ -185,7 +185,7 @@ def snapshot_release(tag: str, repository: str) -> release_state.ReleaseState:
         )
 
 
-def _report_remote_failure(exit_code: int, stderr: str, command: str) -> None:
+def _report_remote_failure(exit_code: int, stderr: str | None, command: str) -> None:
     """Relay the command's own diagnosis, then fail with the remote status."""
     if stderr:
         print(stderr, end="", file=sys.stderr)
@@ -209,6 +209,7 @@ def record_outcome(
             "prerelease": identity.is_prerelease,
             "tag": identity.tag,
         },
+        context="the release itself is already final, but its outcome was not recorded",
     )
     release_io.write_github_output(
         github_output, outcome, is_prerelease=identity.is_prerelease

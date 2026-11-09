@@ -39,6 +39,7 @@ from release_finalize_contract_support import (
     mutate_workflow,
     run_tokens,
 )
+from release_publish_needs import job_names
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
     job_steps,
@@ -137,7 +138,11 @@ def _assert_action_contract(action: dict[str, object]) -> None:
 
 def _assert_job_guard(job: dict[str, object]) -> None:
     """Require the dependency list, success guard, and privilege of the job."""
-    needs = job.get("needs")
+    needs = job_names(job.get("needs"))
+    assert needs is not None, (
+        "the job's needs must be a job name or a list of job names, got "
+        f"{job.get('needs')!r}"
+    )
     assert sorted(needs) == sorted(EXPECTED_NEEDS), (
         f"the job must depend on exactly {EXPECTED_NEEDS}, got {needs!r}"
     )
