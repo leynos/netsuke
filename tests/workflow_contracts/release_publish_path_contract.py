@@ -9,6 +9,7 @@ from release_publish_crates_io_contracts import (
 from release_publish_crates_io_contracts import (
     check_crates_io_action_contract,
 )
+from release_publish_needs import job_names
 from release_publish_path_artifacts import (
     MISSING,
     FieldEvaluation,
@@ -117,14 +118,8 @@ def _needs_context(
     release_job: dict[str, object], scenario: Scenario, outputs: dict[str, str]
 ) -> dict[str, object]:
     """Build declared needs, defaulting unknown prerequisites to skipped."""
-    declared = release_job.get("needs", [])
-    names = [declared] if isinstance(declared, str) else declared
-    if not isinstance(names, list):
-        return {}
     needs: dict[str, object] = {}
-    for name in names:
-        if not isinstance(name, str):
-            continue
+    for name in job_names(release_job.get("needs", [])) or []:
         dependency: dict[str, object] = {
             "result": scenario.needs_results.get(name, "skipped")
         }
@@ -251,8 +246,8 @@ def _check_release_staging(
 
 def _check_release_needs(release: dict[str, object], violations: list[str]) -> None:
     """Require release staging to depend on every build and Windows smoke."""
-    needs = workflow_job(release, "release").get("needs", [])
-    declared_needs = set(needs if isinstance(needs, list) else [needs])
+    needs = job_names(workflow_job(release, "release").get("needs", [])) or []
+    declared_needs = set(needs)
     missing_needs = REQUIRED_NEEDS - declared_needs
     if missing_needs:
         violations.append(f"release.needs: missing {sorted(missing_needs)!r}")

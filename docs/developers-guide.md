@@ -3590,9 +3590,10 @@ repository, `release.yml`, and that environment with crates.io. The workflow
 contains the pinned short-lived OIDC exchange, but no live exchange or release
 has exercised this publisher. `publish-release` still starts without waiting
 for crates.io, so the two surfaces can be briefly out of step; the later
-`verify-release-inventory` job needs both publishers and records what each
-surface holds, but the finalizer that would refuse to make the release public
-while either is unproven is still open.
+`verify-release-inventory` job needs both publishers to succeed and records the
+digests of the GitHub assets. `publish-crates-io` alone verifies the registry
+bytes. The finalizer that would refuse to make the release public while either
+surface is unproven is still open.
 
 ### Selecting the declared payload
 

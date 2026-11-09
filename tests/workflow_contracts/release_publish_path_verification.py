@@ -11,6 +11,7 @@ matching the scenarios is reported rather than agreed with.
 
 import typing as typ
 
+from release_publish_needs import job_names
 from release_publish_path_artifacts import MISSING, FieldEvaluation, evaluate_field
 from release_publish_path_scenarios import VERIFY_NEEDS
 from workflow_loading import workflow_job
@@ -27,11 +28,9 @@ VERIFY_PERMISSIONS = {"contents": "write"}
 
 def _declared_names(job: dict[str, object], violations: list[str]) -> list[str] | None:
     """Return the job's dependency names, or report a malformed declaration."""
-    declared = job.get("needs", [])
-    names = [declared] if isinstance(declared, str) else declared
-    if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
+    names = job_names(job.get("needs", []))
+    if names is None:
         violations.append(f"{VERIFY_JOB}.needs: dependencies must be job names")
-        return None
     return names
 
 
@@ -81,13 +80,7 @@ def _verification_needs_context(
         A needs entry per declared dependency, carrying its scenario result.
     """
     needs: dict[str, object] = {}
-    declared = job.get("needs", [])
-    names = [declared] if isinstance(declared, str) else declared
-    if not isinstance(names, list):
-        return needs
-    for name in names:
-        if not isinstance(name, str):
-            continue
+    for name in job_names(job.get("needs", [])) or []:
         dependency: dict[str, object] = {
             "result": scenario.needs_results.get(name, "skipped")
         }
