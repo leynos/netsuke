@@ -133,6 +133,24 @@ def test_unverifiable_names_are_reported_apart_from_conflicts() -> None:
     )
 
 
+def test_blocked_sees_every_name_of_a_single_pass_iterable() -> None:
+    """Name the unverifiable entries even when ``actions`` is a generator.
+
+    ``blocked`` is annotated ``Iterable``, so it owes a caller the same answer
+    for any iterable it accepts. A second pass over an exhausted generator
+    yields nothing, which would drop the unverifiable names and let a run
+    upload over bytes nobody could read.
+    """
+    planned = [
+        ("b.rpm", AssetAction.CONFLICT),
+        ("c.pkg", AssetAction.UNVERIFIABLE),
+        ("a.deb", AssetAction.UPLOAD),
+    ]
+    assert blocked(name_action for name_action in planned) == ("b.rpm", "c.pkg"), (
+        "a generator must yield the same answer as a list"
+    )
+
+
 def test_a_listing_digest_outranks_a_downloaded_one() -> None:
     """Keep the listing authoritative where it reported a digest.
 

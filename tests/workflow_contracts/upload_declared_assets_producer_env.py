@@ -110,6 +110,35 @@ def _input_name(expression: str) -> str | None:
     return None
 
 
+def _resolved_input(name: str, *, facts: Facts, target: Target) -> str:
+    """Return the fixed value ``name`` carries, in whichever spelling holds one.
+
+    Returns
+    -------
+    str
+        The value the runner would substitute for that input.
+
+    Raises
+    ------
+    AssertionError
+        If the table has no entry under either spelling, which means the
+        workflow grew an input this case has not been taught about.
+
+    Notes
+    -----
+    Both spellings are asked for directly rather than one being respelled into
+    the other and resolved again. The respelled form is itself an expression
+    ``resolve`` claims, so an input with no entry would recurse on it forever
+    instead of reaching the assertion this module promises.
+    """
+    for spelling in (f"${{{{ inputs.{name} }}}}", f"${{{{ inputs['{name}'] }}}}"):
+        fixed = _literal(spelling, facts=facts, target=target)
+        if fixed is not None:
+            return fixed
+    message = f"{PRODUCER_STEP} reads input {name!r}, which this case cannot resolve"
+    raise AssertionError(message)
+
+
 def resolve(expression: str, *, facts: Facts, target: Target) -> str:
     """Return the value GitHub would substitute for one step expression.
 
@@ -133,9 +162,7 @@ def resolve(expression: str, *, facts: Facts, target: Target) -> str:
         return expression
     name = _input_name(expression)
     if name is not None:
-        # Respell the dotted form so one table answers both, and let the
-        # recursion fail loudly if the input has no fixed value either.
-        return resolve(f"${{{{ inputs['{name}'] }}}}", facts=facts, target=target)
+        return _resolved_input(name, facts=facts, target=target)
     output = _STEP_OUTPUT.match(expression)
     if output is not None:
         return tree.stage_paths(facts, target)[output.group(1)]

@@ -318,6 +318,23 @@ def test_a_target_the_configuration_omits_is_refused(
     assert "release-shaped but not declared" in diagnosis, diagnosis
 
 
+def test_an_input_the_harness_cannot_resolve_fails_loudly(
+    facts: Facts,
+) -> None:
+    """Refuse an unresolvable input with the promised diagnosis.
+
+    The step reads some inputs in the dotted spelling and others in the
+    indexed one. Neither spelling may resolve to itself: an earlier revision
+    respelled one as the other and recursed, so an input the table had no
+    entry for produced a ``RecursionError`` instead of the assertion this
+    module's docstring promises.
+    """
+    target: Target = facts.targets[0]
+    for expression in ("${{ inputs.unknown }}", "${{ inputs['unknown'] }}"):
+        with pytest.raises(AssertionError, match="cannot resolve"):
+            producer_env.resolve(expression, facts=facts, target=target)
+
+
 def test_a_duplicated_record_is_refused(tmp_path: pathlib.Path, facts: Facts) -> None:
     """Refuse a tree in which two records claim the same target.
 

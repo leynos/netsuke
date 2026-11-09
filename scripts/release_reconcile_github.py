@@ -333,6 +333,11 @@ def blocked(actions: cabc.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...]:
     same reason: if the bytes already attached cannot be read, nothing shows
     the missing names are this run's either.
 
+    ``actions`` is materialised once because it is annotated ``Iterable``. A
+    caller that passes a generator would otherwise have it exhausted by
+    :func:`conflicts`, and the unverifiable names would silently vanish from a
+    result whose whole purpose is to say the run must stop.
+
     Examples
     --------
     >>> blocked([
@@ -342,4 +347,5 @@ def blocked(actions: cabc.Iterable[tuple[str, AssetAction]]) -> tuple[str, ...]:
     ... ])
     ('a', 'b')
     """
-    return (*conflicts(actions), *unverifiable(actions))
+    settled = tuple(actions)
+    return (*conflicts(settled), *unverifiable(settled))

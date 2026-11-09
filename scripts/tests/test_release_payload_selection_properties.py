@@ -51,8 +51,20 @@ _TARGET = st.from_regex(r"linux-[a-z0-9]{1,8}", fullmatch=True)
 
 
 @st.composite
-def _target_set(draw: st.DrawFn) -> list[tuple[str, str]]:
-    """Generate one to three distinct ``(target, archive)`` pairs.
+def _target_set(
+    draw: st.DrawFn, *, min_targets: int = 1, max_targets: int = 3
+) -> list[tuple[str, str]]:
+    """Generate distinct ``(target, archive)`` pairs.
+
+    Parameters
+    ----------
+    min_targets
+        The fewest targets to draw. A property about a *clash* between two
+        targets asks for at least two, so it never has to discard an example
+        it cannot use.
+    max_targets
+        The most targets to draw. A property that rewrites one record's claims
+        asks for exactly two, because it builds its records pair by pair.
 
     Returns
     -------
@@ -60,7 +72,9 @@ def _target_set(draw: st.DrawFn) -> list[tuple[str, str]]:
         Each target key with the archive name that target stages, in the order
         drawn.
     """
-    targets = draw(st.lists(_TARGET, min_size=1, max_size=3, unique=True))
+    targets = draw(
+        st.lists(_TARGET, min_size=min_targets, max_size=max_targets, unique=True)
+    )
     return [
         (target, f"netsuke-1.0.0-{index}-{target}.tar.gz")
         for index, target in enumerate(targets)
@@ -305,7 +319,7 @@ def test_a_duplicated_target_is_refused(pairs: list[tuple[str, str]]) -> None:
 
 
 @settings(max_examples=50, deadline=None, derandomize=True)
-@given(pairs=_target_set())
+@given(pairs=_target_set(min_targets=2, max_targets=2))
 def test_a_package_name_two_targets_claim_is_refused(
     pairs: list[tuple[str, str]],
 ) -> None:
@@ -317,12 +331,13 @@ def test_a_package_name_two_targets_claim_is_refused(
     wrong. That is what makes this the case for the union rather than for the
     binding.
 
-    Generated target sets of one cannot exhibit the clash, so they are skipped
-    rather than asserted vacuously.
+    The strategy draws exactly two targets, because a cross-target clash needs
+    two and the case rewrites the second record's claims in terms of the
+    first's. Drawing a third would leave that record claiming none of its own
+    packages, which the per-target check refuses before the cross-record claim
+    is ever reached.
     """
     claimed = _claims(pairs)
-    if len(claimed) < 2:
-        pytest.skip("a cross-target clash needs two configured targets")
     (first_record, first_assets), (second_record, second_assets) = (
         claimed[0],
         claimed[1],

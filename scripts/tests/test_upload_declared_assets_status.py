@@ -11,6 +11,7 @@ status, whether a plan was recorded, and whether anything reached ``gh``.
 Run via ``make test-release-publication``.
 """
 
+import pathlib
 import typing as typ
 
 import pytest
@@ -33,7 +34,7 @@ from upload_declared_assets_cli import (
 )
 
 if typ.TYPE_CHECKING:
-    import pathlib
+    import os
 
 
 @pytest.fixture
@@ -184,6 +185,39 @@ def test_a_declaration_matching_replaced_bytes_still_conflicts(
         "a declaration matching replaced bytes must not vouch for them"
     )
     assert not exchange.calls, "a swapped payload must not reach the network"
+
+
+def test_a_payload_entry_the_system_will_not_describe_is_unreadable_input(
+    scenario: Scenario, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Report an unreadable payload entry as input trouble, not a conflict.
+
+    ``lstat`` refusing to describe a path is a permission, mount, or I/O fault
+    in the environment; it is not evidence that the release already holds
+    conflicting bytes. Without its own entry in the refusal table the error
+    escaped ``main`` as a traceback, and Python's own exit status for that is
+    ``1`` -- the same status this step uses for a conflict, so a workflow
+    would have escalated the wrong fault.
+
+    ``lstat`` is patched rather than a mode changed, matching
+    ``test_release_payload_tree``: a test may run as a user whose permission
+    bits are not consulted, and the refusal would then never be reached.
+    """
+    genuine_lstat = pathlib.Path.lstat
+    unreadable = scenario.payload / DEB
+
+    def refuse_one_entry(path: pathlib.Path) -> os.stat_result:
+        """Refuse the declared asset, leaving every other probe readable."""
+        if path == unreadable:
+            raise PermissionError(13, "Permission denied")
+        return genuine_lstat(path)
+
+    monkeypatch.setattr(pathlib.Path, "lstat", refuse_one_entry)
+    exchange = Exchange(attached={})
+    assert run_cli(scenario, exchange, monkeypatch) == EXIT_INPUT_UNREADABLE, (
+        "an lstat refusal must report as unreadable input"
+    )
+    assert not exchange.calls, "an unreadable payload must not reach the network"
 
 
 def test_main_reports_an_unwritable_plan(

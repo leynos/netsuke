@@ -24,6 +24,7 @@ Run via ``make test-release-publication``; exercised through its only caller,
 """
 
 import release_digest_record
+import release_payload_errors
 import release_payload_tree
 import release_upload_remote
 
@@ -73,6 +74,11 @@ REFUSAL_LABELS: tuple[tuple[type[Exception], int, str], ...] = (
         release_payload_tree.PayloadHandoffError,
         EXIT_CONFLICT,
         "the selected payload is not the declared one",
+    ),
+    (
+        release_payload_errors.StagedFileUnreadableError,
+        EXIT_INPUT_UNREADABLE,
+        "a staged path could not be inspected",
     ),
     (
         release_upload_remote.UploadError,
