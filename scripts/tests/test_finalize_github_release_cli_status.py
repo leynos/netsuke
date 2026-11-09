@@ -8,6 +8,11 @@ matter, and neither needs a staged tree to see. A new action added to
 mapped to zero would let an unverified release be un-drafted, and un-drafting
 cannot be undone.
 
+A third mistake is about the inputs rather than the table: the workflow hands
+the planner one identity record, one asset listing, and one output path, and a
+planner that guessed a missing one would read something the run never staged.
+That requirement is pinned here because it is part of the same step contract.
+
 The remainder of the CLI's behaviour -- the plan it writes, the diagnoses it
 prints, and the records it refuses -- is exercised in
 `test_finalize_github_release_cli.py`.
@@ -15,12 +20,14 @@ prints, and the records it refuses -- is exercised in
 Run via ``make test-release-publication``.
 """
 
+import pytest
 import release_reconcile_github
 from finalize_github_release_cli import (
     ACTION_EXITS,
     EXIT_CONFLICT,
     EXIT_OK,
     EXIT_UPLOAD_REQUIRED,
+    build_parser,
 )
 
 
@@ -62,3 +69,22 @@ def test_the_conflict_code_is_distinct_from_the_upload_code() -> None:
         "a conflict and a missing asset are different failures and must not "
         "share an exit code"
     )
+
+
+@pytest.mark.parametrize("missing", ["--identity", "--assets", "--output"])
+def test_the_cli_requires_all_three_files(missing: str) -> None:
+    """Refuse to guess any of them, since each names a different input."""
+    complete = {
+        "--identity": "identity.json",
+        "--assets": "assets.json",
+        "--output": "plan.json",
+    }
+    argv = [
+        part
+        for flag, value in complete.items()
+        if flag != missing
+        for part in (flag, value)
+    ]
+
+    with pytest.raises(SystemExit):
+        _ = build_parser().parse_args(argv)

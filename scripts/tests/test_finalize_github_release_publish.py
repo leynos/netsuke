@@ -1,0 +1,307 @@
+"""Exercise the one command that can make a release public.
+
+The tests are organised around what must remain true however the run ends:
+a release is never published over a plan that is not fully verified, and every
+refusal names the asset that stopped it. The failures that follow a successful
+API call — an unreadable read-back, an output that cannot be written — live in
+``test_finalize_github_release_publish_failures``.
+"""
+
+import typing as typ
+
+import pytest
+from finalize_github_release_io import (
+    EXIT_INPUT_UNREADABLE,
+    EXIT_REFUSED,
+    EXIT_REMOTE_FAILED,
+    EXIT_UPLOAD_REQUIRED,
+)
+from finalize_github_release_support import (
+    ARCHIVE,
+    COMMIT,
+    TAG,
+    edit_arguments,
+    identity_record,
+    invocation_arguments,
+    plan_record,
+    publish_arguments,
+    release_views,
+    result_record,
+    run_finalizer,
+    sequenced_gh,
+)
+
+if typ.TYPE_CHECKING:
+    import pathlib
+
+    from cmd_mox import CmdMox
+
+pytest_plugins = ("cmd_mox.pytest_plugin",)
+
+PRERELEASE_TAG = "v1.2.3-rc.1"
+PRERELEASE_VERSION = "1.2.3-rc.1"
+
+
+def test_publish_un_drafts_a_verified_release(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox
+) -> None:
+    """View, edit once, and read back the release it made public."""
+    output = tmp_path / "github-output"
+    gh = sequenced_gh(
+        cmd_mox,
+        [
+            *release_views((True, False)),
+            ("", "", 0),
+            *release_views((False, False)),
+        ],
+    )
+
+    run_finalizer(*publish_arguments(tmp_path, github_output=output))
+
+    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
+        ("release", "view"),
+        ("release", "edit"),
+        ("release", "view"),
+    ], "the release must be read, edited once, and read back"
+    assert invocation_arguments(gh.invocations[1]) == edit_arguments(
+        TAG, is_prerelease=False
+    ), "the edit must un-draft without replacing any asset"
+    assert result_record(tmp_path) == {
+        "outcome": "finalized",
+        "prerelease": False,
+        "tag": TAG,
+    }
+    assert output.read_text(encoding="utf-8") == (
+        "outcome=finalized\nprerelease=false\n"
+    ), "the step's outputs must name both the outcome and the flag"
+
+
+def test_publish_sets_the_prerelease_flag_from_the_candidate(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox
+) -> None:
+    """Take the flag from the validated candidate, not from the live release."""
+    output = tmp_path / "github-output"
+    gh = sequenced_gh(
+        cmd_mox,
+        [
+            *release_views((True, True), tag=PRERELEASE_TAG),
+            ("", "", 0),
+            *release_views((False, True), tag=PRERELEASE_TAG),
+        ],
+    )
+
+    run_finalizer(
+        *publish_arguments(
+            tmp_path,
+            candidate=identity_record(
+                is_prerelease=True,
+                tag=PRERELEASE_TAG,
+                version=PRERELEASE_VERSION,
+            ),
+            github_output=output,
+        )
+    )
+
+    assert invocation_arguments(gh.invocations[1]) == edit_arguments(
+        PRERELEASE_TAG, is_prerelease=True
+    )
+    assert "prerelease=true" in output.read_text(encoding="utf-8"), (
+        "the workflow must learn the release is a prerelease"
+    )
+    assert result_record(tmp_path) == {
+        "outcome": "finalized",
+        "prerelease": True,
+        "tag": PRERELEASE_TAG,
+    }
+
+
+def test_publish_treats_an_already_public_release_as_finalized(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox
+) -> None:
+    """Succeed without an edit when an interrupted run already published."""
+    gh = sequenced_gh(cmd_mox, release_views((False, False)))
+
+    run_finalizer(*publish_arguments(tmp_path))
+
+    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
+        ("release", "view")
+    ], "an already-finalized release must not be edited again"
+    assert result_record(tmp_path) == {
+        "outcome": "already-finalized",
+        "prerelease": False,
+        "tag": TAG,
+    }
+
+
+def test_a_retry_after_a_failed_edit_finishes_without_a_second_edit(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Resume from the state the previous attempt left behind."""
+    sequenced_gh(
+        cmd_mox,
+        [
+            *release_views((True, False)),
+            ("", "HTTP 502\n", 1),
+            *release_views((False, False)),
+        ],
+    )
+    arguments = publish_arguments(tmp_path)
+
+    with pytest.raises(SystemExit) as first:
+        run_finalizer(*arguments)
+
+    assert first.value.code == EXIT_REMOTE_FAILED
+    assert not (tmp_path / "result.json").exists(), (
+        "a failed edit must not record a final outcome"
+    )
+    assert "HTTP 502" in capsys.readouterr().err
+
+    run_finalizer(*arguments)
+
+    assert result_record(tmp_path) == {
+        "outcome": "already-finalized",
+        "prerelease": False,
+        "tag": TAG,
+    }
+
+
+def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox
+) -> None:
+    """Treat a publish whose read-back failed as finished on the next run."""
+    gh = sequenced_gh(
+        cmd_mox,
+        [
+            *release_views((True, False)),
+            ("", "", 0),
+            ("", "connection reset\n", 1),
+            *release_views((False, False)),
+        ],
+    )
+    arguments = publish_arguments(tmp_path)
+
+    with pytest.raises(SystemExit) as first:
+        run_finalizer(*arguments)
+
+    assert first.value.code == EXIT_REMOTE_FAILED
+
+    run_finalizer(*arguments)
+
+    assert [
+        invocation_arguments(invocation)[:2] for invocation in gh.invocations
+    ].count(("release", "edit")) == 1, (
+        "the retry must not edit an already-public release"
+    )
+    assert result_record(tmp_path) == {
+        "outcome": "already-finalized",
+        "prerelease": False,
+        "tag": TAG,
+    }
+
+
+def test_publish_refuses_an_upload_plan_before_reaching_github(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Leave a missing asset to the declared upload contract, not this stage."""
+    arguments = publish_arguments(tmp_path, plan=plan_record(action="upload"))
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*arguments)
+
+    assert error.value.code == EXIT_UPLOAD_REQUIRED
+    assert not (tmp_path / "result.json").exists()
+    message = capsys.readouterr().err
+    assert ARCHIVE in message, "the refusal must name the asset to upload"
+    assert "remains a draft" in message, "the operator must know the release state"
+
+
+@pytest.mark.parametrize(
+    ("action", "word"),
+    [
+        pytest.param("conflict", "disagree", id="conflicting-bytes"),
+        pytest.param("unverifiable", "could not be verified", id="unread-digest"),
+    ],
+)
+def test_publish_refuses_a_plan_that_cannot_be_verified(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    action: str,
+    word: str,
+) -> None:
+    """Stop on either blockage, with the diagnosis that fits it."""
+    arguments = publish_arguments(tmp_path, plan=plan_record(action=action))
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*arguments)
+
+    assert error.value.code == EXIT_REFUSED
+    message = capsys.readouterr().err
+    assert ARCHIVE in message
+    assert word in message, "the refusal must distinguish the two blockages"
+    assert "remains a draft" in message
+
+
+def test_publish_refuses_a_plan_with_no_decisions(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Never un-draft on the empty plan that resembles a verified release."""
+    arguments = publish_arguments(tmp_path)
+    _ = (tmp_path / "plan.json").write_text('{"actions": []}', encoding="utf-8")
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*arguments)
+
+    assert error.value.code == EXIT_REFUSED
+    assert "no asset decisions" in capsys.readouterr().err
+
+
+def test_publish_refuses_a_malformed_plan(
+    tmp_path: pathlib.Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report a plan that cannot be decoded as an unreadable input."""
+    arguments = publish_arguments(tmp_path)
+    _ = (tmp_path / "plan.json").write_text('{"actions": "all"}', encoding="utf-8")
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*arguments)
+
+    assert error.value.code == EXIT_INPUT_UNREADABLE
+    assert "not a usable plan" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(("v9.9.9", COMMIT, "tag"), id="another-tag"),
+        pytest.param((TAG, "1" * 40, "commit"), id="another-commit"),
+    ],
+)
+def test_publish_refuses_a_candidate_for_another_revision(
+    tmp_path: pathlib.Path,
+    capsys: pytest.CaptureFixture[str],
+    case: tuple[str, str, str],
+) -> None:
+    """Refuse before the API call when the candidate is not this run's."""
+    requested_tag, recorded_commit, field = case
+    arguments = publish_arguments(
+        tmp_path, candidate=identity_record(commit=recorded_commit)
+    )
+    arguments[arguments.index("--tag") + 1] = requested_tag
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*arguments)
+
+    assert error.value.code == EXIT_REFUSED
+    assert field in capsys.readouterr().err
+    assert not (tmp_path / "result.json").exists()
+
+
+def test_publish_refuses_an_unreadable_candidate(tmp_path: pathlib.Path) -> None:
+    """Treat a candidate record that cannot be decoded as an input fault."""
+    arguments = publish_arguments(tmp_path)
+    _ = (tmp_path / "candidate.json").write_text('{"tag": 7}', encoding="utf-8")
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*arguments)
+
+    assert error.value.code == EXIT_INPUT_UNREADABLE

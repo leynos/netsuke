@@ -453,8 +453,9 @@ test-prover-tools-integration: ## Exercise the pinned prover-tools Verus CLI wit
 test-release-publication: ## Test release-candidate identity and staged inventory exactness
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
-		--with 'pyyaml>=6' --with 'cyclopts>=4.25.3,<5' \
-		--with 'cuprum>=0.1.0,<0.2.0' python -m pytest \
+		--with cmd-mox==0.2.0 --with 'cuprum>=0.1.0,<0.2.0' \
+		--with 'cyclopts>=4.25.3,<5' \
+		--with 'pyyaml>=6' python -m pytest \
 		scripts/tests/test_crates_io_candidate_action.py \
 		scripts/tests/test_crates_io_candidate_archive_properties.py \
 		scripts/tests/test_crates_io_candidate_cli.py \
@@ -480,6 +481,10 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_download_plan.py \
 		scripts/tests/test_finalize_github_release_cli.py \
 		scripts/tests/test_finalize_github_release_cli_status.py \
+		scripts/tests/test_finalize_github_release.py \
+		scripts/tests/test_finalize_github_release_publish.py \
+		scripts/tests/test_finalize_github_release_publish_failures.py \
+		scripts/tests/test_finalize_github_release_state.py \
 		scripts/tests/test_release_inventory.py \
 		scripts/tests/test_release_identity_record.py \
 		scripts/tests/test_release_semver.py \
@@ -540,6 +545,11 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_github_draft_listing.py \
 		scripts/release_download_plan.py \
 		scripts/finalize_github_release_cli.py \
+		scripts/finalize_github_release.py \
+		scripts/finalize_github_release_io.py \
+		scripts/finalize_github_release_operations.py \
+		scripts/finalize_github_release_plan.py \
+		scripts/finalize_github_release_state.py \
 		scripts/release_inventory.py \
 		scripts/release_semver.py scripts/release_digest.py \
 		scripts/release_digest_files.py \

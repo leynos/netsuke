@@ -33,6 +33,10 @@ SECTION_MODULES = (
     "scripts/tests/test_release_download_plan.py",
     "scripts/tests/test_finalize_github_release_cli.py",
     "scripts/tests/test_finalize_github_release_cli_status.py",
+    "scripts/tests/test_finalize_github_release.py",
+    "scripts/tests/test_finalize_github_release_publish.py",
+    "scripts/tests/test_finalize_github_release_publish_failures.py",
+    "scripts/tests/test_finalize_github_release_state.py",
     "scripts/tests/test_release_inventory.py",
     "scripts/tests/test_release_identity_record.py",
     "scripts/tests/test_release_semver.py",
@@ -100,6 +104,11 @@ SOURCE_MODULES = (
     "scripts/release_github_draft_listing.py",
     "scripts/release_download_plan.py",
     "scripts/finalize_github_release_cli.py",
+    "scripts/finalize_github_release.py",
+    "scripts/finalize_github_release_io.py",
+    "scripts/finalize_github_release_operations.py",
+    "scripts/finalize_github_release_plan.py",
+    "scripts/finalize_github_release_state.py",
     "scripts/release_inventory.py",
     "scripts/release_semver.py",
     "scripts/release_digest.py",
@@ -166,6 +175,8 @@ POLICY_MODULES = (
     "scripts/release_digest_record_agreement.py",
     "scripts/release_reconcile_crates.py",
     "scripts/release_reconcile_github.py",
+    "scripts/finalize_github_release_plan.py",
+    "scripts/finalize_github_release_state.py",
     "scripts/verify_crates_io_bytes.py",
     "scripts/release_producer_claims.py",
     "scripts/release_producer_assets.py",
@@ -198,6 +209,9 @@ ADAPTER_MODULES = (
     "scripts/release_github_draft_listing.py",
     "scripts/release_download_plan.py",
     "scripts/finalize_github_release_cli.py",
+    "scripts/finalize_github_release.py",
+    "scripts/finalize_github_release_io.py",
+    "scripts/finalize_github_release_operations.py",
     "scripts/release_digest_files.py",
     "scripts/release_registry_response.py",
     "scripts/release_declaration_cli.py",
@@ -254,12 +268,18 @@ NETWORK_FREE_MODULES = tuple(
 #: through :mod:`cuprum`, creating the draft this uploader later fills; it is
 #: deliberately not folded into ``release_upload_remote``, because creating an
 #: unseen draft and filling a visible release are different operations with
-#: different re-run semantics. A new entry here is a reviewed decision, not a
-#: registration.
+#: different re-run semantics. ``finalize_github_release_io`` runs ``gh release
+#: view`` and ``gh release edit``, the publication boundary: it may be the last
+#: step to touch a release, and it must never upload. Every ``gh`` call in the
+#: release path belongs to one of those boundaries. A new entry here is a
+#: reviewed decision, not a registration.
 PROCESS_MODULES = {
     "scripts/ensure_draft_release.py": "runs `gh release create`, the draft boundary",
     "scripts/package_crate_cli.py": "runs `cargo package`, a local build",
     "scripts/release_upload_remote.py": "runs `gh release upload`, the upload boundary",
+    "scripts/finalize_github_release_io.py": (
+        "runs `gh release view` and `gh release edit`, the publication boundary"
+    ),
 }
 
 
