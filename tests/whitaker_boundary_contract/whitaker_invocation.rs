@@ -20,6 +20,7 @@
 
 use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
+use rstest::rstest;
 
 use crate::makefile::{read_repo_file, target_recipe};
 
@@ -267,4 +268,34 @@ fn lint_whitaker_selects_the_suite_and_requires_it() -> Result<()> {
         );
     }
     Ok(())
+}
+
+/// Pin the operator read from a line that names the variable.
+///
+/// The name occurs on recipe lines as well as in definitions, so the helper
+/// has to return no operator there. `--all $(WHITAKER_SUITE_SELECTION)
+/// --no-deps` is the spelling that matters: it names the suite *and* asks for
+/// the standalone libraries, so reading it as a definition would let the
+/// duplicate check pass on the one line it exists to catch.
+#[rstest]
+#[case::assign("WHITAKER_SUITE_SELECTION = --lib whitaker_suite", Some('='))]
+#[case::conditional("WHITAKER_SUITE_SELECTION ?= --lib whitaker_suite", Some('?'))]
+#[case::immediate("WHITAKER_SUITE_SELECTION := --lib whitaker_suite", Some(':'))]
+#[case::append("export WHITAKER_SUITE_SELECTION += --all", Some('+'))]
+#[case::target_specific(
+    "lint-whitaker: WHITAKER_SUITE_SELECTION = --lib whitaker_suite",
+    Some('=')
+)]
+#[case::commented_out("# WHITAKER_SUITE_SELECTION = --all", None)]
+#[case::referenced_in_a_recipe("$(WHITAKER) --all $(WHITAKER_SUITE_SELECTION) --no-deps", None)]
+#[case::subscripted_name("WHITAKER_SUITE_SELECTION_EXTRA = --all", None)]
+fn only_an_assignment_yields_a_selection_operator(
+    #[case] line: &str,
+    #[case] expected: Option<char>,
+) {
+    assert_eq!(
+        selection_operator(line),
+        expected,
+        "the operator read from {line:?} should be {expected:?}"
+    );
 }

@@ -31,19 +31,32 @@ pub(crate) const TRACE_SYSCALLS: &str = "%file,%network";
 const OPEN_SYSCALLS: [&str; 3] = ["open", "openat", "openat2"];
 
 /// Syscalls that can address the network by carrying a socket address.
-const NETWORK_SYSCALLS: [&str; 3] = ["connect", "sendto", "sendmsg"];
+///
+/// `sendmmsg` carries one address per message rather than one for the call, so
+/// the arguments still name `AF_INET` or `AF_INET6` whenever any message does.
+const NETWORK_SYSCALLS: [&str; 4] = ["connect", "sendto", "sendmsg", "sendmmsg"];
 
 /// Open flags that ask for the path to be written rather than read.
 const WRITE_FLAGS: [&str; 5] = ["O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_APPEND"];
 
-/// Syscalls that create, remove, rename, re-time or resize a path outright.
+/// Syscalls that create, remove, rename, re-time or resize a path outright,
+/// together with the calls that change a path's ownership or extended
+/// attributes.
 ///
 /// `creat` is here rather than with the open family because it takes no flag
 /// argument: creating the file is the whole of what it does. The descriptor
-/// forms (`fchmod`, `fchown`, `ftruncate`) are named for completeness even
-/// though `%file` does not report them; each needs a descriptor, so the
-/// write-intent open that produced it is what the trace shows.
-const MUTATING_SYSCALLS: [&str; 24] = [
+/// forms (`fchmod`, `fchown`, `ftruncate`, `fsetxattr`) are named for
+/// completeness even though `%file` does not report them; each needs a
+/// descriptor, so the write-intent open that produced it is what the trace
+/// shows.
+///
+/// The re-time calls are listed individually because there is no common
+/// prefix `strace` reports: `utimensat` supersedes `utimes` and `futimesat`,
+/// and `utime` survives on older architectures. The same holds for the
+/// extended-attribute pair: writing one and removing one are both mutations of
+/// a path's metadata, and either can be suppressed by a caller that discards
+/// the failure.
+const MUTATING_SYSCALLS: [&str; 34] = [
     "creat",
     "mkdir",
     "mkdirat",
@@ -59,6 +72,9 @@ const MUTATING_SYSCALLS: [&str; 24] = [
     "symlinkat",
     "mknod",
     "mknodat",
+    "utime",
+    "utimes",
+    "futimesat",
     "utimensat",
     "truncate",
     "ftruncate",
@@ -66,8 +82,15 @@ const MUTATING_SYSCALLS: [&str; 24] = [
     "fchmod",
     "fchmodat",
     "chown",
+    "lchown",
     "fchown",
     "fchownat",
+    "setxattr",
+    "lsetxattr",
+    "fsetxattr",
+    "removexattr",
+    "lremovexattr",
+    "fremovexattr",
 ];
 
 /// The character devices a program may legitimately open for writing.
@@ -187,12 +210,31 @@ mod tests {
         "`mknodat`"
     )]
     #[case::mode_change(r#"7     fchmodat(AT_FDCWD, "/x", 0600, 0) = -1 EROFS"#, "`fchmodat`")]
+    #[case::legacy_time_change(
+        r#"7     utimes("/x", [{tv_sec=1, tv_usec=0}, {tv_sec=1, tv_usec=0}]) = -1 EROFS"#,
+        "`utimes`"
+    )]
+    #[case::time_change(r#"7     utime("/x", [1234567890, 1234567890]) = -1 EROFS"#, "`utime`")]
+    #[case::at_time_change(
+        r#"7     futimesat(AT_FDCWD, "/x", [{tv_sec=1, tv_usec=0}, {tv_sec=1, tv_usec=0}]) = -1 EROFS"#,
+        "`futimesat`"
+    )]
     #[case::ownership_change(r#"7     fchownat(AT_FDCWD, "/x", 0, 0, 0) = -1 EROFS"#, "`fchownat`")]
+    #[case::link_ownership_change(r#"7     lchown("/x", 0, 0) = -1 EROFS"#, "`lchown`")]
+    #[case::attribute_write(
+        r#"7     setxattr("/x", "user.tag", "v", 1, 0) = -1 EROFS"#,
+        "`setxattr`"
+    )]
+    #[case::attribute_removal(r#"7     removexattr("/x", "user.tag") = -1 EROFS"#, "`removexattr`")]
     #[case::extended_open(r#"7     openat2(AT_FDCWD, "/repo/probe", {flags=O_WRONLY|O_CREAT, mode=0666}, 24) = -1 EROFS"#, "write-intent")]
     #[case::network(r#"7     connect(3, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("1.1.1.1")}, 16) = -1 ENETUNREACH"#, "network address")]
     #[case::datagram(r#"7     sendto(3, "x", 1, 0, {sa_family=AF_INET6, sin6_port=htons(53), sin6_addr=inet_pton(AF_INET6, "::1")}, 28) = -1 ENETUNREACH"#, "network address")]
     #[case::addressed_message(
         r#"7     sendmsg(3, {msg_name={sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("1.1.1.1")}, msg_namelen=16, msg_iov=[{iov_base="x", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0) = -1 ENETUNREACH"#,
+        "network address"
+    )]
+    #[case::addressed_messages(
+        r#"7     sendmmsg(3, [{msg_hdr={msg_name={sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("1.1.1.1")}, msg_namelen=16, msg_iov=[{iov_base="x", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, msg_len=1}], 1, 0) = -1 ENETUNREACH"#,
         "network address"
     )]
     fn suppressed_attempts_are_reported(#[case] line: &str, #[case] expected: &str) {

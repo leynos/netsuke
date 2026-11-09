@@ -20,6 +20,7 @@ mod support;
 
 use anyhow::{Context, Result, bail, ensure};
 use proptest::prelude::*;
+use proptest::test_runner::TestCaseError;
 use std::fs;
 use std::path::Path;
 use support::{
@@ -32,6 +33,16 @@ use tempfile::tempdir;
 /// The repository's canonical proof kernel, used as the default and as one
 /// member of the ordered batch.
 const CANONICAL_PROOF: &str = "verus/canonical_value/main.rs";
+
+/// Convert a fixture error into the failure its proptest case reports.
+///
+/// The property cases below run the real pinned CLI, so a fixture failure is
+/// about the host rather than about the generated case. Panicking on it would
+/// make proptest shrink towards the smallest input instead of reporting the
+/// fault, so the error's own text travels as the case's failure.
+fn case_failure(error: &anyhow::Error) -> TestCaseError {
+    TestCaseError::fail(format!("{error:#}"))
+}
 
 /// Check that the default target verifies the repository's proof kernel.
 #[test]
@@ -160,12 +171,12 @@ proptest! {
     /// ordering asserted here is the CLI's own batching behaviour.
     #[test]
     fn verus_runs_every_proof_of_a_successful_batch_in_order(count in 1usize..=4) {
-        if !require_real_verifier().expect("check the pinned verifier") {
+        if !require_real_verifier().map_err(|error| case_failure(&error))? {
             return Ok(());
         }
-        let fixture = BatchFixture::new(count).expect("stage the batch fixture");
+        let fixture = BatchFixture::new(count).map_err(|error| case_failure(&error))?;
 
-        let output = fixture.run(None).expect("run the batch");
+        let output = fixture.run(None).map_err(|error| case_failure(&error))?;
 
         prop_assert!(
             output.status.success(),
@@ -174,7 +185,7 @@ proptest! {
         );
         let mut expected = vec!["--version".to_owned()];
         expected.extend(fixture.proof_paths());
-        prop_assert_eq!(fixture.invocations().expect("read invocations"), expected);
+        prop_assert_eq!(fixture.invocations().map_err(|error| case_failure(&error))?, expected);
     }
 
     /// Check that a failing batch stops at the failing proof and reports its
@@ -186,17 +197,17 @@ proptest! {
     fn verus_stops_at_the_first_failing_proof_and_propagates_its_status(
         (count, index, status) in failure_cases()
     ) {
-        if !require_real_verifier().expect("check the pinned verifier") {
+        if !require_real_verifier().map_err(|error| case_failure(&error))? {
             return Ok(());
         }
-        let fixture = BatchFixture::new(count).expect("stage the batch fixture");
+        let fixture = BatchFixture::new(count).map_err(|error| case_failure(&error))?;
 
-        let output = fixture.run(Some((index, status))).expect("run the batch");
+        let output = fixture.run(Some((index, status))).map_err(|error| case_failure(&error))?;
 
         prop_assert!(!output.status.success(), "a failing batch should not exit zero");
         let mut expected = vec!["--version".to_owned()];
         expected.extend(fixture.proof_paths().into_iter().take(index + 1));
-        prop_assert_eq!(fixture.invocations().expect("read invocations"), expected);
+        prop_assert_eq!(fixture.invocations().map_err(|error| case_failure(&error))?, expected);
         let stderr = String::from_utf8_lossy(&output.stderr);
         prop_assert!(
             stderr.contains(&format!("prover-tools: target=verus failed exit={status}")),
@@ -216,17 +227,17 @@ proptest! {
     fn verus_follows_a_generated_batch_order_to_the_failing_proof(
         (order, index, status) in ordered_failure_cases()
     ) {
-        if !require_real_verifier().expect("check the pinned verifier") {
+        if !require_real_verifier().map_err(|error| case_failure(&error))? {
             return Ok(());
         }
-        let fixture = BatchFixture::in_order(&order).expect("stage the batch fixture");
+        let fixture = BatchFixture::in_order(&order).map_err(|error| case_failure(&error))?;
 
-        let output = fixture.run(Some((index, status))).expect("run the batch");
+        let output = fixture.run(Some((index, status))).map_err(|error| case_failure(&error))?;
 
         prop_assert!(!output.status.success(), "a failing batch should not exit zero");
         let mut expected = vec!["--version".to_owned()];
         expected.extend(fixture.proof_paths().into_iter().take(index + 1));
-        prop_assert_eq!(fixture.invocations().expect("read invocations"), expected);
+        prop_assert_eq!(fixture.invocations().map_err(|error| case_failure(&error))?, expected);
         let stderr = String::from_utf8_lossy(&output.stderr);
         prop_assert!(
             stderr.contains(&format!("prover-tools: target=verus failed exit={status}")),

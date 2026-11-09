@@ -573,9 +573,12 @@ jobs:
           if ! command -v strace > /dev/null 2>&1; then
             # A mirror that drops one request would otherwise fail the lane on
             # a transient network fault rather than on the boundary under
-            # test, so apt retries each fetch a bounded number of times.
-            sudo apt-get -o Acquire::Retries=3 update
-            sudo apt-get -o Acquire::Retries=3 install --yes --no-install-recommends strace
+            # test, so apt retries each fetch a bounded number of times. The
+            # non-interactive flag matches the isolation step below: a runner
+            # that would prompt for a password fails here rather than hanging
+            # until the job timeout.
+            sudo --non-interactive apt-get -o Acquire::Retries=3 update
+            sudo --non-interactive apt-get -o Acquire::Retries=3 install --yes --no-install-recommends strace
           fi
           strace -V
       - name: Verify the kani-check isolation boundary

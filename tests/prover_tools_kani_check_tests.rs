@@ -297,9 +297,9 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         run.output.status.success(),
         "the isolated query should succeed, got stdout `{stdout}` and stderr `{stderr}`"
     );
-    assertions::ensure_restrictions_reported(&stdout)?;
-    assertions::ensure_home_unwritable(&stdout)?;
-    assertions::ensure_only_control_writable(&stdout)?;
+    assertions::ensure_restrictions_reported(&run)?;
+    assertions::ensure_home_unwritable(&run)?;
+    assertions::ensure_only_control_writable(&run)?;
     ensure!(
         !stderr.contains("prover-tools runner invoked"),
         "the isolated query must not resolve the remote runner, got `{stderr}`"
@@ -309,11 +309,11 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         "the control verifier must succeed while discarding its failed attempts, \
          got stdout `{stdout}` and stderr `{stderr}`"
     );
-    assertions::ensure_query_attempts_nothing(&run.query_trace)?;
-    assertions::ensure_recipe_commands_traced(&run.query_trace)?;
-    assertions::ensure_control_attempts_traced(&run.control_trace)?;
+    assertions::ensure_query_attempts_nothing(&run)?;
+    assertions::ensure_recipe_commands_traced(&run)?;
+    assertions::ensure_control_attempts_traced(&run)?;
     assertions::ensure_dirty_recipe_attempts_traced(&run)?;
     assertions::ensure_missing_payload_refused(&run)?;
-    assertions::ensure_installed_query_works(&run, &stdout, &stderr)?;
+    assertions::ensure_installed_query_works(&run)?;
     fixture.ensure_remote_runner_unused(&run.marker)
 }
