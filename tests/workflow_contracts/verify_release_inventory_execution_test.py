@@ -104,39 +104,56 @@ def test_a_substituted_archive_that_agrees_with_its_sidecar_is_refused(
     assert not run.output_path.exists(), "a rejected release must leave no record"
 
 
-def test_a_declared_asset_the_release_does_not_carry_is_refused(
-    tmp_path: pathlib.Path,
+def _refuse_release_holding(
+    tmp_path: pathlib.Path, served: dict[str, bytes], named: str
 ) -> None:
-    """Refuse a release whose inventory is short of its declaration."""
+    """Run a release that carries ``served`` and assert it is refused.
+
+    Both inventory disagreements end the same way: the step fails, the
+    diagnostic names the asset that caused it, and no verified record is
+    written. Only which asset is named differs, so that is the argument.
+
+    Parameters
+    ----------
+    tmp_path
+        The directory the run keeps its workspace in.
+    served
+        The bytes the release carries, keyed by attachment name.
+    named
+        The asset the diagnostic must name.
+    """
     publisher = default_publisher()
-    served = {name: body for name, body in publisher.files.items() if name != PACKAGE}
     run = execute(
         tmp_path,
         Scenario(publisher=publisher, remote=draft_release(release_assets(served))),
     )
     assert run.completed[-1].returncode != 0, final_diagnostic(run)
-    assert PACKAGE in final_diagnostic(run), (
-        "the diagnostic must name the missing asset"
+    assert named in final_diagnostic(run), (
+        f"the diagnostic must name {named}, the asset at fault"
     )
-    assert not run.output_path.exists()
+    assert not run.output_path.exists(), "a refused release must leave no record"
+
+
+def test_a_declared_asset_the_release_does_not_carry_is_refused(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a release whose inventory is short of its declaration."""
+    served = {
+        name: body
+        for name, body in default_publisher().files.items()
+        if name != PACKAGE
+    }
+    _refuse_release_holding(tmp_path, served, PACKAGE)
 
 
 def test_an_asset_the_declaration_does_not_name_is_refused(
     tmp_path: pathlib.Path,
 ) -> None:
     """Refuse a release that carries more than the build declared."""
-    publisher = default_publisher()
-    served = dict(publisher.files)
-    served["netsuke-0.1.0-extra.tar.gz"] = b"an uninvited asset"
-    run = execute(
-        tmp_path,
-        Scenario(publisher=publisher, remote=draft_release(release_assets(served))),
-    )
-    assert run.completed[-1].returncode != 0, final_diagnostic(run)
-    assert "netsuke-0.1.0-extra.tar.gz" in final_diagnostic(run), (
-        "the diagnostic must name the undeclared asset"
-    )
-    assert not run.output_path.exists()
+    undeclared = "netsuke-0.1.0-extra.tar.gz"
+    served = dict(default_publisher().files)
+    served[undeclared] = b"an uninvited asset"
+    _refuse_release_holding(tmp_path, served, undeclared)
 
 
 def test_a_record_that_does_not_cover_the_declaration_is_refused(
