@@ -2195,7 +2195,7 @@ configuration file may declare them:
 ```toml
 [[shells]]
 name = "dash"
-executable = "/bin/dash"
+executable = "dash"
 args = ["-c"]
 ```
 
@@ -2218,8 +2218,9 @@ Each field is validated as it is read:
 
 - `name` is 1 to 63 bytes and matches `[a-z][a-z0-9_-]{0,62}`.
 - `executable` is a bare program name or an absolute path. A relative path is
-  rejected. Nothing probes the filesystem, so a definition naming a program
-  that is not installed is accepted at configuration time.
+  rejected, and so is a path that is absolute by POSIX rules but names no drive
+  or UNC share to Windows. Nothing probes the filesystem, so a definition
+  naming a program that is not installed is accepted at configuration time.
 - `args` has 1 to 16 elements and at most 4096 UTF-8 bytes in total, and no
   element may contain a NUL byte. Empty elements are allowed because some
   programs treat them as meaningful.

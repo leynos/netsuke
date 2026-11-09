@@ -295,6 +295,20 @@ explicit and exercise the actual adapters in tests.
     shared compile-slot queue of over 100 waiting requests; no gate waited on
     an unhealthy admission service. Every verdict recorded before this rebase
     is superseded by this run, because a rebase creates a new candidate.
+  - [x] 2026-11-09: Repair the first hosted failure the rebased candidate
+    `ba61a02cd` produced. The Windows lane failed
+    `cli_examples::configured_shell_example_is_accepted_from_an_operator_root`
+    because the marked users'-guide example spelled `executable = "/bin/dash"`,
+    which Windows rejects as rooted without a drive. The example and the
+    commented sample in `docs/sample-netsuke.toml` now use the bare program name
+    `dash`, the users' guide states that an absolute path must name a Windows
+    drive or UNC share, and
+    `cli_examples::configured_shell_example_spells_an_executable_every_host_accepts`
+    asserts the documented spelling parses under both host families, so a Linux
+    gate now covers the class. The same run's `build-test` and `lint-windows`
+    jobs failed earlier, in `Install Whitaker`, on an HTTP 504 fetching
+    `dylint-link-x86_64-unknown-linux-gnu-v6.3.0.tgz` from the rolling release;
+    that is a transient archive fault and is rerun, not repaired.
 
 ## Surprises & discoveries
 
@@ -416,6 +430,21 @@ with `GNU compiler is not supported for this target`, because `ureq` reaches
 `ring` through `netsuke-build`, a dev-dependency of `test_support`, and the
 target needs an MSVC C toolchain that is not installed. Cfg-gated imports
 therefore have to be audited by inspection locally and confirmed by hosted CI.
+
+A documented example that the suite executes is loaded on every host, so every
+value it spells has to be host-neutral. The configured-shell example named
+`executable = "/bin/dash"`, which a Unix-like host accepts as absolute and
+Windows rejects as rooted without a drive, so the identical text passed Linux
+and failed the Windows lane at
+`cli_examples::configured_shell_example_is_accepted_from_an_operator_root` with
+`Validation failed for 'shells[0].executable': a Windows shell executable must
+name a drive or a UNC share`.
+This is a second instance of the same blind spot as the unix-gated import
+above: a defect that only the Windows job can observe. The repair is the
+portable spelling, not a host gate on the test, and the example's spelling is
+now asserted against both host families so a Linux gate catches the class. Note
+also that the job stopped at its first failure, leaving 1429 of 4723 tests
+unrun, so a green rerun is the only evidence for the rest.
 
 ## Decision log
 
