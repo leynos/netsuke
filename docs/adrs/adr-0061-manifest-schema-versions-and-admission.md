@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed. This decision remains pending review and explicit acceptance.
+Accepted on 2026-11-09. Manifest schema admission accepts only `MAJOR.MINOR.0`
+releases inside a supported major/minor range, and checks the literal
+`netsuke_version` after YAML parsing but before any template evaluation, so an
+unsupported schema never reaches a Jinja helper.
 
 ## Date
 

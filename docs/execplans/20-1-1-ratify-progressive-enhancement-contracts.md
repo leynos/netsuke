@@ -5,13 +5,14 @@ This ExecPlan (execution plan) is a living document. The sections `Constraints`,
 `Outcomes & retrospective`, `Conformance basis`, and `Verification plan` must
 be kept up to date as work proceeds.
 
-Status: IN PROGRESS
+Status: COMPLETE
 
-The user approved this plan on 2026-10-24 and selected D-19 Option A. Approval
-authorizes drafting the decision records it describes. It does not accept them:
-acceptance happens through the normal Architectural Decision Record (ADR)
-process, when the user explicitly accepts the drafted ADRs during pull-request
-review (milestone EP-M5).
+Every milestone including EP-M5 is complete and roadmap item 20.1.1 is marked
+done. The user approved this plan on 2026-10-24 and selected D-19 Option A;
+approval authorized drafting the decision records, and it did not accept them.
+Acceptance happened through the normal Architectural Decision Record (ADR)
+process: the user explicitly accepted ADR-0061 to ADR-0067 during pull-request
+review on 2026-11-09.
 
 ## Purpose / big picture
 
@@ -71,7 +72,9 @@ decision D-15.
 
 - Do not implement until the user explicitly approves this plan.
 - Do not mark any ADR `Accepted`, or roadmap item 20.1.1 done, until the user
-  has explicitly accepted the drafted ADRs in pull-request review.
+  has explicitly accepted the drafted ADRs in pull-request review. Satisfied on
+  2026-11-09: the user accepted ADR-0061 to ADR-0067 in review, and EP-M5
+  recorded that acceptance.
 - Preserve the shallow end. The quickstart manifest in RFC 0025 section 2 and
   `docs/quickstart.md` must parse, generate, and build with identical output.
   No manifest declaring `netsuke_version: "1.0.0"` may change parse result,
@@ -388,7 +391,14 @@ decision D-15.
   harness closure reaches. The string-keyed fixture `match` that needed
   `unreachable!` became a closed `FIXTURES` table, which removed the panic
   rather than suppressing the lint.
-- [ ] EP-M5: ADR acceptance, roadmap completion, plan completion.
+- [x] EP-M5: ADR acceptance, roadmap completion, plan completion.
+  - 2026-11-09: the user explicitly accepted ADR-0061 to ADR-0067 in review.
+    Each ADR's status became `Accepted on 2026-11-09` followed by a one-line
+    summary of its decision; no amendment was requested, so the drafted text
+    stands. `docs/netsuke-design.md` now calls the resolution table accepted
+    rather than proposed, `docs/roadmap-progressive-enhancement.md` records the
+    acceptance date in its preamble and marks 20.1.1 with its three
+    sub-bullets `[x]`, and this plan's status line is `COMPLETE`.
 
 ## Surprises & discoveries
 
@@ -867,9 +877,23 @@ override rather than maintaining a filter that now names no declared test.
 
 EP-M3 and EP-M4 are implemented and rebased onto `main`, and their conflicts
 were resolved semantically rather than by taking one side wholesale; the
-rebase's own discoveries are recorded in `Progress`. Final gates on this exact
-head, the exact-head CodeRabbit review, and EP-M5's explicit ADR acceptance
-remain outstanding. Reconcile these outcomes again after each delivery boundary.
+rebase's own discoveries are recorded in `Progress`. The branch was then
+rebased a second time onto `fb8486ff3`, where the only textual conflicts were
+the `CHANGELOG.md` entry list and the at-a-glance table's column padding; both
+were resolved by keeping every entry from each side.
+
+EP-M5 completed on 2026-11-09: ADR-0061 to ADR-0067 read `Accepted` with that
+date and a one-line summary of what each decides, the design document's
+resolution table and the roadmap preamble describe them as accepted, and
+`docs/roadmap-progressive-enhancement.md` marks 20.1.1 and its three sub-bullets
+`[x]`. No amendment was requested in review, so the ADR text is the drafted
+text.
+
+The plan's own lesson is that its acceptance gate was worth writing down
+explicitly. Holding the `Accepted` status behind a named precondition kept a
+drafted decision from being presented as a settled one, and the plan's
+`Progress` entries were specific enough to resume after context loss without
+re-deriving the four gate failures that drove the telemetry module's move.
 
 ## Context and orientation
 
@@ -1711,5 +1735,6 @@ history confirms `vTEST` as the first tagged tree with a schema `1.0.0`
 manifest and `v0.1.0-beta1` as the first versioned release; the
 `command_isolation` field was accepted later under the pre-gate `1.0` schema
 and remains absent from release tags. `make fmt`, `make check-fmt`,
-`make markdownlint`, and `make nixie` passed. No code changed. The plan remains
-in progress; ADR acceptance is pending at EP-M5.
+`make markdownlint`, and `make nixie` passed. No code changed. At that point
+the plan remained in progress, with ADR acceptance pending at EP-M5; it was
+accepted on 2026-11-09 and the plan is now complete.

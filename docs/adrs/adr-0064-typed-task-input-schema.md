@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed. This decision remains pending review and explicit acceptance.
+Accepted on 2026-11-09. The root `inputs` mapping is optional and validates
+declared values against a closed type vocabulary before template evaluation or
+command execution, with literal defaults and `--input NAME=VALUE` registration
+in the canonical command metadata.
 
 ## Date
 

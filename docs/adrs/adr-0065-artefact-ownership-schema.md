@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed. This decision remains pending review and explicit acceptance.
+Accepted on 2026-11-09. Artefact ownership is an explicit, exact-path author
+assertion with bounded `clean_owned` selection; ownership roots must not
+overlap, and an explicit selection cleans only its named roots.
 
 ## Date
 

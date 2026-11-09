@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed. This decision remains pending review and explicit acceptance.
+Accepted on 2026-11-09. Opt-in maturity rules select explicit graph nodes,
+compose monotonically against a trusted severity floor, and reuse the semantic
+linter's resolved inventory, so absent policy produces no message at any
+verbosity.
 
 ## Date
 
