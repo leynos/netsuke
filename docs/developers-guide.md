@@ -2835,16 +2835,16 @@ selector that wrote nothing fails there rather than at the uploader. Each of
 those fails the action's own step, which is what stops a bad tree from reaching
 the network at all.
 
-The upload path ends here for now. The uploader reads the local `trusted.json`
-when it checks the payload. No later job consumes the retained artefact:
-`verify-release-inventory`, `finalize-github-release`, and `consumer-smoke` are
-planned job-matched actions that do not exist yet, and no job in this workflow
+The upload path ends here for now. The retained `trusted.json` is consumed by
+the `verify-release-inventory` job, which compares the downloaded release
+assets against it. `finalize-github-release` and `consumer-smoke` are planned
+job-matched actions that do not exist yet, and no job in this workflow
 publishes a release. Only a release the workflow creates is a draft:
 `ensure_draft_release.py` returns as soon as the tag already has one, without
 checking whether it is public, so a rerun attaches assets to whatever release
-the tag already names. The record is retained *for* those jobs, which is what
-the issue asks for; wiring a consumer is their work. Read the section above as
-describing the implemented upload path, not a completed verification and
+the tag already names. The record is retained *for* those jobs, and the
+verifier is the first of them; wiring the finalizer is its own work. Read the
+section above as describing the implemented upload path, not a completed
 finalization hand-off.
 
 Both staging and publication write an always-run outcome to

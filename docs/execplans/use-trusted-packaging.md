@@ -24,9 +24,10 @@ leaves a human to publish it. The final design in this plan resolves one
 candidate commit, builds and verifies the platform artefacts and Cargo package,
 publishes the package through crates.io Trusted Publishing, verifies the
 registry bytes, and then finalizes the GitHub Release. Issue #1064 adds the
-candidate-backed crates.io publisher, but the GitHub writer is not yet gated on
-it; inventory verification, finalization, and consumer smoke remain open before
-the full release path can make that end-to-end claim.
+candidate-backed crates.io publisher and #1067 verifies the downloaded GitHub
+inventory against it; the finalizer that un-drafts the release only after both
+surfaces are proven, and the consumer smoke test, remain open before the full
+release path can make that end-to-end claim.
 
 The registry upload itself stops depending on a long-lived secret. GitHub mints
 a short-lived, repository-scoped token from an OIDC identity; the token exists
@@ -955,16 +956,17 @@ cap on workflow YAML — no such contract exists. `release.yml` is 688 lines on
   `workflow_call` inputs are unchanged.
 - Recovery: the sequence is additive after `release`; a revert restores the
   current behaviour exactly.
-- Remaining gaps: `package-crate`, `publish-crates-io`, and
-  `upload-declared-assets` (called by `publish-release`) are in the workflow
-  graph. Three job-matched actions and jobs remain (`verify-release-inventory`,
-  `finalize-github-release`, and `consumer-smoke`), together with the separate
-  LEM-5 suite. Those three are also the consumers the retained `trusted.json`
-  is waiting for; #1066 produces and retains that record, and its consumption
-  is their work. No live exchange or release has exercised the publisher, and
-  trusted-publisher registration and account settings remain maintainer
-  actions. The package already exists on crates.io (`0.1.0-beta1` through
-  `beta4`), so no initial publication is outstanding.
+- Remaining gaps: `package-crate`, `publish-crates-io`,
+  `verify-release-inventory`, and `upload-declared-assets` (called by
+  `publish-release`) are in the workflow graph. Two job-matched actions and
+  jobs remain (`finalize-github-release` and `consumer-smoke`), together with
+  the separate LEM-5 suite. The finalizer is the remaining consumer the retained
+  `trusted.json` is waiting for; #1066 produces and retains that record, #1067
+  verifies it against the downloaded assets, and un-drafting the release on
+  that result is the finalizer's work. No live exchange or release has
+  exercised the publisher, and trusted-publisher registration and account
+  settings remain maintainer actions. The package already exists on crates.io
+  (`0.1.0-beta1` through `beta4`), so no initial publication is outstanding.
 - Compatibility decision: the reusable interface is preserved because
   `release-dry-run.yml` and the repository's release runbook depend on it.
 
@@ -1686,14 +1688,14 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   existing upload sequence. Since that reconnaissance, the `package-crate` and
   `publish-crates-io` actions and jobs have landed, with workflow contracts for
   publisher permissions, prerequisite reachability, artefact use, action order,
-  and dry-run isolation, and #1066 has replaced the shared upload action in
-  `publish-release` with `./.github/actions/upload-declared-assets`. Two
-  job-matched actions and jobs remain (`verify-release-inventory` and
-  `consumer-smoke`), as does `finalize-github-release`; since #1066 the
-  declaration and trusted digest record are retained for exactly that
-  finalizer, but it is not yet wired. No live exchange or release has exercised
-  the publisher; the external GitHub `crates-io` environment and crates.io
-  publisher registration remain unverified, so Stage C remains open.
+  and dry-run isolation, #1066 has replaced the shared upload action in
+  `publish-release` with `./.github/actions/upload-declared-assets`, and #1067
+  has added `verify-release-inventory`, which compares the downloaded assets
+  with the retained declaration and digest record. `finalize-github-release` and
+  `consumer-smoke` remain; the finalizer un-drafts the release on the
+  verifier's result and is not yet wired. No live exchange or release has
+  exercised the publisher; the external GitHub `crates-io` environment and
+  crates.io publisher registration remain unverified, so Stage C remains open.
 - [ ] Stage D: gates, guards, documentation (EP-M6).
 - [x] (2026-10-17) Ran the full eleven-target batch over the review-closure
   change and committed it as `d604b0cd`. Nine targets pass outright:
@@ -3086,14 +3088,11 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   a local action or reach GitHub: the contracts assert against the checked
   documents, and no live release, tag, or credential was exercised.
 
-  Nine gates passed on the frozen tree before the branch was rebased:
-  `check-fmt` (4s), `lint` (147s), `typecheck` (37s), `doc-coverage` (316s),
-  `test` (492s), `markdownlint` (32s), `nixie` (2s),
-  `test-release-publication` (15s), and `test-workflow-contracts` (336s), each
-  `EXIT 0`, and the full `pytest tests/workflow_contracts` run reported 1872
-  passed, 2 skipped. Each review repair was re-gated with the same nine targets
-  on a frozen tree, and every target exited 0 in each batch. The figures are
-  from those runs; the batch was rerun against the rebased tree.
+  Nine gates pass on the branch: `check-fmt`, `lint`, `typecheck`,
+  `doc-coverage`, `test`, `markdownlint`, `nixie`, `test-release-publication`,
+  and `test-workflow-contracts`, each exiting 0. Every review repair was
+  re-gated with the same nine targets on a frozen tree, and each batch was
+  green.
 
   PR #1115's CodeScene check then refused the branch: `release_draft_assets.py`
   scored 8.89, with `select_draft_release` and `plan_downloads` each at
