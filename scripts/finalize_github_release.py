@@ -81,7 +81,7 @@ def snapshot(
 # Cyclopts binds one command-line flag per parameter, so this signature is the
 # workflow's interface rather than an incidental long argument list.
 @app.command
-def publish(  # pylint: disable=too-many-arguments
+def publish(  # pylint: disable=too-many-arguments  # one flag per parameter
     *,
     tag: typ.Annotated[str, Parameter(required=True)],
     commit: typ.Annotated[str, Parameter(required=True)],

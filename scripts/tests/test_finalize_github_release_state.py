@@ -57,7 +57,9 @@ def test_the_plan_verdict_names_what_publication_may_do(
     plan: dict[str, object], verdict: PlanVerdict
 ) -> None:
     """Classify each plan the planner can produce."""
-    assert assess_plan(plan).verdict is verdict
+    assert assess_plan(plan).verdict is verdict, (
+        f"the plan {plan!r} must be classified as {verdict}"
+    )
 
 
 def test_a_conflict_outranks_an_upload_in_the_same_plan() -> None:
@@ -74,7 +76,9 @@ def test_a_conflict_outranks_an_upload_in_the_same_plan() -> None:
 
     assessment = assess_plan(plan)
 
-    assert assessment.verdict is PlanVerdict.REFUSED
+    assert assessment.verdict is PlanVerdict.REFUSED, (
+        "a plan holding a conflict must be refused"
+    )
     assert assessment.conflicts == (SIDECAR,), (
         "the conflict must be the finding that decides the verdict"
     )
@@ -112,8 +116,12 @@ def test_unverifiable_assets_stay_distinct_from_conflicts() -> None:
 
     assessment = assess_plan(plan)
 
-    assert assessment.conflicts == (SIDECAR,)
-    assert assessment.unverifiable == (ARCHIVE,)
+    assert assessment.conflicts == (SIDECAR,), (
+        "the summary's conflict must survive as a conflict"
+    )
+    assert assessment.unverifiable == (ARCHIVE,), (
+        "an unreadable digest must not be reported as a conflict"
+    )
 
 
 @pytest.mark.parametrize(
@@ -134,7 +142,9 @@ def test_a_malformed_plan_is_unreadable_rather_than_verified(plan: object) -> No
     """Refuse a document whose shape cannot support any decision."""
     assessment = assess_plan(plan)
 
-    assert assessment.verdict is PlanVerdict.UNREADABLE
+    assert assessment.verdict is PlanVerdict.UNREADABLE, (
+        "a plan whose shape supports no decision must be unreadable"
+    )
     assert assessment.detail, "an unreadable plan must say why it was refused"
 
 
@@ -159,7 +169,7 @@ def test_a_release_response_is_decoded_into_its_flags_and_digests() -> None:
         is_draft=True,
         is_prerelease=False,
         assets={ARCHIVE: "sha256:" + "ab" * 32},
-    )
+    ), "the response must decode into exactly its flags, tag, and digests"
 
 
 def test_an_asset_without_a_usable_digest_is_preserved_as_unknown() -> None:
@@ -173,7 +183,9 @@ def test_an_asset_without_a_usable_digest_is_preserved_as_unknown() -> None:
 
     state = parse_release_state(payload, tag="v1.2.3")
 
-    assert state.assets == {ARCHIVE: None, SIDECAR: None}
+    assert state.assets == {ARCHIVE: None, SIDECAR: None}, (
+        "an absent or non-text digest must be recorded as unknown, not empty"
+    )
 
 
 @pytest.mark.parametrize(
@@ -218,7 +230,10 @@ def test_already_finalized_requires_a_public_release_with_the_wanted_flag(
     """Treat only a public release with an agreeing flag as finished."""
     state = ReleaseState("v1.2.3", is_draft, is_prerelease, {})
 
-    assert is_already_finalized(state, is_prerelease=wanted) is expected
+    assert is_already_finalized(state, is_prerelease=wanted) is expected, (
+        f"draft={is_draft} prerelease={is_prerelease} wanted={wanted} must be "
+        f"{expected}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -236,4 +251,7 @@ def test_readback_separates_a_draft_from_a_wrong_flag(
     """Give each failure its own diagnosis, since neither is retryable alike."""
     state = ReleaseState("v1.2.3", is_draft, is_prerelease, {})
 
-    assert classify_readback(state, is_prerelease=wanted) is expected
+    assert classify_readback(state, is_prerelease=wanted) is expected, (
+        f"draft={is_draft} prerelease={is_prerelease} wanted={wanted} must be "
+        f"{expected}"
+    )

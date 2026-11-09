@@ -44,9 +44,6 @@ class PlanVerdict(enum.Enum):
 _ACTION_VALUES = frozenset(
     action.value for action in release_reconcile_github.AssetAction
 )
-_UPLOAD = release_reconcile_github.AssetAction.UPLOAD.value
-_CONFLICT = release_reconcile_github.AssetAction.CONFLICT.value
-_UNVERIFIABLE = release_reconcile_github.AssetAction.UNVERIFIABLE.value
 
 #: A plan row is exactly an asset name followed by its action.
 _ROW_WIDTH = 2
@@ -146,9 +143,12 @@ def _named(plan: cabc.Mapping[str, object], member: str) -> tuple[str, ...]:
     return tuple(raw)
 
 
-def _selected(rows: tuple[tuple[str, str], ...], action: str) -> tuple[str, ...]:
+def _selected(
+    rows: tuple[tuple[str, str], ...],
+    action: release_reconcile_github.AssetAction,
+) -> tuple[str, ...]:
     """Return the names one action applies to, preserving the recorded order."""
-    return tuple(name for name, recorded in rows if recorded == action)
+    return tuple(name for name, recorded in rows if recorded == action.value)
 
 
 def assess_plan(plan: object) -> PlanAssessment:
@@ -199,10 +199,13 @@ def assess_plan(plan: object) -> PlanAssessment:
         )
     try:
         rows = _plan_rows(plan)
-        conflicts = (*_named(plan, "conflicts"), *_selected(rows, _CONFLICT))
+        conflicts = (
+            *_named(plan, "conflicts"),
+            *_selected(rows, release_reconcile_github.AssetAction.CONFLICT),
+        )
         unverifiable = (
             *_named(plan, "unverifiable"),
-            *_selected(rows, _UNVERIFIABLE),
+            *_selected(rows, release_reconcile_github.AssetAction.UNVERIFIABLE),
         )
     except FinalizePolicyError as error:
         return PlanAssessment(PlanVerdict.UNREADABLE, detail=str(error))
@@ -220,7 +223,7 @@ def assess_plan(plan: object) -> PlanAssessment:
             conflicts=_unique(conflicts),
             unverifiable=_unique(unverifiable),
         )
-    uploads = _selected(rows, _UPLOAD)
+    uploads = _selected(rows, release_reconcile_github.AssetAction.UPLOAD)
     if uploads:
         return PlanAssessment(PlanVerdict.UPLOAD_REQUIRED, uploads=_unique(uploads))
     return PlanAssessment(PlanVerdict.VERIFIED)

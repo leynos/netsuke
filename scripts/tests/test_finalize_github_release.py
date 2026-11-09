@@ -100,7 +100,9 @@ def test_resolve_refuses_a_package_record_for_another_candidate(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_REFUSED
+    assert error.value.code == EXIT_REFUSED, (
+        "a record for another candidate must be refused, not recorded"
+    )
     assert not output.exists(), "a refused candidate must leave no record behind"
     assert field in capsys.readouterr().err, (
         "the refusal must name the field that disagreed"
@@ -117,7 +119,9 @@ def test_resolve_refuses_a_rehearsal_record_with_no_tag(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*_resolve_arguments(source, output))
 
-    assert error.value.code == EXIT_REFUSED
+    assert error.value.code == EXIT_REFUSED, (
+        "a rehearsal record cannot be finalized as a release"
+    )
     assert not output.exists(), "a tagless candidate must leave no record behind"
 
 
@@ -150,7 +154,9 @@ def test_resolve_refuses_an_unusable_package_record(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*_resolve_arguments(source, output))
 
-    assert error.value.code == EXIT_INPUT_UNREADABLE
+    assert error.value.code == EXIT_INPUT_UNREADABLE, (
+        "a malformed package record is an input fault"
+    )
     assert not output.exists(), "an unreadable package record must write nothing"
     assert capsys.readouterr().err, "the refusal must be diagnosed"
 
@@ -165,8 +171,12 @@ def test_resolve_reports_an_unwritable_candidate(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*_resolve_arguments(source, output))
 
-    assert error.value.code == EXIT_OUTPUT_UNWRITABLE
-    assert "could not be written" in capsys.readouterr().err
+    assert error.value.code == EXIT_OUTPUT_UNWRITABLE, (
+        "a failed write must not be reported as a refused candidate"
+    )
+    assert "could not be written" in capsys.readouterr().err, (
+        "the write failure must be diagnosed"
+    )
 
 
 def test_snapshot_records_the_flags_and_reported_digests(
@@ -194,15 +204,18 @@ def test_snapshot_records_the_flags_and_reported_digests(
         str(assets_path),
     )
 
-    assert json.loads(state_path.read_text(encoding="utf-8")) == {
-        "assets": {ARCHIVE: (f"sha256:{DIGEST}")},
+    expected_state = {
+        "assets": {ARCHIVE: f"sha256:{DIGEST}"},
         "isDraft": True,
         "isPrerelease": False,
         "tag": TAG,
     }
+    assert json.loads(state_path.read_text(encoding="utf-8")) == expected_state, (
+        "the snapshot must record the release's flags, tag, and asset digests"
+    )
     assert json.loads(assets_path.read_text(encoding="utf-8")) == {
         ARCHIVE: f"sha256:{DIGEST}"
-    }
+    }, "the planner's listing must keep GitHub's digest spelling"
     assert len(view.invocations) == 1, "the snapshot must make one read-only call"
 
 
@@ -234,7 +247,9 @@ def test_snapshot_stops_without_writing_when_the_api_fails(
             str(assets_path),
         )
 
-    assert error.value.code == EXIT_REMOTE_FAILED
+    assert error.value.code == EXIT_REMOTE_FAILED, (
+        "an unreadable release is a remote failure"
+    )
     assert not state_path.exists(), "a failed snapshot must not record the state"
     assert not assets_path.exists(), "a failed snapshot must not record the assets"
     assert "HTTP 403" in capsys.readouterr().err, (
@@ -277,10 +292,14 @@ def test_snapshot_refuses_an_unusable_api_response(
             str(assets_path),
         )
 
-    assert error.value.code == EXIT_REMOTE_FAILED
+    assert error.value.code == EXIT_REMOTE_FAILED, (
+        "a response for another release is a remote failure, not a refusal"
+    )
     assert not state_path.exists(), "an unusable response must record no state"
     assert not assets_path.exists(), "an unusable response must record no assets"
-    assert "unusable response" in capsys.readouterr().err
+    assert "unusable response" in capsys.readouterr().err, (
+        "the refusal must name the unusable response"
+    )
 
 
 def test_snapshot_refuses_a_response_that_names_one_asset_twice(
@@ -309,7 +328,9 @@ def test_snapshot_refuses_a_response_that_names_one_asset_twice(
             str(tmp_path / "assets.json"),
         )
 
-    assert error.value.code == EXIT_REMOTE_FAILED
+    assert error.value.code == EXIT_REMOTE_FAILED, (
+        "an ambiguous asset listing must be refused, not silently reduced"
+    )
 
 
 def test_resolve_refuses_an_unreadable_record(
@@ -321,4 +342,6 @@ def test_resolve_refuses_an_unreadable_record(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*_resolve_arguments(missing, tmp_path / "candidate.json"))
 
-    assert error.value.code == EXIT_INPUT_UNREADABLE
+    assert error.value.code == EXIT_INPUT_UNREADABLE, (
+        "a missing record must not be treated as an empty decision"
+    )

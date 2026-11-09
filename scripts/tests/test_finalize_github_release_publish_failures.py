@@ -43,9 +43,15 @@ def test_publish_reports_an_api_failure_before_the_edit(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*publish_arguments(tmp_path))
 
-    assert error.value.code == EXIT_REMOTE_FAILED
-    assert not (tmp_path / "result.json").exists()
-    assert "HTTP 403" in capsys.readouterr().err
+    assert error.value.code == EXIT_REMOTE_FAILED, (
+        "an unreadable release must fail the step before any edit"
+    )
+    assert not (tmp_path / "result.json").exists(), (
+        "a release that was never read must not record an outcome"
+    )
+    assert "HTTP 403" in capsys.readouterr().err, (
+        "the API diagnostic must reach the workflow log"
+    )
 
 
 def test_publish_reports_a_readback_that_is_still_a_draft(
@@ -62,9 +68,15 @@ def test_publish_reports_a_readback_that_is_still_a_draft(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*publish_arguments(tmp_path))
 
-    assert error.value.code == EXIT_REMOTE_FAILED
-    assert "still a draft" in capsys.readouterr().err
-    assert not (tmp_path / "result.json").exists()
+    assert error.value.code == EXIT_REMOTE_FAILED, (
+        "an accepted edit that changed nothing must fail the step"
+    )
+    assert "still a draft" in capsys.readouterr().err, (
+        "the diagnosis must say the release was not published"
+    )
+    assert not (tmp_path / "result.json").exists(), (
+        "a release that stayed a draft must not record a success"
+    )
 
 
 def test_publish_reports_a_public_release_with_the_wrong_flag(
@@ -81,10 +93,14 @@ def test_publish_reports_a_public_release_with_the_wrong_flag(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*publish_arguments(tmp_path))
 
-    assert error.value.code == EXIT_REFUSED
+    assert error.value.code == EXIT_REFUSED, (
+        "a public release whose flag contradicts it must be refused"
+    )
     message = capsys.readouterr().err
-    assert "public" in message
-    assert "cannot be made a draft again" in message
+    assert "public" in message, "the refusal must say the release is public"
+    assert "cannot be made a draft again" in message, (
+        "the refusal must say the release cannot be reverted to a draft"
+    )
 
 
 def test_publish_reports_an_unwritable_result_after_publishing(
@@ -106,8 +122,12 @@ def test_publish_reports_an_unwritable_result_after_publishing(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_OUTPUT_UNWRITABLE
-    assert "could not be written" in capsys.readouterr().err
+    assert error.value.code == EXIT_OUTPUT_UNWRITABLE, (
+        "an unrecordable outcome must fail the step even after publishing"
+    )
+    assert "could not be written" in capsys.readouterr().err, (
+        "the write failure must be diagnosed"
+    )
 
 
 def test_publish_reports_an_unwritable_github_output(
@@ -123,8 +143,12 @@ def test_publish_reports_an_unwritable_github_output(
             *publish_arguments(tmp_path, github_output=tmp_path / "absent" / "output")
         )
 
-    assert error.value.code == EXIT_OUTPUT_UNWRITABLE
-    assert "already final" in capsys.readouterr().err
+    assert error.value.code == EXIT_OUTPUT_UNWRITABLE, (
+        "an unwritable step output is an output fault, not a publication fault"
+    )
+    assert "already final" in capsys.readouterr().err, (
+        "the operator must be told the release is already final"
+    )
 
 
 def test_publish_only_reads_and_un_drafts(

@@ -70,7 +70,7 @@ def test_publish_un_drafts_a_verified_release(
         "outcome": "finalized",
         "prerelease": False,
         "tag": TAG,
-    }
+    }, "a verified release must be recorded as this run's finalization"
     assert output.read_text(encoding="utf-8") == (
         "outcome=finalized\nprerelease=false\n"
     ), "the step's outputs must name both the outcome and the flag"
@@ -104,7 +104,7 @@ def test_publish_sets_the_prerelease_flag_from_the_candidate(
 
     assert invocation_arguments(gh.invocations[1]) == edit_arguments(
         PRERELEASE_TAG, is_prerelease=True
-    )
+    ), "the edit must carry the candidate's prerelease flag, not the live one"
     assert "prerelease=true" in output.read_text(encoding="utf-8"), (
         "the workflow must learn the release is a prerelease"
     )
@@ -112,7 +112,7 @@ def test_publish_sets_the_prerelease_flag_from_the_candidate(
         "outcome": "finalized",
         "prerelease": True,
         "tag": PRERELEASE_TAG,
-    }
+    }, "the recorded outcome must keep the prerelease classification"
 
 
 def test_publish_treats_an_already_public_release_as_finalized(
@@ -130,7 +130,7 @@ def test_publish_treats_an_already_public_release_as_finalized(
         "outcome": "already-finalized",
         "prerelease": False,
         "tag": TAG,
-    }
+    }, "a public release must be recorded as already finalized"
 
 
 def test_a_retry_after_a_failed_edit_finishes_without_a_second_edit(
@@ -150,11 +150,13 @@ def test_a_retry_after_a_failed_edit_finishes_without_a_second_edit(
     with pytest.raises(SystemExit) as first:
         run_finalizer(*arguments)
 
-    assert first.value.code == EXIT_REMOTE_FAILED
+    assert first.value.code == EXIT_REMOTE_FAILED, "a failed edit must fail the step"
     assert not (tmp_path / "result.json").exists(), (
         "a failed edit must not record a final outcome"
     )
-    assert "HTTP 502" in capsys.readouterr().err
+    assert "HTTP 502" in capsys.readouterr().err, (
+        "the API diagnostic must reach the workflow log"
+    )
 
     run_finalizer(*arguments)
 
@@ -162,7 +164,7 @@ def test_a_retry_after_a_failed_edit_finishes_without_a_second_edit(
         "outcome": "already-finalized",
         "prerelease": False,
         "tag": TAG,
-    }
+    }, "the retry must record the state the failed attempt left behind"
 
 
 def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
@@ -183,7 +185,9 @@ def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
     with pytest.raises(SystemExit) as first:
         run_finalizer(*arguments)
 
-    assert first.value.code == EXIT_REMOTE_FAILED
+    assert first.value.code == EXIT_REMOTE_FAILED, (
+        "an unreadable read-back must fail the step"
+    )
 
     run_finalizer(*arguments)
 
@@ -196,7 +200,7 @@ def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
         "outcome": "already-finalized",
         "prerelease": False,
         "tag": TAG,
-    }
+    }, "the retry must record the release as already finalized"
 
 
 def test_publish_refuses_an_upload_plan_before_reaching_github(
@@ -208,8 +212,12 @@ def test_publish_refuses_an_upload_plan_before_reaching_github(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_UPLOAD_REQUIRED
-    assert not (tmp_path / "result.json").exists()
+    assert error.value.code == EXIT_UPLOAD_REQUIRED, (
+        "a missing asset is the uploader's to fix, not this stage's to guess at"
+    )
+    assert not (tmp_path / "result.json").exists(), (
+        "a release awaiting an upload must not record a finalization"
+    )
     message = capsys.readouterr().err
     assert ARCHIVE in message, "the refusal must name the asset to upload"
     assert "remains a draft" in message, "the operator must know the release state"
@@ -234,11 +242,13 @@ def test_publish_refuses_a_plan_that_cannot_be_verified(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_REFUSED
+    assert error.value.code == EXIT_REFUSED, (
+        "an unverifiable plan must be refused, whatever the cause"
+    )
     message = capsys.readouterr().err
-    assert ARCHIVE in message
+    assert ARCHIVE in message, "the refusal must name the blocked asset"
     assert word in message, "the refusal must distinguish the two blockages"
-    assert "remains a draft" in message
+    assert "remains a draft" in message, "the operator must know the release state"
 
 
 def test_publish_refuses_a_plan_with_no_decisions(
@@ -251,8 +261,12 @@ def test_publish_refuses_a_plan_with_no_decisions(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_REFUSED
-    assert "no asset decisions" in capsys.readouterr().err
+    assert error.value.code == EXIT_REFUSED, (
+        "an empty plan must never be read as a verified release"
+    )
+    assert "no asset decisions" in capsys.readouterr().err, (
+        "the refusal must say the plan decided nothing"
+    )
 
 
 def test_publish_refuses_a_malformed_plan(
@@ -265,8 +279,12 @@ def test_publish_refuses_a_malformed_plan(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_INPUT_UNREADABLE
-    assert "not a usable plan" in capsys.readouterr().err
+    assert error.value.code == EXIT_INPUT_UNREADABLE, (
+        "an undecodable plan is an input fault, not a refusal"
+    )
+    assert "not a usable plan" in capsys.readouterr().err, (
+        "the diagnosis must name the plan as unusable"
+    )
 
 
 @pytest.mark.parametrize(
@@ -291,9 +309,15 @@ def test_publish_refuses_a_candidate_for_another_revision(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_REFUSED
-    assert field in capsys.readouterr().err
-    assert not (tmp_path / "result.json").exists()
+    assert error.value.code == EXIT_REFUSED, (
+        "a candidate for another revision must be refused"
+    )
+    assert field in capsys.readouterr().err, (
+        "the refusal must name the field that disagreed"
+    )
+    assert not (tmp_path / "result.json").exists(), (
+        "a refused candidate must not record a finalization"
+    )
 
 
 def test_publish_refuses_an_unreadable_candidate(tmp_path: pathlib.Path) -> None:
@@ -304,4 +328,6 @@ def test_publish_refuses_an_unreadable_candidate(tmp_path: pathlib.Path) -> None
     with pytest.raises(SystemExit) as error:
         run_finalizer(*arguments)
 
-    assert error.value.code == EXIT_INPUT_UNREADABLE
+    assert error.value.code == EXIT_INPUT_UNREADABLE, (
+        "a candidate that cannot be decoded must be reported as unreadable"
+    )
