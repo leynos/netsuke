@@ -180,9 +180,14 @@ the adapters apply them differently because their libraries do:
   `colour_choice` comes from `startup_signals.parser_color`, which is
   `startup_colour(hint, terminal_facts)` with the JSON argument fixed to
   `false`. That is why `--json` cannot suppress styling in `--help`. The
-  runner's `help` renderers run after the merge and take `plan.stdout_colour()`
-  instead, choosing between `StyledStr::ansi` and `StyledStr::Display` because
-  Clap's `Display` never colours.
+  runner's `help` renderers take `plan.stdout_colour()` instead, choosing
+  between `StyledStr::ansi` and `StyledStr::Display` because Clap's `Display`
+  never colours. Which plan they receive depends on the topic:
+  `is_informational_help` sends every topic except `targets` down the startup
+  route, so `help` and `help build` return through `run_cli` carrying the
+  startup plan and never reach the configuration merge, exactly as Clap's own
+  path does not. Only `help targets` continues past the merge and therefore
+  reflects configuration-derived colour.
 - The status reporter selects live or static progress from `live_progress`,
   which already accounts for accessible mode and a non-redraw-capable `TERM`.
 

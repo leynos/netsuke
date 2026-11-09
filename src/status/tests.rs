@@ -152,6 +152,71 @@ fn task_progress_update_carries_no_escape_from_its_first_byte(
     Ok(())
 }
 
+/// Assert the bytes the reporter *writes* carry no escape at the write site.
+///
+/// The assertion above covers the value `task_progress_update` returns. That
+/// is not the same claim: an edit could add a prefix where the value is
+/// written — `writeln!(writer, "\x1b[31m{task}")` — and leave the formatter's
+/// result untouched, so a formatter-level assertion still passes. The
+/// piped-stdout behavioural test cannot see it either, because its slice
+/// begins at the label.
+///
+/// Routing the text path through an in-memory sink closes that: this test
+/// observes the exact bytes the reporter emits, so the prefix has nowhere to
+/// hide. The reporter is driven through [`StatusReporter`] rather than by
+/// calling the helper, so the write site under test is the production one.
+#[rstest]
+#[case(1, 2, "cc -c src/a.c")]
+#[case(2, 2, "")]
+fn reporter_text_write_carries_no_escape_from_its_first_byte(
+    en_localizer: EnLocalizer,
+    #[case] current: u32,
+    #[case] total: u32,
+    #[case] description: &str,
+) -> Result<()> {
+    let _localizer = en_localizer;
+    let reporter = IndicatifReporter::with_writer(test_prefs(), true, Vec::new());
+    reporter.report_stage(
+        PipelineStage::NinjaSynthesisAndExecution.index(),
+        PIPELINE_STAGE_TOTAL,
+        "Executing Build",
+    );
+    reporter.report_task_progress(current, total, description);
+
+    let written = reporter
+        .writer
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+        .clone();
+    let task = task_progress_update(current, total, description);
+    // The hidden target also mirrors the stage line, so the buffer holds both
+    // writes. The task write is the last line, and asserting it equals the
+    // rendered value exactly is what catches a prefix added at the call site:
+    // `writeln!(writer, "\x1b[31m{task}")` would make the line longer here
+    // while leaving `task_progress_update` untouched.
+    let text = String::from_utf8_lossy(&written);
+    let task_line = text
+        .lines()
+        .next_back()
+        .context("the reporter should have written the task line")?;
+    ensure!(
+        task_line == task,
+        "the task write must be exactly the rendered line; wrote {task_line:?}"
+    );
+    let classified = test_support::terminal::classify(&written);
+    ensure!(
+        !classified.has_any_escape,
+        "the task write must contain no escape byte: {:?}",
+        String::from_utf8_lossy(&written)
+    );
+    ensure!(
+        !classified.has_sgr,
+        "the task write must carry no styling: {:?}",
+        String::from_utf8_lossy(&written)
+    );
+    Ok(())
+}
+
 #[rstest]
 fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
     en_localizer: EnLocalizer,

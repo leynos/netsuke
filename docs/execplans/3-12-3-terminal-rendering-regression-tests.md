@@ -1411,15 +1411,29 @@ code, one of them with the measurement D29 already recorded.
   beginning `ESC[31m` *before* it would pass. That is correct, and the stream
   cannot settle it: widening to the previous terminator collects the stage
   animation's own escapes, which is the failure this measurement already went
-  through. The boundary is closed instead where it actually exists.
-  `src/status/indicatif.rs` writes the plain path as
-  `writeln!(io::stderr(), "{task}")`, so the written value *is* the write from
-  its first byte, and
-  `task_progress_update_carries_no_escape_from_its_first_byte` asserts that
-  constructed value carries no escape, no redraw and no SGR. A mutation
-  inserting exactly CodeRabbit's `ESC[31m` prefix made both cases fail, so the
-  assertion is live rather than vacuous; the production file was restored and
-  the focused tests re-run green.
+  through.
+
+  A first attempt closed it at the wrong layer, and CodeRabbit caught that too.
+  Asserting the value `task_progress_update` returns says nothing about the
+  write: `writeln!(io::stderr(), "\x1b[31m{task}")` leaves the formatter's
+  result untouched. A mutation run makes the distinction concrete — with the
+  prefix added at the *write site*, the formatter assertion passed both cases
+  while the write-site assertion failed both. The earlier claim that the
+  formatter assertion was "the stronger of the pair for the prefix" was wrong
+  and is retracted here rather than left standing.
+
+  The boundary is now closed where the bytes actually exist. The reporter
+  writes through an injected sink (`IndicatifReporter<W: Write + Send>`,
+  defaulting to `io::Stderr`), mirroring the `AccessibleReporter<W>` seam that
+  already existed for the same reason; every plain-text write funnels through
+  one `write_plain_line`. The test
+  `reporter_text_write_carries_no_escape_from_its_first_byte` drives the
+  reporter through `StatusReporter` and asserts the task line it wrote is
+  exactly the rendered value and carries no escape or SGR. Editing the write
+  site is now observable, so the prefix has nowhere to hide. The
+  formatter-level test is kept: it guards the value, which is a different
+  contract. The production file was restored after mutation and the focused
+  tests re-run green.
 - *Domain Architecture* — rebutted, with one correction to the earlier
   wording. An earlier revision of this plan claimed the resolver was
   independent of CLI configuration types. That was wrong and CodeRabbit was

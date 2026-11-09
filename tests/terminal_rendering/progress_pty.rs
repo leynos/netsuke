@@ -126,19 +126,26 @@ fn a_task_update_is_sliced_from_its_label_to_its_line_end() {
 /// The UTF-8 encoding of U+2068, the bidi isolate that opens a task update.
 const TASK_ISOLATE: [u8; 3] = [0xE2, 0x81, 0xA8];
 
-/// Slice out each complete task-update emission, isolation prefix included.
+/// Slice out each task-update emission, isolation prefix included.
 ///
 /// The reporter wraps the whole label in `U+2068`…`U+2069`, so the emission
 /// begins one character before the `Task ` text. Slicing at the label would
 /// leave that prefix outside the assertion, and an escape written there would
-/// pass unseen — the gap this helper exists to close.
+/// pass unseen.
 ///
-/// It is deliberately not "the whole line": the stage animation repaints with
-/// cursor-up moves rather than newlines, so the first task update shares a
-/// physical line with the final stage repaint. Measuring from the previous line
-/// terminator would attribute the animation's escapes to the task update and
-/// fail on correct output, which is exactly what an earlier revision of this
-/// helper did.
+/// This is *not* the whole emission. It stops at the isolate, so bytes written
+/// before it remain unexamined: an edit that wrote `ESC[31m` ahead of the label
+/// would pass every assertion here. The stream cannot settle that case —
+/// widening the slice to the previous terminator collects the stage
+/// animation's own escapes, because the animation repaints with cursor-up
+/// moves and the first update shares its physical line. That is exactly what
+/// an earlier revision of this helper did, and it failed on correct output.
+///
+/// The write-site boundary is therefore covered where it actually exists, by
+/// `reporter_text_write_carries_no_escape_from_its_first_byte` in
+/// `src/status/tests.rs`, which captures the bytes the reporter writes and so
+/// sees the prefix. This helper's job is narrower: prove the emitted line,
+/// from its isolate onward, survives the real pseudo-terminal path intact.
 fn task_update_emissions(bytes: &[u8]) -> Vec<&[u8]> {
     let is_terminator = |byte: &u8| matches!(*byte, b'\r' | b'\n');
     bytes
@@ -180,9 +187,10 @@ fn task_updates_stay_plain_when_stdout_is_piped_and_stderr_is_terminal() -> Resu
     expect_that!(emissions.len(), eq(2));
     for emission in emissions {
         // Piped stdout puts the reporter on the text path, which writes the
-        // whole update with one `writeln!` and emits no escape at all. The
-        // slice now starts at the bidi isolate, so this covers every byte the
-        // task update writes and not merely the part from the label onwards.
+        // update with one `writeln!` and emits no escape at all. This slice
+        // starts at the bidi isolate, so it covers the line from the isolate
+        // onward; bytes before the isolate are out of reach here and are
+        // covered by the write-site capture in `src/status/tests.rs`.
         expect_that!(emission.starts_with(TASK_ISOLATE.as_slice()), eq(true));
         // The slice stops at the first terminator, and on a pseudo-terminal
         // that is the `\r` of the `\r\n` the line discipline writes.
