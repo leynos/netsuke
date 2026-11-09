@@ -68,13 +68,19 @@ outputs:
 
 runs:
   using: composite
+  # A composite action's steps cannot carry `timeout-minutes`: the runner does
+  # not support the key there (actions/runner#1979), so writing one would leave
+  # an inert key and no bound at all. Each adapter invocation is bounded by GNU
+  # `timeout` in the shell instead, and the workflow step that calls this action
+  # carries the aggregate ceiling. The pinned Cuprum release bounds no call in
+  # process, so without these a hung `gh` would hold the job open until the
+  # job's own timeout, with nothing naming the command that stopped answering.
   steps:
     - name: Validate inputs
       id: validate
       shell: bash
-      # A ceiling on every step, not only the network ones: a step left
-      # unbounded is the one nobody notices hanging.
-      timeout-minutes: 1
+      # No command bound, because this step runs only shell builtins and
+      # `mkdir`: there is no child process here that can hang.
       env:
         RELEASE_TAG: ${{ inputs.tag }}
         RELEASE_COMMIT: ${{ inputs.commit }}
@@ -122,10 +128,9 @@ runs:
     - name: Resolve the release candidate
       id: resolve
       shell: bash
-      # The pinned Cuprum release bounds no call on its own, so each step that
-      # can reach the network carries its own ceiling. This one only reads a
-      # local record, and the ceiling is slack rather than a measured cost.
-      timeout-minutes: 5
+      # The record is local, but `uv` still builds the script's environment
+      # from its pinned dependencies, which is the slow part on a cold,
+      # cacheless runner.
       env:
         RELEASE_TAG: ${{ inputs.tag }}
         RELEASE_COMMIT: ${{ inputs.commit }}
@@ -136,17 +141,17 @@ runs:
         # The package record's identity is re-validated here rather than
         # trusted because `package-crate` wrote it: a hand-edited record must
         # not be able to reclassify the release as a prerelease.
-        uv run --no-project --python 3.14 scripts/finalize_github_release.py \
-          resolve \
-          --identity "$IDENTITY_PATH" \
-          --tag "$RELEASE_TAG" \
-          --commit "$RELEASE_COMMIT" \
-          --output "$WORK_DIRECTORY/candidate.json"
+        timeout --kill-after=30s 300s \
+          uv run --no-project --python 3.14 scripts/finalize_github_release.py \
+            resolve \
+            --identity "$IDENTITY_PATH" \
+            --tag "$RELEASE_TAG" \
+            --commit "$RELEASE_COMMIT" \
+            --output "$WORK_DIRECTORY/candidate.json"
 
     - name: Snapshot the release state
       id: snapshot
       shell: bash
-      timeout-minutes: 5
       env:
         RELEASE_TAG: ${{ inputs.tag }}
         RELEASE_REPOSITORY: ${{ inputs.repository }}
@@ -154,17 +159,19 @@ runs:
         GH_TOKEN: ${{ inputs['github-token'] }}
       run: |
         set -euo pipefail
-        uv run --no-project --python 3.14 scripts/finalize_github_release.py \
-          snapshot \
-          --tag "$RELEASE_TAG" \
-          --repository "$RELEASE_REPOSITORY" \
-          --state-path "$WORK_DIRECTORY/state.json" \
-          --assets-path "$WORK_DIRECTORY/assets.json"
+        # Two read-only `gh` calls, each bounded by the same 300s: a draft's
+        # asset listing is small, so anything slower is a stalled API.
+        timeout --kill-after=30s 300s \
+          uv run --no-project --python 3.14 scripts/finalize_github_release.py \
+            snapshot \
+            --tag "$RELEASE_TAG" \
+            --repository "$RELEASE_REPOSITORY" \
+            --state-path "$WORK_DIRECTORY/state.json" \
+            --assets-path "$WORK_DIRECTORY/assets.json"
 
     - name: Plan the release reconciliation
       id: plan
       shell: bash
-      timeout-minutes: 5
       env:
         DIGEST_RECORD_PATH: ${{ inputs['digest-record-path'] }}
         WORK_DIRECTORY: ${{ inputs['work-directory'] }}
@@ -175,14 +182,20 @@ runs:
         # write the plan, and the finalize step turns that plan into the
         # diagnosis, so only a run that produced no plan stops here.
         set +e
-        uv run --no-project --python 3.14 scripts/finalize_github_release_cli.py \
-          --identity "$DIGEST_RECORD_PATH" \
-          --assets "$WORK_DIRECTORY/assets.json" \
-          --output "$WORK_DIRECTORY/plan.json"
+        timeout --kill-after=30s 300s \
+          uv run --no-project --python 3.14 scripts/finalize_github_release_cli.py \
+            --identity "$DIGEST_RECORD_PATH" \
+            --assets "$WORK_DIRECTORY/assets.json" \
+            --output "$WORK_DIRECTORY/plan.json"
         status=$?
         set -e
         case "$status" in
           0 | 1 | 2) ;;
+          124)
+            printf 'the reconciliation plan was not recorded within its 300s ' >&2
+            printf 'bound; the release remains a draft\n' >&2
+            exit 1
+            ;;
           *)
             printf 'the reconciliation plan could not be recorded (status %s); ' \
               "$status" >&2
@@ -195,7 +208,6 @@ runs:
     - name: Finalize the release
       id: finalize
       shell: bash
-      timeout-minutes: 10
       env:
         RELEASE_TAG: ${{ inputs.tag }}
         RELEASE_COMMIT: ${{ inputs.commit }}
@@ -208,13 +220,16 @@ runs:
         # exactly one thing: the draft flag. A missing or conflicting asset,
         # an unreadable record, and a failed API call each stop it with the
         # release still a draft, so a retry starts from verified bytes rather
-        # than from a rebuilt release.
-        uv run --no-project --python 3.14 scripts/finalize_github_release.py \
-          publish \
-          --tag "$RELEASE_TAG" \
-          --commit "$RELEASE_COMMIT" \
-          --repository "$RELEASE_REPOSITORY" \
-          --candidate-path "$WORK_DIRECTORY/candidate.json" \
-          --plan-path "$WORK_DIRECTORY/plan.json" \
-          --result-path "$WORK_DIRECTORY/result.json" \
-          --github-output "$GITHUB_OUTPUT"
+        # than from a rebuilt release. The 600s bound covers three `gh` calls;
+        # a timeout here leaves the release a draft, which is the same state a
+        # refusal leaves, so a retry converges either way.
+        timeout --kill-after=30s 600s \
+          uv run --no-project --python 3.14 scripts/finalize_github_release.py \
+            publish \
+            --tag "$RELEASE_TAG" \
+            --commit "$RELEASE_COMMIT" \
+            --repository "$RELEASE_REPOSITORY" \
+            --candidate-path "$WORK_DIRECTORY/candidate.json" \
+            --plan-path "$WORK_DIRECTORY/plan.json" \
+            --result-path "$WORK_DIRECTORY/result.json" \
+            --github-output "$GITHUB_OUTPUT"

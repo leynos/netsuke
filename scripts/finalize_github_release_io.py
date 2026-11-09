@@ -12,8 +12,10 @@ leaves an earlier record untouched. And the ``gh`` call is launched through
 Cuprum's catalogue, which passes each argument as one element and never
 through a shell, so a tag cannot become a command.
 
-A call that hangs is bounded by the composite action's ``timeout-minutes``:
-the pinned Cuprum release has no in-process timeout.
+A call that hangs is bounded by the GNU ``timeout`` each action step wraps
+around its adapter invocation: the pinned Cuprum release has no in-process
+timeout, and the runner does not support ``timeout-minutes`` inside a
+composite action.
 
 Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 ``scripts/tests/test_finalize_github_release_publish.py``.

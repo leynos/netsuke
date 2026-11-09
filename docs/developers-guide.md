@@ -3400,15 +3400,21 @@ the publisher's `trusted-artifact` output for the pre-upload digest record.
 
 *Table 3: The finalization action's steps and credential routing.*
 
-Each step carries its own `timeout-minutes`. The pinned Cuprum release bounds
-no call on its own, so a step ceiling is the only thing that stops a hung `gh`
-from holding the job open, and leaving one step unbounded is how a hang becomes
-a thirty-minute job timeout with no diagnosis. Expressions reach the shell only
-through `env`, so each is evaluated once, and both records the planner reads
-are checked to exist before anything is written. The validate step confirms
-that the caller supplied a token by testing a presence flag rather than by
-holding the token, so the credential exists in exactly the two steps that reach
-GitHub.
+Every adapter invocation runs under GNU `timeout`. A composite action's steps
+cannot carry `timeout-minutes`: the runner does not support the key there
+([actions/runner#1979](https://github.com/actions/runner/issues/1979)), so a
+key written in the action would be inert and the step would look bounded
+without being bounded. The bound therefore lives in the shell, as
+`timeout --kill-after=30s` around each `uv run`: 300 seconds for the resolver,
+the snapshot, and the planner, and 600 for the finalizer. The workflow step
+that calls the action carries the aggregate ceiling of 28 minutes, inside the
+job's own 30, so a hung `gh` call is reported against that step rather than as
+the whole job. The pinned Cuprum release bounds no call in process, so these
+are the only bounds there are. Expressions reach the shell only through `env`,
+so each is evaluated once, and both records the planner reads are checked to
+exist before anything is written. The validate step confirms that the caller
+supplied a token by testing a presence flag rather than by holding the token,
+so the credential exists in exactly the two steps that reach GitHub.
 
 `scripts/finalize_github_release.py` names the three commands the action
 invokes. `resolve` decodes the package record and refuses an identity whose
@@ -3422,8 +3428,10 @@ changes anything, and it decides from two records already on disk:
 
 Its PEP 723 block pins `cyclopts` and `cuprum` to exact versions, as the
 `scripts/ci` helpers do, rather than to the ranges most scripts declare. The
-other release scripts run earlier in the chain; this one un-drafts a release
-with a write token, and a fixed pair of wheels is one fewer thing that can
+pins cover those two direct dependencies only, so their transitive closure
+still resolves on every run: the block narrows the graph rather than freezing
+it. The other release scripts run earlier in the chain; this one un-drafts a
+release with a write token, and the two pins are one fewer thing that can
 differ between the run that was rehearsed and the run that publishes.
 
 The trusted record is the input, never the verifier's output. A record derived

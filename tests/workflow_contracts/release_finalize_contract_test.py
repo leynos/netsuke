@@ -30,7 +30,10 @@ from release_finalize_contract_support import (
     FINALIZE_STEP,
     FORBIDDEN_IN_RUN,
     LOCAL_ACTION,
+    PLAN_STEP,
+    RESOLVE_STEP,
     SETUP_UV_ACTION,
+    SNAPSHOT_STEP,
     STEP_NAMES,
     TOKEN_STEPS,
     TRUSTED_ARTIFACT_OUTPUT,
@@ -51,10 +54,28 @@ from workflow_loading import (
     workflow_job,
 )
 
-#: The whole-job ceiling every step's own ceiling must sit beneath. The pinned
-#: Cuprum release bounds no call in process, so the step timeouts are the only
-#: thing that stops a hung `gh` from holding the job open.
+#: The whole-job ceiling the action's step ceiling must sit beneath. The pinned
+#: Cuprum release bounds no call in process, so a timeout is the only thing
+#: that stops a hung `gh` from holding the job open.
 JOB_TIMEOUT_MINUTES = 30
+
+#: The ceiling on the workflow step that invokes the composite action. It sits
+#: here rather than on the action's own steps because the runner does not
+#: support `timeout-minutes` inside a composite action (actions/runner#1979),
+#: which is why the action bounds each command with GNU `timeout` instead.
+FINALIZE_STEP_TIMEOUT_MINUTES = 28
+
+#: The longest per-command bound the action may give one adapter invocation.
+#: Four of them, at most, must fit under :data:`FINALIZE_STEP_TIMEOUT_MINUTES`.
+MAX_COMMAND_BOUND_SECONDS = 600
+
+#: ``timeout --kill-after=30s 300s`` and the line continuation that keeps the
+#: bounded command on the next line, where :func:`run_tokens` finds it.
+_COMMAND_BOUND = re.compile(r"timeout --kill-after=\d+s (\d+)s \\")
+
+#: The steps whose ``run`` script invokes an adapter, and so needs a bound. The
+#: validate step runs only shell builtins and `mkdir`.
+BOUNDED_STEPS = (RESOLVE_STEP, SNAPSHOT_STEP, PLAN_STEP, FINALIZE_STEP)
 
 
 def _workflow() -> dict[str, object]:
@@ -86,8 +107,14 @@ def _receives_token_value(value: object) -> bool:
 
 
 def _assert_step_shape(step: dict[str, object]) -> None:
-    """Require strict shell handling and environment-only substitutions."""
+    """Require strict shell handling, environment-only substitutions, and bounds."""
     name = str(step.get("name"))
+    _assert_shell_shape(name, step)
+    _assert_step_bounds(name, step)
+
+
+def _assert_shell_shape(name: str, step: dict[str, object]) -> None:
+    """Require the shell and substitution discipline every step must keep."""
     assert step.get("shell") == "bash", f"{name} must run under Bash"
     run = step.get("run")
     assert isinstance(run, str), f"{name} must be a shell script"
@@ -102,11 +129,30 @@ def _assert_step_shape(step: dict[str, object]) -> None:
         assert forbidden not in run, (
             f"{name} must not call {forbidden!r}; the adapter owns that boundary"
         )
-    timeout = step.get("timeout-minutes")
-    assert isinstance(timeout, int), f"{name} must carry its own timeout-minutes"
-    assert 0 < timeout <= JOB_TIMEOUT_MINUTES, (
-        f"{name} must fit inside the job's {JOB_TIMEOUT_MINUTES} minutes, "
-        f"got {timeout!r}"
+
+
+def _assert_step_bounds(name: str, step: dict[str, object]) -> None:
+    """Require the bound to live where the runner actually honours it."""
+    # The runner ignores this key inside a composite action, so a step that
+    # carried one would look bounded and be nothing of the sort.
+    assert "timeout-minutes" not in step, (
+        f"{name} must not carry timeout-minutes: the runner does not support it "
+        "in a composite action (actions/runner#1979)"
+    )
+    if name in BOUNDED_STEPS:
+        _assert_command_bound(name, str(step.get("run")))
+
+
+def _assert_command_bound(name: str, run: str) -> None:
+    """Require each adapter invocation to run under a shell-level bound."""
+    lines = run.splitlines()
+    start = next(index for index, line in enumerate(lines) if "uv run " in line)
+    assert start > 0, f"{name} must invoke the adapter on its own command line"
+    bound = _COMMAND_BOUND.fullmatch(lines[start - 1].strip())
+    assert bound, f"{name} must bound its adapter invocation with `timeout`"
+    assert 0 < int(bound.group(1)) <= MAX_COMMAND_BOUND_SECONDS, (
+        f"{name} must bound its adapter invocation within "
+        f"{MAX_COMMAND_BOUND_SECONDS} seconds, got {bound.group(1)}"
     )
 
 
@@ -254,7 +300,15 @@ def _assert_job_contract(workflow: dict[str, object]) -> None:
     )
 
     local = steps[step_index_by_key(steps, "uses", LOCAL_ACTION)]
-    inputs = require_mapping(local.get("with"), "finalizer inputs")
+    _assert_local_action(local)
+    assert steps.index(local) > max(steps.index(checkout), steps.index(setup_uv)), (
+        "the finalization action must run after its checkout and tools"
+    )
+
+
+def _assert_local_action(step: dict[str, object]) -> None:
+    """Require the action's inputs and the aggregate ceiling around them."""
+    inputs = require_mapping(step.get("with"), "finalizer inputs")
     assert inputs == EXPECTED_JOB_INPUTS, (
         "the job must forward the contracted finalization inputs"
     )
@@ -262,8 +316,17 @@ def _assert_job_contract(workflow: dict[str, object]) -> None:
         "reconciliation must read the trusted pre-upload record; the verifier's "
         "output agrees with GitHub by construction"
     )
-    assert steps.index(local) > max(steps.index(checkout), steps.index(setup_uv)), (
-        "the finalization action must run after its checkout and tools"
+    timeout = step.get("timeout-minutes")
+    assert isinstance(timeout, int), (
+        "the step that invokes the action must carry the aggregate ceiling, "
+        "because the action's own steps cannot"
+    )
+    assert timeout == FINALIZE_STEP_TIMEOUT_MINUTES, (
+        f"the action's ceiling must stay {FINALIZE_STEP_TIMEOUT_MINUTES} minutes, "
+        f"got {timeout!r}"
+    )
+    assert timeout < JOB_TIMEOUT_MINUTES, (
+        "the action's ceiling must leave the job's own timeout room to report it"
     )
 
 
@@ -280,7 +343,7 @@ def _assert_complete_contract(
     [
         "token-on-validate",
         "token-on-plan",
-        "missing-timeout",
+        "unbounded-command",
         "gh-in-run",
         "wrong-output",
     ],
@@ -303,6 +366,7 @@ def test_action_mutations_are_rejected(mutation: str) -> None:
         "missing-verifier",
         "artifact-pattern",
         "trusted-literal",
+        "missing-step-timeout",
         "verifier-record",
     ],
 )

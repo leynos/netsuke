@@ -45,9 +45,6 @@ _ACTION_VALUES = frozenset(
     action.value for action in release_reconcile_github.AssetAction
 )
 
-#: A plan row is exactly an asset name followed by its action.
-_ROW_WIDTH = 2
-
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class PlanAssessment:
@@ -99,18 +96,22 @@ def _plan_rows(plan: cabc.Mapping[str, object]) -> tuple[tuple[str, str], ...]:
         msg = "the plan does not carry an actions list"
         raise FinalizePolicyError(msg)
     rows: list[tuple[str, str]] = []
+    # Sequence patterns match any two-element list or tuple, and never a
+    # string, so each arm below stands for exactly one of the diagnoses the
+    # original width-then-type-then-value checks reported.
     for row in raw_rows:
-        if not isinstance(row, (list, tuple)) or len(row) != _ROW_WIDTH:
-            msg = f"the plan row {row!r} is not a name and action pair"
-            raise FinalizePolicyError(msg)
-        name, action = row
-        if not isinstance(name, str) or not name:
-            msg = f"the plan row {row!r} does not name an asset"
-            raise FinalizePolicyError(msg)
-        if not isinstance(action, str) or action not in _ACTION_VALUES:
-            msg = f"the plan row {row!r} carries an unknown action"
-            raise FinalizePolicyError(msg)
-        rows.append((name, action))
+        match row:
+            case [str() as name, str() as action] if name and action in _ACTION_VALUES:
+                rows.append((name, action))
+            case [str() as name, _] if name:
+                msg = f"the plan row {row!r} carries an unknown action"
+                raise FinalizePolicyError(msg)
+            case [_, _]:
+                msg = f"the plan row {row!r} does not name an asset"
+                raise FinalizePolicyError(msg)
+            case _:
+                msg = f"the plan row {row!r} is not a name and action pair"
+                raise FinalizePolicyError(msg)
     return tuple(rows)
 
 

@@ -131,7 +131,9 @@ def test_unverifiable_assets_stay_distinct_from_conflicts() -> None:
         pytest.param({}, id="no-actions-member"),
         pytest.param({"actions": "skip-verified"}, id="actions-not-a-list"),
         pytest.param({"actions": [[ARCHIVE]]}, id="row-too-short"),
+        pytest.param({"actions": ["ab"]}, id="row-not-a-pair"),
         pytest.param({"actions": [["", "upload"]]}, id="row-without-a-name"),
+        pytest.param({"actions": [[7, "upload"]]}, id="row-name-not-text"),
         pytest.param({"actions": [[ARCHIVE, 7]]}, id="row-action-not-text"),
         pytest.param({"actions": [[ARCHIVE, "clobber"]]}, id="unknown-action"),
         pytest.param({"actions": [], "conflicts": "a"}, id="summary-not-a-list"),
@@ -146,6 +148,53 @@ def test_a_malformed_plan_is_unreadable_rather_than_verified(plan: object) -> No
         "a plan whose shape supports no decision must be unreadable"
     )
     assert assessment.detail, "an unreadable plan must say why it was refused"
+
+
+@pytest.mark.parametrize(
+    ("plan", "diagnosis"),
+    [
+        pytest.param(
+            {"actions": [[ARCHIVE]]},
+            "not a name and action pair",
+            id="row-too-short",
+        ),
+        pytest.param(
+            {"actions": ["ab"]},
+            "not a name and action pair",
+            id="row-not-a-pair",
+        ),
+        pytest.param(
+            {"actions": [[7, "upload"]]},
+            "does not name an asset",
+            id="row-name-not-text",
+        ),
+        pytest.param(
+            {"actions": [["", "upload"]]},
+            "does not name an asset",
+            id="row-without-a-name",
+        ),
+        pytest.param(
+            {"actions": [[ARCHIVE, 7]]},
+            "carries an unknown action",
+            id="row-action-not-text",
+        ),
+        pytest.param(
+            {"actions": [[ARCHIVE, "clobber"]]},
+            "carries an unknown action",
+            id="unknown-action",
+        ),
+    ],
+)
+def test_each_malformed_row_reports_its_own_diagnosis(
+    plan: object, diagnosis: str
+) -> None:
+    """Distinguish a malformed row's fault from the other rows' faults."""
+    detail = assess_plan(plan).detail or ""
+
+    assert diagnosis in detail, (
+        f"the plan row's fault must be reported as {diagnosis!r}, got {detail!r}"
+    )
+    assert "plan row" in detail, "the diagnosis must name the row it refused"
 
 
 def _payload(**overrides: object) -> dict[str, object]:

@@ -3170,23 +3170,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Exit statuses are the workflow's vocabulary: 0 final, 1 refused or
   conflicting, 2 upload required, 3 input unreadable, 4 output unwritable, 5
   remote failed. The action sets no `continue-on-error` and does not swallow
-  either status. Each step carries a per-step `timeout-minutes`, because Cuprum
-  0.1.0 offers no in-process timeout and a hung `gh` would otherwise hold the
-  job to its own 30-minute cap.
+  either status. Each adapter invocation is bounded with GNU `timeout`, because
+  Cuprum 0.1.0 offers no in-process timeout and a hung `gh` would otherwise
+  hold the job to its own 30-minute cap. The bound cannot be a step
+  `timeout-minutes`: the runner does not support that key inside a composite
+  action (actions/runner#1979), so the workflow step that calls the action
+  carries the aggregate 28-minute ceiling instead.
 
   `release_finalize_contract_test.py` and
   `release_finalize_contract_support.py` hold the job and action contracts,
   each with mutation cases so a passing assertion is shown to notice a change: a
-  `GH_TOKEN` on the plan step, a missing step timeout, a `gh release` call
-  inside a `run`, a wrong output expression, an `id-token` grant, a `release`
-  dependency, a missing verifier dependency, a download pattern instead of a
-  name, an attempt-scoped artefact literal, and the verifier's record in place
-  of the build's. `docs/developers-guide.md` gains a *Finalizing the verified
-  release* section with the step, status, and recovery material;
-  `docs/users-guide.md` now describes the draft ending as the delivered two-job
-  hand-off; and ADR-0007 gains an addendum recording the decision. Finalization
-  is verified against checked documents and recorded responses only — no live
-  release, tag, or credential was exercised.
+  `GH_TOKEN` on the plan step, an unbounded adapter command, a missing step
+  timeout, a `gh release` call inside a `run`, a wrong output expression, an
+  `id-token` grant, a `release` dependency, a missing verifier dependency, a
+  download pattern instead of a name, an attempt-scoped artefact literal, and
+  the verifier's record in place of the build's. `docs/developers-guide.md`
+  gains a *Finalizing the verified release* section with the step, status, and
+  recovery material; `docs/users-guide.md` now describes the draft ending as
+  the delivered two-job hand-off; and ADR-0007 gains an addendum recording the
+  decision. Finalization is verified against checked documents and recorded
+  responses only — no live release, tag, or credential was exercised.
 
 - [x] (2026-11-09) Closed the seventh CodeRabbit pass's remaining obligations:
   executed coverage for the producer hand-off and the candidate checks, a
@@ -3618,6 +3621,38 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the module is registered in four places rather than one: each registration is
   a separate reachability claim.
 
+- [x] (2026-11-09) Closed the tenth CodeRabbit pass on the finalization stage:
+  one finding that removed a bound the design depended on, and two smaller
+  corrections.
+
+  **`timeout-minutes` is not supported inside a composite action, so the five
+  step ceilings were not bounds at all.** The action declared one on every
+  step, and three documents described it as the only thing stopping a hung `gh`
+  call from holding the job open. The metadata-syntax reference lists the keys
+  a composite step may carry, and `timeout-minutes` is not among them;
+  `actions/runner`'s ADR 0549 says "We will not support `timeout-minutes` in a
+  composite action", and actions/runner#1979 is the still-open request for it.
+  The bound moved to where the runner honours it: each adapter invocation now
+  runs under `timeout --kill-after=30s` -- 300 s for the resolver, the
+  snapshot, and the planner, and 600 s for the finalizer -- and the workflow
+  step that calls the action carries a 28-minute ceiling inside the job's 30.
+  The contract now asserts the *absence* of the unsupported key on every step
+  and a bounded invocation on each of the four adapter steps; the
+  `unbounded-command` and `missing-step-timeout` mutations prove both
+  assertions fire.
+
+  **The PEP 723 block pins two packages, not the resolution.** A workflow
+  comment and a guide paragraph said `uv run` "resolves that fixed pair". Only
+  `cyclopts` and `cuprum` are pinned; their transitive closure resolves on
+  every run. The prose now says the block narrows the graph rather than
+  freezing it.
+
+  **The plan decoder's `isinstance` chain became pattern matching.** Four
+  branches of type-and-length checks became four `match` arms reporting the
+  same three diagnoses, and `_ROW_WIDTH` went with them. Those diagnoses had no
+  test of their own, so `test_each_malformed_row_reports_its_own_diagnosis` now
+  distinguishes a row that is not a pair, a row without a usable name, and a
+  row with an unknown action.
 - [x] (2026-11-13) Closed the four findings of the review over `13e935517`.
   All four were about *where* a thing lives rather than what it computes, so
   each was repaired by moving a responsibility to the module that already owned

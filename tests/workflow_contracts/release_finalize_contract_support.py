@@ -197,9 +197,16 @@ def mutate_action(action: dict[str, object], mutation: str) -> None:
             require_mapping(plan["env"], "plan environment")["GH_TOKEN"] = (
                 EXPECTED_ENVIRONMENTS[SNAPSHOT_STEP]["GH_TOKEN"]
             )
-        case "missing-timeout":
+        case "unbounded-command":
             finalize = named_step(steps, FINALIZE_STEP)
-            del finalize["timeout-minutes"]
+            # The action's only available bound, removed: the adapter now runs
+            # with nothing to stop a hung `gh` call.
+            run = str(finalize["run"])
+            finalize["run"] = "\n".join(
+                line
+                for line in run.splitlines()
+                if not line.strip().startswith("timeout --kill-after=")
+            )
         case "gh-in-run":
             finalize = named_step(steps, FINALIZE_STEP)
             finalize["run"] = f'{finalize["run"]}gh release delete "$RELEASE_TAG"\n'
@@ -235,6 +242,9 @@ def mutate_workflow(workflow: dict[str, object], mutation: str) -> None:
             require_mapping(download["with"], "artifact inputs")["name"] = (
                 TRUSTED_ARTIFACT_VALUE
             )
+        case "missing-step-timeout":
+            local = _finalize_step(workflow)
+            del local["timeout-minutes"]
         case "verifier-record":
             local = _finalize_step(workflow)
             require_mapping(local["with"], "finalizer inputs")["digest-record-path"] = (

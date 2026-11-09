@@ -1133,10 +1133,11 @@ jobs:
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
           python-version: '3.14'
-          # The adapter pins its two dependencies exactly in a PEP 723 block, so
-          # `uv run` resolves that fixed pair on every attempt. A restored
-          # package cache buys nothing here and would add a mutable input to
-          # the one job that un-drafts a release.
+          # The adapter pins its two direct dependencies exactly in a PEP 723
+          # block; their transitive closure still resolves on every attempt, so
+          # the pins narrow the graph rather than freeze it. A restored package
+          # cache buys little against that and would add a mutable input to the
+          # one job that un-drafts a release.
           enable-cache: false
       - name: Download the package record
         uses: >-
@@ -1157,6 +1158,14 @@ jobs:
           path: trusted
       - name: Finalize the verified release
         uses: ./.github/actions/finalize-github-release
+        # The aggregate ceiling. A composite action's own steps cannot carry
+        # `timeout-minutes` (actions/runner#1979), so the action bounds each
+        # command with GNU `timeout` and this step bounds the five together:
+        # 300s + 300s + 300s + 600s of command budgets, plus the validate
+        # step and interpreter start-up. It is deliberately below the job's
+        # 30 minutes so a hung action is reported as this step rather than as
+        # the whole job.
+        timeout-minutes: 28
         with:
           tag: ${{ needs.metadata.outputs.release_tag }}
           commit: ${{ needs.metadata.outputs.candidate_commit }}
