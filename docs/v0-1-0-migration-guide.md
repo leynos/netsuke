@@ -17,6 +17,7 @@ sections that match the features they use.
 | Required          | `Target` literals          | Add `description` and `console` to every literal.                   |
 | Required          | `BuildEdge` literals       | Add `output_visibility` to every literal.                           |
 | Review if enabled | Rust `Action.pool` choices | Move console scheduling onto the edge; keep custom pools off it.    |
+| Required          | `NinjaGenError` matches    | Add arms for the two new console variants.                          |
 | Optional          | Existing manifests         | Omit `console` to retain ordinary scheduling; it defaults to false. |
 
 _Table 1: migration obligations for the beta series and console-pool option._
@@ -73,6 +74,13 @@ literal must add `output_visibility` for the same reason: both types expose
 public fields and neither is `#[non_exhaustive]`. Use
 `EdgeOutputVisibility::Buffered` for ordinary edges and `Immediate` when the
 manifest's `console: true` behaviour is required.
+
+`NinjaGenError` gains two variants, `ConsoleDependencyOnly` and
+`ConsolePoolConflict`, because generation now rejects a dependency-only edge
+that asked for console scheduling and a console edge whose action selects a
+different pool. The enum is public and is not `#[non_exhaustive]`, so a caller
+that matches it exhaustively must add an arm for each variant, or a `_` arm.
+Callers that only format or propagate the error need no change.
 
 The edge, not the action, now selects the console pool. An `Action::pool` of
 `Some("console")` no longer gives a `Buffered` edge console scheduling, because
@@ -889,6 +897,9 @@ owned sink and completion-ordering contract.
   to Rust `BuildEdge` literals.
 - [ ] Move console scheduling that relied on `Action.pool` onto
   `BuildEdge::output_visibility`.
+- [ ] Add `NinjaGenError::ConsoleDependencyOnly` and
+  `NinjaGenError::ConsolePoolConflict` arms to exhaustive matches on generation
+  errors.
 
 ## Common errors and fixes
 

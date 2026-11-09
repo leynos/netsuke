@@ -112,6 +112,29 @@ allowance reaches a lane that does not select the profile.
   detects; it proves only that the patched tree compiles. That is the
   pre-existing boundary, unchanged here.
 
+## Addendum, 2026-11-13: the job ceiling is 100 minutes
+
+The decision above is unchanged. This records the arithmetic that sets the job's
+outer bound now that the gate runs under its own Nextest profile.
+
+_Decision Drivers_ and _Decision Outcome_ describe a job ceiling that contains
+the gate. Two things have moved since they were written. The gate now selects
+`--profile kani`, so each of its two invocations receives a 2,520 s whole-run
+cap rather than no cap at all, and the ceiling therefore has to contain two caps
+rather than one. The gate's third test, the negative check, shares the first
+invocation instead of adding one.
+
+Run 41840367244 spent 824 s before nextest started the mutation test, and the
+job's finalisation costs 7 s. Two capped runs plus that setup and finalisation
+total 5,871 s. The 100-minute ceiling is 6,000 s, which leaves 129 s for runner
+variance and post-step reporting. Sizing the ceiling from a single cap would
+cancel the job while the second invocation was still reporting, and a
+cancellation discards the log that explains the overrun.
+
+The per-test allowances do not enter that sum. Each bounds one test's own
+duration and they do not add up to a budget, so the job timeout remains the
+backstop for a gate that has hung rather than a cost the ceiling contains.
+
 ## References
 
 - [ADR-0059](adr-0059-keep-compile-time-contracts-out-of-timed-tests.md) placed

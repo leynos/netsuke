@@ -717,7 +717,10 @@ clears the inherited binding. A caller that relied on the action pool must set
 `output_visibility` to `Immediate` to keep console scheduling. `Action::pool`
 is a separate IR field with no manifest counterpart; a custom pool on an action
 whose edge selects the console pool is rejected at generation time, so clear
-the pool or set it to `console`.
+the pool or set it to `console`. Rust callers see those rejections as
+`NinjaGenError::ConsolePoolConflict` for the conflicting pool and
+`NinjaGenError::ConsoleDependencyOnly` for a dependency-only edge that asked
+for console scheduling; both name the offending edge's first explicit output.
 
 Outside JSON mode, Netsuke forwards Ninja output as it reads it. Netsuke does
 not provide a pseudo-terminal: the recipe sees a pipe, and visibility still
