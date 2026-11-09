@@ -26,6 +26,7 @@ from upload_declared_assets_manifest import (
     RUN_STEPS,
     release_tag,
 )
+from upload_declared_assets_records import interpreter_baseline
 from upload_declared_assets_staging import (
     DIST,
     declared_names,
