@@ -60,12 +60,13 @@ pub fn require_real_verifier() -> Result<bool> {
     Ok(false)
 }
 
-/// Run `make verus` with the supplied `VERUS_FLAGS` value.
+/// Build a `make verus` command before its `VERUS_FLAGS` value is chosen.
 ///
-/// # Errors
-///
-/// Returns an error if the Make invocation cannot be spawned.
-pub fn run_make_verus(verus_flags: Option<&str>) -> Result<Output> {
+/// The recipe reads `VERUS_FLAGS` and `MAKEFLAGS` from the environment, so an
+/// inherited value would silently replace the one a case supplies, or add Make
+/// options the case never named. Removing them in one place keeps the two
+/// runners from drifting apart on that rule.
+fn make_verus_command() -> Command {
     let mut command = Command::new("make");
     command
         .env_remove("VERUS_FLAGS")
@@ -73,6 +74,16 @@ pub fn run_make_verus(verus_flags: Option<&str>) -> Result<Output> {
         .arg("--no-print-directory")
         .arg("-f")
         .arg("Makefile");
+    command
+}
+
+/// Run `make verus` with the supplied `VERUS_FLAGS` value.
+///
+/// # Errors
+///
+/// Returns an error if the Make invocation cannot be spawned.
+pub fn run_make_verus(verus_flags: Option<&str>) -> Result<Output> {
+    let mut command = make_verus_command();
     if let Some(flags) = verus_flags {
         command.arg(format!("VERUS_FLAGS={flags}"));
     }
@@ -91,14 +102,8 @@ pub fn run_make_verus_with_env(
     verus_flags: &str,
     environment: &[(&str, String)],
 ) -> Result<Output> {
-    let mut command = Command::new("make");
-    command
-        .env_remove("VERUS_FLAGS")
-        .env_remove("MAKEFLAGS")
-        .arg("--no-print-directory")
-        .arg("-f")
-        .arg("Makefile")
-        .arg(format!("VERUS_FLAGS={verus_flags}"));
+    let mut command = make_verus_command();
+    command.arg(format!("VERUS_FLAGS={verus_flags}"));
     for (key, value) in environment {
         command.env(key, value);
     }

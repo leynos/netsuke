@@ -18,7 +18,7 @@
 //!
 //! These are deterministic file checks; they never invoke Whitaker itself.
 
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, bail, ensure};
 use camino::Utf8Path;
 
 use crate::makefile::{read_repo_file, target_recipe};
@@ -55,17 +55,90 @@ fn library_selection_arguments(line: &str) -> impl Iterator<Item = &str> + '_ {
     line.split_whitespace().take_while(|token| *token != "--")
 }
 
+/// Return whatever follows `WHITAKER_SUITE_SELECTION` on an assigning line.
+///
+/// The name is matched as a whole token so the text after it is the operator
+/// rather than the tail of a longer name: a prefix match would read
+/// `WHITAKER_SUITE_SELECTION_EXTRA = --all` as a definition of this variable.
+/// The name is looked for anywhere on the line rather than only at its start,
+/// because GNU Make accepts it under an `export`, `override` or `private`
+/// prefix and in a target-specific assignment, and each of those assigns the
+/// variable as surely as the bare form. A commented-out line assigns nothing,
+/// so it is skipped rather than counted as a definition.
+fn suite_selection_assignment(line: &str) -> Option<&str> {
+    const NAME: &str = "WHITAKER_SUITE_SELECTION";
+
+    let trimmed = line.trim_start();
+    if trimmed.starts_with('#') {
+        return None;
+    }
+    let start = trimmed.match_indices(NAME).find_map(|(index, _)| {
+        // `get` rather than a range index: the offsets come from `match_indices`,
+        // so they are character boundaries, but a plain index would still be a
+        // panic site if that ever stopped being true.
+        let before = trimmed.get(..index)?.chars().next_back();
+        let after = trimmed.get(index + NAME.len()..)?.chars().next();
+        let is_boundary =
+            |character: Option<char>| character.is_none_or(|value| !is_identifier(value));
+        (is_boundary(before) && is_boundary(after)).then_some(index)
+    })?;
+    trimmed.get(start + NAME.len()..)
+}
+
+/// Report whether `character` can continue a Makefile variable name.
+fn is_identifier(character: char) -> bool {
+    character.is_alphanumeric() || character == '_'
+}
+
 /// Return the operator of the Makefile's `WHITAKER_SUITE_SELECTION` assignment.
 ///
-/// The name has to be the first thing on the line and has to be followed by an
-/// assignment operator. That rejects a commented-out definition, and it also
-/// rejects a longer name such as `WHITAKER_SUITE_SELECTION_EXTRA`, which a
-/// prefix match would accept as the definition.
+/// `+=` is reported as its own operator rather than ignored: it assigns, so a
+/// second such line is a second definition and has to be caught as one.
 fn selection_operator(line: &str) -> Option<char> {
-    let rest = line.strip_prefix("WHITAKER_SUITE_SELECTION")?.trim_start();
-    rest.chars()
-        .next()
-        .filter(|operator| matches!(operator, '?' | ':' | '='))
+    let rest = suite_selection_assignment(line)?.trim_start();
+    let mut characters = rest.chars();
+    match characters.next()? {
+        '+' if characters.next() == Some('=') => Some('+'),
+        operator @ ('?' | ':' | '=') => Some(operator),
+        _ => None,
+    }
+}
+
+/// Return the Makefile's single `WHITAKER_SUITE_SELECTION` definition.
+///
+/// Checking one matching line is not enough. A later assignment — `=` again, or
+/// `+=`, which appends — can add the standalone libraries to a selection whose
+/// first line is correct, and the line this module inspects would still read as
+/// expected. The definition is therefore required to occur exactly once, and a
+/// duplicate is reported with every line that matched.
+///
+/// A command-line assignment, `make WHITAKER_SUITE_SELECTION=… lint-whitaker`,
+/// still wins over every form accepted here. That is deliberate and not a hole
+/// this check should close: it is an explicit instruction for one invocation,
+/// in the same way the suite substitutes `KANI=`, `UV=` and `PROVER_TOOLS=` to
+/// exercise a branch, whereas an inherited environment value or a second in-file
+/// definition arrives without anyone asking for it at the call site.
+///
+/// # Errors
+///
+/// Returns an error if the name is defined more than once, or not at all.
+fn suite_selection_definition(makefile: &str) -> Result<&str> {
+    let definitions: Vec<&str> = makefile
+        .lines()
+        .filter(|line| selection_operator(line).is_some())
+        .collect();
+    let [selection] = definitions.as_slice() else {
+        bail!(
+            concat!(
+                "the Makefile should define WHITAKER_SUITE_SELECTION exactly ",
+                "once, since a second assignment can append `--all` to the ",
+                "pinned selection; found {count}: {definitions:?}",
+            ),
+            count = definitions.len(),
+            definitions = format!("{definitions:?}")
+        );
+    };
+    Ok(*selection)
 }
 
 #[test]
@@ -176,16 +249,14 @@ fn lint_whitaker_selects_the_suite_and_requires_it() -> Result<()> {
         );
     }
 
-    let selection = makefile
-        .lines()
-        .find(|line| selection_operator(line).is_some())
-        .context("the Makefile should define WHITAKER_SUITE_SELECTION")?;
+    let selection = suite_selection_definition(&makefile)?;
     ensure!(
-        selection_operator(selection) != Some('?'),
+        matches!(selection_operator(selection), Some('=' | ':')),
         concat!(
-            "WHITAKER_SUITE_SELECTION must not be environment-overridable: `?=` ",
-            "lets an exported value replace the pinned selection with one that ",
-            "loads the standalone libraries as well; found {selection:?}",
+            "WHITAKER_SUITE_SELECTION must be assigned unconditionally: `?=` ",
+            "defers to an exported value and `+=` appends to one, so either ",
+            "lets an outside value add the standalone libraries the suite ",
+            "already registers; found {selection:?}",
         ),
         selection = selection
     );

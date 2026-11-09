@@ -82,12 +82,25 @@ pub(crate) fn ensure_query_attempts_nothing(trace: &str) -> Result<()> {
 /// `make`, so that read appears in it. A trace that only ever saw the verifier
 /// would leave a suppressed attempt on a recipe line unreported, and this
 /// assertion is what rules that out.
+///
+/// The name alone is not evidence: the sandbox passes `KANI_VERSION_FILE=` on
+/// the make command line, so the `execve` line carries it whether or not the
+/// file was ever opened. The assertion therefore requires a line that both
+/// names the pin and is an open call.
 pub(crate) fn ensure_recipe_commands_traced(trace: &str) -> Result<()> {
     ensure!(
-        trace.contains("KANI_VERSION"),
+        trace.lines().any(is_pin_read),
         "the trace must include the recipe's own read of the pin file, got {trace:?}"
     );
     Ok(())
+}
+
+/// Report whether a trace line opens the pin file.
+fn is_pin_read(line: &str) -> bool {
+    let is_open_call = ["open(", "openat(", "openat2("]
+        .iter()
+        .any(|call| line.contains(call));
+    is_open_call && line.contains("KANI_VERSION")
 }
 
 /// Assert the installed verifier answered through the recipe and attempted

@@ -698,10 +698,20 @@ install-kani: ## Install the pinned Kani verifier
 # make this query an installer, which is exactly what a read-only check must
 # never be, so an absent payload is refused instead and the operator is pointed
 # at the target that does install it.
+#
+# The guard and the launcher must read the same home. `cargo-kani` resolves an
+# empty `KANI_HOME` to the current directory, whereas a `${KANI_HOME:-...}`
+# default would resolve it to `$HOME/.kani`: the guard would pass on one
+# directory while the launcher installed into another. A `KANI_HOME` that is set
+# but empty is therefore refused rather than guessed at.
 kani-check: ## Check the installed Kani verifier version
 	@version_file='$(subst ','"'"',$(KANI_VERSION_FILE))'; \
 	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check category=pin-unreadable could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
 	printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$expected" >&2; \
+	if [ -n "$${KANI_HOME+set}" ] && [ -z "$${KANI_HOME}" ]; then \
+		printf 'prover-tools: target=kani-check category=kani-home-empty KANI_HOME is set but empty; cargo-kani reads that as the current directory, so name the home that holds the payload or unset it\n' >&2; \
+		exit 1; \
+	fi; \
 	kani_home="$${KANI_HOME:-$${HOME:-}/.kani}"; \
 	if [ ! -d "$$kani_home/kani-$$expected" ]; then \
 		printf 'prover-tools: target=kani-check category=payload-missing Kani %s payload is absent from %s; run make install-kani\n' "$$expected" "$$kani_home" >&2; \

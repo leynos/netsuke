@@ -413,6 +413,16 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       cover the calls those classes now deliver. `WHITAKER_SUITE_SELECTION` is
       `:=` rather than `?=`, so an exported value cannot replace the pinned
       selection. See Revision 58.
+- [x] (2026-11-09) Refuse an empty `KANI_HOME` rather than resolve it two
+      ways. `cargo-kani` reads a set-but-empty home as the current directory,
+      while the recipe's shell default reads it as `$HOME/.kani`, so the
+      payload guard could approve one directory while the launcher installed
+      into another. `make kani-check` now refuses that setting with
+      `category=kani-home-empty`, the category list names it, and
+      `kani_check_refuses_an_empty_kani_home` drives it end to end. The same
+      review pass bounded the workflow's apt fetches, split the longest
+      sentences in the guide's boundary section, corrected its writable-path
+      count, and tightened three contract finders. See Revision 59.
 
 ## Surprises & discoveries
 
@@ -2099,3 +2109,67 @@ plus the doctests), `test-workflow-contracts` (1,792 passed, 3 skipped, plus
 28) and `test-kani-check-isolation` (52 passed, 0 skipped, strict). Keep
 Status: IN PROGRESS pending review at the new head and trusted-main warm-cache
 acceptance.
+
+Revision 59 (2026-11-09): The review at `715970069` came back CHANGES_REQUESTED
+— review `5831859656` — with nine inline findings and three thread follow-ups.
+All nine were live against that head.
+
+Two were substantive. The first is the empty `KANI_HOME` divergence. The
+launcher resolves an empty value to the current directory, while the recipe's
+`${KANI_HOME:-$HOME/.kani}` default resolves it to `$HOME/.kani`, so the
+payload guard could pass on a home the launcher never uses. Proved by hand in a
+fresh directory: `KANI_HOME= cargo-kani --version` created `kani-0.67.0/`
+beside the caller and downloaded a 143 MB bundle. The finding asked for the
+paths to be aligned; that remedy is the wrong one. Aligning means resolving an
+empty value to `.`, so a typo would make a read-only query inspect
+`./kani-<version>` instead of the home the operator meant, and the query would
+then run the launcher against a directory nobody chose. The recipe refuses the
+setting with `category=kani-home-empty`, which makes the ambiguity a diagnosis
+rather than a guess, and `kani_check_refuses_an_empty_kani_home` requires the
+non-zero status, the category, and an untouched fake verifier.
+
+The second is the trace's pin-read assertion. It required only that some line
+name `KANI_VERSION`, and the `execve` line carries `KANI_VERSION_FILE=` in its
+argv whether or not the file was ever opened, so the assertion could pass on a
+recipe that read nothing. It now requires a line that names the pin *and* is an
+open call.
+
+`is_device` was a third real false negative. It matched with `contains`, so
+`/dev/null.log` and `/dev/ttyUSB0` were exempted as if they were the character
+devices, and a write to either would have gone unreported. The path is now
+compared whole, quotes included, and two cases pin the boundary.
+
+The rest are contract and prose repairs. `.github/workflows/ci.yml` gives both
+apt commands `-o Acquire::Retries=3`, because a mirror that drops one request
+otherwise fails the required lane on a network fault rather than on the
+boundary. `tests/prover_tools_verus_e2e_tests/support.rs` builds both
+`make verus` invocations from one `make_verus_command()`, so the flag-scrubbing
+rule cannot drift between them.
+`tests/whitaker_boundary_contract/whitaker_invocation.rs` collects every line
+that assigns `WHITAKER_SUITE_SELECTION`, requires exactly one, reports the
+lines it found when there are more, and treats `+=` as an assignment operator;
+the finder also matches the name under an `export`, `override`, `private` or
+target-specific prefix and skips a commented-out line, and the operator check
+rejects `+=` for the same reason it rejects `?=`, since it appends to an
+exported value. A follow-up asked whether a command-line override should also
+be blocked; it should not, and the test's doc comment now records why: the
+command line is one invocation's explicit instruction, the way the suite
+substitutes `KANI=` and `PROVER_TOOLS=`, while an inherited value arrives
+without anyone asking.
+
+The documentation findings were the three LanguageTool diagnostics — a comma
+before `because`, a comma before `so`, and a missing serial comma — plus
+sentence splitting across the four paragraphs the finding named. Splitting them
+surfaced a wrong count: the paragraph said "exactly two writable mounts" and
+named the control probe at `/proc/self/comm` and the trace directory at
+`/var/trace`, but `/dev/null` is bound read-write as well, so it now says three
+and names all three. In `docs/whitaker-users-guide.md` the two quick-start
+mentions of `whitaker --all` now say it is upstream's default and point at the
+Netsuke deviation note, and "fails its own metadata check" lost the redundant
+possessive.
+
+The focused runs passed on this tree: 36 tests across
+`prover_tools_kani_check_command_tests`, `whitaker_boundary_contract` and
+`prover_tools_verus_e2e_tests`, 36 passed and none skipped, including the new
+empty-home case. Keep Status: IN PROGRESS pending the full gate batch, review
+at the new head, and trusted-main warm-cache acceptance.

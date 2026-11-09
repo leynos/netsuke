@@ -134,8 +134,14 @@ fn requests_write(arguments: &str) -> bool {
 }
 
 /// Report whether the path is one of the character devices a caller writes to.
+///
+/// The path is compared whole, closing quote included. `/dev/null` is a device
+/// whose write every program makes; `/dev/null.log` is an ordinary file, and a
+/// substring test would exempt a write to it as if it were the device.
 fn is_device(arguments: &str) -> bool {
-    DEVICE_PATHS.iter().any(|device| arguments.contains(device))
+    DEVICE_PATHS
+        .iter()
+        .any(|device| arguments.contains(&format!("\"{device}\"")))
 }
 
 #[cfg(test)]
@@ -156,6 +162,14 @@ mod tests {
         "write-intent"
     )]
     #[case::create_only(r#"7     creat("/tmp/x", 0666) = -1 EROFS"#, "`creat`")]
+    #[case::device_named_file(
+        r#"7     openat(AT_FDCWD, "/dev/null.log", O_WRONLY|O_CREAT|O_TRUNC, 0666) = -1 EROFS (Read-only file system)"#,
+        "write-intent"
+    )]
+    #[case::device_path_as_a_prefix(
+        r#"7     openat(AT_FDCWD, "/dev/ttyUSB0", O_WRONLY) = -1 EROFS (Read-only file system)"#,
+        "write-intent"
+    )]
     #[case::directory_creation(r#"7     mkdir("/tmp/x", 0777) = -1 EROFS"#, "`mkdir`")]
     #[case::directory_creation_at(
         r#"7     mkdirat(AT_FDCWD, "/tmp/x", 0777) = -1 EROFS"#,
