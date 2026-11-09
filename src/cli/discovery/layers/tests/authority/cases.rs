@@ -5,14 +5,17 @@
 
 use super::super::super::super::paths::{FailingPathNormalizer, FsPathNormalizer};
 use super::super::super::super::project_policy::RootAuthority;
-use super::super::super::{ProjectKey, scope_discovered_occurrence};
+use super::super::super::{ProjectKey, ScopedFileLayer, scope_discovered_occurrence};
 use anyhow::{Context, Result, ensure};
 use camino::Utf8PathBuf;
 use ortho_config::MergeLayer;
 use serde_json::json;
 use std::borrow::Cow;
-use std::path::Path;
-use tempfile::tempdir;
+use std::path::{Path, PathBuf};
+use tempfile::{TempDir, tempdir};
+
+/// The operator configuration path every trusted chain in these cases reaches.
+const OPERATOR_CONFIG: &str = "/etc/netsuke/config.toml";
 
 /// Build a layer with an optional recorded path.
 fn layer(path: Option<&str>) -> MergeLayer<'static> {
@@ -33,15 +36,56 @@ fn canonical(path: &Path) -> Result<String> {
         .context("canonical test path is not valid UTF-8")
 }
 
+/// Classify an operator-located occurrence reached through a trusted chain.
+fn operator_occurrence(key: Option<&ProjectKey>) -> ScopedFileLayer {
+    scope_discovered_occurrence(layer(Some(OPERATOR_CONFIG)), true, key)
+}
+
+/// A temporary project root, optionally holding a project configuration file.
+struct ProjectFixture {
+    root: TempDir,
+}
+
+impl ProjectFixture {
+    /// Create a project root with no configuration file in it.
+    fn empty() -> Result<Self> {
+        let root = tempdir().context("create project dir")?;
+        Ok(Self { root })
+    }
+
+    /// Create a project root and write its project configuration file.
+    fn new() -> Result<Self> {
+        let fixture = Self::empty()?;
+        test_support::fs::write(fixture.file(), "jobs = 3\n").context("write project config")?;
+        Ok(fixture)
+    }
+
+    /// Borrow the project root.
+    fn path(&self) -> &Path {
+        self.root.path()
+    }
+
+    /// Return the path the project configuration file would occupy.
+    fn file(&self) -> PathBuf {
+        self.path().join(".netsuke.toml")
+    }
+
+    /// Classify the project file with discovery's real normalizer.
+    fn key(&self) -> ProjectKey {
+        project_key(self.path())
+    }
+
+    /// Classify the project file with a normalizer that cannot resolve it.
+    fn unresolved_key(&self) -> ProjectKey {
+        ProjectKey::classify(&FailingPathNormalizer, &self.file())
+    }
+}
+
 #[test]
 fn trusted_root_keeps_operator_authority() -> Result<()> {
-    let project_dir = tempdir().context("create project dir")?;
-    test_support::fs::write(project_dir.path().join(".netsuke.toml"), "jobs = 3\n")
-        .context("write project config")?;
-    let key = project_key(project_dir.path());
+    let project = ProjectFixture::new()?;
 
-    let occurrence =
-        scope_discovered_occurrence(layer(Some("/etc/netsuke/config.toml")), true, Some(&key));
+    let occurrence = operator_occurrence(Some(&project.key()));
 
     ensure!(
         occurrence.authority() == RootAuthority::Operator,
@@ -52,13 +96,11 @@ fn trusted_root_keeps_operator_authority() -> Result<()> {
 
 #[test]
 fn project_occurrence_inside_trusted_chain_is_untrusted() -> Result<()> {
-    let project_dir = tempdir().context("create project dir")?;
-    let project_file = project_dir.path().join(".netsuke.toml");
-    test_support::fs::write(&project_file, "jobs = 3\n").context("write project config")?;
-    let key = project_key(project_dir.path());
-    let recorded = canonical(&project_file)?;
+    let project = ProjectFixture::new()?;
+    let recorded = canonical(&project.file())?;
 
-    let occurrence = scope_discovered_occurrence(layer(Some(&recorded)), true, Some(&key));
+    let occurrence =
+        scope_discovered_occurrence(layer(Some(&recorded)), true, Some(&project.key()));
 
     ensure!(
         occurrence.authority() == RootAuthority::Untrusted,
@@ -69,8 +111,7 @@ fn project_occurrence_inside_trusted_chain_is_untrusted() -> Result<()> {
 
 #[test]
 fn untrusted_root_withholds_authority_from_every_occurrence() -> Result<()> {
-    let occurrence =
-        scope_discovered_occurrence(layer(Some("/etc/netsuke/config.toml")), false, None);
+    let occurrence = scope_discovered_occurrence(layer(Some(OPERATOR_CONFIG)), false, None);
 
     ensure!(
         occurrence.authority() == RootAuthority::Untrusted,
@@ -81,16 +122,9 @@ fn untrusted_root_withholds_authority_from_every_occurrence() -> Result<()> {
 
 #[test]
 fn unresolved_project_key_withholds_operator_authority() -> Result<()> {
-    let project_dir = tempdir().context("create project dir")?;
-    test_support::fs::write(project_dir.path().join(".netsuke.toml"), "jobs = 3\n")
-        .context("write project config")?;
-    let key = ProjectKey::classify(
-        &FailingPathNormalizer,
-        &project_dir.path().join(".netsuke.toml"),
-    );
+    let project = ProjectFixture::new()?;
 
-    let occurrence =
-        scope_discovered_occurrence(layer(Some("/etc/netsuke/config.toml")), true, Some(&key));
+    let occurrence = operator_occurrence(Some(&project.unresolved_key()));
 
     ensure!(
         occurrence.authority() == RootAuthority::Untrusted,
@@ -101,14 +135,9 @@ fn unresolved_project_key_withholds_operator_authority() -> Result<()> {
 
 #[test]
 fn absent_project_file_keeps_operator_authority() -> Result<()> {
-    let project_dir = tempdir().context("create project dir")?;
-    let key = ProjectKey::classify(
-        &FailingPathNormalizer,
-        &project_dir.path().join(".netsuke.toml"),
-    );
+    let project = ProjectFixture::empty()?;
 
-    let occurrence =
-        scope_discovered_occurrence(layer(Some("/etc/netsuke/config.toml")), true, Some(&key));
+    let occurrence = operator_occurrence(Some(&project.unresolved_key()));
 
     ensure!(
         occurrence.authority() == RootAuthority::Operator,
@@ -119,12 +148,9 @@ fn absent_project_file_keeps_operator_authority() -> Result<()> {
 
 #[test]
 fn occurrence_without_a_path_is_untrusted() -> Result<()> {
-    let project_dir = tempdir().context("create project dir")?;
-    test_support::fs::write(project_dir.path().join(".netsuke.toml"), "jobs = 3\n")
-        .context("write project config")?;
-    let key = project_key(project_dir.path());
+    let project = ProjectFixture::new()?;
 
-    let occurrence = scope_discovered_occurrence(layer(None), true, Some(&key));
+    let occurrence = scope_discovered_occurrence(layer(None), true, Some(&project.key()));
 
     ensure!(
         occurrence.authority() == RootAuthority::Untrusted,
