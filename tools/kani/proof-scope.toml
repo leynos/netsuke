@@ -28,6 +28,7 @@ sources = [
   "src/cli/config/shells/executable.rs",
   "src/cli/config/shells/mod.rs",
   "src/cli/config/shells/preview.rs",
+  "src/cli/config/shells/spelling.rs",
   "src/cli/config/validation.rs",
   "src/cli/constants.rs",
   "src/cli/diag/mod.rs",

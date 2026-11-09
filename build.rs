@@ -224,6 +224,7 @@ fn emit_rerun_directives() {
     println!("cargo:rerun-if-changed=src/cli/config/shells/definition.rs");
     println!("cargo:rerun-if-changed=src/cli/config/shells/executable.rs");
     println!("cargo:rerun-if-changed=src/cli/config/shells/preview.rs");
+    println!("cargo:rerun-if-changed=src/cli/config/shells/spelling.rs");
     println!("cargo:rerun-if-changed=src/cli/help.rs");
     println!("cargo:rerun-if-changed=src/cli/validation.rs");
     println!("cargo:rerun-if-changed=src/host/pattern.rs");

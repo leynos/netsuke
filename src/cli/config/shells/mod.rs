@@ -39,6 +39,7 @@ mod compose;
 mod definition;
 mod executable;
 pub(crate) mod preview;
+mod spelling;
 
 pub use arguments::{ArgumentsError, MAX_ARGUMENT_BYTES, MAX_ARGUMENTS, ShellArguments};
 pub use compose::{CompositionError, validate_composition};
