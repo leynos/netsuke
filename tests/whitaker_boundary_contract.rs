@@ -32,6 +32,9 @@
 //! it a missing suite leaves Whitaker running a lint-free `cargo check` that
 //! reports success.
 //!
+//! Both invocation contracts live in the `whitaker_invocation` submodule so
+//! each file stays inside the 400-line limit.
+//!
 //! These assertions are deterministic file checks. They do not invoke Whitaker:
 //! the suite needs its own pinned toolchain and driver, which `make test` does
 //! not require. `make lint-whitaker` remains the gate that actually runs it,
@@ -41,9 +44,14 @@
 #[path = "support/makefile.rs"]
 mod makefile;
 
+// The `make lint-whitaker` invocation contracts live in their own module to
+// keep both files inside the 400-line limit.
+#[path = "whitaker_boundary_contract/whitaker_invocation.rs"]
+mod whitaker_invocation;
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{read_repo_file, target_recipe};
+use makefile::read_repo_file;
 use rstest::rstest;
 use toml::Value as TomlValue;
 
@@ -124,155 +132,6 @@ fn exclusion_list(dylint_toml: &str, key: &str) -> Result<Vec<String>> {
                 .with_context(|| format!("{key} entries should be strings, found {entry:?}"))
         })
         .collect()
-}
-
-/// Collect the package names selected by a Makefile recipe line.
-///
-/// Substring matching cannot tell `--package test_support` apart from
-/// `--package test_support-extra`, nor spot a second selection appended later,
-/// so the line is tokenized and whole arguments are compared. Both the
-/// separated and `--package=value` spellings are recognized, as is the `-p`
-/// short form.
-fn package_selections(line: &str) -> Vec<&str> {
-    let mut tokens = line.split_whitespace();
-    let mut packages = Vec::new();
-    while let Some(token) = tokens.next() {
-        if let Some(value) = token.strip_prefix("--package=") {
-            packages.push(value);
-        } else if token == "--package" || token == "-p" {
-            packages.extend(tokens.next());
-        }
-    }
-    packages
-}
-
-#[test]
-fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let recipe = target_recipe(&makefile, "lint-whitaker")
-        .context("the Makefile should declare a lint-whitaker target")?;
-
-    let invocations: Vec<&str> = recipe
-        .lines()
-        .filter(|line| line.contains("$(WHITAKER)"))
-        .collect();
-    ensure!(
-        invocations.len() == 2,
-        concat!(
-            "lint-whitaker should invoke Whitaker twice — once at the ",
-            "repository root for netsuke and once inside test_support — ",
-            "found {count}: {recipe:?}",
-        ),
-        count = invocations.len(),
-        recipe = recipe
-    );
-
-    // Counted separately rather than with `any`, which two test_support runs
-    // would satisfy while leaving the whole application crate unlinted.
-    let (scoped, root): (Vec<&str>, Vec<&str>) = invocations
-        .iter()
-        .partition(|line| line.contains("cd test_support"));
-    ensure!(
-        scoped.len() == 1,
-        concat!(
-            "exactly one lint-whitaker invocation should run from ",
-            "test_support/, found {count}: {recipe:?}",
-        ),
-        count = scoped.len(),
-        recipe = recipe
-    );
-    ensure!(
-        scoped.first().is_some_and(|line| {
-            line.contains(r#"DYLINT_TOML="$$(cat dylint.toml)""#)
-                && package_selections(line) == ["test_support"]
-                && line.contains("--no-deps")
-        }),
-        concat!(
-            "the scoped Whitaker invocation must explicitly load ",
-            "test_support/dylint.toml and select exactly test_support after ",
-            "workspace membership changes Cargo's configuration and package ",
-            "roots; found {scoped:?}",
-        ),
-        scoped = format!("{scoped:?}")
-    );
-    ensure!(
-        root.len() == 1,
-        concat!(
-            "exactly one lint-whitaker invocation should run from the ",
-            "repository root, found {count}: {recipe:?}",
-        ),
-        count = root.len(),
-        recipe = recipe
-    );
-    ensure!(
-        root.first().is_some_and(|line| {
-            package_selections(line) == ["netsuke-build"] && line.contains("--no-deps")
-        }),
-        concat!(
-            "the root Whitaker invocation must select exactly netsuke-build and skip ",
-            "dependency checks so test_support loads its own dylint.toml; ",
-            "found {root:?}",
-        ),
-        root = format!("{root:?}")
-    );
-    Ok(())
-}
-
-/// Both invocations must load the suite by name and fail when it is absent.
-///
-/// `--all` is the tempting spelling and the one the Whitaker guide shows, but
-/// it loads every installed library. The rolling release ships a standalone
-/// library per lint alongside the suite, so `--all` registers several lints
-/// twice and rustc aborts before any consumer source compiles. Naming the
-/// suite loads the same lint set once, and `--fail-on-no-libraries` keeps a
-/// missing suite from passing as a lint-free `cargo check`.
-#[test]
-fn lint_whitaker_selects_the_suite_and_requires_it() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let recipe = target_recipe(&makefile, "lint-whitaker")
-        .context("the Makefile should declare a lint-whitaker target")?;
-
-    let invocations: Vec<&str> = recipe
-        .lines()
-        .filter(|line| line.contains("$(WHITAKER)"))
-        .collect();
-    ensure!(
-        !invocations.is_empty(),
-        "lint-whitaker should invoke Whitaker, found {recipe:?}"
-    );
-    for line in &invocations {
-        ensure!(
-            line.contains("$(WHITAKER_SUITE_SELECTION)"),
-            concat!(
-                "every Whitaker invocation must select the suite through ",
-                "WHITAKER_SUITE_SELECTION; found {line:?}",
-            ),
-            line = line
-        );
-        // `--all-targets` is passed after the `--` separator and is not a
-        // library selection, so the forbidden spelling is the pair that only
-        // appears when `--all` is used as one.
-        ensure!(
-            !line.contains("--all --no-deps"),
-            concat!(
-                "`--all` loads the standalone per-lint libraries as well as the ",
-                "suite, which registers several lints twice; found {line:?}",
-            ),
-            line = line
-        );
-    }
-
-    let selection = makefile
-        .lines()
-        .find(|line| line.starts_with("WHITAKER_SUITE_SELECTION"))
-        .context("the Makefile should define WHITAKER_SUITE_SELECTION")?;
-    for fragment in ["--lib whitaker_suite", "--fail-on-no-libraries"] {
-        ensure!(
-            selection.contains(fragment),
-            "WHITAKER_SUITE_SELECTION should carry {fragment}, found {selection:?}"
-        );
-    }
-    Ok(())
 }
 
 #[test]

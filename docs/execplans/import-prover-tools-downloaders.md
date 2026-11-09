@@ -284,7 +284,7 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       12 repository gates passed on the candidate described in Revision 41.
       That run is historical: it predates the review rounds and rebase, and
       describes neither the current head nor the current gate set. Revisions
-      49, 50 and 51 record the candidates that followed and their own evidence.
+      49 to 53 record the candidates that followed and their own evidence.
 - [x] (2026-11-06) Make `make kani-check` a local read-only version query.
       Commit `475d15409` removes `KANI_CHECK_FLAGS` and the delegated
       `check-version` invocation; the target reads `tools/kani/VERSION`, runs
@@ -586,22 +586,27 @@ failure position and exit status against a fake verifier while the CLI stays
 real. `tests/prover_tools_kani_check_command_tests.rs` drives the `kani-check`
 recipe through a matching pin, a mismatch, a missing pin, an unreadable pin and
 a failing verifier, and asserts that the verifier receives `--version` in every
-reachable case. The recipe now reports a stable `category=` and never echoes
-the verifier's own output, because that text comes from an external binary and
-no amount of bounding or escaping makes arbitrary text safe to print. The
-read-only chroot boundary remains the evidence for the blocked-network and
-blocked-write requirement, and it runs strictly in the required `kani-smoke`
-lane rather than skipping. Version checking is described as the local read-only
-`--version` query, not a delegation to the pinned CLI.
+reachable case. The recipe now reports a stable `category=` and prints only the
+version token it extracted from the verifier's output — the `kani-version=`
+field and the `found` value of a mismatch — because the surrounding text comes
+from an external binary and no amount of bounding or escaping makes it safe to
+print. The read-only chroot boundary remains the evidence for the
+blocked-network and blocked-write requirement, and it runs strictly in the
+required `kani-smoke` lane rather than skipping. Version checking is described
+as the local read-only `--version` query, not a delegation to the pinned CLI.
 
 The gate evidence above is historical: it was collected on the candidate that
 carried Revision 48, before the review at `5808594893` and the CodeScene delta
-on `adeb43dd6` raised their findings. Three further candidates have since been
-gated: Revision 49 for those findings, Revision 50 after the rebase onto `main`
-at `6ff836603`, and Revision 51 for the review at `5816957501`. Each records
-its own gate evidence at its own revision entry, and the Revision 41 run quoted
-above is the earliest of them and no longer describes the branch head. Review
-at the current head and trusted-main warm-cache acceptance remain open.
+on `adeb43dd6` raised their findings. Six further candidates have since been
+gated, each recording its own evidence at its own revision entry: Revision 49
+for those findings, Revision 50 after the rebase onto `main` at `6ff836603`,
+Revision 51 for the review at `5816957501`, Revision 52 for the Whitaker
+duplicate-registration repair, Revision 53 for the `string-continuation- style`
+repair and the contract-test split, and Revision 54 for the review at
+`5819530205`. The Revision 41 run quoted at the start of this section is the
+earliest of them and describes neither the current head nor the current gate
+set. Review at the current head and trusted-main warm-cache acceptance remain
+open.
 
 ## Context and orientation
 
@@ -1520,12 +1525,15 @@ command suite adds coverage of the recipe itself without replacing any of them.
 *Observability* asked for a safe, redacted verifier diagnostic or an actionable
 error category on failure, plus a regression test. The `kani-check` recipe now
 emits one of `category=pin-unreadable`, `category=verifier-failed`,
-`category=version-unparsable` or `category=version-mismatch`, and never echoes
-the verifier's own output at all. Redaction was rejected: the text comes from
-an external binary, so it could carry a credential, forge a surrounding log
-line or flood a terminal, and bounding plus escaping does not make arbitrary
-text safe to print. The category and the exit status are the actionable facts,
-and a hand-run of the verifier supplies anything else.
+`category=version-unparsable` or `category=version-mismatch`, and prints only
+the version token it extracted from the verifier's output: the `kani-version=`
+field, and the `found` value of a mismatch, so a verifier reporting
+`kani 0.66.0` against a 0.67.0 pin prints `found 0.66.0`. The text that token
+came from is never echoed. Redaction was rejected: that text comes from an
+external binary, so it could carry a credential, forge a surrounding log line
+or flood a terminal, and bounding plus escaping does not make arbitrary text
+safe to print. The extracted version, the category and the exit status are the
+actionable facts, and a hand-run of the verifier supplies anything else.
 `kani_check_reports_a_category_without_echoing_verifier_output` presents a fake
 secret, an ANSI escape and a forged `category=` line and asserts that none of
 them reach the diagnostic, while
@@ -1760,3 +1768,73 @@ exited `0`: `check-fmt`, `lint`, `typecheck`, `doc-coverage`, `markdownlint`,
 `nixie`, `test`, `test-workflow-contracts`, `test-prover-tools-integration`,
 `test-kani-check-isolation` and `test-verus-e2e`. Keep Status: IN PROGRESS
 pending review at the new head and trusted-main warm-cache acceptance.
+
+Revision 54 (2026-11-09): The review at `5819530205`, taken at `a374b6bcd`,
+raised two inline findings, one outside-diff finding and five pre-merge rows,
+and requested changes. An earlier review at the same head (`5818141041`,
+13:52Z) had approved without listing rows; the later review (20:27Z) governs.
+Both inline findings were fixed. `tests/whitaker_boundary_contract.rs` was 400
+lines and is now 316, with the two `make lint-whitaker` invocation contracts
+moved to `tests/whitaker_boundary_contract/whitaker_invocation.rs` (177 lines)
+behind `#[path]`, alongside the module-doc paragraph that explains the split.
+The `--all` check no longer looks for the `--all --no-deps` pair: it cuts the
+recipe line at the recipe's ` -- ` separator, tokenizes the library-selection
+arguments, and rejects an exact `--all` token anywhere in them, which is what
+catches the dangerous `--all $(WHITAKER_SUITE_SELECTION) --no-deps` spelling.
+
+The outside-diff finding was a documentation correction, and it was right: the
+`kani-check` recipe prints the version token it extracted on a mismatch as well
+as on a match, so "never echoes verifier output" overstated the guarantee. The
+developers' guide and both places in this plan now say the recipe prints only
+that token — the `kani-version=` field and the `found` value — and never the
+text it was extracted from. A verifier reporting `kani 0.66.0` against a 0.67.0
+pin prints `found 0.66.0`.
+
+The Testing (Overall) and Unit Architecture rows asked for tests that detect
+write attempts, including attempts whose errors are ignored. The sandbox case
+proves a write cannot succeed; it cannot show that the recipe never tries,
+because a discarded failure (`2>/dev/null`, `|| true`) leaves success behind.
+`tests/prover_tools_kani_check_tests/recipe.rs` supplies the other half: it
+parses the shipped `kani-check` recipe and reports every error-suppression
+fragment, every write-intent command, and every redirect that names a path
+rather than duplicating a descriptor. Eight representative suppressions and
+writes are asserted to be reported, and three standard-stream diagnostics to be
+accepted, so the check is known to fire rather than merely known to pass. Adding
+`mkdir -p "$cache" 2>/dev/null || true` to the recipe was probed and fails the
+contract with two findings. The strict `kani-smoke` lane and the existing
+version-file, mismatch, verifier-failure and remote-runner checks are unchanged.
+
+The Testing (Property / Proof) row asked that generated failure statuses
+account for Make's normalized exit status. The two property cases already
+generate batch length, failure position and status, assert the complete
+successful order, and assert the exact failed prefix and the propagated status;
+what was missing was the reason for the bound. `failure_cases` now records it:
+statuses stay inside `1..=125` because 126 and 127 are the shell's meanings and
+128 upwards denote signals, so a proof exiting with one of those would be
+reported as the shell's number rather than its own.
+
+The Observability row asked for a restore failure to be an actionable CI error
+that fails the step, preserving a suite failure when applicable, and for the
+path to be covered. The `kani-smoke` isolation step now takes the sysctl path
+from `KANI_APPARMOR_RESTRICTION`, so the checked-in body can be executed with
+`make` and `sudo` stubbed and the path pointed at a temporary file.
+`tests/workflow_contracts/kani_isolation_step_test.py` runs that body and
+covers seven cases: no restriction node, an unrestricted host, a restored lift,
+a preserved suite failure, a refused restore with a passing suite (annotation
+plus non-zero exit), a refused restore with a failing suite (annotation plus
+the suite's own status), and a refused lift (an `::error::` before the suite
+runs, nothing restored). Removing the status promotion from the step was probed
+and fails the refused-restore case.
+
+All eleven commit gates were run on this candidate and each exited `0`. The
+batch was interrupted twice by the two-hour detached-command cap, once during
+`lint-whitaker` and once during `test`, and was resumed each time; every gate
+listed here ran on the unchanged tree, whose last file change preceded the
+resumed `lint` run. The results were `check-fmt`, `lint`, `typecheck`,
+`doc-coverage` (98.33% aggregate, 6,762/6,877, against an 80% threshold),
+`markdownlint` (218 files, zero issues), `nixie`, `test` (5,202 nextest passed,
+7 skipped, plus all doctests), `test-workflow-contracts` (1,792 passed, 3
+skipped, plus 28), `test-prover-tools-integration` (11 passed),
+`test-kani-check-isolation` (29 passed, 0 skipped) and `test-verus-e2e` (5
+passed, 0 skipped). Keep Status: IN PROGRESS pending review at the new head and
+trusted-main warm-cache acceptance.

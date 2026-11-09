@@ -579,9 +579,14 @@ jobs:
         # it afterwards. A host that will not let the restriction be lifted
         # cannot exercise the boundary, and says so rather than reporting a
         # sandbox failure that never reached the sandbox.
+        env:
+          # The default is the real sysctl node. The override exists so the
+          # workflow contract can run this step body against a temporary file
+          # instead of requiring root and a mutable kernel setting.
+          KANI_APPARMOR_RESTRICTION: /proc/sys/kernel/apparmor_restrict_unprivileged_userns
         run: |
           set -u
-          restriction=/proc/sys/kernel/apparmor_restrict_unprivileged_userns
+          restriction=${KANI_APPARMOR_RESTRICTION}
           restore_restriction=0
           if [ -e "$restriction" ] && [ "$(cat "$restriction")" = 1 ]; then
             if ! sudo --non-interactive sysctl --write \
@@ -596,8 +601,17 @@ jobs:
           status=0
           make test-kani-check-isolation || status=$?
           if [ "$restore_restriction" = 1 ]; then
-            sudo --non-interactive sysctl --write \
-              kernel.apparmor_restrict_unprivileged_userns=1 || true
+            if ! sudo --non-interactive sysctl --write \
+              kernel.apparmor_restrict_unprivileged_userns=1; then
+              # Leaving the host modified is a fault in its own right, so it
+              # must fail the step even when the suite passed. A suite failure
+              # keeps its own status, which is the more specific diagnosis.
+              printf '::error::%s\n' \
+                'cannot restore the AppArmor unprivileged-userns restriction'
+              if [ "$status" -eq 0 ]; then
+                status=1
+              fi
+            fi
           fi
           exit "$status"
       - name: Mark proof start

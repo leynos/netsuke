@@ -9,8 +9,16 @@
 
 #![cfg(unix)]
 
+#[path = "support/makefile.rs"]
+mod makefile;
+
 #[path = "prover_tools_kani_check_tests/support.rs"]
 mod support;
+
+// The static half of the read-only contract: the sandbox below proves a write
+// cannot succeed, and this module proves the recipe never attempts one.
+#[path = "prover_tools_kani_check_tests/recipe.rs"]
+mod recipe;
 
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]

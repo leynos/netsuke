@@ -228,6 +228,13 @@ impl BatchFixture {
 }
 
 /// Generate a batch length, a failing proof index, and that proof's status.
+///
+/// The status is confined to `1..=125` because that is the range Make can
+/// report unchanged. Above it the shell reserves 126 and 127 for "not
+/// executable" and "not found", and 128 upwards denote termination by a signal,
+/// so a proof that exited with one of those statuses would be reported as the
+/// shell's meaning rather than its own. Generating them would assert against a
+/// number the pipeline never propagates.
 pub fn failure_cases() -> impl Strategy<Value = (usize, usize, i32)> {
     (1usize..=4).prop_flat_map(|count| {
         (0..count, 1i32..=125).prop_map(move |(index, status)| (count, index, status))

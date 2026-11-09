@@ -5834,11 +5834,15 @@ Use the Make targets for day-to-day formal-verification checks:
   verifier, or unparsable output fails the target. Every failure names a stable
   `category=` — `pin-unreadable`, `verifier-failed`, `version-unparsable`, or
   `version-mismatch` — so a caller can branch on the cause without parsing
-  prose. The verifier's own output is never echoed. It comes from an external
-  binary, so it could carry a credential, forge a log line, or flood a
-  terminal, and no amount of bounding or escaping makes arbitrary text safe to
-  print. The category and the exit status are the actionable facts; re-running
-  the verifier by hand supplies anything else.
+  prose. The recipe prints only the version token it extracted from the
+  verifier's output — the `kani-version=` field, and the `found` value of a
+  mismatch, so a verifier reporting `kani 0.66.0` against a 0.67.0 pin prints
+  `found 0.66.0`. The text that token was extracted from is never echoed. It
+  comes from an external binary, so it could carry a credential, forge a log
+  line, or flood a terminal, and no amount of bounding or escaping makes
+  arbitrary text safe to print. The extracted version, the category and the
+  exit status are the actionable facts; re-running the verifier by hand
+  supplies anything else.
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
@@ -5900,6 +5904,30 @@ the boundary instead of reporting green without it. The capability probe binds
 the same `/etc`, repository and fixture paths the sandbox will use and names
 the operation a host refused, which is the evidence to collect before changing
 the lane.
+
+The sandbox proves a write cannot succeed; it cannot show that the recipe never
+tries, because an attempt whose error is discarded (`2>/dev/null`, `|| true`)
+leaves success behind. `tests/prover_tools_kani_check_tests/recipe.rs` supplies
+the other half: it parses the shipped `kani-check` recipe and reports any
+error-suppression fragment, any write-intent command, and any redirect that
+names a path rather than duplicating a descriptor. Representative suppressions
+and writes are asserted to be reported, so the check is known to fire rather
+than merely known to pass, and adding `mkdir -p "$cache" 2>/dev/null || true`
+to the recipe fails it. A diagnostic that ever needed to print a literal `>` is
+reported too; that is deliberate, and such a change should be reviewed.
+
+Ubuntu 24.04 ships `kernel.apparmor_restrict_unprivileged_userns=1`, which makes
+`unshare --user` fail before the sandbox script runs, so the `kani-smoke` step
+lifts the restriction for its own duration and restores it afterwards. The
+sysctl path comes from `KANI_APPARMOR_RESTRICTION` rather than being repeated
+in the step body, so `tests/workflow_contracts/kani_isolation_step_test.py` can
+execute the checked-in step with `make` and `sudo` stubbed and the path pointed
+at a temporary file. A host that refuses the lift fails the step with an
+`::error::` annotation instead of reporting a sandbox fault that never reached
+the sandbox. A refused restore is reported the same way and fails the step even
+when the suite passed, because leaving the host modified is a fault in its own
+right; a suite failure keeps its own status, which is the more specific
+diagnosis.
 
 `tests/prover_tools_kani_check_command_tests.rs` drives the recipe itself with
 a fake verifier, covering a matching pin, a mismatched pin, a missing pin, a
