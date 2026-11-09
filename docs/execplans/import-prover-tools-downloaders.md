@@ -2233,7 +2233,7 @@ succeeds, leaving no setup attempt for the trace to hold. What catches a
 removed guard is the refusal status and category, together with the
 non-invocation assertion in `kani_check_refuses_a_missing_payload`. The trace's
 narrower claim is that the refusal itself attempted nothing, and the text now
-says exactly that.
+says exactly that. All nine commit gates exited `0` on `ae3fbd100`.
 
-Keep Status: IN PROGRESS pending the gate batch at this head, review at the new
-head, and trusted-main warm-cache acceptance.
+Keep Status: IN PROGRESS pending review at the new head and trusted-main
+warm-cache acceptance.
