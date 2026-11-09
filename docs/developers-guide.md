@@ -3950,6 +3950,9 @@ name says the listing or the download failed, so the release may be perfectly
 correct. A run that reported the second as the first would send an operator
 hunting for wrong bytes that do not exist, which is why `write_plan` records
 them under separate keys and `blocked_message` names each clause that applies.
+`finalize_github_release_cli` prints each clause too, so the distinction
+survives in the workflow log and an operator does not have to open the retained
+plan to learn which of the two stopped the run.
 
 `finalize_github_release_cli` turns a plan of all four actions into an exit
 status, with `UNVERIFIABLE` sharing `EXIT_CONFLICT` because both must stop the

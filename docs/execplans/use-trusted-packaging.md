@@ -741,8 +741,8 @@ The `trusted.json` record is produced and retained for downstream consumption
 with `selection.json` before acting. Both intended consumers now read it:
 `verify-release-inventory` downloads every declared asset into its own
 directory and compares each one against the record, which the producer computed
-from its own build tree before upload and never from the bytes it describes,
-and `finalize-github-release` reconciles the recorded listing against the same
+from its own build tree before upload and never from the bytes it describes, and
+`finalize-github-release` reconciles the recorded listing against the same
 record before un-drafting. Neither consumer reads the verifier's output, so the
 release is never compared against a set derived from GitHub itself.
 
