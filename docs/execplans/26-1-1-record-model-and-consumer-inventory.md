@@ -8,7 +8,7 @@ proceeds.
 
 Status: IN PROGRESS
 
-Revision 40. See `Revision note` at the foot of this document. This plan was
+Revision 41. See `Revision note` at the foot of this document. This plan was
 written against `origin/main` at `ebcedaef683efeb795d0ab65f94ad11dc5b92eb2`
 ("RFC 0029: first-class host facts with explicit collection (#802)") and
 revised after two rounds of expert design review, then rebased onto `b0e8547f`
@@ -659,6 +659,10 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   finding (D-23): `Outcomes & retrospective` now separates the completed
   heading-parser replacement and gate rerun from the publication and hosted
   assessment that remain.
+- [x] (2026-11-05) Regenerated the inventory's post-pin commit list a second
+  time (D-24). `10e1f9ce4` touches `tests/`, so the list was stale the moment
+  it landed; the enumeration and live Git now match as sets in both directions
+  at 35 commits.
 - [ ] EP-M4: publish the verified revision, apply the PR body, and take the
   pull request through hosted review to equilibrium.
 
@@ -1010,6 +1014,16 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   figure "seventeen commits" was likewise replaced by the command that yields
   the count, since the number moves with every commit. Date/Author: 2026-11-05,
   implementing agent, after the ninth milestone CodeRabbit review.
+- Decision D-24 (2026-11-05): regenerated the post-pin commit list a second
+  time. `10e1f9ce4` touched `tests/hexagonal_inventory_contract_tests.rs`, so
+  the list went stale again the moment it was committed — the same mechanism
+  D-21 recorded, which is why the section now names the regenerating command
+  and states that the enumeration, not a remembered count, is the claim. The
+  set was re-verified in both directions against the `git log` command now
+  recorded in the inventory itself: 35 identifiers, no difference either way,
+  classified as 25 in `main`, one adding the contract, and nine refinements.
+  Date/Author: 2026-11-05, implementing agent, after the ninth milestone
+  CodeRabbit review.
 
 ## Outcomes & retrospective
 
@@ -1992,6 +2006,11 @@ dev-dependencies only: `rstest`, `anyhow`, `camino`, `cap_std`, `regex`, and
   publishing the verified revision and the hosted PR assessment. Recording it
   moved HEAD to a prose-only delta in this one file; the eleven-gate pass above
   binds `10e1f9ce4`.
+- Revision 41 (2026-11-05): regenerated the inventory's post-pin commit list
+  (D-24) after `10e1f9ce4` made it stale, and replaced its remembered count
+  with the regenerating command plus a note that the enumeration is the claim.
+  The verification candidate is now this revision; the gate run that binds it
+  follows.
 
 [rfc-0026]: ../rfcs/rfc-0026-harden-the-compiler-and-execution-boundaries.md
 [adr-0035]: ../adrs/adr-0035-own-semantic-compiler-and-execution-boundaries.md

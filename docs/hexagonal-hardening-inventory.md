@@ -251,12 +251,15 @@ helper functions; their sum is the compiler message count.
 
 ### In-scope commits since the pin
 
-The snapshot remains pinned to the commit above. These are the 34 commits
-between that pin and the branch's 2026-11-05 head that changed `src/`,
-`build.rs`, `tests/`, `test_support/`, or `benches/`: 25 in the current `main`
-target, one adding this inventory's contract test, and eight refactoring or
-tightening that contract. This list is re-sweep context for later consumers; it
-does not move the inventory pin.
+The snapshot remains pinned to the commit above. These are the commits between
+that pin and the branch's 2026-11-05 head that changed `src/`, `build.rs`,
+`tests/`, `test_support/`, or `benches/`: 25 in the current `main` target, one
+adding this inventory's contract test, and nine refactoring or tightening that
+contract. Regenerate the list with
+`git log 8a961000..HEAD --format=%h -- src build.rs tests test_support benches`;
+it goes stale whenever a commit touches one of those paths, so treat the
+enumeration below, not a remembered count, as the claim. This list is re-sweep
+context for later consumers; it does not move the inventory pin.
 
 - `c82189bf4` Install the built .deb and .rpm before publishing them (#799)
   (#1047)
@@ -301,6 +304,7 @@ does not move the inventory pin.
 - `e679d4308` Restrict obligation coverage to the trace tables
 - `b51702ce3` Honour the Unchanged coverage source and split the test module
 - `7d8c7b6c7` Drop the doc comment from the real-inventory test
+- `10e1f9ce4` Name the roadmap closure count and report the observed value
 
 Three corrected text sweeps cover compiler blind spots. The Rust source list
 contains 936 files across `src/`, `build.rs`, `tests/`, `test_support/`,
