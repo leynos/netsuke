@@ -1262,12 +1262,30 @@ Date/Author: 2026-11-09, implementation agent.
 
 ### D34: six of the eight re-raised pre-merge rows were real defects
 
-**Decision.** Re-verify each row against the tree at `05a8181e2` rather than
-inheriting D31's dispositions. The re-raised table is not the table D31
-answered: four of its rows cite different evidence and three name findings D31
-never saw, so a disposition carried forward would have claimed a check passed
-without reading it again. Six rows were right and are fixed; two are rebutted
-against the code, one of them with the measurement D29 already recorded.
+**Decision.** Re-verify each row against the tree rather than inheriting D31's
+dispositions, because the re-raised table turned out to describe work D31 had
+not done. Six of D31's eight dispositions are contradicted by D31's own basis
+tree, the `245515675` it names. Each of the six is checkable there, and each
+still shows the defect D31 called satisfied or rebutted:
+
+| Row                         | D31 said  | At `245515675`                                                                                                                                    |
+| --------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Module-Level Documentation  | Satisfied | `tests/terminal_rendering/json.rs` still opens "Check JSON output and configuration-error output" and contains no `--json` invocation.            |
+| Testing (Property / Proof)  | Satisfied | `classify.rs` still documents `has_bare_carriage_return` as "a carriage return not followed by a line feed", with no escape-payload carve-out.    |
+| User-Facing Documentation   | Satisfied | `users-guide.md` still reads "The same precedence applies to every route that renders help — `--help`, `help`, and `help <subcommand>`".          |
+| Developer Documentation     | Satisfied | `developers-guide.md` still says "so buffered startup events are plain" with no window, and still says the merged plan is always the second call. |
+| Testing (Compile-Time / Ui) | Satisfied | `tests/clippy_env_policy_ui_tests.rs` still only text-matches `clippy.toml` and the fixture's header; nothing compiles a probe.                   |
+| Unit Architecture           | Rebutted  | `src/main.rs` still has `fn resolve_startup_window`, the query-shaped name the row asks to be changed.                                            |
+
+D31's evidence column cites a different artefact from the one each row requests
+— the migration guide for User-Facing Documentation, the `json_pty.rs` module
+doc for Module-Level Documentation — so the rows were marked satisfied on
+proximity rather than on the finding. Two dispositions do hold:
+`Testing (Overall)` and `Domain Architecture` remain rebutted, for the reasons
+restated below.
+
+So six rows were right and are fixed here, and two are rebutted against the
+code, one of them with the measurement D29 already recorded.
 
 **Six rows were correct, and are fixed.**
 
@@ -1276,7 +1294,7 @@ against the code, one of them with the measurement D29 already recorded.
   `--json` invocation; only `json_pty.rs` runs JSON. The header now names the
   configuration-error split as this file's subject and points at `json_pty.rs`
   for JSON output.
-- *Testing (Property / Proof)* — correct, and the sharpest of the five.
+- *Testing (Property / Proof)* — correct, and the sharpest of the six.
   `TerminalBytes::has_bare_carriage_return` documented itself as "a carriage
   return not followed by a line feed" with no carve-out, while the classifier
   deliberately skips carriage returns inside OSC, DCS, SOS, PM and APC
