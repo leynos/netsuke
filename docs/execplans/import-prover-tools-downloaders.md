@@ -1977,3 +1977,40 @@ sequence exited `2` with three findings — two `clippy::shadow_reuse` and one
 lookup removed; the batch was then restarted from `check-fmt` and every gate on
 the finished tree passed. Keep Status: IN PROGRESS pending review at the new
 head and trusted-main warm-cache acceptance.
+
+Revision 57 (2026-11-09): The pre-merge reply at `6731095126` left three rows
+Open at `1a840c133`, and two of the three needed work beyond Revision 56.
+Testing (Overall) accepted the trace and the control verifier but said the
+control exercises the verifier and not a suppressed attempt added to the
+recipe. That is a real gap: the shipped recipe is parsed statically for
+suppressions and the trace follows `make`, but nothing showed the runtime half
+firing on a command the recipe itself runs. The fixture now writes a makefile
+whose `kani-check` lines discard a write to `/etc` and a directory creation
+under `/usr`, then report the pinned version. Both paths are on read-only
+mounts, so the run changes nothing; because each failure is discarded the make
+run still succeeds, which is what leaves the trace as the only record. The case
+requires `dirty-exit=0` and both findings — a write-intent open and
+`` `mkdir` changes a path `` — so an attempt added to the recipe, rather than
+to the program the recipe runs, is shown to be caught.
+
+Unit Architecture's point was that the isolated query still used the fixture's
+stub, which Revision 56 answered with the third traced query over the installed
+verifier and the `kani-smoke` lane's `NETSUKE_KANI_ISOLATION_VERIFIER`. The
+Developer Documentation row's two remaining corrections — the "bounded quote"
+wording and the claim that every mounted path is read-only — were also made in
+Revision 56; this revision adds the second control to that paragraph.
+
+The new helper first took the completed run plus borrowed `stdout` and `stderr`
+strings, and CodeScene reported String Heavy Function Arguments for it at 9.68.
+It now takes the run alone and borrows both streams itself, and the file scores
+10.00 again.
+
+All nine commit gates exited `0` on `7f6a4693d`: `check-fmt`, `lint`,
+`typecheck`, `doc-coverage` (98.33% aggregate, 6,762/6,877), `markdownlint`
+(218 files, zero issues), `nixie`, `test` (5,217 nextest passed, 7 skipped,
+plus the doctests), `test-workflow-contracts` (1,792 passed, 3 skipped, plus
+28) and `test-kani-check-isolation` (43 passed, 0 skipped). The isolation case
+was also run by hand with `NETSUKE_KANI_ISOLATION_VERIFIER` naming the local
+`cargo-kani`, and passed. `7f6a4693d` is the last revision all nine gates
+verified; the commits after it carry only prose in this file. Keep Status: IN
+PROGRESS pending review at the new head and trusted-main warm-cache acceptance.
