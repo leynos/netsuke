@@ -11937,8 +11937,22 @@ recording is a boundary observer rather than part of the predicate.
 
 Recording before the diagnostic is what keeps the count exact. A rejection
 aborts the load, so a counter placed after the error mapping would never run
-for the cases the series exists to measure. Every load therefore increments
-exactly one series, admitted or not.
+for the cases the series exists to measure. Every load that reaches the
+admission gate therefore increments exactly one series, admitted or not.
+
+Two earlier failures return before `record_admission` and increment nothing: a
+YAML document that does not parse, and a manifest refused by the source-size
+budget charge. The counter is therefore a count of admission decisions, not a
+denominator for total load attempts; do not divide anything by it.
+
+The series is gated on the load's registration via
+`StdlibRegistration::records_schema_admission`, which is true for `AmbientFull`
+and `Full` only. Discovery queries and `netsuke test` runs share this loader
+and reach the same gate, but they are not admissions of a user's manifest, so
+counting them would inflate both terms of a refusal rate with traffic the
+series is not about. This mirrors the expansion and budget telemetry gate
+(ADR-0050 Addendum E). The gate withholds only the recording: a query that
+declares an unsupported schema still fails with the same diagnostic.
 
 The counter is `netsuke_manifest_schema_admissions_total`, with one `outcome`
 label drawn from the closed set `admitted`, `missing`, `not_string`, `invalid`,

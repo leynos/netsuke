@@ -40,6 +40,8 @@ also cannot be emitted directly as Ninja identifiers.
 
 - Cap schema capacity independently of CLI `jobs`.
 - Combine declared capacity with a trusted operator ceiling using ADR-0062.
+- Reject a zero ceiling and clamp the ceiling to the schema maximum, so the
+  effective capacity is always positive.
 - Lower public names through a typed identity and safe internal encoding.
 - Reject incompatible use of Ninja's `console` pool rather than weaken either
   guarantee.
@@ -78,6 +80,17 @@ fractional, Boolean, unbounded, and out-of-range values. The effective capacity
 is the minimum of the declared value and the trusted
 `contention_capacity_ceiling`; inspection reports both values and provenance.
 The ceiling is independent of the CLI `jobs` limit.
+
+The ceiling is validated on the same terms as a declared capacity, and for the
+same reason: a zero ceiling would make the effective capacity zero for every
+class no matter how valid its declaration, and Ninja reads pool depth zero as
+unlimited. Configuration therefore rejects a ceiling below 1, and the trust
+bound is enforced as a minimum as well as a maximum — a ceiling above 1024
+clamps to 1024 rather than widening the declared range. The effective capacity
+is then checked to be positive before any pool text is emitted, so a future
+change to either bound cannot reach Ninja as an unlimited pool. A zero
+effective capacity is an internal invariant violation rather than an operator
+error, because both inputs are already range-checked.
 
 Resolve public names to typed internal class identities before backend
 emission. Never pass an unchecked name into Ninja text. Roadmap item 22.1.2

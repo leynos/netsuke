@@ -10,9 +10,15 @@ Status: COMPLETE
 Every milestone including EP-M5 is complete and roadmap item 20.1.1 is marked
 done. The user approved this plan on 2026-10-24 and selected D-19 Option A;
 approval authorized drafting the decision records, and it did not accept them.
-Acceptance happened through the normal Architectural Decision Record (ADR)
-process: the user explicitly accepted ADR-0061 to ADR-0067 during pull-request
-review on 2026-11-09.
+
+Acceptance was given by the user on 2026-11-09 as a direct instruction to
+accept the records and mark the roadmap item complete, and no amendment was
+requested. It is not evidenced by a GitHub review submission: the pull request
+carries no approving review from the repository owner, so the acceptance is
+recorded here as the acceptance action and not as a link to a review. The seven
+decision records were supplied as `Proposed` specifically so that acceptance
+would be an explicit act separate from drafting, and this entry records that
+act. Commit `09580b6b7` carries the resulting status change.
 
 ## Purpose / big picture
 
@@ -331,6 +337,16 @@ decision D-15.
   gate sequence this milestone names passed at `bd7e6f123`, and the later
   commits touch only this plan and a test-helper extraction that keeps the same
   assertions.
+  - (2026-11-09) The production code changed after that entry was written, so
+    the entry above understates what shipped. Bounded schema-admission
+    telemetry was added in `1b31fc789` and folded into its own module in
+    `c3f25d05d`, and the recording is gated on the load's registration so
+    discovery queries and `netsuke test` runs do not count as admissions. The
+    gate result quoted at `bd7e6f123` covers the revision named there, not the
+    current head; the nine-gate run on `09580b6b7` is the evidence for what
+    this plan ships, and it is recorded in the Progress section under EP-M5.
+    Pre-existing limitation: `bd7e6f123` predates the rebases, so it names a
+    commit that is no longer an ancestor of the branch.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and

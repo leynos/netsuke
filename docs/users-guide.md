@@ -2052,8 +2052,11 @@ because environment variable names routinely identify credentials.
 
 #### Manifest schema-admission metrics
 
-Every manifest load counts one admission decision against its declared
-`netsuke_version` in a single bounded series:
+Every document that reaches schema admission counts one decision against its
+declared `netsuke_version` in a single bounded series. Two failures return
+before that point and are therefore not counted: YAML that does not parse, and
+a manifest refused by the source-size budget. A non-mapping root does reach the
+gate and is counted as admitted:
 
 - `netsuke_manifest_schema_admissions_total` — a counter with a single `outcome`
   label. `outcome` is `admitted` when the declaration names a supported schema

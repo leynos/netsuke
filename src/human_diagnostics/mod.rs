@@ -50,14 +50,22 @@ pub fn render_failure(err: &Error, theme: &GraphicalTheme) -> Option<String> {
     if let Some(runner_err) = err.downcast_ref::<runner::RunnerError>() {
         return Some(render_diagnostic(runner_err, theme));
     }
-    if let Some(manifest_err) = err
-        .chain()
-        .find_map(|cause| cause.downcast_ref::<manifest::ManifestError>())
-    {
+    if let Some(manifest_err) = manifest_cause(err) {
         return Some(render_diagnostic(manifest_err, theme));
     }
     let report = err.downcast_ref::<Report>()?;
     Some(render_diagnostic(&**report, theme))
+}
+
+/// Find the first manifest error in a failure chain.
+///
+/// Rendering and classification must agree on which error they describe, so
+/// both read the chain through this one lookup rather than each walking it.
+/// First match wins: a later `ManifestError` describes an inner failure, not
+/// the one whose diagnostic the human path renders.
+fn manifest_cause(err: &Error) -> Option<&manifest::ManifestError> {
+    err.chain()
+        .find_map(|cause| cause.downcast_ref::<manifest::ManifestError>())
 }
 
 /// Find a circular-dependency error inside a contextual runner failure.
@@ -103,13 +111,13 @@ pub fn handle_failure(err: &Error, prefs: &OutputPrefs) -> ExitCode {
 /// declaration rather than its build description. The rendering is unchanged;
 /// only the logged category differs, and the diagnostic it accompanies still
 /// carries the full explanation.
+///
+/// The category is decided from the same first `ManifestError` that
+/// [`render_failure`] renders, so the log line and the stderr diagnostic
+/// cannot describe different failures.
 fn failure_kind(err: &Error) -> &'static str {
-    let is_schema_rejection = err.chain().any(|cause| {
-        cause
-            .downcast_ref::<manifest::ManifestError>()
-            .is_some_and(|manifest_error| {
-                ManifestFailure::of(manifest_error).is_schema_version_rejection()
-            })
+    let is_schema_rejection = manifest_cause(err).is_some_and(|manifest_error| {
+        ManifestFailure::of(manifest_error).is_schema_version_rejection()
     });
     if is_schema_rejection {
         "manifest_schema_version"

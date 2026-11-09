@@ -256,9 +256,11 @@ command on the way to its own rejection.
 Only the literal schema release is admitted. A version inside the supported
 range that is not `MAJOR.MINOR.0` — `1.0.1`, `1.0.0-rc.1`, or a value carrying
 build metadata — is reported as non-canonical rather than as unsupported,
-because no future reader could start accepting it. The diagnostic names the
-declared and supported schemas, and reports the
-`netsuke::manifest::schema_version` code.
+because no future reader could start accepting it. A non-canonical version uses
+the invalid-version message rather than the unsupported-version one, so the
+diagnostic does not name the declared and supported schemas; it reports the
+`netsuke::manifest::schema_version` code. Only an unsupported version names
+both schemas.
 
 In human output that code appears in the diagnostic header. In `--json` output
 the top-level `code` is `netsuke::manifest::parse` and the schema code appears
@@ -806,6 +808,16 @@ also records `netsuke_cli_config_discovery_total`, labelled
 without labels. Neither exposes configuration paths. See the users' guide's
 [bounded configuration metrics](users-guide.md#bounded-configuration-metrics)
 and [interpret failures](users-guide.md#interpret-failures) sections.
+
+Manifest schema admission has its own series,
+`netsuke_manifest_schema_admissions_total`, labelled only `outcome` with one of
+`admitted`, `missing`, `not_string`, `invalid`, `unsupported`, or
+`not_canonical`. It counts admission decisions, not load attempts: YAML that
+does not parse and manifests refused by the source-size budget return before
+the gate and are not counted. Discovery queries and `netsuke test` runs reach
+the gate but do not record. See the users' guide's
+[manifest schema-admission metrics](users-guide.md#manifest-schema-admission-metrics)
+section.
 
 ## Review the project fetch-policy boundary
 

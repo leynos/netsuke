@@ -148,3 +148,84 @@ fn check_rejects_unsupported_schema_and_accepts_supported_schema(
         .success();
     Ok(())
 }
+
+/// Write a manifest whose schema declaration is `declaration`, verbatim.
+///
+/// The value is spliced into the YAML unquoted so a case can supply `7`, a
+/// non-string scalar, as readily as `'1.0.3'`. `declaration` is `None` for the
+/// missing case: an omitted key is the only shape that reaches
+/// `SchemaVersionRejection::Missing`, because a blank value is a null document
+/// root and non-mapping roots are admitted. Every other field is a valid
+/// manifest, so the only fault the binary can report is the declaration.
+fn write_raw_declaration(directory: &Path, declaration: Option<&str>) -> Result<()> {
+    let declaration_line =
+        declaration.map_or_else(String::new, |value| format!("netsuke_version: {value}\n"));
+    fs::write(
+        directory.join("Netsukefile"),
+        format!(
+            concat!(
+                "{declaration_line}",
+                "targets:\n",
+                "  - name: hello\n",
+                "    command: echo hello\n",
+            ),
+            declaration_line = declaration_line
+        ),
+    )
+    .context("write raw schema declaration manifest")
+}
+
+/// Assert a human-mode rejection names the schema code and a remedy.
+///
+/// The remedy is asserted through the shared help text rather than the summary
+/// line. Every rejection class carries `manifest.schema_version.help`, while
+/// only `Unsupported` names the declared and supported schemas — so requiring
+/// the supported version here would fail three of the four classes for the
+/// right reason. `MAJOR.MINOR.0` is the phrase the help uses to state the
+/// remedy in every locale.
+fn assert_human_rejection_names_code_and_remedy(stderr: &str, case: &str) -> Result<()> {
+    ensure!(
+        stderr.contains("netsuke::manifest::schema_version"),
+        "{case}: human output must name the schema-version diagnostic code: {stderr}"
+    );
+    ensure!(
+        stderr.contains("MAJOR.MINOR.0"),
+        "{case}: human output must state the MAJOR.MINOR.0 remedy: {stderr}"
+    );
+    Ok(())
+}
+
+/// Every rejection class must reach the operator as a rendered diagnosis.
+///
+/// The predicate is unit-tested elsewhere; what this covers is the process
+/// boundary — that each class survives the loader, the diagnostic mapping, and
+/// the human renderer with its code and remedy intact. The four classes take
+/// different paths through `admit_document`, so a regression in any single arm
+/// would otherwise be invisible.
+#[rstest]
+#[case::missing(None, "a missing declaration")]
+#[case::not_string(Some("7"), "a non-string declaration")]
+#[case::invalid(Some("'not-semver'"), "a malformed declaration")]
+#[case::non_canonical(Some("'1.0.3'"), "a non-canonical declaration")]
+fn every_rejection_class_renders_a_diagnosis(
+    #[case] declaration: Option<&str>,
+    #[case] case: &str,
+) -> Result<()> {
+    let temp = tempdir().context("create rejection-class workspace")?;
+    write_raw_declaration(temp.path(), declaration)?;
+    let output = create_netsuke_command(temp.path())
+        .args(["generate", "--output", "out.ninja"])
+        .output()
+        .with_context(|| format!("run generate with {case}"))?;
+    ensure!(
+        !output.status.success(),
+        "{case}: generate must fail rather than build"
+    );
+    ensure!(
+        !temp.path().join("out.ninja").exists(),
+        "{case}: a rejected manifest must not produce output"
+    );
+    let stderr =
+        String::from_utf8(output.stderr).with_context(|| format!("{case}: stderr is UTF-8"))?;
+    assert_human_rejection_names_code_and_remedy(&stderr, case)
+}
