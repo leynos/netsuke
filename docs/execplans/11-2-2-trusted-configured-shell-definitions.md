@@ -240,6 +240,33 @@ explicit and exercise the actual adapters in tests.
     errors), `markdownlint` (35 s), and `nixie` (1 s); the batch finished
     `failed=0`. Every verdict recorded before the rebase is superseded by this
     run, because a rebase creates a new candidate.
+  - [x] 2026-11-09: Repair the delivery findings raised against the published
+    candidate `bef3ec159`. Hosted Windows CI failed there with
+    `error: unused import: merge_in_child`, because that import was reachable
+    only from `#[cfg(unix)]` tests, and CodeScene scored four files below
+    10.00. `tests/cli_tests/shells_authority.rs` becomes
+    `shells_authority/mod.rs` plus a `support.rs` fixture, with the probe
+    imports, `operator_rejection`, and that fixture's `tempdir` import gated
+    on `unix`. The host path rules move out of
+    `src/cli/config/shells/executable.rs` into `spelling.rs`, registered in
+    `build.rs` and `tools/kani/proof-scope.toml`. The startup fixtures
+    consolidate into `shells_startup/support.rs`, and a `ProjectFixture` in
+    `src/cli/discovery/layers/tests/authority/cases.rs` replaces the repeated
+    temporary-project setup. All nine touched or new files score 10.00 under
+    `cs check`, and both `cargo check --all-targets --all-features` and
+    `make typecheck` exit 0 on Linux. The first gate batch then failed `test`
+    on `build_script_rerun_directives_match_the_compiled_module_slice`, a
+    second registry of the build-script module slice; adding `spelling.rs` to
+    `BUILD_SLICE_RERUN_PATHS` in `tests/build_module_slice_ui_tests.rs` fixed
+    it, and the whole set was rerun rather than resumed.
+  - [x] 2026-11-09: Run the full gate set on the repaired candidate, whose
+    code commits are `893e70029`, `ca04b9ad1`, and `6449d02de`. All eleven
+    gates passed in one batch: `check-fmt` (5 s), `lint` (304 s),
+    `typecheck` (40 s), `doc-coverage` (317 s, 98.32 %), `test` (444 s),
+    `test-workflow-contracts` (273 s), `test-package-verify` (108 s),
+    `test-documentation-contracts` (2 s), `verus` (4 s, 9 verified and 0
+    errors), `markdownlint` (30 s), and `nixie` (3 s); the batch finished
+    `failed=0`.
   - [ ] 2026-11-05: Publish the repaired candidate and hand delivery to
     `pr-babysitting`.
 
@@ -328,6 +355,14 @@ even though `make test` was green and the code ran correctly. The repair records
 Cargo, so a green `make test` is not evidence that the source-tree contracts
 hold.
 
+The build-script module slice is registered in two places, and only one of them
+is a directive `build.rs` emits. `tests/build_module_slice_ui_tests.rs` also
+pins the slice as a literal list, so adding a module to `emit_rerun_directives`
+alone leaves `make test` red on
+`build_script_rerun_directives_match_the_compiled_module_slice` while every
+other gate stays green. Search for an existing sibling path, such as
+`shells/preview.rs`, to find every registry the new module has to join.
+
 The build-script slice analyses visibility as a binary crate does, and a
 `pub use` re-export inside a private module is unreachable there even though
 the library crate consumes it. Declaring the slice's `cli` and
@@ -342,6 +377,19 @@ suppression at all.
 `&[&str]` instead. The failure surfaced only when `make typecheck` compiled the
 build script's `cfg(test)` modules, because the slice compiles
 `src/cli/config/shells/tests/` too.
+
+An import that only a `#[cfg(unix)]` test reaches is invisible to every Linux
+gate and fatal to the Windows job, which compiles with `-D warnings`. The
+`shells` authority suite imported the merge probe at module scope and used it
+only inside unix-gated tests, so the branch passed the local lint, typecheck,
+and test gates while hosted CI stopped at
+`error: unused import: merge_in_child`. Gate the import together with the
+helper that reaches it. A Windows cross-check cannot settle this on this host:
+`cargo check --target x86_64-pc-windows-msvc` stops in `ring`'s build script
+with `GNU compiler is not supported for this target`, because `ureq` reaches
+`ring` through `netsuke-build`, a dev-dependency of `test_support`, and the
+target needs an MSVC C toolchain that is not installed. Cfg-gated imports
+therefore have to be audited by inspection locally and confirmed by hosted CI.
 
 ## Decision log
 
@@ -447,6 +495,12 @@ build script's `cfg(test)` modules, because the slice compiles
   workflow contract requires the declared paths to cover the harness closure
   exactly, so an unlisted module fails the contract rather than silently
   skipping a proof input.
+- 2026-11-09: Split the host path-spelling predicates into
+  `src/cli/config/shells/spelling.rs` rather than shortening the type that
+  calls them. CodeScene measures string-heavy functions per file, and the
+  predicates are a coherent unit: pure text inspection shared by both host
+  families, holding no state in common with the `ShellExecutable` value they
+  validate.
 
 ## Outcomes & retrospective
 
