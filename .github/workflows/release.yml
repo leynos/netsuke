@@ -1086,3 +1086,78 @@ jobs:
           name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-operation-observability.jsonl
           if-no-files-found: ignore
+
+  finalize-github-release:
+    # Un-drafting is irreversible: a public release cannot be made a draft
+    # again. This job therefore runs only once the registry publication, the
+    # draft upload, and the inventory verification have each succeeded, and it
+    # reconciles the draft against the *build's* digest record rather than the
+    # verifier's output. Every dependency result is named explicitly because
+    # `!cancelled()` is a status function, and a status function suppresses the
+    # implicit success check GitHub would otherwise apply. The rehearsal job
+    # `release` is deliberately absent: a dry run never creates a draft.
+    if: >-
+      !cancelled() &&
+      needs.metadata.result == 'success' &&
+      needs.package-crate.result == 'success' &&
+      needs.publish-crates-io.result == 'success' &&
+      needs.publish-release.result == 'success' &&
+      needs.verify-release-inventory.result == 'success' &&
+      needs.metadata.outputs.should_publish == 'true'
+    needs:
+      - metadata
+      - package-crate
+      - publish-crates-io
+      - publish-release
+      - verify-release-inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only this stage and the publisher need write access to the release API.
+    # No OIDC permission and no registry credential is granted: the only
+    # mutation here is the release's draft flag.
+    permissions:
+      contents: write
+    steps:
+      - uses: >-
+          actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        # v7.0.1
+        with:
+          # Finalize with the candidate's own scripts, so the code that
+          # decides is the code the publisher ran rather than whatever the
+          # triggering ref resolved to.
+          ref: ${{ needs.metadata.outputs.candidate_commit }}
+          persist-credentials: false
+      - name: Install uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
+        with:
+          python-version: '3.14'
+          # The finalizer's helpers are stdlib-only, so a dependency cache
+          # would add an unnecessary supply-chain input.
+          enable-cache: false
+      - name: Download the package record
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1. One exact name: the identity this job finalizes is the one
+        # the packaging stage recorded, never a record rebuilt here.
+        with:
+          name: release-crate-package
+          path: release-crate-package
+      - name: Download the trusted digest record
+        uses: >-
+          actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        # v8.0.1. The name comes from the publisher's output rather than this
+        # job's attempt number, because a "Re-run failed jobs" reuses a
+        # successful publisher without running it again.
+        with:
+          name: ${{ needs.publish-release.outputs.trusted-artifact }}
+          path: trusted
+      - name: Finalize the verified release
+        uses: ./.github/actions/finalize-github-release
+        with:
+          tag: ${{ needs.metadata.outputs.release_tag }}
+          commit: ${{ needs.metadata.outputs.candidate_commit }}
+          repository: ${{ github.repository }}
+          identity-path: release-crate-package/artifacts/package/identity.json
+          digest-record-path: trusted/trusted.json
+          work-directory: ${{ runner.temp }}/release-finalize
+          github-token: ${{ github.token }}
