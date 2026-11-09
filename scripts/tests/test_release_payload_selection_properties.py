@@ -24,6 +24,11 @@ import release_payload_selection as selection
 from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 from release_payload_errors import PayloadRefusedError
+from release_payload_generation_support import (
+    CANDIDATE,
+    DEB_SUFFIX,
+    RUN_ID,
+)
 from release_producer_provenance_errors import (
     DuplicateAssetError,
     DuplicateTargetError,
@@ -34,11 +39,6 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from release_producer_provenance import ProducerProvenance
-
-CANDIDATE = generated.CANDIDATE
-RUN_ID = generated.RUN_ID
-DEB_SUFFIX = generated.DEB_SUFFIX
-RPM_SUFFIX = generated.RPM_SUFFIX
 
 
 def _select(

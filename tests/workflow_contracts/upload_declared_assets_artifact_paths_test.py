@@ -77,12 +77,13 @@ def _paths(step: dict[str, object]) -> tuple[str, ...]:
     the record is exactly what such a reader would lose.
     """
     declared = require_mapping(step.get("with"), "upload step inputs").get("path")
-    if isinstance(declared, str):
-        entries = declared.splitlines()
-    elif isinstance(declared, list):
-        entries = [str(entry) for entry in declared]
-    else:
-        pytest.fail(f"an upload step must declare a path, got {declared!r}")
+    match declared:
+        case str() as scalar:
+            entries = scalar.splitlines()
+        case list() as sequence:
+            entries = [str(entry) for entry in sequence]
+        case _:
+            pytest.fail(f"an upload step must declare a path, got {declared!r}")
     return tuple(entry.strip() for entry in entries if entry.strip())
 
 

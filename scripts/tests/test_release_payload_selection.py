@@ -56,17 +56,6 @@ CONFIG: dict[str, object] = {
 }
 
 
-def provenance(**overrides: object) -> ProducerProvenance:
-    """Build the x86_64 record over ``staged_assets``, overridden field by field.
-
-    Returns
-    -------
-    ProducerProvenance
-        A record claiming its own archive, sidecar, and two packages.
-    """
-    return x86_record(**overrides)
-
-
 def selection_for(
     provenances: list[ProducerProvenance],
     staged: dict[str, list[str]],
@@ -102,7 +91,7 @@ def complete_staged() -> dict[str, list[str]]:
 
 def test_a_complete_tree_selects_exactly_the_declared_names() -> None:
     """Select every declared name once, with its recorded digest."""
-    selected = selection_for([provenance()], complete_staged())
+    selected = selection_for([x86_record()], complete_staged())
     assert selected.declared == tuple(sorted((ARCHIVE, SIDECAR, DEB, RPM))), (
         "selection must declare every published name"
     )
@@ -122,7 +111,7 @@ def test_the_sources_are_returned_opaque() -> None:
     staged = {ARCHIVE: [tokens["archive"]], SIDECAR: [tokens["sidecar"]]}
     staged |= {DEB: [tokens["deb"]], RPM: [tokens["rpm"]]}
     selected = selection.select_payload(
-        [provenance()],
+        [x86_record()],
         identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, CONFIG),
         tree=selection.StagedTree(archives={TARGET: ARCHIVE}, staged=staged),
     )
@@ -134,13 +123,13 @@ def test_the_sources_are_returned_opaque() -> None:
 def test_a_record_from_another_commit_is_refused() -> None:
     """Refuse a staged tree left over from an earlier candidate."""
     with pytest.raises(StaleCandidateError):
-        selection_for([provenance(commit="b" * 40)], complete_staged())
+        selection_for([x86_record(commit="b" * 40)], complete_staged())
 
 
 def test_a_record_from_another_run_is_refused() -> None:
     """Refuse a record whose producer belongs to a different workflow run."""
     with pytest.raises(ForeignRunError):
-        selection_for([provenance(run_id="9999")], complete_staged())
+        selection_for([x86_record(run_id="9999")], complete_staged())
 
 
 def test_a_target_without_a_record_is_refused() -> None:
@@ -149,7 +138,7 @@ def test_a_target_without_a_record_is_refused() -> None:
         "targets": {TARGET: {"platform": "linux"}, "macos-arm64": {"platform": "macos"}}
     }
     with pytest.raises(MissingTargetError):
-        selection_for([provenance()], complete_staged(), config=config)
+        selection_for([x86_record()], complete_staged(), config=config)
 
 
 def test_a_duplicated_target_record_is_refused() -> None:
@@ -159,13 +148,13 @@ def test_a_duplicated_target_record_is_refused() -> None:
     digests, and only one of them can be the bytes this release publishes.
     """
     with pytest.raises(DuplicateTargetError):
-        selection_for([provenance(), provenance()], complete_staged())
+        selection_for([x86_record(), x86_record()], complete_staged())
 
 
 def test_a_record_whose_platform_contradicts_the_configuration_is_refused() -> None:
     """Refuse a record built for a platform its target does not serve."""
     with pytest.raises(TargetPlatformMismatchError):
-        selection_for([provenance(platform="macos")], complete_staged())
+        selection_for([x86_record(platform="macos")], complete_staged())
 
 
 def test_a_declared_asset_that_was_not_staged_is_refused() -> None:
@@ -173,7 +162,7 @@ def test_a_declared_asset_that_was_not_staged_is_refused() -> None:
     staged = complete_staged()
     del staged[RPM]
     with pytest.raises(PayloadRefusedError, match="was not staged"):
-        selection_for([provenance()], staged)
+        selection_for([x86_record()], staged)
 
 
 def test_an_ambiguous_declared_asset_is_refused() -> None:
@@ -181,7 +170,7 @@ def test_an_ambiguous_declared_asset_is_refused() -> None:
     staged = complete_staged()
     staged[RPM] = ["rpm", "another-rpm"]
     with pytest.raises(PayloadRefusedError, match="staged 2 times"):
-        selection_for([provenance()], staged)
+        selection_for([x86_record()], staged)
 
 
 def test_a_release_shaped_stray_is_refused() -> None:
@@ -189,7 +178,7 @@ def test_a_release_shaped_stray_is_refused() -> None:
     staged = complete_staged()
     staged["netsuke-9.9.9-x86_64.tar.gz"] = ["stale"]
     with pytest.raises(PayloadRefusedError, match="not declared"):
-        selection_for([provenance()], staged)
+        selection_for([x86_record()], staged)
 
 
 def test_retained_workspace_material_is_excluded() -> None:
@@ -200,7 +189,7 @@ def test_retained_workspace_material_is_excluded() -> None:
     """
     staged = complete_staged()
     staged |= {"netsuke": ["bin"], "LICENSE": ["licence"], "README.md": ["readme"]}
-    selected = selection_for([provenance()], staged)
+    selected = selection_for([x86_record()], staged)
     assert "netsuke" not in selected.declared, "the retained binary is not an asset"
     assert "LICENSE" not in selected.declared, "the licence is not an asset"
 
@@ -212,7 +201,7 @@ def test_a_record_claiming_a_name_the_declaration_does_not_is_refused() -> None:
     two accounts of the release cannot both be right about what publishes.
     """
     other_archive = "netsuke-1.0.0-aarch64-apple-darwin.tar.gz"
-    straying = provenance(
+    straying = x86_record(
         assets={
             other_archive: "1" * 64,
             f"{other_archive}.sha256": "2" * 64,
@@ -231,7 +220,7 @@ def test_two_targets_claiming_their_own_assets_are_accepted() -> None:
     must select cleanly, so a refusal there can only be about the exchange.
     """
     selected = selection_for(
-        [provenance(), arm_record()],
+        [x86_record(), arm_record()],
         two_target_staged(),
         archives=TWO_TARGET_ARCHIVES,
         config=TWO_TARGET_CONFIG,
@@ -249,7 +238,7 @@ def test_two_records_exchanging_their_archive_and_sidecar_are_refused() -> None:
     ``.rpm``, and the union of every claimed name is exactly what the release
     declares -- yet each record now vouches for the other target's archive.
     """
-    swapped_x86 = provenance(
+    swapped_x86 = x86_record(
         assets={
             ARM_ARCHIVE: "1" * 64,
             f"{ARM_ARCHIVE}.sha256": "2" * 64,
@@ -277,7 +266,7 @@ def test_a_record_claiming_a_second_archive_is_refused() -> None:
     A record that keeps its own archive *and* adds a sibling target's leaves
     the union complete, so only a per-record check can see it.
     """
-    greedy = provenance(assets=staged_assets() | {ARM_ARCHIVE: "5" * 64})
+    greedy = x86_record(assets=staged_assets() | {ARM_ARCHIVE: "5" * 64})
     with pytest.raises(TargetClaimMismatchError, match="neither its archive"):
         selection_for(
             [greedy, arm_record()],
@@ -294,7 +283,7 @@ def test_a_record_claiming_a_sibling_targets_package_is_refused() -> None:
     and format. A record claiming three ``.rpm`` files -- one of them its
     sibling's -- is still refused, which is what a count is for.
     """
-    doubled = provenance(assets=staged_assets() | {ARM_RPM: "5" * 64})
+    doubled = x86_record(assets=staged_assets() | {ARM_RPM: "5" * 64})
     with pytest.raises(TargetClaimMismatchError, match="must claim 1"):
         selection_for(
             [doubled, arm_record()],
@@ -318,7 +307,7 @@ def test_a_one_for_one_package_exchange_is_refused() -> None:
     observation here: the ARM ``.deb`` was found under the ARM subtree, and
     the x86 record claims it. Selection refuses.
     """
-    traded_x86 = provenance(
+    traded_x86 = x86_record(
         assets={
             ARCHIVE: "1" * 64,
             SIDECAR: "2" * 64,
@@ -350,7 +339,7 @@ def test_a_package_bound_to_its_own_target_is_accepted() -> None:
     refused every tree that carried an origin at all.
     """
     selected = selection.select_payload(
-        [provenance(), arm_record()],
+        [x86_record(), arm_record()],
         identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, TWO_TARGET_CONFIG),
         tree=selection.StagedTree(
             archives=TWO_TARGET_ARCHIVES,

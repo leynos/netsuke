@@ -70,6 +70,19 @@ def test_the_plan_name_is_a_plain_file_name() -> None:
     assert PLAN_NAME == "upload-plan.json", "the plan name must stay plain"
 
 
+#: The serialized shape of a plan that names two assets and blocks nothing.
+#: Written once because the shape itself is the contract this case pins; a
+#: syrupy snapshot would store the same literal in a file that a reader has to
+#: open to see, and there is nothing generated about a two-entry plan to
+#: snapshot.
+TWO_ACTION_PLAN: UploadPlan = {
+    "actions": [["a.deb", "upload"], ["b.rpm", "skip-verified"]],
+    "conflicts": [],
+    "unverifiable": [],
+    "unverifiable_reasons": {},
+}
+
+
 def test_write_plan_records_every_action_in_name_order(
     tmp_path: pathlib.Path,
 ) -> None:
@@ -83,12 +96,9 @@ def test_write_plan_records_every_action_in_name_order(
         ],
         Blockers(),
     )
-    assert read_plan(destination) == {
-        "actions": [["a.deb", "upload"], ["b.rpm", "skip-verified"]],
-        "conflicts": [],
-        "unverifiable": [],
-        "unverifiable_reasons": {},
-    }, "every action must be recorded in the order given"
+    assert read_plan(destination) == TWO_ACTION_PLAN, (
+        "every action must be recorded in the order given"
+    )
 
 
 def test_write_plan_records_the_conflicts_it_was_given(
