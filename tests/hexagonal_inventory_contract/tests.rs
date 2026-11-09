@@ -6,7 +6,7 @@ use anyhow::{Result, bail, ensure};
 use pretty_assertions::assert_eq;
 use rstest::rstest;
 
-use super::markdown::{HeadingLevel, heading_body, pins, register_ids, task_ids};
+use super::markdown::{HeadingLevel, harvest_body, heading_body, pins, register_ids, task_ids};
 use super::roadmap::{dependents_of, roadmap_tasks};
 use super::validation::validate_inventory;
 
@@ -96,6 +96,32 @@ fn section_stops_at_the_next_second_level_heading(
     ensure!(
         heading_body(source, heading, HeadingLevel::Section) == Some(expected),
         "section body differs"
+    );
+    Ok(())
+}
+
+#[test]
+fn heading_bodies_keep_nested_subsection_content() -> Result<()> {
+    let source = concat!(
+        "### A1\n\n",
+        "#### A1 type rows\n| A1/x |\n",
+        "#### A1 site rows\n| A1/y |\n",
+    );
+    let body = heading_body(source, "A1", HeadingLevel::Subsection);
+    ensure!(
+        body.is_some_and(|text| text.contains("A1 type rows") && text.contains("A1 site rows")),
+        "nested subsections should stay inside the parent body; got {body:?}"
+    );
+    Ok(())
+}
+
+#[test]
+fn harvest_bodies_stop_at_the_first_nested_heading() -> Result<()> {
+    let source = "### Changes\nbody\n#### Notes\nleaked\n### Consumes\nmore\n";
+    let body = harvest_body(source, "Changes");
+    ensure!(
+        body == Some("body\n"),
+        "harvest body should stop at the nested heading; got {body:?}"
     );
     Ok(())
 }
@@ -289,6 +315,69 @@ fn rejects_a_finding_without_an_owner() -> Result<()> {
     let inventory = VALID_SKELETON.replace(
         "## Findings\n\nPending EP-M3.",
         "## Findings\n\n- OBS-1: An observed finding has no owner.",
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_obligation_traced_only_under_a_deeper_subheading() -> Result<()> {
+    let inventory = VALID_SKELETON
+        .replace(
+            "## Compatibility obligations\n\nPending EP-M3.",
+            "## Compatibility obligations\n\n- CO-1: Preserve an obligation.",
+        )
+        .replace(
+            "| -- | -- | -- | -- |\n\n### Consumes",
+            concat!(
+                "| -- | -- | -- | -- |\n\n",
+                "#### Notes\n\n",
+                "Task 26.1.1 honours `CO-1`.\n\n",
+                "### Consumes",
+            ),
+        );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "CO-1 has no trace-matrix")?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_unchanged_entry_under_a_deeper_subheading() -> Result<()> {
+    let inventory = inventory_with_register_item_and_unchanged(concat!(
+        "#### Notes\n\n",
+        "- A1/ast::Rule: appears only under a deeper subheading.\n",
+    ));
+    expect_validation_error(
+        &inventory,
+        SIMPLE_ROADMAP,
+        "neither traced nor listed unchanged",
+    )?;
+    Ok(())
+}
+
+#[test]
+fn rejects_an_exclusion_under_a_deeper_subheading() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "### Excluded\n\n- 26.1.2: pending EP-M3.\n",
+        concat!(
+            "### Excluded\n\n",
+            "#### Notes\n\n",
+            "- 26.1.2: named only under a deeper subheading.\n",
+        ),
+    );
+    expect_validation_error(&inventory, SIMPLE_ROADMAP, "missing: {\"26.1.2\"}")?;
+    Ok(())
+}
+
+#[test]
+fn rejects_a_finding_whose_owner_appears_only_under_a_subheading() -> Result<()> {
+    let inventory = VALID_SKELETON.replace(
+        "## Findings\n\nPending EP-M3.",
+        concat!(
+            "## Findings\n\n",
+            "- OBS-1: An observed finding has no owner.\n",
+            "### Notes\n\n",
+            "The task 26.1.1 discusses this finding.\n",
+        ),
     );
     expect_validation_error(&inventory, SIMPLE_ROADMAP, "owning roadmap task")?;
     Ok(())

@@ -1014,6 +1014,63 @@ RM-26.1.1 (done) -> EP-M4 -> roadmap checkbox + docs/contents.md -> EV-GATES
   figure "seventeen commits" was likewise replaced by the command that yields
   the count, since the number moves with every commit. Date/Author: 2026-11-05,
   implementing agent, after the ninth milestone CodeRabbit review.
+- Decision D-25 (2026-11-05): dispositioned the tenth milestone CodeRabbit
+  review's three findings.
+  - *Scope count* — rejected on measurement. The review reported fifteen
+    changed files and asked for the Scope tolerance's sixteen to be corrected.
+    `git diff --name-only origin/main...HEAD` returns sixteen, and the same
+    sixteen come back from the two-dot form's merge-base equivalent; the
+    review's supplied stack omitted the tracked
+    `.codescene/code-health-rules.json` change from `70bd5f42a`. The tolerance
+    stands as written.
+  - *Backslash continuation* — accepted. The `ensure!` message now uses
+    `concat!()` with a positional placeholder and the count passed explicitly,
+    because implicit format capture does not reach inside `concat!()`.
+    Re-run of the focused suite: 36/36.
+  - *Finding boundaries* — accepted, and confirmed empirically rather than by
+    reading. A new case,
+    `rejects_a_finding_whose_owner_appears_only_under_a_subheading`, was
+    written first and observed to fail against the old parser: an unowned
+    `- OBS-1:` finding followed by `### Notes` and a line naming `26.1.1` passed
+    the owner check, because `finding_entries` appended the subheading's prose
+    to the entry and `validate_findings` reads task identifiers from the whole
+    entry. `is_finding_boundary` now ends an entry at any `#` heading.
+  - *Sibling parsers* — the review's claim that `trace_rows` and
+    `unchanged_ids` share the fail-open path was accepted, but only after my
+    first reading of the code said otherwise and the tests said the reading was
+    wrong. A first draft of this decision recorded the siblings as immune
+    because `heading_body` "already stops at the next heading of its own
+    level". Two probes,
+    `rejects_an_obligation_traced_only_under_a_deeper_subheading` and
+    `rejects_an_unchanged_entry_under_a_deeper_subheading`, were run and both
+    failed: 38 run, 36 passed, 2 failed. The mechanism is that
+    `"#### Notes".strip_prefix("### ")` fails, because the fourth byte is `#`
+    rather than the required space, so a `Subsection` body ran straight
+    through a deeper heading and absorbed its prose. Only the `Section` marker
+    is prefix-safe by accident: `"#### Notes".strip_prefix("## ")` succeeds and
+    yields `"# Notes"`.
+  - The two uses then needed different rules, because the real inventory
+    depends on them differing. `## Register` legitimately nests fifteen `####`
+    tables (`A1 type rows` and so on) under its `### A1`–`### A7` areas, so the
+    region slice must keep nesting content. A harvester must not, because a
+    harvester reads its body for claims that a table row or a bullet has to
+    make. `heading_body` therefore still ends at the next heading at or above
+    its own level, and a new `harvest_body` truncates at the first heading of
+    any depth; `trace_rows`, `unchanged_ids`, and `excluded_tasks` all use it.
+    Re-run: 38/38. Reverting only `markdown.rs` to `HEAD` and re-running the
+    three subheading probes returned 3 failed, so all three rejections are
+    red-green rather than assertions that happen to hold.
+  - The second probe was itself defective on its first run and had to be fixed
+    before it proved anything: it placed the deeper subheading in `Unchanged`
+    without adding a register row, so there was no item for the entry to cover
+    and validation passed for the wrong reason. It now builds on
+    `inventory_with_register_item_and_unchanged`.
+  - The review also reported
+    `docs/hexagonal-hardening-inventory.md` as unreviewed for `diff_too_large`;
+    that file's changes are the enumeration and prose recorded in D-24, and the
+    contract test validates the file's structure on every run.
+  Date/Author: 2026-11-05, implementing agent, after the tenth milestone
+  CodeRabbit review.
 - Decision D-24 (2026-11-05): regenerated the post-pin commit list a second
   time. `10e1f9ce4` touched `tests/hexagonal_inventory_contract_tests.rs`, so
   the list went stale again the moment it was committed — the same mechanism

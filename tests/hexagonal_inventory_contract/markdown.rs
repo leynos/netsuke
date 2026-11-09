@@ -13,7 +13,17 @@ pub(super) enum HeadingLevel {
     Subsection,
 }
 
-/// Extract a heading's body up to the next heading at the same level.
+/// Extract a heading's body up to the next heading at or above its level.
+///
+/// Deeper subheadings stay inside the body because they belong to the region,
+/// not to the next one: `## Register` legitimately nests `#### A1 type rows`
+/// inside each area's `###` heading, and slicing the region must not truncate
+/// at the first of those.
+///
+/// Do not use this to harvest identifiers from a body. A deeper subheading's
+/// *prose* is still prose, and treating it as part of the region would let it
+/// supply a coverage claim that no table row or bullet makes. Use
+/// `harvest_body` for that.
 pub(super) fn heading_body<'text>(
     text: &'text str,
     heading: &str,
@@ -27,14 +37,13 @@ pub(super) fn heading_body<'text>(
     let mut body_start = None;
 
     for line in text.split_inclusive('\n') {
+        if body_start.is_some() && is_heading_at_or_above(line, level) {
+            return text.get(body_start?..offset);
+        }
         let title = line
             .trim_end_matches(['\r', '\n'])
             .strip_prefix(marker)
             .map(strip_heading_number);
-
-        if body_start.is_some() && title.is_some() {
-            return text.get(body_start?..offset);
-        }
         if title == Some(heading) {
             body_start = Some(offset + line.len());
         }
@@ -42,6 +51,56 @@ pub(super) fn heading_body<'text>(
     }
 
     body_start.and_then(|start| text.get(start..))
+}
+
+/// Extract a subsection's body for identifier harvesting.
+///
+/// The body is truncated at the first heading of any depth, so prose under a
+/// deeper subheading can never contribute a task or register identifier. Each
+/// harvester reads its body for claims that must be made by a table row or a
+/// bullet; absorbing subheading prose would let an inventory satisfy coverage
+/// with a sentence.
+pub(super) fn harvest_body<'text>(text: &'text str, heading: &str) -> Option<&'text str> {
+    let body = heading_body(text, heading, HeadingLevel::Subsection)?;
+    body.get(..first_heading_offset(body))
+}
+
+/// Return the byte offset of the first Markdown heading in `body`.
+fn first_heading_offset(body: &str) -> usize {
+    let mut offset = 0;
+    for line in body.split_inclusive('\n') {
+        if is_heading(line) {
+            return offset;
+        }
+        offset += line.len();
+    }
+    body.len()
+}
+
+/// Report whether a line is a Markdown ATX heading.
+///
+/// A `#` inside a fenced code block would have to open the line to be
+/// mistaken for a heading, and the inventory's fences are indented, so a
+/// line-prefix test is sufficient rather than a full Markdown parse.
+fn is_heading(line: &str) -> bool {
+    let depth = line
+        .chars()
+        .take_while(|character| *character == '#')
+        .count();
+    (1..=6).contains(&depth) && line.chars().nth(depth) == Some(' ')
+}
+
+/// Report whether a line is a Markdown heading at or above `level`.
+fn is_heading_at_or_above(line: &str, level: HeadingLevel) -> bool {
+    let depth = line
+        .chars()
+        .take_while(|character| *character == '#')
+        .count();
+    let required = match level {
+        HeadingLevel::Section => 2,
+        HeadingLevel::Subsection => 3,
+    };
+    (1..=required).contains(&depth) && line.chars().nth(depth) == Some(' ')
 }
 
 /// Remove a numeric list prefix from a Markdown heading.
@@ -214,7 +273,7 @@ pub(super) fn trace_table_tasks(trace: &str) -> BTreeSet<String> {
 
 /// Collect excluded tasks and the reason text following each identifier.
 pub(super) fn excluded_tasks(trace: &str) -> BTreeMap<String, String> {
-    let Some(excluded) = heading_body(trace, "Excluded", HeadingLevel::Subsection) else {
+    let Some(excluded) = harvest_body(trace, "Excluded") else {
         return BTreeMap::new();
     };
     let mut tasks = BTreeMap::new();
@@ -254,7 +313,7 @@ fn exclusion_identifier(line: &str) -> Option<&str> {
 pub(super) fn trace_rows(trace: &str) -> String {
     ["Changes", "Consumes"]
         .iter()
-        .filter_map(|heading| heading_body(trace, heading, HeadingLevel::Subsection))
+        .filter_map(|heading| harvest_body(trace, heading))
         .collect()
 }
 
@@ -271,7 +330,7 @@ pub(super) fn trace_rows(trace: &str) -> String {
 /// colon: register identifiers themselves contain `::`, so splitting on a colon
 /// would truncate `A1/ast::Rule` to `A1/ast` and reject every real entry.
 pub(super) fn unchanged_ids(trace: &str) -> BTreeSet<String> {
-    let Some(unchanged) = heading_body(trace, "Unchanged", HeadingLevel::Subsection) else {
+    let Some(unchanged) = harvest_body(trace, "Unchanged") else {
         return BTreeSet::new();
     };
     unchanged
@@ -345,10 +404,16 @@ fn is_finding_start(line: &str) -> bool {
         .any(|prefix| line.trim_start().starts_with(prefix))
 }
 
-/// Identify a list item or section heading that ends a finding entry.
+/// Identify a list item or any Markdown heading that ends a finding entry.
+///
+/// Matching only `## ` would let a `### ` subheading and its prose be appended
+/// to the preceding finding, and `validate_findings` reads task identifiers
+/// from the whole entry — so a subheading naming a task would satisfy the
+/// owner check for a finding that names none. Any heading level therefore
+/// ends the entry.
 fn is_finding_boundary(line: &str) -> bool {
     let content = line.trim_start();
-    content.starts_with("- ") || content.starts_with("## ")
+    content.starts_with("- ") || content.starts_with('#')
 }
 
 /// Move a completed finding into the result list.
