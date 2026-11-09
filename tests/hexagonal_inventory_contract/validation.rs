@@ -5,10 +5,11 @@ use std::collections::{BTreeMap, BTreeSet};
 use anyhow::{Context, Result, ensure};
 
 use super::markdown::{
-    HeadingLevel, declared_pin, excluded_tasks, finding_entries, heading_body,
-    is_well_formed_register_id, pins, reference_covers, regex_values, register_ids, task_ids,
-    trace_rows, trace_table_tasks, unchanged_ids,
+    HeadingLevel, declared_pin, excluded_tasks, finding_entries, heading_body, pins,
+    reference_covers, regex_values, register_ids, task_ids, trace_rows, trace_table_tasks,
+    unchanged_ids,
 };
+use super::register::is_well_formed_register_id;
 use super::roadmap::{dependents_of, roadmap_tasks};
 
 /// The identifier form the compatibility obligations and trace matrix share.
