@@ -5932,8 +5932,13 @@ report the write and the connection it discarded, which is what makes the
 reader known to fire rather than known to pass on a clean log. The trace wraps
 `make`, so the recipe's own commands are followed as well as the verifier it
 invokes, and the case asserts that by requiring the recipe's read of the pin
-file to appear in it. The static one is
-`tests/prover_tools_kani_check_tests/recipe.rs`: it parses the shipped
+file to appear in it. A second control moves the attempt from the verifier to
+the recipe: a makefile whose own lines discard a write and a directory creation
+and then report the version runs to success, and the case requires both
+attempts in its trace. That is what shows an attempt added to the recipe — not
+just to the program the recipe runs — would be caught, because the discarded
+failures leave the run looking identical to one that never tried. The static
+one is `tests/prover_tools_kani_check_tests/recipe.rs`: it parses the shipped
 `kani-check` recipe and reports any error-suppression fragment, any
 write-intent command, and any redirect that names a path rather than
 duplicating a descriptor. Representative suppressions and writes are asserted

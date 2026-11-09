@@ -213,9 +213,11 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
 /// must contain no write-intent open, mutation or network connection. The
 /// control verifier discards a write and a connection and still reports the
 /// pinned version, and its trace must name both — otherwise the reader, not the
-/// recipe, is what passed. The trace wraps `make`, so the recipe's own commands
-/// are followed too, and the case asserts that by requiring the pin read to
-/// appear in the trace.
+/// recipe, is what passed. A control recipe then does the same from the other
+/// side: its own lines discard a write and a directory creation and it still
+/// succeeds, which shows an attempt added to the recipe would be caught. The
+/// trace wraps `make`, so the recipe's own commands are followed too, and the
+/// case asserts that by requiring the pin read to appear in the trace.
 ///
 /// When `NETSUKE_KANI_ISOLATION_VERIFIER` names an installed verifier, a third
 /// traced query runs that binary through the same recipe and its trace must be
@@ -262,6 +264,7 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
     ensure_query_attempts_nothing(&run.query_trace)?;
     ensure_recipe_commands_traced(&run.query_trace)?;
     ensure_control_attempts_traced(&run.control_trace)?;
+    ensure_dirty_recipe_attempts_traced(&run)?;
     ensure_installed_query_works(&run, &stdout, &stderr)?;
     fixture.ensure_remote_runner_unused(&run.marker)
 }
@@ -381,6 +384,33 @@ fn ensure_installed_query_works(
         findings.is_empty(),
         "the installed verifier must attempt no write or connection, got {findings:?}"
     );
+    Ok(())
+}
+
+/// Assert a suppressed attempt on a recipe line is traced and still succeeds.
+///
+/// The verifier control proves the reader fires on a verifier's attempts. A
+/// recipe line is the other place an attempt can hide, and a discarded failure
+/// there leaves the make run looking exactly like one that never tried. The
+/// control recipe therefore discards a write and a directory creation and then
+/// reports the pinned version, so `dirty-exit=0` shows success survived while
+/// the trace is the only record of either attempt.
+#[cfg(target_os = "linux")]
+fn ensure_dirty_recipe_attempts_traced(run: &support::SandboxRun) -> Result<()> {
+    let stdout = String::from_utf8_lossy(&run.output.stdout);
+    let stderr = String::from_utf8_lossy(&run.output.stderr);
+    ensure!(
+        stdout.contains("dirty-exit=0"),
+        "the control recipe must succeed while discarding its attempts, \
+         got stdout `{stdout}` and stderr `{stderr}`"
+    );
+    let findings = trace::attempts(&run.dirty_trace);
+    for expected in ["write-intent", "`mkdir` changes a path"] {
+        ensure!(
+            findings.iter().any(|finding| finding.contains(expected)),
+            "a suppressed recipe attempt must be reported as {expected}, got {findings:?}"
+        );
+    }
     Ok(())
 }
 

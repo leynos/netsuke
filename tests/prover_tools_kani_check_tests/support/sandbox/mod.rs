@@ -26,6 +26,10 @@ pub(super) struct SandboxPaths<'a> {
     pub(super) version_file: &'a Path,
     pub(super) poison: &'a Path,
     pub(super) trace: &'a Path,
+    /// A makefile whose recipe lines attempt suppressed writes, so the boundary
+    /// shows it would notice an attempt made by the recipe and not only by the
+    /// verifier the recipe runs.
+    pub(super) dirty: &'a Path,
     /// The installed verifier to exercise inside the boundary, when the caller
     /// named one. Its binary is exposed read-only at `/opt/verifier`, and its
     /// Kani home read-only at its own path.
@@ -144,7 +148,7 @@ mount --bind "$trace" "$root/var/trace" || exit 99
 if [ -n "$kani_home" ]; then
   mount --bind "$kani_home" "$root$kani_home" && mount -o remount,ro,bind "$root$kani_home" || exit 102
 fi
-{install_mount}chroot "$root" /bin/sh -c '{inner}' sh "$repo" "$fixture" {kani} {control} {version_file} {poison} /var/trace {install_argument} "$kani_home"
+{install_mount}chroot "$root" /bin/sh -c '{inner}' sh "$repo" "$fixture" {kani} {control} {version_file} {poison} /var/trace {install_argument} "$kani_home" {dirty}
 "#,
         chroot = shell_quote(paths.chroot),
         repo = shell_quote(paths.repo),
@@ -154,6 +158,7 @@ fi
         version_file = shell_quote(paths.version_file),
         poison = shell_quote(paths.poison),
         trace = shell_quote(paths.trace),
+        dirty = shell_quote(paths.dirty),
         inner = INNER,
     );
     // The syscall set is the reader's, not the script's: a trace that omits a
@@ -169,28 +174,31 @@ fi
 /// failure when the path really is protected, rather than reporting every path
 /// as blocked because redirection is broken.
 ///
-/// Two traced queries follow the probes: the real one, and a control whose
-/// verifier attempts a suppressed write and a suppressed connection. The reader
-/// must find nothing in the first trace and both attempts in the second, which
-/// is how the boundary proves it would notice an attempt rather than only a
-/// success. When the caller names an installed verifier, a third traced query
+/// Three traced runs follow the probes: the real query, a control whose
+/// verifier attempts a suppressed write and a suppressed connection, and a
+/// control recipe whose own lines attempt suppressed writes. The reader must
+/// find nothing in the first trace and the expected attempts in the other two,
+/// which is how the boundary proves it would notice an attempt rather than only
+/// a success. When the caller names an installed verifier, a fourth traced query
 /// runs that binary through the same recipe, so the real executable is
 /// exercised inside the boundary and not only the fixture's stub; that query
 /// also points `KANI_HOME` at the bound payload, so the launcher answers rather
 /// than installing.
 ///
 /// The trace wraps `make`, not the verifier binary, so every process the recipe
-/// starts is followed. The query's own trace shows this: the recipe's `cat` of
-/// the pin file appears in it, which is why the boundary covers the recipe's
-/// commands and not just whatever those commands invoke.
+/// starts is followed, and `makefile` names the makefile to run: the shipped
+/// one for three of the runs, the fixture's dirty recipe for the control that
+/// must be reported. The query's own trace shows the wrapping works: the
+/// recipe's `cat` of the pin file appears in it, which is why the boundary
+/// covers the recipe's commands and not just whatever those commands invoke.
 const INNER: &str = r#"set -u
 LC_ALL=C
 export LC_ALL
-repo=$1; fixture=$2; kani=$3; control=$4; version_file=$5; poison=$6; trace=$7; installed=$8; kani_home=$9
+repo=$1; fixture=$2; kani=$3; control=$4; version_file=$5; poison=$6; trace=$7; installed=$8; kani_home=$9; dirty=${10}
 traced() {
-  out=$1; verifier=$2; pin=${3:-$version_file}
+  out=$1; verifier=$2; pin=${3:-$version_file}; makefile=${4:-Makefile}
   strace -f -qq -e "trace=__TRACE_SYSCALLS__" \
-    -o "$trace/$out" make --no-print-directory kani-check \
+    -o "$trace/$out" make --no-print-directory -f "$makefile" kani-check \
     KANI="$verifier" KANI_VERSION_FILE="$pin" \
     PROVER_TOOLS="$poison" UV="$poison"
 }
@@ -235,6 +243,8 @@ traced query.strace "$kani"
 rc=$?
 traced control.strace "$control"
 control_rc=$?
+traced dirty.strace "$kani" "$version_file" "$dirty"
+dirty_rc=$?
 if [ -n "$installed" ]; then
   traced installed.strace "$installed" "$repo/tools/kani/VERSION"
   installed_rc=$?
@@ -243,6 +253,7 @@ else
 fi
 echo "make-exit=$rc"
 echo "control-exit=$control_rc"
+echo "dirty-exit=$dirty_rc"
 echo "installed-exit=$installed_rc"
 exit "$rc"
 "#;

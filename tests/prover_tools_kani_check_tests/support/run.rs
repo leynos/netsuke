@@ -27,12 +27,13 @@ impl Fixture {
     /// writable control path, so the caller can prove the sandbox was effective
     /// rather than assume it.
     ///
-    /// Two queries are traced: the real one, and a control whose verifier
-    /// attempts a suppressed write and a suppressed connection before reporting
-    /// the pinned version. Both traces come back so the caller can require the
-    /// first to be clean and the second to name both attempts. When `installed`
-    /// names a verifier, a third traced query runs it through the same recipe
-    /// and its trace comes back too.
+    /// Three runs are traced: the real query, a control whose verifier attempts
+    /// a suppressed write and a suppressed connection before reporting the
+    /// pinned version, and a control recipe whose own lines attempt a suppressed
+    /// write and a suppressed directory creation. The traces come back so the
+    /// caller can require the first to be clean and the other two to name their
+    /// attempts. When `installed` names a verifier, a fourth traced query runs
+    /// it through the same recipe and its trace comes back too.
     ///
     /// # Errors
     ///
@@ -47,6 +48,7 @@ impl Fixture {
         let (poison, marker) = self.poison_runner()?;
         let kani = self.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
         let control = self.write_control_verifier()?;
+        let dirty = self.write_dirty_recipe()?;
         let version_file = self.write_version_file()?;
         // Both directories must outlive the child; keep their handles in scope.
         let chroot = tempdir().context("create kani-check sandbox root")?;
@@ -60,6 +62,7 @@ impl Fixture {
             version_file: &version_file,
             poison: &poison,
             trace: trace.path(),
+            dirty: &dirty,
             installed,
         };
         let output = Command::new("unshare")
@@ -83,6 +86,7 @@ impl Fixture {
         Ok(SandboxRun {
             query_trace: read_trace(trace.path(), "query.strace")?,
             control_trace: read_trace(trace.path(), "control.strace")?,
+            dirty_trace: read_trace(trace.path(), "dirty.strace")?,
             installed_trace,
             output,
             marker,
@@ -120,6 +124,36 @@ impl Fixture {
         self.write_executable("control-kani", &script)?;
         Ok(self.path("control-kani"))
     }
+
+    /// Write a recipe whose own lines attempt a suppressed write.
+    ///
+    /// The verifier control proves the reader fires on a verifier's attempts;
+    /// this proves it fires on the recipe's. A recipe line that discards its
+    /// failure leaves the make run looking exactly like one that never tried,
+    /// so the trace is the only evidence, and the case requires this run to
+    /// succeed. Both paths are on read-only mounts, so nothing is changed by
+    /// running it.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the makefile cannot be written.
+    fn write_dirty_recipe(&self) -> Result<PathBuf> {
+        let recipe = concat!(
+            "# A recipe-shaped control: the lines below are what an accidental\n",
+            "# write in the real recipe would look like, with each failure\n",
+            "# discarded so the make run still succeeds.\n",
+            ".PHONY: kani-check\n",
+            "kani-check:\n",
+            "\t@mkdir -p /usr/dirty-probe 2>/dev/null || true; \\\n",
+            "\t( : > /etc/dirty-probe ) 2>/dev/null || true; \\\n",
+            "\t$(KANI) --version >/dev/null 2>&1 || true; \\\n",
+            "\tprintf 'Kani 0.67.0 matches.\\n'\n",
+        );
+        self.directory
+            .write("dirty.mk", recipe)
+            .context("write the recipe control")?;
+        Ok(self.path("dirty.mk"))
+    }
 }
 
 /// A completed isolation run and the traces it recorded.
@@ -128,6 +162,8 @@ pub(crate) struct SandboxRun {
     pub(crate) marker: PathBuf,
     pub(crate) query_trace: String,
     pub(crate) control_trace: String,
+    /// The trace of the control recipe whose lines attempt suppressed writes.
+    pub(crate) dirty_trace: String,
     /// The trace of the installed verifier's query, when one was exercised.
     pub(crate) installed_trace: Option<String>,
 }
