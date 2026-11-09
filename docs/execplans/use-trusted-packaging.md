@@ -732,11 +732,12 @@ to a partial observation.
 
 The `trusted.json` record is now produced and retained for downstream
 consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
-it to agree with `selection.json` before acting. No verifier or finalizer job
-consumes it *yet*: `verify-release-inventory/` and `finalize-github-release/`
-are the unchanged open actions listed above, and wiring that hand-off belongs
-to them rather than to the upload path. This is an explicitly agreed deferral,
-not an unnoticed gap.
+it to agree with `selection.json` before acting. The `verify-release-inventory`
+job consumes it: it downloads the published assets and compares every digest
+with that record, which the producer computed from its own build tree before
+upload and never from the bytes it describes. `finalize-github-release/` is
+still one of the open actions listed above, so un-drafting the release on the
+verifier's result is the one hand-off this path does not yet perform.
 
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.

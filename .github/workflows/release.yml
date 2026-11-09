@@ -914,8 +914,9 @@ jobs:
         # Selects, declares, and digests this run's assets before uploading
         # only the declared names, and refuses to replace attached bytes. The
         # declaration and both digest records it retains are the account the
-        # inventory verifier and finalizer will compare against once those
-        # jobs run here; neither is wired into this workflow yet.
+        # `verify-release-inventory` job compares the downloaded assets
+        # against; the finalizer that un-drafts the release on that result is
+        # not wired into this workflow yet.
         uses: ./.github/actions/upload-declared-assets
         with:
           release-tag: ${{ needs.metadata.outputs.release_tag }}
