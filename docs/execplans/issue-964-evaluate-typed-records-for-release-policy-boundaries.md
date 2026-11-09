@@ -15,8 +15,11 @@ and consistent ADR citations. A further review asked for one parametrized
 coverage-refusal table in place of three near-identical tests and for direct
 tests of the staging decoder's multi-target and malformed-configuration paths;
 it also noted that the developers' guide claimed `ReleaseIdentity` and
-`PublishedAsset` are validated by their constructors, which they are not. All
-are addressed. Draft pull request
+`PublishedAsset` are validated by their constructors, which they are not. A
+third review found that the coverage-refusal patterns could not tell the two
+disagreement directions apart and that the absent-target test passed a
+present-but-wrong-typed table, and its title check asked for the roadmap
+reference in the pull-request title. All are addressed. Draft pull request
 [#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
 maintainer review; merging is outside this plan's scope.
 
@@ -283,6 +286,17 @@ records and are unchanged.
       it separates field-local invariants the constructor owns from judgements
       the context-holding step makes. The nine-gate set is re-run on the
       branch head.
+- [x] Address the third review findings on `c3daf0037`. The coverage-refusal
+      table's patterns matched only one clause of a message that always names
+      both directions, so a row asserting "record omits" also matched the row
+      where nothing was omitted; each row now pins the whole sentence and
+      compares it exactly. The direct decoder suite's absent-target test passed
+      a `targets` key holding a list, which is a present but wrong-typed table;
+      it now passes `{}`, the true absent key, while the malformed-configuration
+      suite keeps the wrong-typed shapes under real TOML. The pre-merge title
+      check also asked for the roadmap reference, so the pull-request title
+      carries `(9.1.1.)`. Repository conventions there use the roadmap item in
+      parentheses, as other roadmap-scoped pull requests do.
 - [x] Run the final CodeRabbit review on `7a68b38dd`. It reported no findings
       across 24 reviewed files.
 - [x] Rebase onto `origin/main`, first at `08d0a918` ("Add Proptest coverage

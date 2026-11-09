@@ -143,9 +143,15 @@ def test_a_configuration_that_is_not_a_string_keyed_mapping_is_refused(
 
 
 def test_an_absent_target_table_is_refused() -> None:
-    """Refuse a mapping that carries no ``targets`` table at all."""
+    """Refuse a mapping that carries no ``targets`` table at all.
+
+    A ``targets`` key holding a non-table value is the other way to reach this
+    refusal, and the malformed-configuration suite pins those shapes through
+    real TOML; this case is the absent key that only a direct call expresses
+    unambiguously.
+    """
     with pytest.raises(release_package_formats.MissingTargetsError):
-        staging_targets({"targets": []})
+        staging_targets({})
 
 
 def test_an_empty_target_table_is_refused() -> None:

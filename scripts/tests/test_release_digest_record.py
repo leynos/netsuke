@@ -210,19 +210,21 @@ def test_a_covering_record_is_accepted() -> None:
         pytest.param(
             {"a": DIGEST},
             ["a", "b"],
-            "record omits",
+            "the digest record and the declaration disagree: "
+            "record omits ['b'], record adds []",
             id="omits-declared",
         ),
         pytest.param(
             {"a": DIGEST, "b": OTHER},
             ["a"],
-            "record adds",
+            "the digest record and the declaration disagree: "
+            "record omits [], record adds ['b']",
             id="adds-undeclared",
         ),
         pytest.param(
             {"a": DIGEST},
             [],
-            "names no asset",
+            "the declaration names no asset, so there is nothing to verify",
             id="empty-declaration",
         ),
     ],
@@ -232,17 +234,23 @@ def test_a_record_that_does_not_cover_the_declaration_is_refused(
 ) -> None:
     """Refuse anything but exact coverage of the declared assets.
 
-    Each row names the refusal it expects, because the cases differ in which
-    side of the comparison is short: an omitted asset would go unverified, an
+    Each row pins the whole message, because every coverage disagreement is
+    reported in one sentence naming both directions: a pattern for one clause
+    alone would also match the row that disagrees the other way. The cases
+    differ in which side is short: an omitted asset would go unverified, an
     undeclared asset has no declaration to verify against, and an empty
     declaration would pass a naive set-equality check over two empty sets.
     """
     record = _trusted(digests)
 
-    with pytest.raises(release_digest_record.DigestRecordError, match=message):
+    with pytest.raises(release_digest_record.DigestRecordError) as raised:
         release_digest_record.require_record_matches_declaration(
             record, expected=expected
         )
+
+    assert str(raised.value) == message, (
+        f"the refusal must name both sides of the comparison, got {raised.value}"
+    )
 
 
 def test_matching_downloads_are_accepted() -> None:
