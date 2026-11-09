@@ -107,11 +107,13 @@
 # checks structure only and cannot verify that for an arbitrary program. `args`
 # needs 1 to 16 elements and at most 4096 UTF-8 bytes in total.
 #
-# `executable` must be a bare name or an absolute path. Nothing probes the
+# `executable` must be a bare name or an absolute path on the loading host. A
+# POSIX-style rooted path is not absolute to Windows, which requires a drive or
+# a UNC share, so a bare name is the portable spelling. Nothing probes the
 # filesystem, so a definition naming a program that is not installed is
 # accepted at configuration time. Loading a definition never runs it; named
 # commands are a later task.
 # [[shells]]
 # name = "dash"
-# executable = "/bin/dash"
+# executable = "dash"
 # args = ["-c"]

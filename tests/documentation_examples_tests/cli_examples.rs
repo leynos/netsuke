@@ -1,6 +1,8 @@
 //! Check documented CLI examples against live command behaviour.
 
 use super::*;
+use netsuke::cli::config::shells::ShellExecutable;
+use netsuke::shell_selection::HostFamily;
 
 #[test]
 fn documented_cli_shape_matches_live_help() -> Result<()> {
@@ -241,4 +243,30 @@ fn configured_shell_example_is_accepted_from_an_operator_root() -> Result<()> {
     )?;
 
     assert_generates_valid_ninja(&run, "guide-configured-shell-definition")
+}
+
+// The documented definition is loaded from an operator root on every platform
+// the suite runs on, so its executable has to be a spelling both host families
+// accept. A POSIX rooted path such as `/bin/dash` is absolute to a Unix-like
+// host but rooted without a drive to Windows, which is why the example uses a
+// bare name; checking the example text directly makes that a Linux-runnable
+// guard rather than a defect only the Windows lane can see.
+#[test]
+fn configured_shell_example_spells_an_executable_every_host_accepts() -> Result<()> {
+    let example = documented_example("guide-configured-shell-definition")?;
+    let definition: toml::Value =
+        toml::from_str(&example.body).context("parse the documented shell definition")?;
+    let executable = definition
+        .get("shells")
+        .and_then(toml::Value::as_array)
+        .and_then(|shells| shells.first())
+        .and_then(|shell| shell.get("executable"))
+        .and_then(toml::Value::as_str)
+        .context("the documented shell definition should name an executable")?;
+
+    for host in [HostFamily::UnixLike, HostFamily::Windows] {
+        ShellExecutable::parse(executable, host)
+            .with_context(|| format!("the documented executable should be accepted on {host:?}"))?;
+    }
+    Ok(())
 }
