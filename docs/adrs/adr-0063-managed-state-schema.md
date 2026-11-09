@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed. This decision remains pending review and explicit acceptance.
+Accepted on 2026-11-09. Named state declarations separate readiness,
+preparation, and durable preparation evidence; the result algebra is `ready`,
+`not_ready`, `degraded`, and `unknown`, and `unknown` never satisfies a
+condition or authorizes preparation.
 
 ## Date
 

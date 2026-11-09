@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed. This decision remains pending review and explicit acceptance.
+Accepted on 2026-11-09. Named contention classes lower to Ninja pools through a
+typed internal class identity, with capacity bounded at 1024 and clamped by a
+trusted ceiling, so no public name reaches Ninja text unchecked.
 
 ## Date
 

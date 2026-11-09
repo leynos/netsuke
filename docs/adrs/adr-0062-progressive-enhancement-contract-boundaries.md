@@ -2,7 +2,10 @@
 
 ## Status
 
-Proposed. This decision remains pending review and explicit acceptance.
+Accepted on 2026-11-09. Progressive-enhancement features get one closed
+identifier registry, one capability-reporting namespace keyed by those
+identifiers, and one structured command operation union, so each feature stays
+optional and independently implementable.
 
 ## Date
 
