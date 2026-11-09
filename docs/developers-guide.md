@@ -3279,16 +3279,27 @@ those operations at the file or transport boundary:
 External record shapes cross the boundary exactly once. A module that already
 owns a file, stream, or provider response decodes its field names and shape
 into a frozen slotted dataclass, and policy functions accept that record. The
-record's constructor owns the value invariant, a decoding factory owns any
-normalization, and the adapter owns the wire names, including `targets`,
-`platform`, and `assets`. `DigestRecord` shows the split: `from_mapping`
-lowercases a digest, while `__post_init__` refuses one that is not already
-lowercase, so a directly constructed record carries the same invariant as a
-decoded one. `StagingTargets`, `ReleaseIdentity`, and `PublishedAsset` follow
-the same rule. A mapping remains acceptable when the policy decides over a
-domain-shaped name-to-value relation that no external format defines, such as
-the name-to-digest plans in `release_reconcile_github` and the computed side of
-a download comparison; adding a decoder for one of those would invent a format
+adapter owns the wire names, including `targets`, `platform`, and `assets`, and
+a decoding factory owns any normalization.
+
+Where the invariant is a property of the record's own fields, the constructor
+owns it as well. `DigestRecord` shows the split: `from_mapping` lowercases a
+digest, while `__post_init__` refuses one that is not already lowercase, so a
+directly constructed record carries the same invariant as a decoded one.
+`StagingTarget` and `StagingTargets` likewise refuse a malformed platform or an
+empty target set on every construction path.
+
+Where the judgement needs context the record does not carry, the constructor
+checks nothing and the step that holds that context decides. `ReleaseIdentity`
+carries no validation of its own and is checked by `resolve_identity`, and
+`PublishedAsset` performs no validation at construction and is checked later by
+`validate_inventory`. A directly constructed instance of either is unvalidated,
+and code must not read one as evidence that it was checked.
+
+A mapping remains acceptable when the policy decides over a domain-shaped
+name-to-value relation that no external format defines, such as the
+name-to-digest plans in `release_reconcile_github` and the computed side of a
+download comparison; adding a decoder for one of those would invent a format
 boundary that does not exist. See
 [ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md).
 

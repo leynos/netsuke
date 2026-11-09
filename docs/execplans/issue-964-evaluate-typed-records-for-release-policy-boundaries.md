@@ -11,7 +11,12 @@ malformed-configuration case. CodeRabbit reported no findings on its first
 review, then raised the record invariants, a duplicate adapter check, and a
 property-test gap on review of the rebased head; a later review asked for
 structured record docstrings, a sorted-order invariant, a frozen-field test,
-and consistent ADR citations. All are addressed. Draft pull request
+and consistent ADR citations. A further review asked for one parametrized
+coverage-refusal table in place of three near-identical tests and for direct
+tests of the staging decoder's multi-target and malformed-configuration paths;
+it also noted that the developers' guide claimed `ReleaseIdentity` and
+`PublishedAsset` are validated by their constructors, which they are not. All
+are addressed. Draft pull request
 [#1052](https://github.com/leynos/netsuke/pull/1052) carries the branch for
 maintainer review; merging is outside this plan's scope.
 
@@ -268,6 +273,16 @@ records and are unchanged.
       parametrized, the variance note is corrected, and the sorting guard now
       uses a mixed-type key set. The full gate set is re-run on the branch
       head.
+- [x] Address the second review findings. The three coverage-refusal tests are
+      one parametrized table with a distinct match per refusal, and
+      `scripts/tests/test_release_declaration_decode.py` exercises the staging
+      decoder directly: repeated and distinct platforms, the decoded counts,
+      the resulting exact declaration, a malformed later target, and the
+      non-mapping shapes TOML cannot produce. The developers' guide no longer
+      claims `ReleaseIdentity` and `PublishedAsset` validate at construction;
+      it separates field-local invariants the constructor owns from judgements
+      the context-holding step makes. The nine-gate set is re-run on the
+      branch head.
 - [x] Run the final CodeRabbit review on `7a68b38dd`. It reported no findings
       across 24 reviewed files.
 - [x] Rebase onto `origin/main`, first at `08d0a918` ("Add Proptest coverage

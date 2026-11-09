@@ -204,27 +204,44 @@ def test_a_covering_record_is_accepted() -> None:
     )
 
 
-def test_a_record_that_omits_a_declared_asset_is_refused() -> None:
-    """Refuse a record that would leave an asset uncompared."""
-    with pytest.raises(release_digest_record.DigestRecordError):
+@pytest.mark.parametrize(
+    ("digests", "expected", "message"),
+    [
+        pytest.param(
+            {"a": DIGEST},
+            ["a", "b"],
+            "record omits",
+            id="omits-declared",
+        ),
+        pytest.param(
+            {"a": DIGEST, "b": OTHER},
+            ["a"],
+            "record adds",
+            id="adds-undeclared",
+        ),
+        pytest.param(
+            {"a": DIGEST},
+            [],
+            "names no asset",
+            id="empty-declaration",
+        ),
+    ],
+)
+def test_a_record_that_does_not_cover_the_declaration_is_refused(
+    digests: dict[str, object], expected: list[str], message: str
+) -> None:
+    """Refuse anything but exact coverage of the declared assets.
+
+    Each row names the refusal it expects, because the cases differ in which
+    side of the comparison is short: an omitted asset would go unverified, an
+    undeclared asset has no declaration to verify against, and an empty
+    declaration would pass a naive set-equality check over two empty sets.
+    """
+    record = _trusted(digests)
+
+    with pytest.raises(release_digest_record.DigestRecordError, match=message):
         release_digest_record.require_record_matches_declaration(
-            _trusted({"a": DIGEST}), expected=["a", "b"]
-        )
-
-
-def test_a_record_that_adds_an_undeclared_asset_is_refused() -> None:
-    """Refuse a record naming an asset the release never declared."""
-    with pytest.raises(release_digest_record.DigestRecordError):
-        release_digest_record.require_record_matches_declaration(
-            _trusted({"a": DIGEST, "b": OTHER}), expected=["a"]
-        )
-
-
-def test_an_empty_declaration_is_refused() -> None:
-    """Refuse the vacuous case, where set equality holds over two empty sets."""
-    with pytest.raises(release_digest_record.DigestRecordError):
-        release_digest_record.require_record_matches_declaration(
-            _trusted({"a": DIGEST}), expected=[]
+            record, expected=expected
         )
 
 
