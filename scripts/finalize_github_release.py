@@ -26,7 +26,8 @@ Exit statuses are the vocabulary the workflow branches on:
     The release is public with the candidate's prerelease state.
 ``1``
     The plan or candidate refuses publication, or the release contradicts the
-    candidate after an apparently successful edit.
+    candidate: before the edit when it is already public with the wrong flag,
+    and after one when the read-back disagrees.
 ``2``
     The plan still requires an upload, which this stage never performs.
 ``3``

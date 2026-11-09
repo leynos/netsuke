@@ -3433,28 +3433,32 @@ Comparing the draft against the record written before upload is what makes a
 substitution visible, and that comparison is only meaningful if the record
 comes from the build.
 
-`publish` exits with the vocabulary below, and the plan step treats the first
-three as normal: a conflict and a missing asset are both decisions the finalize
-step turns into a diagnosis, and only a run that produced no plan stops at the
-planner.
+`publish` exits with the vocabulary below. The plan step runs the planner
+instead, whose own statuses are in Table 10, and reads `0`, `1`, and `2` as
+normal: a conflict and a missing asset are both decisions the finalize step
+turns into a diagnosis, and only a run whose planner could not record a plan
+stops there.
 
-| Exit | Meaning                                                  |
-| ---- | -------------------------------------------------------- |
-| 0    | every asset is attached with the recorded digest         |
-| 1    | an attached asset disagrees, or reports no usable digest |
-| 2    | assets are missing and nothing conflicts                 |
-| 3    | an input record could not be read                        |
-| 4    | an output record could not be written                    |
-| 5    | GitHub could not be read, or would not perform the edit  |
+| Exit | Meaning                                                      |
+| ---- | ------------------------------------------------------------ |
+| 0    | the release is public with the candidate's prerelease state  |
+| 1    | the candidate or plan refuses, or the release contradicts it |
+| 2    | the plan still requires an upload                            |
+| 3    | an input record could not be read or decoded                 |
+| 4    | an output record could not be written                        |
+| 5    | GitHub could not be read, or would not perform the edit      |
 
 *Table 4: `finalize_github_release.py` exit statuses.*
 
-Exits 1 and 2 leave the release a draft: an asset with different bytes is
-reported as a conflict and never overwritten, and a missing asset is reported
-with the name the declared upload contract owes. Exit 3 stops before the API is
-called. Exit 4 is always an output fault, and where it happens decides what it
-means: a candidate or snapshot record that could not be written leaves the
-draft untouched, while `publish` failing to record its outcome says the release
+Exits 1 and 2 publish nothing. Exit 1 covers every refusal — an asset with
+different bytes, an asset whose digest could not be established, a candidate
+that names another tag or commit, and a release already public with the wrong
+prerelease flag — and only the last leaves the release public, because it
+already was; the rest leave the draft untouched. Exit 2 names the assets the
+declared upload contract still owes. Exit 3 stops before the API is called.
+Exit 4 is always an output fault, and where it happens decides what it means: a
+candidate or snapshot record that could not be written leaves the draft
+untouched, while `publish` failing to record its outcome says the release
 itself is already final, because the edit succeeded before the record was
 written. Read the message rather than the status to tell those apart. Exit 5
 covers both an unreadable release and an edit GitHub accepted without
