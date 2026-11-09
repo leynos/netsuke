@@ -42,9 +42,15 @@ TWO_TARGET_CONFIG: dict[str, object] = {
 #: Each target key mapped to the archive that target stages.
 TWO_TARGET_ARCHIVES = {X86_TARGET: X86_ARCHIVE, ARM_TARGET: ARM_ARCHIVE}
 
-#: The identity every staged record in these cases claims.
+#: The identity every staged record in these cases claims. The x86_64 target
+#: keeps the one-target names the cases are written in.
 CANDIDATE = "a" * 40
 RUN_ID = "1234"
+TARGET = X86_TARGET
+ARCHIVE = X86_ARCHIVE
+SIDECAR = f"{X86_ARCHIVE}.sha256"
+DEB = X86_DEB
+RPM = X86_RPM
 
 
 def record(
@@ -66,6 +72,50 @@ def record(
         platform=platform,
         assets=dict(assets),
     )
+
+
+def staged_assets() -> dict[str, str]:
+    """Return the x86_64 target's own claims, one distinct digest per name.
+
+    Returns
+    -------
+    dict[str, str]
+        The archive, its sidecar, and two packages.
+    """
+    return {
+        ARCHIVE: "1" * 64,
+        SIDECAR: "2" * 64,
+        DEB: "3" * 64,
+        RPM: "4" * 64,
+    }
+
+
+def x86_record(**overrides: object) -> ProducerProvenance:
+    """Build the x86_64 record over :func:`staged_assets`, field by field.
+
+    Returns
+    -------
+    ProducerProvenance
+        The record, with any field the case chose replaced.
+
+    Notes
+    -----
+    The override surface is a keyword bag rather than a parameter list because
+    a case varies exactly one field at a time -- the commit, the run, the
+    platform, or the claims -- and naming all four would invite a caller to
+    vary two and read the wrong refusal.
+    """
+    fields: dict[str, object] = {
+        "schema": 1,
+        "commit": CANDIDATE,
+        "run_id": RUN_ID,
+        "run_attempt": "1",
+        "target": TARGET,
+        "platform": "linux",
+        "assets": staged_assets(),
+    }
+    fields.update(overrides)
+    return ProducerProvenance(**fields)
 
 
 def arm_record(
@@ -142,12 +192,17 @@ def _digest(index: int) -> str:
 
 
 __all__ = [
+    "ARCHIVE",
     "ARM_ARCHIVE",
     "ARM_DEB",
     "ARM_RPM",
     "ARM_TARGET",
     "CANDIDATE",
+    "DEB",
+    "RPM",
     "RUN_ID",
+    "SIDECAR",
+    "TARGET",
     "TWO_TARGET_ARCHIVES",
     "TWO_TARGET_CONFIG",
     "X86_ARCHIVE",
@@ -156,6 +211,8 @@ __all__ = [
     "X86_TARGET",
     "arm_record",
     "record",
+    "staged_assets",
     "two_target_origins",
     "two_target_staged",
+    "x86_record",
 ]

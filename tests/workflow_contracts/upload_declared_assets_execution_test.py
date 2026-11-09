@@ -22,7 +22,7 @@ import typing as typ
 
 import pytest
 from action_run_sources import action_steps, require_action_step
-from upload_declared_assets_harness import execute, interpreter_baseline
+from upload_declared_assets_harness import Release, execute, interpreter_baseline
 from upload_declared_assets_manifest import (
     ACTION,
     PLAN_STEP,
@@ -195,7 +195,7 @@ def test_an_identical_attached_asset_is_left_alone(tmp_path: Path) -> None:
     attached = [
         {"name": name, "digest": f"sha256:{digest}"} for name, digest in recorded
     ]
-    run = execute(tmp_path, workspace, facts, attached=attached)
+    run = execute(tmp_path, workspace, facts, release=Release(attached=tuple(attached)))
     message = run.outputs.get("error-message")
     assert run.outputs.get("upload-error") == "false", message
     assert not _uploads(run), run.gh_log
@@ -210,7 +210,7 @@ def test_a_conflicting_attachment_blocks_every_upload(tmp_path: Path) -> None:
     workspace = stage_workspace(tmp_path, facts)
     offender = min(recorded_digests(workspace))
     attached = [{"name": offender, "digest": f"sha256:{'0' * 64}"}]
-    run = execute(tmp_path, workspace, facts, attached=attached)
+    run = execute(tmp_path, workspace, facts, release=Release(attached=tuple(attached)))
     assert all(result.returncode == 0 for result in run.completed), run.gh_log
     assert run.outputs.get("upload-error") == "true", (
         "a conflict must be reported as a deferred upload error"
@@ -245,7 +245,7 @@ def test_an_asset_github_cannot_vouch_for_is_reported_as_unverifiable(
     # A digest the adapter cannot normalise, over a download the stub refuses:
     # the listing names the asset and nothing establishes its bytes.
     attached = [{"name": offender, "digest": "md5:00000000000000000000000000000000"}]
-    run = execute(tmp_path, workspace, facts, attached=attached)
+    run = execute(tmp_path, workspace, facts, release=Release(attached=tuple(attached)))
     assert run.outputs.get("upload-error") == "true", (
         "an unverifiable asset must block the upload"
     )

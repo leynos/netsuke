@@ -23,7 +23,7 @@ Run via ``make test-workflow-contracts``.
 import typing as typ
 
 import pytest
-from upload_declared_assets_harness import ActionRun, execute
+from upload_declared_assets_harness import ActionRun, Release, execute
 from upload_declared_assets_manifest import RUN_STEPS
 from upload_declared_assets_staging import release_facts, stage_workspace
 
@@ -56,7 +56,7 @@ def _mode_run(tmp_path: pathlib.Path, dry_run: str) -> ActionRun:
     """
     facts = release_facts()
     workspace = stage_workspace(tmp_path, facts)
-    return execute(tmp_path, workspace, facts, dry_run=dry_run)
+    return execute(tmp_path, workspace, facts, release=Release(dry_run=dry_run))
 
 
 def test_a_publishing_run_transfers_the_declared_assets(tmp_path: pathlib.Path) -> None:

@@ -16,6 +16,7 @@ repository: valid values must pass and invalid ones must stop the job.
 Run via ``make test-workflow-contracts``.
 """
 
+import dataclasses
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the steps' own scripts are under test.
 import typing as typ
 
@@ -37,15 +38,41 @@ METADATA_JOB = "metadata"
 BUILD_JOB = "build"
 CRATE_JOB = "package-crate"
 
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class CandidateCheck:
+    """Name one job that compares its checkout against the candidate.
+
+    Attributes
+    ----------
+    workflow_path
+        The workflow file declaring the job.
+    job
+        The job whose comparison is under test.
+
+    Notes
+    -----
+    The two travel together because every case runs the same comparison
+    against a different pair, and a case given one without the other would
+    read a body from the wrong job.
+    """
+
+    workflow_path: pathlib.Path
+    job: str
+
+
 #: Every job that compares its checkout against the candidate before building.
 #: Two workflows carry a comparison each, written separately, so a correction
 #: applied to one would otherwise leave the other unexecuted. The crate job is
 #: listed because it packages the archive the release publishes; a tree that
 #: moved under it would ship bytes from a commit the candidate never named.
 CANDIDATE_CHECKS = (
-    pytest.param(PACKAGE_WORKFLOW_PATH, BUILD_JOB, id="build"),
-    pytest.param(RELEASE_WORKFLOW_PATH, CRATE_JOB, id="package-crate"),
+    pytest.param(CandidateCheck(PACKAGE_WORKFLOW_PATH, BUILD_JOB), id="build"),
+    pytest.param(CandidateCheck(RELEASE_WORKFLOW_PATH, CRATE_JOB), id="package-crate"),
 )
+
+#: The comparison a case runs when it does not name one: the producer's.
+DEFAULT_CHECK = CandidateCheck(PACKAGE_WORKFLOW_PATH, BUILD_JOB)
 
 #: The candidate the metadata step accepts: a full lowercase hexadecimal
 #: commit. Written out rather than derived, because this step's subject is the
@@ -205,9 +232,7 @@ def _checkout_step(
     tmp_path: pathlib.Path,
     workspace: pathlib.Path,
     candidate: str,
-    *,
-    workflow_path: pathlib.Path = PACKAGE_WORKFLOW_PATH,
-    job: str = BUILD_JOB,
+    check: CandidateCheck = DEFAULT_CHECK,
 ) -> subprocess.CompletedProcess[str]:
     """Execute one job's HEAD comparison in a real repository.
 
@@ -218,15 +243,15 @@ def _checkout_step(
 
     Notes
     -----
-    The workflow and job are parameters because two jobs carry a comparison
-    each, written as separate bodies. Running only the producer's would leave
-    the crate job's copy unchecked, and that copy guards the archive bytes the
-    release ships rather than a downloadable artefact.
+    The check is a parameter because two jobs carry a comparison each, written
+    as separate bodies. Running only the producer's would leave the crate job's
+    copy unchecked, and that copy guards the archive bytes the release ships
+    rather than a downloadable artefact.
     """
     return _run_script(
         workspace,
         tmp_path,
-        _step_body(workflow_path, job, CHECKOUT_STEP),
+        _step_body(check.workflow_path, check.job, CHECKOUT_STEP),
         {"CANDIDATE_COMMIT": candidate},
     )
 
@@ -255,22 +280,20 @@ def test_a_candidate_that_is_not_a_full_commit_is_refused(
     assert "value=" not in written, "a refused candidate must not be published"
 
 
-@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+@pytest.mark.parametrize("check", CANDIDATE_CHECKS)
 def test_the_checkout_of_the_candidate_passes(
-    tmp_path: pathlib.Path, workflow_path: pathlib.Path, job: str
+    tmp_path: pathlib.Path, check: CandidateCheck
 ) -> None:
     """Accept a checkout that is the candidate it was told to build."""
     workspace = tmp_path / "producer"
     head = _commit(workspace, tmp_path)
-    result = _checkout_step(
-        tmp_path, workspace, head, workflow_path=workflow_path, job=job
-    )
+    result = _checkout_step(tmp_path, workspace, head, check)
     assert result.returncode == 0, result.stderr
 
 
-@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+@pytest.mark.parametrize("check", CANDIDATE_CHECKS)
 def test_a_checkout_of_another_commit_is_refused(
-    tmp_path: pathlib.Path, workflow_path: pathlib.Path, job: str
+    tmp_path: pathlib.Path, check: CandidateCheck
 ) -> None:
     """Refuse a checkout that built something other than the candidate.
 
@@ -281,9 +304,7 @@ def test_a_checkout_of_another_commit_is_refused(
     workspace = tmp_path / "producer"
     head = _commit(workspace, tmp_path)
     assert head != VALID_CANDIDATE, "the fixture commit must differ from the case"
-    result = _checkout_step(
-        tmp_path, workspace, VALID_CANDIDATE, workflow_path=workflow_path, job=job
-    )
+    result = _checkout_step(tmp_path, workspace, VALID_CANDIDATE, check)
     assert result.returncode == 1, result.stdout
     assert head in result.stderr, (
         f"the refusal must name the commit on disk, got {result.stderr!r}"
@@ -293,9 +314,9 @@ def test_a_checkout_of_another_commit_is_refused(
     )
 
 
-@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+@pytest.mark.parametrize("check", CANDIDATE_CHECKS)
 def test_an_unreadable_checkout_is_refused(
-    tmp_path: pathlib.Path, workflow_path: pathlib.Path, job: str
+    tmp_path: pathlib.Path, check: CandidateCheck
 ) -> None:
     """Stop a job whose tree is not a checkout at all.
 
@@ -306,18 +327,16 @@ def test_an_unreadable_checkout_is_refused(
     """
     workspace = tmp_path / "producer"
     workspace.mkdir()
-    result = _checkout_step(
-        tmp_path, workspace, VALID_CANDIDATE, workflow_path=workflow_path, job=job
-    )
+    result = _checkout_step(tmp_path, workspace, VALID_CANDIDATE, check)
     assert result.returncode != 0, result.stdout
     assert "checkout is" not in result.stderr, (
         f"an unreadable checkout is not a mismatched one, got {result.stderr!r}"
     )
 
 
-@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+@pytest.mark.parametrize("check", CANDIDATE_CHECKS)
 def test_the_checkout_step_reads_the_candidate_from_the_environment(
-    workflow_path: pathlib.Path, job: str
+    check: CandidateCheck,
 ) -> None:
     """Take the candidate from the step's ``env``, never from the script text.
 
@@ -325,6 +344,6 @@ def test_the_checkout_step_reads_the_candidate_from_the_environment(
     a runner and compare HEAD against it. The structural cases assert the
     ``env`` block; this one asserts the body reads no other variable.
     """
-    body = _step_body(workflow_path, job, CHECKOUT_STEP)
+    body = _step_body(check.workflow_path, check.job, CHECKOUT_STEP)
     assert "CANDIDATE_COMMIT" in body, body
     assert "${{" not in body, f"a run block must not carry an expression: {body}"

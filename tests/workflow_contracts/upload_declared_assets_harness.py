@@ -108,6 +108,33 @@ class Sandbox:
     declared_root: Path
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Release:
+    """Describe the release a run observes and the mode it runs in.
+
+    Attributes
+    ----------
+    attached
+        The assets the release already holds, as the listing reports them.
+    dry_run
+        The value the caller sets the ``dry-run`` input to.
+
+    Notes
+    -----
+    The two are one value because both describe the *outside* a run is handed
+    rather than the tree it works on: a case that models a partially attached
+    release in a rehearsal asks for both at once, and either alone would leave
+    the other at a default the case did not choose.
+    """
+
+    attached: tuple[dict[str, str], ...] = ()
+    dry_run: str = "false"
+
+
+#: The release a case that names none is handed: nothing attached, publishing.
+NO_RELEASE = Release()
+
+
 def _write_stub(path: Path, body: str) -> None:
     """Install one executable stand-in for an external command."""
     path.write_text(body, encoding="utf-8")
@@ -310,8 +337,7 @@ def execute(
     workspace: Path,
     facts: Facts,
     *,
-    attached: list[dict[str, str]] | None = None,
-    dry_run: str = "false",
+    release: Release = NO_RELEASE,
 ) -> ActionRun:
     """Run the action's script steps in order, stopping where a job would stop.
 
@@ -320,8 +346,8 @@ def execute(
     ActionRun
         The completed steps, the outputs they wrote, and the recorded calls.
     """
-    sandbox = _sandbox(tmp_path, attached)
-    completed = run_steps(workspace, facts, sandbox, dry_run=dry_run)
+    sandbox = _sandbox(tmp_path, list(release.attached))
+    completed = run_steps(workspace, facts, sandbox, dry_run=release.dry_run)
     return ActionRun(
         completed=tuple(completed),
         outputs=read_outputs(sandbox.output_file),

@@ -10,6 +10,8 @@ re-running the failed job.
 Run via ``make test-release-publication``.
 """
 
+import typing as typ
+
 import pytest
 import release_payload_selection as selection
 from release_payload_errors import (
@@ -17,16 +19,22 @@ from release_payload_errors import (
     TargetPlatformMismatchError,
 )
 from release_payload_selection_support import (
+    ARCHIVE,
     ARM_ARCHIVE,
     ARM_DEB,
     ARM_RPM,
+    DEB,
+    RPM,
+    SIDECAR,
+    TARGET,
     TWO_TARGET_ARCHIVES,
     TWO_TARGET_CONFIG,
     arm_record,
+    staged_assets,
     two_target_origins,
     two_target_staged,
+    x86_record,
 )
-from release_producer_provenance import ProducerProvenance
 from release_producer_provenance_errors import (
     DuplicateTargetError,
     ForeignRunError,
@@ -35,9 +43,11 @@ from release_producer_provenance_errors import (
     TargetClaimMismatchError,
 )
 
+if typ.TYPE_CHECKING:
+    from release_producer_provenance import ProducerProvenance
+
 CANDIDATE = "a" * 40
 RUN_ID = "1234"
-TARGET = "linux-x86_64"
 
 #: The staging configuration selection is judged against, with the target
 #: spelled the way the workflow's TOML does.
@@ -45,36 +55,16 @@ CONFIG: dict[str, object] = {
     "targets": {TARGET: {"platform": "linux"}},
 }
 
-ARCHIVE = "netsuke-1.0.0-x86_64-unknown-linux-gnu.tar.gz"
-SIDECAR = f"{ARCHIVE}.sha256"
-DEB = "netsuke_1.0.0_amd64.deb"
-RPM = "netsuke-1.0.0-1.x86_64.rpm"
-
 
 def provenance(**overrides: object) -> ProducerProvenance:
-    """Build a producer record for the candidate, overridden field by field.
+    """Build the x86_64 record over ``staged_assets``, overridden field by field.
 
     Returns
     -------
     ProducerProvenance
-        A record claiming the archive, its sidecar, and two packages.
+        A record claiming its own archive, sidecar, and two packages.
     """
-    fields: dict[str, object] = {
-        "schema": 1,
-        "commit": CANDIDATE,
-        "run_id": RUN_ID,
-        "run_attempt": "1",
-        "target": TARGET,
-        "platform": "linux",
-        "assets": {
-            ARCHIVE: "1" * 64,
-            SIDECAR: "2" * 64,
-            DEB: "3" * 64,
-            RPM: "4" * 64,
-        },
-    }
-    fields.update(overrides)
-    return ProducerProvenance(**fields)
+    return x86_record(**overrides)
 
 
 def selection_for(
@@ -232,22 +222,6 @@ def test_a_record_claiming_a_name_the_declaration_does_not_is_refused() -> None:
     )
     with pytest.raises(TargetClaimMismatchError):
         selection_for([straying], {other_archive: ["archive"]})
-
-
-def staged_assets() -> dict[str, str]:
-    """Return the x86_64 target's own claims, one distinct digest per name.
-
-    Returns
-    -------
-    dict[str, str]
-        The archive, its sidecar, and two packages.
-    """
-    return {
-        ARCHIVE: "1" * 64,
-        SIDECAR: "2" * 64,
-        DEB: "3" * 64,
-        RPM: "4" * 64,
-    }
 
 
 def test_two_targets_claiming_their_own_assets_are_accepted() -> None:

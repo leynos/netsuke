@@ -38,23 +38,23 @@ class RecordingRunner:
         returncode: int = 0,
         stderr: str = "",
         writes: dict[str, bytes] | None = None,
-        links: dict[str, pathlib.Path] | None = None,
     ) -> None:
-        """Hold the canned answer and start an empty record of invocations.
-
-        Parameters
-        ----------
-        links
-            Names to install in the download directory as symlinks, each
-            pointing where the caller says. A case uses this to model a name
-            whose download resolves to something that is not the asset.
-        """
+        """Hold the canned answer and start an empty record of invocations."""
         self.stdout = stdout
         self.returncode = returncode
         self.stderr = stderr
         self.writes = writes or {}
-        self.links = links or {}
+        self.links: dict[str, pathlib.Path] = {}
         self.calls: list[list[str]] = []
+
+    def link(self, name: str, target: pathlib.Path) -> None:
+        """Install ``name`` as a symlink to ``target`` when a download runs.
+
+        Model a download resolving to something that is not the asset. The
+        staging is kept out of the constructor because it is a second concern
+        the answer itself does not have, and every other case leaves it empty.
+        """
+        self.links[name] = target
 
     def __call__(
         self, arguments: list[str], **_keywords: object
@@ -318,7 +318,8 @@ def test_a_symlink_at_the_asset_name_is_not_followed(tmp_path: pathlib.Path) -> 
     """
     outside = tmp_path / "outside.bin"
     _ = outside.write_bytes(b"not this asset")
-    runner = RecordingRunner(links={"a.deb": outside})
+    runner = RecordingRunner()
+    runner.link("a.deb", outside)
     evidence = downloaded_digests("v1", ["a.deb"], runner=runner)
     assert evidence.digests == {"a.deb": None}, "a symlink supplies no digest"
     assert evidence.failures["a.deb"] is DigestFailure.NOT_A_REGULAR_FILE, (
