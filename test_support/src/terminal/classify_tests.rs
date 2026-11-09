@@ -193,11 +193,11 @@ fn cancel_ends_a_control_string(#[case] bytes: &[u8]) {
 proptest! {
     /// Compare bare-carriage-return detection against a byte-level oracle.
     ///
-    /// The oracle in `oracle.rs` is deliberately independent of the classifier:
-    /// it is a state machine over the same bytes, where the classifier is a set
-    /// of scanners that each return a consumed length. The two shapes fail
-    /// differently, so agreement is evidence that two implementations concur
-    /// rather than one test restating itself.
+    /// The oracle in `classify_oracle.rs` is deliberately independent of the
+    /// classifier: it is a state machine over the same bytes, where the
+    /// classifier is a set of scanners that each return a consumed length. The
+    /// two shapes fail differently, so agreement is evidence that two
+    /// implementations concur rather than one test restating itself.
     ///
     /// The alphabet covers every introducer the classifier knows: CSI, OSC and
     /// the four control-string introducers, plus both terminators, the two

@@ -1176,19 +1176,89 @@ parent-commit reproduction shows the failure precedes this branch's work; this
 shows it crosses to a branch that shares no code with it. That is a stronger
 claim, and it is the one recorded.
 
-**Why this branch cannot fix it.** The action refuses a suite pin by design, so
-no caller input can select a different artefact, and the installer version is
-pinned at the action's own ref. The correct repair is in Whitaker's
+**Why this branch could not fix it.** The action refuses a suite pin by design,
+so no caller input could select a different artefact, and the installer version
+is pinned at the action's own ref. The correct repair was in Whitaker's
 `prune_prebuilt_libraries`; the issue's suggested fix prunes by staged filename
-instead of by an enumerated crate list. That is another repository's diff.
+instead of by an enumerated crate list. That was another repository's diff.
 
-**Consequence for the disposition.** This is an intractable impasse owned by
-`leynos/whitaker` issue #565, and it clears itself for this branch once
-Whitaker publishes an installer that prunes unknown libraries — no change to
-netsuke is required or appropriate. Recorded here so the next sweep reads the
-cause rather than re-deriving it.
+**How it cleared, measured.** It did not need a new installer release. Whitaker
+upstream PR #577 (`5418482a3`, merged 2026-11-08T22:10:34Z) changed
+`prune_prebuilt_libraries` to scan the staging directory and remove every
+staged library whose crate was not requested, so an unknown crate is now pruned
+by construction rather than by being present in a compiled-in list. The rolling
+archive republished sixteen minutes later as `whitaker-lints-5418482-…`
+(22:17:40Z). The next `build-test` attempt (6, job `128910557609`) downloaded
+that archive, ran `whitaker --all` on both `netsuke-build` and `test_support`,
+and finished clean: steps 22–24 read `Install Whitaker` success, `Lint` success,
+`Typecheck` success.
+
+**So the installer pin is not on the recovery path.** The netsuke workflows
+still pin `installer-version: '0.2.11'` — unchanged at
+`.github/workflows/ci.yml` line 219 and `.github/workflows/ci-windows.yml` line
+170 — and the lanes are green anyway. Updating that pin is therefore *not*
+required to clear this defect, and recording it as a required operator action
+would be wrong. A future installer release is still desirable, because the same
+class of defect can recur for any crate the pinned installer does not know
+about, but Whitaker PR #576 has since added a pre-publish guard to
+`rolling-release.yml` (`scripts/check_prune_safety.py`) that fails the publish
+job rather than shipping an archive the oldest supported installer cannot
+prune. The upstream owner of both is `leynos/whitaker` issue #565, which is
+still open and tracks the remaining installer-side work.
+
+**Consequence for the disposition.** This was an intractable impasse for this
+branch, not a defect in it: no change here could have cleared it, and the fix
+arrived as an upstream archive republication. It is now cleared, and neither
+the archive nor the installer pin needs any action from netsuke to stay
+cleared. Recorded here so the next sweep reads the cause and the resolution
+rather than re-deriving either.
 
 Date/Author: 2026-11-08, implementation agent.
+
+### D33: the first hosted run on this head failed on a GitHub CDN outage
+
+**Decision.** Record why `a08c1298f`'s first CI attempt shows six red checks
+that are not code failures, so the red rollup is not later read as evidence
+about the diff.
+
+**Evidence.** Run `42467919851` attempt 1 failed `build-test`,
+`Default features`, `kani-smoke`, `Windows / build-test-windows` and
+`Windows / lint-windows`, and run `42467919843` failed five release jobs. Every
+one of those failures terminates in the same way: an HTTP failure while
+downloading a `github.com/…/releases/download/…` asset. The Linux jobs log
+`curl: (22) The requested URL returned error: 504` against `ninja-linux.zip` or
+`mold-2.41.0-x86_64-linux.tar.gz`; `build-test` and both Windows lanes log
+`Error: Invalid or unsupported zip format. No END header found` from
+`seanmiddleditch/gha-setup-ninja`, which is a truncated body rather than a
+genuine archive-format problem.
+
+This was reproducible from the host and not a runner condition. Repeated `curl`
+probes of
+`https://github.com/ninja-build/ninja/releases/download/v1.12.1/ninja-linux.zip`
+returned `504` with a 92-byte HTML body, then `503` with a truncated
+54,894-byte body, then connection timeouts with zero bytes, with occasional
+clean `200`/123,084-byte successes interleaved. `https://www.githubstatus.com`
+published incident [stspg.io/5yt31mfmyc6p](https://stspg.io/5yt31mfmyc6p),
+"Increase in timeouts for some unauthenticated users", opened
+2026-11-08T10:36:05Z — before which the endpoint had already been failing for
+an hour — and cleared by 2026-11-08T23:51Z.
+
+**Resolution.** No code or workflow change was made for it. Once the incident
+cleared and three consecutive probes returned `200`/123,084 bytes, the failed
+jobs were rerun with the run-level `rerun-failed-jobs` endpoint. Attempt 6 of
+`42467919851` is green in all six jobs and attempt 3 of `42467919843` is green
+in all thirteen. Superseded attempts are retained as evidence of the outage,
+not of the diff.
+
+Photo of the state at the time of writing: `build-test`, `Default features`,
+`kani-smoke`, `Windows / build-test-windows`, `Windows / lint-windows`,
+`Windows / windows-msi-upgrade`, all six release build lanes,
+`release / metadata`, `release / package-crate`,
+`release / release-admission-canaries`, `release / release`,
+`CodeScene Code Health Review (main)` and `Gecko Security Review` all read
+`SUCCESS` on `a08c1298f`.
+
+Date/Author: 2026-11-09, implementation agent.
 
 ## Outcomes & retrospective
 
