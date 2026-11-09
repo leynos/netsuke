@@ -126,7 +126,12 @@ pub(super) fn spawn_and_stream_output(
     let (status, stderr_failure, stderr_stats) =
         finalize_streaming(wait_result, stdout_stats, err_handle)?;
     if matches!(stderr_mode, StderrMode::Forward) {
-        report_unwritable_stderr(stderr_stats);
+        // Named for its one job rather than `stdout`, which would shadow the
+        // child's pipe handle above and read as if it were the same stream.
+        let mut fallback_writer = io::stdout().lock();
+        if let Err(error) = report_unwritable_stderr(stderr_stats, &mut fallback_writer) {
+            tracing::debug!("failed to report an unwritable stderr on stdout: {error}");
+        }
     }
     let failure = if status.success() {
         stderr_failure
@@ -148,26 +153,146 @@ pub(super) fn spawn_and_stream_output(
 ///
 /// Only a rejected write or flush triggers the fallback: a failure to read the
 /// child stream says nothing about the destination's health.
-fn report_unwritable_stderr(stats: ForwardStats) {
+///
+/// The destination is a parameter rather than an [`io::stdout`] lock taken
+/// here, so the process boundary owns which stream receives the warning and
+/// this helper's own write and flush failures are testable without a real
+/// terminal. The caller decides what a failure means; the fallback cannot
+/// fail the build, because the stream that would report it is the one already
+/// known to be broken.
+fn report_unwritable_stderr(stats: ForwardStats, out: &mut impl Write) -> io::Result<()> {
     let rejected = match stats.failure {
         Some(kind @ (ForwardFailureKind::Write | ForwardFailureKind::Flush)) => Some(kind),
         Some(ForwardFailureKind::Read | ForwardFailureKind::Drain) | None => None,
     };
     let Some(kind) = rejected else {
-        return;
+        return Ok(());
     };
 
-    let mut stdout = io::stdout().lock();
-    let message = writeln!(
-        stdout,
+    writeln!(
+        out,
         concat!(
             "netsuke: warning: failed to forward child stderr ({}); ",
             "reporting on stdout because the stderr destination rejected the output",
         ),
         kind.label()
     )
-    .and_then(|()| stdout.flush());
-    if let Err(error) = message {
-        tracing::debug!("failed to report an unwritable stderr on stdout: {error}");
+    .and_then(|()| out.flush())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Cover the fallback warning's stream selection and its own failure path.
+
+    use super::{ForwardFailureKind, ForwardStats, report_unwritable_stderr};
+    use rstest::rstest;
+    use std::io::{self, Write};
+
+    /// Build forwarding statistics carrying one failure classification.
+    fn stats_with(failure: Option<ForwardFailureKind>) -> ForwardStats {
+        ForwardStats {
+            bytes_read: 0,
+            bytes_written: 0,
+            failure,
+            drain_failed: false,
+        }
+    }
+
+    /// Writer that records every byte it accepts.
+    #[derive(Default)]
+    struct RecordingWriter {
+        /// Bytes accepted so far.
+        written: Vec<u8>,
+        /// Whether `flush` should report a rejection.
+        fails_flush: bool,
+    }
+
+    impl Write for RecordingWriter {
+        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+            self.written.extend_from_slice(buf);
+            Ok(buf.len())
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            if self.fails_flush {
+                return Err(io::Error::other("flush rejected"));
+            }
+            Ok(())
+        }
+    }
+
+    /// Writer whose every operation is rejected.
+    struct RejectingWriter;
+
+    impl Write for RejectingWriter {
+        fn write(&mut self, _buf: &[u8]) -> io::Result<usize> {
+            Err(io::Error::other("write rejected"))
+        }
+
+        fn flush(&mut self) -> io::Result<()> {
+            Ok(())
+        }
+    }
+
+    #[rstest]
+    #[case(ForwardFailureKind::Write)]
+    #[case(ForwardFailureKind::Flush)]
+    fn a_rejected_destination_is_reported_on_the_injected_writer(#[case] kind: ForwardFailureKind) {
+        let mut out = RecordingWriter::default();
+        report_unwritable_stderr(stats_with(Some(kind)), &mut out)
+            .expect("a recording writer accepts every write");
+        let text = String::from_utf8(out.written).expect("the warning is valid UTF-8");
+        assert!(
+            text.contains("failed to forward child stderr"),
+            "the fallback must name the lost stream: {text}"
+        );
+        assert!(
+            text.contains("reporting on stdout"),
+            "the fallback must name its channel: {text}"
+        );
+        assert!(
+            text.contains(kind.label()),
+            "the fallback must carry the failure kind: {text}"
+        );
+    }
+
+    #[rstest]
+    #[case::read(Some(ForwardFailureKind::Read))]
+    #[case::drain(Some(ForwardFailureKind::Drain))]
+    #[case::none(None)]
+    fn a_stream_that_did_not_reject_output_writes_nothing(
+        #[case] failure: Option<ForwardFailureKind>,
+    ) {
+        let mut out = RecordingWriter::default();
+        report_unwritable_stderr(stats_with(failure), &mut out)
+            .expect("a recording writer accepts every write");
+        assert!(out.written.is_empty(), "no warning may be written");
+    }
+
+    #[test]
+    fn a_rejected_fallback_write_surfaces_to_the_caller() {
+        let error = report_unwritable_stderr(
+            stats_with(Some(ForwardFailureKind::Write)),
+            &mut RejectingWriter,
+        )
+        .expect_err("rejected write must surface");
+        assert!(
+            error.to_string().contains("write rejected"),
+            "the caller must see the write error: {error}"
+        );
+    }
+
+    #[test]
+    fn a_rejected_fallback_flush_surfaces_to_the_caller() {
+        let mut out = RecordingWriter {
+            fails_flush: true,
+            ..RecordingWriter::default()
+        };
+        let error = report_unwritable_stderr(stats_with(Some(ForwardFailureKind::Flush)), &mut out)
+            .expect_err("rejected flush must surface");
+        assert!(
+            error.to_string().contains("flush rejected"),
+            "the caller must see the flush error: {error}"
+        );
     }
 }
