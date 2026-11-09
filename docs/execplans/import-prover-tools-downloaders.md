@@ -441,6 +441,20 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       without installing anything, so a removed guard would let the run
       succeed. The refusal status is what catches it, and the clean trace only
       adds that the refusal attempted nothing. See Revision 60.
+- [x] (2026-11-10) Answer the review's trace, ordering and signature
+      findings. The trace reader now names the re-time, ownership and
+      extended-attribute calls `%file` delivers, and `sendmmsg`, with a case
+      per family; a suppressed attempt through any of them was previously a
+      clean trace. Every isolation assertion takes the whole `SandboxRun` and
+      reads the stream or trace it is about, which fixes CodeScene's
+      string-heavy signature report — nine of twelve arguments were strings —
+      and the two-`&str` inconsistency the review named. The step test records
+      the `sudo` calls visible when `make` starts, so the lift-before-suite
+      order is asserted rather than assumed, and the two no-lift cases are one
+      parametrized case. The tracer install uses `sudo --non-interactive`, the
+      Whitaker operator has cases for a recipe-line reference and `+=`, and
+      the Verus property cases report fixture errors as case failures. See
+      Revision 61.
 
 ## Surprises & discoveries
 
@@ -2234,6 +2248,22 @@ removed guard is the refusal status and category, together with the
 non-invocation assertion in `kani_check_refuses_a_missing_payload`. The trace's
 narrower claim is that the refusal itself attempted nothing, and the text now
 says exactly that. All nine commit gates exited `0` on `ae3fbd100`.
+
+Revision 61 (2026-11-10): Record the seven inline findings and one CodeScene
+issue raised at `1f38b9e91`, their repairs, and the nine-gate batch that
+validated them. CodeScene's "String Heavy Function Arguments" report is a
+file-level ratio, not a per-function verdict, which is why its text named no
+function: `tests/prover_tools_kani_check_tests/assertions.rs` measured nine
+string arguments of twelve, and `cs check` reproduced the hosted 9.68 before
+the change. Every one of those values already lives on `SandboxRun`, so each
+helper now takes the run and reads the field its assertion is about; the same
+file measured 10.00 afterwards. The first batch after the repairs failed at
+`lint-clippy`, because the new proptest helper took `anyhow::Error` by value
+and only formatted it. The second failed at `lint-python`: the import block
+needed Ruff's ordering, `_run_step` held twelve locals once it read the marker,
+and one assertion message reached 89 columns. Writing the stubs and the
+environment into their own helpers, and letting Ruff order the imports, cleared
+all three. All nine commit gates exited `0` on `5d9a6b6cf`.
 
 Keep Status: IN PROGRESS pending review at the new head and trusted-main
 warm-cache acceptance.
