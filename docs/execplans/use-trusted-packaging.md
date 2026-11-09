@@ -3145,10 +3145,10 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   that point and to say that the two jobs were written but unwired; #1067 has
   since wired the verifier through `verify-release-inventory`, so
   `finalize_github_release_cli.py` is now the only unwired one. The
-  producer-record docstring also stops claiming the record "reaches
-  publication independently of the downloaded trees" -- it travels inside the
-  producer's own artefact, and its independence is that it is never derived
-  from the bytes it describes.
+  producer-record docstring also stops claiming the record "reaches publication
+  independently of the downloaded trees" -- it travels inside the producer's
+  own artefact, and its independence is that it is never derived from the bytes
+  it describes.
 
   **The upload plan keeps "unread" apart from "disagrees".** `unverifiable` is
   now its own key, and a case proves that an attached asset whose digest
