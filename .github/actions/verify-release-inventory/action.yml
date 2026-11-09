@@ -30,13 +30,16 @@ inputs:
     required: true
   declaration-file:
     description: >-
-      The declared asset names, relative to `trusted-directory`. The verifier
-      compares the downloaded names against it exactly.
+      The file listing the declared asset names. It must resolve inside
+      `trusted-directory`; a relative path resolves from the working directory,
+      as in `trusted/declaration.txt`. The verifier compares the downloaded
+      names against it exactly.
     required: true
   trusted-record-file:
     description: >-
-      The digest record produced from the built bytes before upload, relative to
-      `trusted-directory`. It is the only input that can detect a substituted
+      The digest record produced from the built bytes before upload. It must
+      resolve inside `trusted-directory`; a relative path resolves from the
+      working directory. It is the only input that can detect a substituted
       attachment that agrees with its own sidecar.
     required: true
   download-directory:
