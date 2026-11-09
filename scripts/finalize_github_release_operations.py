@@ -293,6 +293,7 @@ def publish_release(request: PublishRequest) -> None:
             request.result_path, request.github_output, "already-finalized", identity
         )
         return
+    _require_draft(current)
     edited = release_io.run_gh(
         "release",
         "edit",
@@ -326,3 +327,21 @@ def publish_release(request: PublishRequest) -> None:
                 "the release is public but its prerelease state contradicts "
                 "the validated candidate; it cannot be made a draft again",
             )
+
+
+def _require_draft(state: release_state.ReleaseState) -> None:
+    """Refuse to edit a release that has already been published.
+
+    ``is_already_finalized`` has taken the case where the release is public
+    with the candidate's flag, so a public release reaching here has the other
+    one. Editing it would change a release someone may already have downloaded,
+    and a public release cannot be made a draft again, so the run stops before
+    the call rather than correcting a state it must not touch.
+    """
+    if state.is_draft:
+        return
+    release_io.fail(
+        release_io.EXIT_REFUSED,
+        "the release is public but its prerelease state contradicts the "
+        "validated candidate; a public release cannot be made a draft again",
+    )

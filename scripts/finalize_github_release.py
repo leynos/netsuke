@@ -78,31 +78,16 @@ def snapshot(
     )
 
 
-# Cyclopts binds one command-line flag per parameter, so this signature is the
-# workflow's interface rather than an incidental long argument list.
+# `Parameter(name="*")` flattens the request into one flag per field, so the
+# command line stays `--tag`, `--commit`, `--candidate-path` and so on while
+# the command itself takes one grouped value. Fields without a default stay
+# required, which is what the action's contract asserts.
 @app.command
-def publish(  # pylint: disable=too-many-arguments  # one flag per parameter
-    *,
-    tag: typ.Annotated[str, Parameter(required=True)],
-    commit: typ.Annotated[str, Parameter(required=True)],
-    repository: typ.Annotated[str, Parameter(required=True)],
-    candidate_path: typ.Annotated[pathlib.Path, Parameter(required=True)],
-    plan_path: typ.Annotated[pathlib.Path, Parameter(required=True)],
-    result_path: typ.Annotated[pathlib.Path, Parameter(required=True)],
-    github_output: pathlib.Path | None = None,
+def publish(
+    request: typ.Annotated[operations.PublishRequest, Parameter(name="*")],
 ) -> None:
     """Un-draft a fully verified release, or report why it stays a draft."""
-    operations.publish_release(
-        operations.PublishRequest(
-            tag=tag,
-            commit=commit,
-            repository=repository,
-            candidate_path=candidate_path,
-            plan_path=plan_path,
-            result_path=result_path,
-            github_output=github_output,
-        )
-    )
+    operations.publish_release(request)
 
 
 if __name__ == "__main__":

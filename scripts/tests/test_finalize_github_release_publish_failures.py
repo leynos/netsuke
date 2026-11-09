@@ -79,16 +79,13 @@ def test_publish_reports_a_readback_that_is_still_a_draft(
     )
 
 
-def test_publish_reports_a_public_release_with_the_wrong_flag(
+def test_publish_refuses_a_public_release_before_editing_its_flag(
     tmp_path: pathlib.Path,
     cmd_mox: CmdMox,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Refuse to call a public release finalized when its flag contradicts it."""
-    sequenced_gh(
-        cmd_mox,
-        [*release_views((True, False)), ("", "", 0), *release_views((False, True))],
-    )
+    """Refuse an edit that would change a release already published."""
+    gh = sequenced_gh(cmd_mox, release_views((False, True)))
 
     with pytest.raises(SystemExit) as error:
         run_finalizer(*publish_arguments(tmp_path))
@@ -100,6 +97,41 @@ def test_publish_reports_a_public_release_with_the_wrong_flag(
     assert "public" in message, "the refusal must say the release is public"
     assert "cannot be made a draft again" in message, (
         "the refusal must say the release cannot be reverted to a draft"
+    )
+    # The first view is the whole exchange: the refusal happens before the
+    # edit, so a public release's flag is never rewritten to match.
+    edits = [
+        invocation
+        for invocation in gh.invocations
+        if invocation_arguments(invocation)[:2] == ("release", "edit")
+    ]
+    assert not edits, "the stage must not edit a release it did not publish"
+
+
+def test_publish_reports_a_readback_with_the_wrong_flag(
+    tmp_path: pathlib.Path,
+    cmd_mox: CmdMox,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Diagnose an edit whose release came back public with the wrong flag."""
+    sequenced_gh(
+        cmd_mox,
+        [*release_views((True, False)), ("", "", 0), *release_views((False, True))],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
+
+    assert error.value.code == EXIT_REFUSED, (
+        "a release that contradicts the candidate after the edit must be refused"
+    )
+    message = capsys.readouterr().err
+    assert "public" in message, "the refusal must say the release is public"
+    assert "cannot be made a draft again" in message, (
+        "the refusal must say the release cannot be reverted to a draft"
+    )
+    assert not (tmp_path / "result.json").exists(), (
+        "a contradictory read-back must not be recorded as a success"
     )
 
 

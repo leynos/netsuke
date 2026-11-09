@@ -1,6 +1,6 @@
 """Exercise the one command that can make a release public.
 
-The tests are organised around what must remain true however the run ends:
+The tests are organized around what must remain true however the run ends:
 a release is never published over a plan that is not fully verified, and every
 refusal names the asset that stopped it. The failures that follow a successful
 API call — an unreadable read-back, an output that cannot be written — live in

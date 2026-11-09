@@ -85,12 +85,8 @@ extend-ignore = [
 "scripts/tests/*.py" = ["assert", "too-many-arguments", "too-many-positional-arguments", "magic-value-comparison", "no-self-use"]
 "tests/workflow_contracts/*.py" = ["assert", "too-many-arguments", "too-many-positional-arguments", "magic-value-comparison", "no-self-use"]
 # Cyclopts entry points declare one keyword-only parameter per environment
-# input by design, so the argument-count ceilings do not apply to them. The
-# release finalizer's `publish` command is such an entry point: each of its
-# keyword-only parameters is one workflow input, and grouping them behind a
-# struct would only move the same list one call deeper.
+# input by design, so the argument-count ceilings do not apply to them.
 "scripts/ci/*.py" = ["too-many-arguments", "too-many-positional-arguments"]
-"scripts/finalize_github_release.py" = ["too-many-arguments"]
 
 [tool.ruff.lint.flake8-import-conventions]
 # Declare the banned `from` imports.

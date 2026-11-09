@@ -3390,13 +3390,13 @@ the publisher's `trusted-artifact` output for the pre-upload digest record.
 
 `.github/actions/finalize-github-release` holds five bounded steps:
 
-| Step                          | Network calls         | Token      |
-| ----------------------------- | --------------------- | ---------- |
-| Validate inputs               | none                  | none       |
-| Resolve the release candidate | none                  | none       |
-| Snapshot the release state    | one `gh release view` | `GH_TOKEN` |
-| Plan the reconciliation       | none                  | none       |
-| Finalize the release          | one `gh release edit` | `GH_TOKEN` |
+| Step                          | Network calls                                         | Token      |
+| ----------------------------- | ----------------------------------------------------- | ---------- |
+| Validate inputs               | none                                                  | none       |
+| Resolve the release candidate | none                                                  | none       |
+| Snapshot the release state    | one `gh release view`                                 | `GH_TOKEN` |
+| Plan the reconciliation       | none                                                  | none       |
+| Finalize the release          | two `gh release view` reads and one `gh release edit` | `GH_TOKEN` |
 
 *Table 3: The finalization action's steps and credential routing.*
 
@@ -3490,17 +3490,19 @@ Four states are worth recognizing:
   the release stays a draft until a person decides what the correct bytes are.
 
 A release left public with the wrong prerelease flag is the one state this
-stage cannot repair; it refuses rather than editing, because it cannot tell a
-mistaken flag from a deliberate one. The output `prerelease` names the flag the
-validated candidate required, which is what an operator needs to decide.
+stage cannot repair; it refuses before editing, because it cannot tell a
+mistaken flag from a deliberate one and a public release cannot be made a draft
+again. The output `prerelease` names the flag the validated candidate required,
+which is what an operator needs to decide.
 
 `tests/workflow_contracts/release_finalize_contract_test.py` pins the action's
 steps, their environment, and their token routing, the job's guard,
 permissions, and artefact selection, and the exact command the finalize step
 runs, and proves each assertion against a deliberate mutation. The adapter's
 own behaviour is covered by `make test-release-publication`, which drives
-interrupted retries, an already-finalized release, missing and conflicting
-assets, and API and output failures through `cmd-mox`.
+interrupted retries, an already-finalized release, an already-public release
+that must not be edited, missing and conflicting assets, and API and output
+failures through `cmd-mox`.
 
 ### Crate-package operation telemetry
 
@@ -3950,7 +3952,7 @@ four actions, and the name's own evidence decides which:
 | `CONFLICT`      | the attached digest was read and differs from the record's     |
 | `UNVERIFIABLE`  | the name is attached and no digest could be established for it |
 
-*Table 7: The four actions `plan_asset_actions` assigns.*
+*Table 9: The four actions `plan_asset_actions` assigns.*
 
 `CONFLICT` and `UNVERIFIABLE` both stop the upload, and they are kept apart
 because their remedies differ. A conflict says the release holds demonstrably
@@ -3978,7 +3980,7 @@ named.
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 9: `finalize_github_release_cli` exit statuses.*
+*Table 10: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -4185,7 +4187,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 10: `package-crate` action inputs.*
+*Table 11: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote

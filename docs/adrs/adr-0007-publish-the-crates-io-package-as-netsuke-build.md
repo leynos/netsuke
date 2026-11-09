@@ -349,7 +349,8 @@ above.
   is recognized on the next run as already finalized.
 - A public release whose prerelease flag disagrees with the candidate cannot be
   repaired, because a public release cannot be made a draft again. The run
-  refuses rather than reporting success.
+  refuses before editing it, rather than rewriting the flag of a release
+  someone may already have downloaded.
 
 **What this decision does not claim.** Un-drafting is irreversible, so this
 stage is the one place where "verified" has to mean the bytes already attached,

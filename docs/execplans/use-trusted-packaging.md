@@ -3281,6 +3281,51 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   branches are separate strategies rather than one `assume`-guarded case, so
   neither can silently lose coverage when the generator drifts.
 
+- [x] (2026-11-09) Closed the ninth CodeRabbit pass on the finalization
+  stage, including one finding that was a defect rather than a style preference.
+
+  **A public release with the wrong flag was edited, not refused.** The pass
+  read `publish_release` and found that `is_already_finalized` returns `False`
+  when a public release carries the other prerelease flag, so the run fell
+  through to `gh release edit` and rewrote the flag of a release someone may
+  already have downloaded -- then reported success. The guide and the ADR
+  already claimed the stage "refuses rather than editing", so the documents
+  described the intended behaviour and the code did not implement it. The
+  repair is `_require_draft`, called after the already-finalized check and
+  before the edit: a release that is public at that point has the other flag,
+  and the run stops. The old case exercised the post-edit contradiction; it is
+  now two cases, one proving that a public release is refused with no
+  `gh release edit` invocation at all, the other keeping the read-back
+  contradiction diagnosed when an edit comes back with the wrong flag.
+
+  **`publish` takes one grouped argument again.** The seven-parameter signature
+  needed an inline Pylint disable and a file-level Ruff `too-many-arguments`
+  ignore in `pyproject.toml`. Cyclopts 4.25.3 flattens a dataclass parameter
+  declared `Parameter(name="*")`, which was verified against the installed
+  release before relying on it: `--tag`, `--commit`, `--repository`,
+  `--candidate-path`, `--plan-path`, `--result-path`, and `--github-output`
+  keep their spellings, and the six fields without defaults stay required. Both
+  suppressions are gone and the existing suites pass unchanged.
+
+  **The `contents: write` claim named two jobs; three hold it.**
+  `verify-release-inventory` holds the scope because a draft release is visible
+  only with write access. The guide and the workflow comment now name all three
+  and keep the distinction that matters: only the publisher and the finalizer
+  change the release.
+
+  **The release token reached a step that never calls GitHub.** The validate
+  step held `GH_TOKEN` only to test that it was non-empty; it now receives a
+  boolean presence flag. The contract's expected-environment map records the
+  new name, and a new rule rejects any step outside the token set that forwards
+  the token expression under any name. The rule is asserted before the map
+  comparison because the map is what recorded the leak as correct, and a
+  `token-on-validate` mutation proves it fires.
+
+  **Two documentation and spelling corrections.** Table 3 said the finalize
+  step makes one `gh` call, but `publish` makes two `gh release view` reads
+  around one `gh release edit`. The captions after the release section ran 8,
+  6, 9, 10, so they are renumbered 9, 10, 11. A test module docstring used
+  "-ised" rather than the repository's -ize spelling.
 - [x] (2026-11-10) Closed the ninth CodeRabbit pass's two architecture rows by
   splitting effect from decision at both upload boundaries, and made an
   unattributable package a refusal rather than a silent acceptance.
