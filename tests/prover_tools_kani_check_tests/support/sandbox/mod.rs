@@ -30,6 +30,12 @@ pub(super) struct SandboxPaths<'a> {
     /// shows it would notice an attempt made by the recipe and not only by the
     /// verifier the recipe runs.
     pub(super) dirty: &'a Path,
+    /// A Kani home holding the pinned payload, which the recipe requires before
+    /// it will run the verifier.
+    pub(super) kani_home: &'a Path,
+    /// A Kani home with no payload, the shape an interrupted installation
+    /// leaves. Querying it must be refused rather than repaired by installing.
+    pub(super) empty_home: &'a Path,
     /// The installed verifier to exercise inside the boundary, when the caller
     /// named one. Its binary is exposed read-only at `/opt/verifier`, and its
     /// Kani home read-only at its own path.
@@ -102,12 +108,16 @@ impl<'a> InstalledVerifier<'a> {
 /// makes a shell abort a redirection rather than report a refused write.
 ///
 /// When the caller names an installed verifier its directory and its Kani home
-/// are bound read-only too, each at its own host path. The home has to exist
+/// are bound read-only too, each at its own host path. That home has to exist
 /// before the chroot root is remounted, so it is created in the same pass as
 /// the other paths the query is allowed to read.
+///
+/// The fixture's two Kani homes — one with the pinned payload, one empty — need
+/// no mount of their own: they live inside the fixture directory, which is
+/// already bound read-only, and the recipe only ever tests them for existence.
 pub(super) fn script(paths: &SandboxPaths<'_>) -> String {
     let installed = InstalledVerifier::new(paths.installed);
-    let kani_home = installed
+    let installed_home = installed
         .as_ref()
         .map_or_else(|| "''".to_owned(), |verifier| shell_quote(verifier.home));
     let install_mount = installed
@@ -122,13 +132,13 @@ root={chroot}
 repo={repo}
 fixture={fixture}
 trace={trace}
-kani_home={kani_home}
+installed_home={installed_home}
 mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root/dev" "$root/tmp" "$root/opt/verifier" "$root/var/trace" "$root$repo" "$root$fixture" || exit 90
 if [ -n "${{HOME:-}}" ]; then
   mkdir -p "$root$HOME" || exit 90
 fi
-if [ -n "$kani_home" ]; then
-  mkdir -p "$root$kani_home" || exit 90
+if [ -n "$installed_home" ]; then
+  mkdir -p "$root$installed_home" || exit 90
 fi
 touch "$root/dev/null" || exit 90
 ln -s usr/bin "$root/bin"
@@ -145,10 +155,10 @@ mount -o remount,ro,bind "$root$fixture" || exit 96
 mount -t proc proc "$root/proc" || exit 97
 mount --bind /dev/null "$root/dev/null" || exit 98
 mount --bind "$trace" "$root/var/trace" || exit 99
-if [ -n "$kani_home" ]; then
-  mount --bind "$kani_home" "$root$kani_home" && mount -o remount,ro,bind "$root$kani_home" || exit 102
+if [ -n "$installed_home" ]; then
+  mount --bind "$installed_home" "$root$installed_home" && mount -o remount,ro,bind "$root$installed_home" || exit 102
 fi
-{install_mount}chroot "$root" /bin/sh -c '{inner}' sh "$repo" "$fixture" {kani} {control} {version_file} {poison} /var/trace {install_argument} "$kani_home" {dirty}
+{install_mount}chroot "$root" /bin/sh -c '{inner}' sh "$repo" "$fixture" {kani} {control} {version_file} {poison} /var/trace {install_argument} {kani_home} {dirty} {empty_home} "$installed_home"
 "#,
         chroot = shell_quote(paths.chroot),
         repo = shell_quote(paths.repo),
@@ -158,7 +168,9 @@ fi
         version_file = shell_quote(paths.version_file),
         poison = shell_quote(paths.poison),
         trace = shell_quote(paths.trace),
+        kani_home = shell_quote(paths.kani_home),
         dirty = shell_quote(paths.dirty),
+        empty_home = shell_quote(paths.empty_home),
         inner = INNER,
     );
     // The syscall set is the reader's, not the script's: a trace that omits a
@@ -174,41 +186,40 @@ fi
 /// failure when the path really is protected, rather than reporting every path
 /// as blocked because redirection is broken.
 ///
-/// Three traced runs follow the probes: the real query, a control whose
-/// verifier attempts a suppressed write and a suppressed connection, and a
-/// control recipe whose own lines attempt suppressed writes. The reader must
-/// find nothing in the first trace and the expected attempts in the other two,
-/// which is how the boundary proves it would notice an attempt rather than only
-/// a success. When the caller names an installed verifier, a fourth traced query
-/// runs that binary through the same recipe, so the real executable is
-/// exercised inside the boundary and not only the fixture's stub; that query
-/// also points `KANI_HOME` at the bound payload, so the launcher answers rather
-/// than installing.
+/// Four traced runs follow the probes: the real query, a control whose
+/// verifier attempts a suppressed write and a suppressed connection, a control
+/// recipe whose own lines attempt suppressed writes, and the query against a
+/// home with no payload. The reader must find nothing in the first, third and
+/// fourth traces and the expected attempts in the second, which is how the
+/// boundary proves it would notice an attempt rather than only a success. When
+/// the caller names an installed verifier, a fifth traced query runs that
+/// binary through the same recipe, so the real executable is exercised inside
+/// the boundary and not only the fixture's stub; that query also points
+/// `KANI_HOME` at the bound payload, so the launcher answers rather than
+/// installing.
 ///
 /// The trace wraps `make`, not the verifier binary, so every process the recipe
 /// starts is followed, and `makefile` names the makefile to run: the shipped
-/// one for three of the runs, the fixture's dirty recipe for the control that
-/// must be reported. The query's own trace shows the wrapping works: the
-/// recipe's `cat` of the pin file appears in it, which is why the boundary
-/// covers the recipe's commands and not just whatever those commands invoke.
+/// one for all but the dirty control. The query's own trace shows the wrapping
+/// works: the recipe's `cat` of the pin file appears in it, which is why the
+/// boundary covers the recipe's commands and not just whatever those commands
+/// invoke.
+///
+/// `KANI_HOME` is passed to each `make` invocation rather than exported once,
+/// because the runs deliberately disagree: the stub and the missing-payload
+/// run use fixture homes, and the installed verifier needs the real one.
 const INNER: &str = r#"set -u
 LC_ALL=C
 export LC_ALL
-repo=$1; fixture=$2; kani=$3; control=$4; version_file=$5; poison=$6; trace=$7; installed=$8; kani_home=$9; dirty=${10}
+repo=$1; fixture=$2; kani=$3; control=$4; version_file=$5; poison=$6; trace=$7; installed=$8; kani_home=$9; dirty=${10}; empty_home=${11}; installed_home=${12}
 traced() {
-  out=$1; verifier=$2; pin=${3:-$version_file}; makefile=${4:-Makefile}
+  out=$1; verifier=$2; home=$3; pin=${4:-$version_file}; makefile=${5:-Makefile}
   strace -f -qq -e "trace=__TRACE_SYSCALLS__" \
     -o "$trace/$out" make --no-print-directory -f "$makefile" kani-check \
-    KANI="$verifier" KANI_VERSION_FILE="$pin" \
+    KANI="$verifier" KANI_VERSION_FILE="$pin" KANI_HOME="$home" \
     PROVER_TOOLS="$poison" UV="$poison"
 }
 cd "$repo" || exit 90
-# The launcher resolves its payload from KANI_HOME and starts a first-time
-# setup when the home is missing, so the query is pointed at the bound home.
-if [ -n "$kani_home" ]; then
-  KANI_HOME="$kani_home"
-  export KANI_HOME
-fi
 probe() {
   label=$1; path=$2
   if err=$( ( : > "$path" ) 2>&1 ); then
@@ -239,14 +250,16 @@ if resolved=$(timeout 5 getent hosts example.com 2>&1); then
 else
   echo "dns=blocked"
 fi
-traced query.strace "$kani"
+traced query.strace "$kani" "$kani_home"
 rc=$?
-traced control.strace "$control"
+traced control.strace "$control" "$kani_home"
 control_rc=$?
-traced dirty.strace "$kani" "$version_file" "$dirty"
+traced dirty.strace "$kani" "$kani_home" "$version_file" "$dirty"
 dirty_rc=$?
+traced missing.strace "$kani" "$empty_home"
+missing_rc=$?
 if [ -n "$installed" ]; then
-  traced installed.strace "$installed" "$repo/tools/kani/VERSION"
+  traced installed.strace "$installed" "$installed_home" "$repo/tools/kani/VERSION"
   installed_rc=$?
 else
   installed_rc=unset
@@ -254,6 +267,7 @@ fi
 echo "make-exit=$rc"
 echo "control-exit=$control_rc"
 echo "dirty-exit=$dirty_rc"
+echo "missing-exit=$missing_rc"
 echo "installed-exit=$installed_rc"
 exit "$rc"
 "#;

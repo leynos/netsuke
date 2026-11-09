@@ -250,8 +250,10 @@ WHITAKER ?= whitaker
 # the per-lint `pattern` selection the Whitaker guide's Netsuke deviation note
 # rules out. `--fail-on-no-libraries` keeps the gate honest: without it a
 # missing suite would leave Whitaker running a lint-free `cargo check` that
-# reports success.
-WHITAKER_SUITE_SELECTION ?= --lib whitaker_suite --fail-on-no-libraries
+# reports success. The assignment is unconditional rather than `?=`, so an
+# exported value cannot replace the selection with one that loads the
+# standalone libraries as well.
+WHITAKER_SUITE_SELECTION := --lib whitaker_suite --fail-on-no-libraries
 
 # The build-tools install prefix leads: `-fuse-ld=mold` resolves by PATH order, so
 # the pinned release must outrank any distribution `mold`. Every build target
@@ -689,10 +691,22 @@ install-kani: ## Install the pinned Kani verifier
 # flood a terminal, and no bounding or escaping makes arbitrary text safe to
 # print. The category and the exit status are the actionable facts; re-running
 # the verifier by hand supplies the rest.
+#
+# The pinned payload is checked before the launcher runs. `cargo-kani` treats a
+# home without `<home>/kani-<version>` as an incomplete installation and starts
+# a first-time setup: it downloads a release bundle and unpacks it. That would
+# make this query an installer, which is exactly what a read-only check must
+# never be, so an absent payload is refused instead and the operator is pointed
+# at the target that does install it.
 kani-check: ## Check the installed Kani verifier version
 	@version_file='$(subst ','"'"',$(KANI_VERSION_FILE))'; \
 	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check category=pin-unreadable could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
 	printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$expected" >&2; \
+	kani_home="$${KANI_HOME:-$${HOME:-}/.kani}"; \
+	if [ ! -d "$$kani_home/kani-$$expected" ]; then \
+		printf 'prover-tools: target=kani-check category=payload-missing Kani %s payload is absent from %s; run make install-kani\n' "$$expected" "$$kani_home" >&2; \
+		exit 1; \
+	fi; \
 	output="$$($(KANI) --version 2>&1)"; status=$$?; \
 	if [ "$$status" -ne 0 ]; then \
 		printf 'prover-tools: target=kani-check category=verifier-failed failed exit=%s\n' "$$status" >&2; \

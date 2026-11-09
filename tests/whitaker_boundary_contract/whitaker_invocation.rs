@@ -43,15 +43,29 @@ fn package_selections(line: &str) -> Vec<&str> {
     packages
 }
 
-/// Return the part of a recipe line that Whitaker reads as its own arguments.
+/// Yield the arguments Whitaker reads as its own.
 ///
-/// Everything after the `--` separator is forwarded to Cargo, so
+/// Everything from the standalone `--` token onward is forwarded to Cargo, so
 /// `--all-targets` and `--all-features` live there and select nothing.
-/// Returning the prefix keeps the library-selection check from either missing
-/// a real `--all` or matching a Cargo flag that merely starts with it.
-fn library_selection_arguments(line: &str) -> &str {
-    line.split_once(" -- ")
-        .map_or(line, |(selection, _)| selection)
+/// Splitting on whitespace keeps the check from either missing a real `--all`
+/// or matching a Cargo flag that merely starts with it, and it treats a tab, a
+/// doubled space, and a line that ends at the separator alike — none of which
+/// a search for the substring `" -- "` would find.
+fn library_selection_arguments(line: &str) -> impl Iterator<Item = &str> + '_ {
+    line.split_whitespace().take_while(|token| *token != "--")
+}
+
+/// Return the operator of the Makefile's `WHITAKER_SUITE_SELECTION` assignment.
+///
+/// The name has to be the first thing on the line and has to be followed by an
+/// assignment operator. That rejects a commented-out definition, and it also
+/// rejects a longer name such as `WHITAKER_SUITE_SELECTION_EXTRA`, which a
+/// prefix match would accept as the definition.
+fn selection_operator(line: &str) -> Option<char> {
+    let rest = line.strip_prefix("WHITAKER_SUITE_SELECTION")?.trim_start();
+    rest.chars()
+        .next()
+        .filter(|operator| matches!(operator, '?' | ':' | '='))
 }
 
 #[test]
@@ -152,9 +166,8 @@ fn lint_whitaker_selects_the_suite_and_requires_it() -> Result<()> {
         // An exact token, not a substring: `--all $(WHITAKER_SUITE_SELECTION)
         // --no-deps` is the dangerous spelling, and the old `--all --no-deps`
         // pair would not have caught it.
-        let selection = library_selection_arguments(line);
         ensure!(
-            !selection.split_whitespace().any(|token| token == "--all"),
+            !library_selection_arguments(line).any(|token| token == "--all"),
             concat!(
                 "`--all` loads the standalone per-lint libraries as well as the ",
                 "suite, which registers several lints twice; found {line:?}",
@@ -165,8 +178,17 @@ fn lint_whitaker_selects_the_suite_and_requires_it() -> Result<()> {
 
     let selection = makefile
         .lines()
-        .find(|line| line.starts_with("WHITAKER_SUITE_SELECTION"))
+        .find(|line| selection_operator(line).is_some())
         .context("the Makefile should define WHITAKER_SUITE_SELECTION")?;
+    ensure!(
+        selection_operator(selection) != Some('?'),
+        concat!(
+            "WHITAKER_SUITE_SELECTION must not be environment-overridable: `?=` ",
+            "lets an exported value replace the pinned selection with one that ",
+            "loads the standalone libraries as well; found {selection:?}",
+        ),
+        selection = selection
+    );
     for fragment in ["--lib whitaker_suite", "--fail-on-no-libraries"] {
         ensure!(
             selection.contains(fragment),

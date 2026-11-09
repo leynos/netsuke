@@ -27,19 +27,22 @@ impl Fixture {
     /// writable control path, so the caller can prove the sandbox was effective
     /// rather than assume it.
     ///
-    /// Three runs are traced: the real query, a control whose verifier attempts
-    /// a suppressed write and a suppressed connection before reporting the
-    /// pinned version, and a control recipe whose own lines attempt a suppressed
-    /// write and a suppressed directory creation. The traces come back so the
-    /// caller can require the first to be clean and the other two to name their
-    /// attempts. When `installed` names a verifier, a fourth traced query runs
-    /// it through the same recipe and its trace comes back too.
+    /// Four runs are traced: the real query, a control whose verifier attempts a
+    /// suppressed write and a suppressed connection before reporting the pinned
+    /// version, a control recipe whose own lines attempt a suppressed write and
+    /// a suppressed directory creation, and the query against a Kani home with
+    /// no payload. The traces come back so the caller can require all but the
+    /// second to be clean and that one to name its attempts. When `installed`
+    /// names a verifier, a fifth traced query runs it through the same recipe
+    /// and its trace comes back too.
     ///
     /// # Errors
     ///
-    /// Returns an error if the fake verifier, version file, sandbox root, trace
-    /// directory, or sandbox script cannot be created, if `unshare` cannot be
-    /// spawned, or if a trace cannot be read back.
+    /// Returns an error if the fake verifier, Kani homes, version file, sandbox
+    /// root, trace directory, or sandbox script cannot be created, if `unshare`
+    /// cannot be spawned, or if a trace cannot be read back; a missing trace
+    /// carries the sandbox's own output, which is where an early failure says
+    /// what went wrong.
     pub(crate) fn run_sandboxed_check(
         &self,
         repo: &Path,
@@ -49,6 +52,8 @@ impl Fixture {
         let kani = self.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
         let control = self.write_control_verifier()?;
         let dirty = self.write_dirty_recipe()?;
+        let kani_home = self.write_pinned_kani_home()?;
+        let empty_home = self.write_empty_kani_home()?;
         let version_file = self.write_version_file()?;
         // Both directories must outlive the child; keep their handles in scope.
         let chroot = tempdir().context("create kani-check sandbox root")?;
@@ -63,6 +68,8 @@ impl Fixture {
             poison: &poison,
             trace: trace.path(),
             dirty: &dirty,
+            kani_home: &kani_home,
+            empty_home: &empty_home,
             installed,
         };
         let output = Command::new("unshare")
@@ -80,16 +87,33 @@ impl Fixture {
             .arg(sandbox::script(&paths))
             .output()
             .context("run make kani-check inside an isolation namespace")?;
-        let installed_trace = installed
-            .map(|_| read_trace(trace.path(), "installed.strace"))
-            .transpose()?;
+        // A trace missing here means the sandbox stopped before that run — a
+        // refused mount, or an `strace` that could not attach. It says why on
+        // its own streams rather than in the trace directory, so naming them is
+        // the only way that evidence reaches whoever reads the failure.
+        let read = |name: &str| {
+            read_trace(trace.path(), name).with_context(|| {
+                format!(
+                    "the sandbox wrote no `{name}` ({status}); stdout `{stdout}`, stderr `{stderr}`",
+                    status = output.status,
+                    stdout = String::from_utf8_lossy(&output.stdout),
+                    stderr = String::from_utf8_lossy(&output.stderr),
+                )
+            })
+        };
+        let installed_trace = installed.map(|_| read("installed.strace")).transpose()?;
+        let query_trace = read("query.strace")?;
+        let control_trace = read("control.strace")?;
+        let dirty_trace = read("dirty.strace")?;
+        let missing_trace = read("missing.strace")?;
         Ok(SandboxRun {
-            query_trace: read_trace(trace.path(), "query.strace")?,
-            control_trace: read_trace(trace.path(), "control.strace")?,
-            dirty_trace: read_trace(trace.path(), "dirty.strace")?,
-            installed_trace,
             output,
             marker,
+            query_trace,
+            control_trace,
+            dirty_trace,
+            missing_trace,
+            installed_trace,
         })
     }
 
@@ -164,6 +188,8 @@ pub(crate) struct SandboxRun {
     pub(crate) control_trace: String,
     /// The trace of the control recipe whose lines attempt suppressed writes.
     pub(crate) dirty_trace: String,
+    /// The trace of the query run against a Kani home with no payload.
+    pub(crate) missing_trace: String,
     /// The trace of the installed verifier's query, when one was exercised.
     pub(crate) installed_trace: Option<String>,
 }

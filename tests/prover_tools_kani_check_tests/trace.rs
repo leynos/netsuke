@@ -11,16 +11,18 @@
 //! The reading is deliberately literal: a syscall the trace does not contain is
 //! a syscall that was never made.
 
-/// The syscalls whose appearance can only mean an attempt to change the host.
+/// The syscall classes the sandbox traces.
 ///
-/// The open family is included because a write-intent open is an attempt even
-/// when it is refused; the remaining calls create, remove, rename or re-time a
-/// path. The network family is every call that can carry a socket address, so a
-/// datagram attempt is reported and not only a stream connection.
-pub(crate) const TRACE_SYSCALLS: &str = concat!(
-    "open,openat,openat2,creat,mkdir,mkdirat,unlink,unlinkat,rename,renameat,",
-    "renameat2,truncate,ftruncate,chmod,fchmodat,utimensat,connect,sendto,sendmsg",
-);
+/// The filter selects classes rather than naming calls one by one. `%file` is
+/// every call that takes a path, which is every call that can read, create,
+/// remove, rename, re-time or resize one; `%network` is every call that can
+/// carry a socket address. Naming calls individually would be wrong on half the
+/// supported architectures: `mkdir` has no syscall of its own on aarch64, where
+/// the same operation is `mkdirat`, and `strace` refuses to start when a
+/// qualifier names a call the current architecture does not have. Covering the
+/// classes means the trace cannot omit a call a reader entry expects, and the
+/// reader still decides which of the calls it sees are attempts.
+pub(crate) const TRACE_SYSCALLS: &str = "%file,%network";
 
 /// Syscalls that open a path, with their flags in the arguments.
 ///
@@ -37,20 +39,35 @@ const WRITE_FLAGS: [&str; 5] = ["O_WRONLY", "O_RDWR", "O_CREAT", "O_TRUNC", "O_A
 /// Syscalls that create, remove, rename, re-time or resize a path outright.
 ///
 /// `creat` is here rather than with the open family because it takes no flag
-/// argument: creating the file is the whole of what it does.
-const MUTATING_SYSCALLS: [&str; 12] = [
+/// argument: creating the file is the whole of what it does. The descriptor
+/// forms (`fchmod`, `fchown`, `ftruncate`) are named for completeness even
+/// though `%file` does not report them; each needs a descriptor, so the
+/// write-intent open that produced it is what the trace shows.
+const MUTATING_SYSCALLS: [&str; 24] = [
     "creat",
     "mkdir",
     "mkdirat",
     "unlink",
     "unlinkat",
+    "rmdir",
     "rename",
     "renameat",
     "renameat2",
+    "link",
+    "linkat",
+    "symlink",
+    "symlinkat",
+    "mknod",
+    "mknodat",
     "utimensat",
     "truncate",
     "ftruncate",
     "chmod",
+    "fchmod",
+    "fchmodat",
+    "chown",
+    "fchown",
+    "fchownat",
 ];
 
 /// The character devices a program may legitimately open for writing.
@@ -83,12 +100,10 @@ fn finding(line: &str) -> Option<String> {
 }
 
 /// Report a syscall that creates, removes, renames, re-times or resizes a path.
-///
-/// `fchmodat` is named here rather than in [`MUTATING_SYSCALLS`] so that list
-/// keeps the twelve calls the trace filter also names.
 fn path_change(name: &str) -> Option<String> {
-    let mutates = MUTATING_SYSCALLS.contains(&name) || name == "fchmodat";
-    mutates.then(|| format!("`{name}` changes a path"))
+    MUTATING_SYSCALLS
+        .contains(&name)
+        .then(|| format!("`{name}` changes a path"))
 }
 
 /// Report a call that addresses the network.
@@ -142,10 +157,30 @@ mod tests {
     )]
     #[case::create_only(r#"7     creat("/tmp/x", 0666) = -1 EROFS"#, "`creat`")]
     #[case::directory_creation(r#"7     mkdir("/tmp/x", 0777) = -1 EROFS"#, "`mkdir`")]
+    #[case::directory_creation_at(
+        r#"7     mkdirat(AT_FDCWD, "/tmp/x", 0777) = -1 EROFS"#,
+        "`mkdirat`"
+    )]
+    #[case::directory_removal(r#"7     rmdir("/tmp/x") = -1 EROFS"#, "`rmdir`")]
     #[case::removal(r#"7     unlinkat(AT_FDCWD, "/tmp/x", 0) = -1 EROFS"#, "`unlinkat`")]
+    #[case::hard_link(
+        r#"7     linkat(AT_FDCWD, "/a", AT_FDCWD, "/b", 0) = -1 EROFS"#,
+        "`linkat`"
+    )]
+    #[case::symbolic_link(r#"7     symlinkat("/a", AT_FDCWD, "/b") = -1 EROFS"#, "`symlinkat`")]
+    #[case::node_creation(
+        r#"7     mknodat(AT_FDCWD, "/dev/x", S_IFCHR|0600, makedev(1, 3)) = -1 EROFS"#,
+        "`mknodat`"
+    )]
+    #[case::mode_change(r#"7     fchmodat(AT_FDCWD, "/x", 0600, 0) = -1 EROFS"#, "`fchmodat`")]
+    #[case::ownership_change(r#"7     fchownat(AT_FDCWD, "/x", 0, 0, 0) = -1 EROFS"#, "`fchownat`")]
     #[case::extended_open(r#"7     openat2(AT_FDCWD, "/repo/probe", {flags=O_WRONLY|O_CREAT, mode=0666}, 24) = -1 EROFS"#, "write-intent")]
     #[case::network(r#"7     connect(3, {sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("1.1.1.1")}, 16) = -1 ENETUNREACH"#, "network address")]
     #[case::datagram(r#"7     sendto(3, "x", 1, 0, {sa_family=AF_INET6, sin6_port=htons(53), sin6_addr=inet_pton(AF_INET6, "::1")}, 28) = -1 ENETUNREACH"#, "network address")]
+    #[case::addressed_message(
+        r#"7     sendmsg(3, {msg_name={sa_family=AF_INET, sin_port=htons(53), sin_addr=inet_addr("1.1.1.1")}, msg_namelen=16, msg_iov=[{iov_base="x", iov_len=1}], msg_iovlen=1, msg_controllen=0, msg_flags=0}, 0) = -1 ENETUNREACH"#,
+        "network address"
+    )]
     fn suppressed_attempts_are_reported(#[case] line: &str, #[case] expected: &str) {
         let findings = attempts(line);
 

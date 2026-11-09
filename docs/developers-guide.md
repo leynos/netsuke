@@ -1532,12 +1532,14 @@ rolling release publishes a standalone library for every lint as well as the
 suite, and the suite already registers all of them, so `--all` loads several
 lints twice: on Linux rustc aborts with `duplicate specification of lint`, and
 on Windows one of the duplicated standalone libraries fails its own metadata
-check. Naming the suite loads the same lint set once. It is still a whole-suite
-load, so a lint added upstream arrives without a change here; it is not the
-per-lint `pattern` selection that the Whitaker guide's Netsuke deviation note
-rules out. `--fail-on-no-libraries` keeps the gate honest, because without it a
-missing suite would leave Whitaker running a lint-free `cargo check` that
-reports success.
+check. Naming the suite loads the same lint set once. The variable is assigned
+with `:=` rather than `?=`, so an exported value cannot replace it with one
+that loads the standalone libraries as well. It is still a whole-suite load, so
+a lint added upstream arrives without a change here; it is not the per-lint
+`pattern` selection that the Whitaker guide's Netsuke deviation note rules out.
+`--fail-on-no-libraries` keeps the gate honest, because without it a missing
+suite would leave Whitaker running a lint-free `cargo check` that reports
+success.
 
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
 records the policy decision, and the [polonius migration notes](polonius.md)
@@ -5830,19 +5832,23 @@ Use the Make targets for day-to-day formal-verification checks:
   `$CARGO_HOME` with `--version`, and compares the first semantic version in
   its output with the file. The query is deliberately local and read-only: it
   never resolves `rust-prover-tools` through `uv`, so it works without network
-  access and does not write the uv cache. A version mismatch, a failing
-  verifier, or unparsable output fails the target. Every failure names a stable
-  `category=` — `pin-unreadable`, `verifier-failed`, `version-unparsable`, or
-  `version-mismatch` — so a caller can branch on the cause without parsing
-  prose. The only text it takes from the verifier is the version token it
-  extracts: the `found` value of a mismatch, and the version named by the
-  success line, so a verifier reporting `kani 0.66.0` against a 0.67.0 pin
-  prints `found 0.66.0`. The `kani-version=` field is the expected pin as read
-  from the file, not a value taken from the verifier. The text that token was
-  extracted from is never echoed. It comes from an external binary, so it could
-  carry a credential, forge a log line, or flood a terminal, and no amount of
-  bounding or escaping makes arbitrary text safe to print. The extracted
-  version, the category and the exit status are the actionable facts;
+  access and does not write the uv cache. It also refuses to run the launcher
+  when `<KANI_HOME>/kani-<version>` is absent, because `cargo-kani` treats that
+  as an incomplete installation and starts a first-time setup, which downloads
+  and unpacks a release bundle; the query names `payload-missing` and points at
+  `make install-kani` instead of becoming an installer. A version mismatch, a
+  failing verifier, or unparsable output fails the target. Every failure names
+  a stable `category=` — `pin-unreadable`, `payload-missing`, `verifier-failed`,
+  `version-unparsable`, or `version-mismatch` — so a caller can branch on the
+  cause without parsing prose. The only text it takes from the verifier is the
+  version token it extracts: the `found` value of a mismatch, and the version
+  named by the success line, so a verifier reporting `kani 0.66.0` against a
+  0.67.0 pin prints `found 0.66.0`. The `kani-version=` field is the expected
+  pin as read from the file, not a value taken from the verifier. The text that
+  token was extracted from is never echoed. It comes from an external binary,
+  so it could carry a credential, forge a log line, or flood a terminal, and no
+  amount of bounding or escaping makes arbitrary text safe to print. The
+  extracted version, the category and the exit status are the actionable facts;
   re-running the verifier by hand supplies anything else.
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
@@ -5925,13 +5931,17 @@ leaves success behind. Two mechanisms supply that half. The runtime one runs
 each query under `strace` and reads the log back through
 `tests/prover_tools_kani_check_tests/trace.rs`: a write-intent open, a
 path-mutating call, or a socket address aimed at another host is reported
-whether the kernel refused it or not, and the syscall filter is templated from
-the reader, so a call the reader looks for cannot be missing from the trace it
-reads. The real query must report no attempts and the control verifier must
-report the write and the connection it discarded, which is what makes the
-reader known to fire rather than known to pass on a clean log. The trace wraps
-`make`, so the recipe's own commands are followed as well as the verifier it
-invokes, and the case asserts that by requiring the recipe's read of the pin
+whether the kernel refused it or not. The filter names the `%file` and
+`%network` classes rather than individual calls, so no call can be missing from
+the trace a reader entry expects, and no architecture-specific name can stop
+`strace` before it starts. The real query must report no attempts and the
+control verifier must report the write and the connection it discarded, which
+is what makes the reader known to fire rather than known to pass on a clean
+log. A third run queries a Kani home with no payload: the recipe must refuse it
+with `payload-missing`, and its trace must also be clean, which is what would
+fail if the refusal were removed and the launcher started installing. The trace
+wraps `make`, so the recipe's own commands are followed as well as the verifier
+it invokes, and the case asserts that by requiring the recipe's read of the pin
 file to appear in it. A second control moves the attempt from the verifier to
 the recipe: a makefile whose own lines discard a write and a directory creation
 and then report the version runs to success, and the case requires both

@@ -130,6 +130,44 @@ impl Fixture {
         Ok(self.path("KANI_VERSION"))
     }
 
+    /// Stage a Kani home holding the payload a version pins.
+    ///
+    /// `cargo-kani` looks for `<home>/kani-<version>` and starts a first-time
+    /// setup when it is absent, so the recipe refuses to query a home without
+    /// it. The fixture never runs the launcher against this directory; its only
+    /// job is to look like a completed installation to the recipe's check.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be created.
+    pub(super) fn write_kani_home(&self, version: &str) -> Result<PathBuf> {
+        self.directory
+            .create_dir_all(format!("kani-home/kani-{version}"))
+            .with_context(|| format!("stage a Kani home for {version}"))?;
+        Ok(self.path("kani-home"))
+    }
+
+    /// Stage a Kani home holding the payload for [`PINNED_VERSION`].
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be created.
+    pub(super) fn write_pinned_kani_home(&self) -> Result<PathBuf> {
+        self.write_kani_home(PINNED_VERSION)
+    }
+
+    /// Create an empty Kani home, the shape an interrupted installation leaves.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the directory cannot be created.
+    pub(super) fn write_empty_kani_home(&self) -> Result<PathBuf> {
+        self.directory
+            .create_dir_all("empty-kani-home")
+            .context("create an empty Kani home")?;
+        Ok(self.path("empty-kani-home"))
+    }
+
     /// Read a fixture-relative file as UTF-8.
     ///
     /// # Errors
@@ -214,16 +252,22 @@ impl Fixture {
         Ok(())
     }
 
-    /// Run `make kani-check` against the fake binary and version file.
+    /// Run `make kani-check` against the fake binary, version file, and home.
     ///
     /// # Errors
     ///
     /// Returns an error if the command cannot be spawned.
-    pub(super) fn run_check(&self, kani: &Path, version_file: &Path) -> Result<(Output, PathBuf)> {
+    pub(super) fn run_check(
+        &self,
+        kani: &Path,
+        version_file: &Path,
+        kani_home: &Path,
+    ) -> Result<(Output, PathBuf)> {
         let (mut command, marker) = self.make_check_command()?;
         let output = command
             .arg(format!("KANI={}", kani.display()))
             .arg(format!("KANI_VERSION_FILE={}", version_file.display()))
+            .arg(format!("KANI_HOME={}", kani_home.display()))
             .output()
             .context("run make kani-check")?;
         Ok((output, marker))
@@ -233,12 +277,13 @@ impl Fixture {
     ///
     /// # Errors
     ///
-    /// Returns an error if the fake binary, version file, or command cannot be
-    /// created.
+    /// Returns an error if the fake binary, version file, Kani home, or command
+    /// cannot be created.
     pub(super) fn run_fake_kani(&self, script: &str) -> Result<(Output, PathBuf)> {
         let kani = self.fake_kani(script)?;
         let version_file = self.write_version_file()?;
-        self.run_check(&kani, &version_file)
+        let kani_home = self.write_pinned_kani_home()?;
+        self.run_check(&kani, &version_file, &kani_home)
     }
 
     /// Query the pinned version with `script` and return the failure diagnostic.

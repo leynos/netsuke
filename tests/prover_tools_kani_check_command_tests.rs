@@ -5,7 +5,9 @@
 //! drive the recipe with a fake verifier so every branch is exercised without
 //! installing Kani: a match, a mismatch, a missing pin, a pin that cannot be
 //! read at all, a failing verifier, and the boundary that keeps the query off
-//! the network and out of any cache.
+//! the network and out of any cache. Every fixture names a Kani home holding an
+//! installed payload for its pin, because the recipe refuses one without it; the
+//! refusal itself belongs to `prover_tools_kani_check_tests`.
 
 #![cfg(unix)]
 
@@ -31,28 +33,39 @@ struct FakeKani {
     executable: PathBuf,
     invocation_log: PathBuf,
     version_file: PathBuf,
+    kani_home: PathBuf,
 }
 
 impl FakeKani {
     /// Create a fake verifier that answers `--version` as `behaviour` describes.
     ///
+    /// The fixture also supplies the Kani home the recipe inspects before it
+    /// runs anything: the home carries an installed payload for the pinned
+    /// version, because without one `cargo-kani` would treat the installation
+    /// as incomplete and start a download. A home without that payload is the
+    /// separate refusal case in `prover_tools_kani_check_tests`.
+    ///
     /// # Errors
     ///
-    /// Returns an error if the temporary directory, the fake executable, or the
-    /// version file cannot be created.
+    /// Returns an error if the temporary directory, the fake executable, the
+    /// version file, or the Kani payload directory cannot be created.
     fn new(pinned_version: &str, behaviour: Behaviour<'_>) -> Result<Self> {
         let temp = tempdir().context("create fake Kani directory")?;
         let executable = temp.path().join("fake-kani");
         let invocation_log = temp.path().join("invocations.log");
         let version_file = temp.path().join("KANI_VERSION");
+        let kani_home = temp.path().join("kani-home");
         write_fake_kani(&executable, &invocation_log, behaviour)?;
         fs::write(&version_file, pinned_version).context("write fake Kani version file")?;
+        fs::create_dir_all(kani_home.join(format!("kani-{pinned_version}")))
+            .context("create the fake Kani payload directory")?;
 
         Ok(Self {
             temp,
             executable,
             invocation_log,
             version_file,
+            kani_home,
         })
     }
 
@@ -108,7 +121,8 @@ impl FakeKani {
             .arg("-f")
             .arg("Makefile")
             .arg(format!("KANI={}", self.executable.display()))
-            .arg(format!("KANI_VERSION_FILE={}", self.version_file.display()));
+            .arg(format!("KANI_VERSION_FILE={}", self.version_file.display()))
+            .arg(format!("KANI_HOME={}", self.kani_home.display()));
         command
     }
 

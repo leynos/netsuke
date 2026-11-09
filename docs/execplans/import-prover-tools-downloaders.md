@@ -390,10 +390,29 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       a pin that is not a file, and a failing verifier; and
       `tests/prover_tools_verus_e2e_tests.rs` gains two property cases that run
       the pinned CLI against a fake verifier over generated batch lengths,
-      failure positions, and exit statuses. `make kani-check` now names a
-      stable `category=` on every failure and bounds and sanitizes the verifier
-      output it quotes. `make test-verus-e2e` is the strict lane for the
+      failure positions, and exit statuses. `make kani-check` names a stable
+      `category=` on every failure, prints the pin and the configured command
+      before invoking the verifier, and never echoes the verifier's own
+      output: it captures that stream, extracts one semantic version, and
+      quotes only that token, so an unparsable report is categorized rather
+      than repeated. `make test-verus-e2e` is the strict lane for the
       real-verifier cases. See Revision 48.
+- [x] (2026-11-09) Refuse an absent Kani payload instead of installing one,
+      and widen what the trace can see. `cargo-kani` treats a missing
+      `<KANI_HOME>/kani-<version>` as an incomplete installation and starts a
+      first-time setup that downloads a release, so `make kani-check` —
+      documented as a read-only query — could become an installer. The recipe
+      now checks that directory before invoking the verifier and refuses with
+      `category=payload-missing`, naming `make install-kani`. The isolation
+      case runs a fifth traced query against a home with no payload and
+      requires both the refusal and an attempt-free trace, which is what fails
+      if the guard is removed. The trace filter moved from named calls to the
+      `%file,%network` classes, because `strace` refuses to start when a
+      qualifier names a call the host architecture lacks and `mkdir` has no
+      syscall of its own on aarch64; the reader's mutating-call list grew to
+      cover the calls those classes now deliver. `WHITAKER_SUITE_SELECTION` is
+      `:=` rather than `?=`, so an exported value cannot replace the pinned
+      selection. See Revision 58.
 
 ## Surprises & discoveries
 
@@ -572,45 +591,53 @@ published in the candidate. The isolation boundary test now enforces the write
 boundary with a read-only chroot rather than a single repository bind, so the
 query is verified to run with every mounted path read-only: `/usr`, `/etc`, the
 repository, the fixture directory, the chroot root, `/tmp` and the caller's
-home. The one deliberately writable path is the `control` probe at
-`/proc/self/comm`, which exists to prove the probe can report a plain failure
-rather than classifying every path as blocked because redirection itself is
-broken. On a host that forbids unprivileged user namespaces the case reports
-the reason and returns success, which `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`
-converts into a failure. The review at `5803947003` recorded six failed
-pre-merge checks, and the working candidate now addresses each while leaving
-every published repair above unchanged. Two new suites carry the coverage.
-`tests/prover_tools_verus_e2e_tests.rs` drives `make verus` through the pinned
-CLI and the real verifier, checking the default proof, an ordered batch and
-failure propagation, and adds property cases that generate batch length,
-failure position and exit status — and, in a third, a batch order that is a
-permutation rather than creation order — against a fake verifier while the CLI
-stays real. `tests/prover_tools_kani_check_command_tests.rs` drives the
-`kani-check` recipe through a matching pin, a mismatch, a missing pin, an
-unreadable pin and a failing verifier, and asserts that the verifier receives
-`--version` in every reachable case. The recipe now reports a stable
-`category=` and takes only a version token from the verifier's output — the
-`found` value of a mismatch and the version named by the success line; the
-`kani-version=` field is the expected pin read from the file — because the
-surrounding text comes from an external binary and no amount of bounding or
-escaping makes it safe to print. The read-only chroot boundary remains the
-evidence for the blocked-network and blocked-write requirement, and it runs
-strictly in the required `kani-smoke` lane rather than skipping. Version
-checking is described as the local read-only `--version` query, not a
-delegation to the pinned CLI.
+home. Three paths are deliberately writable, and none is storage the query can
+use. The `control` probe at `/proc/self/comm` exists to prove the probe can
+report a plain failure rather than classifying every path as blocked because
+redirection itself is broken. `/var/trace` is a writable bind of a host
+directory where `strace` records what each run attempted; the recipe is never
+told about it, and the case reads it back afterwards as the only record of a
+suppressed attempt. `/dev/null` is bound because shells and the recipe's own
+diagnostics write there unconditionally, and without it a shell aborts a
+redirection instead of reporting a refused write. On a host that forbids
+unprivileged user namespaces the case reports the reason and returns success,
+which `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` converts into a failure. The review
+at `5803947003` recorded six failed pre-merge checks, and the working candidate
+now addresses each while leaving every published repair above unchanged. Two
+new suites carry the coverage. `tests/prover_tools_verus_e2e_tests.rs` drives
+`make verus` through the pinned CLI and the real verifier, checking the default
+proof, an ordered batch and failure propagation, and adds property cases that
+generate batch length, failure position and exit status — and, in a third, a
+batch order that is a permutation rather than creation order — against a fake
+verifier while the CLI stays real.
+`tests/prover_tools_kani_check_command_tests.rs` drives the `kani-check` recipe
+through a matching pin, a mismatch, a missing pin, an unreadable pin and a
+failing verifier, and asserts that the verifier receives `--version` in every
+reachable case. The recipe now reports a stable `category=` and takes only a
+version token from the verifier's output — the `found` value of a mismatch and
+the version named by the success line; the `kani-version=` field is the
+expected pin read from the file — because the surrounding text comes from an
+external binary and no amount of bounding or escaping makes it safe to print.
+The read-only chroot boundary remains the evidence for the blocked-network and
+blocked-write requirement, and it runs strictly in the required `kani-smoke`
+lane rather than skipping. Version checking is described as the local read-only
+`--version` query, not a delegation to the pinned CLI.
 
 The gate evidence above is historical: it is the Revision 41 sweep, and it was
 collected before the review at `5808594893` and the CodeScene delta on
-`adeb43dd6` raised their findings. Six further candidates have since been
+`adeb43dd6` raised their findings. Ten further candidates have since been
 gated, each recording its own evidence at its own revision entry: Revision 49
 for those findings, Revision 50 after the rebase onto `main` at `6ff836603`,
 Revision 51 for the review at `5816957501`, Revision 52 for the Whitaker
 duplicate-registration repair, Revision 53 for the `string-continuation- style`
-repair and the contract-test split, and Revision 54 for the review at
-`5819530205`. The Revision 41 run quoted at the start of this section is the
-earliest of them and describes neither the current head nor the current gate
-set. Review at the current head and trusted-main warm-cache acceptance remain
-open.
+repair and the contract-test split, Revision 54 for the review at `5819530205`,
+Revision 55 for the runtime trace reader, Revision 56 for the
+installed-verifier query inside the boundary, Revision 57 for the control
+recipe that discards a write and a directory creation, and Revision 58 for the
+payload refusal and the syscall classes. The Revision 41 run quoted at the
+start of this section is the earliest of them and describes neither the current
+head nor the current gate set. Review at the current head and trusted-main
+warm-cache acceptance remain open.
 
 ## Context and orientation
 

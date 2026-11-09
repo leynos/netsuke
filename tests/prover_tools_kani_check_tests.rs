@@ -25,6 +25,12 @@ mod recipe;
 #[path = "prover_tools_kani_check_tests/trace.rs"]
 mod trace;
 
+// The assertions the isolation case makes about what the sandbox reported,
+// grouped so that neither this file nor the case outgrows the size cap.
+#[cfg(target_os = "linux")]
+#[path = "prover_tools_kani_check_tests/assertions.rs"]
+mod assertions;
+
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]
 use std::path::Path;
@@ -110,9 +116,11 @@ fn kani_check_handles_apostrophes_in_the_active_cargo_home() -> Result<()> {
         "#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n",
     )?;
     let version_file = fixture.write_version_file()?;
+    let kani_home = fixture.write_pinned_kani_home()?;
     let (mut command, marker) = fixture.make_check_command()?;
     let output = command
         .arg(format!("KANI_VERSION_FILE={}", version_file.display()))
+        .arg(format!("KANI_HOME={}", kani_home.display()))
         .arg(format!("CARGO_HOME={}", cargo_home.display()))
         .output()
         .context("run make kani-check with an apostrophe in CARGO_HOME")?;
@@ -135,7 +143,8 @@ fn kani_check_invokes_the_verifier_with_the_version_flag() -> Result<()> {
         fixture.path("kani-argv").display()
     ))?;
     let version_file = fixture.write_version_file()?;
-    let (output, marker) = fixture.run_check(&kani, &version_file)?;
+    let kani_home = fixture.write_pinned_kani_home()?;
+    let (output, marker) = fixture.run_check(&kani, &version_file, &kani_home)?;
 
     ensure!(
         output.status.success(),
@@ -157,7 +166,8 @@ fn kani_check_reads_the_expected_version_from_the_file() -> Result<()> {
     let fixture = Fixture::new()?;
     let kani = fixture.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.68.0\\n'\n")?;
     let version_file = fixture.write_version_file_pinning("0.68.0")?;
-    let (output, marker) = fixture.run_check(&kani, &version_file)?;
+    let kani_home = fixture.write_kani_home("0.68.0")?;
+    let (output, marker) = fixture.run_check(&kani, &version_file, &kani_home)?;
     let stdout = String::from_utf8_lossy(&output.stdout);
 
     ensure!(
@@ -181,8 +191,9 @@ fn kani_check_reads_the_expected_version_from_the_file() -> Result<()> {
 fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
     let fixture = Fixture::new()?;
     let kani = fixture.fake_kani("#!/bin/sh\nprintf 'cargo-kani 0.67.0\\n'\n")?;
+    let kani_home = fixture.write_pinned_kani_home()?;
     fixture.create_dir_all("KANI_VERSION")?;
-    let (output, marker) = fixture.run_check(&kani, &fixture.path("KANI_VERSION"))?;
+    let (output, marker) = fixture.run_check(&kani, &fixture.path("KANI_VERSION"), &kani_home)?;
     let stderr = String::from_utf8_lossy(&output.stderr);
 
     ensure!(
@@ -192,6 +203,41 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
     ensure!(
         stderr.contains("could not read"),
         "the diagnostic should name the unreadable pin, got `{stderr}`"
+    );
+    fixture.ensure_remote_runner_unused(&marker)
+}
+
+/// Check that an absent Kani payload is refused instead of being installed.
+///
+/// `cargo-kani` reads `<KANI_HOME>/kani-<version>` and, when that directory is
+/// missing, downloads and unpacks a release bundle before answering. The query
+/// is documented as read-only, so it must refuse rather than let the launcher
+/// turn it into an installation. The stub records any invocation, which is what
+/// shows the refusal happened before the verifier ran rather than after.
+#[test]
+fn kani_check_refuses_a_missing_payload() -> Result<()> {
+    let fixture = Fixture::new()?;
+    let invoked = fixture.path("verifier-invoked");
+    let kani = fixture.fake_kani(&format!(
+        "#!/bin/sh\nprintf invoked > '{}'\nprintf 'cargo-kani 0.67.0\\n'\n",
+        invoked.display()
+    ))?;
+    let version_file = fixture.write_version_file()?;
+    let kani_home = fixture.write_empty_kani_home()?;
+    let (output, marker) = fixture.run_check(&kani, &version_file, &kani_home)?;
+    let stderr = String::from_utf8_lossy(&output.stderr);
+
+    ensure!(
+        !output.status.success(),
+        "the query must refuse a home without the pinned payload, got `{stderr}`"
+    );
+    ensure!(
+        stderr.contains("category=payload-missing"),
+        "the diagnostic should name the missing payload, got `{stderr}`"
+    );
+    ensure!(
+        !invoked.exists(),
+        "the verifier must not run when its payload is absent, so the query cannot install"
     );
     fixture.ensure_remote_runner_unused(&marker)
 }
@@ -219,15 +265,18 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
 /// trace wraps `make`, so the recipe's own commands are followed too, and the
 /// case asserts that by requiring the pin read to appear in the trace.
 ///
-/// When `NETSUKE_KANI_ISOLATION_VERIFIER` names an installed verifier, a third
+/// When `NETSUKE_KANI_ISOLATION_VERIFIER` names an installed verifier, a fourth
 /// traced query runs that binary through the same recipe and its trace must be
 /// equally clean. CI sets it to the pinned `cargo-kani` it installed, so the
-/// real executable — not only the stub — is exercised inside the boundary.
+/// real executable — not only the stub — is exercised inside the boundary. A
+/// fifth runs it against a Kani home with no payload, where the launcher would
+/// otherwise start a first-time setup; the recipe must refuse with
+/// `category=payload-missing`, and that trace must be clean too.
 ///
 /// # Errors
 ///
 /// Returns an error if the fixture cannot be built, if the isolated query
-/// fails, if the sandbox reports that a restriction did not apply, or if the
+/// fails, if the sandbox reports that a restriction did not apply, or if a
 /// control trace does not name the attempts it was built to make.
 #[cfg(target_os = "linux")]
 #[test]
@@ -249,9 +298,9 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         run.output.status.success(),
         "the isolated query should succeed, got stdout `{stdout}` and stderr `{stderr}`"
     );
-    ensure_restrictions_reported(&stdout)?;
-    ensure_home_unwritable(&stdout)?;
-    ensure_only_control_writable(&stdout)?;
+    assertions::ensure_restrictions_reported(&stdout)?;
+    assertions::ensure_home_unwritable(&stdout)?;
+    assertions::ensure_only_control_writable(&stdout)?;
     ensure!(
         !stderr.contains("prover-tools runner invoked"),
         "the isolated query must not resolve the remote runner, got `{stderr}`"
@@ -261,168 +310,11 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         "the control verifier must succeed while discarding its failed attempts, \
          got stdout `{stdout}` and stderr `{stderr}`"
     );
-    ensure_query_attempts_nothing(&run.query_trace)?;
-    ensure_recipe_commands_traced(&run.query_trace)?;
-    ensure_control_attempts_traced(&run.control_trace)?;
-    ensure_dirty_recipe_attempts_traced(&run)?;
-    ensure_installed_query_works(&run, &stdout, &stderr)?;
+    assertions::ensure_query_attempts_nothing(&run.query_trace)?;
+    assertions::ensure_recipe_commands_traced(&run.query_trace)?;
+    assertions::ensure_control_attempts_traced(&run.control_trace)?;
+    assertions::ensure_dirty_recipe_attempts_traced(&run)?;
+    assertions::ensure_missing_payload_refused(&run)?;
+    assertions::ensure_installed_query_works(&run, &stdout, &stderr)?;
     fixture.ensure_remote_runner_unused(&run.marker)
-}
-
-/// The reports a sandboxed query must make once the sandbox has applied every
-/// restriction: each blocked path, the absence of a usable interface and DNS,
-/// and the successful version match.
-#[cfg(target_os = "linux")]
-const REQUIRED_REPORTS: [&str; 10] = [
-    "control=writable",
-    "repo=read-only",
-    "fixture=read-only",
-    "rootdir=read-only",
-    "usr=read-only",
-    "etc=read-only",
-    "tmp=read-only",
-    "ifaces=lo,",
-    "dns=blocked",
-    "Kani 0.67.0 matches",
-];
-
-/// Assert the sandbox reported every restriction it applied.
-#[cfg(target_os = "linux")]
-fn ensure_restrictions_reported(stdout: &str) -> Result<()> {
-    for expected in REQUIRED_REPORTS {
-        ensure!(
-            stdout.contains(expected),
-            "the isolated query should report `{expected}`, got `{stdout}`"
-        );
-    }
-    Ok(())
-}
-
-/// Assert the inherited home directory was reported unwritable or absent.
-///
-/// `HOME` comes from the caller, so the chroot contains it only when the caller
-/// has one. Either state satisfies the boundary; a writable one does not.
-#[cfg(target_os = "linux")]
-fn ensure_home_unwritable(stdout: &str) -> Result<()> {
-    let reported = stdout
-        .lines()
-        .any(|line| line == "home=read-only" || line == "home=absent");
-    ensure!(
-        reported,
-        "the isolated query should report `home` as read-only or absent, got `{stdout}`"
-    );
-    Ok(())
-}
-
-/// Assert no path other than the deliberate control is reported writable.
-///
-/// The control names a path that really is writable, so a sandbox that blocked
-/// everything — including its own probe — fails here rather than passing.
-#[cfg(target_os = "linux")]
-fn ensure_only_control_writable(stdout: &str) -> Result<()> {
-    for line in stdout.lines().filter(|line| line.contains('=')) {
-        ensure!(
-            line == "control=writable" || !line.ends_with("=writable"),
-            "only the control path may be writable, got `{line}` in `{stdout}`"
-        );
-    }
-    Ok(())
-}
-
-/// Assert the query's own trace names no attempted write or connection.
-#[cfg(target_os = "linux")]
-fn ensure_query_attempts_nothing(trace: &str) -> Result<()> {
-    let findings = trace::attempts(trace);
-    ensure!(
-        findings.is_empty(),
-        "the isolated query must attempt no write or connection, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// Assert the trace covers the recipe's own commands, not only the verifier.
-///
-/// The recipe reads the pin file before it runs anything, and the trace wraps
-/// `make`, so that read appears in it. A trace that only ever saw the verifier
-/// would leave a suppressed attempt on a recipe line unreported, and this
-/// assertion is what rules that out.
-#[cfg(target_os = "linux")]
-fn ensure_recipe_commands_traced(trace: &str) -> Result<()> {
-    ensure!(
-        trace.contains("KANI_VERSION"),
-        "the trace must include the recipe's own read of the pin file, got {trace:?}"
-    );
-    Ok(())
-}
-
-/// Assert the installed verifier answered through the recipe and attempted
-/// nothing.
-///
-/// The fixture's stub is what proves the reader fires; this proves the real
-/// executable behaves, which no stub can. It runs only where the caller named
-/// one, so a host without Kani still exercises the rest of the boundary.
-#[cfg(target_os = "linux")]
-fn ensure_installed_query_works(
-    run: &support::SandboxRun,
-    stdout: &str,
-    stderr: &str,
-) -> Result<()> {
-    let Some(trace) = run.installed_trace.as_deref() else {
-        ensure!(
-            stdout.contains("installed-exit=unset"),
-            "the sandbox must report an unexercised installed verifier, got `{stdout}`"
-        );
-        return Ok(());
-    };
-    ensure!(
-        stdout.contains("installed-exit=0"),
-        "the installed verifier must answer through the recipe inside the boundary, \
-         got stdout `{stdout}` and stderr `{stderr}`"
-    );
-    let findings = trace::attempts(trace);
-    ensure!(
-        findings.is_empty(),
-        "the installed verifier must attempt no write or connection, got {findings:?}"
-    );
-    Ok(())
-}
-
-/// Assert a suppressed attempt on a recipe line is traced and still succeeds.
-///
-/// The verifier control proves the reader fires on a verifier's attempts. A
-/// recipe line is the other place an attempt can hide, and a discarded failure
-/// there leaves the make run looking exactly like one that never tried. The
-/// control recipe therefore discards a write and a directory creation and then
-/// reports the pinned version, so `dirty-exit=0` shows success survived while
-/// the trace is the only record of either attempt.
-#[cfg(target_os = "linux")]
-fn ensure_dirty_recipe_attempts_traced(run: &support::SandboxRun) -> Result<()> {
-    let stdout = String::from_utf8_lossy(&run.output.stdout);
-    let stderr = String::from_utf8_lossy(&run.output.stderr);
-    ensure!(
-        stdout.contains("dirty-exit=0"),
-        "the control recipe must succeed while discarding its attempts, \
-         got stdout `{stdout}` and stderr `{stderr}`"
-    );
-    let findings = trace::attempts(&run.dirty_trace);
-    for expected in ["write-intent", "`mkdir` changes a path"] {
-        ensure!(
-            findings.iter().any(|finding| finding.contains(expected)),
-            "a suppressed recipe attempt must be reported as {expected}, got {findings:?}"
-        );
-    }
-    Ok(())
-}
-
-/// Assert the control trace names both attempts the control discarded.
-#[cfg(target_os = "linux")]
-fn ensure_control_attempts_traced(trace: &str) -> Result<()> {
-    let findings = trace::attempts(trace);
-    for expected in ["write-intent", "network address"] {
-        ensure!(
-            findings.iter().any(|finding| finding.contains(expected)),
-            "the control must be reported as a {expected} attempt, got {findings:?}"
-        );
-    }
-    Ok(())
 }
