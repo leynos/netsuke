@@ -53,6 +53,7 @@ __all__ = [
     "install_payload",
     "observe_payload",
     "read_provenances",
+    "record_locations",
     "require_payload_matches",
     "require_regular",
 ]
@@ -146,6 +147,37 @@ def read_provenances(
         if path.name == RECORD_NAME
     ]
     return sorted(records, key=lambda record: record.target)
+
+
+def record_locations(dist_dir: pathlib.Path) -> dict[pathlib.Path, str]:
+    """Map every producer record's path to the target that record names.
+
+    Returns
+    -------
+    dict[pathlib.Path, str]
+        Record path mapped to its validated target key.
+
+    Notes
+    -----
+    The record is read here rather than by the caller because a record's
+    *position* is what attributes the artefacts beside it, and only the reader
+    knows which subtree a given record came from. A record that cannot be read
+    or validated surfaces exactly what :func:`read_provenances` does, so a
+    caller that needs both can call this first and lose no diagnosis.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     record_locations(Path(tmp))
+    {}
+    """
+    return {
+        path: _read_provenance(path).target
+        for path in hoist_binstall_discovery.walk_files(dist_dir)
+        if path.name == RECORD_NAME
+    }
 
 
 def _read_provenance(
@@ -273,7 +305,10 @@ def require_payload_matches(
         name: release_digest_files.digest_of_file(present[name][0])
         for name in sorted(expected)
     }
-    release_digest_record.require_downloads_match_record(computed, trusted=expected)
+    release_digest_record.require_downloads_match_record(
+        computed,
+        trusted=release_digest_record.DigestRecord.from_mapping(expected),
+    )
 
 
 def copy_verified(source: pathlib.Path, destination: pathlib.Path) -> None:

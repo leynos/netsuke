@@ -20,7 +20,6 @@ import typing as typ
 import pytest
 import release_digest_record
 import release_payload_tree
-import release_reconcile_github
 import release_upload_plan
 from release_upload_support import DEB, RPM, Exchange, Scenario
 from upload_declared_assets_cli import settle
@@ -46,7 +45,7 @@ def test_an_empty_release_receives_every_declared_asset(
 ) -> None:
     """Upload the whole payload when the release holds nothing."""
     exchange = Exchange(attached={})
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert sorted(exchange.uploads()[0][4:]) == sorted([
         str(scenario.payload / DEB),
         str(scenario.payload / RPM),
@@ -62,7 +61,7 @@ def test_an_identical_attached_asset_is_skipped(scenario: Scenario) -> None:
     exchange = Exchange(
         attached={DEB: f"sha256:{digests[DEB]}", RPM: f"sha256:{digests[RPM]}"}
     )
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert not exchange.uploads(), "nothing may be sent to a release that agrees"
     assert {action.value for _name, action in actions} == {"skip-verified"}, (
         "every asset must be reported as verified, not as transferred"
@@ -72,7 +71,7 @@ def test_an_identical_attached_asset_is_skipped(scenario: Scenario) -> None:
 def test_only_the_missing_asset_is_uploaded(scenario: Scenario) -> None:
     """Upload the gap and leave the verified asset alone."""
     exchange = Exchange(attached={DEB: f"sha256:{scenario.digests()[DEB]}"})
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert len(exchange.uploads()) == 1, "exactly one transfer must be made"
     assert exchange.uploads()[0][4:] == [str(scenario.payload / RPM)], (
         "only the missing asset may be sent"
@@ -93,7 +92,7 @@ def test_a_conflicting_asset_blocks_every_upload(scenario: Scenario) -> None:
     this run's bytes and an earlier run's.
     """
     exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert not exchange.uploads(), "a conflict must block the whole transfer"
     assert dict(actions)[DEB].value == "conflict", (
         "the disagreeing asset must be recorded as a conflict"
@@ -116,7 +115,7 @@ def test_an_unreported_digest_is_established_by_downloading(
         attached={DEB: None, RPM: f"sha256:{scenario.digests()[RPM]}"},
         downloads={DEB: scenario.contents[DEB]},
     )
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert dict(actions)[DEB].value == "skip-verified", (
         "the downloaded bytes must be accepted as the recorded ones"
     )
@@ -133,7 +132,7 @@ def test_a_download_that_fails_makes_the_asset_unverifiable(
     operator to inspect a release whose fault may be in the listing instead.
     """
     exchange = Exchange(attached={DEB: None})
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert dict(actions)[DEB].value == "unverifiable", (
         "an unestablishable digest must be refused, not assumed"
     )
@@ -143,7 +142,7 @@ def test_a_download_that_fails_makes_the_asset_unverifiable(
 def test_downloaded_bytes_that_differ_are_a_conflict(scenario: Scenario) -> None:
     """Refuse attached bytes that are not the recorded ones."""
     exchange = Exchange(attached={DEB: None}, downloads={DEB: b"another commit"})
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert dict(actions)[DEB].value == "conflict", (
         "bytes from another commit must be refused as a conflict"
     )
@@ -152,7 +151,7 @@ def test_downloaded_bytes_that_differ_are_a_conflict(scenario: Scenario) -> None
 def test_a_dry_run_sends_nothing(scenario: Scenario) -> None:
     """Plan the transfer without making it."""
     exchange = Exchange(attached={})
-    actions = settle(scenario.request(is_dry_run=True), runner=exchange)
+    actions = settle(scenario.request(is_dry_run=True), runner=exchange).actions
     assert not exchange.uploads(), "a dry run must never transfer a byte"
     assert {action.value for _name, action in actions} == {"upload"}, (
         "a dry run must still report what it would have sent"
@@ -179,7 +178,7 @@ def test_the_returned_plan_describes_the_post_upload_release(
 ) -> None:
     """Report every asset verified, not merely sent."""
     exchange = Exchange(attached={})
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert all(action.value == "skip-verified" for _name, action in actions), (
         "the plan must describe the post-upload release, not the pre-upload one"
     )
@@ -244,7 +243,7 @@ def test_an_undeclared_attached_asset_is_ignored(scenario: Scenario) -> None:
             RPM: f"sha256:{digests[RPM]}",
         }
     )
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     assert not exchange.uploads(), "an undeclared asset must not provoke a transfer"
     assert "unrelated.txt" not in dict(actions), (
         "an undeclared asset must not appear in the plan"
@@ -260,9 +259,9 @@ def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
     could not serialize would be a release decision with no audit trail.
     """
     exchange = Exchange(attached={DEB: "sha256:" + "ff" * 32})
-    actions = settle(scenario.request(), runner=exchange)
+    actions = settle(scenario.request(), runner=exchange).actions
     release_upload_plan.write_plan(
-        scenario.plan, actions, release_reconcile_github.conflicts(actions)
+        scenario.plan, actions, release_upload_plan.Blockers.of(actions)
     )
     recorded = scenario.stored_plan()
     # The plan sorts by name, and "-" precedes "_", so the RPM leads.

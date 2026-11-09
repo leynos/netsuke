@@ -55,11 +55,11 @@ def test_the_trusted_record_describes_the_installed_bytes(
     tree = staged_tree(tmp_path)
     assert run_cli(tree) == cli.EXIT_OK, "a complete tree must be accepted"
     record = release_digest_record_files.read_digest_record(tree["record"])
-    assert sorted(record) == sorted([ARCHIVE, SIDECAR, DEB, RPM]), (
+    assert sorted(record.names()) == sorted([ARCHIVE, SIDECAR, DEB, RPM]), (
         "the record must describe every declared name"
     )
     installed = tree["output"] / cli.PAYLOAD_DIRECTORY / DEB
-    assert record[DEB] == release_digest_files.digest_of_file(installed), (
+    assert record.as_mapping()[DEB] == release_digest_files.digest_of_file(installed), (
         "the recorded digest must describe the installed bytes"
     )
 
@@ -75,7 +75,7 @@ def test_retained_material_never_reaches_the_payload(tmp_path: pathlib.Path) -> 
     recorded = release_digest_record_files.read_digest_record(tree["record"])
     for retained in RETAINED:
         assert retained not in installed_names(tree["output"]), retained
-        assert retained not in recorded, retained
+        assert retained not in recorded.names(), retained
 
 
 def test_the_producer_record_is_not_uploaded_as_an_asset(

@@ -23,6 +23,7 @@ from release_payload_selection_support import (
     TWO_TARGET_ARCHIVES,
     TWO_TARGET_CONFIG,
     arm_record,
+    two_target_origins,
     two_target_staged,
 )
 from release_producer_provenance import ProducerProvenance
@@ -97,8 +98,10 @@ def selection_for(
             run_id=RUN_ID,
             target_config=CONFIG if config is None else config,
         ),
-        archives={TARGET: ARCHIVE} if archives is None else archives,
-        staged=staged,
+        tree=selection.StagedTree(
+            archives={TARGET: ARCHIVE} if archives is None else archives,
+            staged=staged,
+        ),
     )
 
 
@@ -131,8 +134,7 @@ def test_the_sources_are_returned_opaque() -> None:
     selected = selection.select_payload(
         [provenance()],
         identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, CONFIG),
-        archives={TARGET: ARCHIVE},
-        staged=staged,
+        tree=selection.StagedTree(archives={TARGET: ARCHIVE}, staged=staged),
     )
     assert selected.sources[DEB] is tokens["deb"], (
         "selection must return the adapter's own object, not a copy"
@@ -328,27 +330,19 @@ def test_a_record_claiming_a_sibling_targets_package_is_refused() -> None:
         )
 
 
-def test_a_one_for_one_package_exchange_is_not_caught_by_the_count() -> None:
-    """Record exactly what the package check does and does not guarantee.
+def test_a_one_for_one_package_exchange_is_refused() -> None:
+    """Refuse two same-platform records that trade one package each.
 
-    The package half of the per-record check is a format *count*. This case
-    is the one that shows where that stops being enough: the x86 record claims
-    the ARM ``.deb`` instead of its own, and the ARM record claims the x86 one
-    in exchange. Each record still claims one ``.deb`` and one ``.rpm``, each
-    still claims its own archive and sidecar, and the union of everything
-    claimed is exactly the release's declaration.
+    Each record still claims one ``.deb`` and one ``.rpm``, each still claims
+    its own archive and sidecar, and the union of everything claimed is
+    exactly the release's declaration. Every *count* is satisfied, so this is
+    the case a count-based check cannot see.
 
-    So selection accepts it, and this case asserts that it accepts it. That is
-    the honest guarantee: package names are owned by three external shared
-    actions, so a format and a count are all this repository can know about
-    them, and package-to-target identity is beyond it. The archives *are*
-    caught, because the configuration names them (see
-    :func:`test_two_records_exchanging_their_archive_and_sidecar_are_refused`);
-    the packages are not.
-
-    Asserting the acceptance rather than the refusal is the point. A case that
-    documented a guarantee the code does not make would read, to the next
-    person to touch this check, as a regression to be restored.
+    Position can. Each producer uploads one workflow artefact and writes its
+    record inside it, so the record's own downloaded subtree names the target
+    that staged every package beside it. ``package_origins`` carries that
+    observation here: the ARM ``.deb`` was found under the ARM subtree, and
+    the x86 record claims it. Selection refuses.
     """
     traded_x86 = provenance(
         assets={
@@ -362,17 +356,36 @@ def test_a_one_for_one_package_exchange_is_not_caught_by_the_count() -> None:
     assert set(traded_x86.assets) | set(traded_arm.assets) == {*two_target_staged()}, (
         "the case must preserve the union, or it tests the wrong refusal"
     )
-    selected = selection_for(
-        [traded_x86, traded_arm],
-        two_target_staged(),
-        archives=TWO_TARGET_ARCHIVES,
-        config=TWO_TARGET_CONFIG,
+    with pytest.raises(TargetClaimMismatchError, match="staged"):
+        selection.select_payload(
+            [traded_x86, traded_arm],
+            identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, TWO_TARGET_CONFIG),
+            tree=selection.StagedTree(
+                archives=TWO_TARGET_ARCHIVES,
+                staged=two_target_staged(),
+                package_origins=two_target_origins(),
+            ),
+        )
+
+
+def test_a_package_bound_to_its_own_target_is_accepted() -> None:
+    """Accept the same exchange's positive control: correct attribution.
+
+    The record's own packages are found under its own subtree, so nothing is
+    refused. Without this case the refusal above would pass even if the check
+    refused every tree that carried an origin at all.
+    """
+    selected = selection.select_payload(
+        [provenance(), arm_record()],
+        identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, TWO_TARGET_CONFIG),
+        tree=selection.StagedTree(
+            archives=TWO_TARGET_ARCHIVES,
+            staged=two_target_staged(),
+            package_origins=two_target_origins(),
+        ),
     )
     assert set(selected.declared) == set(two_target_staged()), (
-        "a same-format package exchange is not refused by the count"
-    )
-    assert selected.trusted[ARM_DEB] == "3" * 64, (
-        "the digest that travels is the claiming record's, not the target's build"
+        "a correctly bound tree must still be selected"
     )
 
 

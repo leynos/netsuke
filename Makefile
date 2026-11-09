@@ -497,10 +497,12 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_payload_selection.py \
 		scripts/tests/test_release_payload_selection_properties.py \
 		scripts/tests/test_release_payload_tree.py \
+		scripts/tests/test_release_package_origins.py \
 		scripts/tests/test_select_release_payload_cli.py \
 		scripts/tests/test_release_upload_plan.py \
 		scripts/tests/test_release_upload_remote.py \
 		scripts/tests/test_upload_declared_assets_cli.py \
+		scripts/tests/test_upload_declared_assets_properties.py \
 		scripts/tests/test_upload_declared_assets_status.py \
 		scripts/crates_io_candidate_cli.py \
 		scripts/crates_io_candidate_archive.py \
@@ -538,10 +540,11 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/record_producer_provenance_record.py \
 		scripts/release_payload_errors.py scripts/release_payload_identity.py \
 		scripts/release_payload_names.py \
+		scripts/release_package_origins.py \
 		scripts/release_payload_selection.py scripts/release_payload_tree.py \
 		scripts/select_release_payload_cli.py \
 		scripts/release_upload_digests.py scripts/release_upload_plan.py \
-		scripts/release_upload_remote.py \
+		scripts/release_upload_failures.py scripts/release_upload_remote.py \
 		scripts/release_upload_observation.py \
 		scripts/upload_declared_assets_cli.py \
 		scripts/upload_declared_assets_refusals.py \

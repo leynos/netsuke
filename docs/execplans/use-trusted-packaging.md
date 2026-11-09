@@ -3035,6 +3035,50 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   ADR-0007 gains the addendum the plan's documentation list requires, naming
   `./.github/actions/upload-declared-assets` as the publisher.
 
+- [x] (2026-11-09) Closed the eighth CodeRabbit pass's pre-merge findings,
+  including the one that refused to let the package exchange stay open.
+
+  **The one-for-one package exchange is refused, by position and not by
+  count.** The pass was right that a per-format count cannot see two
+  same-platform records trading one package each: every count still reads one
+  and the union is unchanged. The repair is a new adapter,
+  `scripts/release_package_origins.py`, which walks the downloaded tree and
+  reports the target subtree each published package was found in. Every
+  producer uploads one workflow artefact and the release downloads each into
+  its own subtree of `dist`, so that position is an observation the count
+  cannot supply. `select_release_payload_cli` passes the mapping into selection
+  through `StagedTree.package_origins`, and
+  `release_producer_claims._foreign_package_offenders` refuses a record that
+  claims a package a sibling's subtree staged. The criterion is therefore met
+  rather than narrowed, and the decision to narrow it -- the pass's fallback --
+  is not taken. The archive and sidecar half of the check is unchanged and
+  remains exact.
+
+  **Position is not presented as proof.** The module docstring, the ADR
+  addendum, and the migration guide all say the same thing: the mapping reports
+  where the download put a file, not who built it, so suffix, count, and
+  position checks narrow what can reach the upload and the producer records are
+  what bind the bytes to a commit. The pass asked for the narrowed criterion to
+  be described honestly if it were narrowed; the criterion was not narrowed,
+  and the origin claim is withheld anyway.
+
+  **Both five-parameter functions became one parameter each.** The pass's
+  lint-adjacent findings pointed at argument lists that had grown a parameter
+  per observation. `release_payload_selection.select_payload` now takes
+  `tree: StagedTree`, and `release_upload_plan.write_plan` takes
+  `blockers: Blockers`, with `Blockers.of` deriving the two blocker kinds from
+  the plan itself so a caller cannot record a name as blocking in one place and
+  as settled in the other.
+
+  **The mixed-state upload property the pass asked for is generated, not
+  filtered.** `scripts/tests/test_upload_declared_assets_properties.py` draws
+  releases with any mixture of absent, matching, conflicting, and unverifiable
+  assets in a drawn order, plus a dry-run flag, and asserts that a release
+  holding any blocker transfers nothing and that an unblocked run uploads
+  exactly the absent names in at most one invocation. The blocked and unblocked
+  branches are separate strategies rather than one `assume`-guarded case, so
+  neither can silently lose coverage when the generator drifts.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

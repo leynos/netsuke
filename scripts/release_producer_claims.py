@@ -8,20 +8,29 @@ declaration lets two same-platform records exchange their archive, sidecar,
 and packages while the union stays identical, and the release would then
 attach one target's bytes under another target's name.
 
-The archive is bound by *name*, because a target's archive interpolates its
-Rust triple and the staging configuration is the only authority for that. A
-package name cannot be derived: three external shared actions own those names,
-so only the format suffix and the per-target count are knowable.
+A package name cannot be *derived*: three external shared actions own those
+names, so the format suffix and the per-target count are all the name itself
+says. Identity comes from elsewhere. Every producer uploads one workflow
+artefact, the release downloads each into its own subtree of ``dist``, and the
+record is written inside the subtree its own producer uploaded. A package's
+position therefore names the target that staged it, which is an observation a
+count can never supply: two same-platform targets that trade one package each
+leave every count unchanged and the union identical, and only the position
+refuses the trade.
 
-That is exactly what the package half of this check enforces, and no more. A
-record must claim one package per format its platform stages, and a claim that
-matches no format at all is refused. It does **not** establish that a package
-belongs to the record's own target: two same-platform targets that trade one
-package each leave every count unchanged and the union identical, and this
-check accepts the trade. `test_release_payload_selection` records that
-acceptance so no reader mistakes the count for an identity proof. Establishing
-package-to-target identity would need a boundary that could read the package's
-own metadata, which nothing here does.
+Position is not proof either, and this module does not claim it is. It says
+where the download put a file, not who built it; a producer that wrote into
+another target's subtree would be believed. What it does establish is that the
+claims are consistent with the tree the run actually has, which is the window
+a count leaves open.
+
+So this check enforces three things about the package half, and the caller
+supplies the third. A record must claim one package per format its platform
+stages, a claim matching no format at all is refused, and -- given
+``package_origins``, the target keys whose downloaded subtree each published
+name was found in -- every package it claims must have been staged under its
+own target. The origins are the adapter's observation of a real tree, so this
+module still reads no file and parses nothing.
 
 Nothing here reads a file, parses JSON, or hashes bytes. Claims arrive
 validated from :mod:`release_producer_provenance`, and the refusals live in
@@ -51,15 +60,29 @@ def require_target_claims(
     *,
     archives: cabc.Mapping[str, str],
     targets: cabc.Mapping[str, str],
+    package_origins: cabc.Mapping[str, str] | None = None,
 ) -> None:
     """Refuse a record that claims artefacts its own target cannot have staged.
+
+    Parameters
+    ----------
+    provenances
+        Every validated producer record found in the downloaded tree.
+    archives
+        Configured target key mapped to the archive name that target stages.
+    targets
+        Configured target key mapped to the platform it serves.
+    package_origins
+        Published package name mapped to the target key whose downloaded
+        subtree it was staged in. Omitted by a caller with no tree to observe,
+        which leaves the per-format count as the only package guarantee.
 
     Raises
     ------
     TargetClaimMismatchError
         If any record omits its own archive or sidecar, claims a name that is
-        neither, or does not claim exactly one package per format its platform
-        stages.
+        neither, does not claim exactly one package per format its platform
+        stages, or claims a package another target's subtree staged.
 
     Notes
     -----
@@ -68,11 +91,18 @@ def require_target_claims(
     stages no package format at all, and so stays out of the ``Raises``
     section.
 
-    The module docstring states which half of this check is an identity proof
-    and which is only a count, and why. A target with no entry in ``archives``
-    or ``targets`` is skipped here rather than reported: coverage calls it an
-    uncovered target, which sends the operator to the configuration rather
-    than to a producer record.
+    A target with no entry in ``archives`` or ``targets`` is skipped here
+    rather than reported: coverage calls it an uncovered target, which sends
+    the operator to the configuration rather than to a producer record.
+
+    ``package_origins`` is what turns the package half from a count into an
+    observation of which target actually staged each name, so a caller that has
+    a tree should always pass it. It is corroboration, not proof: the adapter
+    reported where the download put each file, and a walked tree is only as
+    trustworthy as the producer that wrote into it. A name absent from the
+    mapping is not reported: the staged-tree check owns "this declared name was
+    never staged", and reporting it here would blame the producer for an
+    absence no record can cause.
 
     Examples
     --------
@@ -98,11 +128,12 @@ def require_target_claims(
     ...     print("omits its own" in str(refusal))
     True
     """
+    origins = {} if package_origins is None else package_origins
     offenders = [
         offender
         for provenance in provenances
         for offender in _target_claim_offenders(
-            provenance, archives=archives, targets=targets
+            provenance, archives=archives, targets=targets, origins=origins
         )
     ]
     if offenders:
@@ -114,6 +145,7 @@ def _target_claim_offenders(
     *,
     archives: cabc.Mapping[str, str],
     targets: cabc.Mapping[str, str],
+    origins: cabc.Mapping[str, str],
 ) -> list[str]:
     """Describe every way one record's claims are not its target's own.
 
@@ -134,13 +166,52 @@ def _target_claim_offenders(
         return []
     expected = {archive, f"{archive}{release_declaration.SIDECAR_SUFFIX}"}
     claimed = set(provenance.assets)
+    packages = claimed - expected
     missing = sorted(expected - claimed)
     omissions = (
         [f"target {provenance.target!r} omits its own {missing!r}"] if missing else []
     )
     return [
         *omissions,
-        *_package_claim_offenders(provenance, claimed - expected, platform=platform),
+        *_package_claim_offenders(provenance, packages, platform=platform),
+        *_foreign_package_offenders(provenance, packages, origins=origins),
+    ]
+
+
+def _foreign_package_offenders(
+    provenance: ProducerProvenance,
+    names: cabc.Iterable[str],
+    *,
+    origins: cabc.Mapping[str, str],
+) -> list[str]:
+    """Describe packages a record claims from another target's subtree.
+
+    Parameters
+    ----------
+    provenance
+        The record whose package claims are being judged.
+    names
+        The claims left once the record's own archive and sidecar are removed.
+    origins
+        Published package name mapped to the target key that staged it.
+
+    Returns
+    -------
+    list[str]
+        One description per claim whose staged position names another target,
+        sorted so a re-run reports the same list.
+
+    Notes
+    -----
+    A name with no recorded origin is passed over rather than refused. The
+    staged-tree check owns an absent name, and blaming the producer for an
+    absence it cannot cause would send the operator to the wrong job.
+    """
+    return [
+        f"target {provenance.target!r} claims {name!r}, which "
+        f"target {origins[name]!r} staged"
+        for name in sorted(names)
+        if name in origins and origins[name] != provenance.target
     ]
 
 

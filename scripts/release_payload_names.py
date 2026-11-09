@@ -32,6 +32,7 @@ __all__ = [
     "ARCHIVE_SUFFIX",
     "PACKAGE_SUFFIXES",
     "describe_offenders",
+    "is_package",
     "is_release_shaped",
 ]
 
@@ -84,6 +85,36 @@ def is_release_shaped(name: str) -> bool:
     """
     sidecar = f"{ARCHIVE_SUFFIX}{release_declaration.SIDECAR_SUFFIX}"
     return name.endswith((*PACKAGE_SUFFIXES, ARCHIVE_SUFFIX, sidecar))
+
+
+def is_package(name: str) -> bool:
+    """Report whether a staged name is an operating-system package.
+
+    Parameters
+    ----------
+    name
+        A staged file name, before GitHub's character substitution.
+
+    Returns
+    -------
+    bool
+        ``True`` when the name carries one of the configured package suffixes.
+
+    Notes
+    -----
+    This is narrower than :func:`is_release_shaped` on purpose. A producer's
+    subtree also holds its archive and sidecar, and those are bound to a target
+    by *name* rather than by position, so attributing them here would make the
+    same bytes evidence of two different bindings.
+
+    Examples
+    --------
+    >>> is_package("netsuke_1.0.0_amd64.deb")
+    True
+    >>> is_package("netsuke-1.0.0-x86_64-unknown-linux-gnu.tar.gz")
+    False
+    """
+    return name.endswith(PACKAGE_SUFFIXES)
 
 
 def describe_offenders(

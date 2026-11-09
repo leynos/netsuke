@@ -76,10 +76,44 @@ __all__ = [
     "PACKAGE_SUFFIXES",
     "PayloadSelection",
     "ReleaseIdentity",
+    "StagedTree",
     "is_release_shaped",
     "require_staged_digests",
     "select_payload",
 ]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class StagedTree[Source]:
+    """Name everything the adapter observed in the downloaded tree.
+
+    Attributes
+    ----------
+    archives
+        Configured target key mapped to the archive name that target stages.
+        A mapping rather than a flat name list so each record can be held to
+        its *own* target's archive, which is what stops two same-platform
+        records exchanging claims.
+    staged
+        Published name mapped to each observed file claiming it.
+    package_origins
+        Published package name mapped to the target key whose downloaded
+        subtree staged it, as
+        :func:`release_package_origins.observe_package_origins` reports it.
+        ``None`` when no observation is available.
+
+    Notes
+    -----
+    One value rather than three parameters because the three answer one
+    question -- what the tree holds -- so a caller that mixed an archive
+    configuration with another walk's staged files would be describing two
+    trees at once. Grouping them also keeps :func:`select_payload` inside the
+    repository's argument ceiling as the observation grows.
+    """
+
+    archives: cabc.Mapping[str, str]
+    staged: cabc.Mapping[str, cabc.Sequence[Source]]
+    package_origins: cabc.Mapping[str, str] | None = None
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -105,8 +139,7 @@ def select_payload[Source](
     provenances: cabc.Iterable[ProducerProvenance],
     *,
     identity: ReleaseIdentity,
-    archives: cabc.Mapping[str, str],
-    staged: cabc.Mapping[str, cabc.Sequence[Source]],
+    tree: StagedTree[Source],
 ) -> PayloadSelection[Source]:
     """Select the staged files that make up the declared release payload.
 
@@ -116,13 +149,10 @@ def select_payload[Source](
         Every validated producer record found in the downloaded tree.
     identity
         The candidate, run, and configured targets the release must serve.
-    archives
-        Configured target key mapped to the archive name that target stages.
-        Selection needs the mapping rather than a flat name list so each
-        record can be held to its *own* target's archive, which is what stops
-        two same-platform records exchanging claims.
-    staged
-        Published name mapped to each observed file claiming it.
+    tree
+        What the adapter observed: each target's archive name, the files
+        staged under each published name, and which subtree staged each
+        package.
 
     Returns
     -------
@@ -149,39 +179,51 @@ def select_payload[Source](
     ...     identity=ReleaseIdentity(
     ...         "a" * 40, "7", {"targets": {"linux-x86_64": {"platform": "linux"}}}
     ...     ),
-    ...     archives={"linux-x86_64": "pkg.tar.gz"},
-    ...     staged={"pkg.deb": ["deb"], "pkg.rpm": ["rpm"],
-    ...             "pkg.tar.gz": ["archive"], "pkg.tar.gz.sha256": ["sidecar"]},
+    ...     tree=StagedTree(
+    ...         archives={"linux-x86_64": "pkg.tar.gz"},
+    ...         staged={"pkg.deb": ["deb"], "pkg.rpm": ["rpm"],
+    ...                 "pkg.tar.gz": ["archive"],
+    ...                 "pkg.tar.gz.sha256": ["sidecar"]},
+    ...     ),
     ... )
     >>> selection.sources["pkg.tar.gz"]
     'archive'
     """
     claims = list(provenances)
     targets = release_payload_identity.require_bound_claims(claims, identity)
-    claimed = _require_claims(
-        claims, identity=identity, archives=archives, targets=targets
-    )
+    claimed = _require_claims(claims, identity=identity, targets=targets, tree=tree)
     declared = _require_declaration(
-        archive_names=archives.values(),
+        archive_names=tree.archives.values(),
         targets=targets,
         claimed=claimed,
     )
-    _require_staged(declared, staged)
+    _require_staged(declared, tree.staged)
     return PayloadSelection(
         declared=declared,
         trusted=release_producer_provenance_checks.trusted_digests(claims),
-        sources={name: staged[name][0] for name in declared},
+        sources={name: tree.staged[name][0] for name in declared},
     )
 
 
-def _require_claims(
+def _require_claims[Source](
     claims: cabc.Sequence[ProducerProvenance],
     *,
     identity: ReleaseIdentity,
-    archives: cabc.Mapping[str, str],
     targets: cabc.Mapping[str, str],
+    tree: StagedTree[Source],
 ) -> tuple[str, ...]:
     """Hold each record to its own target's archive and package formats.
+
+    Parameters
+    ----------
+    targets
+        Target key mapped to the platform the configuration names for it.
+    tree
+        What the adapter observed, already bound to these claims. Its
+        ``package_origins`` decides whether a package may be refused for
+        coming from a *sibling's* subtree; without it the count checks stand
+        and nothing weaker, because a count is all an unobserved tree can
+        support.
 
     Returns
     -------
@@ -199,12 +241,18 @@ def _require_claims(
     Examples
     --------
     >>> _require_claims(
-    ...     [], identity=ReleaseIdentity("a" * 40, "7", {}), archives={}, targets={}
+    ...     [],
+    ...     identity=ReleaseIdentity("a" * 40, "7", {}),
+    ...     targets={},
+    ...     tree=StagedTree(archives={}, staged={}),
     ... )
     ()
     """
     release_producer_claims.require_target_claims(
-        claims, archives=archives, targets=targets
+        claims,
+        archives=tree.archives,
+        targets=targets,
+        package_origins=tree.package_origins,
     )
     return release_producer_provenance_checks.declared_names(claims)
 

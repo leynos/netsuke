@@ -16,10 +16,17 @@ skipped entirely when that answer is empty.
 :func:`reconcile` composes the two for the caller that wants both, so the CLI
 states its orchestration once rather than restating the wiring at each site.
 
+An observation carries more than digests. Where a digest could not be
+established, :class:`release_upload_failures.DigestFailure` records which kind
+of failure it was, in a vocabulary small enough to publish: a diagnostic that
+quoted the failing command's output could carry a URL, a temporary path, or
+whatever else the tool chose to print, and a retained plan outlives the run.
+
 Run via ``.github/actions/upload-declared-assets``; behavioural coverage lives
 in ``scripts/tests/test_upload_declared_assets_cli.py``.
 """
 
+import dataclasses
 import typing as typ
 
 import release_reconcile_github
@@ -29,10 +36,13 @@ import release_upload_remote
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
+    from release_upload_failures import DigestFailure
     from release_upload_plan import UploadRequest
     from release_upload_remote import SubprocessRunner
 
 __all__ = [
+    "Observation",
+    "Settlement",
     "observe_release",
     "plan_release",
     "reconcile",
@@ -40,9 +50,53 @@ __all__ = [
 ]
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Observation:
+    """Hold what one release listing established and what it could not.
+
+    Attributes
+    ----------
+    digests
+        Attached asset name mapped to its digest, or ``None`` where neither
+        the listing nor a download could establish one.
+    failures
+        Asset name mapped to the bounded category explaining why its digest is
+        ``None``. Empty when every name the download was asked about produced
+        one, and never naming a name that has a digest.
+    """
+
+    digests: dict[str, str | None]
+    failures: dict[str, DigestFailure]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class Settlement:
+    """Hold what an upload run decided and what it learned about the release.
+
+    Attributes
+    ----------
+    actions
+        The final per-asset plan, sorted by name. After a transfer this
+        describes what the release holds rather than what was sent.
+    failures
+        Asset name mapped to the bounded category explaining a digest that
+        could not be established. Reported beside the plan because the plan
+        alone says *that* an asset is unverifiable, never why.
+
+    Notes
+    -----
+    One value rather than two return values, so a caller cannot keep the plan
+    and drop the reasons -- which is exactly the diagnostic an operator needs
+    to choose between retrying a transfer and investigating a release.
+    """
+
+    actions: tuple[tuple[str, release_reconcile_github.AssetAction], ...]
+    failures: dict[str, DigestFailure]
+
+
 def observe_release(
     tag: str, expected: cabc.Mapping[str, str], *, runner: SubprocessRunner
-) -> dict[str, str | None]:
+) -> Observation:
     """Observe the release: list its assets, then download the digests it hid.
 
     Parameters
@@ -56,16 +110,17 @@ def observe_release(
 
     Returns
     -------
-    dict[str, str | None]
-        Attached asset name mapped to its digest, or ``None`` where neither
-        the listing nor a download could establish one.
+    Observation
+        Each attached asset's digest where one was established, and the
+        category explaining each one that was not.
 
     Notes
     -----
     A listing that cannot be taken surfaces ``GhCommandFailedError`` or
     ``RemoteListingError`` from :mod:`release_upload_remote`. A download that
     fails does not: the name simply keeps its ``None``, which reconciliation
-    reads as unverifiable rather than as a match on no evidence.
+    reads as unverifiable rather than as a match on no evidence, while the
+    category says whether a retry is the next thing to try.
 
     Examples
     --------
@@ -75,16 +130,19 @@ def observe_release(
     ...         '{"assets": [{"name": "a", "digest": "sha256:aa"}]}'
     ...     ),
     ... )
-    {'a': 'aa'}
+    Observation(digests={'a': 'aa'}, failures={})
     """
     listed = release_upload_remote.attached_digests(tag, runner=runner)
     wanted = release_reconcile_github.undigested(expected, listed)
-    downloaded = (
+    evidence = (
         release_upload_digests.downloaded_digests(tag, wanted, runner=runner)
         if wanted
-        else {}
+        else release_upload_digests.DownloadEvidence(digests={}, failures={})
     )
-    return release_reconcile_github.present_assets(listed, downloaded)
+    return Observation(
+        digests=release_reconcile_github.present_assets(listed, evidence.digests),
+        failures=evidence.failures,
+    )
 
 
 def plan_release(
@@ -98,7 +156,7 @@ def plan_release(
         Published name mapped to the digest the trusted record demands.
     observed
         The release's attached assets and their digests, as
-        :func:`observe_release` returned them.
+        :func:`observe_release` returned them in its ``digests``.
 
     Returns
     -------
@@ -123,7 +181,7 @@ def plan_release(
 
 def reconcile(
     tag: str, expected: cabc.Mapping[str, str], *, runner: SubprocessRunner
-) -> tuple[tuple[str, release_reconcile_github.AssetAction], ...]:
+) -> Settlement:
     """Observe the release and plan its declared assets in one pass.
 
     Parameters
@@ -137,26 +195,35 @@ def reconcile(
 
     Returns
     -------
-    tuple[tuple[str, release_reconcile_github.AssetAction], ...]
-        One ``(name, action)`` pair per declared asset, sorted by name.
+    Settlement
+        The per-asset plan and the bounded reasons behind any asset whose
+        digest could not be established.
 
     Notes
     -----
     The composition of :func:`observe_release` and :func:`plan_release`, kept
-    so a caller that wants both does not restate the wiring.
+    so a caller that wants both does not restate the wiring. The failure
+    categories travel with the plan because they live only in the observation;
+    a caller given the plan alone could say an asset was unverifiable but not
+    whether the remedy is a retry.
 
     Examples
     --------
     An asset the release has not attached is planned for upload:
 
-    >>> [action.value for _name, action in reconcile(
+    >>> settlement = reconcile(
     ...     "v1", {"a": "aa"},
     ...     runner=release_upload_remote.StaticRunner('{"assets": []}'),
-    ... )]
+    ... )
+    >>> [action.value for _name, action in settlement.actions]
     ['upload']
+    >>> settlement.failures
+    {}
     """
-    return plan_release(
-        expected, observed=observe_release(tag, expected, runner=runner)
+    observation = observe_release(tag, expected, runner=runner)
+    return Settlement(
+        actions=plan_release(expected, observed=observation.digests),
+        failures=observation.failures,
     )
 
 

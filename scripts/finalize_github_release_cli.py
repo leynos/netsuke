@@ -264,7 +264,9 @@ def _reconcile_listing(
     )
     conflicting = release_reconcile_github.conflicts(actions)
     try:
-        release_upload_plan.write_plan(output_path, actions, conflicting)
+        release_upload_plan.write_plan(
+            output_path, actions, release_upload_plan.Blockers.of(actions)
+        )
     except OSError as error:
         print(
             f"reconciliation plan write failed: {output_path}: {error}", file=sys.stderr

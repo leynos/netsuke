@@ -15,8 +15,10 @@ import typing as typ
 import pytest
 import release_reconcile_github
 from release_reconcile_github import AssetAction
+from release_upload_failures import DigestFailure
 from release_upload_plan import (
     PLAN_NAME,
+    Blockers,
     UploadRequest,
     blocked_message,
     conflict_message,
@@ -48,6 +50,7 @@ class UploadPlan(typ.TypedDict):
     actions: list[list[str]]
     conflicts: list[str]
     unverifiable: list[str]
+    unverifiable_reasons: dict[str, str]
 
 
 def read_plan(path: pathlib.Path) -> UploadPlan:
@@ -78,12 +81,13 @@ def test_write_plan_records_every_action_in_name_order(
             ("a.deb", AssetAction.UPLOAD),
             ("b.rpm", AssetAction.SKIP_VERIFIED),
         ],
-        [],
+        Blockers(),
     )
     assert read_plan(destination) == {
         "actions": [["a.deb", "upload"], ["b.rpm", "skip-verified"]],
         "conflicts": [],
         "unverifiable": [],
+        "unverifiable_reasons": {},
     }, "every action must be recorded in the order given"
 
 
@@ -92,7 +96,7 @@ def test_write_plan_records_the_conflicts_it_was_given(
 ) -> None:
     """Record the conflicting names so a failed run says which asset blocked it."""
     destination = tmp_path / PLAN_NAME
-    write_plan(destination, [("a.deb", AssetAction.CONFLICT)], ["a.deb"])
+    write_plan(destination, [("a.deb", AssetAction.CONFLICT)], Blockers(("a.deb",)))
     assert read_plan(destination)["conflicts"] == ["a.deb"], (
         "the plan must name the blocked asset"
     )
@@ -101,7 +105,7 @@ def test_write_plan_records_the_conflicts_it_was_given(
 def test_write_plan_is_newline_terminated(tmp_path: pathlib.Path) -> None:
     """Terminate the file so it appends cleanly to a job log."""
     destination = tmp_path / PLAN_NAME
-    write_plan(destination, [], [])
+    write_plan(destination, [], Blockers())
     assert destination.read_text(encoding="utf-8").endswith("}\n"), (
         "the plan must be newline-terminated"
     )
@@ -116,8 +120,8 @@ def test_two_identical_runs_serialize_identically(tmp_path: pathlib.Path) -> Non
     actions = [("b.rpm", AssetAction.UPLOAD), ("a.deb", AssetAction.CONFLICT)]
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
-    write_plan(first, actions, ["a.deb"])
-    write_plan(second, actions, ["a.deb"])
+    write_plan(first, actions, Blockers(("a.deb",)))
+    write_plan(second, actions, Blockers(("a.deb",)))
     assert first.read_bytes() == second.read_bytes(), (
         "identical decisions must serialize identically"
     )
@@ -133,7 +137,7 @@ def test_a_conflicting_run_still_records_its_plan(tmp_path: pathlib.Path) -> Non
     write_plan(
         destination,
         [("a.deb", AssetAction.CONFLICT), ("b.rpm", AssetAction.UPLOAD)],
-        ["a.deb"],
+        Blockers(("a.deb",)),
     )
     plan = read_plan(destination)
     assert plan["actions"] == [["a.deb", "conflict"], ["b.rpm", "upload"]], (
@@ -144,7 +148,7 @@ def test_a_conflicting_run_still_records_its_plan(tmp_path: pathlib.Path) -> Non
 def test_write_plan_reports_an_unwritable_destination(tmp_path: pathlib.Path) -> None:
     """Surface a write failure rather than reporting a plan that is not there."""
     with pytest.raises(OSError, match="absent"):
-        write_plan(tmp_path / "absent" / PLAN_NAME, [], [])
+        write_plan(tmp_path / "absent" / PLAN_NAME, [], Blockers())
 
 
 def test_conflict_message_names_every_conflict() -> None:
@@ -199,12 +203,7 @@ def test_a_plan_records_the_two_kinds_of_blocker_apart(
         expected={"a.deb": "aa", "b.rpm": "bb"},
         present={"a.deb": "zz", "b.rpm": None},
     )
-    write_plan(
-        destination,
-        actions,
-        release_reconcile_github.conflicts(actions),
-        release_reconcile_github.unverifiable(actions),
-    )
+    write_plan(destination, actions, Blockers.of(actions))
     plan = read_plan(destination)
     assert plan["conflicts"] == ["a.deb"], "the disagreement must be recorded"
     assert plan["unverifiable"] == ["b.rpm"], "the unread digest must be recorded"
@@ -265,7 +264,7 @@ def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
         present={"a.deb": "aa", "b.rpm": "zz"},
     )
     destination = tmp_path / PLAN_NAME
-    write_plan(destination, actions, release_reconcile_github.conflicts(actions))
+    write_plan(destination, actions, Blockers.of(actions))
     recorded = read_plan(destination)
     expected = {
         "actions": [
@@ -275,5 +274,61 @@ def test_the_plan_round_trips_through_the_reconciliation_vocabulary(
         ],
         "conflicts": ["b.rpm"],
         "unverifiable": [],
+        "unverifiable_reasons": {},
     }
     assert recorded == expected, "the plan must express every reconciliation action"
+
+
+def test_the_plan_records_each_unverifiable_assets_bounded_reason(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Record why an unverifiable asset could not be verified, in bounded words.
+
+    The action alone says the run could not tell; it does not say whether a
+    retry is worth trying. The category does, and it is a fixed vocabulary
+    rather than the failing command's own message: a plan is retained beside
+    the release, so whatever is written there is published.
+    """
+    destination = tmp_path / PLAN_NAME
+    actions = release_reconcile_github.plan_asset_actions(
+        expected={"a.deb": "aa", "b.rpm": "bb"}, present={"a.deb": None, "b.rpm": None}
+    )
+    write_plan(
+        destination,
+        actions,
+        Blockers.of(
+            actions,
+            {
+                "a.deb": DigestFailure.DOWNLOAD_FAILED,
+                "b.rpm": DigestFailure.NOT_A_REGULAR_FILE,
+            },
+        ),
+    )
+    reasons = read_plan(destination)["unverifiable_reasons"]
+    assert reasons == {
+        "a.deb": "download-failed",
+        "b.rpm": "not-a-regular-file",
+    }, "each unverifiable asset must carry the category that explains it"
+
+
+def test_a_reason_is_never_written_for_an_asset_that_verified(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Keep the reasons about unestablished digests and nothing else.
+
+    A caller that passed every delivered file would put reasons beside names
+    that have digests, and a reader would then see two contradictory accounts
+    of one asset in the same file.
+    """
+    destination = tmp_path / PLAN_NAME
+    actions = release_reconcile_github.plan_asset_actions(
+        expected={"a.deb": "aa"}, present={"a.deb": "aa"}
+    )
+    write_plan(
+        destination,
+        actions,
+        Blockers.of(actions, {"a.deb": DigestFailure.MISSING_FILE}),
+    )
+    assert read_plan(destination)["unverifiable_reasons"] == {}, (
+        "a verified asset has no failure to explain"
+    )

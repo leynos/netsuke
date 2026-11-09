@@ -266,9 +266,9 @@ def test_install_payload_copies_and_writes_the_record(
     )
     installed = output / release_payload_tree.PAYLOAD_DIRECTORY / "a.deb"
     assert installed.read_bytes() == b"payload", "the payload must be installed"
-    assert release_digest_record_files.read_digest_record(record) == computed, (
-        "the record must carry the digest the caller computed"
-    )
+    assert release_digest_record_files.read_digest_record(record).as_mapping() == (
+        computed
+    ), "the record must carry the digest the caller computed"
 
 
 def test_install_payload_refuses_an_existing_output_directory(

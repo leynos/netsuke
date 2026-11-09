@@ -27,6 +27,7 @@ from release_producer_provenance import ProducerProvenance
 from release_producer_provenance_errors import (
     DuplicateAssetError,
     DuplicateTargetError,
+    TargetClaimMismatchError,
 )
 
 if typ.TYPE_CHECKING:
@@ -156,10 +157,31 @@ def _valid_tree(
     return [record for record, _assets in claimed], names
 
 
+def _origins(
+    claimed: cabc.Iterable[tuple[ProducerProvenance, dict[str, str]]],
+) -> dict[str, str]:
+    """Attribute each record's own packages to that record's target.
+
+    Returns
+    -------
+    dict[str, str]
+        Published package name mapped to the target that staged it, as a
+        downloaded tree would report it.
+    """
+    return {
+        name: record.target
+        for record, assets in claimed
+        for name in assets
+        if name.endswith((DEB_SUFFIX, RPM_SUFFIX))
+    }
+
+
 def _select(
     records: cabc.Sequence[ProducerProvenance],
     staged: dict[str, list[str]],
     pairs: cabc.Sequence[tuple[str, str]],
+    *,
+    package_origins: cabc.Mapping[str, str] | None = None,
 ) -> selection.PayloadSelection[str]:
     """Select from ``staged`` against the configuration ``pairs`` describes.
 
@@ -177,8 +199,11 @@ def _select(
                 "targets": {target: {"platform": "linux"} for target, _ in pairs}
             },
         ),
-        archives=dict(pairs),
-        staged=staged,
+        tree=selection.StagedTree(
+            archives=dict(pairs),
+            staged=staged,
+            package_origins=package_origins,
+        ),
     )
 
 
@@ -361,3 +386,63 @@ def test_a_package_name_two_targets_claim_is_refused(
             _staged_for(every_name),
             pairs,
         )
+
+
+def _exchange_debs(
+    first: tuple[ProducerProvenance, dict[str, str]],
+    second: tuple[ProducerProvenance, dict[str, str]],
+) -> list[ProducerProvenance]:
+    """Rewrite two records so each claims the other target's ``.deb``.
+
+    Each record gives up its own ``.deb`` and takes the sibling's. The union
+    of claimed names is unchanged, each record still claims exactly one
+    package per format, and its archive and sidecar stay its own -- so a count
+    check sees nothing wrong and only the downloaded position differs.
+
+    Returns
+    -------
+    list[ProducerProvenance]
+        The two rewritten records, in the order given.
+    """
+    (first_record, first_assets), (second_record, second_assets) = first, second
+    first_deb = next(name for name in first_assets if name.endswith(DEB_SUFFIX))
+    second_deb = next(name for name in second_assets if name.endswith(DEB_SUFFIX))
+    traded_first = {
+        name: digest for name, digest in first_assets.items() if name != first_deb
+    } | {second_deb: "f" * 64}
+    traded_second = {
+        name: digest for name, digest in second_assets.items() if name != second_deb
+    } | {first_deb: "e" * 64}
+    return [
+        dataclasses.replace(first_record, assets=traded_first),
+        dataclasses.replace(second_record, assets=traded_second),
+    ]
+
+
+@settings(max_examples=50, deadline=None, derandomize=True)
+@given(pairs=_target_set(min_targets=2, max_targets=2))
+def test_a_package_exchange_between_targets_is_refused_by_position(
+    pairs: list[tuple[str, str]],
+) -> None:
+    """Refuse a same-format package exchange at one-for-one parity.
+
+    Unlike the union case above, the two records keep the *union* intact: each
+    still claims exactly one ``.deb`` and one ``.rpm``, so every count is
+    satisfied and no name is claimed twice. Only the downloaded position
+    distinguishes them, and ``package_origins`` is that observation.
+
+    Both records are rewritten so each claims the other's ``.deb``, which is
+    the exact trade a count cannot see. The origins stay as the tree reported
+    them -- each target's own ``.deb`` under its own subtree -- so the
+    refusal is attributable to the trade rather than to a missing observation.
+    """
+    claimed = _claims(pairs)
+    records = _exchange_debs(claimed[0], claimed[1])
+    origins = _origins(claimed)
+    first_deb = next(name for name in claimed[0][1] if name.endswith(DEB_SUFFIX))
+    assert origins[first_deb] == records[0].target, (
+        "the observation must attribute each package to its own target"
+    )
+    every_name = {name for record in records for name in record.assets}
+    with pytest.raises(TargetClaimMismatchError, match="staged"):
+        _select(records, _staged_for(every_name), pairs, package_origins=origins)

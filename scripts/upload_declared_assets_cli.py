@@ -1,7 +1,16 @@
 """Upload exactly the declared release assets, never clobbering what exists.
 
-The upload step is the only part of publication that writes to GitHub, and it
-is a re-run as often as a first run: an interrupted job restarts, a tag is
+Publication writes to GitHub in three places, and this is the only one that
+attaches release *assets*. ``ensure_draft_release.py`` creates the release
+itself as a draft, one asset upload sends the payload's bytes, and the
+finalizer un-drafts the release once the inventory is verified. Creating a
+draft is a different operation from filling it: a draft is invisible until it
+is published, so a re-run can find it already there, whereas a second asset
+upload lands on a release an operator can already see. That is why the
+no-clobber rule and the reconciliation below belong to this step and not to
+the two around it.
+
+It is a re-run as often as a first run: an interrupted job restarts, a tag is
 pushed twice, an operator retries a failed transfer. ``gh release upload
 --clobber`` makes that "work" by replacing whatever is attached, which would
 let a second run built from another commit publish its bytes under the first
@@ -174,33 +183,65 @@ def main(argv: list[str] | None = None) -> int:
         is_dry_run=arguments.dry_run,
     )
     try:
-        actions = settle(request, runner=PRODUCTION_RUNNER)
+        settlement = settle(request, runner=PRODUCTION_RUNNER)
     except upload_declared_assets_refusals.REFUSALS as error:
         exit_code, label = upload_declared_assets_refusals.refusal(error)
         print(f"{label}: {error}", file=sys.stderr)
         return exit_code
-    conflicts = release_reconcile_github.conflicts(actions)
-    unverifiable = release_reconcile_github.unverifiable(actions)
+    return _report(request, settlement)
+
+
+def _report(
+    request: UploadRequest, settlement: release_upload_observation.Settlement
+) -> int:
+    """Record the plan, report every blocker, and settle the exit status.
+
+    Parameters
+    ----------
+    request
+        The run that produced ``settlement``, for its plan destination and its
+        dry-run flag.
+    settlement
+        The per-asset plan, and the bounded reasons behind any asset whose
+        digest could not be established.
+
+    Returns
+    -------
+    int
+        ``EXIT_CONFLICT`` when the plan holds a blocker, ``EXIT_OK`` when every
+        declared asset is attached and verified, otherwise the status for the
+        failure that stopped the run.
+
+    Notes
+    -----
+    The plan is written before any status is decided, so a refused run still
+    leaves an operator the record of what it planned. Blockers are derived from
+    the plan rather than assembled beside it, so the file and the message cannot
+    disagree about which asset blocked the run.
+
+    A plan that still asks for an upload means GitHub does not hold that asset:
+    ``gh release upload`` can succeed while the asset never appears, and
+    ``plan_asset_actions`` reports an absent name as ``UPLOAD`` rather than
+    ``CONFLICT``. :func:`main` promises this exit means every declared asset is
+    attached and verified, so an absent one is a failed upload, not a clean run.
+    A dry run legitimately ends in ``UPLOAD`` and is left alone.
+    """
+    actions = settlement.actions
+    blockers = release_upload_plan.Blockers.of(actions, settlement.failures)
     try:
-        release_upload_plan.write_plan(
-            request.plan_path, actions, conflicts, unverifiable
-        )
+        release_upload_plan.write_plan(request.plan_path, actions, blockers)
     except OSError as error:
         destination = request.plan_path
         print(f"upload plan write failed: {destination}: {error}", file=sys.stderr)
         return EXIT_OUTPUT_UNWRITABLE
-    if conflicts or unverifiable:
+    if blockers.conflicts or blockers.unverifiable:
         print(
-            release_upload_plan.blocked_message(conflicts, unverifiable),
+            release_upload_plan.blocked_message(
+                blockers.conflicts, blockers.unverifiable, blockers.reasons
+            ),
             file=sys.stderr,
         )
         return EXIT_CONFLICT
-    # A plan that still asks for an upload means GitHub does not hold that
-    # asset: `gh release upload` can succeed while the asset never appears, and
-    # `plan_asset_actions` reports an absent name as UPLOAD rather than
-    # CONFLICT. The docstring above promises this exit means every declared
-    # asset is attached and verified, so an absent one is a failed upload, not
-    # a clean run. A dry run legitimately ends in UPLOAD and is left alone.
     unverified = () if request.is_dry_run else release_reconcile_github.uploads(actions)
     if unverified:
         missing = ", ".join(unverified)
@@ -211,7 +252,7 @@ def main(argv: list[str] | None = None) -> int:
 
 def settle(
     request: UploadRequest, *, runner: SubprocessRunner
-) -> tuple[tuple[str, release_reconcile_github.AssetAction], ...]:
+) -> release_upload_observation.Settlement:
     """Decide, upload, and re-verify one release's declared assets.
 
     Parameters
@@ -224,8 +265,9 @@ def settle(
 
     Returns
     -------
-    tuple[tuple[str, release_reconcile_github.AssetAction], ...]
-        The final per-asset plan, sorted by name.
+    release_upload_observation.Settlement
+        The final per-asset plan, sorted by name, and the bounded reasons for
+        any asset whose digest could not be established.
 
     Notes
     -----
@@ -234,6 +276,11 @@ def settle(
     actually holds rather than what was sent. Every conflict is reported
     before any upload, so a run with one conflicting asset publishes none of
     the others.
+
+    The reasons describe the same listing the returned plan does: after a
+    transfer they come from the re-read release, not from the one that was
+    missing the asset, so a failure to establish a digest after the upload is
+    not confused with the absence that caused it.
 
     Examples
     --------
@@ -254,25 +301,27 @@ def settle(
     ...     for destination in (record, selection):
     ...         release_digest_record_files.write_digest_record(
     ...             digests, destination)
-    ...     actions = settle(
+    ...     settlement = settle(
     ...         UploadRequest("v1", payload, record, selection,
     ...                       root / "plan.json", is_dry_run=True),
     ...         runner=release_upload_remote.StaticRunner('{"assets": []}'),
     ...     )
-    >>> [action.value for _name, action in actions]
+    >>> [action.value for _name, action in settlement.actions]
     ['upload']
     """
     expected = verified_payload(request)
-    actions = release_upload_observation.reconcile(request.tag, expected, runner=runner)
-    pending = release_reconcile_github.uploads(actions)
-    if release_upload_observation.should_upload(request, actions, pending):
+    settlement = release_upload_observation.reconcile(
+        request.tag, expected, runner=runner
+    )
+    pending = release_reconcile_github.uploads(settlement.actions)
+    if release_upload_observation.should_upload(request, settlement.actions, pending):
         release_upload_remote.upload(
             request.tag, pending, request.payload_dir, runner=runner
         )
         return release_upload_observation.reconcile(
             request.tag, expected, runner=runner
         )
-    return actions
+    return settlement
 
 
 def verified_payload(request: UploadRequest) -> dict[str, str]:
@@ -324,9 +373,12 @@ def verified_payload(request: UploadRequest) -> dict[str, str]:
     """
     declaration = release_digest_record_files.read_digest_record(request.digest_record)
     selected = release_digest_record_files.read_digest_record(request.selection_record)
-    release_digest_record.require_records_agree(selected, declaration=declaration)
-    release_payload_tree.require_payload_matches(request.payload_dir, declaration)
-    return declaration
+    declared = declaration.as_mapping()
+    release_digest_record.require_records_agree(
+        selected.as_mapping(), declaration=declared
+    )
+    release_payload_tree.require_payload_matches(request.payload_dir, declared)
+    return declared
 
 
 if __name__ == "__main__":

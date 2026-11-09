@@ -218,6 +218,12 @@ the release against that record and uploads only the gaps.
   Non-release-shaped material -- the binary, licences, completions, manual
   pages that ship inside the packages -- is excluded; a file carrying a release
   suffix that is not a declared name is refused.
+- Each package claim is checked against where the download put it. Every
+  producer uploads one workflow artefact and the release downloads each into
+  its own subtree of `dist`, so `scripts/release_package_origins.py` can report
+  the target key whose subtree staged each published package. A record claiming
+  a package a sibling's subtree staged is refused, which is the one-for-one
+  exchange no per-format count can see.
 - The declaration and both digest records are written before the first
   network call and retained as a `declared-assets-<job>-<attempt>` workflow
   artefact, so a run that is later refused still leaves the account of what it
@@ -227,11 +233,14 @@ the release against that record and uploads only the gaps.
   be established at all, and the two are reported as distinct diagnoses. The
   uploader never replaces an attached asset.
 
-**What this decision does not claim.** A package name cannot be derived, so the
-package half binds each record to the right count and format for its own
-platform. Suffix and count checks describe a file, not its origin, and the
-records -- not those checks -- are what bind the bytes to a commit. This is
-stated in the users' and developers' guides rather than implied.
+**What this decision does not claim.** A package name cannot be derived: three
+external shared actions own those names, so its format suffix and the
+per-target count are all the name itself says. The subtree position is a
+stronger observation but still an observation -- it reports where the download
+put a file, not who built it. Suffix, count, and position checks narrow what
+can reach the upload; none of them proves origin, and the records -- not those
+checks -- are what bind the bytes to a commit. This is stated in the users' and
+developers' guides rather than implied.
 
 **Status.** Implemented and exercised by an executed-shell harness in
 `tests/workflow_contracts/`; not yet exercised by a live release. The inventory

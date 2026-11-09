@@ -886,8 +886,12 @@ declared names.
 
 Release-shaped files are named by suffix, and a suffix describes a file rather
 than its origin, so the count and suffix checks narrow what can reach the
-upload; they do not prove where those bytes came from. The producer records are
-what bind the bytes to a commit.
+upload; they do not prove where those bytes came from. Each package *is* also
+checked against where the download put it: the action records the target
+subtree each published package was found in, and a record claiming a package a
+sibling's subtree staged is refused. That is an observation of the tree the run
+has, not proof of who built the file. The producer records are what bind the
+bytes to a commit.
 
 Two consequences matter to anyone re-running a release:
 
@@ -906,6 +910,27 @@ release input was added: the dry run and the publishing lane keep using the same
 `dry-run` output. The [users' guide](users-guide.md) describes the upload
 policy and the [developers' guide](developers-guide.md#release-publication)
 records the job graph and the runbook.
+
+**Breaking for direct callers of the action:** the action's `commit` input now
+carries a binding requirement it did not have before. It must be the full,
+lowercase 40-character hexadecimal commit the release publishes, matching the
+`commit` every producer recorded; an abbreviated SHA, an uppercase spelling, a
+tag, or a branch name is refused before any upload. A workflow that calls
+`./.github/actions/upload-declared-assets` directly should forward
+`release.yml`'s `metadata.candidate_commit` output rather than deriving the
+value from the triggering ref, because only the metadata job applies the
+spelling rule and publishes the validated name. Pull requests that call
+`release.yml` itself are unaffected.
+
+**Breaking for direct callers of `build-and-package.yml`:** the reusable
+workflow gained the same required `commit` input. A caller must supply the
+full, lowercase 40-character hexadecimal commit the release publishes; the
+producer checks out that value, refuses to build when the checkout's `HEAD`
+differs, and records it in the producer record the upload action binds against.
+A caller that omits it is refused when the workflow is invoked, and one that
+passes an abbreviated SHA, an uppercase spelling, a tag, or a branch name is
+refused at the checkout check rather than building bytes it cannot attribute to
+a commit.
 
 ## Tolerate the forwarding-failure warning on stdout
 

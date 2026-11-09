@@ -15,6 +15,7 @@ import pytest
 import release_digest_files
 import release_upload_remote
 from release_upload_digests import downloaded_digests
+from release_upload_failures import DigestFailure
 from release_upload_remote import (
     GhCommandFailedError,
     RemoteListingError,
@@ -37,12 +38,22 @@ class RecordingRunner:
         returncode: int = 0,
         stderr: str = "",
         writes: dict[str, bytes] | None = None,
+        links: dict[str, pathlib.Path] | None = None,
     ) -> None:
-        """Hold the canned answer and start an empty record of invocations."""
+        """Hold the canned answer and start an empty record of invocations.
+
+        Parameters
+        ----------
+        links
+            Names to install in the download directory as symlinks, each
+            pointing where the caller says. A case uses this to model a name
+            whose download resolves to something that is not the asset.
+        """
         self.stdout = stdout
         self.returncode = returncode
         self.stderr = stderr
         self.writes = writes or {}
+        self.links = links or {}
         self.calls: list[list[str]] = []
 
     def __call__(
@@ -50,9 +61,12 @@ class RecordingRunner:
     ) -> subprocess.CompletedProcess[str]:
         """Record the call, write any staged download, and return the result."""
         self.calls.append(list(arguments))
-        for name, content in self.writes.items():
+        if "--dir" in arguments:
             directory = pathlib.Path(arguments[arguments.index("--dir") + 1])
-            _ = (directory / name).write_bytes(content)
+            for name, content in self.writes.items():
+                _ = (directory / name).write_bytes(content)
+            for name, target in self.links.items():
+                (directory / name).symlink_to(target)
         return subprocess.CompletedProcess(
             args=list(arguments),
             returncode=self.returncode,
@@ -214,10 +228,11 @@ def test_downloaded_digests_hashes_the_exact_named_asset(
     """Establish a digest from the downloaded bytes when the listing had none."""
     content = b"attached bytes"
     runner = RecordingRunner(writes={"a.deb": content})
-    digests = downloaded_digests("v1", ["a.deb"], runner=runner)
-    assert digests["a.deb"] == release_digest_files.digest_of_file(
+    evidence = downloaded_digests("v1", ["a.deb"], runner=runner)
+    assert evidence.digests["a.deb"] == release_digest_files.digest_of_file(
         _written(tmp_path, content)
     ), "the digest must come from the downloaded bytes"
+    assert not evidence.failures, "a hash that succeeded needs no reason"
 
 
 def _written(tmp_path: pathlib.Path, content: bytes) -> pathlib.Path:
@@ -254,16 +269,60 @@ def test_downloaded_digests_downloads_into_its_own_directory() -> None:
 def test_a_failed_download_leaves_the_digest_unknown() -> None:
     """Answer ``None`` rather than raising: reconciliation turns it into a conflict."""
     runner = RecordingRunner(returncode=1, stderr="404")
-    assert downloaded_digests("v1", ["a.deb"], runner=runner) == {"a.deb": None}, (
+    evidence = downloaded_digests("v1", ["a.deb"], runner=runner)
+    assert evidence.digests == {"a.deb": None}, (
         "a failed download must leave the digest unknown"
+    )
+    assert evidence.failures["a.deb"] is DigestFailure.DOWNLOAD_FAILED, (
+        "a refused transfer must be reported as one, not as a missing file"
     )
 
 
 def test_a_download_that_writes_nothing_leaves_the_digest_unknown() -> None:
     """Refuse to hash an absence as though it were agreement."""
     runner = RecordingRunner()
-    assert downloaded_digests("v1", ["a.deb"], runner=runner) == {"a.deb": None}, (
+    evidence = downloaded_digests("v1", ["a.deb"], runner=runner)
+    assert evidence.digests == {"a.deb": None}, (
         "an absent file must not be hashed as agreement"
+    )
+    assert evidence.failures["a.deb"] is DigestFailure.MISSING_FILE, (
+        "a transfer that exited zero and wrote nothing is its own finding"
+    )
+
+
+def test_a_failed_download_is_not_hidden_by_the_file_it_wrote() -> None:
+    """Report the refused transfer rather than hashing bytes it never sent.
+
+    A transfer can exit non-zero having written a partial file -- a truncated
+    body is exactly what a dropped connection leaves. Hashing it would answer
+    a question about the release with bytes no complete download produced, and
+    the resulting digest would differ from the record for a reason that says
+    nothing about GitHub. The status is therefore consulted first.
+    """
+    runner = RecordingRunner(returncode=1, writes={"a.deb": b"half a body"})
+    evidence = downloaded_digests("v1", ["a.deb"], runner=runner)
+    assert evidence.digests == {"a.deb": None}, (
+        "a refused download must not be answered from the file it left behind"
+    )
+    assert evidence.failures["a.deb"] is DigestFailure.DOWNLOAD_FAILED, (
+        evidence.failures
+    )
+
+
+def test_a_symlink_at_the_asset_name_is_not_followed(tmp_path: pathlib.Path) -> None:
+    """Refuse to hash whatever a symlink points at.
+
+    The name arrives from the release's listing, and following it would let a
+    download hand the hash the contents of a file outside the directory it
+    wrote into -- which is not evidence about the release at all.
+    """
+    outside = tmp_path / "outside.bin"
+    _ = outside.write_bytes(b"not this asset")
+    runner = RecordingRunner(links={"a.deb": outside})
+    evidence = downloaded_digests("v1", ["a.deb"], runner=runner)
+    assert evidence.digests == {"a.deb": None}, "a symlink supplies no digest"
+    assert evidence.failures["a.deb"] is DigestFailure.NOT_A_REGULAR_FILE, (
+        evidence.failures
     )
 
 
@@ -274,15 +333,21 @@ def test_downloaded_digests_never_reports_a_digest_it_did_not_compute() -> None:
     download looks like to a caller.
     """
     runner = RecordingRunner(writes={"a.deb": b"x"})
-    digests = downloaded_digests("v1", ["a.deb", "b.rpm"], runner=runner)
-    assert digests["b.rpm"] is None, "the missing asset must stay unknown"
-    assert digests["a.deb"] is not None, "the written asset must be hashed"
+    evidence = downloaded_digests("v1", ["a.deb", "b.rpm"], runner=runner)
+    assert evidence.digests["b.rpm"] is None, "the missing asset must stay unknown"
+    assert evidence.digests["a.deb"] is not None, "the written asset must be hashed"
+    assert set(evidence.failures) == {"b.rpm"}, (
+        "only the name without a digest may carry a reason"
+    )
 
 
 def test_downloaded_digests_of_nothing_launches_nothing() -> None:
     """Establish no digest for no name without paying for a download."""
     runner = RecordingRunner()
-    assert downloaded_digests("v1", [], runner=runner) == {}, "no name means no digest"
+    evidence = downloaded_digests("v1", [], runner=runner)
+    assert (evidence.digests, evidence.failures) == ({}, {}), (
+        "no name means no digest and no reason"
+    )
     assert not runner.calls, "no name means no subprocess"
 
 

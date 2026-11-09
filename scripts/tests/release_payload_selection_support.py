@@ -113,6 +113,29 @@ def two_target_staged() -> dict[str, list[str]]:
     }
 
 
+def two_target_origins() -> dict[str, str]:
+    """Return each target's own packages attributed to that target.
+
+    Returns
+    -------
+    dict[str, str]
+        Published package name mapped to the target whose downloaded subtree
+        staged it.
+
+    Notes
+    -----
+    Archives are deliberately absent. They are hoisted to the ``dist`` root
+    and bound to a target by *name*, so an origin for them would be a second,
+    weaker account of a fact the configuration already states.
+    """
+    return {
+        X86_DEB: X86_TARGET,
+        X86_RPM: X86_TARGET,
+        ARM_DEB: ARM_TARGET,
+        ARM_RPM: ARM_TARGET,
+    }
+
+
 def _digest(index: int) -> str:
     """Return a distinct, well-formed digest for the ``index``th name."""
     return f"{index + 1:x}" * 64
@@ -133,5 +156,6 @@ __all__ = [
     "X86_TARGET",
     "arm_record",
     "record",
+    "two_target_origins",
     "two_target_staged",
 ]

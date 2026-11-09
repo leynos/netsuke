@@ -268,9 +268,16 @@ def _run_one(
 
 
 def run_steps(
-    workspace: Path, facts: Facts, sandbox: Sandbox
+    workspace: Path, facts: Facts, sandbox: Sandbox, *, dry_run: str
 ) -> list[subprocess.CompletedProcess[str]]:
     """Run each script step in order, stopping where a job would stop.
+
+    Parameters
+    ----------
+    dry_run
+        The value the caller sets the ``dry-run`` input to. It reaches the
+        upload step as an environment variable, which is what its ``case``
+        statement reads.
 
     A failed step stops the loop because GitHub would not start the next one;
     the caller can then tell a refusal from a later upload fault by how many
@@ -289,7 +296,7 @@ def run_steps(
         script = steps / f"{number}.sh"
         script.write_text(str(step.get("run", "")), encoding="utf-8")
         environment = base_env | step_environment(
-            step, facts=facts, declared_root=sandbox.declared_root
+            step, facts=facts, declared_root=sandbox.declared_root, dry_run=dry_run
         )
         result = _run_one(workspace, script, environment)
         completed.append(result)
@@ -304,6 +311,7 @@ def execute(
     facts: Facts,
     *,
     attached: list[dict[str, str]] | None = None,
+    dry_run: str = "false",
 ) -> ActionRun:
     """Run the action's script steps in order, stopping where a job would stop.
 
@@ -313,7 +321,7 @@ def execute(
         The completed steps, the outputs they wrote, and the recorded calls.
     """
     sandbox = _sandbox(tmp_path, attached)
-    completed = run_steps(workspace, facts, sandbox)
+    completed = run_steps(workspace, facts, sandbox, dry_run=dry_run)
     return ActionRun(
         completed=tuple(completed),
         outputs=read_outputs(sandbox.output_file),

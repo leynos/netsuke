@@ -3290,17 +3290,26 @@ written by `release_declaration_cli --digest-record` from the staged tree in
 the same run that declares the names, and read by both later consumers.
 
 Selection writes a record of its own, and the difference between the two is the
-point. `select_release_payload_cli` hashes the staged sources it approved and
-writes those digests to `selection.json` *before* copying them; the declaration
-record is written independently from the staged tree afterwards. A record
-compared only with a later hash of the copied tree would accept bytes swapped
-between the two hashes, so `release_digest_record.require_records_agree` makes
-the two records answer for one another before either is used against the
-payload. A run that presents a payload matching its declaration record but not
-its selection record is refused as a conflict.
+point. `select_release_payload_cli` hashes the staged *sources* it approved and
+only then copies them, so the digests `selection.json` records describe the
+bytes that were read, not the bytes that were written. The declaration record
+is produced independently from the staged tree by a later step. The file itself
+is installed after the copy, and that ordering is deliberate: a record that
+exists beside no payload would be a claim a reader could mistake for a
+completed selection, so a copy that fails leaves neither the payload nor a
+record behind.
+
+A record compared only with a later hash of the copied tree would accept bytes
+swapped between the two hashes, so
+`release_digest_record.require_records_agree` makes the two records answer for
+one another before either is used against the payload. A run that presents a
+payload matching its declaration record but not its selection record is refused
+as a conflict.
 
 The provenance chain has six links and each one refuses rather than
-interpolates.
+interpolates. Links 1 to 4 run in every tagged workflow; links 5 and 6 are
+written and tested but are not yet wired into `release.yml`, so today the
+record is retained past the upload rather than consumed by them.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
 2. `select_release_payload_cli` hashes the sources it approves and writes
@@ -3311,11 +3320,16 @@ interpolates.
 4. `upload_declared_assets_cli --digest-record --selection-record` refuses a
    payload whose bytes disagree with the records, and uploads only names they
    cover.
-5. `verify_release_inventory_cli --trusted` compares every downloaded asset
-   against the record, and refuses a record that does not cover exactly the
-   declared set.
-6. `finalize_github_release_cli --identity` reads the same record to decide what
-   a re-run should do.
+5. *Planned.* `verify_release_inventory_cli --trusted` compares every
+   downloaded asset against the record, and refuses a record that does not
+   cover exactly the declared set.
+6. *Planned.* `finalize_github_release_cli --identity` reads the same record to
+   decide what a re-run should do.
+
+The action retains `declaration.txt`, `selection.json`, and `trusted.json` as a
+workflow artefact for exactly that reason: a job added to the chain later needs
+this run's account of the release, and a record reconstructed after the fact
+would be derived from the bytes it is meant to judge.
 
 The record is never derived from downloaded bytes, and that is the whole point.
 A record derived from the download proves only that GitHub agrees with itself:
@@ -3348,8 +3362,30 @@ be undone, so the decision to proceed is taken from recorded state before
 anything is un-drafted.
 
 `release_reconcile_github.plan_asset_actions` assigns each declared name one of
-three actions — upload, skip-verified, or conflict — and
-`finalize_github_release_cli` turns the plan into an exit status.
+four actions, and the name's own evidence decides which:
+
+| Action          | Evidence                                                       |
+| --------------- | -------------------------------------------------------------- |
+| `UPLOAD`        | the release does not attach the name at all                    |
+| `SKIP_VERIFIED` | the attached digest equals the trusted record's                |
+| `CONFLICT`      | the attached digest was read and differs from the record's     |
+| `UNVERIFIABLE`  | the name is attached and no digest could be established for it |
+
+*Table 6: The four actions `plan_asset_actions` assigns.*
+
+`CONFLICT` and `UNVERIFIABLE` both stop the upload, and they are kept apart
+because their remedies differ. A conflict says the release holds demonstrably
+wrong bytes and a person has to decide what to do with them; an unverifiable
+name says the listing or the download failed, so the release may be perfectly
+correct. A run that reported the second as the first would send an operator
+hunting for wrong bytes that do not exist, which is why `write_plan` records
+them under separate keys and `blocked_message` names each clause that applies.
+
+`finalize_github_release_cli` turns a plan of the first three actions into an
+exit status; the uploader's own precedent is below. Only names the record
+declares are decided: an attached asset the record never claimed is left alone
+here, because refusing over it would block a release over a file the plan never
+named.
 
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |
@@ -3359,7 +3395,7 @@ three actions — upload, skip-verified, or conflict — and
 | `EXIT_INPUT_UNREADABLE`  | 3    | the record cannot support a decision at all              |
 | `EXIT_OUTPUT_UNWRITABLE` | 4    | the reconciliation plan could not be written             |
 
-*Table 6: `finalize_github_release_cli` exit statuses.*
+*Table 7: `finalize_github_release_cli` exit statuses.*
 
 Conflict outranks upload when a draft holds both kinds of finding. The
 precedence is stated in `_verdict` rather than taken from the numeric maximum,
@@ -3531,7 +3567,7 @@ CLI also refuses, so the mistake surfaces as the input that caused it.
 | `version`      | yes      | the crate version from the manifest                   |
 | `bin-name`     | yes      | `netsuke`, the installed binary name                  |
 
-*Table 7: `package-crate` action inputs.*
+*Table 8: `package-crate` action inputs.*
 
 The action publishes three outputs — `identity-path`, `crate-name`, and
 `crate-path` — and resolves the archive name from the record it just wrote

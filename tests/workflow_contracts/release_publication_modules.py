@@ -51,10 +51,12 @@ SECTION_MODULES = (
     "scripts/tests/test_release_payload_selection.py",
     "scripts/tests/test_release_payload_selection_properties.py",
     "scripts/tests/test_release_payload_tree.py",
+    "scripts/tests/test_release_package_origins.py",
     "scripts/tests/test_select_release_payload_cli.py",
     "scripts/tests/test_release_upload_plan.py",
     "scripts/tests/test_release_upload_remote.py",
     "scripts/tests/test_upload_declared_assets_cli.py",
+    "scripts/tests/test_upload_declared_assets_properties.py",
     "scripts/tests/test_upload_declared_assets_status.py",
 )
 
@@ -105,8 +107,10 @@ SOURCE_MODULES = (
     "scripts/release_payload_names.py",
     "scripts/release_payload_selection.py",
     "scripts/release_payload_tree.py",
+    "scripts/release_package_origins.py",
     "scripts/select_release_payload_cli.py",
     "scripts/release_upload_digests.py",
+    "scripts/release_upload_failures.py",
     "scripts/release_upload_observation.py",
     "scripts/release_upload_plan.py",
     "scripts/release_upload_remote.py",
@@ -139,6 +143,7 @@ POLICY_MODULES = (
     "scripts/release_payload_names.py",
     "scripts/release_payload_selection.py",
     "scripts/upload_declared_assets_refusals.py",
+    "scripts/release_upload_failures.py",
 )
 
 #: Sources that parse formats, touch files, or compose policy at the CLI edge.
@@ -166,6 +171,7 @@ ADAPTER_MODULES = (
     "scripts/record_producer_provenance_errors.py",
     "scripts/record_producer_provenance_record.py",
     "scripts/release_payload_tree.py",
+    "scripts/release_package_origins.py",
     "scripts/select_release_payload_cli.py",
     "scripts/release_upload_digests.py",
     "scripts/release_upload_observation.py",

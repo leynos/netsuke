@@ -21,14 +21,17 @@ import dataclasses
 import json
 import typing as typ
 
+import release_reconcile_github
+
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
     import pathlib
 
-    import release_reconcile_github
+    import release_upload_failures
 
 __all__ = [
     "PLAN_NAME",
+    "Blockers",
     "UploadRequest",
     "blocked_message",
     "conflict_message",
@@ -83,11 +86,98 @@ class UploadRequest:
     is_dry_run: bool
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class Blockers:
+    """Hold what stopped an upload run, split into the kinds a reader needs.
+
+    Attributes
+    ----------
+    conflicts
+        The names whose attached bytes were read and disagreed with the
+        trusted record.
+    unverifiable
+        The names whose attached bytes could not be read at all. Recorded
+        separately from ``conflicts`` because the operator's next step
+        differs: one is a wrong release, the other may be a broken listing.
+    reasons
+        Unverifiable asset name mapped to the bounded category that explains
+        it, such as ``download-failed``. Names with no known category are
+        simply absent, which is why the mapping cannot be read as a
+        replacement for ``unverifiable``.
+
+    Notes
+    -----
+    One value rather than three parameters, because the three are one finding:
+    whether a run is blocked, and by what. A caller able to pass the conflicts
+    from one observation and the unverifiable names from another could write a
+    plan that disagrees with itself, and no reader could tell which half was
+    current. Empty defaults describe an unblocked run, which is the common case
+    and the one worth spelling as nothing at all.
+
+    Examples
+    --------
+    >>> Blockers()
+    Blockers(conflicts=(), unverifiable=(), reasons={})
+    >>> Blockers(conflicts=("a.deb",)).conflicts
+    ('a.deb',)
+    """
+
+    conflicts: tuple[str, ...] = ()
+    unverifiable: tuple[str, ...] = ()
+    reasons: cabc.Mapping[str, release_upload_failures.DigestFailure] = (
+        dataclasses.field(default_factory=dict)
+    )
+
+    @classmethod
+    def of(
+        cls,
+        actions: cabc.Iterable[tuple[str, release_reconcile_github.AssetAction]],
+        reasons: cabc.Mapping[str, release_upload_failures.DigestFailure] | None = None,
+    ) -> Blockers:
+        """Derive every blocker from a plan and the categories behind it.
+
+        Parameters
+        ----------
+        actions
+            One ``(name, action)`` pair per declared asset, as
+            :func:`release_upload_observation.plan_release` returned them.
+        reasons
+            Unverifiable asset name mapped to the bounded category explaining
+            it.
+
+        Returns
+        -------
+        Blockers
+            The conflicting and unverifiable names the plan holds, with the
+            categories that were supplied for them.
+
+        Notes
+        -----
+        Derived from ``actions`` rather than passed in alongside them so a
+        caller cannot report a name as blocking in one place and as settled in
+        the other. Only the unverifiable names keep their reasons: a reason
+        supplied for an asset that verified describes a digest that exists.
+
+        Examples
+        --------
+        >>> from release_reconcile_github import AssetAction
+        >>> Blockers.of([("a", AssetAction.CONFLICT), ("b", AssetAction.UPLOAD)])
+        Blockers(conflicts=('a',), unverifiable=(), reasons={})
+        """
+        settled = tuple(actions)
+        unread = release_reconcile_github.unverifiable(settled)
+        known = reasons or {}
+        return cls(
+            conflicts=release_reconcile_github.conflicts(settled),
+            unverifiable=unread,
+            reasons={name: known[name] for name in unread if name in known},
+        )
+
+
 def write_plan(
     plan_path: pathlib.Path,
     actions: cabc.Iterable[tuple[str, release_reconcile_github.AssetAction]],
-    conflicts: cabc.Iterable[str],
-    unverifiable: cabc.Iterable[str] = (),
+    blockers: Blockers,
 ) -> None:
     """Write the per-asset plan in the shape the release jobs already read.
 
@@ -97,13 +187,9 @@ def write_plan(
         Destination for the JSON plan.
     actions
         One ``(name, action)`` pair per declared asset.
-    conflicts
-        The names whose attached bytes were read and disagreed with the
-        trusted record.
-    unverifiable
-        The names whose attached bytes could not be read at all. Recorded
-        separately from ``conflicts`` because the operator's next step differs:
-        one is a wrong release, the other may be a broken listing.
+    blockers
+        What stopped the run, split into the two kinds a reader must tell
+        apart, with the bounded category behind each unverifiable name.
 
     Notes
     -----
@@ -117,6 +203,13 @@ def write_plan(
     only at the blocking summary should not have to scan the per-asset rows to
     learn which kind of blockage it is looking at.
 
+    The categories are recorded rather than the underlying error text. A plan
+    is retained beside the release for a job to read, so anything written there
+    is published: an error message from a failing command can carry a URL, a
+    temporary path, or a token a tool chose to echo, and none of that belongs
+    in an artefact. A bounded vocabulary is also what lets a reader branch on
+    the reason at all.
+
     Examples
     --------
     >>> import pathlib
@@ -124,7 +217,7 @@ def write_plan(
     >>> from release_reconcile_github import AssetAction
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     destination = pathlib.Path(tmp) / "plan.json"
-    ...     write_plan(destination, [("a", AssetAction.UPLOAD)], [])
+    ...     write_plan(destination, [("a", AssetAction.UPLOAD)], Blockers())
     ...     print(destination.read_text(encoding="utf-8"))
     {
       "actions": [
@@ -134,7 +227,8 @@ def write_plan(
         ]
       ],
       "conflicts": [],
-      "unverifiable": []
+      "unverifiable": [],
+      "unverifiable_reasons": {}
     }
     <BLANKLINE>
     """
@@ -142,8 +236,11 @@ def write_plan(
         json.dumps(
             {
                 "actions": [[name, action.value] for name, action in actions],
-                "conflicts": list(conflicts),
-                "unverifiable": list(unverifiable),
+                "conflicts": list(blockers.conflicts),
+                "unverifiable": list(blockers.unverifiable),
+                "unverifiable_reasons": {
+                    name: failure.value for name, failure in blockers.reasons.items()
+                },
             },
             indent=2,
             sort_keys=True,
@@ -177,7 +274,10 @@ def conflict_message(conflicts: cabc.Iterable[str]) -> str:
     )
 
 
-def unverifiable_message(unverifiable: cabc.Iterable[str]) -> str:
+def unverifiable_message(
+    unverifiable: cabc.Iterable[str],
+    reasons: cabc.Mapping[str, release_upload_failures.DigestFailure] | None = None,
+) -> str:
     """Describe the attached assets whose bytes a run could not read.
 
     Parameters
@@ -185,11 +285,15 @@ def unverifiable_message(unverifiable: cabc.Iterable[str]) -> str:
     unverifiable
         The names attached to the release whose digest neither the listing nor
         a download could establish.
+    reasons
+        Name mapped to the bounded category explaining it. Each name's category
+        and suggested remedy are appended to the clause; a name with no known
+        category is still named, because the refusal stands without it.
 
     Returns
     -------
     str
-        One line naming every unreadable asset.
+        One line naming every unreadable asset, with each known reason.
 
     Notes
     -----
@@ -198,21 +302,36 @@ def unverifiable_message(unverifiable: cabc.Iterable[str]) -> str:
     Reporting that as a disagreement would promise evidence the run does not
     have and send an operator looking for wrong bytes that may be correct.
 
+    The reasons are rendered beside their names rather than replacing them, so
+    the sentence still names every asset the run refused over, and the remedy
+    is what tells an operator whether a retry is worth attempting.
+
     Examples
     --------
     >>> unverifiable_message(["a.deb"]) == (
     ...     "the release attaches assets whose bytes could not be verified: a.deb"
     ... )
     True
+    >>> unverifiable_message(
+    ...     ["a.deb"], {"a.deb": release_upload_failures.DigestFailure.DOWNLOAD_FAILED}
+    ... ) == (
+    ...     "the release attaches assets whose bytes could not be verified: "
+    ...     "a.deb (download-failed: retry the download)"
+    ... )
+    True
     """
-    return (
-        "the release attaches assets whose bytes could not be verified: "
-        + ", ".join(unverifiable)
+    known = reasons or {}
+    described = ", ".join(
+        f"{name} ({known[name].value}: {known[name].remedy})" if name in known else name
+        for name in unverifiable
     )
+    return "the release attaches assets whose bytes could not be verified: " + described
 
 
 def blocked_message(
-    conflicts: cabc.Iterable[str], unverifiable: cabc.Iterable[str]
+    conflicts: cabc.Iterable[str],
+    unverifiable: cabc.Iterable[str],
+    reasons: cabc.Mapping[str, release_upload_failures.DigestFailure] | None = None,
 ) -> str:
     """Describe every reason the run refused, one clause per kind present.
 
@@ -222,6 +341,9 @@ def blocked_message(
         The names whose attached bytes were read and disagreed.
     unverifiable
         The names whose attached bytes could not be read.
+    reasons
+        Unverifiable name mapped to the bounded category explaining it, as
+        :func:`unverifiable_message` renders them.
 
     Returns
     -------
@@ -252,6 +374,6 @@ def blocked_message(
     unread = tuple(unverifiable)
     clauses = [
         conflict_message(disputed) if disputed else "",
-        unverifiable_message(unread) if unread else "",
+        unverifiable_message(unread, reasons) if unread else "",
     ]
     return "; ".join(clause for clause in clauses if clause)

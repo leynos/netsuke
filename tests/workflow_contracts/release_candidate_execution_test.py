@@ -35,6 +35,17 @@ CANDIDATE_STEP = "Bind the release candidate commit"
 CHECKOUT_STEP = "Verify the checkout is the release candidate"
 METADATA_JOB = "metadata"
 BUILD_JOB = "build"
+CRATE_JOB = "package-crate"
+
+#: Every job that compares its checkout against the candidate before building.
+#: Two workflows carry a comparison each, written separately, so a correction
+#: applied to one would otherwise leave the other unexecuted. The crate job is
+#: listed because it packages the archive the release publishes; a tree that
+#: moved under it would ship bytes from a commit the candidate never named.
+CANDIDATE_CHECKS = (
+    pytest.param(PACKAGE_WORKFLOW_PATH, BUILD_JOB, id="build"),
+    pytest.param(RELEASE_WORKFLOW_PATH, CRATE_JOB, id="package-crate"),
+)
 
 #: The candidate the metadata step accepts: a full lowercase hexadecimal
 #: commit. Written out rather than derived, because this step's subject is the
@@ -191,19 +202,31 @@ def _commit(workspace: pathlib.Path, home: pathlib.Path) -> str:
 
 
 def _checkout_step(
-    tmp_path: pathlib.Path, workspace: pathlib.Path, candidate: str
+    tmp_path: pathlib.Path,
+    workspace: pathlib.Path,
+    candidate: str,
+    *,
+    workflow_path: pathlib.Path = PACKAGE_WORKFLOW_PATH,
+    job: str = BUILD_JOB,
 ) -> subprocess.CompletedProcess[str]:
-    """Execute the producer's HEAD comparison in a real repository.
+    """Execute one job's HEAD comparison in a real repository.
 
     Returns
     -------
     subprocess.CompletedProcess[str]
         The completed step.
+
+    Notes
+    -----
+    The workflow and job are parameters because two jobs carry a comparison
+    each, written as separate bodies. Running only the producer's would leave
+    the crate job's copy unchecked, and that copy guards the archive bytes the
+    release ships rather than a downloadable artefact.
     """
     return _run_script(
         workspace,
         tmp_path,
-        _step_body(PACKAGE_WORKFLOW_PATH, BUILD_JOB, CHECKOUT_STEP),
+        _step_body(workflow_path, job, CHECKOUT_STEP),
         {"CANDIDATE_COMMIT": candidate},
     )
 
@@ -232,16 +255,24 @@ def test_a_candidate_that_is_not_a_full_commit_is_refused(
     assert "value=" not in written, "a refused candidate must not be published"
 
 
-def test_the_checkout_of_the_candidate_passes(tmp_path: pathlib.Path) -> None:
-    """Accept a producer whose checkout is the candidate it was told to build."""
+@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+def test_the_checkout_of_the_candidate_passes(
+    tmp_path: pathlib.Path, workflow_path: pathlib.Path, job: str
+) -> None:
+    """Accept a checkout that is the candidate it was told to build."""
     workspace = tmp_path / "producer"
     head = _commit(workspace, tmp_path)
-    result = _checkout_step(tmp_path, workspace, head)
+    result = _checkout_step(
+        tmp_path, workspace, head, workflow_path=workflow_path, job=job
+    )
     assert result.returncode == 0, result.stderr
 
 
-def test_a_checkout_of_another_commit_is_refused(tmp_path: pathlib.Path) -> None:
-    """Refuse a producer that built something other than the candidate.
+@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+def test_a_checkout_of_another_commit_is_refused(
+    tmp_path: pathlib.Path, workflow_path: pathlib.Path, job: str
+) -> None:
+    """Refuse a checkout that built something other than the candidate.
 
     This is the check that makes the rest of the provenance chain mean
     anything: the recorder would happily bind bytes built from a moved branch
@@ -250,7 +281,9 @@ def test_a_checkout_of_another_commit_is_refused(tmp_path: pathlib.Path) -> None
     workspace = tmp_path / "producer"
     head = _commit(workspace, tmp_path)
     assert head != VALID_CANDIDATE, "the fixture commit must differ from the case"
-    result = _checkout_step(tmp_path, workspace, VALID_CANDIDATE)
+    result = _checkout_step(
+        tmp_path, workspace, VALID_CANDIDATE, workflow_path=workflow_path, job=job
+    )
     assert result.returncode == 1, result.stdout
     assert head in result.stderr, (
         f"the refusal must name the commit on disk, got {result.stderr!r}"
@@ -260,8 +293,11 @@ def test_a_checkout_of_another_commit_is_refused(tmp_path: pathlib.Path) -> None
     )
 
 
-def test_an_unreadable_checkout_is_refused(tmp_path: pathlib.Path) -> None:
-    """Stop a producer whose tree is not a checkout at all.
+@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+def test_an_unreadable_checkout_is_refused(
+    tmp_path: pathlib.Path, workflow_path: pathlib.Path, job: str
+) -> None:
+    """Stop a job whose tree is not a checkout at all.
 
     ``git rev-parse HEAD`` fails outside a repository, and the step runs under
     ``set -euo pipefail``. Without that, an empty reading would be compared
@@ -270,20 +306,25 @@ def test_an_unreadable_checkout_is_refused(tmp_path: pathlib.Path) -> None:
     """
     workspace = tmp_path / "producer"
     workspace.mkdir()
-    result = _checkout_step(tmp_path, workspace, VALID_CANDIDATE)
+    result = _checkout_step(
+        tmp_path, workspace, VALID_CANDIDATE, workflow_path=workflow_path, job=job
+    )
     assert result.returncode != 0, result.stdout
     assert "checkout is" not in result.stderr, (
         f"an unreadable checkout is not a mismatched one, got {result.stderr!r}"
     )
 
 
-def test_the_checkout_step_reads_the_candidate_from_the_environment() -> None:
+@pytest.mark.parametrize(("workflow_path", "job"), CANDIDATE_CHECKS)
+def test_the_checkout_step_reads_the_candidate_from_the_environment(
+    workflow_path: pathlib.Path, job: str
+) -> None:
     """Take the candidate from the step's ``env``, never from the script text.
 
     A step that inlined an expression would receive literal ``${{ ... }}`` on
     a runner and compare HEAD against it. The structural cases assert the
     ``env`` block; this one asserts the body reads no other variable.
     """
-    body = _step_body(PACKAGE_WORKFLOW_PATH, BUILD_JOB, CHECKOUT_STEP)
+    body = _step_body(workflow_path, job, CHECKOUT_STEP)
     assert "CANDIDATE_COMMIT" in body, body
     assert "${{" not in body, f"a run block must not carry an expression: {body}"

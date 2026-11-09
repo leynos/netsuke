@@ -83,8 +83,17 @@ def release_tag(facts: Facts) -> str:
     return f"v{facts.version}"
 
 
-def _resolved(expression: str, *, facts: Facts, declared_root: Path) -> str:
+def _resolved(
+    expression: str, *, facts: Facts, declared_root: Path, dry_run: str
+) -> str:
     """Return the value GitHub would substitute for one step expression.
+
+    Parameters
+    ----------
+    dry_run
+        What the ``dry-run`` input is set to. Substituted rather than fixed
+        because the caller chooses the mode, and the step's own ``case``
+        statement is one of the things under test.
 
     Returns
     -------
@@ -98,7 +107,7 @@ def _resolved(expression: str, *, facts: Facts, declared_root: Path) -> str:
         "${{ inputs.version }}": facts.version,
         "${{ inputs.commit }}": COMMIT,
         "${{ inputs['release-tag'] }}": release_tag(facts),
-        "${{ inputs['dry-run'] }}": "false",
+        "${{ inputs['dry-run'] }}": dry_run,
     }
     if expression in known:
         return known[expression]
@@ -111,7 +120,11 @@ def _resolved(expression: str, *, facts: Facts, declared_root: Path) -> str:
 
 
 def step_environment(
-    step: dict[str, object], *, facts: Facts, declared_root: Path
+    step: dict[str, object],
+    *,
+    facts: Facts,
+    declared_root: Path,
+    dry_run: str = "false",
 ) -> dict[str, str]:
     """Return one step's ``env`` block with every expression resolved.
 
@@ -122,7 +135,9 @@ def step_environment(
     """
     declared = require_mapping(step.get("env"), f"{ACTION} step env")
     return {
-        str(key): _resolved(str(value), facts=facts, declared_root=declared_root)
+        str(key): _resolved(
+            str(value), facts=facts, declared_root=declared_root, dry_run=dry_run
+        )
         for key, value in declared.items()
     }
 

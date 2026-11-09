@@ -36,6 +36,7 @@ import tomllib
 import hoist_binstall_discovery
 import release_declaration
 import release_digest_files
+import release_package_origins
 import release_payload_selection
 import release_payload_tree
 from release_payload_errors import PayloadError
@@ -227,6 +228,7 @@ def select_and_copy(
     behind for the upload step to publish.
     """
     config = _read_staging_config(arguments.staging_config)
+    locations = release_payload_tree.record_locations(arguments.dist_dir)
     provenances = release_payload_tree.read_provenances(arguments.dist_dir)
     archives = hoist_binstall_discovery.archives_by_target(
         arguments.staging_config, arguments.manifest, arguments.version
@@ -239,8 +241,13 @@ def select_and_copy(
             run_id=arguments.run_id,
             target_config=config,
         ),
-        archives=archives,
-        staged=staged,
+        tree=release_payload_selection.StagedTree(
+            archives=archives,
+            staged=staged,
+            package_origins=release_package_origins.observe_package_origins(
+                arguments.dist_dir, target_of_record=locations
+            ),
+        ),
     )
     computed = _digests(selection)
     release_payload_selection.require_staged_digests(

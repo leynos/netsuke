@@ -10,7 +10,10 @@ same boundary small enough to read.
 A failed download is not an error here. The name keeps ``None``, and
 reconciliation reads that as unverifiable: the run still refuses to upload,
 but it reports "could not tell" rather than "the release holds wrong bytes",
-because those two call for different operator responses.
+because those two call for different operator responses. Which *kind* of
+"could not tell" it was is recorded beside the digest as a
+:class:`release_upload_failures.DigestFailure`, so a refusal can say whether a
+retry is worth trying without quoting anything a failing command wrote.
 
 ``names`` is an iterable read twice, so it is materialized before either pass.
 A generator would be exhausted by the first and nothing would be downloaded or
@@ -21,24 +24,51 @@ Run via ``.github/actions/upload-declared-assets``; behavioural coverage lives
 in ``scripts/tests/test_release_upload_remote.py``.
 """
 
+import dataclasses
 import pathlib
 import stat
 import tempfile
 import typing as typ
 
 import release_digest_files
+from release_upload_failures import DigestFailure
 
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
     from release_upload_remote import SubprocessRunner
 
-__all__ = ["downloaded_digests"]
+__all__ = ["DownloadEvidence", "downloaded_digests"]
+
+
+@dataclasses.dataclass(frozen=True, slots=True)
+class DownloadEvidence:
+    """Hold what a digest round established and what it could not.
+
+    Attributes
+    ----------
+    digests
+        Asset name mapped to the digest of its downloaded bytes, or ``None``
+        where none could be established.
+    failures
+        Asset name mapped to the bounded category naming *why* its digest is
+        ``None``. Never names an asset that has a digest.
+
+    Notes
+    -----
+    The two travel together because they answer one question: an asset with no
+    digest is unverifiable, and an asset with no digest *and* no category is a
+    gap in this module rather than a property of the release. Splitting them
+    into two return values would let a caller keep one and drop the other.
+    """
+
+    digests: dict[str, str | None]
+    failures: dict[str, DigestFailure]
 
 
 def downloaded_digests(
     tag: str, names: cabc.Iterable[str], *, runner: SubprocessRunner
-) -> dict[str, str | None]:
+) -> DownloadEvidence:
     """Establish digests for attached assets GitHub would not report.
 
     Parameters
@@ -52,9 +82,8 @@ def downloaded_digests(
 
     Returns
     -------
-    dict[str, str | None]
-        Name mapped to the digest of the downloaded bytes, or ``None`` when
-        the download or the hash failed.
+    DownloadEvidence
+        Each name's digest, or ``None`` with the category that explains it.
 
     Notes
     -----
@@ -73,7 +102,7 @@ def downloaded_digests(
     --------
     >>> from release_upload_remote import _never_called
     >>> downloaded_digests("v1", [], runner=_never_called)
-    {}
+    DownloadEvidence(digests={}, failures={})
 
     A generator names the assets as well as a list does. The recorder below
     counts what was asked for, which is the thing an exhausted generator
@@ -85,22 +114,29 @@ def downloaded_digests(
     >>> def _record(arguments, **_keywords):
     ...     asked.append(arguments[arguments.index("--pattern") + 1])
     ...     return subprocess.CompletedProcess(arguments, 1, "", "404")
-    >>> downloaded_digests("v1", (name for name in ["a.deb"]), runner=_record)
-    {'a.deb': None}
+    >>> evidence = downloaded_digests("v1", (n for n in ["a.deb"]), runner=_record)
+    >>> evidence.digests, evidence.failures["a.deb"].value
+    ({'a.deb': None}, 'download-failed')
     >>> asked
     ['a.deb']
     """
     ordered = sorted(names)
     with tempfile.TemporaryDirectory() as temporary:
         directory = pathlib.Path(temporary)
+        digests: dict[str, str | None] = {}
+        failures: dict[str, DigestFailure] = {}
         for name in ordered:
-            _download(tag, name, directory, runner=runner)
-        return {name: _digest_if_present(directory / name) for name in ordered}
+            returncode = _download(tag, name, directory, runner=runner)
+            digest, failure = _established(directory / name, returncode=returncode)
+            digests[name] = digest
+            if failure is not None:
+                failures[name] = failure
+        return DownloadEvidence(digests=digests, failures=failures)
 
 
 def _download(
     tag: str, name: str, directory: pathlib.Path, *, runner: SubprocessRunner
-) -> None:
+) -> int:
     """Fetch one attached asset into ``directory``, tolerating failure.
 
     Parameters
@@ -114,42 +150,79 @@ def _download(
     runner
         The injected subprocess seam.
 
+    Returns
+    -------
+    int
+        The status ``gh`` exited with.
+
     Notes
     -----
-    ``required=False`` keeps a failed download from raising: it leaves the name
-    without a digest, and reconciliation turns that into an unverifiable asset
-    rather than into a match on no evidence.
+    ``required=False`` keeps a failed download from raising: the status is
+    returned instead, so the caller can record *that* the transfer failed
+    separately from what the directory then contains. A download that exits
+    zero but writes nothing and one that exits non-zero are different findings
+    -- the first is a broken transfer or a name that resolved to nothing, the
+    second is a refused one.
     """
     from release_upload_remote import gh
 
-    gh(
+    completed = gh(
         ("release", "download", tag, "--pattern", name, "--dir", str(directory)),
         runner=runner,
         required=False,
     )
+    return completed.returncode
 
 
-def _digest_if_present(path: pathlib.Path) -> str | None:
-    """Hash ``path`` when it is a regular file, or answer ``None``.
+def _established(
+    path: pathlib.Path, *, returncode: int
+) -> tuple[str | None, DigestFailure | None]:
+    """Hash ``path`` when it is a readable regular file, or explain why not.
 
     Parameters
     ----------
     path
-        A candidate downloaded asset.
+        The downloaded asset, under the exact name that was asked for.
+    returncode
+        The status the download exited with.
 
     Returns
     -------
-    str | None
-        The lowercase SHA-256 of the bytes, or ``None`` when the path is not a
-        readable regular file.
+    tuple[str | None, DigestFailure | None]
+        The digest and ``None``, or ``None`` and the category that explains it.
+
+    Notes
+    -----
+    The download's own status is checked first, so a refused transfer is
+    reported as refused even when a stale file of that name happens to be
+    present -- hashing it would answer a question about the release with bytes
+    the release never sent.
+
+    The remaining checks are ordered from the least to the most specific
+    observation. An absence is a missing file; something that exists but is
+    not a regular file is refused rather than followed, because following a
+    symlink would hash whatever it points at; and a regular file that cannot
+    be read is a local fault with no bearing on the release.
 
     Examples
     --------
-    >>> _digest_if_present(pathlib.Path("/nonexistent/asset"))
+    >>> from pathlib import Path
+    >>> _established(Path("/nonexistent/asset"), returncode=0)
+    (None, <DigestFailure.MISSING_FILE: 'missing-file'>)
+    >>> _established(Path("/nonexistent/asset"), returncode=1)[1].value
+    'download-failed'
     """
+    if returncode != 0:
+        return None, DigestFailure.DOWNLOAD_FAILED
     try:
-        if not stat.S_ISREG(path.lstat().st_mode):
-            return None
-        return release_digest_files.digest_of_file(path)
+        status = path.lstat().st_mode
+    except FileNotFoundError:
+        return None, DigestFailure.MISSING_FILE
     except OSError:
-        return None
+        return None, DigestFailure.READ_FAILED
+    if not stat.S_ISREG(status):
+        return None, DigestFailure.NOT_A_REGULAR_FILE
+    try:
+        return release_digest_files.digest_of_file(path), None
+    except OSError:
+        return None, DigestFailure.READ_FAILED
