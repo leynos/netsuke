@@ -2041,3 +2041,61 @@ was also run by hand with `NETSUKE_KANI_ISOLATION_VERIFIER` naming the local
 `cargo-kani`, and passed. `7f6a4693d` is the last revision all nine gates
 verified; the commits after it carry only prose in this file. Keep Status: IN
 PROGRESS pending review at the new head and trusted-main warm-cache acceptance.
+
+Revision 58 (2026-11-09): The review at head `42e4e490f` raised six inline
+findings and re-emitted two pre-merge rows plus the Developer Documentation
+warning. Three findings were the same defect reported at different anchors: a
+datagram sent with `sendmsg` was not recognized as an attempt, and neither were
+`linkat`, `mknodat`, `symlinkat`, `fchmodat`, `fchownat` or `rmdir`, so the
+reader would have passed a run that created a link, a node, or a permission
+change. The trace filter now names syscall *classes*, `%file` and `%network`,
+rather than calls one by one. That is not only shorter: `strace` refuses to
+start when a qualifier names a call the host architecture does not have, and
+`mkdir` has no syscall of its own on aarch64, so the enumerated list was a
+portability hazard that would have failed the isolation case outright on that
+architecture. The reader's mutating-call list grew to the twenty-four names
+those classes deliver, and the case covers each new one.
+
+Unit Architecture's finding was a real defect in the new query. `cargo-kani` is
+a launcher: with no `<KANI_HOME>/kani-<version>` it runs a first-time setup,
+creates that directory, and downloads a release bundle from GitHub. A read-only
+query that reaches that state installs. Proved by hand — an empty `KANI_HOME`
+makes `cargo-kani --version` populate the home and fetch — so the recipe now
+inspects the payload directory after reading the pin and before invoking
+anything, refusing with `category=payload-missing` and naming
+`make install-kani`. The isolation case gained a fifth traced run over a
+payload-free home: it requires the refusal and requires that trace to hold no
+attempt, which is exactly what fails if the guard is removed.
+
+The Developer Documentation row's premises were both live, and Revision 57's
+claim that they had already been corrected was wrong: the Progress item still
+said the recipe bounded and sanitized the output it quotes — it captures that
+output and prints only the extracted version token — and Outcomes still called
+`/proc/self/comm` the one writable path, ignoring the trace directory at
+`/var/trace` and the bound `/dev/null`. Both are corrected here. Outcomes also
+names Revisions 55 to 58 in its list of gated candidates, which previously
+stopped at 54.
+
+The isolation case's assertions moved into
+`tests/prover_tools_kani_check_tests/assertions.rs`, since the case file was
+over the 400-line cap and the helpers were the part that could move without
+weakening the case. `test-kani-check-isolation` still exercises the whole
+sandbox strictly.
+
+Gating found three defects that the focused runs could not. The new Makefile
+contract sliced `&str` by byte index, which `clippy::string-slice` refuses; it
+now splits on whitespace and stops at the `--` token. The sandbox run built its
+`SandboxRun` in an order that disagreed with the struct declaration. And two
+`kani_check` command cases ran the recipe with no Kani home carrying the pin,
+so the new guard refused them before the verifier they were testing; the
+fixture now supplies a home holding an installed payload for its pin, which
+also makes those cases independent of whatever the host happens to have
+installed.
+
+All nine commit gates exited `0` on `9037b92cb`: `check-fmt`, `lint`,
+`typecheck`, `doc-coverage` (98.33% aggregate, 6,762/6,877), `markdownlint`
+(218 files, zero issues), `nixie`, `test` (5,226 nextest passed, 7 skipped,
+plus the doctests), `test-workflow-contracts` (1,792 passed, 3 skipped, plus
+28) and `test-kani-check-isolation` (52 passed, 0 skipped, strict). Keep
+Status: IN PROGRESS pending review at the new head and trusted-main warm-cache
+acceptance.
