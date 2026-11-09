@@ -2171,5 +2171,16 @@ possessive.
 The focused runs passed on this tree: 36 tests across
 `prover_tools_kani_check_command_tests`, `whitaker_boundary_contract` and
 `prover_tools_verus_e2e_tests`, 36 passed and none skipped, including the new
-empty-home case. Keep Status: IN PROGRESS pending the full gate batch, review
-at the new head, and trusted-main warm-cache acceptance.
+empty-home case.
+
+The first full batch then stopped at `lint`, and the stop was worth having.
+Clippy denies `string-slice`, and the new selection finder indexed the line at
+offsets `match_indices` had already proved to be character boundaries. The
+three sites now use `get(..)`, the convention the rest of the suite follows, so
+each slice stays a checked lookup rather than a panic site; the scan reads the
+same. The re-run took all nine gates. `check-fmt`, `lint`, `typecheck`,
+`doc-coverage`, `markdownlint`, `nixie`, `test`, `test-workflow-contracts` and
+`test-kani-check-isolation` each exited `0` on commit `53d1cc32e`.
+
+Keep Status: IN PROGRESS pending review at the new head and trusted-main
+warm-cache acceptance.
