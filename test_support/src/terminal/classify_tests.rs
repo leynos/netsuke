@@ -224,6 +224,28 @@ proptest! {
         );
     }
 
+    /// The two implementations also agree on bytes outside the escape grammar.
+    ///
+    /// The alphabet above is chosen so the *escape* rules are exercised: every
+    /// introducer, both terminators, both cancellations. That leaves one gap —
+    /// bytes that mean nothing to the grammar at all, such as `0x9b` (the
+    /// eight-bit CSI) or arbitrary high-bit data. Neither implementation
+    /// treats them as introducers, so both fall through to "not a bare
+    /// carriage return"; this case states that agreement rather than assuming
+    /// it, so a later change that taught one side about eight-bit controls
+    /// would fail here instead of silently diverging.
+    #[test]
+    fn classifier_agrees_with_the_oracle_on_arbitrary_bytes(
+        bytes in prop::collection::vec(any::<u8>(), 0..32)
+    ) {
+        prop_assert_eq!(
+            classify(&bytes).has_bare_carriage_return,
+            oracle_has_bare_carriage_return(&bytes),
+            "stream {:?}",
+            bytes
+        );
+    }
+
     /// Complete and truncated escapable strings both hide their payload.
     ///
     /// The payload alphabet starts at `0x20`, so it holds no control byte that

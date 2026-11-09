@@ -1182,25 +1182,47 @@ is pinned at the action's own ref. The correct repair was in Whitaker's
 `prune_prebuilt_libraries`; the issue's suggested fix prunes by staged filename
 instead of by an enumerated crate list. That was another repository's diff.
 
-**How it cleared, measured.** It did not need a new installer release. Whitaker
-upstream PR #577 (`5418482a3`, merged 2026-11-08T22:10:34Z) changed
-`prune_prebuilt_libraries` to scan the staging directory and remove every
-staged library whose crate was not requested, so an unknown crate is now pruned
-by construction rather than by being present in a compiled-in list. The rolling
-archive republished sixteen minutes later as `whitaker-lints-5418482-…`
-(22:17:40Z). The next `build-test` attempt (6, job `128910557609`) downloaded
-that archive, ran `whitaker --all` on both `netsuke-build` and `test_support`,
-and finished clean: steps 22–24 read `Install Whitaker` success, `Lint` success,
-`Typecheck` success.
+**How it cleared, measured.** It did not need a new installer release, and the
+installer's own pruning code did not run. The recovery was a *packaging*
+change, and the two changes sit in different places:
+
+- **The archive stopped shipping the crate.** Whitaker PR #570 (`64a5011af`,
+  merged 2026-11-08T14:18:48Z) made `string_continuation_style` experimental
+  and restricted `whitaker-package-lints` to `PINNED_INSTALLER_LINT_CRATES` —
+  the nine crates the oldest offered installer, v0.2.9, can prune by name. A
+  standalone library for any other crate is now never packaged, so the archive
+  cannot contain a library the pinned installer would fail to prune.
+- **The installer's fancier prune came later and did not reach CI.** Whitaker
+  PR #577 (`5418482a3`, merged 2026-11-08T22:10:34Z) rewrote
+  `prune_prebuilt_libraries` to scan the staging directory rather than a
+  compiled-in list. That is a change to the *installer binary*, and the
+  workflows pin `installer-version: '0.2.11'`, which was released
+  2026-10-29T21:01:49Z — three weeks before. The installed binary therefore
+  cannot contain that code, and reading the recovery as #577 arriving would be
+  wrong.
+
+The timing confirms which one reached CI. `build-test` attempt 6 (job
+`128910557609`) downloaded a `whitaker-lints-5418482-nightly-…` archive and
+finished clean: steps 22–24 read `Install Whitaker` success, `Lint` success,
+`Typecheck` success. A `5418482` archive name only shows the rolling release
+was *republished after* that commit; the archive it rebuilt already lacked the
+crate, because #570 had removed it from the packaging list five commits
+earlier. The green run is evidence that the archive was clean, not that the new
+prune executed.
+
+The corrected interval matters for the record. #577 merged at 22:10:34Z and the
+archive republished at 22:17:40Z — **seven minutes six seconds**, not the
+sixteen the earlier revision of this decision claimed. That figure was wrong
+arithmetic, not a rounding: it was never sixteen.
 
 **So the installer pin is not on the recovery path.** The netsuke workflows
 still pin `installer-version: '0.2.11'` — unchanged at
 `.github/workflows/ci.yml` line 219 and `.github/workflows/ci-windows.yml` line
 170 — and the lanes are green anyway. Updating that pin is therefore *not*
 required to clear this defect, and recording it as a required operator action
-would be wrong. A future installer release is still desirable, because the same
-class of defect can recur for any crate the pinned installer does not know
-about, but Whitaker PR #576 has since added a pre-publish guard to
+would be wrong. A future installer release is still desirable, because the
+archive-side restriction is a packaging policy the pinned installer never
+enforces for itself, and Whitaker PR #576 has since added a pre-publish guard to
 `rolling-release.yml` (`scripts/check_prune_safety.py`) that fails the publish
 job rather than shipping an archive the oldest supported installer cannot
 prune. The upstream owner of both is `leynos/whitaker` issue #565, which is
@@ -1374,6 +1396,96 @@ with a file, a line, or a measurement behind it. Six produced edits, one is
 recorded as unsatisfiable with its numbers, and one is rebutted on the code's
 own shape. A fresh formal review of the resulting head is what clears
 `CHANGES_REQUESTED`; the queue request and its outcome are recorded separately.
+
+Date/Author: 2026-11-09, implementation agent.
+
+### D35: the conversation with CodeRabbit corrected D32's mechanism
+
+**Decision.** Answer each point CodeRabbit raised against this head with a
+check, and correct the record where it was wrong. Four of its six observations
+were correct, and two of those were errors in this plan's own text.
+
+**D32 named the wrong recovery mechanism, and CodeRabbit was right to say so.**
+The claim was that Whitaker PR #577's rewrite of `prune_prebuilt_libraries` is
+what cleared the duplicate-lint failure. That cannot be right: the workflows pin
+`installer-version: '0.2.11'`, released 2026-10-29T21:01:49Z, and #577 merged
+2026-11-08T22:10:34Z. The installed binary predates the fix by ten days, so the
+new prune never executed in CI. The green job's own log confirms which
+installer ran: `WHITAKER_INSTALLER_VERSION: 0.2.11` and
+`path=official-release version=0.2.11`.
+
+The real recovery was a **packaging** change: Whitaker PR #570 (`64a5011af`,
+merged 2026-11-08T14:18:48Z) made `string_continuation_style` experimental and
+restricted `whitaker-package-lints` to `PINNED_INSTALLER_LINT_CRATES` — the
+nine crates v0.2.9 can prune by name — so the archive stopped shipping a
+library the pinned installer could not prune. A `5418482` archive name records
+only that the rolling release was republished *after* #577; the archive it
+rebuilt was already clean because #570 had removed the crate from the packaging
+list.
+
+**The arithmetic was wrong too.** #577 merged at 22:10:34Z and the archive
+republished at 22:17:40Z: seven minutes six seconds. The text said sixteen. D32
+now records 7m06s, names #570 as the cause, and states explicitly that #577's
+installer-side prune did not reach CI.
+
+**The users' guide omitted a JSON-mode distinction.** It said the colour
+precedence applied to `--help`, `help`, and `help <subcommand>`, and treated
+`help targets` as the only exception. That is incomplete. JSON mode splits the
+routes: `--json` suppresses colour for the help Netsuke renders itself, because
+`DisplayPolicies.json` feeds `colour_enabled`, which returns `false` when set.
+It does not suppress Clap's own `--help` or `--version`, because
+`startup_colour` calls `colour_enabled(..., false)` with the JSON argument
+hard-coded false — the parser's choice is made from the startup hint before any
+configuration or JSON decision exists. `docs/users-guide.md` now states that
+split.
+
+**The task-update test could assert more than it did.** CodeRabbit's point was
+that the assertion starts at the `Task` label, so an escape prefix would go
+unseen. True as written, and D29's measurement explained why the enclosing-line
+reading is unavailable on the *animated* path. The plain path is different:
+`report_task_progress` writes `writeln!(io::stderr(), "{task}")` in one call
+when `is_hidden || force_text_task_updates`, so the update is one emission.
+
+Closing the gap took three attempts, and the first two were wrong in
+instructive ways. The first sliced from the preceding line terminator; it
+failed because the stage animation repaints with cursor-up moves rather than
+newlines, so the first task update shares a physical line with the final stage
+repaint and the slice collected the animation's escapes. The second asserted
+the emission begins at `Task`; it failed because the reporter wraps the whole
+label in `U+2068`…`U+2069`, so the emission begins one character earlier. The
+measured answer is `task_update_emissions`, which starts at the `U+2068` that
+opens the label and runs to the next terminator — the complete emission, with
+no part of the stage animation in it. It asserts that structure, then that the
+whole emission carries neither an escape nor a redraw. The animated path keeps
+`task_lines`, and D29's measurement still governs it.
+
+Both failed attempts were caught by running the test rather than by reasoning
+about it, and each failure was a false claim in my own prose: that nothing
+preceded the update on its line, and that the line began at `Task`. The
+assertion is stronger now precisely because the capture was read instead of
+assumed.
+
+**One request was tested and not adopted.** The row asked the oracle property
+to generate arbitrary byte streams rather than a selected alphabet. A
+differential probe over 12,720 enumerated adversarial streams (every
+combination up to length three over an alphabet including `0x9b`, `0x90`,
+`0x98`, `0x9d`, `0x9e`, `0x9f`, `0x9c`, `0x00` and `0xff`) and 400,000
+pseudo-random streams up to 32 bytes found **zero** divergence.
+
+The comparison cannot diverge on such bytes, and the reason is structural:
+neither implementation treats an eight-bit control as an introducer, so both
+fall through to "not a bare carriage return". A property over arbitrary bytes
+would therefore add cases that exercise the same branch the selected alphabet
+already reaches, at the cost of a slower generator. What it would not do is
+stay silent if that ever changed, so the case is added in the form that earns
+its keep — `classifier_agrees_with_the_oracle_on_arbitrary_bytes`, which states
+the agreement rather than assuming it. Recorded as tested-and-narrowed, not as
+refused.
+
+**One confirmation.** CodeRabbit accepted the `DisplayPolicies` enum decision
+explicitly ("I acknowledge your decision not to move those types in this PR"),
+which closes the *Domain Architecture* rebuttal as a shared reading rather than
+a disagreement.
 
 Date/Author: 2026-11-09, implementation agent.
 

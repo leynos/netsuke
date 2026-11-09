@@ -123,13 +123,51 @@ fn a_task_update_is_sliced_from_its_label_to_its_line_end() {
     );
 }
 
+/// The UTF-8 encoding of U+2068, the bidi isolate that opens a task update.
+const TASK_ISOLATE: [u8; 3] = [0xE2, 0x81, 0xA8];
+
+/// Slice out each complete task-update emission, isolation prefix included.
+///
+/// The reporter wraps the whole label in `U+2068`…`U+2069`, so the emission
+/// begins one character before the `Task ` text. Slicing at the label would
+/// leave that prefix outside the assertion, and an escape written there would
+/// pass unseen — the gap this helper exists to close.
+///
+/// It is deliberately not "the whole line": the stage animation repaints with
+/// cursor-up moves rather than newlines, so the first task update shares a
+/// physical line with the final stage repaint. Measuring from the previous line
+/// terminator would attribute the animation's escapes to the task update and
+/// fail on correct output, which is exactly what an earlier revision of this
+/// helper did.
+fn task_update_emissions(bytes: &[u8]) -> Vec<&[u8]> {
+    let is_terminator = |byte: &u8| matches!(*byte, b'\r' | b'\n');
+    bytes
+        .windows(b"Task ".len())
+        .enumerate()
+        .filter_map(|(start, window)| {
+            if window != b"Task " {
+                return None;
+            }
+            let emission_start = start
+                .checked_sub(TASK_ISOLATE.len())
+                .filter(|&index| bytes.get(index..start) == Some(TASK_ISOLATE.as_slice()))
+                .unwrap_or(start);
+            let remainder = bytes.get(emission_start..)?;
+            let emission_length = remainder
+                .iter()
+                .position(is_terminator)
+                .map_or(remainder.len(), |terminator| terminator + 1);
+            bytes.get(emission_start..emission_start.saturating_add(emission_length))
+        })
+        .collect()
+}
+
 #[googletest::gtest]
 #[test]
 fn task_updates_stay_plain_when_stdout_is_piped_and_stderr_is_terminal() -> Result<()> {
     let workspace = TerminalWorkspace::new()?;
     let args = ["--accessibility", "off", "--progress", "always", "build"];
     let env = [("TERM", "xterm-256color")];
-    let plan = display_plan_for_args(&args, &env, false, true)?;
     let output = workspace
         .run_pty(&args, &env, Attach::StderrOnly)
         .context("run task updates with piped stdout")?;
@@ -138,14 +176,19 @@ fn task_updates_stay_plain_when_stdout_is_piped_and_stderr_is_terminal() -> Resu
     let terminal = visible_text(&output.terminal);
     expect_that!(terminal.as_str(), contains_substring("Task 1/2"));
     expect_that!(terminal.as_str(), contains_substring("Task 2/2"));
-    let task_lines = task_lines(&output.terminal);
-    expect_that!(task_lines.len(), eq(2));
-    for line in task_lines {
-        expect_that!(
-            classify(line).has_any_escape,
-            eq(!plan.force_text_task_updates())
-        );
-        expect_that!(classify(line).has_redraw, eq(false));
+    let emissions = task_update_emissions(&output.terminal);
+    expect_that!(emissions.len(), eq(2));
+    for emission in emissions {
+        // Piped stdout puts the reporter on the text path, which writes the
+        // whole update with one `writeln!` and emits no escape at all. The
+        // slice now starts at the bidi isolate, so this covers every byte the
+        // task update writes and not merely the part from the label onwards.
+        expect_that!(emission.starts_with(TASK_ISOLATE.as_slice()), eq(true));
+        // The slice stops at the first terminator, and on a pseudo-terminal
+        // that is the `\r` of the `\r\n` the line discipline writes.
+        expect_that!(emission.ends_with(b"\r"), eq(true));
+        expect_that!(classify(emission).has_any_escape, eq(false));
+        expect_that!(classify(emission).has_redraw, eq(false));
     }
     Ok(())
 }

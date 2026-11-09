@@ -2052,6 +2052,15 @@ colour. A `NETSUKE_COLOR` value styles all of them or none of them. An explicit
 `--color always` can override the automatic colour suppression from `NO_COLOR`
 and `TERM=dumb`.
 
+JSON mode splits those routes. `--json` suppresses colour for the help Netsuke
+renders itself — `help` and `help <subcommand>` — because the structured
+document is the output. It does not suppress the styles Clap embeds in `--help`
+or `--version`: those are rendered by the parser from the startup colour hint,
+before any configuration or JSON decision is available, so
+`--color always --json --help` still styles Clap's own help text. Treat
+`--help` as a parser-level question and `help` as a Netsuke command when
+scripting either.
+
 `help targets` is the exception. It loads and validates the manifest, so it
 takes the ordinary configuration path and resolves colour from the merged
 configuration. It renders a plain catalogue with no ANSI styling under every
