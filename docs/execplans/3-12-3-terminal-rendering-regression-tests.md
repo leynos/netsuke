@@ -1215,6 +1215,27 @@ archive republished at 22:17:40Z — **seven minutes six seconds**, not the
 sixteen the earlier revision of this decision claimed. That figure was wrong
 arithmetic, not a rounding: it was never sixteen.
 
+**The recovery cost lint coverage, and that is part of the disposition.** #570
+did not merely stop packaging the crate; it also moved it out of the default
+suite registry, behind the `experimental-string-continuation-style` feature.
+Whitaker's own users' guide at the merge commit says so directly: the rolling
+archive "holds no experimental lint, so `string_continuation_style` is neither
+in the archive nor registered by the published suite. Installing it needs
+`--experimental`, which builds from source." Neither installation route netsuke
+uses passes that flag — `make lint-whitaker` runs `whitaker --all --no-deps`
+with no `--experimental`, and the shared `install-whitaker` action exposes no
+such input. So the lint that caused the outage no longer runs here at all. That
+is the right trade against a red gate, and it is a real reduction: this
+repository's style guide tells contributors to use `concat!()` instead of
+backslash-continued literals, which is exactly the pattern the lint enforces,
+and nothing now checks it. A grep-level estimate of the population is 284
+tracked `*.rs` lines matching `"[^"]*\\[[:space:]]*$`; that is an upper bound
+on what the lint would examine rather than a lint-run count, since some matches
+sit in comments or raw strings. Re-enabling means `--experimental`, which
+builds the suite from source rather than using the prebuilt archive, so it is a
+deliberate cost decision rather than a flag flip, and it belongs to whoever
+revisits the installer pin.
+
 **So the installer pin is not on the recovery path.** The netsuke workflows
 still pin `installer-version: '0.2.11'` — unchanged at
 `.github/workflows/ci.yml` line 219 and `.github/workflows/ci-windows.yml` line
@@ -1398,12 +1419,17 @@ code, one of them with the measurement D29 already recorded.
   `unicode_override`; it performs no I/O and reads no configuration, and
   `Cli::display_policies` is the single adapter that fills the struct. What is
   not independent is the *type identity*: the enums live in `cli::config` and
-  are re-exported through the resolver's input. Moving four enums that 293
-  sites across 33 files name, to change where the types are declared while
+  are re-exported through the resolver's input. Moving four enums that 365
+  lines across 39 Rust files name, to change where the types are declared while
   leaving every value and accessor identical, would be a large refactor with no
   behavioural gain, and the plan's own tolerance caps production changes at 600
   lines. Recorded as a design choice with its cost, not as a claim that the
-  dependency is absent.
+  dependency is absent. The figure is measured, not estimated: a `git grep` for
+  the four enum names over tracked `*.rs` at HEAD reports 365 matching lines,
+  and the `-l` form reports 39 files. An earlier revision said "293 sites
+  across 33 files"; that number did not reproduce under any definition tried —
+  322 lines across 33 files was the closest, on an older commit — and is
+  corrected here rather than carried.
 
 **Consequence for the review decision.** All eight rows now have a disposition
 with a file, a line, or a measurement behind it. Six produced edits, one is
