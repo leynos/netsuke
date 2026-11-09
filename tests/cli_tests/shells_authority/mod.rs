@@ -6,52 +6,17 @@
 //! including a project chain reached through `extends` and environment
 //! variables that would inject the key indirectly.
 
-use super::merge_probe::{isolated_environment, merge_in_child, merge_in_child_error};
+mod support;
+
+#[cfg(unix)]
+use super::merge_probe::{isolated_environment, merge_in_child};
 use anyhow::{Context, Result, ensure};
-use cap_std::{ambient_authority, fs::Dir};
 use rstest::rstest;
 use std::ffi::OsString;
-use std::path::Path;
+#[cfg(unix)]
+use support::operator_rejection;
+use support::{SHELLS_TOML, ensure_authority_rejection, rejected_in_child, write_file};
 use tempfile::tempdir;
-
-/// The smallest definition body accepted by the eventual schema.
-const SHELLS_TOML: &str = "[[shells]]\nname = \"dash\"\nexecutable = \"dash\"\nargs = [\"-c\"]\n";
-
-/// Write `content` into `directory` as `name` through a capability handle.
-///
-/// The tests construct each configuration root themselves, so the ambient
-/// authority is deliberate: the directory being opened is the fixture's own
-/// temporary root, not a path supplied by a configuration file.
-fn write_file(directory: &Path, name: &str, content: &str) -> Result<()> {
-    let root = Dir::open_ambient_dir(directory, ambient_authority())
-        .with_context(|| format!("open {} to write {name}", directory.display()))?;
-    root.write(name, content.as_bytes())
-        .with_context(|| format!("write {name} in {}", directory.display()))
-}
-
-/// Run a merge probe that must fail and return its reported message.
-fn rejected_in_child(
-    args: &[&str],
-    project: &Path,
-    home: &Path,
-    overrides: &[(OsString, OsString)],
-) -> Result<String> {
-    let (_xdg_config_dirs, environment) = isolated_environment(home, overrides)?;
-    merge_in_child_error(args, project, &environment)
-}
-
-/// Assert a rejection names the `shells` key and the authority rule.
-fn ensure_authority_rejection(message: &str) -> Result<()> {
-    ensure!(
-        message.contains("shells"),
-        "rejection should name the rejected key, got: {message}"
-    );
-    ensure!(
-        message.contains("operator"),
-        "rejection should state the operator-authority rule, got: {message}"
-    );
-    Ok(())
-}
 
 #[rstest]
 fn project_shells_key_is_rejected() -> Result<()> {
@@ -119,18 +84,6 @@ fn environment_shells_is_rejected(#[case] variable: &str) -> Result<()> {
         "environment rejection should state the file-only rule, got: {message}"
     );
     Ok(())
-}
-
-/// Write an operator configuration file and return the failure it causes.
-///
-/// The operator root keeps definition authority, so a failure here is a
-/// validation fault rather than an authority fault.
-#[cfg(unix)]
-fn operator_rejection(config: &str) -> Result<String> {
-    let project = tempdir().context("create temporary project directory")?;
-    let home = tempdir().context("create temporary home directory")?;
-    write_file(home.path(), ".netsuke.toml", config)?;
-    rejected_in_child(&["netsuke"], project.path(), home.path(), &[])
 }
 
 /// A valid definition declared by an operator root is accepted.
