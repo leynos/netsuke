@@ -1334,12 +1334,12 @@ against the code, one of them with the measurement D29 already recorded.
 - *Testing (Overall)* — the row is true as a statement about the test:
   `task_lines` slices from the label (the literal `Task` followed by a space),
   so an escape prefix immediately before it would pass unnoticed. D29 already
-  recorded that, together with why
-  the enclosing-line reading it asks for cannot be satisfied: the stage-6
-  repaint occupies every byte before the label with no terminator between them
-  (span 962 bytes, `has_redraw=true`), no `Task` occurrence in the whole
-  capture starts a line, and `--progress never` emits no task updates at all.
-  The row is therefore recorded as measured-unsatisfiable rather than re-fixed.
+  recorded that, together with why the enclosing-line reading it asks for
+  cannot be satisfied: the stage-6 repaint occupies every byte before the label
+  with no terminator between them (span 962 bytes, `has_redraw=true`), no
+  `Task` occurrence in the whole capture starts a line, and `--progress never`
+  emits no task updates at all. The row is therefore recorded as
+  measured-unsatisfiable rather than re-fixed.
 - *Domain Architecture* — rebutted. The row asks the resolver not to use CLI
   configuration types. It already does not: `resolve_display_plan` takes a
   purpose-built `DisplayPolicies` struct of plain `Copy` enums, and
