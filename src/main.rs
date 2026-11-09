@@ -133,8 +133,11 @@ where
     main_tracing::set_tracing_ansi(startup_plan.stderr_colour());
     if is_informational_help(&parsed_cli) {
         settle_startup_diagnostics(startup_writer, startup_mode);
+        // The runner-rendered help topics never reach the configuration merge,
+        // so this route applies the startup plan's colour rather than
+        // re-deriving one from configuration it deliberately has not read.
         return finish_run(
-            run_informational_help(
+            run_cli(
                 &parsed_cli,
                 dependencies.system_locale,
                 startup_mode,
@@ -223,22 +226,6 @@ struct StartupWindow {
     parsed_cli: cli::Cli,
     /// Raw clap matches retained for the configuration merge.
     matches: clap::ArgMatches,
-}
-
-/// Render the informational-help route from the pre-configuration plan.
-///
-/// The runner-rendered `help` topics never reach the configuration merge, so
-/// this route must apply the startup plan's colour rather than re-deriving it.
-fn run_informational_help<S>(
-    parsed_cli: &cli::Cli,
-    system_locale: &S,
-    startup_mode: DiagMode,
-    startup_plan: DisplayPlan,
-) -> ExitCode
-where
-    S: locale_resolution::SystemLocale,
-{
-    run_cli(parsed_cli, system_locale, startup_mode, startup_plan)
 }
 
 /// Run the command after the configuration merge has settled its own mode.

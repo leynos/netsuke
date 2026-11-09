@@ -1371,25 +1371,39 @@ code, one of them with the measurement D29 already recorded.
 
 **Two rows are rebutted.**
 
-- *Testing (Overall)* — the row is true as a statement about the test:
+- *Testing (Overall)* — repaired, and the earlier rebuttal was half wrong.
   `task_lines` slices from the label (the literal `Task` followed by a space),
-  so an escape prefix immediately before it would pass unnoticed. D29 already
-  recorded that, together with why the enclosing-line reading it asks for
-  cannot be satisfied: the stage-6 repaint occupies every byte before the label
-  with no terminator between them (span 962 bytes, `has_redraw=true`), no
-  `Task` occurrence in the whole capture starts a line, and `--progress never`
-  emits no task updates at all. The row is therefore recorded as
-  measured-unsatisfiable rather than re-fixed.
-- *Domain Architecture* — rebutted. The row asks the resolver not to use CLI
-  configuration types. It already does not: `resolve_display_plan` takes a
-  purpose-built `DisplayPolicies` struct of plain `Copy` enums, and
-  `Cli::display_policies` is the adapter that fills it. The enums do carry
-  Serde and `FromStr`, but nothing on the resolver's side exercises either —
-  the resolver calls `explicit_override` and `unicode_override`, which are pure
-  accessors. Moving four enums that 293 sites across 33 files name, to satisfy
-  a reading the code does not support, would be a large refactor with no
+  so an escape prefix immediately before it would pass unnoticed; that part of
+  the row is true, and the assertion now closes it. What D29 actually
+  establishes is narrower than the earlier rebuttal claimed: the *whole
+  physical line* cannot be used as the unit, because the stage-6 repaint
+  occupies every byte before the label with no terminator between them (span
+  962 bytes, `has_redraw=true`) and no `Task` occurrence in the capture starts
+  a line. That rules out one measurement, not every one. The task emission
+  itself has a real boundary — the reporter wraps the whole label in
+  `U+2068`…`U+2069`, so the emission begins at that isolate — and
+  `task_update_emissions` slices exactly there, then asserts the complete
+  emission carries no escape and no redraw. `--progress never` emits no task
+  updates at all, so that case is still asserted through the stage labels
+  rather than through task lines.
+- *Domain Architecture* — rebutted, with one correction to the earlier
+  wording. An earlier revision of this plan claimed the resolver was
+  independent of CLI configuration types. That was wrong and CodeRabbit was
+  right to say so: `src/output/plan/mod.rs:10` imports `AccessibilityPolicy`,
+  `ColourPolicy`, `EmojiPolicy` and `ProgressPolicy` from `crate::cli::config`,
+  and `DisplayPolicies` exposes those same four types. The accurate claim is
+  narrower. The *dependency direction* is already the one the row asks for:
+  `resolve_display_plan` takes a purpose-built `DisplayPolicies` struct of plain
+  `Copy` enums and calls only the pure accessors `explicit_override` and
+  `unicode_override`; it performs no I/O and reads no configuration, and
+  `Cli::display_policies` is the single adapter that fills the struct. What is
+  not independent is the *type identity*: the enums live in `cli::config` and
+  are re-exported through the resolver's input. Moving four enums that 293
+  sites across 33 files name, to change where the types are declared while
+  leaving every value and accessor identical, would be a large refactor with no
   behavioural gain, and the plan's own tolerance caps production changes at 600
-  lines.
+  lines. Recorded as a design choice with its cost, not as a claim that the
+  dependency is absent.
 
 **Consequence for the review decision.** All eight rows now have a disposition
 with a file, a line, or a measurement behind it. Six produced edits, one is

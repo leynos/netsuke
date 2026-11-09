@@ -2045,21 +2045,21 @@ subprocess.
 - `never` disables ANSI styling and acts like an internal `NO_COLOR` for
   automatic accessibility selection.
 
-Clap-rendered help and version output — `--help`, `help`, and
-`help <subcommand>` — use the last `--color` value on the command line, then
-`NETSUKE_COLOR`, then `auto`; configuration files are not read to choose their
-colour. A `NETSUKE_COLOR` value styles all of them or none of them. An explicit
-`--color always` can override the automatic colour suppression from `NO_COLOR`
-and `TERM=dumb`.
+All three help routes take their colour from the last `--color` value on the
+command line, then `NETSUKE_COLOR`, then `auto`; configuration files are never
+read to choose it. They do not all render in the same layer, though, and that
+decides what `--json` can suppress:
 
-JSON mode splits those routes. `--json` suppresses colour for the help Netsuke
-renders itself — `help` and `help <subcommand>` — because the structured
-document is the output. It does not suppress the styles Clap embeds in `--help`
-or `--version`: those are rendered by the parser from the startup colour hint,
-before any configuration or JSON decision is available, so
-`--color always --json --help` still styles Clap's own help text. Treat
-`--help` as a parser-level question and `help` as a Netsuke command when
-scripting either.
+- Clap renders `--help` and `--version` during parsing, before Netsuke starts.
+  Their colour follows the startup hint, so `--color always --json --help`
+  still styles that text.
+- Netsuke renders `help` and `help <subcommand>` itself and returns before the
+  configuration merge, so it applies the startup plan's colour. `--json`
+  suppresses colour for these, because the structured document is the output.
+
+An explicit `--color always` can override the automatic colour suppression from
+`NO_COLOR` and `TERM=dumb`, on either layer. Treat `--help` as a parser-level
+question and `help` as a Netsuke command when scripting either.
 
 `help targets` is the exception. It loads and validates the manifest, so it
 takes the ordinary configuration path and resolves colour from the merged

@@ -163,9 +163,13 @@ the adapters apply them differently because their libraries do:
   therefore holds only for the window before the first call — the parse
   diagnostics. A configuration-load failure is emitted *after* the startup
   reload, so its structured events already follow the startup colour hint, and
-  that is the split `tests/terminal_rendering/json.rs` pins. Informational help
-  — `--help`, `help` and `help <subcommand>` — returns before the merge, so its
-  events keep the startup answer rather than a merged one.
+  that is the split `tests/terminal_rendering/json.rs` pins. Only the
+  runner-rendered help — `help` and `help <subcommand>` — reaches the startup
+  plan at all. Clap's own `--help` and `--version` exit from inside
+  `parse_with_localizer_from` via `err.exit()`, before `set_tracing_ansi` is
+  called once, so their buffered tracing events stay plain even under
+  `--color always`. The styling Clap puts in the help body is a separate
+  matter, decided by `parser_color` at parse time.
 - The Miette hook builds one `MietteHandlerOpts` handler per report from
   `diagnostic_style()`, passing its `colour`, `unicode` and `links` fields to
   `color`, `unicode` and `terminal_links`. It does not choose between graphical
@@ -7104,7 +7108,7 @@ and its coverage contract rationale.
 
 ### Configuration-precedence regression tests
 
-The config-precedence ladder and display-policy domain are covered by three
+The config-precedence ladder and display-policy domain are covered by several
 modules under `tests/cli_tests/`:
 
 - `config_precedence_ladder.rs` pins the closed selector model (`--config` >
@@ -7113,12 +7117,18 @@ modules under `tests/cli_tests/`:
   defaults. It includes an explicit guard that the removed
   `NETSUKE_CONFIG_PATH` alias is not a selector, even when it names an existing
   file with distinct values.
-- `display_policy_domain.rs` exhaustively verifies the consolidated
-  display-policy resolution (`EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`,
-  `AccessibilityPolicy`, `json`, `NO_COLOR`, and `TERM`/output mode) against a
-  handwritten truth model, using one flat Cartesian-product sweep plus a
-  proptest. It adds coverage only; the production resolution in
-  `src/theme/mod.rs` and `src/output/prefs/mod.rs` is not changed.
+- `display_plan_domain.rs` exhaustively verifies the consolidated display-plan
+  resolution (`EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`,
+  `AccessibilityPolicy`, `json`, `NO_COLOR`, and `TERM`/output mode) against
+  the truth model in `display_policy_truth.rs`, using one flat
+  Cartesian-product sweep plus a proptest. It adds coverage only; the
+  production resolution in `src/theme/mod.rs` and `src/output/prefs/mod.rs` is
+  not changed.
+- `display_plan_contract.rs` pins the same plan from the other direction, as
+  insta snapshots keyed by policy, so a change to how one policy renders fails
+  as a readable diff rather than as an assertion count.
+  `display_policy_domain.rs` keeps the narrower per-field mapping checks that
+  predate the consolidated resolver.
 - `merge_targets_proptests.rs` holds the handwritten proptest strategies (no
   `#[derive(Arbitrary)]`) for the `default_targets` append-in-discovery-order
   invariant and scalar merge ordering (defaults → file → environment → CLI).
