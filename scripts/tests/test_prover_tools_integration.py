@@ -198,25 +198,68 @@ def test_make_verus_propagates_a_verifier_failure(tmp_path: pathlib.Path) -> Non
         st.integers(min_value=0, max_value=4), min_size=1, max_size=4, unique=True
     ),
     requested_position=st.integers(min_value=0, max_value=3),
+    failure_status=st.integers(min_value=1, max_value=125),
 )
 def test_pinned_cli_stops_at_the_failing_proof_in_any_order(
-    tmp_path: pathlib.Path, order: list[int], requested_position: int
+    tmp_path: pathlib.Path,
+    order: list[int],
+    requested_position: int,
+    failure_status: int,
 ) -> None:
-    """Whatever the batch order, execution stops at and after the failure."""
+    """Whatever the batch order and status, execution stops at the failure.
+
+    The status is generated across ``1..=125`` because the CLI must hand the
+    verifier's own code back unchanged rather than mapping it: those are the
+    codes a failing verifier can report without colliding with the shell's
+    reserved 126 and above, which mean "cannot execute" and "killed" instead.
+    """
     failed_position = requested_position % len(order)
     proofs = make_proofs(tmp_path, count=5)
     selected = [proofs[index] for index in order]
     result = run_verus(
         tmp_path,
         selected,
-        environment={"VERUS_FAIL_PROOF": str(selected[failed_position])},
+        environment={
+            "VERUS_FAIL_PROOF": str(selected[failed_position]),
+            "VERUS_FAIL_STATUS": str(failure_status),
+        },
     )
     completed = [
         proof_for_invocation(invocation, selected)
         for invocation in invocations(tmp_path / "verus-invocations.jsonl")
     ]
 
-    assert result.returncode == 42, "the Verus failure status must be preserved"
+    assert result.returncode == failure_status, (
+        "the Verus failure status must be preserved"
+    )
     assert completed == selected[: failed_position + 1], (
         "the pinned CLI must stop immediately after the failing proof"
+    )
+
+
+@settings(
+    max_examples=5,
+    deadline=None,
+    suppress_health_check=[HealthCheck.function_scoped_fixture],
+)
+@given(
+    order=st.lists(
+        st.integers(min_value=0, max_value=4), min_size=1, max_size=4, unique=True
+    ),
+)
+def test_pinned_cli_completes_any_successful_order(
+    tmp_path: pathlib.Path, order: list[int]
+) -> None:
+    """A batch with no failure runs every proof, whatever the order."""
+    proofs = make_proofs(tmp_path, count=5)
+    selected = [proofs[index] for index in order]
+    result = run_verus(tmp_path, selected)
+    completed = [
+        proof_for_invocation(invocation, selected)
+        for invocation in invocations(tmp_path / "verus-invocations.jsonl")
+    ]
+
+    assert result.returncode == 0, result.stderr
+    assert completed == selected, (
+        "a successful batch must execute every proof in the order given"
     )

@@ -560,11 +560,30 @@ jobs:
         # per-user systemd manager into a failure instead of a skip -- a lane
         # that skipped every scenario would otherwise read as green.
         run: make test-kani-scope-wrapper
+      - name: Install the syscall tracer
+        if: steps.scope.outputs.run-proofs == 'true'
+        # The boundary test reads the query's `strace` log to tell an attempt
+        # that was refused from one that was never made; a run that cannot
+        # trace cannot distinguish them and the target's strict mode fails
+        # rather than reporting a skip. The lane installs the tracer itself
+        # instead of assuming the runner image ships one, because the two
+        # runner pools this job can land on are not built from the same image
+        # recipe.
+        run: |
+          if ! command -v strace > /dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install --yes --no-install-recommends strace
+          fi
+          strace -V
       - name: Verify the kani-check isolation boundary
         if: steps.scope.outputs.run-proofs == 'true'
         # The `kani-check` query is read-only by construction, and the Rust
         # suite proves it by running the real recipe inside a read-only chroot
-        # with no network. A host that forbids unprivileged user namespaces
+        # with no network. It also traces that run, so a refused write or
+        # connection is distinguished from one that was never attempted; the
+        # step above installs the tracer, and the target's strict mode turns an
+        # absent tracer into a failure rather than a skip. A host that forbids
+        # unprivileged user namespaces
         # reports that case as a skip, which would read as green without ever
         # exercising the boundary. The target exports the strict variable, so
         # such a host fails here and names the sandbox operation it refused.

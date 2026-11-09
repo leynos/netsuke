@@ -20,6 +20,11 @@ mod support;
 #[path = "prover_tools_kani_check_tests/recipe.rs"]
 mod recipe;
 
+// The runtime half: the sandbox traces the query, and this module turns the
+// trace into the attempt findings the boundary case asserts are empty.
+#[path = "prover_tools_kani_check_tests/trace.rs"]
+mod trace;
+
 use anyhow::{Context, Result, ensure};
 #[cfg(target_os = "linux")]
 use std::path::Path;
@@ -192,7 +197,7 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
 }
 
 /// Check that the query succeeds with network access and filesystem writes
-/// blocked, and that the sandbox actually applied both restrictions.
+/// blocked, that it attempts neither, and that the attempt reader fires.
 ///
 /// This is the boundary the finding asks for: the recipe is read-only by
 /// construction, so the test removes the ability to write or reach the network
@@ -203,10 +208,18 @@ fn kani_check_reports_an_unreadable_version_file() -> Result<()> {
 /// every path as blocked because redirection itself was broken would fail here
 /// rather than pass.
 ///
+/// A refused attempt and no attempt look identical in an exit status once a
+/// caller discards the error, so the two queries are traced instead. The real
+/// trace must contain no write-intent open, mutation or network connection. The
+/// control verifier discards a write and a connection and still reports the
+/// pinned version, and its trace must name both — otherwise the reader, not the
+/// recipe, is what passed.
+///
 /// # Errors
 ///
 /// Returns an error if the fixture cannot be built, if the isolated query
-/// fails, or if the sandbox reports that a restriction did not apply.
+/// fails, if the sandbox reports that a restriction did not apply, or if the
+/// control trace does not name the attempts it was built to make.
 #[cfg(target_os = "linux")]
 #[test]
 fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
@@ -215,7 +228,11 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
     if let Some(reason) = support::sandbox::unavailable(repo, fixture.root()) {
         return support::sandbox::skip(&reason);
     }
-    let (output, marker) = fixture.run_sandboxed_check(repo)?;
+    if !support::sandbox::tracer_available() {
+        return support::sandbox::skip("strace is not installed, so attempts cannot be read back");
+    }
+    let run = fixture.run_sandboxed_check(repo)?;
+    let output = &run.output;
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
 
@@ -261,5 +278,24 @@ fn kani_check_runs_without_network_or_writable_storage() -> Result<()> {
         !stderr.contains("prover-tools runner invoked"),
         "the isolated query must not resolve the remote runner, got `{stderr}`"
     );
-    fixture.ensure_remote_runner_unused(&marker)
+    ensure!(
+        stdout.contains("control-exit=0"),
+        "the control verifier must succeed while discarding its failed attempts, \
+         got stdout `{stdout}` and stderr `{stderr}`"
+    );
+    let reads = trace::attempts(&run.query_trace);
+    ensure!(
+        reads.is_empty(),
+        "the isolated query must attempt no write or connection, got {reads:?}"
+    );
+    let control_reads = trace::attempts(&run.control_trace);
+    for expected in ["write-intent", "network address"] {
+        ensure!(
+            control_reads
+                .iter()
+                .any(|finding| finding.contains(expected)),
+            "the control must be reported as a {expected} attempt, got {control_reads:?}"
+        );
+    }
+    fixture.ensure_remote_runner_unused(&run.marker)
 }

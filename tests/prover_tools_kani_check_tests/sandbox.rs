@@ -24,8 +24,10 @@ pub(super) struct SandboxPaths<'a> {
     pub(super) fixture: &'a Path,
     pub(super) chroot: &'a Path,
     pub(super) kani: &'a Path,
+    pub(super) control: &'a Path,
     pub(super) version_file: &'a Path,
     pub(super) poison: &'a Path,
+    pub(super) trace: &'a Path,
 }
 
 /// Build the shell script that applies the restrictions and runs the query.
@@ -39,16 +41,25 @@ pub(super) struct SandboxPaths<'a> {
 /// read-only, so they exist and are proven unwritable rather than merely
 /// absent; the home directory is created only when the caller has one, and the
 /// probe reports it as absent otherwise.
+///
+/// The one writable filesystem mount is the trace directory, which exists so
+/// `strace` can record what the query attempted. It is bound rather than
+/// created inside the chroot, so its contents survive on the host for the
+/// caller to read, and the recipe is never told about it. `/dev/null` is bound
+/// separately: programs and shells write there unconditionally, and its absence
+/// makes a shell abort a redirection rather than report a refused write.
 pub(super) fn script(paths: &SandboxPaths<'_>) -> String {
-    format!(
+    let body = format!(
         r#"set -u
 root={chroot}
 repo={repo}
 fixture={fixture}
-mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root/tmp" "$root$repo" "$root$fixture" || exit 90
+trace={trace}
+mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root/dev" "$root/tmp" "$root/var/trace" "$root$repo" "$root$fixture" || exit 90
 if [ -n "${{HOME:-}}" ]; then
   mkdir -p "$root$HOME" || exit 90
 fi
+touch "$root/dev/null" || exit 90
 ln -s usr/bin "$root/bin"
 ln -s usr/sbin "$root/sbin"
 ln -s usr/lib "$root/lib"
@@ -61,16 +72,23 @@ mount --bind "$repo" "$root$repo" && mount -o remount,ro,bind "$root$repo" || ex
 mount --bind "$fixture" "$root$fixture" || exit 95
 mount -o remount,ro,bind "$root$fixture" || exit 96
 mount -t proc proc "$root/proc" || exit 97
-exec chroot "$root" /bin/sh -c '{inner}' sh "$repo" "$fixture" {kani} {version_file} {poison}
+mount --bind /dev/null "$root/dev/null" || exit 98
+mount --bind "$trace" "$root/var/trace" || exit 99
+chroot "$root" /bin/sh -c '{inner}' sh "$repo" "$fixture" {kani} {control} {version_file} {poison} /var/trace
 "#,
         chroot = shell_quote(paths.chroot),
         repo = shell_quote(paths.repo),
         fixture = shell_quote(paths.fixture),
         kani = shell_quote(paths.kani),
+        control = shell_quote(paths.control),
         version_file = shell_quote(paths.version_file),
         poison = shell_quote(paths.poison),
+        trace = shell_quote(paths.trace),
         inner = INNER,
-    )
+    );
+    // The syscall set is the reader's, not the script's: a trace that omits a
+    // call the reader looks for would report a clean run it never saw.
+    body.replace("__TRACE_SYSCALLS__", crate::trace::TRACE_SYSCALLS)
 }
 
 /// The script run inside the chroot: probe the restrictions, then query.
@@ -80,10 +98,23 @@ exec chroot "$root" /bin/sh -c '{inner}' sh "$repo" "$fixture" {kani} {version_f
 /// deliberately writable procfs entry: it proves the probe reports a plain
 /// failure when the path really is protected, rather than reporting every path
 /// as blocked because redirection is broken.
+///
+/// Two traced queries follow the probes: the real one, and a control whose
+/// verifier attempts a suppressed write and a suppressed connection. The reader
+/// must find nothing in the first trace and both attempts in the second, which
+/// is how the boundary proves it would notice an attempt rather than only a
+/// success.
 const INNER: &str = r#"set -u
 LC_ALL=C
 export LC_ALL
-repo=$1; fixture=$2; kani=$3; version_file=$4; poison=$5
+repo=$1; fixture=$2; kani=$3; control=$4; version_file=$5; poison=$6; trace=$7
+traced() {
+  out=$1; verifier=$2
+  strace -f -qq -e "trace=__TRACE_SYSCALLS__" \
+    -o "$trace/$out" make --no-print-directory kani-check \
+    KANI="$verifier" KANI_VERSION_FILE="$version_file" \
+    PROVER_TOOLS="$poison" UV="$poison"
+}
 cd "$repo" || exit 90
 probe() {
   label=$1; path=$2
@@ -115,11 +146,12 @@ if resolved=$(timeout 5 getent hosts example.com 2>&1); then
 else
   echo "dns=blocked"
 fi
-make --no-print-directory kani-check \
-  KANI="$kani" KANI_VERSION_FILE="$version_file" \
-  PROVER_TOOLS="$poison" UV="$poison"
+traced query.strace "$kani"
 rc=$?
+traced control.strace "$control"
+control_rc=$?
 echo "make-exit=$rc"
+echo "control-exit=$control_rc"
 exit "$rc"
 "#;
 
@@ -135,8 +167,9 @@ exit "$rc"
 /// simpler binds succeed. Each stage has its own exit status so the reason
 /// names the operation that was refused.
 const PROBE: &str = r#"set -u
-root=$1; repo=$2; fixture=$3
-mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root$repo" "$root$fixture" || exit 90
+root=$1; repo=$2; fixture=$3; trace=$4
+mkdir -p "$root/usr" "$root/etc" "$root/proc" "$root/dev" "$root$repo" "$root$fixture" "$root/var/trace" "$trace" || exit 90
+touch "$root/dev/null" || exit 90
 ln -s usr/bin "$root/bin" || exit 90
 ln -s usr/sbin "$root/sbin" || exit 90
 ln -s usr/lib "$root/lib" || exit 90
@@ -149,7 +182,9 @@ mount --bind "$repo" "$root$repo" && mount -o remount,ro,bind "$root$repo" || ex
 mount --bind "$fixture" "$root$fixture" || exit 95
 mount -o remount,ro,bind "$root$fixture" || exit 96
 mount -t proc proc "$root/proc" || exit 97
-chroot "$root" /bin/sh -c 'exit 0' || exit 98
+mount --bind /dev/null "$root/dev/null" || exit 98
+mount --bind "$trace" "$root/var/trace" || exit 99
+chroot "$root" /bin/sh -c 'exit 0' || exit 100
 "#;
 
 /// Name the sandbox operation a probe exit status stands for.
@@ -163,7 +198,9 @@ fn probe_stage(status: Option<i32>) -> &'static str {
         Some(95) => "bind the fixture directory",
         Some(96) => "remount the fixture directory read-only",
         Some(97) => "mount a fresh procfs",
-        Some(98) => "chroot into the probe root",
+        Some(98) => "bind /dev/null into the probe root",
+        Some(99) => "bind the trace directory",
+        Some(100) => "chroot into the probe root",
         _ => "run the capability probe",
     }
 }
@@ -185,6 +222,10 @@ pub(crate) fn unavailable(repo: &Path, fixture: &Path) -> Option<String> {
         Ok(root) => root,
         Err(error) => return Some(format!("cannot create a sandbox probe directory: {error}")),
     };
+    let trace = match tempdir() {
+        Ok(trace) => trace,
+        Err(error) => return Some(format!("cannot create a sandbox probe directory: {error}")),
+    };
     let probe = Command::new("unshare")
         .args([
             "--user",
@@ -202,6 +243,7 @@ pub(crate) fn unavailable(repo: &Path, fixture: &Path) -> Option<String> {
         .arg(root.path())
         .arg(repo)
         .arg(fixture)
+        .arg(trace.path())
         .output();
     match probe {
         Ok(output) if output.status.success() => None,
@@ -212,6 +254,18 @@ pub(crate) fn unavailable(repo: &Path, fixture: &Path) -> Option<String> {
         )),
         Err(error) => Some(format!("unshare is not runnable: {error}")),
     }
+}
+
+/// Report whether a syscall tracer is installed.
+///
+/// The read-only mounts can only show that a write did not succeed. Showing
+/// that none was attempted — which is the contract — needs the trace, so a host
+/// without `strace` cannot exercise the boundary's attempt-detection half.
+pub(crate) fn tracer_available() -> bool {
+    Command::new("strace")
+        .arg("-V")
+        .output()
+        .is_ok_and(|output| output.status.success())
 }
 
 /// Report a skipped isolation case, unless strict mode forbids skipping.

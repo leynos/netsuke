@@ -561,43 +561,47 @@ Cargo home contained an apostrophe. Both defects reproduced with focused tests.
 The install recipe now prepends the exported active Cargo home only for the
 installer invocation, leaving Make's global build-tools-first order intact;
 `kani-check` uses a shell-escaped command value. Both regressions pass in the
-focused Rust suite (2/2). All 12 sequential repository gates now pass on the
-final candidate, including 4,950 nextest tests, all doctests, 1,669 workflow
-contracts, 90 CI-script tests, seven prover-tools integration tests, and 98.23%
-doc coverage. The exact-base CodeScene delta reports no new findings, the new
-edge-test file scores 10.0 with no review findings, and the hosted CodeScene
-check reports six quality gates passed. The repair is published in the
-candidate. The isolation boundary test now enforces the write boundary with a
-read-only chroot rather than a single repository bind, so the query is verified
-to run with every mounted path read-only: `/usr`, `/etc`, the repository, the
-fixture directory, the chroot root, `/tmp` and the caller's home. The one
-deliberately writable path is the `control` probe at `/proc/self/comm`, which
-exists to prove the probe can report a plain failure rather than classifying
-every path as blocked because redirection itself is broken. On a host that
-forbids unprivileged user namespaces the case reports the reason and returns
-success, which `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1` converts into a failure.
-The review at `5803947003` recorded six failed pre-merge checks, and the
-working candidate now addresses each while leaving every published repair above
-unchanged. Two new suites carry the coverage.
+focused Rust suite (2/2). All 12 sequential repository gates passed on the
+candidate recorded as Revision 41 — 4,950 nextest tests, all doctests, 1,669
+workflow contracts, 90 CI-script tests, seven prover-tools integration tests
+and 98.23% doc coverage — and each later revision records its own sweep at its
+own entry rather than renewing that one. The exact-base CodeScene delta reports
+no new findings, the new edge-test file scores 10.0 with no review findings,
+and the hosted CodeScene check reports six quality gates passed. The repair is
+published in the candidate. The isolation boundary test now enforces the write
+boundary with a read-only chroot rather than a single repository bind, so the
+query is verified to run with every mounted path read-only: `/usr`, `/etc`, the
+repository, the fixture directory, the chroot root, `/tmp` and the caller's
+home. The one deliberately writable path is the `control` probe at
+`/proc/self/comm`, which exists to prove the probe can report a plain failure
+rather than classifying every path as blocked because redirection itself is
+broken. On a host that forbids unprivileged user namespaces the case reports
+the reason and returns success, which `NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`
+converts into a failure. The review at `5803947003` recorded six failed
+pre-merge checks, and the working candidate now addresses each while leaving
+every published repair above unchanged. Two new suites carry the coverage.
 `tests/prover_tools_verus_e2e_tests.rs` drives `make verus` through the pinned
 CLI and the real verifier, checking the default proof, an ordered batch and
-failure propagation, and adds two property cases that generate batch length,
-failure position and exit status against a fake verifier while the CLI stays
-real. `tests/prover_tools_kani_check_command_tests.rs` drives the `kani-check`
-recipe through a matching pin, a mismatch, a missing pin, an unreadable pin and
-a failing verifier, and asserts that the verifier receives `--version` in every
-reachable case. The recipe now reports a stable `category=` and prints only the
-version token it extracted from the verifier's output — the `kani-version=`
-field and the `found` value of a mismatch — because the surrounding text comes
-from an external binary and no amount of bounding or escaping makes it safe to
-print. The read-only chroot boundary remains the evidence for the
-blocked-network and blocked-write requirement, and it runs strictly in the
-required `kani-smoke` lane rather than skipping. Version checking is described
-as the local read-only `--version` query, not a delegation to the pinned CLI.
+failure propagation, and adds property cases that generate batch length,
+failure position and exit status — and, in a third, a batch order that is a
+permutation rather than creation order — against a fake verifier while the CLI
+stays real. `tests/prover_tools_kani_check_command_tests.rs` drives the
+`kani-check` recipe through a matching pin, a mismatch, a missing pin, an
+unreadable pin and a failing verifier, and asserts that the verifier receives
+`--version` in every reachable case. The recipe now reports a stable
+`category=` and takes only a version token from the verifier's output — the
+`found` value of a mismatch and the version named by the success line; the
+`kani-version=` field is the expected pin read from the file — because the
+surrounding text comes from an external binary and no amount of bounding or
+escaping makes it safe to print. The read-only chroot boundary remains the
+evidence for the blocked-network and blocked-write requirement, and it runs
+strictly in the required `kani-smoke` lane rather than skipping. Version
+checking is described as the local read-only `--version` query, not a
+delegation to the pinned CLI.
 
-The gate evidence above is historical: it was collected on the candidate that
-carried Revision 48, before the review at `5808594893` and the CodeScene delta
-on `adeb43dd6` raised their findings. Six further candidates have since been
+The gate evidence above is historical: it is the Revision 41 sweep, and it was
+collected before the review at `5808594893` and the CodeScene delta on
+`adeb43dd6` raised their findings. Six further candidates have since been
 gated, each recording its own evidence at its own revision entry: Revision 49
 for those findings, Revision 50 after the rebase onto `main` at `6ff836603`,
 Revision 51 for the review at `5816957501`, Revision 52 for the Whitaker
@@ -1525,10 +1529,11 @@ command suite adds coverage of the recipe itself without replacing any of them.
 *Observability* asked for a safe, redacted verifier diagnostic or an actionable
 error category on failure, plus a regression test. The `kani-check` recipe now
 emits one of `category=pin-unreadable`, `category=verifier-failed`,
-`category=version-unparsable` or `category=version-mismatch`, and prints only
-the version token it extracted from the verifier's output: the `kani-version=`
-field, and the `found` value of a mismatch, so a verifier reporting
-`kani 0.66.0` against a 0.67.0 pin prints `found 0.66.0`. The text that token
+`category=version-unparsable` or `category=version-mismatch`, and takes only a
+version token from the verifier's output: the `found` value of a mismatch, and
+the version named by the success line, so a verifier reporting `kani 0.66.0`
+against a 0.67.0 pin prints `found 0.66.0`. The `kani-version=` field is the
+expected pin as read from the file, not verifier output. The text that token
 came from is never echoed. Redaction was rejected: that text comes from an
 external binary, so it could carry a credential, forge a surrounding log line
 or flood a terminal, and bounding plus escaping does not make arbitrary text
@@ -1784,11 +1789,13 @@ catches the dangerous `--all $(WHITAKER_SUITE_SELECTION) --no-deps` spelling.
 
 The outside-diff finding was a documentation correction, and it was right: the
 `kani-check` recipe prints the version token it extracted on a mismatch as well
-as on a match, so "never echoes verifier output" overstated the guarantee. The
-developers' guide and both places in this plan now say the recipe prints only
-that token — the `kani-version=` field and the `found` value — and never the
-text it was extracted from. A verifier reporting `kani 0.66.0` against a 0.67.0
-pin prints `found 0.66.0`.
+as on a match, so "never echoes verifier output" overstated the guarantee. A
+later review found the same sentence overstating the other way: the
+`kani-version=` field is the expected pin read from the file, not an extracted
+token. The developers' guide and both places in this plan now name only the
+values actually taken from the verifier — the `found` value of a mismatch and
+the version named by the success line — and never the text they came from. A
+verifier reporting `kani 0.66.0` against a 0.67.0 pin prints `found 0.66.0`.
 
 The Testing (Overall) and Unit Architecture rows asked for tests that detect
 write attempts, including attempts whose errors are ignored. The sandbox case
@@ -1838,3 +1845,75 @@ skipped, plus 28), `test-prover-tools-integration` (11 passed),
 `test-kani-check-isolation` (29 passed, 0 skipped) and `test-verus-e2e` (5
 passed, 0 skipped). Keep Status: IN PROGRESS pending review at the new head and
 trusted-main warm-cache acceptance.
+
+Revision 55 (2026-11-09): The review at `5820412422` approved `d80aaa07d`, and
+the follow-up comment at `6729345451` re-emitted four of the five pre-merge
+rows as still Open. Each was answered by a change, not by an argument, except
+where the row's premise did not survive inspection.
+
+The Testing (Overall) and Unit Architecture rows asked for detection of an
+attempted write or connection whose error the caller discards. The static
+contract in `recipe.rs` cannot reach every shell spelling the row named
+(`if wget https://example.com; then :; fi`), so the sandbox now records what
+the query actually called. `tests/prover_tools_kani_check_tests/trace.rs` turns
+an `strace -f -qq` log into findings, reporting a write-intent `open`, a
+path-mutating syscall, or an `AF_INET`/`AF_INET6` `connect` whether or not the
+kernel refused it, and accepting the character devices a diagnostic
+legitimately writes. The syscall list is templated from the reader into the
+sandbox script, so a call the reader looks for but the trace omits cannot
+produce a clean run it never saw; a compile that dropped the template failed
+with `constant TRACE_SYSCALLS is never used`. The reader has its own unit
+cases: six suppressed attempts are reported, three read-only or local uses are
+accepted, and a clean log reports nothing.
+
+Two defects surfaced while making the traces real. The control verifier first
+shared `fake_kani`'s file name, so it replaced the query verifier and both runs
+failed; it is now `control-kani`. Its write then used `:`, a POSIX special
+builtin, and a failed redirection on a special builtin aborts the shell that
+runs it — so `|| true` never ran and the control exited before printing its
+version. The attempt now runs in a subshell, and the chroot binds `/dev/null`,
+which the shells and the recipe's own diagnostics also need. The isolation case
+requires the query's trace to be empty and the control's trace to name both a
+write-intent and a network attempt, with `control-exit=0` proving the failures
+were discarded rather than fatal.
+
+A `kani-smoke` step installs `strace` before the isolation step. The target's
+strict mode turns an absent tracer into a failure, and the job can land on two
+runner pools that are not built from one image recipe, so assuming the tracer
+would be a way to go green locally and red in the lane that requires the
+boundary. The reader is the oracle, and the lane that demands the boundary now
+pays for the tool.
+
+The Developer Documentation row was right on every point. The developers' guide
+and both places in this plan described the `kani-version=` field as verifier
+output; it is the expected pin read from the file. Only the `found` value of a
+mismatch and the version named by the success line come from the verifier, and
+all three sites now say so. The 4,950-test sweep is attributed to Revision 41
+rather than to a "final candidate", and the sentence that attributed the
+preceding evidence to Revision 48 now names Revision 41, which is the entry
+that records that run.
+
+The Testing (Property / Proof) row asked for generated orders and generated
+statuses. In the Python suite the failing-order property now generates the
+verifier status across `1..=125` and asserts it is propagated unchanged, and a
+new property generates orderings of a batch in which nothing fails and requires
+every proof to run in the order given. In the Rust suite
+`BatchFixture::in_order` stages proofs in an explicit order while each keeps
+the name of its original index, `ordered_failure_cases` generates a permutation
+with a failing position and status, and `permutation` reaches every ordering by
+sorting indices on random keys. A third property asserts the log is the
+permutation up to the failure and stops there, which the creation-order cases
+could not have caught.
+
+All eleven commit gates were run on this candidate and each exited `0`:
+`check-fmt`, `lint` (which caught two findings, `clippy::indexing_slicing` in
+the permutation strategy and the Whitaker capability-filesystem rule in the
+trace reader, both fixed and re-run), `typecheck`, `doc-coverage` (98.33%
+aggregate, 6,762/6,877), `markdownlint` (218 files, zero issues), `nixie`,
+`test` (5,213 nextest passed, 7 skipped, plus all doctests),
+`test-workflow-contracts` (1,792 passed, 3 skipped, plus 28),
+`test-kani-check-isolation` (39 passed, 0 skipped),
+`test-prover-tools-integration` (12 passed) and `test-verus-e2e` (6 passed, 0
+skipped). The isolation and Verus counts rise by the ten trace-reader cases and
+the one generated-order property. Keep Status: IN PROGRESS pending review at
+the new head and trusted-main warm-cache acceptance.

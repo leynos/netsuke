@@ -4,7 +4,7 @@
 //! run anywhere. These cases do the opposite: they drive the real Make target,
 //! the pinned `rust-prover-tools` CLI, and the pinned Verus binary, so the
 //! default proof, an ordered batch, and failure propagation are exercised
-//! through the whole stack. Two property cases keep the pinned CLI real but
+//! through the whole stack. Three property cases keep the pinned CLI real but
 //! swap in a fake verifier, which is the only way to observe the batching loop
 //! without running Verus once per generated case.
 //!
@@ -23,8 +23,9 @@ use proptest::prelude::*;
 use std::fs;
 use std::path::Path;
 use support::{
-    BatchFixture, batch_flags, failure_cases, output_text, require_real_verifier, run_make_verus,
-    verification_counts, verification_runs, write_distinct_proof,
+    BatchFixture, batch_flags, failure_cases, ordered_failure_cases, output_text,
+    require_real_verifier, run_make_verus, verification_counts, verification_runs,
+    write_distinct_proof,
 };
 use tempfile::tempdir;
 
@@ -189,6 +190,36 @@ proptest! {
             return Ok(());
         }
         let fixture = BatchFixture::new(count).expect("stage the batch fixture");
+
+        let output = fixture.run(Some((index, status))).expect("run the batch");
+
+        prop_assert!(!output.status.success(), "a failing batch should not exit zero");
+        let mut expected = vec!["--version".to_owned()];
+        expected.extend(fixture.proof_paths().into_iter().take(index + 1));
+        prop_assert_eq!(fixture.invocations().expect("read invocations"), expected);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        prop_assert!(
+            stderr.contains(&format!("prover-tools: target=verus failed exit={status}")),
+            "the target should report exit {status}, got `{stderr}`"
+        );
+    }
+
+    /// Check that a generated batch order is run in that order and stops at the
+    /// proof named to fail.
+    ///
+    /// The cases above stage their proofs in creation order, so a CLI that
+    /// reordered its inputs would still agree with them. Here the staged order
+    /// is a generated permutation, and the failing proof is named by its
+    /// position in that order: the log must show the permutation itself, then
+    /// the prefix through the failure and nothing after it.
+    #[test]
+    fn verus_follows_a_generated_batch_order_to_the_failing_proof(
+        (order, index, status) in ordered_failure_cases()
+    ) {
+        if !require_real_verifier().expect("check the pinned verifier") {
+            return Ok(());
+        }
+        let fixture = BatchFixture::in_order(&order).expect("stage the batch fixture");
 
         let output = fixture.run(Some((index, status))).expect("run the batch");
 

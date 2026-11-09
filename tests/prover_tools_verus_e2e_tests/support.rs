@@ -161,9 +161,24 @@ impl BatchFixture {
     /// Returns an error if the pin cannot be read or a fixture file cannot be
     /// written.
     pub fn new(count: usize) -> Result<Self> {
+        Self::in_order(&(0..count).collect::<Vec<_>>())
+    }
+
+    /// Stage proofs in an explicit order and return the fixture.
+    ///
+    /// `order` must be a permutation of `0..order.len()`. Each proof keeps the
+    /// name of its original index, so a run that reorders the inputs, drops one
+    /// or repeats one is visible in the invocation log rather than masked by
+    /// the staged names.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the pin cannot be read or a fixture file cannot be
+    /// written.
+    pub fn in_order(order: &[usize]) -> Result<Self> {
         let temp = tempdir().context("create batch fixture directory")?;
-        let mut proofs = Vec::with_capacity(count);
-        for index in 0..count {
+        let mut proofs = Vec::with_capacity(order.len());
+        for index in order {
             let path = temp.path().join(format!("proof-{index}.rs"));
             fs::write(&path, "// proof\n")
                 .with_context(|| format!("write proof file {}", path.display()))?;
@@ -238,6 +253,31 @@ impl BatchFixture {
 pub fn failure_cases() -> impl Strategy<Value = (usize, usize, i32)> {
     (1usize..=4).prop_flat_map(|count| {
         (0..count, 1i32..=125).prop_map(move |(index, status)| (count, index, status))
+    })
+}
+
+/// Generate a batch order, the position within it that fails, and its status.
+///
+/// The order is a permutation rather than `0..count`, so a batch that silently
+/// ran the proofs in creation order could not pass by accident. The statuses
+/// are confined to `1..=125` for the reason [`failure_cases`] records.
+pub fn ordered_failure_cases() -> impl Strategy<Value = (Vec<usize>, usize, i32)> {
+    (1usize..=4).prop_flat_map(|count| {
+        (permutation(count), 0..count, 1i32..=125)
+            .prop_map(move |(order, index, status)| (order, index, status))
+    })
+}
+
+/// Generate a random ordering of `0..count`.
+///
+/// Ordering the indices by a random key each is the simplest way to reach every
+/// permutation without building one by hand; the index breaks ties so the
+/// result is always a permutation, not merely a sort.
+fn permutation(count: usize) -> impl Strategy<Value = Vec<usize>> {
+    prop::collection::vec(any::<u64>(), count).prop_map(|keys| {
+        let mut keyed: Vec<(u64, usize)> = keys.into_iter().zip(0..).collect();
+        keyed.sort_unstable();
+        keyed.into_iter().map(|(_, index)| index).collect()
     })
 }
 

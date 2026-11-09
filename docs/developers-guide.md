@@ -5834,15 +5834,16 @@ Use the Make targets for day-to-day formal-verification checks:
   verifier, or unparsable output fails the target. Every failure names a stable
   `category=` — `pin-unreadable`, `verifier-failed`, `version-unparsable`, or
   `version-mismatch` — so a caller can branch on the cause without parsing
-  prose. The recipe prints only the version token it extracted from the
-  verifier's output — the `kani-version=` field, and the `found` value of a
-  mismatch, so a verifier reporting `kani 0.66.0` against a 0.67.0 pin prints
-  `found 0.66.0`. The text that token was extracted from is never echoed. It
-  comes from an external binary, so it could carry a credential, forge a log
-  line, or flood a terminal, and no amount of bounding or escaping makes
-  arbitrary text safe to print. The extracted version, the category and the
-  exit status are the actionable facts; re-running the verifier by hand
-  supplies anything else.
+  prose. The only text it takes from the verifier is the version token it
+  extracts: the `found` value of a mismatch, and the version named by the
+  success line, so a verifier reporting `kani 0.66.0` against a 0.67.0 pin
+  prints `found 0.66.0`. The `kani-version=` field is the expected pin as read
+  from the file, not a value taken from the verifier. The text that token was
+  extracted from is never echoed. It comes from an external binary, so it could
+  carry a credential, forge a log line, or flood a terminal, and no amount of
+  bounding or escaping makes arbitrary text safe to print. The extracted
+  version, the category and the exit status are the actionable facts;
+  re-running the verifier by hand supplies anything else.
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
