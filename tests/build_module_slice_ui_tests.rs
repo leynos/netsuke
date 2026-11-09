@@ -66,6 +66,7 @@ const BUILD_SLICE_RERUN_PATHS: &[&str] = &[
     "src/cli/config/shells/definition.rs",
     "src/cli/config/shells/executable.rs",
     "src/cli/config/shells/preview.rs",
+    "src/cli/config/shells/spelling.rs",
     "src/cli/help.rs",
     "src/cli/validation.rs",
 ];

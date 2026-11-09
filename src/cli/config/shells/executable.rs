@@ -1,15 +1,13 @@
-//! Validate the `executable` field of a trusted shell definition.
+//! Retain the validated `executable` field of a trusted shell definition.
 //!
-//! A definition names the program a future adapter runs, and this module decides
-//! only whether that spelling is a plausible single program reference: a bare
-//! executable name or an absolute path on the loading host. Nothing here probes
-//! the filesystem, so a definition naming a program that does not exist is
-//! accepted at configuration time and fails only if something tries to run it.
-//!
-//! Host semantics are an explicit parameter rather than `cfg!(windows)`, so both
-//! families' rules are exercised on either build host.
+//! The spelling rules themselves live in [`super::spelling`]; this module owns
+//! the type that holds an accepted value, its serde surface, and the error
+//! vocabulary those rules report. Host semantics are an explicit parameter
+//! rather than `cfg!(windows)`, so both families' rules are exercised on either
+//! build host.
 
 use super::preview::preview;
+use super::spelling::check_spelling;
 use crate::shell_selection::HostFamily;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::fmt;
@@ -71,91 +69,6 @@ impl<'de> Deserialize<'de> for ShellExecutable {
             serde::de::Error::custom(format!("{error}; value is {}", preview(&text)))
         })
     }
-}
-
-/// Check the rules shared by both host families, then the host's path rules.
-fn check_spelling(text: &str, host: HostFamily) -> Result<(), ExecutableError> {
-    if text.is_empty() {
-        return Err(ExecutableError::Empty);
-    }
-    if text.contains('\0') {
-        return Err(ExecutableError::Nul);
-    }
-    if matches!(text, "." | "..") {
-        return Err(ExecutableError::DirectoryReference);
-    }
-    match host {
-        HostFamily::UnixLike => check_unix_spelling(text),
-        HostFamily::Windows => check_windows_spelling(text),
-    }
-}
-
-/// Accept a rooted path or a bare name; reject any other spelling with a slash.
-fn check_unix_spelling(text: &str) -> Result<(), ExecutableError> {
-    if text.starts_with('/') || !text.contains(['/', '\\']) {
-        Ok(())
-    } else {
-        Err(ExecutableError::RelativePath)
-    }
-}
-
-/// Apply Windows path semantics, where both separators are significant.
-///
-/// The tests run in this order so each rejected spelling reports its most
-/// specific reason: a drive with a root is absolute, a drive without one is
-/// drive-relative, a rooted path with no drive is unresolved, and anything else
-/// carrying a separator is relative.
-fn check_windows_spelling(text: &str) -> Result<(), ExecutableError> {
-    if is_windows_absolute(text) {
-        Ok(())
-    } else if has_drive_prefix(text) {
-        Err(ExecutableError::DriveRelative)
-    } else if text.starts_with(['/', '\\']) {
-        Err(ExecutableError::RootedWithoutDrive)
-    } else if text.contains(['/', '\\']) {
-        Err(ExecutableError::RelativePath)
-    } else {
-        Ok(())
-    }
-}
-
-/// Report whether `text` is an absolute Windows path: a drive or a UNC share.
-fn is_windows_absolute(text: &str) -> bool {
-    has_drive_absolute(text) || is_unc_share(text)
-}
-
-/// Report whether `text` begins with an ASCII drive letter and its root.
-fn has_drive_absolute(text: &str) -> bool {
-    let mut characters = text.chars();
-    matches!(
-        (characters.next(), characters.next(), characters.next()),
-        (Some(drive), Some(':'), Some(separator))
-            if drive.is_ascii_alphabetic() && is_windows_separator(separator)
-    )
-}
-
-/// Report whether `text` begins with an ASCII drive letter and a colon only.
-fn has_drive_prefix(text: &str) -> bool {
-    let mut characters = text.chars();
-    matches!(
-        (characters.next(), characters.next()),
-        (Some(drive), Some(':')) if drive.is_ascii_alphabetic()
-    )
-}
-
-/// Report whether `text` begins with the two separators of a UNC share.
-fn is_unc_share(text: &str) -> bool {
-    let mut characters = text.chars();
-    matches!(
-        (characters.next(), characters.next()),
-        (Some(first), Some(second))
-            if is_windows_separator(first) && is_windows_separator(second)
-    )
-}
-
-/// Report whether `character` separates Windows path components.
-const fn is_windows_separator(character: char) -> bool {
-    matches!(character, '/' | '\\')
 }
 
 /// Classify the executable-spelling rules a definition may violate.
