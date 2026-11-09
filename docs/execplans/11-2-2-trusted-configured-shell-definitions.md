@@ -240,6 +240,11 @@ explicit and exercise the actual adapters in tests.
     errors), `markdownlint` (35 s), and `nixie` (1 s); the batch finished
     `failed=0`. Every verdict recorded before the rebase is superseded by this
     run, because a rebase creates a new candidate.
+  - [x] 2026-11-05: Publish the repaired candidate at `bef3ec159` and hand
+    delivery to `pr-babysitting`. Hosted evaluation then found the Windows
+    unused-import failure and the CodeScene findings listed in the 2026-11-09
+    entries below, so the published candidate was repaired and re-gated rather
+    than accepted as delivered.
   - [x] 2026-11-09: Repair the delivery findings raised against the published
     candidate `bef3ec159`. Hosted Windows CI failed there with
     `error: unused import: merge_in_child`, because that import was reachable
@@ -267,8 +272,29 @@ explicit and exercise the actual adapters in tests.
     `test-documentation-contracts` (2 s), `verus` (4 s, 9 verified and 0
     errors), `markdownlint` (30 s), and `nixie` (3 s); the batch finished
     `failed=0`.
-  - [ ] 2026-11-05: Publish the repaired candidate and hand delivery to
-    `pr-babysitting`.
+  - [x] 2026-11-09: Rebase the branch onto `origin/main` at `8dfbab416`, the
+    nightly-2026-11-08 toolchain bump. Twenty of the 21 replayed commits
+    produce an identical patch (`range-diff` reports `=` for every pair). The
+    one conflict is in `tools/kani/proof-scope.toml`: upstream renamed
+    `src/recipe_shell.rs` into `src/power_shell_location/mod.rs` and
+    `src/recipe_shell/mod.rs`, and this branch inserts `shell_selection`
+    entries in the same place. The resolution keeps upstream's two renamed
+    entries and the four shell-selection entries, and the file still parses as
+    TOML with 189 sources. Upstream work adds no configured-shell convention
+    to adopt: RFC 0036 shapes shell parsing and transformations rather than
+    configuration authority, and the Windows recipe-interpreter binding is an
+    independent change that also demands an absolute executable path.
+  - [x] 2026-11-09: Run the full gate set on the rebased candidate, whose
+    replayed series ends at `f480699be`. All eleven gates passed in one batch:
+    `check-fmt` (3 s), `lint` (4454 s), `typecheck` (495 s), `doc-coverage`
+    (1738 s, 98.14 %), `test` (849 s), `test-workflow-contracts` (280 s),
+    `test-package-verify` (216 s), `test-documentation-contracts` (48 s),
+    `verus` (3 s, 9 verified and 0 errors), `markdownlint` (30 s), and `nixie`
+    (4 s); the batch finished `failed=0`. The durations are dominated by the
+    nightly-2026-11-08 bump, which invalidated every cached dependency, plus a
+    shared compile-slot queue of over 100 waiting requests; no gate waited on
+    an unhealthy admission service. Every verdict recorded before this rebase
+    is superseded by this run, because a rebase creates a new candidate.
 
 ## Surprises & discoveries
 
