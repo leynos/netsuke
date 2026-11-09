@@ -65,7 +65,9 @@ def test_the_steps_verify_a_release_the_build_produced(
     assert run.verified_record == expected, (
         "the verified record must hold each asset's own digest"
     )
-    assert run.outputs.get("verified-record-path") == "verified/verified-digests.json"
+    assert (
+        run.outputs.get("verified-record-path") == "verified/verified-digests.json"
+    ), "the verification step must publish the path it wrote"
     assert run.output_path.is_file(), (
         "the verification step must create the output directory it was given"
     )
@@ -175,7 +177,9 @@ def test_a_record_that_does_not_cover_the_declaration_is_refused(
     assert PACKAGE in final_diagnostic(run), (
         "the diagnostic must name the unrecorded asset"
     )
-    assert not run.output_path.exists()
+    assert not run.output_path.exists(), (
+        "a refused record must leave no verified record"
+    )
 
 
 @pytest.mark.parametrize(
@@ -217,7 +221,7 @@ def test_a_listing_that_cannot_be_downloaded_stops_before_the_fetch(
     assert not run.download_root.exists() or not any(run.download_root.iterdir()), (
         "a refused plan must not leave a downloaded asset behind"
     )
-    assert not run.output_path.exists()
+    assert not run.output_path.exists(), "a refused plan must not verify anything"
 
 
 def test_a_failed_download_stops_the_job(tmp_path: pathlib.Path) -> None:

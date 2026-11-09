@@ -137,4 +137,4 @@ def test_an_input_the_action_cannot_use_is_refused(
     assert run.completed[0].returncode != 0, final_diagnostic(run)
     assert fault.message in final_diagnostic(run), final_diagnostic(run)
     assert not run.gh_log, "a refused input must not reach the network"
-    assert not run.output_path.exists()
+    assert not run.output_path.exists(), "a refused input must leave no record"
