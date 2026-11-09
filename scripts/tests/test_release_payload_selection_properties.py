@@ -122,6 +122,26 @@ def _staged_for(assets: cabc.Iterable[str]) -> dict[str, list[str]]:
     return {name: [f"staged:{name}"] for name in assets}
 
 
+def _valid_tree(
+    pairs: cabc.Sequence[tuple[str, str]],
+) -> tuple[list[ProducerProvenance], list[str]]:
+    """Build records for ``pairs`` and the names they claim, both sorted.
+
+    Every case that damages a valid tree starts from this one. Damaging a tree
+    the release would otherwise accept is what makes the refusal attributable
+    to the damage rather than to some unrelated defect the generator happened
+    to produce.
+
+    Returns
+    -------
+    tuple[list[ProducerProvenance], list[str]]
+        The records, and every name they claim in sorted order.
+    """
+    claimed = _claims(pairs)
+    names = sorted(name for _record, assets in claimed for name in assets)
+    return [record for record, _assets in claimed], names
+
+
 def _select(
     records: cabc.Sequence[ProducerProvenance],
     staged: dict[str, list[str]],
@@ -247,13 +267,12 @@ def test_a_missing_declared_name_is_refused(
     Generated from a valid tree with exactly one name removed, so the case is
     the omission and not some other defect.
     """
-    claimed = _claims(pairs)
-    every_name = sorted(name for _record, assets in claimed for name in assets)
-    omitted = every_name[index % len(every_name)]
-    staged = _staged_for(every_name)
+    records, names = _valid_tree(pairs)
+    omitted = names[index % len(names)]
+    staged = _staged_for(names)
     del staged[omitted]
     with pytest.raises(PayloadRefusedError, match="was not staged"):
-        _select([record for record, _assets in claimed], staged, pairs)
+        _select(records, staged, pairs)
 
 
 @settings(max_examples=50, deadline=None, derandomize=True)
@@ -266,13 +285,12 @@ def test_a_doubly_staged_declared_name_is_refused(
     Two sources claim one published name and nothing says which is the
     release's, so neither may be chosen.
     """
-    claimed = _claims(pairs)
-    every_name = sorted(name for _record, assets in claimed for name in assets)
-    doubled = every_name[index % len(every_name)]
-    staged = _staged_for(every_name)
+    records, names = _valid_tree(pairs)
+    doubled = names[index % len(names)]
+    staged = _staged_for(names)
     staged[doubled] = [*staged[doubled], f"duplicate:{doubled}"]
     with pytest.raises(PayloadRefusedError, match="was staged 2 times"):
-        _select([record for record, _assets in claimed], staged, pairs)
+        _select(records, staged, pairs)
 
 
 @settings(max_examples=50, deadline=None, derandomize=True)

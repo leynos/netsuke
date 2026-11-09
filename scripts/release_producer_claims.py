@@ -54,15 +54,6 @@ def require_target_claims(
 ) -> None:
     """Refuse a record that claims artefacts its own target cannot have staged.
 
-    Parameters
-    ----------
-    provenances
-        Every validated producer record found in the downloaded tree.
-    archives
-        Configured target key mapped to the archive name that target stages.
-    targets
-        Configured target key mapped to the platform it serves.
-
     Raises
     ------
     TargetClaimMismatchError
@@ -77,19 +68,11 @@ def require_target_claims(
     stages no package format at all, and so stays out of the ``Raises``
     section.
 
-    The archive half is an identity check and the package half is a
-    suffix-and-count check, and the difference is load-bearing rather than
-    incidental. A record claiming a sibling's archive is refused, because the
-    configuration names every archive. A record claiming a sibling's package
-    of the *same format* is not refused, because nothing here can tell two
-    Linux ``.deb`` files apart. Callers may rely on the archive guarantee; the
-    package guarantee is that a record's package claims are the right number
-    and shape for its platform, not that they are its own build's output.
-
-    A target with no entry in ``archives`` or ``targets`` is skipped rather
-    than reported here. Coverage reports it as an uncovered or undeclared
-    target, which is the operator's real problem; a claim diagnosis would send
-    them to a producer record instead of to the configuration.
+    The module docstring states which half of this check is an identity proof
+    and which is only a count, and why. A target with no entry in ``archives``
+    or ``targets`` is skipped here rather than reported: coverage calls it an
+    uncovered target, which sends the operator to the configuration rather
+    than to a producer record.
 
     Examples
     --------
