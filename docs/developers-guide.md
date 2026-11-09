@@ -175,10 +175,14 @@ the adapters apply them differently because their libraries do:
   `color`, `unicode` and `terminal_links`. It does not choose between graphical
   and narratable handlers; Miette decides the rendering, and the plan only
   supplies those three facts.
-- Clap's own `--help` path uses the plan's stdout decision for `colour_choice`;
-  the runner's `help` renderers take the same `bool` and choose between
-  `StyledStr::ansi` and `StyledStr::Display`, because Clap's `Display` never
-  colours.
+- Clap's own `--help` path does *not* use the plan's stdout decision. It exits
+  from inside `parse_with_localizer_from`, before any plan exists, so its
+  `colour_choice` comes from `startup_signals.parser_color`, which is
+  `startup_colour(hint, terminal_facts)` with the JSON argument fixed to
+  `false`. That is why `--json` cannot suppress styling in `--help`. The
+  runner's `help` renderers run after the merge and take `plan.stdout_colour()`
+  instead, choosing between `StyledStr::ansi` and `StyledStr::Display` because
+  Clap's `Display` never colours.
 - The status reporter selects live or static progress from `live_progress`,
   which already accounts for accessible mode and a non-redraw-capable `TERM`.
 
@@ -7121,9 +7125,12 @@ modules under `tests/cli_tests/`:
   resolution (`EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`,
   `AccessibilityPolicy`, `json`, `NO_COLOR`, and `TERM`/output mode) against
   the truth model in `display_policy_truth.rs`, using one flat
-  Cartesian-product sweep plus a proptest. It adds coverage only; the
-  production resolution in `src/theme/mod.rs` and `src/output/prefs/mod.rs` is
-  not changed.
+  Cartesian-product sweep. It adds coverage only; the production resolution in
+  `src/theme/mod.rs` and `src/output/prefs/mod.rs` is not changed. The
+  environment-signal property test lives elsewhere, as
+  `environment_signal_resolver_matches_reference_policy` in
+  `src/output/mode/tests.rs`, because it drives the resolver directly rather
+  than through the CLI.
 - `display_plan_contract.rs` pins the same plan from the other direction, as
   insta snapshots keyed by policy, so a change to how one policy renders fails
   as a readable diff rather than as an assertion count.

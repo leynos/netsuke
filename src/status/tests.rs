@@ -111,6 +111,47 @@ fn task_progress_update_formats_expected_text(
     Ok(())
 }
 
+/// Assert the text task-update write carries no escape at its own boundary.
+///
+/// The piped-stdout behavioural test slices a pseudo-terminal stream from the
+/// isolate that opens the label, which leaves bytes *before* that isolate
+/// unexamined: a write beginning `ESC[31m` and then the isolate would pass it.
+/// That stream cannot settle the question, because the stage animation shares
+/// the first update's physical line and any wider slice collects the
+/// animation's own escapes.
+///
+/// The plain path is `writeln!(io::stderr(), "{task}")`, so the written value
+/// *is* the write, from its first byte onward. Asserting the constructed value
+/// therefore covers the boundary the stream cannot: there is no earlier byte
+/// for an escape to hide in. The two tests are complementary, and this one is
+/// the stronger of the pair for the prefix.
+#[rstest]
+#[case(1, 2, "cc -c src/a.c")]
+#[case(2, 2, "")]
+fn task_progress_update_carries_no_escape_from_its_first_byte(
+    en_localizer: EnLocalizer,
+    #[case] current: u32,
+    #[case] total: u32,
+    #[case] description: &str,
+) -> Result<()> {
+    let _localizer = en_localizer;
+    let rendered = task_progress_update(current, total, description);
+    let classified = test_support::terminal::classify(rendered.as_bytes());
+    ensure!(
+        !classified.has_any_escape,
+        "task update must contain no escape byte: {rendered:?}"
+    );
+    ensure!(
+        !classified.has_redraw,
+        "task update must contain no redraw sequence: {rendered:?}"
+    );
+    ensure!(
+        !classified.has_sgr,
+        "task update must carry no styling: {rendered:?}"
+    );
+    Ok(())
+}
+
 #[rstest]
 fn indicatif_reporter_ignores_task_updates_when_stage6_is_not_running(
     en_localizer: EnLocalizer,

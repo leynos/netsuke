@@ -1197,9 +1197,8 @@ change, and the two changes sit in different places:
   `prune_prebuilt_libraries` to scan the staging directory rather than a
   compiled-in list. That is a change to the *installer binary*, and the
   workflows pin `installer-version: '0.2.11'`, which was released
-  2026-10-29T21:01:49Z — three weeks before. The installed binary therefore
-  cannot contain that code, and reading the recovery as #577 arriving would be
-  wrong.
+  2026-10-29T21:01:49Z — ten days before. The installed binary therefore cannot
+  contain that code, and reading the recovery as #577 arriving would be wrong.
 
 The timing confirms which one reached CI. `build-test` attempt 6 (job
 `128910557609`) downloaded a `whitaker-lints-5418482-nightly-…` archive and
@@ -1407,6 +1406,20 @@ code, one of them with the measurement D29 already recorded.
   emission carries no escape and no redraw. `--progress never` emits no task
   updates at all, so that case is still asserted through the stage labels
   rather than through task lines.
+
+  CodeRabbit observed that this slice still starts at the isolate, so a write
+  beginning `ESC[31m` *before* it would pass. That is correct, and the stream
+  cannot settle it: widening to the previous terminator collects the stage
+  animation's own escapes, which is the failure this measurement already went
+  through. The boundary is closed instead where it actually exists.
+  `src/status/indicatif.rs` writes the plain path as
+  `writeln!(io::stderr(), "{task}")`, so the written value *is* the write from
+  its first byte, and
+  `task_progress_update_carries_no_escape_from_its_first_byte` asserts that
+  constructed value carries no escape, no redraw and no SGR. A mutation
+  inserting exactly CodeRabbit's `ESC[31m` prefix made both cases fail, so the
+  assertion is live rather than vacuous; the production file was restored and
+  the focused tests re-run green.
 - *Domain Architecture* — rebutted, with one correction to the earlier
   wording. An earlier revision of this plan claimed the resolver was
   independent of CLI configuration types. That was wrong and CodeRabbit was
