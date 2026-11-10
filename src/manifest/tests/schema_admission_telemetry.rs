@@ -32,6 +32,12 @@ const ADMISSION_TOTAL: &str = "netsuke_manifest_schema_admissions_total";
 /// through the event, so both are asserted.
 const ADMISSION_SPAN: &str = "manifest.schema.admission";
 
+/// The message the decision event carries.
+///
+/// The event is a distinct surface from the span: a query that emitted only the
+/// event would still be observable, so both are asserted separately.
+const ADMISSION_EVENT: &str = "manifest schema admission decision";
+
 /// One recorder snapshot as the debugging utilities expose it.
 type Snapshot = Vec<(
     CompositeKey,
@@ -179,36 +185,45 @@ fn test_surface_load_does_not_record_schema_admission() -> AnyResult<()> {
 /// A discovery query must not emit the admission span or decision event.
 ///
 /// The counter is only half of what recording does; `record_admission` also
-/// opens `manifest.schema.admission` and emits a decision event. Asserting the
-/// counter alone would let a regression re-introduce the event on the query
-/// path and still pass, which is precisely the side effect the registration
-/// gate exists to prevent.
+/// opens `manifest.schema.admission` and emits a decision event. The span and
+/// the event are separate surfaces, so each is asserted: a regression that
+/// emitted the event without opening the span would pass a span-only test, and
+/// that event alone is enough to make the query path observable.
 #[test]
 fn manifest_query_does_not_emit_admission_traces() -> AnyResult<()> {
     let (_temp, path) = workspace_with("1.0.0")?;
-    let spans = with_test_subscriber(LevelFilter::TRACE, |captured| {
+    let (spans, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
         from_path_for_manifest_query(&path, None)?;
-        Ok::<_, anyhow::Error>(captured.span_fields(ADMISSION_SPAN))
+        Ok::<_, anyhow::Error>((captured.span_fields(ADMISSION_SPAN), captured.snapshot()))
     })?;
     ensure!(
         spans.is_empty(),
         "a manifest query must not open the admission span: {spans:?}"
     );
+    let decisions: Vec<_> = events
+        .iter()
+        .filter(|event| event.contains(ADMISSION_EVENT))
+        .collect();
+    ensure!(
+        decisions.is_empty(),
+        "a manifest query must not emit an admission decision event: {decisions:?}"
+    );
     Ok(())
 }
 
-/// A command load must emit the admission span with its bounded outcome.
+/// A command load must emit both admission surfaces with their bounded fields.
 ///
 /// This is the positive control for
 /// [`manifest_query_does_not_emit_admission_traces`]: without it, an absent
-/// span would be equally explained by a subscriber that never captured
-/// anything.
+/// span *and* an absent event would be equally explained by a subscriber that
+/// never captured anything. It therefore asserts each surface the query test
+/// requires to be missing, so neither absence can pass vacuously.
 #[test]
-fn command_load_emits_the_admission_span() -> AnyResult<()> {
+fn command_load_emits_the_admission_span_and_event() -> AnyResult<()> {
     let yaml = command_load_manifest("1.0.0");
-    let spans = with_test_subscriber(LevelFilter::TRACE, |captured| {
+    let (spans, events) = with_test_subscriber(LevelFilter::TRACE, |captured| {
         from_str_with_limits(&yaml, ManifestBudgetLimits::default())?;
-        Ok::<_, anyhow::Error>(captured.span_fields(ADMISSION_SPAN))
+        Ok::<_, anyhow::Error>((captured.span_fields(ADMISSION_SPAN), captured.snapshot()))
     })?;
     ensure!(
         !spans.is_empty(),
@@ -222,6 +237,20 @@ fn command_load_emits_the_admission_span() -> AnyResult<()> {
     ensure!(
         rendered.contains("operation=\"admit_schema\""),
         "the admission span must name the operation: {rendered}"
+    );
+    let decisions: Vec<_> = events
+        .iter()
+        .filter(|event| event.contains(ADMISSION_EVENT))
+        .collect();
+    ensure!(
+        !decisions.is_empty(),
+        "a command load must emit the admission decision event: {events:?}"
+    );
+    ensure!(
+        decisions
+            .iter()
+            .all(|event| event.contains("outcome=\"admitted\"")),
+        "the decision event must carry the bounded outcome: {decisions:?}"
     );
     Ok(())
 }

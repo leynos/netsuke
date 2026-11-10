@@ -269,7 +269,11 @@ fn every_rejection_class_renders_a_diagnosis(
     let temp = tempdir().context("create rejection-class workspace")?;
     write_raw_declaration(temp.path(), declaration)?;
     let output = create_netsuke_command(temp.path())
-        .args(["generate", "--output", "out.ninja"])
+        // The asserted phrases are English messages from
+        // `locales/en-GB/messages.ftl`. Netsuke negotiates the interface locale,
+        // so without this flag a host or `LANG` setting would translate the
+        // summary and this test would fail on a correct rejection.
+        .args(["--locale", "en-GB", "generate", "--output", "out.ninja"])
         .output()
         .with_context(|| format!("run generate with {case}"))?;
     ensure!(
