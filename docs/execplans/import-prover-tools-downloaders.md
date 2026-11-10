@@ -468,8 +468,9 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       read-only open of `/repo/O_CREAT.log` was reported as a write and a Unix
       socket at `/run/AF_INET` as remote; it now reads only the unquoted text,
       with two cases and two properties over generated paths. `TRACE_SYSCALLS`
-      is compiled only on Linux, where its consumer is, and the Verus property
-      bounds are named constants shared by both strategies. See Revision 63.
+      is compiled only on Linux, where its consumer is, the Verus property
+      bounds are named constants shared by both strategies, and both install
+      recipes now prove they propagate a failure status. See Revision 63.
 
 ## Surprises & discoveries
 
@@ -2348,6 +2349,15 @@ onto the constant. The Python property tests in
 `scripts/tests/test_prover_tools_integration.py` bound their batches at four
 proofs and their statuses at `1..=125`, so the constants name the bounds both
 suites already hold rather than inventing one.
+
+The saved row about `make install-kani` asked for failure propagation as well
+as cold, warm and repair coverage. Failure propagation was tested only through
+`install-verus`, so `delegated_prover_target_reports_failure_exit_status` now
+runs both install arms over the same recipe shape and asserts each names itself
+in its own diagnostic. Cold and warm cache behaviour is not a local test: the
+shared cache is populated by a trusted run on `main`, which is the acceptance
+item this plan already tracks as open, and the cache's layout contract is what
+`tests/workflow_contracts/kani_cache_test.py` holds.
 
 Keep Status: IN PROGRESS pending review at the new head and trusted-main
 warm-cache acceptance.

@@ -14,6 +14,13 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use tempfile::{TempDir, tempdir};
 
+// The per-target expectations live in a sibling file so that neither this
+// module nor that one outgrows the size cap.
+#[path = "prover_tools_make_tests/cases.rs"]
+mod cases;
+
+use cases::ProverMakeCase;
+
 const PROVER_TOOLS_SOURCE_ASSIGNMENT: &str = "PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@592558f7183b554fc749696246984c5d7300d029";
 
 struct FakeProverTools {
@@ -57,52 +64,6 @@ impl FakeProverTools {
         fs::read_to_string(&self.invocation_log)
             .with_context(|| format!("read {}", self.invocation_log.display()))
             .map(|contents| contents.lines().map(str::to_owned).collect())
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-struct ProverMakeCase {
-    target: &'static str,
-    expected_args: &'static [&'static str],
-    secret_flags_variable: &'static str,
-    secret_flags_value: &'static str,
-}
-
-impl ProverMakeCase {
-    /// Build the Kani installation case.
-    ///
-    /// Use `ProverMakeCase::install_kani()` to select the `install-kani` recipe.
-    const fn install_kani() -> Self {
-        Self {
-            target: "install-kani",
-            expected_args: &["kani", "install", "--api-token=kani-install-secret"],
-            secret_flags_variable: "KANI_INSTALL_FLAGS",
-            secret_flags_value: "--api-token=kani-install-secret",
-        }
-    }
-
-    /// Build the Verus installation case.
-    ///
-    /// Use `ProverMakeCase::install_verus()` to select the `install-verus` recipe.
-    const fn install_verus() -> Self {
-        Self {
-            target: "install-verus",
-            expected_args: &["verus", "install", "--token=verus-install-secret"],
-            secret_flags_variable: "VERUS_INSTALL_FLAGS",
-            secret_flags_value: "--token=verus-install-secret",
-        }
-    }
-
-    /// Build the Verus proof-execution case.
-    ///
-    /// Use `ProverMakeCase::verus()` to select the `verus` recipe.
-    const fn verus() -> Self {
-        Self {
-            target: "verus",
-            expected_args: &["verus", "run", "--proof-token=verus-run-secret"],
-            secret_flags_variable: "VERUS_FLAGS",
-            secret_flags_value: "--proof-token=verus-run-secret",
-        }
     }
 }
 
@@ -155,21 +116,39 @@ fn make_command(fake: &FakeProverTools) -> Command {
     command
 }
 
-/// Run one delegated Make target with the case's secret flag variable.
+/// Run one delegated Make target, asking the fake to exit with `status`.
+///
+/// The fake reads `PROVER_TOOLS_EXIT`, so a case can exercise the recipe's
+/// failure arm without a second executable: `0` succeeds and any other value
+/// propagates through the recipe unchanged.
 ///
 /// # Errors
 ///
 /// Returns an error if the Make invocation cannot be spawned.
-fn run_make_target(fake: &FakeProverTools, case: ProverMakeCase) -> Result<Output> {
+fn run_make_target_with_status(
+    fake: &FakeProverTools,
+    case: ProverMakeCase,
+    status: u8,
+) -> Result<Output> {
     let output = make_command(fake)
         .arg(case.target)
         .arg(format!(
             "{}={}",
             case.secret_flags_variable, case.secret_flags_value
         ))
+        .env("PROVER_TOOLS_EXIT", status.to_string())
         .output()
         .with_context(|| format!("run make {}", case.target))?;
     Ok(output)
+}
+
+/// Run one delegated Make target with the case's secret flag variable.
+///
+/// # Errors
+///
+/// Returns an error if the Make invocation cannot be spawned.
+fn run_make_target(fake: &FakeProverTools, case: ProverMakeCase) -> Result<Output> {
+    run_make_target_with_status(fake, case, 0)
 }
 
 /// Check that every delegated target forwards its real flags while redacting
@@ -273,25 +252,33 @@ fn verus_preserves_repeated_proof_files_and_paths_with_spaces() -> Result<()> {
 
 /// Check that a failing installer propagates its exit status without leaking
 /// secret flags.
-#[test]
-fn delegated_prover_target_reports_failure_exit_status() -> Result<()> {
-    let fake = FakeProverTools::new()?;
-    let output = make_command(&fake)
-        .arg("install-verus")
-        .arg("VERUS_INSTALL_FLAGS=--token=verus-install-secret")
-        .env("PROVER_TOOLS_EXIT", "42")
-        .output()
-        .context("run failing make install-verus")?;
+///
+/// Both install recipes delegate the same way and only the tool and its flags
+/// differ, so each is driven through the failure arm: a shared status that
+/// reached the caller from one arm but not the other would be invisible to a
+/// single-target case.
+#[rstest]
+#[case::install_kani(ProverMakeCase::install_kani())]
+#[case::install_verus(ProverMakeCase::install_verus())]
+fn delegated_prover_target_reports_failure_exit_status(
+    fake_prover_tools: Result<FakeProverTools>,
+    #[case] case: ProverMakeCase,
+) -> Result<()> {
+    let fake = fake_prover_tools?;
+    let output = run_make_target_with_status(&fake, case, 42)?;
 
-    ensure!(!output.status.success(), "make install-verus should fail");
+    ensure!(!output.status.success(), "make {} should fail", case.target);
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     ensure!(
-        stderr.contains("prover-tools: target=install-verus failed exit=42"),
+        stderr.contains(&format!(
+            "prover-tools: target={} failed exit=42",
+            case.target
+        )),
         "diagnostics should report the failing target and exit status, got `{stderr}`"
     );
     ensure!(
-        !stderr.contains("verus-install-secret"),
+        !stderr.contains(case.secret_flags_value),
         "failure diagnostics should not leak secret flags, got `{stderr}`"
     );
     Ok(())
