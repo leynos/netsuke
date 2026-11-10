@@ -5943,10 +5943,13 @@ leaves success behind. Two mechanisms supply that half.
 The runtime one runs each query under `strace` and reads the log back through
 `tests/prover_tools_kani_check_tests/trace.rs`. A write-intent open, a
 path-mutating call, or a socket address aimed at another host is reported
-whether the kernel refused it or not. The filter names the `%file` and
-`%network` classes rather than individual calls. No call can then be missing
-from the trace a reader entry expects, and no architecture-specific name can
-stop `strace` before it starts. The real query must report no attempts, and the
+whether the kernel refused it or not. Flags and address families are read only
+outside the quoted runs, because `strace` quotes every path it reports: a path
+may be named `/repo/O_CREAT.log`, or a Unix socket `/run/AF_INET`, without
+being a write or a remote address. The filter names the `%file` and `%network`
+classes rather than individual calls. No call can then be missing from the
+trace a reader entry expects, and no architecture-specific name can stop
+`strace` before it starts. The real query must report no attempts, and the
 control verifier must report the write and the connection it discarded. That
 pair is what makes the reader known to fire rather than known to pass on a
 clean log. A further run queries a Kani home with no payload. The recipe must

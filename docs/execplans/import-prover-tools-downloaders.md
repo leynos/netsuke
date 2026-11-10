@@ -463,6 +463,13 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       name what they mean, the summary extending through Revision 61. Hosted
       CodeScene then caught the two home refusals as duplicates, so they are
       one `#[rstest]` case over a fixture enum. See Revision 62.
+- [x] (2026-11-10) Answer the review at `3afdcb9b1`. The trace classifier read
+      the whole argument string for write flags and address families, so a
+      read-only open of `/repo/O_CREAT.log` was reported as a write and a Unix
+      socket at `/run/AF_INET` as remote; it now reads only the unquoted text,
+      with two cases and two properties over generated paths. `TRACE_SYSCALLS`
+      is compiled only on Linux, where its consumer is, and the Verus property
+      bounds are named constants shared by both strategies. See Revision 63.
 
 ## Surprises & discoveries
 
@@ -687,9 +694,10 @@ recipe that discards a write and a directory creation, Revision 58 for the
 payload refusal and the syscall classes, Revision 59 for the review at
 `715970069`, Revision 60 for its eight inline findings and the removed-guard
 check, Revision 61 for the review at `1f38b9e91` and the CodeScene
-string-argument repair, and Revision 62 for the review at `cfdd1563f`. The
-Revision 41 run quoted at the start of this section is the earliest of them and
-describes neither the current head nor the current gate set. Review at the
+string-argument repair, Revision 62 for the review at `cfdd1563f`, and Revision
+63 for the review at `3afdcb9b1` and the trace classifier's path-text repair.
+The Revision 41 run quoted at the start of this section is the earliest of them
+and describes neither the current head nor the current gate set. Review at the
 current head and trusted-main warm-cache acceptance remain open.
 
 ## Context and orientation
@@ -2311,6 +2319,35 @@ test-kani-check-isolation at 01:11Z, after an earlier full pass at 23:50Z had
 covered the same code before the duplication refactor. The first attempt failed
 at check-fmt because mdtablefix reflowed both edited documents, and `make fmt`
 supplied the layout it wanted.
+
+Revision 63 (2026-11-10): The review at `3afdcb9b1` raised three inline
+findings, and the walkthrough beside it kept one warning from the saved
+pre-merge table: the trace classifier searched every open argument for write
+flags, so a read-only path containing `O_CREAT` produced a finding. That one is
+real, and the same reading had a second instance nobody had named — a Unix
+socket whose path is `/run/AF_INET` was classified as a remote address. Both
+searches now run over `unquoted`, which drops every quoted run before looking
+for a flag or an address family, since `strace` quotes the path and a name
+inside one is path text rather than a selector. `is_device` was already
+comparing the whole quoted path, so it needed no change. Two `#[rstest]` cases
+name the concrete lines, and two `proptest` properties generate paths from
+fragments that include the flag names, an address family and the components of
+a character device, asserting that the answer follows the flags and the address
+family and never the path.
+
+The three inline findings all held. `TRACE_SYSCALLS` is read only by the
+sandbox, which is `cfg(target_os = "linux")`, so a macOS build carried the
+constant unused and `-D warnings` turned that into a failure; it is now gated
+the same way. The `case_failure` doc comment claimed a panic would make
+proptest shrink instead of reporting the fault, which is wrong: a
+`TestCaseError` shrinks too, and the helper's real value is carrying the
+error's context chain instead of a panic message. And the Verus strategies
+repeated their bounds literally in both functions; they now share
+`MAX_BATCH_LENGTH` and `MAX_FAILURE_STATUS`, whose `1..=125` rationale moved
+onto the constant. The Python property tests in
+`scripts/tests/test_prover_tools_integration.py` bound their batches at four
+proofs and their statuses at `1..=125`, so the constants name the bounds both
+suites already hold rather than inventing one.
 
 Keep Status: IN PROGRESS pending review at the new head and trusted-main
 warm-cache acceptance.

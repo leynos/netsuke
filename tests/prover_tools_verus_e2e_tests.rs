@@ -37,9 +37,10 @@ const CANONICAL_PROOF: &str = "verus/canonical_value/main.rs";
 /// Convert a fixture error into the failure its proptest case reports.
 ///
 /// The property cases below run the real pinned CLI, so a fixture failure is
-/// about the host rather than about the generated case. Panicking on it would
-/// make proptest shrink towards the smallest input instead of reporting the
-/// fault, so the error's own text travels as the case's failure.
+/// about the host rather than about the generated case. Proptest shrinks a
+/// failing case either way; travelling as the case's failure rather than as a
+/// panic is what keeps the error's own text, with its context chain, in the
+/// report.
 fn case_failure(error: &anyhow::Error) -> TestCaseError {
     TestCaseError::fail(format!("{error:#}"))
 }

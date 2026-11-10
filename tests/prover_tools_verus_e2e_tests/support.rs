@@ -247,17 +247,31 @@ impl BatchFixture {
     }
 }
 
+/// The longest batch a generated case asks the target to run.
+///
+/// The exhaustive batch cases run a handful of proofs, and the Python property
+/// tests bound their batches the same way, so a longer generated batch would
+/// only spend Verus time without reaching a shape the suite does not already
+/// cover.
+const MAX_BATCH_LENGTH: usize = 4;
+
+/// The largest status a failing proof may report.
+///
+/// Make can report `1..=125` unchanged. Above it the shell reserves 126 and 127
+/// for "not executable" and "not found", and 128 upwards denote termination by a
+/// signal, so a proof that exited with one of those statuses would be reported
+/// as the shell's meaning rather than its own. Generating them would assert
+/// against a number the pipeline never propagates. The Python property tests
+/// generate the same range.
+const MAX_FAILURE_STATUS: i32 = 125;
+
 /// Generate a batch length, a failing proof index, and that proof's status.
 ///
-/// The status is confined to `1..=125` because that is the range Make can
-/// report unchanged. Above it the shell reserves 126 and 127 for "not
-/// executable" and "not found", and 128 upwards denote termination by a signal,
-/// so a proof that exited with one of those statuses would be reported as the
-/// shell's meaning rather than its own. Generating them would assert against a
-/// number the pipeline never propagates.
+/// The length and the status come from the shared bounds above, so the two
+/// strategies in this module cannot drift apart.
 pub fn failure_cases() -> impl Strategy<Value = (usize, usize, i32)> {
-    (1usize..=4).prop_flat_map(|count| {
-        (0..count, 1i32..=125).prop_map(move |(index, status)| (count, index, status))
+    (1..=MAX_BATCH_LENGTH).prop_flat_map(|count| {
+        (0..count, 1..=MAX_FAILURE_STATUS).prop_map(move |(index, status)| (count, index, status))
     })
 }
 
@@ -265,10 +279,10 @@ pub fn failure_cases() -> impl Strategy<Value = (usize, usize, i32)> {
 ///
 /// The order is a permutation rather than `0..count`, so a batch that silently
 /// ran the proofs in creation order could not pass by accident. The statuses
-/// are confined to `1..=125` for the reason [`failure_cases`] records.
+/// are confined to `1..=MAX_FAILURE_STATUS` for the reason that constant records.
 pub fn ordered_failure_cases() -> impl Strategy<Value = (Vec<usize>, usize, i32)> {
-    (1usize..=4).prop_flat_map(|count| {
-        (permutation(count), 0..count, 1i32..=125)
+    (1..=MAX_BATCH_LENGTH).prop_flat_map(|count| {
+        (permutation(count), 0..count, 1..=MAX_FAILURE_STATUS)
             .prop_map(move |(order, index, status)| (order, index, status))
     })
 }

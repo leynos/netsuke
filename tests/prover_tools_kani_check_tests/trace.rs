@@ -22,6 +22,11 @@
 /// qualifier names a call the current architecture does not have. Covering the
 /// classes means the trace cannot omit a call a reader entry expects, and the
 /// reader still decides which of the calls it sees are attempts.
+///
+/// Only the sandbox on Linux runs `strace`, so the constant is compiled only
+/// there. A non-Linux Unix build would otherwise carry it unused, which
+/// `-D warnings` turns into a test failure.
+#[cfg(target_os = "linux")]
 pub(crate) const TRACE_SYSCALLS: &str = "%file,%network";
 
 /// Syscalls that open a path, with their flags in the arguments.
@@ -141,8 +146,12 @@ fn network_call(name: &str, arguments: &str) -> Option<String> {
 }
 
 /// Report whether a socket address names another host.
+///
+/// The address family is read from the selectors the call carries, not from a
+/// quoted path: a Unix socket at `/run/AF_INET` is still a local socket.
 fn reaches_network(arguments: &str) -> bool {
-    arguments.contains("AF_INET") || arguments.contains("AF_INET6")
+    let selectors = unquoted(arguments);
+    selectors.contains("AF_INET") || selectors.contains("AF_INET6")
 }
 
 /// Report an open that asks to write a path other than a character device.
@@ -152,8 +161,31 @@ fn write_open(name: &str, arguments: &str) -> Option<String> {
 }
 
 /// Report whether the open flags ask for the path to be written.
+///
+/// The flags are read from everything the call carries *except* its quoted
+/// runs, because a path can be named after a flag. A read-only open of
+/// `/repo/O_CREAT.log` is a read; searching the whole argument list would call
+/// it a write and report a query that never asked to write anything.
 fn requests_write(arguments: &str) -> bool {
-    WRITE_FLAGS.iter().any(|flag| arguments.contains(flag))
+    let flags = unquoted(arguments);
+    WRITE_FLAGS.iter().any(|flag| flags.contains(flag))
+}
+
+/// Return `text` with every quoted run removed.
+///
+/// `strace` quotes the path in each call that takes one, so a name inside a
+/// quoted run is path text rather than a flag or an address selector. An
+/// unterminated quote — a line `strace` truncated mid-write — ends the retained
+/// text, since nothing after it can be read as an argument.
+fn unquoted(text: &str) -> String {
+    let mut kept = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some((before, after)) = rest.split_once('"') {
+        kept.push_str(before);
+        rest = after.split_once('"').map_or("", |(_, tail)| tail);
+    }
+    kept.push_str(rest);
+    kept
 }
 
 /// Report whether the path is one of the character devices a caller writes to.
@@ -172,7 +204,8 @@ mod tests {
     //! Cases for the reader, so the oracle is known to fire rather than known
     //! to pass on today's log.
 
-    use super::attempts;
+    use super::{DEVICE_PATHS, WRITE_FLAGS, attempts};
+    use proptest::prelude::*;
     use rstest::rstest;
 
     #[rstest]
@@ -250,7 +283,13 @@ mod tests {
     #[case::read_only("7     openat(AT_FDCWD, \"/etc/hosts\", O_RDONLY|O_CLOEXEC) = 3")]
     #[case::extended_read_only("7     openat2(AT_FDCWD, \"/etc/hosts\", {flags=O_RDONLY}, 24) = 3")]
     #[case::null_device("7     openat(AT_FDCWD, \"/dev/null\", O_WRONLY|O_CREAT, 0666) = 3")]
+    #[case::path_naming_a_write_flag(
+        "7     openat(AT_FDCWD, \"/repo/O_CREAT.log\", O_RDONLY|O_CLOEXEC) = 3"
+    )]
     #[case::local_socket("7     connect(3, {sa_family=AF_UNIX, sun_path=\"/run/bus\"}, 110) = 0")]
+    #[case::local_socket_naming_a_remote_family(
+        "7     connect(3, {sa_family=AF_UNIX, sun_path=\"/run/AF_INET\"}, 110) = 0"
+    )]
     #[case::local_datagram(
         "7     sendto(3, \"x\", 1, 0, {sa_family=AF_UNIX, sun_path=\"/run/bus\"}, 110) = 1"
     )]
@@ -276,5 +315,77 @@ mod tests {
             "a read-only trace must report nothing, got {:?}",
             attempts(log)
         );
+    }
+
+    /// The path fragments a generated case assembles its path from.
+    ///
+    /// The set deliberately names open flags, an address family, and the
+    /// components of a character device. A path built from those is what
+    /// separates a reader that reads the flags from one that searches the whole
+    /// line for them.
+    const PATH_FRAGMENTS: [&str; 8] = [
+        "repo", "tmp", "O_CREAT", "O_TRUNC", "AF_INET", "dev", "null", "log",
+    ];
+
+    /// Build a path of one to three fragments drawn from [`PATH_FRAGMENTS`].
+    fn generated_path() -> impl Strategy<Value = String> {
+        prop::collection::vec(prop::sample::select(&PATH_FRAGMENTS), 1..=3)
+            .prop_map(|fragments| format!("/{}", fragments.join("/")))
+    }
+
+    proptest! {
+        /// Check that a write finding follows the open flags, not the path.
+        ///
+        /// The only path text that can change the answer is a whole character
+        /// device, which is exempt because every program writes to one.
+        #[test]
+        fn classification_follows_the_open_flags(
+            path in generated_path(),
+            write_flags in prop::collection::vec(prop::sample::select(&WRITE_FLAGS), 0..=3),
+        ) {
+            let flags = if write_flags.is_empty() {
+                "O_RDONLY".to_owned()
+            } else {
+                write_flags.join("|")
+            };
+            let line = format!("7     openat(AT_FDCWD, \"{path}\", {flags}) = -1 EROFS");
+            let expected = !write_flags.is_empty() && !DEVICE_PATHS.contains(&path.as_str());
+
+            let findings = attempts(&line);
+            prop_assert_eq!(
+                !findings.is_empty(),
+                expected,
+                "the open of {:?} with {:?} should report a write: {}",
+                path,
+                flags,
+                expected
+            );
+        }
+
+        /// Check that a network finding follows the address family, not a path.
+        ///
+        /// A Unix socket is local however its path is named, and a remote
+        /// address is remote however the path alongside it is named.
+        #[test]
+        fn only_an_address_selector_outside_a_path_names_a_remote_host(
+            path in generated_path(),
+            family in prop::sample::select(&["AF_UNIX", "AF_INET", "AF_INET6"]),
+        ) {
+            let address = if family == "AF_UNIX" {
+                format!("{{sa_family=AF_UNIX, sun_path=\"{path}\"}}")
+            } else {
+                format!("{{sa_family={family}, sin_addr=inet_addr(\"1.1.1.1\")}}")
+            };
+            let line = format!("7     connect(3, {address}, 16) = -1 ENETUNREACH");
+
+            let findings = attempts(&line);
+            prop_assert_eq!(
+                !findings.is_empty(),
+                family != "AF_UNIX",
+                "the connect to {} should be classified by its family: {}",
+                address,
+                line
+            );
+        }
     }
 }
