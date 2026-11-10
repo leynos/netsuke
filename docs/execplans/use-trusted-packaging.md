@@ -24,10 +24,11 @@ leaves a human to publish it. The final design in this plan resolves one
 candidate commit, builds and verifies the platform artefacts and Cargo package,
 publishes the package through crates.io Trusted Publishing, verifies the
 registry bytes, and then finalizes the GitHub Release. Issue #1064 adds the
-candidate-backed crates.io publisher and #1067 verifies the downloaded GitHub
-inventory against it; the finalizer that un-drafts the release only after both
-surfaces are proven, and the consumer smoke test, remain open before the full
-release path can make that end-to-end claim.
+candidate-backed crates.io publisher, and #1067 verifies the downloaded GitHub
+inventory against the digest record `publish-release` retained, not against the
+crates.io publisher or its package bytes. The finalizer that un-drafts the
+release only after both surfaces are proven, and the consumer smoke test,
+remain open before the full release path can make that end-to-end claim.
 
 The registry upload itself stops depending on a long-lived secret. GitHub mints
 a short-lived, repository-scoped token from an OIDC identity; the token exists
@@ -734,10 +735,12 @@ The `trusted.json` record is now produced and retained for downstream
 consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
 it to agree with `selection.json` before acting. The `verify-release-inventory`
 job consumes it: it downloads the published assets and compares every digest
-with that record, which the producer computed from its own build tree before
-upload and never from the bytes it describes. `finalize-github-release/` is
-still one of the open actions listed above, so un-drafting the release on the
-verifier's result is the one hand-off this path does not yet perform.
+with that record, which the producer computed from the staged payload before
+upload rather than from the copies GitHub later serves. The record is therefore
+an independent witness to the bytes, not a restatement of what was downloaded.
+`finalize-github-release/` is still one of the open actions listed above, so
+un-drafting the release on the verifier's result is the one hand-off this path
+does not yet perform.
 
 Each new job's name matches the composite action it calls, so a reader moving
 between `release.yml` and `.github/actions/` does not have to translate.
@@ -3147,8 +3150,9 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `finalize_github_release_cli.py` is now the only unwired one. The
   producer-record docstring also stops claiming the record "reaches publication
   independently of the downloaded trees" -- it travels inside the producer's
-  own artefact, and its independence is that it is never derived from the bytes
-  it describes.
+  own artefact, and its independence is that it is computed from the staged
+  payload before upload rather than from the downloaded copies it is later
+  compared against.
 
   **The upload plan keeps "unread" apart from "disagrees".** `unverifiable` is
   now its own key, and a case proves that an attached asset whose digest
