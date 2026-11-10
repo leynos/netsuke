@@ -3778,6 +3778,53 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   Evidence: `make lint-python`, `make test-workflow-contracts` (2068 passed, 3
   skipped), and `make test-release-publication` (1169 passed).
 
+- [x] (2026-11-09) Closed the twelfth CodeRabbit pass: a missing adapter name,
+  a misattributed `isinstance` finding, a duplicated candidate rule, and the
+  unconstrained closure of the token-bearing script's dependencies.
+
+  **A processes-test docstring named three callers and omitted a fourth.**
+  `release_publication_processes` said the finalizer's three modules issue no
+  process of their own, but the `gh` invocations live in
+  `finalize_github_release_io`, which it never named. The docstring now names
+  it alongside the two `gh release` commands it runs.
+
+  **The `isinstance`-chain finding did not apply, and the skip is recorded
+  rather than mechanical.** The finding asked for structural pattern matching in
+  `record_candidate`, whose guard is a single validation test
+  (`not isinstance(envelope, dict) or not isinstance(envelope.get("identity"), dict)`).
+  The df12 rule R9101 is emitted only when "consecutive branches select
+  behaviour with `isinstance()` checks on one subject" — a dispatch chain, not
+  one guard that rejects a malformed record. A `match` around that pair of
+  checks would be a single arm with a `|` pattern over two unrelated
+  expressions, which reads worse than the guard. The tenth pass already
+  converted the parse decoder's genuine chain; nothing else here is one.
+
+  **One candidate rule was implemented twice.** `resolve` and `publish` each
+  compared the recorded identity's tag and commit against the run's, and the
+  two copies differed where it mattered: only the package-record side had a
+  dedicated diagnosis for a tagless rehearsal record. The comparison is now the
+  pure `release_candidate.identity_refusal`, returning a reason or `None`;
+  `operations.require_candidate` (public, and shared by `candidate` and
+  `publish`) and `records.record_candidate` each map that one answer onto their
+  own exit status. The helper sits in the policy module, so neither adapter
+  imports the other and no cycle is introduced.
+
+  **The one script that runs with a write token left its closure unpinned.**
+  The PEP 723 block pins `cyclopts` and `cuprum`, so their transitive closure
+  resolves afresh on every run, and `uv` resolves and installs while the step's
+  `GH_TOKEN` is in scope. A lockfile would freeze the closure exactly, but the
+  repository keeps no per-script locks and `--locked` would fail the release
+  job the first time a pin was edited without relocking — a failure no local
+  gate would catch. The measured mitigation is a `[tool.uv]` table with
+  `exclude-newer`, which refuses any dependency release published after the
+  cutoff. Two probes on this host confirmed the mechanism and that it is
+  usable: a `2000-01-01` cutoff failed with "`cyclopts` was filtered by
+  `exclude-newer` … was published at 2026-09-17", and a `2026-11-10` cutoff
+  installed nine packages. The action contract gained
+  `assert_adapter_pins_its_closure`, which requires both the table and the
+  cutoff, and `test_the_dependency_cutoff_contract_rejects_a_removed_cutoff`
+  proves the assertion notices a block from which the line was stripped.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

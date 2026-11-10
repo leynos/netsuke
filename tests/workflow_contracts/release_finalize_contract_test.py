@@ -19,7 +19,11 @@ Run via ``make test-workflow-contracts``.
 import copy
 
 import pytest
-from release_finalize_action_contract import assert_action_contract
+from release_finalize_action_contract import (
+    FINALIZER_SCRIPT,
+    assert_action_contract,
+    assert_adapter_pins_its_closure,
+)
 from release_finalize_contract_support import (
     ARTIFACT_ACTION,
     CHECKOUT_ACTION,
@@ -39,6 +43,7 @@ from release_finalize_contract_support import (
 from release_publish_needs import job_names
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
+    REPO_ROOT,
     job_steps,
     load_workflow,
     require_mapping,
@@ -217,3 +222,14 @@ def test_workflow_mutations_are_rejected(mutation: str) -> None:
 def test_the_action_and_job_satisfy_the_complete_contract() -> None:
     """Require the checked-in action and workflow to agree on the contract."""
     _assert_complete_contract(load_action(), _workflow())
+
+
+def test_the_dependency_cutoff_contract_rejects_a_removed_cutoff() -> None:
+    """Prove the closure assertion notices a block whose cutoff was removed."""
+    source = (REPO_ROOT / FINALIZER_SCRIPT).read_text(encoding="utf-8")
+    assert_adapter_pins_its_closure(source)
+    stripped = "\n".join(
+        line for line in source.splitlines() if not line.startswith("# exclude-newer")
+    )
+    with pytest.raises(AssertionError):
+        assert_adapter_pins_its_closure(stripped)

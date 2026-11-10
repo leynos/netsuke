@@ -3426,6 +3426,15 @@ changes anything, and it decides from two records already on disk:
 - the reconciliation plan, which `finalize_github_release_cli.py` wrote from
   the trusted record and the snapshot's asset listing.
 
+Both ends of the run apply the same agreement, and it exists once.
+`release_candidate.identity_refusal` takes an identity and the run's tag and
+commit and returns the reason they disagree, or `None`. `resolve` and
+`publish`, on the package record and the candidate record respectively, each
+map that one answer onto the exit status their stage reports. The helper sits
+in the policy module rather than in either adapter, so the two adapters apply
+one rule without importing each other, and a new check of the same kind belongs
+there rather than in a third copy of the comparison.
+
 Its PEP 723 block pins `cyclopts` and `cuprum` to exact versions, as the
 `scripts/ci` helpers do, rather than to the ranges most scripts declare. The
 pins cover those two direct dependencies only, so their transitive closure
@@ -3433,6 +3442,16 @@ still resolves on every run: the block narrows the graph rather than freezing
 it. The other release scripts run earlier in the chain; this one un-drafts a
 release with a write token, and the two pins are one fewer thing that can
 differ between the run that was rehearsed and the run that publishes.
+
+The same block sets `exclude-newer`, because `uv` resolves and installs while
+the step's `GH_TOKEN` is in the environment. A dependency release published
+after the cutoff is refused rather than installed, which keeps a compromised
+later release of a transitive package out of the step that can un-draft. A
+lockfile would pin the closure exactly, but the repository keeps no per-script
+locks, and running with `--locked` would fail the release job the first time
+someone edited a pin without relocking — a generated file no gate verifies. The
+cutoff needs neither. The action contract asserts the `[tool.uv]` table and the
+cutoff line, so removing either fails `make test-workflow-contracts`.
 
 The trusted record is the input, never the verifier's output. A record derived
 from GitHub agrees with GitHub however the upload was tampered with: replace an

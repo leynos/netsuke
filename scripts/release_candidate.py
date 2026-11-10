@@ -290,3 +290,52 @@ def resolve_identity(facts: CandidateFacts) -> ReleaseIdentity:
         bin_name=facts.bin_name,
         is_prerelease=is_prerelease(facts.version),
     )
+
+
+def identity_refusal(identity: ReleaseIdentity, *, tag: str, commit: str) -> str | None:
+    """Return why the identity is not this run's candidate, or ``None``.
+
+    Parameters
+    ----------
+    identity
+        The identity an earlier stage recorded.
+    tag
+        The release being finalized, which the identity must name.
+    commit
+        The revision being published, which the identity must name.
+
+    Returns
+    -------
+    str | None
+        The refusal message naming the field that disagreed, or ``None`` when
+        the identity is this run's candidate.
+
+    Notes
+    -----
+    The rule lives here rather than in either caller because there are two
+    readings of one agreement: the package record ``resolve`` checks before it
+    writes a candidate, and the candidate record ``publish`` checks before it
+    acts. Two copies of the rule are how those diagnoses drift apart, and both
+    of them guard an edit that cannot be undone.
+
+    A tagless rehearsal identity is refused with its own message, because it
+    records that no tag was supplied rather than naming one that disagrees.
+
+    Examples
+    --------
+    >>> identity = ReleaseIdentity("v1.2.3", "0" * 40, "p", "1.2.3", "b", False)
+    >>> identity_refusal(identity, tag="v1.2.3", commit="0" * 40) is None
+    True
+    >>> "commit" in (identity_refusal(identity, tag="v1.2.3", commit="1" * 40) or "")
+    True
+    """
+    if identity.tag is None:
+        return (
+            "the recorded identity names no tag, so a rehearsal record cannot "
+            "be finalized as a release"
+        )
+    if identity.tag != tag:
+        return f"the recorded identity names tag {identity.tag!r}, not {tag!r}"
+    if identity.commit != commit:
+        return f"the recorded identity is commit {identity.commit}, not {commit}"
+    return None

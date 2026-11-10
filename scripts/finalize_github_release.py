@@ -2,6 +2,8 @@
 # /// script
 # requires-python = ">=3.14"
 # dependencies = ["cyclopts==4.25.3", "cuprum==0.1.0"]
+# [tool.uv]
+# exclude-newer = "2026-11-10T00:00:00Z"
 # ///
 """Finalize a verified GitHub release without ever replacing its bytes.
 

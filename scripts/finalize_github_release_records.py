@@ -185,6 +185,10 @@ def record_candidate(
     A record that is not a package record, holds no usable identity, or names
     another tag or revision stops the run with :data:`EXIT_INPUT_UNREADABLE`
     or :data:`EXIT_REFUSED`, before anything is written.
+
+    The tag-and-revision agreement is :func:`release_candidate.identity_refusal`,
+    the same rule ``publish`` applies to the candidate record. One rule read
+    twice cannot report the same disagreement two ways.
     """
     envelope = release_io.read_json(identity)
     if not isinstance(envelope, dict) or not isinstance(envelope.get("identity"), dict):
@@ -199,16 +203,9 @@ def record_candidate(
             release_io.EXIT_INPUT_UNREADABLE,
             f"{identity} is not a usable candidate: {error}",
         )
-    if recorded.tag is None or recorded.tag != tag:
-        release_io.fail(
-            release_io.EXIT_REFUSED,
-            f"the package record names tag {recorded.tag!r}, not {tag!r}",
-        )
-    if recorded.commit != commit:
-        release_io.fail(
-            release_io.EXIT_REFUSED,
-            f"the package record is commit {recorded.commit}, not {commit}",
-        )
+    reason = release_candidate.identity_refusal(recorded, tag=tag, commit=commit)
+    if reason is not None:
+        release_io.fail(release_io.EXIT_REFUSED, reason)
     release_io.write_json(output, recorded.as_record())
     print(f"recorded candidate {recorded.tag} at {recorded.commit}")
 

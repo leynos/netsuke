@@ -116,31 +116,36 @@ def candidate(
             release_io.EXIT_INPUT_UNREADABLE,
             f"{path} is not a usable candidate: {error}",
         )
-    _require_candidate(identity, tag=tag, commit=commit)
+    require_candidate(identity, tag=tag, commit=commit)
     return identity
 
 
-def _require_candidate(
+def require_candidate(
     identity: release_candidate.ReleaseIdentity, *, tag: str, commit: str
 ) -> None:
-    """Stop unless the identity names this run's tag and revision."""
-    if identity.tag is None:
+    """Stop unless the identity names this run's tag and revision.
+
+    Parameters
+    ----------
+    identity
+        The identity an earlier stage recorded.
+    tag
+        The release this run is finalizing.
+    commit
+        The revision being published.
+
+    Notes
+    -----
+    The agreement itself is :func:`release_candidate.identity_refusal`, so the
+    package record ``resolve`` checks and the candidate record this module
+    checks cannot disagree about what counts as this run's candidate. A
+    mismatch stops the run with :data:`EXIT_REFUSED` before any API call, so
+    the release remains a draft.
+    """
+    reason = release_candidate.identity_refusal(identity, tag=tag, commit=commit)
+    if reason is not None:
         release_io.fail(
-            release_io.EXIT_REFUSED,
-            "the recorded candidate names no tag, so a rehearsal record "
-            "cannot be finalized",
-        )
-    if identity.tag != tag:
-        release_io.fail(
-            release_io.EXIT_REFUSED,
-            f"the recorded candidate names tag {identity.tag!r}, not {tag!r}; "
-            "the release remains a draft",
-        )
-    if identity.commit != commit:
-        release_io.fail(
-            release_io.EXIT_REFUSED,
-            f"the recorded candidate is commit {identity.commit}, not "
-            f"{commit}; the release remains a draft",
+            release_io.EXIT_REFUSED, f"{reason}; the release remains a draft"
         )
 
 

@@ -32,7 +32,7 @@ from release_finalize_contract_support import (
     load_action_steps,
     run_tokens,
 )
-from workflow_loading import named_step, require_mapping
+from workflow_loading import REPO_ROOT, named_step, require_mapping
 
 #: ``timeout --kill-after=30s 300s`` and the line continuation that keeps the
 #: bounded command on the next line, where :func:`run_tokens` finds it.
@@ -47,6 +47,18 @@ BOUNDED_STEPS = (RESOLVE_STEP, SNAPSHOT_STEP, PLAN_STEP, FINALIZE_STEP)
 _PRESENCE_TEST = re.compile(
     r"inputs(?:\[['\"]github-token['\"]\]|\.github-token)\s*[!=]=\s*''"
 )
+
+#: The adapter the two token-bearing steps run. It is the only script here that
+#: resolves its own dependencies at run time, with a write token in scope.
+FINALIZER_SCRIPT = "scripts/finalize_github_release.py"
+
+#: The inline-metadata table a PEP 723 block needs for any setting beyond
+#: `dependencies` and `requires-python`.
+_UV_TABLE = "# [tool.uv]"
+
+#: The resolution cutoff itself. Dates only, so a malformed value cannot pass
+#: as a cutoff the resolver would reject anyway.
+_EXCLUDE_NEWER = re.compile(r'^# exclude-newer = "\d{4}-\d{2}-\d{2}T', re.MULTILINE)
 
 
 def _receives_token_value(value: object) -> bool:
@@ -244,6 +256,32 @@ def _assert_finalize_step(steps: list[dict[str, object]]) -> None:
     assert "|| " not in run, "the finalize step must not fall back after a refusal"
 
 
+def assert_adapter_pins_its_closure(source: str | None = None) -> None:
+    """Require the token-bearing adapter to constrain its resolution.
+
+    Parameters
+    ----------
+    source
+        The adapter's text. The contract reads the checked-in script, and the
+        control passes a block whose cutoff was removed, so the assertion is
+        shown to notice the change rather than to pass on any text.
+    """
+    text = (
+        source
+        if source is not None
+        else (REPO_ROOT / FINALIZER_SCRIPT).read_text(encoding="utf-8")
+    )
+    assert _UV_TABLE in text, (
+        f"{FINALIZER_SCRIPT} must carry a [tool.uv] table: the PEP 723 block "
+        "has no other place for a resolution setting"
+    )
+    assert _EXCLUDE_NEWER.search(text), (
+        f"{FINALIZER_SCRIPT} must set `exclude-newer`: its two direct pins "
+        "leave the transitive closure to resolve afresh in a step that holds a "
+        "write token, and the cutoff is what refuses a later dependency release"
+    )
+
+
 def assert_action_contract(action: dict[str, object]) -> None:
     """Check the action's interface, token routing, and single mutating call."""
     _assert_interface(action)
@@ -254,3 +292,4 @@ def assert_action_contract(action: dict[str, object]) -> None:
     _assert_bounds_fit_the_step(_assert_step_environments(steps))
     _assert_plan_step(steps)
     _assert_finalize_step(steps)
+    assert_adapter_pins_its_closure()
