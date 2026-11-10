@@ -18,6 +18,7 @@ use metrics_util::{
     CompositeKey, MetricKind,
     debugging::{DebugValue, DebuggingRecorder},
 };
+use rstest::rstest;
 use tempfile::tempdir;
 use test_support::fs as test_fs;
 use tracing_subscriber::filter::LevelFilter;
@@ -69,18 +70,7 @@ fn admission_counts(snapshot: &Snapshot) -> Vec<(String, u64)> {
 fn workspace_with(version: &str) -> AnyResult<(tempfile::TempDir, camino::Utf8PathBuf)> {
     let temp = tempdir().context("create schema admission workspace")?;
     let manifest_path = temp.path().join("Netsukefile");
-    test_fs::write(
-        &manifest_path,
-        format!(
-            concat!(
-                "netsuke_version: \"{}\"\n",
-                "targets:\n",
-                "  - name: pure\n",
-                "    command: echo pure\n",
-            ),
-            version
-        ),
-    )?;
+    test_fs::write(&manifest_path, command_load_manifest(version))?;
     let utf8 = camino::Utf8PathBuf::from_path_buf(manifest_path)
         .map_err(|rejected| anyhow!("workspace path is not UTF-8: {}", rejected.display()))?;
     Ok((temp, utf8))
@@ -109,49 +99,52 @@ fn manifest_query_does_not_record_schema_admission() -> AnyResult<()> {
     Ok(())
 }
 
-/// A command load must record exactly one admission decision.
-#[test]
-fn command_load_records_one_admitted_decision() -> AnyResult<()> {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "targets:\n",
-        "  - name: pure\n",
-        "    command: echo pure\n",
-    );
+/// Write a command-load manifest declaring `version` as its schema.
+fn command_load_manifest(version: &str) -> String {
+    format!(
+        concat!(
+            "netsuke_version: \"{}\"\n",
+            "targets:\n",
+            "  - name: pure\n",
+            "    command: echo pure\n",
+        ),
+        version
+    )
+}
+
+/// A command load must record exactly one decision under its own outcome.
+///
+/// The admitted and rejected cases differ only in the declaration and in what
+/// the load is expected to do, so they are one parameterized case. Splitting
+/// them duplicated the recorder plumbing and let the two assertions drift
+/// apart without either failing.
+#[rstest]
+#[case::admitted("1.0.0", true, "admitted")]
+#[case::rejected("1.1.0", false, "unsupported")]
+fn command_load_records_one_decision(
+    #[case] version: &str,
+    #[case] should_load: bool,
+    #[case] expected_outcome: &str,
+) -> AnyResult<()> {
+    let yaml = command_load_manifest(version);
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     metrics::with_local_recorder(&recorder, || {
-        from_str_with_limits(yaml, ManifestBudgetLimits::default())?;
+        let outcome = from_str_with_limits(&yaml, ManifestBudgetLimits::default());
+        // A rejection is expected for the unsupported case, but the load's
+        // result is not what this test measures: the counter it left behind is.
+        assert_eq!(
+            outcome.is_ok(),
+            should_load,
+            "the {version} manifest must {} load",
+            if should_load { "" } else { "not" }
+        );
         Ok::<_, anyhow::Error>(())
     })?;
     let counts = admission_counts(&snapshotter.snapshot().into_vec());
     ensure!(
-        counts == [("admitted".to_owned(), 1)],
-        "a command load must record one admitted decision: {counts:?}"
-    );
-    Ok(())
-}
-
-/// A command load must record a rejection under its own bounded outcome.
-#[test]
-fn command_load_records_one_rejected_decision() -> AnyResult<()> {
-    let yaml = concat!(
-        "netsuke_version: \"1.1.0\"\n",
-        "targets:\n",
-        "  - name: pure\n",
-        "    command: echo pure\n",
-    );
-    let recorder = DebuggingRecorder::new();
-    let snapshotter = recorder.snapshotter();
-    metrics::with_local_recorder(&recorder, || {
-        // The load fails; the point of the test is the counter it left behind.
-        from_str_with_limits(yaml, ManifestBudgetLimits::default())
-            .expect_err("an unsupported schema must be rejected");
-    });
-    let counts = admission_counts(&snapshotter.snapshot().into_vec());
-    ensure!(
-        counts == [("unsupported".to_owned(), 1)],
-        "a rejected command load must record one unsupported decision: {counts:?}"
+        counts == [(expected_outcome.to_owned(), 1)],
+        "a command load must record one {expected_outcome} decision: {counts:?}"
     );
     Ok(())
 }
@@ -163,18 +156,13 @@ fn command_load_records_one_rejected_decision() -> AnyResult<()> {
 /// a user's manifest.
 #[test]
 fn test_surface_load_does_not_record_schema_admission() -> AnyResult<()> {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "targets:\n",
-        "  - name: pure\n",
-        "    command: echo pure\n",
-    );
+    let yaml = command_load_manifest("1.0.0");
     let surface = TestSurface::new(StdlibConfig::from_current_dir()?);
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     metrics::with_local_recorder(&recorder, || {
         from_str_with_options(
-            yaml,
+            &yaml,
             &ManifestName::new("Netsukefile"),
             ManifestLoadOptions::test(surface),
         )?;
@@ -217,14 +205,9 @@ fn manifest_query_does_not_emit_admission_traces() -> AnyResult<()> {
 /// anything.
 #[test]
 fn command_load_emits_the_admission_span() -> AnyResult<()> {
-    let yaml = concat!(
-        "netsuke_version: \"1.0.0\"\n",
-        "targets:\n",
-        "  - name: pure\n",
-        "    command: echo pure\n",
-    );
+    let yaml = command_load_manifest("1.0.0");
     let spans = with_test_subscriber(LevelFilter::TRACE, |captured| {
-        from_str_with_limits(yaml, ManifestBudgetLimits::default())?;
+        from_str_with_limits(&yaml, ManifestBudgetLimits::default())?;
         Ok::<_, anyhow::Error>(captured.span_fields(ADMISSION_SPAN))
     })?;
     ensure!(
