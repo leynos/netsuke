@@ -3388,6 +3388,16 @@ the finalizer that decides is the code the publisher ran, and it downloads two
 artefacts by exact name: `release-crate-package` for the candidate identity and
 the publisher's `trusted-artifact` output for the pre-upload digest record.
 
+Both downloads land at the artefact's own root, and that is what makes
+`trusted/trusted.json` the record's path: `upload-artifact` stores each
+retained file relative to the deepest directory its paths share, and the
+publisher's three records share one, so the downloaded tree is flat. The
+retention contract pins that layout — every retained path must share a parent —
+and a case that moves `selection.json` into a subdirectory shows the assertion
+fires. Without it, retaining one record from a sibling directory would lift the
+shared root, nest the files a segment deeper, and leave this job reading a path
+that no longer resolves.
+
 `.github/actions/finalize-github-release` holds five bounded steps:
 
 | Step                          | Network calls                                         | Token      |

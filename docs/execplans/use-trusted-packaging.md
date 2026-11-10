@@ -3855,6 +3855,31 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   target now pins the two exactly, as `test-workflow-contracts`,
   `test-release-admission`, and the CI script helpers already do.
 
+- [x] (2026-11-10) Rebased onto the #1067 head, resolving two documentation
+  conflicts and adopting the parent's retained-layout contract as a property
+  this stage depends on.
+
+  **Both branches renumbered the same captions, for different reasons.** The
+  base's developers' guide numbered two different tables `Table 6`; #1067 fixed
+  it by shifting the trailing captions up one, while this branch had inserted
+  two tables of its own and shifted the same captions by two. Taking either
+  side wholesale would have produced a duplicate or a gap, so each conflict
+  took this branch's number — the scheme that already accounts for both new
+  tables — and the replayed series was checked to end at eleven unique,
+  sequential captions. The two conflicting commits are the only ones the
+  post-rebase `range-diff` reports as changed, and they differ only in those
+  caption lines.
+
+  **The parent pinned the artefact layout this stage reads.** `upload-artifact`
+  stores each retained file relative to the deepest directory the paths share,
+  so the publisher's records download flat and `trusted/trusted.json` resolves.
+  #1067 added a retention assertion requiring every retained path to share one
+  parent, with a case that moves `selection.json` into a subdirectory to prove
+  the assertion fires. The finalization job reads that record by the same flat
+  path, so the constraint is inherited rather than merely neighbouring: the
+  developers' guide now states why `trusted/trusted.json` is the right path and
+  what a lifted shared root would do to it.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
