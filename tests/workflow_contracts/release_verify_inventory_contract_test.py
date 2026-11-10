@@ -16,6 +16,7 @@ import typing as typ
 import pytest
 from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
+from release_verify_inventory_mutations import mutate_action, mutate_workflow
 from release_verify_inventory_support import (
     ARTIFACT_ACTION,
     CHECKOUT_ACTION,
@@ -23,7 +24,7 @@ from release_verify_inventory_support import (
     EXPECTED_INPUTS,
     EXPECTED_JOB_INPUTS,
     EXPECTED_OUTPUTS,
-    FORBIDDEN_GH_FLAGS,
+    GH_RELEASE_CALL,
     LOCAL_ACTION,
     NETWORK_STEPS,
     PUBLISH_JOB,
@@ -34,11 +35,10 @@ from release_verify_inventory_support import (
     VERIFY_COMMAND,
     VERIFY_JOB,
     VERIFY_STEP,
+    forbidden_gh_flags,
     gh_api_invocations,
     load_action,
     load_action_steps,
-    mutate_action,
-    mutate_workflow,
     reject_secrets,
     retained_artifact_name,
     run_tokens,
@@ -82,7 +82,7 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
     for step in steps:
         name = str(step.get("name"))
         run = str(step.get("run"))
-        assert "gh release" not in run, (
+        assert not GH_RELEASE_CALL.search(run), (
             f"{name} must not use the release subcommand: it can write"
         )
         invocations = gh_api_invocations(run)
@@ -95,9 +95,9 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
             assert tokens[:4] == ["gh", "api", "--method", "GET"], (
                 f"{name} must issue an explicit GET, got {tokens[:4]!r}"
             )
-            offending = FORBIDDEN_GH_FLAGS.intersection(tokens)
+            offending = forbidden_gh_flags(tokens)
             assert not offending, (
-                f"{name} must stay read-only; {sorted(offending)!r} implies a write"
+                f"{name} must stay read-only; {offending!r} implies a write"
             )
             found += 1
     assert found == len(NETWORK_STEPS), (
@@ -283,7 +283,18 @@ def _assert_complete_contract(
 
 @pytest.mark.parametrize(
     "mutation",
-    ["gh-release-download", "gh-api-field", "secret-token"],
+    [
+        "gh-release-download",
+        "gh-release-spacing",
+        "gh-api-field",
+        "gh-api-inline-field",
+        "gh-api-short-field",
+        "gh-api-input",
+        "gh-api-method-override",
+        "gh-api-short-method",
+        "gh-api-substitution",
+        "secret-token",
+    ],
 )
 def test_action_mutations_are_rejected(mutation: str) -> None:
     """Prove the action contract detects each verifier mutation."""
@@ -316,15 +327,36 @@ def test_workflow_mutations_are_rejected(mutation: str) -> None:
         _assert_complete_contract(action, workflow)
 
 
-def test_the_secret_scan_reaches_nested_values() -> None:
-    """Reject a secret reference however deeply it is nested.
+@pytest.mark.parametrize(
+    "reference",
+    [
+        "${{ secrets.CARGO_REGISTRY_TOKEN }}",
+        "${{ secrets['CARGO_REGISTRY_TOKEN'] }}",
+        "${{ toJSON(secrets) }}",
+    ],
+)
+def test_the_secret_scan_reaches_nested_values(reference: str) -> None:
+    """Reject a secret reference however it is spelled and however deeply nested.
 
     The control for :func:`reject_secrets`. Without it the scan could be
     vacuous — checking only top-level keys — and every assertion calling it
-    would still pass.
+    would still pass. The bracketed and whole-context spellings are the ones a
+    dotted-substring check would let through.
     """
     with pytest.raises(AssertionError):
-        reject_secrets({"steps": [{"env": {"TOKEN": "${{ secrets.X }}"}}]})
+        reject_secrets({"steps": [{"env": {"TOKEN": reference}}]})
+
+
+def test_a_call_inside_a_substitution_is_still_scanned() -> None:
+    """Find a write hidden in ``$(...)``, which a line-anchored scan misses.
+
+    The mutation case above shows the contract rejects the shape; this one
+    shows why. The scan has to locate the call wherever it sits on the line,
+    and the flag check has to see the ``-f`` that turns it into a POST.
+    """
+    script = 'body=$(gh api --method GET -f x=y "repos/o/r/releases")\n'
+    (tokens,) = gh_api_invocations(script)
+    assert forbidden_gh_flags(tokens) == ["-f"], tokens
 
 
 def test_the_action_and_job_satisfy_the_complete_contract() -> None:

@@ -7,19 +7,16 @@ mutation set, so the test module can state the contract while each mutation
 stays beside the shape it changes.
 """
 
+import re
 import shlex
 import typing as typ
 
-import pytest
 import yaml
 from workflow_loading import (
     REPO_ROOT,
-    job_steps,
     named_step,
     require_list,
     require_mapping,
-    step_index_by_key,
-    workflow_job,
 )
 
 if typ.TYPE_CHECKING:
@@ -128,15 +125,23 @@ VERIFY_COMMAND = [
     "--output",
     "$OUTPUT_PATH",
 ]
-#: Flags that would turn `gh api` into a write: `-f` and `-F` imply POST, and
-#: `--input` reads a body from a file. The action must remain read-only.
-FORBIDDEN_GH_FLAGS = frozenset({
-    "-f",
-    "-F",
-    "--field",
-    "--raw-field",
-    "--input",
-})
+#: Long flags that would turn `gh api` into a write: `--field` and
+#: `--raw-field` imply POST, and `--input` reads a body from a file. `--method`
+#: is checked separately, because the call's own leading one is required.
+FORBIDDEN_LONG_FLAGS = ("--field", "--raw-field", "--input")
+#: The short spellings of the same flags. `-f` and `-F` imply POST and `-X`
+#: sets the method. Matching their first two characters covers the joined
+#: forms, such as `-fx=y` and `-XPOST`.
+FORBIDDEN_SHORT_FLAGS = ("-f", "-F", "-X")
+#: A `gh api` call anywhere on a line, including inside a command
+#: substitution, which a check anchored at the start of the line would miss.
+GH_API_CALL = re.compile(r"\bgh\s+api\b")
+#: The `gh release` subcommand, which can write; `gh api` is what a read-only
+#: step must use instead.
+GH_RELEASE_CALL = re.compile(r"\bgh\s+release\b")
+#: A workflow expression naming the secrets context, whether dotted, indexed,
+#: or passed whole to `toJSON`.
+SECRET_REFERENCE = re.compile(r"\$\{\{[^}]*\bsecrets\b")
 EXPECTED_JOB_INPUTS = {
     "tag": "${{ needs.metadata.outputs.release_tag }}",
     "repository": "${{ github.repository }}",
@@ -191,25 +196,72 @@ def gh_api_invocations(run: str) -> list[list[str]]:
     A line scanning for ``gh api`` would miss a call whose flags continue onto
     later lines, so the continuation lines are joined first. Tokenizing the
     joined command rather than the whole script keeps the flag checks from
-    seeing text that belongs to an unrelated line.
+    seeing text that belongs to an unrelated line. The search starts wherever
+    the call sits on its line, so a call inside a command substitution is
+    scanned like any other.
 
     Returns
     -------
     list[list[str]]
         Shell tokens for each invocation, in the order the step runs them.
+
+    Raises
+    ------
+    AssertionError
+        If the script names more ``gh api`` calls than the scan tokenizes. An
+        unmodelled shape must fail the contract rather than slip past it.
     """
     lines = run.splitlines()
+    # A comment that mentions `gh api` names no call, so it neither counts
+    # towards the total nor gets tokenized as though it were one.
+    script = [line for line in lines if not line.lstrip().startswith("#")]
     invocations: list[list[str]] = []
     index = 0
-    while index < len(lines):
-        command = lines[index].strip()
-        if command.startswith("gh api"):
-            while command.endswith("\\"):
+    while index < len(script):
+        command = script[index].strip()
+        call = GH_API_CALL.search(command)
+        if call is not None:
+            command = command[call.start() :]
+            while command.endswith("\\") and index + 1 < len(script):
                 index += 1
-                command = f"{command[:-1]} {lines[index].strip()}"
+                command = f"{command[:-1]} {script[index].strip()}"
             invocations.append(shlex.split(command))
         index += 1
+    mentioned = len(GH_API_CALL.findall("\n".join(script)))
+    if mentioned != len(invocations):
+        msg = (
+            f"every gh api call must be tokenized, found {mentioned} call(s) "
+            f"and {len(invocations)} invocation(s)"
+        )
+        raise AssertionError(msg)
     return invocations
+
+
+def forbidden_gh_flags(tokens: list[str]) -> list[str]:
+    """Return each argument of one ``gh api`` call that implies a write.
+
+    Matching whole tokens would accept ``--field=x=y`` and ``-fx=y``, so each
+    argument is compared by its flag name with any ``=value`` removed. The
+    call's own leading ``--method GET`` is the one method override the action
+    is allowed to name; any later ``--method`` is a second, unreviewed one.
+
+    Returns
+    -------
+    list[str]
+        The offending arguments, in the order they appear.
+    """
+    offending: list[str] = []
+    # The contract pins `gh api --method GET` as the leading four tokens, so
+    # that exact method is the one override the action may name.
+    allowed_method = tokens[:4] == ["gh", "api", "--method", "GET"]
+    for position, token in enumerate(tokens):
+        name = token.split("=", 1)[0]
+        if name == "--method":
+            if position != 2 or not allowed_method:
+                offending.append(token)
+        elif name in FORBIDDEN_LONG_FLAGS or name[:2] in FORBIDDEN_SHORT_FLAGS:
+            offending.append(token)
+    return offending
 
 
 def run_tokens(run: str) -> list[str]:
@@ -233,7 +285,7 @@ def reject_secrets(node: object) -> None:
     """
     match node:
         case str() as text:
-            assert "secrets." not in text, (
+            assert not SECRET_REFERENCE.search(text), (
                 f"the verification boundary must not reference a secret: {text!r}"
             )
         case dict() as mapping:
@@ -242,66 +294,3 @@ def reject_secrets(node: object) -> None:
         case list() | tuple() as items:
             for item in items:
                 reject_secrets(item)
-
-
-def mutate_action(action: dict[str, object], mutation: str) -> None:
-    """Change one dimension of an action step's command or environment."""
-    steps = load_action_steps(action)
-    match mutation:
-        case "gh-release-download":
-            download = named_step(steps, DOWNLOAD_STEP)
-            download["run"] = f'{download["run"]}gh release download "$RELEASE_TAG"\n'
-        case "gh-api-field":
-            listing = named_step(steps, LIST_RELEASES_STEP)
-            listing["run"] = str(listing["run"]).replace(
-                "--method GET --paginate --slurp", "--method GET --paginate -f x=y"
-            )
-        case "secret-token":
-            verify = named_step(steps, VERIFY_STEP)
-            require_mapping(verify["env"], "verify environment")["UNEXPECTED_INPUT"] = (
-                "${{ secrets.CARGO_REGISTRY_TOKEN }}"
-            )
-        case other:
-            pytest.fail(f"unknown action mutation {other!r}")
-
-
-def mutate_workflow(workflow: dict[str, object], mutation: str) -> None:
-    """Change one dimension of the verification job's wiring."""
-    job = workflow_job(workflow, VERIFY_JOB)
-    match mutation:
-        case "id-token":
-            permissions = require_mapping(job["permissions"], "verify permissions")
-            permissions["id-token"] = "write"
-        case "release-dependency":
-            needs = require_list(job.get("needs"), "verify needs")
-            job["needs"] = [*needs, "release"]
-        case "trusted-in-download":
-            steps = job_steps(workflow, VERIFY_JOB)
-            local = steps[step_index_by_key(steps, "uses", LOCAL_ACTION)]
-            require_mapping(local["with"], "verifier inputs")["trusted-record-file"] = (
-                "release-download/trusted.json"
-            )
-        case "artifact-pattern":
-            download = next(
-                step
-                for step in job_steps(workflow, VERIFY_JOB)
-                if str(step.get("uses", "")).startswith("actions/download-artifact@")
-            )
-            with_values = require_mapping(download["with"], "artifact inputs")
-            del with_values["name"]
-            with_values["pattern"] = "declared-assets-*"
-        case "artifact-literal":
-            download = next(
-                step
-                for step in job_steps(workflow, VERIFY_JOB)
-                if str(step.get("uses", "")).startswith("actions/download-artifact@")
-            )
-            require_mapping(download["with"], "artifact inputs")["name"] = (
-                TRUSTED_ARTIFACT_VALUE
-            )
-        case "publisher-output":
-            publisher = workflow_job(workflow, PUBLISH_JOB)
-            outputs = require_mapping(publisher.get("outputs"), "publisher outputs")
-            outputs["trusted-artifact"] = "declared-assets-publish-release-1"
-        case other:
-            pytest.fail(f"unknown workflow mutation {other!r}")
