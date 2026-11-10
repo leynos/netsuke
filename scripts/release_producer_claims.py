@@ -77,30 +77,26 @@ def require_target_claims(
         Configured target key mapped to the platform it serves.
     package_origins
         Published package name mapped to the target key whose downloaded
-        subtree it was staged in. Turns the package half from a count into an
-        observation, so a caller with a tree should always pass it. Supplied,
+        subtree staged it, or ``None`` when no tree was walked. Supplied,
         every claimed package must have an origin and it must be the record's
-        own target; omitted, the per-format count is the only package
-        guarantee. Corroboration rather than proof, as the module docstring
-        sets out.
+        own target; omitted, the per-format count is the whole guarantee. An
+        observation, not a proof, as the module docstring sets out.
 
     Raises
     ------
     TargetClaimMismatchError
         If any record omits its own archive or sidecar, claims a name that is
-        neither, does not claim exactly one package per format its platform
-        stages, or -- when origins were supplied -- claims a package its own
-        target's subtree did not stage, including one no subtree staged.
+        neither, misses or doubles a package format its platform stages, or --
+        when origins were supplied -- claims a package its own target's
+        subtree did not stage, including one no subtree staged.
 
     Notes
     -----
     ``UnknownPlatformError`` reaches the caller from
     :func:`_package_claim_offenders` rather than being raised here, so it stays
-    out of the ``Raises`` section.
-
-    A target with no entry in ``archives`` or ``targets`` is skipped rather
-    than reported: coverage calls it an uncovered target, which sends the
-    operator to the configuration rather than to a producer record.
+    out of the ``Raises`` section. A target with no entry in ``archives`` or
+    ``targets`` is skipped rather than reported: coverage calls it an
+    uncovered target, which sends the operator to the configuration.
 
     Examples
     --------
@@ -111,16 +107,14 @@ def require_target_claims(
     ...     assets={"pkg-gnu.tar.gz": "b" * 64, "pkg-gnu.tar.gz.sha256": "c" * 64,
     ...             "pkg.deb": "d" * 64, "pkg.rpm": "e" * 64},
     ... )
-    >>> require_target_claims(
-    ...     [provenance],
-    ...     archives={"linux-x86_64": "pkg-gnu.tar.gz"},
-    ...     targets={"linux-x86_64": "linux"},
-    ... )
+    >>> archives = {"linux-x86_64": "pkg-gnu.tar.gz"}
+    >>> targets = {"linux-x86_64": "linux"}
+    >>> require_target_claims([provenance], archives=archives, targets=targets)
     >>> try:
     ...     require_target_claims(
     ...         [provenance],
     ...         archives={"linux-x86_64": "pkg-musl.tar.gz"},
-    ...         targets={"linux-x86_64": "linux"},
+    ...         targets=targets,
     ...     )
     ... except TargetClaimMismatchError as refusal:
     ...     print("omits its own" in str(refusal))

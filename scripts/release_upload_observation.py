@@ -208,8 +208,9 @@ def reconcile(
     categories travel with the plan because they live only in the observation;
     a caller given the plan alone could say an asset was unverifiable but not
     whether the remedy is a retry. A caller that needs to interleave a transfer
-    between the effect and the decision calls the two directly, as
-    :func:`upload_declared_assets_cli.settle` does across its re-read.
+    between the effect and the decision calls this function once before the
+    transfer and once after, as :func:`upload_declared_assets_cli.settle` does
+    across its re-read.
 
     Examples
     --------
