@@ -76,10 +76,25 @@ def _needs_results(
     -------
     dict[str, str]
         One result per dependency named by the release scenarios.
+
+    Raises
+    ------
+    ValueError
+        If ``outcomes`` names a job the release scenarios do not model. Its
+        result would otherwise land beside the dependency the scenario meant to
+        change, leaving every real dependency at success and the scenario green
+        while testing nothing.
     """
     results = dict.fromkeys(CRATES_IO_NEEDS | PUBLISHER_NEEDS, "success")
     results["windows-native-recipe-smoke"] = smoke
     if outcomes is not None:
+        # A mistyped job name would otherwise add a result no job declares and
+        # leave the intended one at its default, so the scenario would assert
+        # the opposite of what its name says.
+        unknown = sorted(outcomes.keys() - results.keys())
+        if unknown:
+            msg = f"scenario names unknown dependenc(ies) {unknown}"
+            raise ValueError(msg)
         results.update(outcomes)
     return results
 
