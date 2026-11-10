@@ -129,18 +129,18 @@ fn command_load_records_one_decision(
     let yaml = command_load_manifest(version);
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
-    metrics::with_local_recorder(&recorder, || {
-        let outcome = from_str_with_limits(&yaml, ManifestBudgetLimits::default());
-        // A rejection is expected for the unsupported case, but the load's
-        // result is not what this test measures: the counter it left behind is.
-        assert_eq!(
-            outcome.is_ok(),
-            should_load,
-            "the {version} manifest must {} load",
-            if should_load { "" } else { "not" }
-        );
-        Ok::<_, anyhow::Error>(())
-    })?;
+    let outcome = metrics::with_local_recorder(&recorder, || {
+        from_str_with_limits(&yaml, ManifestBudgetLimits::default()).map(drop)
+    });
+    // A rejection is expected for the unsupported case, but the load's result
+    // is not what this test measures: the counter it left behind is. Checking
+    // it outside the recorder closure keeps the assertion reportable as an
+    // error rather than a panic inside a `Result`-returning function.
+    ensure!(
+        outcome.is_ok() == should_load,
+        "the {version} manifest must {} load: {outcome:?}",
+        if should_load { "" } else { "not" }
+    );
     let counts = admission_counts(&snapshotter.snapshot().into_vec());
     ensure!(
         counts == [(expected_outcome.to_owned(), 1)],
