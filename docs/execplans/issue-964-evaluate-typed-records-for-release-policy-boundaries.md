@@ -297,6 +297,12 @@ records and are unchanged.
       check also asked for the roadmap reference, so the pull-request title
       carries `(9.1.1.)`. Repository conventions there use the roadmap item in
       parentheses, as other roadmap-scoped pull requests do.
+- [x] Correct the shared fixture's revalidation claim. The outcome section said
+      `write_trusted_record` serializes a `DigestRecord` instead of
+      revalidating a mapping. It does not: the helper passes
+      `digests.as_mapping()` to `write_digest_record`, which builds a
+      `DigestRecord` from that mapping before serializing, so the writer's
+      own guarantee still holds. The paragraph now says what the code does.
 - [x] Run the final CodeRabbit review on `7a68b38dd`. It reported no findings
       across 24 reviewed files.
 - [x] Rebase onto `origin/main`, first at `08d0a918` ("Add Proptest coverage
@@ -410,8 +416,10 @@ Three points were less mechanical than the estimate suggested:
   `DigestRecordError` rather than `TypeError` when a mixed-type key set would
   break `sorted`.
 - The fixture module that both verifier suites share now produces a
-  `DigestRecord` rather than a dict, so `write_trusted_record` serializes the
-  record instead of revalidating a mapping.
+  `DigestRecord`. `write_trusted_record` converts it back to a mapping, and
+  `write_digest_record` revalidates that mapping before serialization, so the
+  writer keeps its own guarantee that it cannot emit a record its reader would
+  refuse.
 
 Review of the migration tightened where those invariants live. Both records now
 validate in `__post_init__` as well as in their factories, so a directly
