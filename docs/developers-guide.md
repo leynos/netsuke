@@ -186,8 +186,9 @@ the adapters apply them differently because their libraries do:
   `is_informational_help` sends every topic except `targets` down the startup
   route, so `help` and `help build` return through `run_cli` carrying the
   startup plan and never reach the configuration merge, exactly as Clap's own
-  path does not. Only `help targets` continues past the merge and therefore
-  reflects configuration-derived colour.
+  path does not. Only `help targets` continues past the merge — but it renders
+  a plain catalogue from `plan.prefs()` and never calls `plan.stdout_colour()`,
+  so a merged plan does not make that output configuration-coloured.
 - The status reporter selects live or static progress from `live_progress`,
   which already accounts for accessible mode and a non-redraw-capable `TERM`.
 

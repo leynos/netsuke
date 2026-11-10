@@ -2055,7 +2055,9 @@ decides what `--json` can suppress:
   still styles that text.
 - Netsuke renders `help` and `help <subcommand>` itself and returns before the
   configuration merge, so it applies the startup plan's colour. `--json`
-  suppresses colour for these, because the structured document is the output.
+  suppresses colour for these, but it does not turn them into a structured
+  document: they still print help text, because a help topic has no JSON form.
+  Ask for `help targets` when you want JSON output.
 
 An explicit `--color always` can override the automatic colour suppression from
 `NO_COLOR` and `TERM=dumb`, on either layer. Treat `--help` as a parser-level

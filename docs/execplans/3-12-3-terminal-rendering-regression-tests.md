@@ -1002,8 +1002,11 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
     task-update row was **not** satisfied, as D29 records; the claim I made
     here that the helper "collects each whole task line … which includes the
     bytes that precede the task-name field" was false, because the code sliced
-    from the `Task` window itself rather than from the line start. Date/Author:
-    2026-11-08, implementation agent, after `5815758338`.
+    from the `Task` window itself rather than from the line start.
+    *(Superseded on one point by D34: `Testing (Overall)` was not "already
+    addressed", because a prefix written before the label was still invisible.
+    D34 records the repair and the write-site test that closes it.)*
+    Date/Author: 2026-11-08, implementation agent, after `5815758338`.
 
 - **D29. The task-update assertion is scoped to the task text, not to the
   enclosing terminal line.** CodeRabbit asked for each complete task-update
@@ -1108,17 +1111,17 @@ Date/Author: 2026-11-08, implementation agent.
 the tree at `245515675`. All nine are now satisfied, and the run below names
 the evidence so a reviewer can re-check rather than take the claim.
 
-| Row                                         | Disposition                       | Evidence in the current tree                                                                                                                                                                                                                                                                                                                                                                           |
-| ------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Testing (Overall)                           | Rebutted, with a measurement      | The enclosing-line reading is unsatisfiable; see D29's probe numbers. `--progress never` emits no task updates at all, so no capture exists in which the bytes before a label are task text. The label-forward span is 45 bytes, plain and redraw-free.                                                                                                                                                |
-| User-Facing Documentation                   | Satisfied                         | `docs/v0-1-0-migration-guide.md:301-315` documents the removed `output_mode::resolve`, the `DisplayPlan` arguments on `runner::run` and `run_with_ninja_program`, and the `parse_with_localizer_from` colour argument.                                                                                                                                                                                 |
-| Developer Documentation                     | Satisfied                         | `docs/developers-guide.md:158-160` describes `with_ansi(false)` plus the `set_tracing_ansi` reload, which is the mechanism `main` actually uses.                                                                                                                                                                                                                                                       |
-| Module-Level Documentation                  | Satisfied                         | `tests/terminal_rendering/json.rs` opens with the configuration-error and tracing contract; `json_pty.rs` opens with "Verify JSON output stays plain when attached to a Unix pseudo-terminal", which is its role.                                                                                                                                                                                      |
-| Testing (Property / Proof)                  | Satisfied                         | `test_support/src/terminal/classify_tests.rs` compares against an independent byte-level oracle over arbitrary streams, and `escapable_strings_hide_payload_carriage_returns` generates both terminated and unterminated strings (`is_terminated` is a generated boolean).                                                                                                                             |
-| Testing (Compile-Time / Ui)                 | Satisfied                         | `tests/clippy_env_policy_ui_tests.rs` locates the `disallowed_methods` exception by its attribute and asserts it decorates `fn main` specifically.                                                                                                                                                                                                                                                     |
-| Unit Architecture                           | Rebutted                          | `src/main.rs` separates the boundary already: `run_with_args` (106), `resolve_startup_window` (171), `run_merged_command` (245) and `run_configured_command` (265) name the signal resolution, the merge, and the configuration step, with `run_cli` and `configure_runtime` after them. The startup side effects the row names are unchanged from base. Recorded earlier as D26 and re-verified here. |
-| Domain Architecture                         | Rebutted                          | The policy enums live in `src/cli/config/mod.rs` and the resolver consumes them through `DisplayPolicies`, which is the adapter boundary the row asks for. Recorded earlier as D26.                                                                                                                                                                                                                    |
-| Outside-diff: document the removed resolver | Satisfied, and broader than asked | `docs/v0-1-0-migration-guide.md:301-305` names both replacements — `EnvSignals::read` with `resolve_output_mode`, and `resolve_with` — where the finding suggested only `resolve_with`.                                                                                                                                                                                                                |
+| Row                                         | Disposition                       | Evidence in the current tree                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Testing (Overall)                           | Satisfied                         | Only the *enclosing-line* reading is unsatisfiable (D29's probe numbers: the stage-6 repaint fills the 962 bytes before the label with `has_redraw=true`). `task_update_emissions` instead slices from the bidi isolate that opens each emission and asserts no escape and no redraw, and `reporter_text_write_carries_no_escape_from_its_first_byte` covers the pre-isolate prefix from the reporter's own write buffer. |
+| User-Facing Documentation                   | Satisfied                         | `docs/v0-1-0-migration-guide.md:301-315` documents the removed `output_mode::resolve`, the `DisplayPlan` arguments on `runner::run` and `run_with_ninja_program`, and the `parse_with_localizer_from` colour argument.                                                                                                                                                                                                    |
+| Developer Documentation                     | Satisfied                         | `docs/developers-guide.md:158-160` describes `with_ansi(false)` plus the `set_tracing_ansi` reload, which is the mechanism `main` actually uses.                                                                                                                                                                                                                                                                          |
+| Module-Level Documentation                  | Satisfied                         | `tests/terminal_rendering/json.rs` opens with the configuration-error and tracing contract; `json_pty.rs` opens with "Verify JSON output stays plain when attached to a Unix pseudo-terminal", which is its role.                                                                                                                                                                                                         |
+| Testing (Property / Proof)                  | Satisfied                         | `test_support/src/terminal/classify_tests.rs` compares against an independent byte-level oracle over arbitrary streams, and `escapable_strings_hide_payload_carriage_returns` generates both terminated and unterminated strings (`is_terminated` is a generated boolean).                                                                                                                                                |
+| Testing (Compile-Time / Ui)                 | Satisfied                         | `tests/clippy_env_policy_ui_tests.rs` locates the `disallowed_methods` exception by its attribute and asserts it decorates `fn main` specifically.                                                                                                                                                                                                                                                                        |
+| Unit Architecture                           | Rebutted                          | `src/main.rs` separates the boundary already: `run_with_args` (106), `resolve_startup_window` (171), `run_merged_command` (245) and `run_configured_command` (265) name the signal resolution, the merge, and the configuration step, with `run_cli` and `configure_runtime` after them. The startup side effects the row names are unchanged from base. Recorded earlier as D26 and re-verified here.                    |
+| Domain Architecture                         | Rebutted                          | The policy enums live in `src/cli/config/mod.rs` and the resolver consumes them through `DisplayPolicies`, which is the adapter boundary the row asks for. Recorded earlier as D26.                                                                                                                                                                                                                                       |
+| Outside-diff: document the removed resolver | Satisfied, and broader than asked | `docs/v0-1-0-migration-guide.md:301-305` names both replacements — `EnvSignals::read` with `resolve_output_mode`, and `resolve_with` — where the finding suggested only `resolve_with`.                                                                                                                                                                                                                                   |
 
 **Why the rebuttals are not stonewalling.** Two rows ask for changes that are
 already present, and one asks for an observation the binary cannot produce. In
@@ -1182,9 +1185,13 @@ is pinned at the action's own ref. The correct repair was in Whitaker's
 `prune_prebuilt_libraries`; the issue's suggested fix prunes by staged filename
 instead of by an enumerated crate list. That was another repository's diff.
 
-**How it cleared, measured.** It did not need a new installer release, and the
-installer's own pruning code did not run. The recovery was a *packaging*
-change, and the two changes sit in different places:
+**How it cleared, measured.** It did not need a new installer release. Note
+which pruning code is meant here: the pinned installer (v0.2.11) does still call
+`prune_prebuilt_libraries` after a successful prebuilt download, as
+`installer/src/install_flow/mod.rs` at that tag shows. What did not reach CI is
+the rewritten prune from Whitaker PR 577, which scans the staging directory.
+The recovery was a *packaging* change, and the two changes sit in different
+places:
 
 - **The archive stopped shipping the crate.** Whitaker PR #570 (`64a5011af`,
   merged 2026-11-08T14:18:48Z) made `string_continuation_style` experimental
@@ -1322,12 +1329,13 @@ still shows the defect D31 called satisfied or rebutted:
 D31's evidence column cites a different artefact from the one each row requests
 — the migration guide for User-Facing Documentation, the `json_pty.rs` module
 doc for Module-Level Documentation — so the rows were marked satisfied on
-proximity rather than on the finding. Two dispositions do hold:
-`Testing (Overall)` and `Domain Architecture` remain rebutted, for the reasons
-restated below.
+proximity rather than on the finding.
 
-So six rows were right and are fixed here, and two are rebutted against the
-code, one of them with the measurement D29 already recorded.
+Six rows were right and are fixed here. `Testing (Overall)` was first read as
+rebutted and needed a repair of its own, and its row is reconciled below.
+`Domain Architecture` is the one row that genuinely holds, because the policy
+enums really do sit on the resolver's input boundary; it is restated below with
+its measurement.
 
 **Six rows were correct, and are fixed.**
 
@@ -1389,7 +1397,7 @@ code, one of them with the measurement D29 already recorded.
   themselves are unchanged from base, so this is a naming and documentation
   correction, not a behavioural one.
 
-**Two rows are rebutted.**
+**Two rows first read as rebuttals, and both turned out to need repair.**
 
 - *Testing (Overall)* — repaired, and the earlier rebuttal was half wrong.
   `task_lines` slices from the label (the literal `Task` followed by a space),
@@ -1402,10 +1410,13 @@ code, one of them with the measurement D29 already recorded.
   a line. That rules out one measurement, not every one. The task emission
   itself has a real boundary — the reporter wraps the whole label in
   `U+2068`…`U+2069`, so the emission begins at that isolate — and
-  `task_update_emissions` slices exactly there, then asserts the complete
-  emission carries no escape and no redraw. `--progress never` emits no task
-  updates at all, so that case is still asserted through the stage labels
-  rather than through task lines.
+  `task_update_emissions` slices exactly there, then asserts that slice carries
+  no escape and no redraw. That slice is *not* the complete emission: it begins
+  at the isolate, so bytes written before the isolate are outside it and a
+  prefix placed there would pass. The write-site test in `src/status/tests.rs`
+  covers that prefix separately, from the bytes the reporter actually writes.
+  `--progress never` emits no task updates at all, so that case is still
+  asserted through the stage labels rather than through task lines.
 
   CodeRabbit observed that this slice still starts at the isolate, so a write
   beginning `ESC[31m` *before* it would pass. That is correct, and the stream
@@ -1458,11 +1469,14 @@ code, one of them with the measurement D29 already recorded.
   322 lines across 33 files was the closest, on an older commit — and is
   corrected here rather than carried.
 
-**Consequence for the review decision.** All eight rows now have a disposition
-with a file, a line, or a measurement behind it. Six produced edits, one is
-recorded as unsatisfiable with its numbers, and one is rebutted on the code's
-own shape. A fresh formal review of the resulting head is what clears
-`CHANGES_REQUESTED`; the queue request and its outcome are recorded separately.
+**Consequence for the review decision.** All eight rows now have one
+disposition each, with a file, a line, or a measurement behind it. Seven
+produced edits — the task-emission row among them, after the write-site test
+replaced the formatter-only assertion — and the eighth, Domain Architecture, is
+rebutted with its measured cost (365 lines across 39 files against a 600-line
+production-change tolerance), not waved away. A fresh formal review of the
+resulting head is what clears `CHANGES_REQUESTED`; the queue request and its
+outcome are recorded separately.
 
 Date/Author: 2026-11-09, implementation agent.
 
@@ -1521,10 +1535,13 @@ repaint and the slice collected the animation's escapes. The second asserted
 the emission begins at `Task`; it failed because the reporter wraps the whole
 label in `U+2068`…`U+2069`, so the emission begins one character earlier. The
 measured answer is `task_update_emissions`, which starts at the `U+2068` that
-opens the label and runs to the next terminator — the complete emission, with
-no part of the stage animation in it. It asserts that structure, then that the
-whole emission carries neither an escape nor a redraw. The animated path keeps
-`task_lines`, and D29's measurement still governs it.
+opens the label and runs to the next terminator, with no part of the stage
+animation in it. It asserts that structure, then that the slice carries neither
+an escape nor a redraw. The slice is bounded by the isolate, not by the start
+of the write — a prefix written before the isolate is outside it, and
+`reporter_text_write_carries_no_escape_from_its_first_byte` covers that byte
+from the reporter's own output. The animated path keeps `task_lines`, and D29's
+measurement still governs it.
 
 Both failed attempts were caught by running the test rather than by reasoning
 about it, and each failure was a false claim in my own prose: that nothing

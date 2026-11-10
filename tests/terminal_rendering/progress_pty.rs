@@ -133,6 +133,13 @@ const TASK_ISOLATE: [u8; 3] = [0xE2, 0x81, 0xA8];
 /// leave that prefix outside the assertion, and an escape written there would
 /// pass unseen.
 ///
+/// An emission is one line-bounded slice beginning at an isolate. A `Task `
+/// that the isolate does not open is part of a description rather than a new
+/// update, so it is skipped: otherwise one write containing that text twice
+/// would yield overlapping slices and the caller's count would be meaningless.
+/// Requiring the isolate also means a lost isolate shows up as a missing
+/// emission instead of a silently reshaped one.
+///
 /// This is *not* the whole emission. It stops at the isolate, so bytes written
 /// before it remain unexamined: an edit that wrote `ESC[31m` ahead of the label
 /// would pass every assertion here. The stream cannot settle that case —
@@ -155,10 +162,15 @@ fn task_update_emissions(bytes: &[u8]) -> Vec<&[u8]> {
             if window != b"Task " {
                 return None;
             }
+            // Only an occurrence the isolate opens counts as an emission. A
+            // `Task ` appearing inside a description is not a new update, and
+            // slicing there would produce two overlapping emissions for one
+            // write, so the count assertion would be measuring the wrong
+            // thing. Requiring the isolate also makes a dropped isolate a
+            // visible failure: the emission disappears from the count.
             let emission_start = start
                 .checked_sub(TASK_ISOLATE.len())
-                .filter(|&index| bytes.get(index..start) == Some(TASK_ISOLATE.as_slice()))
-                .unwrap_or(start);
+                .filter(|&index| bytes.get(index..start) == Some(TASK_ISOLATE.as_slice()))?;
             let remainder = bytes.get(emission_start..)?;
             let emission_length = remainder
                 .iter()
