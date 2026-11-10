@@ -3216,15 +3216,17 @@ The registry job and `publish-release` remain independent siblings: neither
 needs the other, so an upload interrupted on one surface can be resumed without
 repeating the other. `verify-release-inventory` needs both. A tagged run in
 which either publisher fails or is skipped therefore leaves the draft
-unverified, and the finalizer that will un-draft the release depends on this
-job, so the two surfaces cannot diverge at the point the release becomes public.
+unverified. Nothing gates publication on that result yet: a person can still
+publish the draft by hand. The planned finalizer closes that gap by depending
+on this job before it un-drafts the release, so the two surfaces cannot diverge
+at the point the release becomes public.
 
 ### Verifying the downloaded release inventory
 
-`verify-release-inventory` answers one question before a draft release is
-un-drafted: are the bytes GitHub holds the bytes the publishers built? It is
-the downloaded-side counterpart of the pre-upload checks, and it needs no
-registry or GitHub credential beyond the visibility a draft requires.
+`verify-release-inventory` answers one question about a draft release: are the
+bytes GitHub holds the bytes the publishers built? It is the downloaded-side
+counterpart of the pre-upload checks, and it needs no registry or GitHub
+credential beyond the visibility a draft requires.
 
 The job downloads exactly one artefact into `trusted/`, selecting it by the
 exact name in `publish-release`'s `trusted-artifact` output, never a `pattern`,
@@ -3260,9 +3262,11 @@ planning, because the step reads the plan line by line and splits each line on
 tabs, so a line feed in a name would forge a second record and download an
 asset the listing never named. The download step sets `noclobber`, so a name
 repeated in the plan fails rather than letting the second download replace the
-first, and it does not retry: a partial download must stop the job, because the
-verifier cannot distinguish a truncated attachment from one that somehow
-matched.
+first. It refuses an entry that carries an id but no name, before the redirect
+can fail as a write to the directory itself, and it keeps a final line with no
+trailing newline, which a plain `while read` would silently skip. It does not
+retry: a partial download must stop the job, because the verifier cannot
+distinguish a truncated attachment from one that somehow matched.
 
 Two inputs decide what the verifier trusts. `trusted-directory` must be
 disjoint from `download-directory` and from `output-path`, and both
