@@ -26,7 +26,7 @@ if typ.TYPE_CHECKING:
     import collections.abc as cabc
     import pathlib
 
-__all__ = ["copy_verified", "require_regular"]
+__all__ = ["copy_verified", "has_mode", "require_regular"]
 
 
 def copy_verified(source: pathlib.Path, destination: pathlib.Path) -> None:
@@ -70,7 +70,7 @@ def require_regular(path: pathlib.Path) -> pathlib.Path:
 
     Notes
     -----
-    ``StagedFileUnreadableError`` reaches the caller from :func:`_has_mode`
+    ``StagedFileUnreadableError`` reaches the caller from :func:`has_mode`
     when ``lstat`` refuses to describe the leaf or an ancestor, so it is
     described here rather than in ``Raises``.
 
@@ -99,15 +99,15 @@ def require_regular(path: pathlib.Path) -> pathlib.Path:
     ...         print("regular file" in str(refusal))
     True
     """
-    if not _has_mode(path, stat.S_ISREG):
+    if not has_mode(path, stat.S_ISREG):
         raise StagedFileMissingError(path, expected="a regular file")
     for ancestor in path.parents:
-        if not _has_mode(ancestor, stat.S_ISDIR):
+        if not has_mode(ancestor, stat.S_ISDIR):
             raise StagedFileMissingError(ancestor, expected="a directory")
     return path
 
 
-def _has_mode(path: pathlib.Path, predicate: cabc.Callable[[int], bool]) -> bool:
+def has_mode(path: pathlib.Path, predicate: cabc.Callable[[int], bool]) -> bool:
     """Report whether ``path``'s own mode satisfies ``predicate``.
 
     Returns
@@ -138,9 +138,9 @@ def _has_mode(path: pathlib.Path, predicate: cabc.Callable[[int], bool]) -> bool
     >>> import tempfile
     >>> with tempfile.TemporaryDirectory() as tmp:
     ...     _ = (pathlib.Path(tmp) / "a").write_bytes(b"x")
-    ...     _has_mode(pathlib.Path(tmp) / "a", stat.S_ISREG)
+    ...     has_mode(pathlib.Path(tmp) / "a", stat.S_ISREG)
     True
-    >>> _has_mode(pathlib.Path("/nonexistent/a"), stat.S_ISREG)
+    >>> has_mode(pathlib.Path("/nonexistent/a"), stat.S_ISREG)
     False
     """
     try:

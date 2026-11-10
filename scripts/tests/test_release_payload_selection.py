@@ -23,15 +23,16 @@ from release_payload_selection_support import (
     ARM_ARCHIVE,
     ARM_DEB,
     ARM_RPM,
+    CANDIDATE,
     DEB,
     RPM,
+    RUN_ID,
     SIDECAR,
     TARGET,
     TWO_TARGET_ARCHIVES,
     TWO_TARGET_CONFIG,
     arm_record,
     staged_assets,
-    two_target_origins,
     two_target_staged,
     x86_record,
 )
@@ -45,9 +46,6 @@ from release_producer_provenance_errors import (
 
 if typ.TYPE_CHECKING:
     from release_producer_provenance import ProducerProvenance
-
-CANDIDATE = "a" * 40
-RUN_ID = "1234"
 
 #: The staging configuration selection is judged against, with the target
 #: spelled the way the workflow's TOML does.
@@ -291,65 +289,6 @@ def test_a_record_claiming_a_sibling_targets_package_is_refused() -> None:
             archives=TWO_TARGET_ARCHIVES,
             config=TWO_TARGET_CONFIG,
         )
-
-
-def test_a_one_for_one_package_exchange_is_refused() -> None:
-    """Refuse two same-platform records that trade one package each.
-
-    Each record still claims one ``.deb`` and one ``.rpm``, each still claims
-    its own archive and sidecar, and the union of everything claimed is
-    exactly the release's declaration. Every *count* is satisfied, so this is
-    the case a count-based check cannot see.
-
-    Position can. Each producer uploads one workflow artefact and writes its
-    record inside it, so the record's own downloaded subtree names the target
-    that staged every package beside it. ``package_origins`` carries that
-    observation here: the ARM ``.deb`` was found under the ARM subtree, and
-    the x86 record claims it. Selection refuses.
-    """
-    traded_x86 = x86_record(
-        assets={
-            ARCHIVE: "1" * 64,
-            SIDECAR: "2" * 64,
-            ARM_DEB: "3" * 64,
-            RPM: "4" * 64,
-        }
-    )
-    traded_arm = arm_record(packages=(DEB, ARM_RPM))
-    assert set(traded_x86.assets) | set(traded_arm.assets) == {*two_target_staged()}, (
-        "the case must preserve the union, or it tests the wrong refusal"
-    )
-    with pytest.raises(TargetClaimMismatchError, match="staged"):
-        selection.select_payload(
-            [traded_x86, traded_arm],
-            identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, TWO_TARGET_CONFIG),
-            tree=selection.StagedTree(
-                archives=TWO_TARGET_ARCHIVES,
-                staged=two_target_staged(),
-                package_origins=two_target_origins(),
-            ),
-        )
-
-
-def test_a_package_bound_to_its_own_target_is_accepted() -> None:
-    """Accept the same exchange's positive control: correct attribution.
-
-    The record's own packages are found under its own subtree, so nothing is
-    refused. Without this case the refusal above would pass even if the check
-    refused every tree that carried an origin at all.
-    """
-    selected = selection.select_payload(
-        [x86_record(), arm_record()],
-        identity=selection.ReleaseIdentity(CANDIDATE, RUN_ID, TWO_TARGET_CONFIG),
-        tree=selection.StagedTree(
-            archives=TWO_TARGET_ARCHIVES,
-            staged=two_target_staged(),
-            package_origins=two_target_origins(),
-        ),
-    )
-    assert set(selected.declared) == set(two_target_staged()), (
-        "a correctly bound tree must still be selected"
-    )
 
 
 def test_require_staged_digests_accepts_the_recorded_bytes() -> None:

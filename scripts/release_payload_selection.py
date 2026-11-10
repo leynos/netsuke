@@ -100,7 +100,10 @@ class StagedTree[Source]:
         Published package name mapped to the target key whose downloaded
         subtree staged it, as
         :func:`release_package_origins.observe_package_origins` reports it.
-        ``None`` when no observation is available.
+        ``None`` when no observation is available, which leaves the per-format
+        count as the only package guarantee; an empty mapping is not the same
+        thing, because it says the tree was walked and no package could be
+        attributed.
 
     Notes
     -----
@@ -191,7 +194,7 @@ def select_payload[Source](
     """
     claims = list(provenances)
     targets = release_payload_identity.require_bound_claims(claims, identity)
-    claimed = _require_claims(claims, identity=identity, targets=targets, tree=tree)
+    claimed = _require_claims(claims, targets=targets, tree=tree)
     declared = _require_declaration(
         archive_names=tree.archives.values(),
         targets=targets,
@@ -208,7 +211,6 @@ def select_payload[Source](
 def _require_claims[Source](
     claims: cabc.Sequence[ProducerProvenance],
     *,
-    identity: ReleaseIdentity,
     targets: cabc.Mapping[str, str],
     tree: StagedTree[Source],
 ) -> tuple[str, ...]:
@@ -216,14 +218,16 @@ def _require_claims[Source](
 
     Parameters
     ----------
+    claims
+        Every validated producer record found in the downloaded tree.
     targets
         Target key mapped to the platform the configuration names for it.
     tree
         What the adapter observed, already bound to these claims. Its
         ``package_origins`` decides whether a package may be refused for
-        coming from a *sibling's* subtree; without it the count checks stand
-        and nothing weaker, because a count is all an unobserved tree can
-        support.
+        coming from a *sibling's* subtree or from none at all; without it the
+        count checks stand and nothing weaker, because a count is all an
+        unobserved tree can support.
 
     Returns
     -------
@@ -242,7 +246,6 @@ def _require_claims[Source](
     --------
     >>> _require_claims(
     ...     [],
-    ...     identity=ReleaseIdentity("a" * 40, "7", {}),
     ...     targets={},
     ...     tree=StagedTree(archives={}, staged={}),
     ... )

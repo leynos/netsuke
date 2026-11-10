@@ -39,6 +39,7 @@ import sys
 import release_digest_record
 import release_digest_record_files
 import release_reconcile_github
+import release_upload_messages
 import release_upload_plan
 
 # The shared GitHub digest conversion, imported under the private name this
@@ -262,11 +263,9 @@ def _reconcile_listing(
     actions = release_reconcile_github.plan_asset_actions(
         expected=expected, present=normalized
     )
-    conflicting = release_reconcile_github.conflicts(actions)
+    blockers = release_upload_plan.Blockers.of(actions)
     try:
-        release_upload_plan.write_plan(
-            output_path, actions, release_upload_plan.Blockers.of(actions)
-        )
+        release_upload_plan.write_plan(output_path, actions, blockers)
     except OSError as error:
         print(
             f"reconciliation plan write failed: {output_path}: {error}", file=sys.stderr
@@ -274,10 +273,15 @@ def _reconcile_listing(
         output_error = error
     else:
         output_error = None
-    if conflicting:
+    if blockers.conflicts or blockers.unverifiable:
+        # One Blockers value feeds the plan and the diagnostic, so the file and
+        # the log cannot name different findings. Building the message from the
+        # conflicts alone would leave an unverifiable-only plan exiting 1 with
+        # no stderr at all, and the operator would see a refusal naming nothing.
         print(
-            "the release holds assets that disagree with the trusted digest record: "
-            + ", ".join(conflicting),
+            release_upload_messages.blocked_message(
+                blockers.conflicts, blockers.unverifiable
+            ),
             file=sys.stderr,
         )
     if output_error is not None:

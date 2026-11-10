@@ -39,7 +39,7 @@ import release_digest_files
 import release_package_origins
 import release_payload_selection
 import release_payload_tree
-from release_payload_errors import PayloadError
+from release_payload_errors import PayloadError, StagedFileUnreadableError
 
 # Re-exported so the workflow step and its tests reach the tree adapter through
 # the CLI that composes it, without this module's own code depending on the
@@ -69,7 +69,7 @@ __all__ = [
     "build_parser",
     "main",
     "observe_payload",
-    "select_and_copy",
+    "select_payload",
 ]
 
 EXIT_OK = 0
@@ -167,43 +167,90 @@ def main(argv: list[str] | None = None) -> int:
     """
     arguments = build_parser().parse_args(argv)
     try:
-        selection = select_and_copy(arguments)
-    except release_declaration.ConfigurationError as error:
-        print(f"payload inputs unusable: {error}", file=sys.stderr)
-        return EXIT_UNUSABLE_INPUT
-    except (
-        DuplicateAssetError,
-        DuplicateTargetError,
-        ForeignRunError,
-        MissingTargetError,
-        StaleCandidateError,
-        TargetClaimMismatchError,
-    ) as error:
-        # These describe a tree that is *readable* but is not this release's:
-        # a stale download, a foreign run, a missing or doubled producer. The
-        # artefacts are wrong, so they are refused as a payload.
-        print(f"payload refused: {error}", file=sys.stderr)
-        return EXIT_PAYLOAD_REFUSED
-    except ProvenanceError as error:
-        # Everything else in the family says the record *itself* is broken --
-        # an unknown platform, a malformed digest, no assets at all. Re-running
-        # publication cannot repair that; the producer job must be fixed.
-        print(f"producer record unusable: {error}", file=sys.stderr)
-        return EXIT_UNUSABLE_INPUT
-    except PayloadError as error:
-        print(f"payload refused: {error}", file=sys.stderr)
-        return EXIT_PAYLOAD_REFUSED
+        selection = select_payload(arguments)
     except (OSError, KeyError, ValueError) as error:
+        message, status = _selection_refusal(error)
+        print(message, file=sys.stderr)
+        return status
+    try:
+        release_payload_tree.install_payload(
+            selection,
+            arguments.output_dir,
+            arguments.digest_record,
+            _digests(selection),
+        )
+    except OSError as error:
+        # Selection reads everything it judges, so an OSError from here is the
+        # destination refusing the copy or the record: an output directory that
+        # already exists, a full disk, a permission denial. That is
+        # EXIT_OUTPUT_UNWRITABLE, and reporting it as unusable *input* would
+        # send an operator to the producer records for a workspace fault.
+        print(f"payload could not be installed: {error}", file=sys.stderr)
+        return EXIT_OUTPUT_UNWRITABLE
+    except StagedFileUnreadableError as error:
         print(f"payload inputs unreadable: {error}", file=sys.stderr)
         return EXIT_UNUSABLE_INPUT
+    except PayloadError as error:
+        # A source that stopped being a regular file between the digest check
+        # and the copy, or a path that would smuggle bytes from outside the
+        # download. Selection approved the names; the path is what changed.
+        print(f"payload refused: {error}", file=sys.stderr)
+        return EXIT_PAYLOAD_REFUSED
     print(f"selected {len(selection.declared)} declared assets")
     return EXIT_OK
 
 
-def select_and_copy(
+def _selection_refusal(error: BaseException) -> tuple[str, int]:
+    """Say what a selection failure means and which status reports it.
+
+    Parameters
+    ----------
+    error
+        The exception :func:`select_payload` raised.
+
+    Returns
+    -------
+    tuple[str, int]
+        The diagnostic to print and the exit status it implies.
+
+    Notes
+    -----
+    The cases are ordered so a subclass is matched before its parent:
+    ``StagedFileUnreadableError`` is a ``PayloadError``, and the six tree
+    mismatches are ``ProvenanceError``. Reading a staged file whose mode the
+    operating system would not describe as a wrong artefact would send an
+    operator to the producer job; it is an environment fault, and the remedy
+    is to re-run on a healthy runner.
+    """
+    match error:
+        case StagedFileUnreadableError():
+            return f"payload inputs unreadable: {error}", EXIT_UNUSABLE_INPUT
+        # A bare name in a pattern is a *capture*, not a value lookup, so the
+        # six tree mismatches are spelled out here rather than matched as one
+        # tuple; a class pattern needs each class named.
+        case (
+            DuplicateAssetError()
+            | DuplicateTargetError()
+            | ForeignRunError()
+            | MissingTargetError()
+            | StaleCandidateError()
+            | TargetClaimMismatchError()
+        ):
+            return f"payload refused: {error}", EXIT_PAYLOAD_REFUSED
+        case ProvenanceError():
+            # The record *itself* is broken -- an unknown platform, a
+            # malformed digest, no assets at all. Re-running cannot repair it.
+            return f"producer record unusable: {error}", EXIT_UNUSABLE_INPUT
+        case PayloadError():
+            return f"payload refused: {error}", EXIT_PAYLOAD_REFUSED
+        case _:
+            return f"payload inputs unreadable: {error}", EXIT_UNUSABLE_INPUT
+
+
+def select_payload(
     arguments: argparse.Namespace,
 ) -> release_payload_selection.PayloadSelection[pathlib.Path]:
-    """Select the payload, verify its digests, and copy it into place.
+    """Decide the payload without touching the destination.
 
     Parameters
     ----------
@@ -213,23 +260,22 @@ def select_and_copy(
     Returns
     -------
     release_payload_selection.PayloadSelection
-        The approved selection, with its sources as staged paths.
+        The approved selection, holding only staged source paths.
 
     Notes
     -----
-    A tree that disagrees with the release, a malformed or foreign producer
-    record, or staged bytes that differ from the record surface a
-    :class:`release_payload_errors.PayloadError`; an input that cannot be read
-    or a payload that cannot be installed surfaces ``OSError``. Every one of
-    them reaches the caller from a helper below.
-
-    The output directory is created only after every check has passed. It is
-    removed again if copying fails, so a half-written payload is never left
-    behind for the upload step to publish.
+    Reads the configuration, the producer records and the staged tree, and
+    reaches no destination. Every refusal a *tree* can provoke is raised
+    here; a destination that will not accept the copy is
+    :func:`release_payload_tree.install_payload`'s.
     """
     config = _read_staging_config(arguments.staging_config)
-    locations = release_payload_tree.record_locations(arguments.dist_dir)
-    provenances = release_payload_tree.read_provenances(arguments.dist_dir)
+    # Read each record once: `record_locations` and the claim check must judge
+    # the same bytes, or a record rewritten between two reads would attribute
+    # a package to one target and describe it with another's claims.
+    records = release_payload_tree.read_provenance_by_path(arguments.dist_dir)
+    locations = release_payload_tree.record_locations(records)
+    provenances = sorted(records.values(), key=lambda record: record.target)
     archives = hoist_binstall_discovery.archives_by_target(
         arguments.staging_config, arguments.manifest, arguments.version
     )
@@ -249,12 +295,8 @@ def select_and_copy(
             ),
         ),
     )
-    computed = _digests(selection)
     release_payload_selection.require_staged_digests(
-        computed, trusted=selection.trusted
-    )
-    release_payload_tree.install_payload(
-        selection, arguments.output_dir, arguments.digest_record, computed
+        _digests(selection), trusted=selection.trusted
     )
     return selection
 

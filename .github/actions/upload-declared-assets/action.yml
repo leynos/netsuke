@@ -142,13 +142,17 @@ runs:
             ;;
         esac
         upload_status=0
+        # The `+` form rather than a bare `"${upload_mode[@]}"`: macOS ships
+        # Bash 3.2 as `/bin/bash`, where expanding an empty array under
+        # `set -u` is an unbound-variable error. Publishing mode leaves the
+        # array empty, so the guard is what keeps that mode working there.
         uv run --no-project --python 3.14 scripts/upload_declared_assets_cli.py \
           --release-tag "$RELEASE_TAG" \
           --payload-dir "$DECLARED_ASSETS_ROOT/selected/payload" \
           --digest-record "$DECLARED_ASSETS_ROOT/trusted.json" \
           --selection-record "$DECLARED_ASSETS_ROOT/selection.json" \
           --plan "$DECLARED_ASSETS_ROOT/upload-plan.json" \
-          "${upload_mode[@]}" \
+          ${upload_mode[@]+"${upload_mode[@]}"} \
           2>"$DECLARED_ASSETS_ROOT/upload-error.txt" || upload_status=$?
         upload_error=false
         upload_message=''

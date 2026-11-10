@@ -2634,11 +2634,13 @@ the network at all.
 The upload path ends here for now. The retained `trusted.json` is consumed by
 nothing in this workflow: `verify-release-inventory`,
 `finalize-github-release`, and `consumer-smoke` are planned job-matched actions
-that do not exist yet, so the release this job attaches assets to stays a draft
-a person publishes. The record is retained *for* those jobs, which is what the
-issue asks for; wiring a consumer is their work. Read the section above as
-describing the implemented upload path, not a completed verification and
-finalization hand-off.
+that do not exist yet, and no job in this workflow publishes a release. Only a
+release the workflow creates is a draft: `ensure_draft_release.py` returns as
+soon as the tag already has one, without checking whether it is public, so a
+rerun attaches assets to whatever release the tag already names. The record is
+retained *for* those jobs, which is what the issue asks for; wiring a consumer
+is their work. Read the section above as describing the implemented upload
+path, not a completed verification and finalization hand-off.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
@@ -3282,6 +3284,42 @@ has exercised this publisher. The later `verify-release-inventory` job is also
 still open, so `publish-release` does not yet wait for crates.io success and a
 tagged run can temporarily leave the GitHub Release and crate out of sync.
 
+### Selecting the declared payload
+
+Selection answers one question: which of the files the download left in `dist`
+is this release's payload? `release_payload_selection.select_payload` is the
+policy half. It receives three already-parsed accounts -- the producer records,
+the release identity, and an observation of the staged tree -- and returns the
+declared names with each one's recorded digest and the adapter's own source
+value. It never opens a file, so its cases supply tokens rather than paths.
+
+The three accounts arrive in named shapes rather than as loose arguments.
+`ReleaseIdentity` carries the candidate commit, the workflow run, and the
+staging configuration's target table. `StagedTree` carries the archive each
+target's record names, every regular file indexed by the name it would publish
+under, and an *optional* mapping of package name to the target subtree that
+staged it. Those are the inputs a mapping-based boundary needs: a caller
+assembles the observations, and the policy says what they mean.
+
+`StagedTree.package_origins` has three shapes and they are not interchangeable.
+A populated mapping is the walked tree, and a package a record claims must
+appear there under that record's own target. `None` is a caller that did not
+walk the tree, and the per-format counts stand as the whole package guarantee.
+`{}` is a walk that found no producer record beside any package at all, and
+every claimed package is refused. A falsy default would collapse the last two
+into the first, which is exactly the case -- a package nobody staged -- that a
+count cannot see.
+
+`select_release_payload_cli` is the adapter that composes those observations
+and installs the result. `select_payload` reads the staging configuration, the
+producer records (once, so the claim check and the origin walk judge the same
+bytes), the archive names, the staged index, and the package-origin walk, and
+returns the selection without touching the destination. `main` runs it in its
+own `try` block and calls `install_payload` in a second, so a wrong tree is
+reported as a refusal while a destination that cannot be written is reported as
+`EXIT_OUTPUT_UNWRITABLE`; sharing one classifier would send an operator to the
+producer records for a fault in their workspace.
+
 ### Trusted digest records
 
 A release has to state, before anything is uploaded, which bytes it intends to
@@ -3293,11 +3331,11 @@ Selection writes a record of its own, and the difference between the two is the
 point. `select_release_payload_cli` hashes the staged *sources* it approved and
 only then copies them, so the digests `selection.json` records describe the
 bytes that were read, not the bytes that were written. The declaration record
-is produced independently from the staged tree by a later step. The file itself
-is installed after the copy, and that ordering is deliberate: a record that
-exists beside no payload would be a claim a reader could mistake for a
-completed selection, so a copy that fails leaves neither the payload nor a
-record behind.
+is produced from the staged tree by a later step, independently of selection.
+The file itself is installed after the copy, and that ordering is deliberate: a
+record that exists beside no payload would be a claim a reader could mistake
+for a completed selection, so a copy that fails leaves neither the payload nor
+a record behind.
 
 A record compared only with a later hash of the copied tree would accept bytes
 swapped between the two hashes, so
@@ -3381,10 +3419,11 @@ correct. A run that reported the second as the first would send an operator
 hunting for wrong bytes that do not exist, which is why `write_plan` records
 them under separate keys and `blocked_message` names each clause that applies.
 
-`finalize_github_release_cli` turns a plan of the first three actions into an
-exit status; the uploader's own precedent is below. Only names the record
+`finalize_github_release_cli` turns a plan of all four actions into an exit
+status, with `UNVERIFIABLE` sharing `EXIT_CONFLICT` because both must stop the
+run just as firmly; only the plan keeps them apart. Only names the record
 declares are decided: an attached asset the record never claimed is left alone
-here, because refusing over it would block a release over a file the plan never
+here because refusing over it would block a release over a file the plan never
 named.
 
 | Exit constant            | Code | Meaning                                                  |
@@ -3496,6 +3535,18 @@ those operations at the file or transport boundary:
   observations for `release_reconcile_crates`. `release_crates_io_adapter` maps
   download status and file bytes into a `DownloadObservation` for
   `verify_crates_io_bytes`.
+- `release_upload_observation` splits the release listing into an effectful
+  `observe_release` and a read-only `settle_observation`. The first lists the
+  release through `release_upload_remote` and, only for names the listing left
+  undigested, downloads and hashes the asset. The second turns an `Observation`
+  into a `Settlement` without touching the network or the filesystem, which is
+  why a case can hand it a handwritten mapping and no stub at all.
+  `settle_observation` takes the expected mapping as well as the observation:
+  an observation says what the release holds, while what the payload should
+  hold is the caller's, and a plan derived from the listing alone would decide
+  about names nobody declared. `upload_declared_assets_cli.settle` calls the
+  two separately around its transfer, because the re-read after an upload is a
+  second observation of the same release and not a second decision procedure.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
 

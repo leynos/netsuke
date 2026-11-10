@@ -26,6 +26,7 @@ from select_release_payload_support import (
     SIDECAR,
     Provenance,
     installed_names,
+    published_path,
     record_provenance,
     run_cli,
     stage,
@@ -170,7 +171,7 @@ def test_a_release_shaped_stray_is_refused(tmp_path: pathlib.Path) -> None:
 def test_a_missing_declared_asset_is_refused(tmp_path: pathlib.Path) -> None:
     """Refuse a tree that lost one of the recorded assets."""
     tree = staged_tree(tmp_path)
-    _ = (tree["dist"] / RPM).unlink()
+    _ = published_path(tree["dist"], RPM).unlink()
     assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
         "a lost declared asset must be refused"
     )
@@ -181,7 +182,7 @@ def test_replaced_bytes_are_refused_before_the_copy(tmp_path: pathlib.Path) -> N
     """Refuse a staged file whose bytes the producer did not record."""
     tree = staged_tree(tmp_path, producer=False)
     record_provenance(tree["dist"], assets=staged_assets(tree))
-    stage(tree["dist"], DEB, b"rebuilt from another commit")
+    _ = published_path(tree["dist"], DEB).write_bytes(b"rebuilt from another commit")
     assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
         "bytes the producer did not record must be refused"
     )
@@ -201,14 +202,20 @@ def test_a_missing_producer_record_is_refused(tmp_path: pathlib.Path) -> None:
     assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 
-def test_an_existing_output_directory_is_unusable_input(
+def test_an_existing_output_directory_is_unwritable_output(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Refuse to merge into a directory left by an earlier attempt."""
+    """Refuse to merge into a directory left by an earlier attempt.
+
+    The tree here is complete and this release's, so nothing is wrong with the
+    input: only the destination refuses. Reporting ``EXIT_UNUSABLE_INPUT``
+    would send an operator to the producer records for a fault that lives in
+    the workspace.
+    """
     tree = staged_tree(tmp_path)
     tree["output"].mkdir()
-    assert run_cli(tree) == cli.EXIT_UNUSABLE_INPUT, (
-        "an existing output directory must be refused"
+    assert run_cli(tree) == cli.EXIT_OUTPUT_UNWRITABLE, (
+        "an existing output directory is a destination fault, not an input one"
     )
 
 

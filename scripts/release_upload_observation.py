@@ -46,6 +46,7 @@ __all__ = [
     "observe_release",
     "plan_release",
     "reconcile",
+    "settle_observation",
     "should_upload",
 ]
 
@@ -201,11 +202,14 @@ def reconcile(
 
     Notes
     -----
-    The composition of :func:`observe_release` and :func:`plan_release`, kept
-    so a caller that wants both does not restate the wiring. The failure
+    :func:`observe_release` is the only function here that reaches outside the
+    process; this one composes it with the pure :func:`plan_release` and exists
+    so a caller that wants both states the wiring once. The failure
     categories travel with the plan because they live only in the observation;
     a caller given the plan alone could say an asset was unverifiable but not
-    whether the remedy is a retry.
+    whether the remedy is a retry. A caller that needs to interleave a transfer
+    between the effect and the decision calls the two directly, as
+    :func:`upload_declared_assets_cli.settle` does across its re-read.
 
     Examples
     --------
@@ -220,7 +224,51 @@ def reconcile(
     >>> settlement.failures
     {}
     """
-    observation = observe_release(tag, expected, runner=runner)
+    return settle_observation(
+        observe_release(tag, expected, runner=runner), expected=expected
+    )
+
+
+def settle_observation(
+    observation: Observation, *, expected: cabc.Mapping[str, str]
+) -> Settlement:
+    """Turn one taken observation into the plan and the reasons behind it.
+
+    Parameters
+    ----------
+    observation
+        What one listing and its downloads established, as
+        :func:`observe_release` returned it.
+    expected
+        Published name mapped to the digest the trusted record demands. Passed
+        rather than read back out of the observation, because an observation
+        is a statement about the release: what the *payload* should hold is the
+        caller's, and a plan derived from a listing nobody constrained would
+        decide about names the release merely happens to carry.
+
+    Returns
+    -------
+    Settlement
+        The per-asset plan, sorted by name, and the bounded failure
+        categories carried beside it.
+
+    Notes
+    -----
+    The boundary between the effectful half of an upload run and its decision.
+    Taking the observation rather than the tag is what lets a caller decide
+    from an observation it already has -- after a transfer, say -- without
+    listing the release a second time, and what lets the decision be tested
+    from a handwritten :class:`Observation` with no stub at all.
+
+    Examples
+    --------
+    >>> settlement = settle_observation(
+    ...     Observation(digests={"a": "aa", "b": None}, failures={}),
+    ...     expected={"a": "aa", "b": "bb"},
+    ... )
+    >>> [action.value for _name, action in settlement.actions]
+    ['skip-verified', 'unverifiable']
+    """
     return Settlement(
         actions=plan_release(expected, observed=observation.digests),
         failures=observation.failures,

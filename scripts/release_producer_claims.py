@@ -29,8 +29,11 @@ supplies the third. A record must claim one package per format its platform
 stages, a claim matching no format at all is refused, and -- given
 ``package_origins``, the target keys whose downloaded subtree each published
 name was found in -- every package it claims must have been staged under its
-own target. The origins are the adapter's observation of a real tree, so this
-module still reads no file and parses nothing.
+own target. A package no subtree staged has no origin at all, and that is
+refused rather than passed over: the name-based staged check cannot see a
+package moved to an unattributed directory, because it still carries its own
+name. The origins are the adapter's observation of a real tree, so this module
+still reads no file and parses nothing.
 
 Nothing here reads a file, parses JSON, or hashes bytes. Claims arrive
 validated from :mod:`release_producer_provenance`, and the refusals live in
@@ -75,16 +78,19 @@ def require_target_claims(
     package_origins
         Published package name mapped to the target key whose downloaded
         subtree it was staged in. Turns the package half from a count into an
-        observation, so a caller with a tree should always pass it; omitted,
-        the per-format count is the only package guarantee. Corroboration
-        rather than proof, as the module docstring sets out.
+        observation, so a caller with a tree should always pass it. Supplied,
+        every claimed package must have an origin and it must be the record's
+        own target; omitted, the per-format count is the only package
+        guarantee. Corroboration rather than proof, as the module docstring
+        sets out.
 
     Raises
     ------
     TargetClaimMismatchError
         If any record omits its own archive or sidecar, claims a name that is
         neither, does not claim exactly one package per format its platform
-        stages, or claims a package another target's subtree staged.
+        stages, or -- when origins were supplied -- claims a package its own
+        target's subtree did not stage, including one no subtree staged.
 
     Notes
     -----
@@ -94,9 +100,7 @@ def require_target_claims(
 
     A target with no entry in ``archives`` or ``targets`` is skipped rather
     than reported: coverage calls it an uncovered target, which sends the
-    operator to the configuration rather than to a producer record. A name
-    absent from ``package_origins`` is passed over for the same reason -- the
-    staged-tree check owns an absence no record can cause.
+    operator to the configuration rather than to a producer record.
 
     Examples
     --------
@@ -122,9 +126,13 @@ def require_target_claims(
     ...     print("omits its own" in str(refusal))
     True
     """
-    origins = {} if package_origins is None else package_origins
     offenders = list(
-        _offenders(provenances, archives=archives, targets=targets, origins=origins)
+        _offenders(
+            provenances,
+            archives=archives,
+            targets=targets,
+            origins=package_origins,
+        )
     )
     if offenders:
         raise TargetClaimMismatchError(offenders)
@@ -135,7 +143,7 @@ def _offenders(
     *,
     archives: cabc.Mapping[str, str],
     targets: cabc.Mapping[str, str],
-    origins: cabc.Mapping[str, str],
+    origins: cabc.Mapping[str, str] | None,
 ) -> cabc.Iterator[str]:
     """Yield every way any record's claims are not its target's own.
 
@@ -149,6 +157,10 @@ def _offenders(
     A generator rather than a flat list so one record's refusals are produced
     and the next record's begin, which keeps a long release's refusal from
     being assembled twice: once per record and once for the whole run.
+
+    ``origins`` is ``None`` when the caller supplied no observation, which is
+    distinct from an empty one: an empty mapping is a tree that was walked and
+    attributed nothing, and every claimed package is then refused.
     """
     for provenance in provenances:
         yield from _target_claim_offenders(
@@ -161,7 +173,7 @@ def _target_claim_offenders(
     *,
     archives: cabc.Mapping[str, str],
     targets: cabc.Mapping[str, str],
-    origins: cabc.Mapping[str, str],
+    origins: cabc.Mapping[str, str] | None,
 ) -> list[str]:
     """Describe every way one record's claims are not its target's own.
 
@@ -198,9 +210,9 @@ def _foreign_package_offenders(
     provenance: ProducerProvenance,
     names: cabc.Iterable[str],
     *,
-    origins: cabc.Mapping[str, str],
+    origins: cabc.Mapping[str, str] | None,
 ) -> list[str]:
-    """Describe packages a record claims from another target's subtree.
+    """Describe packages a record claims without its own subtree staging them.
 
     Parameters
     ----------
@@ -209,26 +221,58 @@ def _foreign_package_offenders(
     names
         The claims left once the record's own archive and sidecar are removed.
     origins
-        Published package name mapped to the target key that staged it.
+        Published package name mapped to the target key that staged it. Only
+        consulted when the caller supplied an observation at all; see
+        :func:`require_target_claims`.
 
     Returns
     -------
     list[str]
-        One description per claim whose staged position names another target,
-        sorted so a re-run reports the same list.
+        One description per claim whose staged position names another target
+        or no target at all, sorted so a re-run reports the same list.
 
     Notes
     -----
-    A name with no recorded origin is passed over rather than refused. The
-    staged-tree check owns an absent name, and blaming the producer for an
-    absence it cannot cause would send the operator to the wrong job.
+    A name with no recorded origin is refused here, not passed over. The
+    adapter attributes a package only when exactly one producer subtree holds
+    it, so an absent origin means the download put the file somewhere no
+    producer owns -- the ``dist`` root, or a subtree holding no record. The
+    staged-tree check cannot see that: it matches published *names*, and a
+    package moved to an unattributed location keeps its name, so a swapped
+    package with an intact digest would otherwise select cleanly.
+
+    The refusal is confined to a call that supplied origins. A caller with no
+    observation has not claimed the packages are unattributed, only that it
+    did not look, and the count checks are then all the guarantee there is.
     """
+    if origins is None:
+        return []
     return [
-        f"target {provenance.target!r} claims {name!r}, which "
+        _unattributed(provenance, name, origins)
+        if name not in origins
+        else f"target {provenance.target!r} claims {name!r}, which "
         f"target {origins[name]!r} staged"
         for name in sorted(names)
-        if name in origins and origins[name] != provenance.target
+        if origins.get(name) != provenance.target
     ]
+
+
+def _unattributed(
+    provenance: ProducerProvenance, name: str, origins: cabc.Mapping[str, str]
+) -> str:
+    """Describe a claimed package no producer's subtree was found to hold.
+
+    Returns
+    -------
+    str
+        The refusal naming the record's target, the package, and the stale
+        observation it was judged against, so an operator can tell a moved
+        file from a subtree whose record is missing.
+    """
+    return (
+        f"target {provenance.target!r} claims {name!r}, which no producer "
+        f"subtree staged; the observation covers {sorted(origins)!r}"
+    )
 
 
 def _package_claim_offenders(

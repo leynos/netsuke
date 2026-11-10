@@ -264,7 +264,16 @@ def test_the_declared_record_is_retained_before_the_upload() -> None:
     """Retain the declaration and both digest records, failing if any is absent."""
     document = action_document()
     steps = action_steps(ACTION, document)
-    retain = steps[require_action_step(ACTION, document, RETAIN_STEP)]
+    retain_index = require_action_step(ACTION, document, RETAIN_STEP)
+    upload_index = require_action_step(ACTION, document, RUN_STEPS[-1])
+    # The name and docstring above are an ordering claim, so the test checks
+    # the order. Retention that slipped after the upload would still name the
+    # right files, and would then retain nothing for exactly the refused runs
+    # the record exists for.
+    assert retain_index < upload_index, (
+        "the declared record must be retained before the step that may refuse"
+    )
+    retain = steps[retain_index]
     with_block = require_mapping(retain.get("with"), f"{ACTION} {RETAIN_STEP} with")
     names = {
         _basename(line.strip())

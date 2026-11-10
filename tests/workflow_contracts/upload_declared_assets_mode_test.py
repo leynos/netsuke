@@ -20,15 +20,12 @@ The tree is built by ``upload_declared_assets_staging.py`` and executed by
 Run via ``make test-workflow-contracts``.
 """
 
-import typing as typ
+import pathlib
 
 import pytest
 from upload_declared_assets_harness import ActionRun, Release, execute
 from upload_declared_assets_manifest import RUN_STEPS
 from upload_declared_assets_staging import release_facts, stage_workspace
-
-if typ.TYPE_CHECKING:
-    import pathlib
 
 
 def _uploads(run: ActionRun) -> list[list[str]]:
@@ -71,7 +68,8 @@ def test_a_publishing_run_transfers_the_declared_assets(tmp_path: pathlib.Path) 
     assert run.outputs.get("upload-error") == "false", run.outputs.get("error-message")
     uploads = _uploads(run)
     assert len(uploads) == 1, run.gh_log
-    assert (run.payload / uploads[0][-1].rsplit("/", 1)[-1]).is_file(), (
+    uploaded = pathlib.PurePosixPath(uploads[0][-1]).name
+    assert (run.payload / uploaded).is_file(), (
         "the upload must name a file the payload really holds"
     )
 

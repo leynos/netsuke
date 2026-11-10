@@ -3079,6 +3079,53 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   branches are separate strategies rather than one `assume`-guarded case, so
   neither can silently lose coverage when the generator drifts.
 
+- [x] (2026-11-10) Closed the ninth CodeRabbit pass's two architecture rows by
+  splitting effect from decision at both upload boundaries, and made an
+  unattributable package a refusal rather than a silent acceptance.
+
+  **The release listing and its downloads are one effect, the plan is another.**
+  `release_upload_observation.observe_release` lists the release through
+  `release_upload_remote` and, for names the listing left undigested, downloads
+  and hashes the attached asset. `settle_observation` turns the `Observation`
+  it returns into a `Settlement` with no network and no filesystem at all,
+  which is why a case can hand it a handwritten mapping and no stub.
+  `settle_observation` takes the expected mapping as well as the observation:
+  an observation says what the *release* holds, while what the *payload* should
+  hold is the caller's, and a plan derived from the listing alone would decide
+  about names nobody declared. `upload_declared_assets_cli.settle` calls the
+  two separately around its transfer, so the re-read after an upload is a
+  second observation of the same release and not a second decision procedure.
+
+  **Selection and installation are also separated.**
+  `select_release_payload_cli.select_payload` reads the staging configuration,
+  the producer records, and the staged tree, and returns the selection without
+  touching the destination. `main` runs it in its own `try`, so a wrong tree
+  stays `EXIT_PAYLOAD_REFUSED` or `EXIT_UNUSABLE_INPUT` while a failure to
+  write the payload directory is `EXIT_OUTPUT_UNWRITABLE`; the two used to
+  share one classifier, and a missing staging configuration was reported as an
+  unwritable output. The `select_and_copy` it replaces had no caller outside
+  the module. `_selection_refusal` and `_NOT_THIS_RELEASE` keep `main` inside
+  ruff's branch and return ceilings without collapsing the diagnoses into one.
+
+  **A claimed package with no attributable origin is now refused.** The origin
+  observation has three shapes and only one of them is silent:
+  `package_origins=None` is a caller that did not walk the tree, `{}` is a walk
+  that found no record beside any package, and a populated mapping is per-name
+  attribution. `release_producer_claims` refuses a claimed package that the
+  populated mapping does not attribute to the claiming target, and treats the
+  empty mapping the same way -- a falsy default would have swallowed exactly
+  the case that says the tree was walked.
+
+  **The origin cases have their own suite.**
+  `scripts/tests/test_release_payload_selection_origins.py` holds the five
+  cases that state those three shapes plus the one-for-one exchange and its
+  positive control, extracted because `test_release_payload_selection.py` had
+  grown past the 400-line file cap. It is registered in both `SECTION_MODULES`
+  and the `test-release-publication` recipe, whose order the contract asserts.
+  The developers' guide's policy-and-adapter bullet list gained the
+  `observe_release`/`settle_observation` split with the reason it takes the
+  expected mapping.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

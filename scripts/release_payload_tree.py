@@ -38,12 +38,13 @@ import release_producer_provenance
 from record_producer_provenance_record import RECORD_NAME
 from release_payload_errors import PayloadError
 
-# Re-exported because the tree adapter is the one name a caller imports; the
-# regularity proof it copies through is an implementation detail of that
-# adapter, not a second entry point.
+# Re-exported because the tree adapter is the one name a caller imports. The
+# regularity predicate is imported under its public name: this module calls it
+# directly rather than only copying it through, so a private spelling would
+# misdescribe the dependency.
 from release_payload_regular_files import (
-    _has_mode,
     copy_verified,
+    has_mode,
     require_regular,
 )
 
@@ -59,6 +60,7 @@ __all__ = [
     "copy_verified",
     "install_payload",
     "observe_payload",
+    "read_provenance_by_path",
     "read_provenances",
     "record_locations",
     "require_payload_matches",
@@ -116,11 +118,47 @@ def observe_payload(dist_dir: pathlib.Path) -> dict[str, list[pathlib.Path]]:
     """
     indexed: dict[str, list[pathlib.Path]] = {}
     for path in hoist_binstall_discovery.walk_files(dist_dir):
-        if path.name == RECORD_NAME or not _has_mode(path, stat.S_ISREG):
+        if path.name == RECORD_NAME or not has_mode(path, stat.S_ISREG):
             continue
         published = release_github_assets_adapter.published_asset_name(path.name)
         indexed.setdefault(published, []).append(path)
     return indexed
+
+
+def read_provenance_by_path(
+    dist_dir: pathlib.Path,
+) -> dict[pathlib.Path, release_producer_provenance.ProducerProvenance]:
+    """Read and validate every producer record once, keyed by where it was found.
+
+    Returns
+    -------
+    dict[pathlib.Path, release_producer_provenance.ProducerProvenance]
+        Record path mapped to its validated record.
+
+    Notes
+    -----
+    The one read every other view is derived from. A caller that needs both the
+    records and their positions would otherwise walk the tree twice and read
+    each record twice, and a file rewritten between those two reads yields a
+    position attributed to one target described by another target's claims --
+    the very exchange the position check exists to refuse.
+
+    A malformed record surfaces the reader's own diagnosis rather than being
+    skipped, so a broken producer is reported against the file that holds it.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     read_provenance_by_path(Path(tmp))
+    {}
+    """
+    return {
+        path: _read_provenance(path)
+        for path in hoist_binstall_discovery.walk_files(dist_dir)
+        if path.name == RECORD_NAME
+    }
 
 
 def read_provenances(
@@ -148,16 +186,24 @@ def read_provenances(
     ...     read_provenances(Path(tmp))
     []
     """
-    records = [
-        _read_provenance(path)
-        for path in hoist_binstall_discovery.walk_files(dist_dir)
-        if path.name == RECORD_NAME
-    ]
-    return sorted(records, key=lambda record: record.target)
+    return sorted(
+        read_provenance_by_path(dist_dir).values(),
+        key=lambda record: record.target,
+    )
 
 
-def record_locations(dist_dir: pathlib.Path) -> dict[pathlib.Path, str]:
-    """Map every producer record's path to the target that record names.
+def record_locations(
+    provenances: cabc.Mapping[
+        pathlib.Path, release_producer_provenance.ProducerProvenance
+    ],
+) -> dict[pathlib.Path, str]:
+    """Map each producer record's path to the target that record names.
+
+    Parameters
+    ----------
+    provenances
+        Record path mapped to its already-read record, as
+        :func:`read_provenance_by_path` returns them.
 
     Returns
     -------
@@ -166,25 +212,20 @@ def record_locations(dist_dir: pathlib.Path) -> dict[pathlib.Path, str]:
 
     Notes
     -----
-    The record is read here rather than by the caller because a record's
-    *position* is what attributes the artefacts beside it, and only the reader
-    knows which subtree a given record came from. A record that cannot be read
-    or validated surfaces exactly what :func:`read_provenances` does, so a
-    caller that needs both can call this first and lose no diagnosis.
+    A record's *position* is what attributes the artefacts beside it, and only
+    the reader knows which subtree a given record came from. Taking the
+    already-read records rather than the tree keeps a caller that needs both
+    from reading each file twice.
 
     Examples
     --------
     >>> import tempfile
     >>> from pathlib import Path
     >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     record_locations(Path(tmp))
+    ...     record_locations(read_provenance_by_path(Path(tmp)))
     {}
     """
-    return {
-        path: _read_provenance(path).target
-        for path in hoist_binstall_discovery.walk_files(dist_dir)
-        if path.name == RECORD_NAME
-    }
+    return {path: record.target for path, record in provenances.items()}
 
 
 def _read_provenance(
@@ -305,7 +346,12 @@ def require_payload_matches(
     """
     present = observe_payload(payload_dir)
     missing = sorted(set(expected) - set(present))
-    extra = sorted(set(present) - set(expected))
+    # A name two files publish under is refused alongside an undeclared name.
+    # Without this, `present[name][0]` decides which copy is hashed: an
+    # appended `sub/a.deb` beside `a.deb` leaves `missing` and `extra` both
+    # empty, and the file this check exists to catch is never read at all.
+    duplicated = {name for name, paths in present.items() if len(paths) > 1}
+    extra = sorted((set(present) - set(expected)) | duplicated)
     if missing or extra:
         raise _HandoffDisagreementError(missing, extra)
     computed = {

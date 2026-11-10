@@ -15,6 +15,7 @@ still states its own contradiction and its own expectation.
 Run via ``scripts/tests/test_release_payload_selection_properties.py``.
 """
 
+import hashlib
 import typing as typ
 
 from hypothesis import strategies as st
@@ -98,9 +99,13 @@ def claims(
     claimed: list[tuple[ProducerProvenance, dict[str, str]]] = []
     for index, (target, archive) in enumerate(pairs):
         deb, rpm = packages(index, target)
-        assets = dict.fromkeys(
-            (archive, f"{archive}.sha256", deb, rpm), f"{index:x}" * 64
-        )
+        # Derived from the name so each claim carries its own digest. A shared
+        # digest would let a case that swaps two names' digests pass: nothing
+        # in the tree would then distinguish the swap from the original.
+        assets = {
+            name: hashlib.sha256(name.encode()).hexdigest()
+            for name in (archive, f"{archive}.sha256", deb, rpm)
+        }
         record = ProducerProvenance(
             schema=1,
             commit=CANDIDATE,

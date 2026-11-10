@@ -109,6 +109,12 @@ def _environment(home: pathlib.Path) -> dict[str, str]:
     ``git init`` and ``git rev-parse`` do, and the subject here is the step's
     own logic rather than the reader's setup.
 
+    ``GIT_CEILING_DIRECTORIES`` stops Git's upward search at this test's own
+    root. Without it, a ``tmp_path`` under a work tree -- which is what
+    ``--basetemp`` and a repository-rooted ``TMPDIR`` both produce -- would let
+    ``git rev-parse`` find the enclosing repository and answer for the wrong
+    checkout.
+
     Returns
     -------
     dict[str, str]
@@ -120,6 +126,7 @@ def _environment(home: pathlib.Path) -> dict[str, str]:
         "XDG_CONFIG_HOME": str(home / ".config"),
         "GIT_CONFIG_GLOBAL": str(home / "gitconfig"),
         "GIT_CONFIG_SYSTEM": "/dev/null",
+        "GIT_CEILING_DIRECTORIES": str(home),
         "GIT_AUTHOR_NAME": "Netsuke Contract",
         "GIT_AUTHOR_EMAIL": "netsuke@example.invalid",
         "GIT_COMMITTER_NAME": "Netsuke Contract",

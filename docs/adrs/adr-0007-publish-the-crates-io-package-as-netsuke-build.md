@@ -224,10 +224,12 @@ the release against that record and uploads only the gaps.
   the target key whose subtree staged each published package. A record claiming
   a package a sibling's subtree staged is refused, which is the one-for-one
   exchange no per-format count can see.
-- The declaration and both digest records are written before the first
-  network call and retained as a `declared-assets-<job>-<attempt>` workflow
-  artefact, so a run that is later refused still leaves the account of what it
-  declared.
+- The declaration and both digest records are written from the staged tree
+  before the uploader's first release-asset request, and retained as a
+  `declared-assets-<job>-<attempt>` workflow artefact, so a run that is later
+  refused still leaves the account of what it declared. Earlier steps in the
+  job do reach the network -- the draft-release lookup and the artefact
+  download -- but none of them transmits release bytes.
 - An attached asset whose digest matches the record is skipped. An attached
   asset with different bytes stops the run, as does one whose bytes could not
   be established at all, and the two are reported as distinct diagnoses. The
@@ -246,4 +248,10 @@ developers' guides rather than implied.
 `tests/workflow_contracts/`; not yet exercised by a live release. The inventory
 verifier, the GitHub release finalizer, and the consumer smoke test remain open
 in the trusted-packaging ExecPlan, so the retained records have no consumer in
-the workflow yet and the release stays a draft a person publishes.
+the workflow yet and the release is not published by this decision.
+
+Only a release the workflow *creates* is a draft: `ensure_draft_release.py`
+returns as soon as the tag already has a release, without checking whether it
+is public. A rerun therefore attaches assets to whatever release the tag
+already names, which may well be public by then. Nothing here can widen that
+guarantee, so it is recorded rather than assumed.

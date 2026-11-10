@@ -149,8 +149,14 @@ def staged_tree(tmp_path: pathlib.Path, *, producer: bool = True) -> StagedTree:
         The paths :func:`run_cli` needs, plus the staged bytes.
     """
     dist = tmp_path / "dist"
-    for name in (ARCHIVE, SIDECAR, DEB, RPM):
+    # Archives are hoisted to the ``dist`` root; packages stay in the producer
+    # subtree the download put them in, which is what lets the origin adapter
+    # attribute them to a target. A package staged at the root would publish
+    # the same bytes and carry no origin at all.
+    for name in (ARCHIVE, SIDECAR):
         stage(dist, name, name.encode("utf-8"))
+    for name in (DEB, RPM):
+        stage(dist, f"{TARGET}/{name}", name.encode("utf-8"))
     for retained in RETAINED:
         stage(dist, retained)
     if producer:
@@ -228,9 +234,30 @@ def staged_assets_of(dist: pathlib.Path) -> dict[str, str]:
     the record the tree is built *from* the last thing written.
     """
     return {
-        name: release_digest_files.digest_of_file(dist / name)
+        name: release_digest_files.digest_of_file(published_path(dist, name))
         for name in (ARCHIVE, SIDECAR, DEB, RPM)
     }
+
+
+def published_path(dist: pathlib.Path, name: str) -> pathlib.Path:
+    """Return where the download staged ``name`` under ``dist``.
+
+    Returns
+    -------
+    pathlib.Path
+        The ``dist`` root for an archive or sidecar, the producer subtree for
+        a package.
+
+    Notes
+    -----
+    The hoist moves archives and their sidecars to the root; packages stay in
+    the subtree of the producer that built them. A helper rather than a
+    literal in each case, so a case that replaces a package's bytes writes
+    over the file selection actually reads.
+    """
+    if name in {ARCHIVE, SIDECAR}:
+        return dist / name
+    return dist / TARGET / name
 
 
 __all__ = [
@@ -245,6 +272,7 @@ __all__ = [
     "Provenance",
     "StagedTree",
     "installed_names",
+    "published_path",
     "record_provenance",
     "run_cli",
     "stage",

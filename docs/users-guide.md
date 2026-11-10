@@ -116,11 +116,17 @@ is not one of the declared names. Build material that ships inside the packages
 suffix and is simply left out of the upload. The job then hashes the declared
 bytes and retains the declaration and the digest record as workflow artefacts,
 so what was uploaded stays on record. No later job consumes those artefacts
-yet: the release remains a draft that a person publishes. An attached asset
-GitHub already reports with the recorded digest is skipped; an attached asset
-with different bytes stops the run, and the uploader never replaces an existing
-asset. Rerunning a job is therefore safe, and a rerun cannot swap a release's
-bytes for a second build's.
+yet, and no job in this workflow publishes a release. Only a release the
+workflow creates is a draft; when the tag already has one, the job attaches to
+that release whether or not it is public. An attached asset GitHub already
+reports with the recorded digest is skipped; an attached asset with different
+bytes stops the run, and the uploader never replaces an existing asset. An
+attached asset whose bytes cannot be established -- GitHub reports no usable
+digest for it and the download that would settle the question fails -- stops
+the run too, but the upload plan records it apart from a conflict, because "the
+release holds the wrong bytes" and "nobody could read the bytes" call for
+different remedies. Rerunning a job is therefore safe, and a rerun cannot swap
+a release's bytes for a second build's.
 
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase
@@ -132,6 +138,15 @@ producer record's `commit`, and none of those spellings equals the name the
 recorder wrote. The metadata job in `release.yml` validates the same rule and
 is the only place that derives the value, so a direct caller normally forwards
 that job's `candidate_commit` output rather than computing its own.
+
+`./.github/workflows/build-and-package.yml` takes the same `commit` input and
+applies the same rule, and there it is **required**: a caller that does not
+pass it is refused before the job starts. The producer checks out that commit,
+refuses to build when the checkout's `HEAD` differs, and records it in the
+producer record the upload action later binds against, so a workflow that calls
+the reusable workflow directly must pass the same full, lowercase 40-character
+commit the release publishes -- typically the value its own triggering event
+resolves to, rather than a tag or a branch name.
 
 SHA-256 checksum files accompany standalone binaries and staged help,
 completion, and licence files. Installer packages do not have checksum sidecars
