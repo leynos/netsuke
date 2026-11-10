@@ -470,7 +470,9 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       with two cases and two properties over generated paths. `TRACE_SYSCALLS`
       is compiled only on Linux, where its consumer is, the Verus property
       bounds are named constants shared by both strategies, and both install
-      recipes now prove they propagate a failure status. See Revision 63.
+      recipes now prove they propagate a failure status, and the isolation step
+      contract pins `NETSUKE_KANI_ISOLATION_VERIFIER` so a lane cannot drop the
+      installed verifier and still pass. See Revision 63.
 
 ## Surprises & discoveries
 
@@ -696,10 +698,11 @@ payload refusal and the syscall classes, Revision 59 for the review at
 `715970069`, Revision 60 for its eight inline findings and the removed-guard
 check, Revision 61 for the review at `1f38b9e91` and the CodeScene
 string-argument repair, Revision 62 for the review at `cfdd1563f`, and Revision
-63 for the review at `3afdcb9b1` and the trace classifier's path-text repair.
-The Revision 41 run quoted at the start of this section is the earliest of them
-and describes neither the current head nor the current gate set. Review at the
-current head and trusted-main warm-cache acceptance remain open.
+63 for the review at `3afdcb9b1`, the trace classifier's path-text repair and
+the contract pinning the isolation step's verifier variable. The Revision 41
+run quoted at the start of this section is the earliest of them and describes
+neither the current head nor the current gate set. Review at the current head
+and trusted-main warm-cache acceptance remain open.
 
 ## Context and orientation
 
@@ -2358,6 +2361,16 @@ in its own diagnostic. Cold and warm cache behaviour is not a local test: the
 shared cache is populated by a trusted run on `main`, which is the acceptance
 item this plan already tracks as open, and the cache's layout contract is what
 `tests/workflow_contracts/kani_cache_test.py` holds.
+
+An incremental review of `5267c4d9` then found that nothing pinned
+`NETSUKE_KANI_ISOLATION_VERIFIER`, the variable the `kani-smoke` isolation step
+uses to hand the installed `cargo-kani` to the boundary case. It had been set
+in the workflow and read by the Rust case, but no contract held the two
+together, so a lane that dropped or renamed it would still pass every isolation
+case on the stub alone. `test_step_names_the_installed_verifier` now requires
+the step to set it to `${{ env.CARGO_HOME }}/bin/cargo-kani`, and renaming the
+variable in the workflow was probed: that case alone fails, and the workflow
+was restored.
 
 Keep Status: IN PROGRESS pending review at the new head and trusted-main
 warm-cache acceptance.

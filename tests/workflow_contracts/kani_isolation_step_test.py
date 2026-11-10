@@ -32,6 +32,7 @@ if typ.TYPE_CHECKING:
 STEP_NAME = "Verify the kani-check isolation boundary"
 JOB_NAME = "kani-smoke"
 RESTRICTION_VARIABLE = "KANI_APPARMOR_RESTRICTION"
+VERIFIER_VARIABLE = "NETSUKE_KANI_ISOLATION_VERIFIER"
 
 #: Records that `make` ran, copies the `sudo` calls made so far to the marker so
 #: the test can prove the lift preceded the suite, and exits with
@@ -69,6 +70,27 @@ def _step_body() -> tuple[str, str]:
     )
     assert restriction, f"{RESTRICTION_VARIABLE} must name a node, got {restriction!r}"
     return body, restriction
+
+
+def test_step_names_the_installed_verifier() -> None:
+    """Require the step to hand the installed ``cargo-kani`` to the boundary case.
+
+    The boundary case exercises the installed launcher only when this variable
+    resolves, and it fails rather than skips when the path is unusable. A lane
+    that dropped or renamed the variable would therefore still pass every
+    isolation case, on the stub alone, without the installed verifier ever
+    running inside the sandbox.
+    """
+    steps = job_steps(load_workflow(), JOB_NAME)
+    step = named_step(steps, STEP_NAME)
+    environment = require_mapping(step.get("env", {}), f"{STEP_NAME} env")
+
+    assert (
+        environment.get(VERIFIER_VARIABLE) == "${{ env.CARGO_HOME }}/bin/cargo-kani"
+    ), (
+        f"{STEP_NAME} must set {VERIFIER_VARIABLE} to the cargo-kani it installed, "
+        f"got {environment.get(VERIFIER_VARIABLE)!r}"
+    )
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
