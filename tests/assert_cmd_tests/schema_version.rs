@@ -175,21 +175,62 @@ fn write_raw_declaration(directory: &Path, declaration: Option<&str>) -> Result<
     .context("write raw schema declaration manifest")
 }
 
-/// Assert a human-mode rejection names the schema code and a remedy.
+/// The summary fragment each rejection class must render, and nothing else.
 ///
-/// The remedy is asserted through the shared help text rather than the summary
-/// line. Every rejection class carries `manifest.schema_version.help`, while
-/// only `Unsupported` names the declared and supported schemas — so requiring
-/// the supported version here would fail three of the four classes for the
-/// right reason. `MAJOR.MINOR.0` is the phrase the help uses to state the
-/// remedy in every locale.
-fn assert_human_rejection_names_code_and_remedy(stderr: &str, case: &str) -> Result<()> {
+/// A case is identified by the phrase only its own message carries, because a
+/// substring common to several classes cannot show that the right class was
+/// chosen. `MAJOR.MINOR.0` alone would not do it: it appears in the remedy for
+/// every class *and* in the `invalid` summary, so an assertion built on it
+/// would still pass if `missing` and `invalid` were swapped.
+#[derive(Clone, Copy)]
+enum RejectionSummary {
+    /// Only `manifest.schema_version.missing` carries this phrase.
+    Missing,
+    /// `not_string`, `invalid` and `not_canonical` share the invalid summary.
+    Invalid,
+    /// The only summary naming the declared and supported schema.
+    Unsupported,
+}
+
+impl RejectionSummary {
+    /// Return the phrase unique to this class's summary line.
+    const fn phrase(self) -> &'static str {
+        match self {
+            Self::Missing => "must declare 'netsuke_version'",
+            Self::Invalid => "must be a semantic-version release",
+            Self::Unsupported => "but this Netsuke supports schema",
+        }
+    }
+}
+
+/// Assert a human-mode rejection renders its own summary and the shared remedy.
+///
+/// The summary and the remedy are asserted separately on purpose. Every class
+/// carries `manifest.schema_version.help`, and that text is the only place a
+/// class-specific summary is *not* required — while `MAJOR.MINOR.0` appears in
+/// both the help and the `invalid` summary, so asserting the remedy alone
+/// cannot distinguish them. Requiring the class phrase is what makes the case
+/// discriminating.
+fn assert_human_rejection_names_code_and_remedy(
+    stderr: &str,
+    case: &str,
+    summary: RejectionSummary,
+) -> Result<()> {
     ensure!(
         stderr.contains("netsuke::manifest::schema_version"),
         "{case}: human output must name the schema-version diagnostic code: {stderr}"
     );
+    // `miette` wraps the graphical layout to the terminal width, so a phrase
+    // spanning a line break is still the phrase. Collapsing whitespace before
+    // matching keeps the assertion about the text rather than the wrapping.
+    let flattened = stderr.split_whitespace().collect::<Vec<_>>().join(" ");
     ensure!(
-        stderr.contains("MAJOR.MINOR.0"),
+        flattened.contains(summary.phrase()),
+        "{case}: human output must render this class's own summary ({}): {stderr}",
+        summary.phrase()
+    );
+    ensure!(
+        flattened.contains("MAJOR.MINOR.0"),
         "{case}: human output must state the MAJOR.MINOR.0 remedy: {stderr}"
     );
     Ok(())
@@ -199,17 +240,31 @@ fn assert_human_rejection_names_code_and_remedy(stderr: &str, case: &str) -> Res
 ///
 /// The predicate is unit-tested elsewhere; what this covers is the process
 /// boundary — that each class survives the loader, the diagnostic mapping, and
-/// the human renderer with its code and remedy intact. The four classes take
-/// different paths through `admit_document`, so a regression in any single arm
-/// would otherwise be invisible.
+/// the human renderer with its own summary, its code, and the shared remedy
+/// intact. The four classes take different paths through `admit_document`, so a
+/// regression in any single arm would otherwise be invisible.
 #[rstest]
-#[case::missing(None, "a missing declaration")]
-#[case::not_string(Some("7"), "a non-string declaration")]
-#[case::invalid(Some("'not-semver'"), "a malformed declaration")]
-#[case::non_canonical(Some("'1.0.3'"), "a non-canonical declaration")]
+#[case::missing(None, "a missing declaration", RejectionSummary::Missing)]
+#[case::not_string(Some("7"), "a non-string declaration", RejectionSummary::Invalid)]
+#[case::invalid(
+    Some("'not-semver'"),
+    "a malformed declaration",
+    RejectionSummary::Invalid
+)]
+#[case::non_canonical(
+    Some("'1.0.3'"),
+    "a non-canonical declaration",
+    RejectionSummary::Invalid
+)]
+#[case::unsupported(
+    Some("'1.1.0'"),
+    "an unsupported declaration",
+    RejectionSummary::Unsupported
+)]
 fn every_rejection_class_renders_a_diagnosis(
     #[case] declaration: Option<&str>,
     #[case] case: &str,
+    #[case] summary: RejectionSummary,
 ) -> Result<()> {
     let temp = tempdir().context("create rejection-class workspace")?;
     write_raw_declaration(temp.path(), declaration)?;
@@ -227,5 +282,5 @@ fn every_rejection_class_renders_a_diagnosis(
     );
     let stderr =
         String::from_utf8(output.stderr).with_context(|| format!("{case}: stderr is UTF-8"))?;
-    assert_human_rejection_names_code_and_remedy(&stderr, case)
+    assert_human_rejection_names_code_and_remedy(&stderr, case, summary)
 }

@@ -343,10 +343,18 @@ decision D-15.
     `c3f25d05d`, and the recording is gated on the load's registration so
     discovery queries and `netsuke test` runs do not count as admissions. The
     gate result quoted at `bd7e6f123` covers the revision named there, not the
-    current head; the nine-gate run on `09580b6b7` is the evidence for what
-    this plan ships, and it is recorded in the Progress section under EP-M5.
-    Pre-existing limitation: `bd7e6f123` predates the rebases, so it names a
-    commit that is no longer an ancestor of the branch.
+    current head. Pre-existing limitation: `bd7e6f123` predates the rebases, so
+    it names a commit that is no longer an ancestor of the branch.
+  - (2026-11-09) The nine-gate evidence for what this plan ships is the run on
+    `68260a52f`, which supersedes the earlier `09580b6b7` run. It binds a
+    content hash taken over the working tree before and after the batch, and
+    the two are identical, so the verdict attaches to those bytes and not
+    merely to a commit message. The batch ran sequentially — `check-fmt`,
+    `typecheck`, `lint`, `doc-coverage`, `test`, `markdownlint`, `nixie`,
+    `test-documentation-contracts`, `test-workflow-contracts` — and all nine
+    passed; `test` ran 5203 cases. Doc-comment coverage measured 98.16%
+    (6121/6236) against the 80% threshold. Any later commit needs its own run;
+    a green gate does not carry forward to a revision it did not read.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and
