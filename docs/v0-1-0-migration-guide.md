@@ -305,9 +305,11 @@ context.
 The remedy depends on what the `#` means in your recipe.
 
 - When `#` starts a comment, separate it from the closer with a space, a tab,
-  or a newline. The shell then sees the comment it always did.
-- When `#` is literal word data, escape it as `\#` inside an unquoted word.
-  Inserting whitespace would change the word the shell receives.
+  or a newline. The shell then sees the comment it always did, and the text of
+  that comment stops reaching the command's arguments.
+- When `#` is literal word data, keep it inside a quoted region or escape it as
+  `\#` in an unquoted word. Both forms leave the word the shell receives
+  unchanged; only whitespace or an escape may separate it from the closer.
 
 This recipe triggers the rejection:
 
@@ -322,12 +324,20 @@ targets:
 defaults: [output.txt]
 ```
 
-Rewriting the first line as either remedy clears it:
+The `#` there is word data: the double quote that opens before `$(` closes after
+`comment`, so the literal text reaches `echo`. Two rewrites clear the
+rejection while keeping that output:
 
 ```yaml
-      echo "$(case x in x) :;; esac)" # trailing comment
+      echo "$(case x in x) :;; esac)"'# trailing comment'
       echo $(printf x)\#literal
 ```
+
+The first closes the double quote after the closer and reopens a single-quoted
+region for the literal hash, so the argument is unchanged. Placing a space
+before the `#` instead, as in `... esac)" # trailing comment`, also clears the
+rejection but turns the text into a real comment: that is the correct form when
+the recipe never meant to echo it, and the wrong form when it did.
 
 The check scans raw recipe source, so it also rejects a `case` that appears
 inside a string or a comment within the substitution. Anything that separates

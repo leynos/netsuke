@@ -967,13 +967,16 @@ The lowering stages have deliberately separate responsibilities:
   grammar, a substitution whose source contains `case` is rejected when a `)`
   is immediately followed by `#`, whatever the enclosing quote context, because
   a substitution is parsed as its own script; PowerShell keeps the narrower
-  unquoted-only rule. Literal `$in`, `$out`, `$ins`, and `$outs` remain shell
-  variables and are escaped for Ninja pass-through. POSIX lowering tracks
-  unquoted, single-quoted, and double-quoted text, and rejects markers within
-  command substitutions because it cannot lower them safely. Script recipes
-  therefore retain heredocs and comments without accepting an unsafe marker
-  context. The resulting action contains lowered command text and no Ninja rule
-  variables; an inert region may still retain an internal Netsuke marker token.
+  unquoted-only rule. The pattern terminator is matched at the parenthesis
+  depth where its `case` opened, so a `case` inside a nested group is not
+  confused with the group's own closer. Literal `$in`, `$out`, `$ins`, and
+  `$outs` remain shell variables and are escaped for Ninja pass-through. POSIX
+  lowering tracks unquoted, single-quoted, and double-quoted text, and rejects
+  markers within command substitutions because it cannot lower them safely.
+  Script recipes therefore retain heredocs and comments without accepting an
+  unsafe marker context. The resulting action contains lowered command text and
+  no Ninja rule variables; an inert region may still retain an internal Netsuke
+  marker token.
 - `src/ninja_gen/mod.rs` delegates completed recipe text to
   `src/ninja_gen/recipe_shell/`. On Unix, and for the explicit Windows Bash
   compatibility route, a scalar remains POSIX shell text. A list puts each

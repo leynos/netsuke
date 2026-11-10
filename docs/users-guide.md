@@ -2363,15 +2363,20 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   immediately followed by `#`. That check matches the substitution's raw source
   text, so it can also reject a substitution whose `case` appears only inside
   quotes or a comment; that over-approximation keeps the check independent of a
-  second parse of the substitution. A non-breaking space or another non-ASCII
-  space before `#` does not start a comment, so a quote after it still opens or
-  closes a quoted region. Netsuke also rejects a marker that directly follows
-  an unpaired backslash, because that backslash would escape the first
-  character of the substituted path; write `\\{{ outs }}` to keep one literal
-  backslash, or place the marker inside single quotes. In PowerShell `command:`
-  and `script:` recipes, markers are valid only at unquoted sites. Netsuke
-  rejects markers in single-quoted strings, double-quoted strings, here-strings,
-  `$()`, and immediately after a backtick. Netsuke rejects markers in the raw
+  second parse of the substitution. To clear a rejection, separate a real
+  comment from the closer with whitespace, or keep a literal `#` in a quoted
+  region or escape it as `\#`; the
+  [v0.1.0 migration guide](v0-1-0-migration-guide.md#separate-a-substitution-closer-and-a-following-)
+  shows a form that preserves the emitted word and one that turns the text
+  into a comment. A non-breaking space or another non-ASCII space before `#`
+  does not start a comment, so a quote after it still opens or closes a quoted
+  region. Netsuke also rejects a marker that directly follows an unpaired
+  backslash, because that backslash would escape the first character of the
+  substituted path; write `\\{{ outs }}` to keep one literal backslash, or
+  place the marker inside single quotes. In PowerShell `command:` and `script:`
+  recipes, markers are valid only at unquoted sites. Netsuke rejects markers in
+  single-quoted strings, double-quoted strings, here-strings, `$()`, and
+  immediately after a backtick. Netsuke rejects markers in the raw
   native-command region after PowerShell's `--%` stop-parsing token. That
   region ends at a newline or pipeline character; a semicolon does not end it,
   and scanning resumes after the boundary. Only ASCII double quotes are

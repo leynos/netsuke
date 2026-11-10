@@ -6,7 +6,7 @@
 //! repository's module-size cap.
 
 use super::super::command_substitution::{
-    CaseNesting, SubstitutionBoundary, reject_ambiguous_case_comment,
+    CaseNesting, CaseObservation, SubstitutionBoundary, reject_ambiguous_case_comment,
 };
 use super::{IrGenError, ScriptSubstitutionTraversal, ShellQuoteContext};
 
@@ -127,20 +127,27 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         let is_unquoted = self.active_quote_context() == ShellQuoteContext::Unquoted;
         let next = self.chars.get(pos + 1).copied();
         if let Some(substitution) = self.command_substitutions.last_mut() {
-            substitution.case_nesting.observe(ch, next, is_unquoted);
+            let observation =
+                CaseObservation::new(ch, next, is_unquoted, substitution.parenthesis_depth);
+            substitution.case_nesting.observe(observation);
         }
     }
 
     /// Report whether the current `)` terminates a `case` pattern.
     ///
-    /// While a `case` construct is open, a `)` at the substitution's own depth
-    /// cannot close it: the shell reads it as a pattern terminator. Keeping the
-    /// substitution open makes the real closer the one that is checked.
+    /// While a `case` construct is open, a `)` at that construct's own depth
+    /// cannot close the substitution: the shell reads it as a pattern
+    /// terminator. The depth matters because a `case` may sit inside a nested
+    /// group, where its terminator is one level below the substitution's.
+    /// Keeping the substitution open makes the real closer the one that is
+    /// checked.
     fn is_case_pattern_terminator(&self) -> bool {
         self.command_substitutions
             .last()
             .is_some_and(|substitution| {
-                substitution.parenthesis_depth == 1 && substitution.case_nesting.is_open()
+                substitution
+                    .case_nesting
+                    .is_open_at(substitution.parenthesis_depth)
             })
     }
 

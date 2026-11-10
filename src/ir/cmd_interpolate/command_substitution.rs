@@ -42,6 +42,40 @@ impl CommandSubstitution {
     }
 }
 
+/// Describe one source character offered to a substitution's `case` tracker.
+///
+/// The four values are one observation rather than independent arguments: the
+/// character, what it escapes, whether it is word data, and the parenthesis
+/// depth a construct spelled here would open at all describe the same position.
+#[derive(Clone, Copy)]
+pub(super) struct CaseObservation {
+    /// The character at the current position.
+    ch: char,
+    /// The character an unquoted backslash escapes.
+    next: Option<char>,
+    /// Whether the character is unquoted word data.
+    is_unquoted: bool,
+    /// The parenthesis depth of the active command substitution.
+    parenthesis_depth: usize,
+}
+
+impl CaseObservation {
+    /// Describe the character at one position of the active substitution.
+    pub(super) const fn new(
+        ch: char,
+        next: Option<char>,
+        is_unquoted: bool,
+        parenthesis_depth: usize,
+    ) -> Self {
+        Self {
+            ch,
+            next,
+            is_unquoted,
+            parenthesis_depth,
+        }
+    }
+}
+
 /// Track `case ... esac` nesting inside one command substitution.
 ///
 /// A `)` that terminates a `case` pattern is an operator, while the `)` that
@@ -52,8 +86,12 @@ impl CommandSubstitution {
 /// that merely happens to come first.
 #[derive(Default)]
 pub(super) struct CaseNesting {
-    /// Count `case` keywords not yet matched by `esac`.
-    depth: usize,
+    /// Record the parenthesis depth at which each open `case` began.
+    ///
+    /// A pattern terminator stands at the depth of the group that contains its
+    /// `case`, which need not be the substitution's own outermost level, so the
+    /// depth has to travel with the construct rather than be assumed.
+    depths: Vec<usize>,
     /// Accumulate the current unquoted word so reserved words are recognised.
     word: String,
     /// Record that the traversal is inside an unquoted `#` comment.
@@ -66,16 +104,20 @@ impl CaseNesting {
     /// Initialise an empty tracker for one command substitution.
     pub(super) const fn new() -> Self {
         Self {
-            depth: 0,
+            depths: Vec::new(),
             word: String::new(),
             in_comment: false,
             saw_case: false,
         }
     }
 
-    /// Report whether a `case` construct is open inside this substitution.
-    pub(super) const fn is_open(&self) -> bool {
-        self.depth > 0
+    /// Report whether the innermost open `case` began at `parenthesis_depth`.
+    ///
+    /// Only a `)` at the depth of its own construct terminates that pattern: a
+    /// `)` one level deeper closes a group inside the pattern, and one level
+    /// shallower closes the group that contains the whole `case`.
+    pub(super) fn is_open_at(&self, parenthesis_depth: usize) -> bool {
+        self.depths.last() == Some(&parenthesis_depth)
     }
 
     /// Report whether a `case` keyword appeared anywhere in this substitution.
@@ -95,13 +137,16 @@ impl CaseNesting {
     /// its own escape from `next`: `ca\se` and `c\<newline>ase` both spell
     /// `case`, while a line continuation removes both characters. A `case`
     /// inside a quoted string or a comment therefore never opens a construct.
-    pub(super) fn observe(&mut self, ch: char, next: Option<char>, is_unquoted: bool) {
-        if !is_unquoted {
-            self.finish_word();
+    ///
+    /// The observation carries the depth a construct would open at, so the
+    /// pattern terminator can later be matched against it.
+    pub(super) fn observe(&mut self, observation: CaseObservation) {
+        if !observation.is_unquoted {
+            self.finish_word(observation.parenthesis_depth);
         } else if self.in_comment {
-            self.observe_comment_character(ch);
+            self.observe_comment_character(observation.ch);
         } else {
-            self.observe_word_character(ch, next);
+            self.observe_word_character(observation);
         }
     }
 
@@ -113,32 +158,35 @@ impl CaseNesting {
     }
 
     /// Accumulate one character of unquoted word data.
-    fn observe_word_character(&mut self, ch: char, next: Option<char>) {
-        if ch == '\\' {
-            self.word.extend(next.filter(|escaped| *escaped != '\n'));
+    fn observe_word_character(&mut self, observation: CaseObservation) {
+        if observation.ch == '\\' {
+            self.word
+                .extend(observation.next.filter(|escaped| *escaped != '\n'));
             return;
         }
-        if ends_word(ch) {
-            self.finish_word();
+        if ends_word(observation.ch) {
+            self.finish_word(observation.parenthesis_depth);
             return;
         }
         // A number sign starts a comment only at a word start; mid-word it is
         // ordinary word data, so `case#x` must not read as the keyword.
-        if ch == '#' && self.word.is_empty() {
+        if observation.ch == '#' && self.word.is_empty() {
             self.in_comment = true;
             return;
         }
-        self.word.push(ch);
+        self.word.push(observation.ch);
     }
 
-    /// Apply the completed word to the `case` nesting count.
-    fn finish_word(&mut self) {
+    /// Apply the completed word to the `case` nesting state.
+    fn finish_word(&mut self, parenthesis_depth: usize) {
         match self.word.as_str() {
             "case" => {
-                self.depth += 1;
+                self.depths.push(parenthesis_depth);
                 self.saw_case = true;
             }
-            "esac" => self.depth = self.depth.saturating_sub(1),
+            "esac" => {
+                self.depths.pop();
+            }
             _ => {}
         }
         self.word.clear();

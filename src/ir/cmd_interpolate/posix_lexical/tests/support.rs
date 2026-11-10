@@ -5,8 +5,8 @@
 //! free to describe only the case it pins.
 
 use super::super::super::{
-    CommandBindings, INS_TOKEN, OUTS_TOKEN, RecipeShell, interpolate_command_with_bindings,
-    interpolate_script_with_bindings,
+    CommandBindings, INS_TOKEN, IrGenError, OUTS_TOKEN, RecipeShell,
+    interpolate_command_with_bindings, interpolate_script_with_bindings,
 };
 use super::Interpolator;
 
@@ -96,6 +96,22 @@ pub(super) fn assert_both_reject(template: &str, context: &str) {
     let bindings = hostile_posix_bindings();
     for interpolate in both_interpolators() {
         assert!(interpolate(template, &bindings).is_err(), "{context}");
+    }
+}
+
+/// Assert that both interpolators report an ambiguous substitution boundary.
+///
+/// The over-approximating guards must fail closed through the dedicated
+/// diagnostic rather than through a generic invalid-command error, so a caller
+/// can still tell that the scanner declined to classify the boundary.
+pub(super) fn assert_both_reject_as_ambiguous(template: &str, context: &str) {
+    let bindings = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
+        let error = interpolate(template, &bindings).expect_err(context);
+        assert!(
+            matches!(error, IrGenError::AmbiguousSubstitutionBoundary { .. }),
+            "{context}: unexpected error {error:?}"
+        );
     }
 }
 

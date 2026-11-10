@@ -12,11 +12,13 @@ use rstest::rstest;
 /// Verify the migration remedies for an ambiguous `)#` boundary are accepted.
 ///
 /// The migration guide tells affected users either to separate a comment from
-/// the closer with whitespace or to escape a literal `#` as `\#`. A guide that
-/// recommended a recipe the scanner still rejects would strand every user who
-/// followed it, so both forms are pinned here for both interpolators.
+/// the closer with whitespace, to keep a literal `#` in a quoted region, or to
+/// escape it as `\#`. A guide that recommended a recipe the scanner still
+/// rejects would strand every user who followed it, so every presented form is
+/// pinned here for both interpolators.
 #[rstest]
 #[case::whitespace_before_comment("echo \"$(case x in x) :;; esac)\" # trailing")]
+#[case::quoted_literal_hash(r#"echo "$(case x in x) :;; esac)"'# trailing comment'"#)]
 #[case::escaped_literal_hash("echo $(printf x)\\#literal")]
 fn migration_remedies_for_ambiguous_boundary_are_accepted(#[case] template: &str) {
     let bindings = bindings();
@@ -293,5 +295,54 @@ fn case_substitution_inside_outer_quotes_fails_closed() {
     assert_both_reject(
         &template,
         "an outer-quoted case substitution closer before '#' must fail closed",
+    );
+}
+
+/// Verify a `case` inside a nested group still finds its pattern terminator.
+///
+/// `case` opens at the parenthesis depth of the group that contains it, so the
+/// `)` that ends its pattern is one level below the substitution. Matching a
+/// terminator only at the substitution's own depth reads that `)` as closing
+/// the group: the following `esac` then closes nothing, and the next `)` is
+/// taken for the substitution closer one `)` too early. The leftover `)#` is
+/// then read as a comment, which leaves the quote opened after it inert and
+/// encodes the next line's marker for the wrong context.
+#[test]
+fn case_pattern_terminator_inside_nested_group_fails_closed() {
+    let (template, _) = executable_quote_case("echo $( (case x in x) :;; esac))");
+    assert_both_reject_as_ambiguous(
+        &template,
+        "a case pattern inside a nested group must fail closed before the boundary",
+    );
+}
+
+/// Verify the raw-source scan rejects a `case` spelled inside a quoted string.
+///
+/// The guard deliberately does not re-lex the substitution, so a whole-word
+/// `case` between separator characters is enough to fail closed even when the
+/// shell would read it as ordinary string data. Narrowing the scan would mean
+/// parsing the substitution a second time, which is the ambiguity the guard
+/// exists to avoid, so the over-approximation is pinned here.
+#[test]
+fn case_spelled_inside_a_quoted_string_fails_closed() {
+    let (template, _) = executable_quote_case("echo $(echo \" case \")");
+    assert_both_reject_as_ambiguous(
+        &template,
+        "a whole-word 'case' inside a quoted string must still fail closed",
+    );
+}
+
+/// Verify the raw-source scan rejects a `case` spelled inside a comment.
+///
+/// As with the quoted spelling, the guard does not skip comments while it
+/// scans. The `case` here is comment text to the shell, but a `)` immediately
+/// before `#` still leaves the closer unprovable, so the recipe fails closed
+/// rather than encode a later marker for a guessed context.
+#[test]
+fn case_spelled_inside_a_comment_fails_closed() {
+    let (template, _) = executable_quote_case("echo $(echo hi # case x in x\n)");
+    assert_both_reject_as_ambiguous(
+        &template,
+        "a whole-word 'case' inside a comment must still fail closed",
     );
 }

@@ -315,6 +315,13 @@ impl HashBoundary {
 }
 
 /// Generate `#` boundaries that exercise every POSIX word-ending rule.
+///
+/// The generated prefixes name their expectation rather than restating the
+/// scanner, so the property compares the production traversal with an
+/// independent description of the rule. Nested groups and substitutions are
+/// included because their closers sit at a different parenthesis depth from the
+/// substitution's own, which is exactly where a depth-blind closer check reads
+/// the wrong `)`.
 pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
     let separator = prop::sample::select(POSIX_SEPARATORS.to_vec())
         .prop_map(|separator| HashBoundary::after_separator(format!("echo x{separator}")));
@@ -326,6 +333,10 @@ pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
     let line_continuation = Just(HashBoundary::inside_word("echo x\\\n".to_owned()));
     let substitution_closer = prop::sample::select(vec!["$(printf x)", "$((1 + 2))"])
         .prop_map(|closer| HashBoundary::inside_word(format!("echo {closer}")));
+    let nested_group_closer = Just(HashBoundary::inside_word("echo $( (printf x) )".to_owned()));
+    let nested_substitution_closer = Just(HashBoundary::inside_word(
+        "echo $(printf $(printf x))".to_owned(),
+    ));
     let subshell_closer = Just(HashBoundary::after_separator("echo (echo x)".to_owned()));
     prop_oneof![
         separator,
@@ -334,6 +345,8 @@ pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
         escaped,
         line_continuation,
         substitution_closer,
+        nested_group_closer,
+        nested_substitution_closer,
         subshell_closer,
     ]
 }
