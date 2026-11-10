@@ -102,4 +102,3 @@ pub(super) fn decode_power_shell_transport(binding: &str) -> Result<String> {
         .collect::<Vec<_>>();
     String::from_utf16(&code_units).context("PowerShell payload should be valid UTF-16")
 }
-// weave: run 'weave explain tests/shell_filter_composition_tests/composition_support.rs' for per-hunk detail, 'weave check' to verify your resolution
