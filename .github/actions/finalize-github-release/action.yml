@@ -159,8 +159,11 @@ runs:
         GH_TOKEN: ${{ inputs['github-token'] }}
       run: |
         set -euo pipefail
-        # Two read-only `gh` calls, each bounded by the same 300s: a draft's
-        # asset listing is small, so anything slower is a stalled API.
+        # One read-only `gh release view`, bounded by the same 300s as every
+        # other command here: a draft's asset listing is small, so anything
+        # slower is a stalled API. The single response is recorded twice —
+        # state.json for the draft flag and assets.json for the planner —
+        # because one call is the only way the two records can agree.
         # `--no-build` matters here because this step holds the token: a source
         # distribution would run its build backend with the token in scope, and
         # the script's own `exclude-newer` bounds which releases uv may choose,

@@ -223,7 +223,7 @@ def write_github_output(
         left the release public.
     is_prerelease
         The validated candidate's prerelease state, written as ``true`` or
-        ``false`` rather than Python's capitalised spelling.
+        ``false`` rather than Python's capitalized spelling.
 
     Notes
     -----

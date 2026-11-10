@@ -1160,7 +1160,7 @@ jobs:
         uses: ./.github/actions/finalize-github-release
         # The aggregate ceiling. A composite action's own steps cannot carry
         # `timeout-minutes` (actions/runner#1979), so the action bounds each
-        # command with GNU `timeout` and this step bounds the five together:
+        # command with GNU `timeout` and this step bounds the four together:
         # 300s + 300s + 300s + 600s of command budgets, plus the validate
         # step and interpreter start-up. It is deliberately below the job's
         # 30 minutes so a hung action is reported as this step rather than as
