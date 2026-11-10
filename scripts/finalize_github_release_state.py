@@ -2,9 +2,13 @@
 
 Two decisions stand between a verified release and a public one: whether the
 release is already public, and what it looked like after the API call that
-un-drafts it. Both are decided from decoded values rather than from the live
-API, so the partial and interrupted states that are hardest to arrange
-against GitHub can be exercised directly.
+un-drafts it. A third question is asked of the same record before that call:
+whether the release still attaches the assets the reconciliation plan verified.
+The plan answers for a snapshot taken earlier, so a name it accepted and the
+release no longer carries means the release moved under the run. All three are
+decided from decoded values rather than from the live API, so the partial and
+interrupted states that are hardest to arrange against GitHub can be exercised
+directly.
 
 Nothing here reads a file or runs a command. The adapter decodes the API
 response, then asks these functions what it means; that split lets this suite
@@ -279,6 +283,39 @@ def is_already_finalized(state: ReleaseState, *, is_prerelease: bool) -> bool:
     False
     """
     return not state.is_draft and state.is_prerelease is is_prerelease
+
+
+def missing_names(state: ReleaseState, names: cabc.Iterable[str]) -> tuple[str, ...]:
+    """Return the names the release no longer attaches.
+
+    Parameters
+    ----------
+    state
+        The release as GitHub reports it just before the edit.
+    names
+        The names an earlier snapshot verified, in the order to report them.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The names that snapshot accepted and this one does not carry.
+
+    Notes
+    -----
+    Only names already decided are asked about. An asset the release attaches
+    and the plan never named is not reported here, because the reconciliation
+    tolerates such a file by design and this check exists to detect the release
+    losing what was verified, not to add a rule the plan does not make.
+
+    Examples
+    --------
+    >>> state = ReleaseState("v1.2.3", True, False, {"a": "sha256:ab"})
+    >>> missing_names(state, ["a"])
+    ()
+    >>> missing_names(state, ["a", "b"])
+    ('b',)
+    """
+    return tuple(name for name in names if name not in state.assets)
 
 
 def classify_readback(state: ReleaseState, *, is_prerelease: bool) -> Readback:

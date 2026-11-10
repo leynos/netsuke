@@ -61,6 +61,10 @@ class PlanAssessment:
         Names whose recorded digest could not be established.
     uploads
         Names the plan still expects to upload.
+    verified
+        Names the plan found attached with the trusted digest. Carried because
+        a verified verdict is a claim about specific assets, and a later reader
+        re-checking the release needs to know which ones were claimed.
     detail
         Why the document could not be read, for an
         :attr:`PlanVerdict.UNREADABLE` verdict; empty otherwise.
@@ -70,6 +74,7 @@ class PlanAssessment:
     conflicts: tuple[str, ...] = ()
     unverifiable: tuple[str, ...] = ()
     uploads: tuple[str, ...] = ()
+    verified: tuple[str, ...] = ()
     detail: str = ""
 
 
@@ -210,6 +215,8 @@ def assess_plan(plan: object) -> PlanAssessment:
     --------
     >>> assess_plan({"actions": [["a", "skip-verified"]]}).verdict.value
     'verified'
+    >>> assess_plan({"actions": [["a", "skip-verified"]]}).verified
+    ('a',)
     >>> verdict = assess_plan({"actions": [["a", "upload"]]}).verdict
     >>> verdict.value
     'upload-required'
@@ -255,7 +262,9 @@ def _verdict(
         The verdict and the names that justify it. The order of the checks is
         the policy: no decisions at all is refused before any finding is read,
         because emptiness cannot be told apart from a plan nothing was checked
-        against, and the two refusals outrank an upload.
+        against, and the two refusals outrank an upload. A verified verdict
+        carries the names it verified, so a caller that re-reads the release
+        can ask whether those names are still there.
     """
     if not rows:
         return PlanAssessment(
@@ -274,7 +283,8 @@ def _verdict(
     uploads = _selected(rows, release_reconcile_github.AssetAction.UPLOAD)
     if uploads:
         return PlanAssessment(PlanVerdict.UPLOAD_REQUIRED, uploads=_unique(uploads))
-    return PlanAssessment(PlanVerdict.VERIFIED)
+    verified = _selected(rows, release_reconcile_github.AssetAction.SKIP_VERIFIED)
+    return PlanAssessment(PlanVerdict.VERIFIED, verified=_unique(verified))
 
 
 def _unique(names: cabc.Iterable[str]) -> tuple[str, ...]:

@@ -11,6 +11,7 @@ from finalize_github_release_state import (
     ReleaseState,
     classify_readback,
     is_already_finalized,
+    missing_names,
     parse_release_state,
 )
 
@@ -303,4 +304,50 @@ def test_readback_separates_a_draft_from_a_wrong_flag(
     assert classify_readback(state, is_prerelease=wanted) is expected, (
         f"draft={is_draft} prerelease={is_prerelease} wanted={wanted} must be "
         f"{expected}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("attached", "verified", "expected"),
+    [
+        pytest.param([ARCHIVE], [ARCHIVE], (), id="still-attached"),
+        pytest.param([ARCHIVE], [ARCHIVE, SIDECAR], (SIDECAR,), id="one-vanished"),
+        pytest.param([SIDECAR], [ARCHIVE, SIDECAR], (ARCHIVE,), id="the-archive"),
+        pytest.param([], [ARCHIVE], (ARCHIVE,), id="everything-gone"),
+        pytest.param([ARCHIVE, SIDECAR], [], (), id="nothing-was-verified"),
+    ],
+)
+def test_missing_names_reports_only_what_the_release_lost(
+    *, attached: list[str], verified: list[str], expected: tuple[str, ...]
+) -> None:
+    """Report the verified names the release no longer attaches, in plan order."""
+    state = ReleaseState("v1.2.3", True, False, dict.fromkeys(attached, "sha256:ab"))
+
+    assert missing_names(state, verified) == expected, (
+        f"attached={attached} verified={verified} must report {expected}"
+    )
+
+
+def test_a_verified_plan_carries_the_names_it_verified() -> None:
+    """Record which assets the verdict rests on, so a later read can re-check."""
+    assessment = assess_plan({
+        "actions": [[ARCHIVE, "skip-verified"], [SIDECAR, "skip-verified"]]
+    })
+
+    assert assessment.verdict is PlanVerdict.VERIFIED, "the plan must permit publishing"
+    assert assessment.verified == (ARCHIVE, SIDECAR), (
+        "the verdict must name every asset it accepted"
+    )
+
+
+@pytest.mark.parametrize(
+    "action",
+    [pytest.param("upload", id="upload"), pytest.param("conflict", id="worse")],
+)
+def test_a_plan_that_does_not_verify_carries_no_verified_names(action: str) -> None:
+    """Keep the verified names empty unless the plan actually verified them."""
+    assessment = assess_plan({"actions": [[ARCHIVE, action]]})
+
+    assert assessment.verified == (), (
+        "a plan that does not permit publishing verified nothing"
     )

@@ -4029,6 +4029,15 @@ declares are decided: an attached asset the record never claimed is left alone
 here because refusing over it would block a release over a file the plan never
 named.
 
+The finalize step does not take that decision on trust. It re-reads the release
+immediately before the single edit, and a name the plan verified that the
+re-read no longer attaches stops the run with `EXIT_REFUSED`. The plan answers
+for the snapshot the record step took, so publishing a release whose verified
+inventory has since changed would report a completeness nothing checked. The
+re-read decides only about the plan's own names, which leaves the tolerance
+above intact: an undeclared attachment neither blocks the run nor is removed
+from the release.
+
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |
 | `EXIT_OK`                | 0    | every asset is attached with the recorded digest         |

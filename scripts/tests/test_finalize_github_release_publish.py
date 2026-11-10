@@ -19,12 +19,14 @@ from finalize_github_release_io import (
 from finalize_github_release_support import (
     ARCHIVE,
     COMMIT,
+    DIGEST,
     TAG,
     edit_arguments,
     identity_record,
     invocation_arguments,
     plan_record,
     publish_arguments,
+    release_view,
     release_views,
     result_record,
     run_finalizer,
@@ -201,6 +203,68 @@ def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
         "prerelease": False,
         "tag": TAG,
     }, "the retry must record the release as already finalized"
+
+
+def test_publish_refuses_a_release_that_lost_a_verified_asset(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Stop before the edit when the draft no longer holds what was verified."""
+    gh = sequenced_gh(
+        cmd_mox,
+        [(release_view(is_draft=True, is_prerelease=False, assets={}), "", 0)],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
+
+    assert error.value.code == EXIT_REFUSED, (
+        "a draft that lost a verified asset must not be published"
+    )
+    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
+        ("release", "view")
+    ], "a refused run must not edit the release"
+    assert not (tmp_path / "result.json").exists(), (
+        "a refused run must not record an outcome"
+    )
+    message = capsys.readouterr().err
+    assert ARCHIVE in message, "the refusal must name the asset that went missing"
+    assert "remains a draft" in message, "the operator must know the release state"
+
+
+def test_publish_tolerates_an_asset_the_plan_never_named(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox
+) -> None:
+    """Leave an undeclared attachment alone, exactly as the plan does.
+
+    The reconciliation decides only about names the trusted record declares, so
+    a file it never claimed must not stop a release the plan verified: the
+    check added for a vanished asset asks about the plan's own names, not about
+    every name GitHub reports.
+    """
+    gh = sequenced_gh(
+        cmd_mox,
+        [
+            (
+                release_view(
+                    is_draft=True,
+                    is_prerelease=False,
+                    assets={ARCHIVE: f"sha256:{DIGEST}", "notes.txt": None},
+                ),
+                "",
+                0,
+            ),
+            ("", "", 0),
+            *release_views((False, False)),
+        ],
+    )
+
+    run_finalizer(*publish_arguments(tmp_path))
+
+    assert [
+        invocation_arguments(invocation)[:2] for invocation in gh.invocations
+    ].count(("release", "edit")) == 1, (
+        "an undeclared attachment must not block the plan's verified release"
+    )
 
 
 def test_publish_refuses_an_upload_plan_before_reaching_github(

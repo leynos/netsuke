@@ -178,13 +178,21 @@ def assessment(path: pathlib.Path) -> release_plan.PlanAssessment:
     return result
 
 
-def require_verified(result: release_plan.PlanAssessment) -> None:
+def require_verified(
+    result: release_plan.PlanAssessment,
+) -> release_plan.PlanAssessment:
     """Stop unless the plan says every declared asset is already correct.
 
     Parameters
     ----------
     result
         The plan assessment :func:`assessment` produced.
+
+    Returns
+    -------
+    release_plan.PlanAssessment
+        The assessment it accepted, so a caller can go on to use the verified
+        names without re-reading the plan or re-deciding what it permits.
 
     Notes
     -----
@@ -196,7 +204,7 @@ def require_verified(result: release_plan.PlanAssessment) -> None:
     """
     match result.verdict:
         case release_plan.PlanVerdict.VERIFIED:
-            return
+            return result
         case release_plan.PlanVerdict.UPLOAD_REQUIRED:
             release_io.fail(
                 release_io.EXIT_UPLOAD_REQUIRED,
@@ -240,10 +248,13 @@ def publish_release(request: PublishRequest) -> None:
 
     A release already public with the candidate's own flag is recorded as
     ``already-finalized`` without a second edit, so an interrupted retry
-    converges instead of re-publishing.
+    converges instead of re-publishing. A draft that no longer attaches a name
+    the plan verified stops the run with :data:`EXIT_REFUSED`: the plan answers
+    for an earlier snapshot, and publishing a release whose verified inventory
+    has since changed would report a completeness nothing checked.
     """
     identity = candidate(request.candidate_path, tag=request.tag, commit=request.commit)
-    require_verified(assessment(request.plan_path))
+    decision = require_verified(assessment(request.plan_path))
     current = release_records.snapshot_release(request.tag, request.repository)
     if release_state.is_already_finalized(
         current, is_prerelease=identity.is_prerelease
@@ -252,7 +263,7 @@ def publish_release(request: PublishRequest) -> None:
             request.result_path, request.github_output, "already-finalized", identity
         )
         return
-    _require_draft(current)
+    _require_editable(current, decision)
     edited = release_io.run_gh(
         "release",
         "edit",
@@ -290,14 +301,44 @@ def publish_release(request: PublishRequest) -> None:
             )
 
 
-def _require_draft(state: release_state.ReleaseState) -> None:
-    """Refuse to edit a release that has already been published.
+def _require_editable(
+    state: release_state.ReleaseState, decision: release_plan.PlanAssessment
+) -> None:
+    """Refuse to edit a release the accepted plan no longer describes.
+
+    Both refusals are preconditions of the same edit, so they share one guard.
 
     ``is_already_finalized`` has taken the case where the release is public
     with the candidate's flag, so a public release reaching here has the other
     one. Editing it would change a release someone may already have downloaded,
     and a public release cannot be made a draft again, so the run stops before
     the call rather than correcting a state it must not touch.
+
+    The second answer is taken from a snapshot later than the plan's. The plan
+    was written from the one the record step took, and a name it verified that
+    the release no longer attaches means the draft changed under the run. The
+    two reads are the whole reason this is checked here rather than trusted, so
+    the release is left a draft and a re-run reconciles it again.
+    """
+    _require_draft(state)
+    missing = release_state.missing_names(state, decision.verified)
+    if missing:
+        release_io.fail(
+            release_io.EXIT_REFUSED,
+            "the release no longer attaches "
+            + ", ".join(missing)
+            + ", which the reconciliation plan verified; the release remains a "
+            "draft and a re-run must reconcile it again",
+        )
+
+
+def _require_draft(state: release_state.ReleaseState) -> None:
+    """Refuse to edit a release that has already been published.
+
+    A public release has nothing to un-draft, and one with the wrong
+    prerelease flag cannot be corrected without making it a draft again, which
+    GitHub does not allow. The run therefore stops before the call rather than
+    acting on a state it must not touch.
     """
     if state.is_draft:
         return

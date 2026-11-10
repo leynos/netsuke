@@ -142,8 +142,8 @@ existing asset. An attached asset whose bytes cannot be established -- GitHub
 reports no usable digest for it and the download that would settle the
 question fails -- stops the run too, but the upload plan records it apart from
 a conflict, because "the release holds the wrong bytes" and "nobody could read
-the bytes" call for different remedies. A missing or conflicting asset, an
-unreadable record, or a failed GitHub call leaves the release as a draft;
+the bytes" call for different remedies. A missing or conflicting asset, a draft that has since lost an asset the
+reconciliation accepted, an unreadable record, or a failed GitHub call leaves the release as a draft;
 correct the cause and rerun the verification and finalization jobs, which read
 the retained records and never rebuild the release. Rerunning a job is
 therefore safe, and a rerun cannot swap a release's bytes for a second build's.

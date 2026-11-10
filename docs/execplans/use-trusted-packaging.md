@@ -3880,6 +3880,30 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   developers' guide now states why `trusted/trusted.json` is the right path and
   what a lifted shared root would do to it.
 
+- [x] (2026-11-10) Answered the fourth review's four findings: three described
+  comments or spelling that had drifted from the code, and one closed a real
+  gap between the plan and the release.
+
+  **The comments described an older shape.** The snapshot step claimed two `gh`
+  calls where `record_snapshot` makes one `gh release view` and writes both
+  records from it; the workflow step claimed to bound "the five" commands where
+  the action bounds four (300 + 300 + 300 + 600 seconds); and one docstring used
+  `capitalised` where the house spelling is `-ize`.
+
+  **A verified plan is a claim about a snapshot, and the release can move after
+  it.** `publish_release` re-read the release but decided only from the plan,
+  so a draft that lost an asset between the record step and the edit would
+  still be un-drafted, publishing an inventory nothing had checked.
+  `PlanAssessment` now carries the names a verified plan accepted, and
+  `_require_editable` refuses with `EXIT_REFUSED` when the pre-edit read no
+  longer attaches one of them. The reviewer's own remedy — refuse when the
+  fresh read names an asset the plan never named — was not adopted: it would
+  reverse the documented decision that an undeclared attachment is left alone,
+  and `test_publish_tolerates_an_asset_the_plan_never_named` holds that
+  boundary in place. Comparing the two reads cannot re-check digests, because
+  the plan records actions rather than digests; it detects a release that lost
+  what was verified, which is the failure the extra read can settle.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
