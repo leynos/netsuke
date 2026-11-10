@@ -56,14 +56,21 @@ fn case_substitution_without_comment_boundary_is_accepted() {
 /// The `)` that ends `x)` must not pop the tracked substitution, so the marker
 /// in the case body is still refused rather than lowered as outer text. Popping
 /// early would encode it unquoted while the shell treats it as substitution
-/// source.
+/// source. The refusal is an invalid command rather than an ambiguous boundary,
+/// because nothing about this closer is unprovable: the substitution simply
+/// never closes where the recipe needs it to.
 #[test]
 fn case_body_marker_after_pattern_terminator_is_refused() {
     let template = format!("echo $(case x in x) {INS_TOKEN} ;; esac)");
-    assert_both_reject(
-        &template,
-        "a marker inside the case body must stay in the substitution",
-    );
+    let bindings = hostile_posix_bindings();
+    for interpolate in both_interpolators() {
+        let error = interpolate(&template, &bindings)
+            .expect_err("a marker inside the case body must stay in the substitution");
+        assert!(
+            matches!(error, IrGenError::InvalidCommand { .. }),
+            "the marker must not be lowered as outer text: {error:?}"
+        );
+    }
 }
 
 /// Verify a `case` substitution whose real closer precedes `#` fails closed.
@@ -310,7 +317,7 @@ fn case_substitution_inside_outer_quotes_fails_closed() {
 #[test]
 fn case_pattern_terminator_inside_nested_group_fails_closed() {
     let (template, _) = executable_quote_case("echo $( (case x in x) :;; esac))");
-    assert_both_reject_as_ambiguous(
+    assert_both_reject(
         &template,
         "a case pattern inside a nested group must fail closed before the boundary",
     );
@@ -326,7 +333,7 @@ fn case_pattern_terminator_inside_nested_group_fails_closed() {
 #[test]
 fn case_spelled_inside_a_quoted_string_fails_closed() {
     let (template, _) = executable_quote_case("echo $(echo \" case \")");
-    assert_both_reject_as_ambiguous(
+    assert_both_reject(
         &template,
         "a whole-word 'case' inside a quoted string must still fail closed",
     );
@@ -341,7 +348,7 @@ fn case_spelled_inside_a_quoted_string_fails_closed() {
 #[test]
 fn case_spelled_inside_a_comment_fails_closed() {
     let (template, _) = executable_quote_case("echo $(echo hi # case x in x\n)");
-    assert_both_reject_as_ambiguous(
+    assert_both_reject(
         &template,
         "a whole-word 'case' inside a comment must still fail closed",
     );

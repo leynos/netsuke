@@ -91,20 +91,13 @@ pub(super) fn assert_output(
     }
 }
 
-/// Assert that command and script interpolation both reject the template.
-pub(super) fn assert_both_reject(template: &str, context: &str) {
-    let bindings = hostile_posix_bindings();
-    for interpolate in both_interpolators() {
-        assert!(interpolate(template, &bindings).is_err(), "{context}");
-    }
-}
-
-/// Assert that both interpolators report an ambiguous substitution boundary.
+/// Assert that both interpolators reject the template as an ambiguous boundary.
 ///
-/// The over-approximating guards must fail closed through the dedicated
-/// diagnostic rather than through a generic invalid-command error, so a caller
-/// can still tell that the scanner declined to classify the boundary.
-pub(super) fn assert_both_reject_as_ambiguous(template: &str, context: &str) {
+/// Every rejection these suites pin comes from a guard that declined to
+/// classify a boundary, so the dedicated diagnostic is required rather than any
+/// error at all: a generic invalid-command error would leave a caller unable to
+/// tell that the scanner refused to guess.
+pub(super) fn assert_both_reject(template: &str, context: &str) {
     let bindings = hostile_posix_bindings();
     for interpolate in both_interpolators() {
         let error = interpolate(template, &bindings).expect_err(context);
