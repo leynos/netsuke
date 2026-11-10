@@ -14,10 +14,13 @@ Three properties make the copy trustworthy:
    stale directory from an earlier attempt cannot be mistaken for this run's
    payload.
 3. Every copy is made from a verified regular file under a verified regular
-   ancestor. A symlinked leaf or a symlinked producer directory is refused
-   rather than followed, because a link is not a claim this run can make. The
-   proof itself lives in :mod:`release_payload_regular_files`; this module
-   re-exports it so a caller keeps importing one name.
+   ancestor, down to the staged root the caller names. A symlinked leaf or a
+   symlinked producer directory is refused rather than followed, because a
+   link inside the downloaded tree is not a claim this run can make; the
+   runner's own path above that root is not judged, because a link there
+   redirects nothing this run publishes. The proof itself lives in
+   :mod:`release_payload_regular_files`; this module re-exports it so a caller
+   keeps importing one name.
 
 Run via ``scripts/select_release_payload_cli.py``; behavioural coverage lives
 in ``scripts/tests/test_select_release_payload_cli.py``.
@@ -252,7 +255,7 @@ def install_payload[Source: pathlib.Path](
     selection: release_payload_selection.PayloadSelection[Source],
     output_dir: pathlib.Path,
     digest_record: pathlib.Path,
-    computed: cabc.Mapping[str, str],
+    staged_root: pathlib.Path,
 ) -> None:
     """Copy the payload into a fresh directory and write the trusted record.
 
@@ -263,9 +266,9 @@ def install_payload[Source: pathlib.Path](
     output_dir
         Directory to create; it must not already exist.
     digest_record
-        Where to write the record of the bytes just copied.
-    computed
-        Published name mapped to the digest of the staged bytes.
+        Where to write the record of the account the copy is held to.
+    staged_root
+        The downloaded tree every source was staged inside.
 
     Raises
     ------
@@ -276,6 +279,16 @@ def install_payload[Source: pathlib.Path](
 
     Notes
     -----
+    The record carries ``selection.trusted``: the digests the producers
+    recorded, which selection has already required the staged sources to equal.
+    Its names are the declared names, because selection refuses a producer
+    claim that disagrees with the declaration. Writing it from the selection
+    rather than from a second hash is what makes a source swapped between that
+    check and this copy visible downstream: the record keeps the digests the
+    producers stand behind, so the payload no longer matches it and the
+    uploader refuses the run. Reading every source once, rather than twice, is
+    the same choice seen from the other side.
+
     A selected source that is not a regular file below regular directories
     surfaces ``StagedFileMissingError`` from :func:`copy_verified`. Both
     failure families remove the partial directory before the error
@@ -291,8 +304,12 @@ def install_payload[Source: pathlib.Path](
     try:
         payload.mkdir()
         for name in selection.declared:
-            copy_verified(selection.sources[name], payload / name)
-        release_digest_record_files.write_digest_record(computed, digest_record)
+            copy_verified(
+                selection.sources[name], payload / name, staged_root=staged_root
+            )
+        release_digest_record_files.write_digest_record(
+            selection.trusted, digest_record
+        )
     except OSError, PayloadError:
         # A refused copy leaves exactly as much of a payload behind as a failed
         # one, so both are cleaned up: a partial directory that survives would

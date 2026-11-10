@@ -177,7 +177,7 @@ def main(argv: list[str] | None = None) -> int:
             selection,
             arguments.output_dir,
             arguments.digest_record,
-            _digests(selection),
+            arguments.dist_dir,
         )
     except OSError as error:
         # Selection reads everything it judges, so an OSError from here is the

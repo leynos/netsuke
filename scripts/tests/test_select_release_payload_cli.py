@@ -35,7 +35,10 @@ from select_release_payload_support import (
 )
 
 if typ.TYPE_CHECKING:
+    import argparse
     import pathlib
+
+    import release_payload_selection
 
 
 def test_a_complete_tree_installs_exactly_the_declared_names(
@@ -187,6 +190,50 @@ def test_replaced_bytes_are_refused_before_the_copy(tmp_path: pathlib.Path) -> N
         "bytes the producer did not record must be refused"
     )
     assert not tree["output"].exists(), "a refusal must not leave a payload"
+
+
+def test_a_source_swapped_after_the_digest_check_disagrees_with_the_record(
+    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Record the approved digests, so a swap after the check stays visible.
+
+    ``require_staged_digests`` and the copy are separate steps, and this case
+    rewrites a source in the window between them. A record re-hashed at install
+    time would describe whatever the swap left behind, so ``selection.json``,
+    the declaration record, and the payload would all agree with each other and
+    none of them with the producer. Recording the digests selection verified is
+    what makes the payload disagree with the record, which is the disagreement
+    the uploader refuses.
+
+    ``select_payload`` is wrapped rather than ``copyfile``: the swap has to
+    land after the digest check has returned and before the copy is asked for
+    the bytes, and this is the seam that bounds that window.
+    """
+    tree = staged_tree(tmp_path)
+    approved = staged_assets(tree)
+    genuine_select = cli.select_payload
+
+    def select_then_swap(
+        arguments: argparse.Namespace,
+    ) -> release_payload_selection.PayloadSelection[pathlib.Path]:
+        """Run the real selection, then replace one source it approved."""
+        selection = genuine_select(arguments)
+        _ = published_path(tree["dist"], DEB).write_bytes(b"swapped after the check")
+        return selection
+
+    monkeypatch.setattr(cli, "select_payload", select_then_swap)
+    assert run_cli(tree) == cli.EXIT_OK, "the install itself must still succeed"
+    installed = tree["output"] / cli.PAYLOAD_DIRECTORY / DEB
+    assert installed.read_bytes() == b"swapped after the check", (
+        "the copy must read the replacement, or the case proves nothing"
+    )
+    recorded = release_digest_record_files.read_digest_record(tree["record"])
+    assert recorded.as_mapping()[DEB] == approved[DEB], (
+        "the record must keep the digests selection verified"
+    )
+    assert recorded.as_mapping()[DEB] != release_digest_files.digest_of_file(installed), (
+        "the record must disagree with the bytes that were copied"
+    )
 
 
 def test_a_missing_producer_record_is_refused(tmp_path: pathlib.Path) -> None:

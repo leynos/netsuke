@@ -18,38 +18,12 @@ import release_digest_record_files
 import release_payload_selection
 import release_payload_tree
 from release_payload_errors import StagedFileMissingError, StagedFileUnreadableError
+from release_payload_install_support import (
+    selection_for,
+    write_asset,
+    write_provenance,
+)
 from release_payload_tree import RECORD_NAME
-
-
-def write_asset(
-    directory: pathlib.Path, name: str, content: bytes = b"bytes"
-) -> pathlib.Path:
-    """Write ``content`` under ``name`` and return the path.
-
-    Returns
-    -------
-    pathlib.Path
-        The written file's path.
-    """
-    path = directory / name
-    path.parent.mkdir(parents=True, exist_ok=True)
-    _ = path.write_bytes(content)
-    return path
-
-
-def write_provenance(directory: pathlib.Path, target: str) -> None:
-    """Write a valid producer record for ``target`` below ``directory``."""
-    record = {
-        "schema": 1,
-        "commit": "a" * 40,
-        "run_id": "7",
-        "run_attempt": "1",
-        "target": target,
-        "platform": "linux",
-        "assets": {"a.deb": "b" * 64},
-    }
-    directory.mkdir(parents=True, exist_ok=True)
-    _ = (directory / RECORD_NAME).write_text(json.dumps(record), encoding="utf-8")
 
 
 def test_observe_payload_indexes_files_by_published_name(
@@ -120,9 +94,39 @@ def test_read_provenances_reports_an_unusable_record(tmp_path: pathlib.Path) -> 
 def test_require_regular_accepts_an_ordinary_file(tmp_path: pathlib.Path) -> None:
     """Accept a regular file below regular directories."""
     asset = write_asset(tmp_path, "a.deb")
-    assert release_payload_tree.require_regular(asset) == asset, (
+    assert release_payload_tree.require_regular(asset, staged_root=tmp_path) == asset, (
         "an ordinary file must be returned unchanged"
     )
+
+
+def test_require_regular_ignores_a_link_above_the_staged_root(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Accept a good tree whose own path runs through a link.
+
+    A runner temp directory under a symlinked mount is the host's layout, not
+    the producers' claim. Refusing there would reject a perfectly good tree
+    with no corrective action available to an operator.
+    """
+    real = tmp_path / "mnt"
+    dist = real / "dist"
+    asset = write_asset(dist, "a.deb")
+    linked = tmp_path / "runner-temp"
+    _ = linked.symlink_to(real, target_is_directory=True)
+    assert release_payload_tree.require_regular(
+        linked / "dist" / asset.name, staged_root=linked / "dist"
+    ) == (linked / "dist" / asset.name), "the staged root bounds the walk"
+
+
+def test_require_regular_refuses_a_path_outside_the_staged_root(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a path the root does not contain, before any mode is read."""
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    asset = write_asset(tmp_path / "elsewhere", "a.deb")
+    with pytest.raises(StagedFileMissingError, match="inside the staged tree"):
+        release_payload_tree.require_regular(asset, staged_root=dist)
 
 
 def test_require_regular_refuses_a_symlinked_leaf(tmp_path: pathlib.Path) -> None:
@@ -131,21 +135,26 @@ def test_require_regular_refuses_a_symlinked_leaf(tmp_path: pathlib.Path) -> Non
     link = tmp_path / "link.deb"
     _ = link.symlink_to(real)
     with pytest.raises(StagedFileMissingError, match="regular file"):
-        release_payload_tree.require_regular(link)
+        release_payload_tree.require_regular(link, staged_root=tmp_path)
 
 
 def test_require_regular_refuses_a_symlinked_ancestor(tmp_path: pathlib.Path) -> None:
-    """Refuse a file reached through a linked directory.
+    """Refuse a file reached through a linked directory inside the root.
 
     Following it would let the payload hold bytes from outside the downloaded
-    tree, which is the substitution the trusted record exists to catch.
+    tree, which is the substitution the trusted record exists to catch. The
+    stage the link occupies is also what keeps this case distinct from
+    ``test_require_regular_ignores_a_link_above_the_staged_root``: there the
+    link is the runner's own path, here it is inside the tree.
     """
     real_dir = tmp_path / "elsewhere"
     asset = write_asset(real_dir, "a.deb")
     linked_dir = tmp_path / "producer"
     _ = linked_dir.symlink_to(real_dir, target_is_directory=True)
     with pytest.raises(StagedFileMissingError, match="directory"):
-        release_payload_tree.require_regular(linked_dir / asset.name)
+        release_payload_tree.require_regular(
+            linked_dir / asset.name, staged_root=tmp_path
+        )
 
 
 def test_require_regular_refuses_a_fifo(tmp_path: pathlib.Path) -> None:
@@ -160,13 +169,15 @@ def test_require_regular_refuses_a_fifo(tmp_path: pathlib.Path) -> None:
     fifo = tmp_path / "a-fifo"
     os.mkfifo(fifo)
     with pytest.raises(StagedFileMissingError, match="regular file"):
-        release_payload_tree.require_regular(fifo)
+        release_payload_tree.require_regular(fifo, staged_root=tmp_path)
 
 
 def test_require_regular_refuses_a_missing_file(tmp_path: pathlib.Path) -> None:
     """Surface the absent path rather than a bare ``FileNotFoundError``."""
     with pytest.raises(StagedFileMissingError, match="regular file"):
-        release_payload_tree.require_regular(tmp_path / "absent.deb")
+        release_payload_tree.require_regular(
+            tmp_path / "absent.deb", staged_root=tmp_path
+        )
 
 
 def test_require_regular_reports_an_unreadable_leaf(
@@ -190,7 +201,7 @@ def test_require_regular_reports_an_unreadable_leaf(
 
     monkeypatch.setattr(pathlib.Path, "lstat", refuse)
     with pytest.raises(StagedFileUnreadableError, match="could not be inspected"):
-        release_payload_tree.require_regular(asset)
+        release_payload_tree.require_regular(asset, staged_root=tmp_path)
 
 
 def test_require_regular_reports_an_unreadable_ancestor(
@@ -213,7 +224,7 @@ def test_require_regular_reports_an_unreadable_ancestor(
 
     monkeypatch.setattr(pathlib.Path, "lstat", refuse_ancestors)
     with pytest.raises(StagedFileUnreadableError, match="could not be inspected"):
-        release_payload_tree.require_regular(asset)
+        release_payload_tree.require_regular(asset, staged_root=tmp_path)
 
 
 def test_copy_verified_copies_the_bytes(tmp_path: pathlib.Path) -> None:
@@ -221,7 +232,7 @@ def test_copy_verified_copies_the_bytes(tmp_path: pathlib.Path) -> None:
     source = write_asset(tmp_path, "a.deb", b"payload")
     destination = tmp_path / "out" / "a.deb"
     destination.parent.mkdir()
-    release_payload_tree.copy_verified(source, destination)
+    release_payload_tree.copy_verified(source, destination, staged_root=tmp_path)
     assert destination.read_bytes() == b"payload", "the bytes must be copied verbatim"
 
 
@@ -232,43 +243,58 @@ def test_copy_verified_refuses_a_symlink(tmp_path: pathlib.Path) -> None:
     _ = link.symlink_to(real)
     destination = tmp_path / "out.deb"
     with pytest.raises(StagedFileMissingError):
-        release_payload_tree.copy_verified(link, destination)
+        release_payload_tree.copy_verified(link, destination, staged_root=tmp_path)
     assert not destination.exists(), "a refused copy must leave nothing behind"
-
-
-def selection_for(
-    sources: dict[str, pathlib.Path],
-) -> release_payload_selection.PayloadSelection[pathlib.Path]:
-    """Name ``sources`` as the approved payload.
-
-    Returns
-    -------
-    release_payload_selection.PayloadSelection
-        A selection whose declared names are the source keys.
-    """
-    return release_payload_selection.PayloadSelection(
-        declared=tuple(sorted(sources)),
-        trusted=dict.fromkeys(sources, "b" * 64),
-        sources=sources,
-    )
 
 
 def test_install_payload_copies_and_writes_the_record(
     tmp_path: pathlib.Path,
 ) -> None:
-    """Install the payload and its trusted record in one step."""
-    source = write_asset(tmp_path / "dist", "a.deb", b"payload")
+    """Install the payload and the record of what selection approved."""
+    dist = tmp_path / "dist"
+    source = write_asset(dist, "a.deb", b"payload")
     output = tmp_path / "artifacts"
     record = tmp_path / "record.json"
-    computed = {"a.deb": release_digest_files.digest_of_file(source)}
-    release_payload_tree.install_payload(
-        selection_for({"a.deb": source}), output, record, computed
-    )
+    selection = selection_for({"a.deb": source})
+    release_payload_tree.install_payload(selection, output, record, dist)
     installed = output / release_payload_tree.PAYLOAD_DIRECTORY / "a.deb"
     assert installed.read_bytes() == b"payload", "the payload must be installed"
-    assert release_digest_record_files.read_digest_record(record).as_mapping() == (
-        computed
-    ), "the record must carry the digest the caller computed"
+    assert (
+        release_digest_record_files.read_digest_record(record).as_mapping()
+        == selection.trusted
+    ), "the record must carry the digests selection was approved against"
+
+
+def test_install_payload_records_the_approved_digests_not_a_fresh_hash(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Keep the approved digests, so a swap after the check stays visible.
+
+    A record re-hashed from the copy would agree with whatever bytes happened
+    to be copied, and the uploader's comparison against it would then bless the
+    substitution instead of catching it.
+    """
+    dist = tmp_path / "dist"
+    source = write_asset(dist, "a.deb", b"payload")
+    output = tmp_path / "artifacts"
+    record = tmp_path / "record.json"
+    approved = {"a.deb": release_digest_files.digest_of_file(source)}
+    _ = source.write_bytes(b"swapped between the digest check and the copy")
+    release_payload_tree.install_payload(
+        release_payload_selection.PayloadSelection(
+            declared=("a.deb",), trusted=approved, sources={"a.deb": source}
+        ),
+        output,
+        record,
+        dist,
+    )
+    installed = output / release_payload_tree.PAYLOAD_DIRECTORY / "a.deb"
+    assert installed.read_bytes() == b"swapped between the digest check and the copy", (
+        "the copy reads whatever the source holds when it runs"
+    )
+    assert (
+        release_digest_record_files.read_digest_record(record).as_mapping() == approved
+    ), "the record must keep the approved digests so the swap stays visible"
 
 
 def test_install_payload_refuses_an_existing_output_directory(
@@ -279,15 +305,13 @@ def test_install_payload_refuses_an_existing_output_directory(
     A stale directory from an earlier attempt would otherwise be mistaken for
     this run's payload.
     """
-    source = write_asset(tmp_path / "dist", "a.deb")
+    dist = tmp_path / "dist"
+    source = write_asset(dist, "a.deb")
     output = tmp_path / "artifacts"
     output.mkdir()
     with pytest.raises(FileExistsError):
         release_payload_tree.install_payload(
-            selection_for({"a.deb": source}),
-            output,
-            tmp_path / "record.json",
-            {"a.deb": "b" * 64},
+            selection_for({"a.deb": source}), output, tmp_path / "record.json", dist
         )
 
 
@@ -295,19 +319,36 @@ def test_install_payload_removes_a_partial_directory_on_failure(
     tmp_path: pathlib.Path,
 ) -> None:
     """Leave no partial payload behind when a copy fails."""
-    good = write_asset(tmp_path / "dist", "a.deb")
+    dist = tmp_path / "dist"
+    good = write_asset(dist, "a.deb")
     output = tmp_path / "artifacts"
     with pytest.raises(StagedFileMissingError):
         release_payload_tree.install_payload(
-            selection_for({
-                "a.deb": good,
-                "absent.deb": tmp_path / "dist" / "absent.deb",
-            }),
+            selection_for({"a.deb": good, "absent.deb": dist / "absent.deb"}),
             output,
             tmp_path / "record.json",
-            {"a.deb": "b" * 64},
+            dist,
         )
     assert not output.exists(), "a failed install must not leave a payload to upload"
+
+
+def test_install_payload_refuses_a_source_outside_the_staged_root(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a source that is not below the tree the producers staged.
+
+    The selection's own names came from that tree, so a source outside it is a
+    different claim from the one selection made, and the copy must not make it.
+    """
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    source = write_asset(tmp_path / "elsewhere", "a.deb")
+    output = tmp_path / "artifacts"
+    with pytest.raises(StagedFileMissingError, match="inside the staged tree"):
+        release_payload_tree.install_payload(
+            selection_for({"a.deb": source}), output, tmp_path / "record.json", dist
+        )
+    assert not output.exists(), "a refused install must not leave a payload to upload"
 
 
 def test_require_payload_matches_accepts_the_installed_bytes(

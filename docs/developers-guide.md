@@ -2631,16 +2631,17 @@ selector that wrote nothing fails there rather than at the uploader. Each of
 those fails the action's own step, which is what stops a bad tree from reaching
 the network at all.
 
-The upload path ends here for now. The retained `trusted.json` is consumed by
-nothing in this workflow: `verify-release-inventory`,
-`finalize-github-release`, and `consumer-smoke` are planned job-matched actions
-that do not exist yet, and no job in this workflow publishes a release. Only a
-release the workflow creates is a draft: `ensure_draft_release.py` returns as
-soon as the tag already has one, without checking whether it is public, so a
-rerun attaches assets to whatever release the tag already names. The record is
-retained *for* those jobs, which is what the issue asks for; wiring a consumer
-is their work. Read the section above as describing the implemented upload
-path, not a completed verification and finalization hand-off.
+The upload path ends here for now. The uploader reads the local `trusted.json`
+when it checks the payload. No later job consumes the retained artefact:
+`verify-release-inventory`, `finalize-github-release`, and `consumer-smoke` are
+planned job-matched actions that do not exist yet, and no job in this workflow
+publishes a release. Only a release the workflow creates is a draft:
+`ensure_draft_release.py` returns as soon as the tag already has one, without
+checking whether it is public, so a rerun attaches assets to whatever release
+the tag already names. The record is retained *for* those jobs, which is what
+the issue asks for; wiring a consumer is their work. Read the section above as
+describing the implemented upload path, not a completed verification and
+finalization hand-off.
 
 Both staging and publication write an always-run outcome to
 `GITHUB_STEP_SUMMARY`. The staging job does not upload diagnostic artefacts;
@@ -3320,6 +3321,16 @@ reported as a refusal while a destination that cannot be written is reported as
 `EXIT_OUTPUT_UNWRITABLE`; sharing one classifier would send an operator to the
 producer records for a fault in their workspace.
 
+`install_payload` hands `release_payload_regular_files` the staged root, and
+the regularity proof stops there. Everything from the root down is the
+downloaded tree, so a link inside it is refused; the root's own ancestors are
+the runner's path, chosen by the job rather than by the producers, and a link
+there redirects nothing this run publishes. Probing them anyway would reject a
+good tree on a host whose `$RUNNER_TEMP` sits under a symlinked mount, which is
+a false refusal with no corrective action available. A source outside the root
+is refused separately, because selection's names came from that tree and a path
+beyond it is a different claim.
+
 ### Trusted digest records
 
 A release has to state, before anything is uploaded, which bytes it intends to
@@ -3328,14 +3339,21 @@ written by `release_declaration_cli --digest-record` from the staged tree in
 the same run that declares the names, and read by both later consumers.
 
 Selection writes a record of its own, and the difference between the two is the
-point. `select_release_payload_cli` hashes the staged *sources* it approved and
-only then copies them, so the digests `selection.json` records describe the
-bytes that were read, not the bytes that were written. The declaration record
-is produced from the staged tree by a later step, independently of selection.
-The file itself is installed after the copy, and that ordering is deliberate: a
-record that exists beside no payload would be a claim a reader could mistake
-for a completed selection, so a copy that fails leaves neither the payload nor
-a record behind.
+point. `select_release_payload_cli` hashes the staged *sources* once and
+requires them to equal the digests the producer records claim, and
+`selection.json` is written from that same account rather than from a second
+hash of the copy. Re-hashing at install time would make the record describe
+whatever bytes the copy happened to read: a source swapped between the check
+and the copy would leave `selection.json`, the declaration record, and the
+payload agreeing with each other and none of them with the producer. Writing
+the verified digests instead makes the payload disagree with the record, which
+is the disagreement the uploader refuses.
+
+The declaration record is produced from the staged tree by a later step,
+independently of selection. The file itself is installed after the copy, and
+that ordering is deliberate: a record that exists beside no payload would be a
+claim a reader could mistake for a completed selection, so a copy that fails
+leaves neither the payload nor a record behind.
 
 A record compared only with a later hash of the copied tree would accept bytes
 swapped between the two hashes, so
@@ -3350,8 +3368,9 @@ written and tested but are not yet wired into `release.yml`, so today the
 record is retained past the upload rather than consumed by them.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
-2. `select_release_payload_cli` hashes the sources it approves, copies them,
-   and writes `selection.json` only once the copy has succeeded.
+2. `select_release_payload_cli` hashes the sources it approves, requires them
+   to equal the producer records, copies them, and writes `selection.json` from
+   those verified digests once the copy has succeeded.
 3. `release_declaration_cli --digest-record` writes its own record from the
    staged tree, and `upload_declared_assets_cli` requires the two records to
    name the same bytes.
