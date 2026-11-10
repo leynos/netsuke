@@ -212,8 +212,17 @@ runs:
         # papered over, because the verifier cannot tell it from a truncated
         # attachment that somehow matched.
         set -o noclobber
-        while IFS=$'\t' read -r asset_id asset_name; do
+        # `read` fails on a final line with no trailing newline, which a
+        # plain `while read` would skip as though the plan had ended. Repeating
+        # the non-empty test on the read keeps that last entry in the loop.
+        while IFS=$'\t' read -r asset_id asset_name || [[ -n "$asset_id" ]]; do
           [[ -n "$asset_id" ]] || continue
+          # Without a name the redirect would target the directory itself and
+          # fail with a message about a path nobody asked for.
+          if [[ -z "$asset_name" ]]; then
+            printf 'download plan entry %s has no asset name\n' "$asset_id" >&2
+            exit 1
+          fi
           gh api --method GET \
             -H 'Accept: application/octet-stream' \
             "repos/$RELEASE_REPOSITORY/releases/assets/$asset_id" \
