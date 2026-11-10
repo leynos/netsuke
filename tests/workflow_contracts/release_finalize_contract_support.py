@@ -56,6 +56,22 @@ STEP_NAMES = (VALIDATE_STEP, RESOLVE_STEP, SNAPSHOT_STEP, PLAN_STEP, FINALIZE_ST
 #: single mutating call. The resolver and the planner read local records.
 TOKEN_STEPS = (SNAPSHOT_STEP, FINALIZE_STEP)
 
+#: The whole-job ceiling the action's step ceiling must sit beneath. The pinned
+#: Cuprum release bounds no call in process, so a timeout is the only thing
+#: that stops a hung `gh` from holding the job open.
+JOB_TIMEOUT_MINUTES = 30
+
+#: The ceiling on the workflow step that invokes the composite action. It sits
+#: there rather than on the action's own steps because the runner does not
+#: support `timeout-minutes` inside a composite action (actions/runner#1979),
+#: which is why the action bounds each command with GNU `timeout` instead.
+FINALIZE_STEP_TIMEOUT_MINUTES = 28
+
+#: The longest per-command bound the action may give one adapter invocation.
+#: Four of them, at most, must fit under :data:`FINALIZE_STEP_TIMEOUT_MINUTES`;
+#: the contract sums them rather than trusting the individual caps to imply it.
+MAX_COMMAND_BOUND_SECONDS = 600
+
 EXPECTED_INPUTS = {
     "tag": True,
     "commit": True,
@@ -133,6 +149,15 @@ FINALIZE_COMMAND = [
 #: A finalizer that calls `gh` itself would put an unbounded, unparsed process
 #: in the step the adapter exists to keep shell-free.
 FORBIDDEN_IN_RUN = ("gh release", "gh api", "gh pr")
+
+#: The plan step deletes any earlier plan before planning. Without it a planner
+#: run that wrote nothing would leave the previous attempt's plan to be read as
+#: this run's answer.
+PLAN_RESET = 'rm -f "$WORK_DIRECTORY/plan.json"'
+#: The plan step refuses to report a plan path the run did not write. Its exit
+#: statuses cannot say a plan exists: `argparse` usage errors and `uv`
+#: resolution failures also exit 2, and an uncaught exception exits 1.
+PLAN_PRESENCE_GUARD = 'if [[ ! -f "$WORK_DIRECTORY/plan.json" ]]; then'
 EXPECTED_JOB_INPUTS = {
     "tag": "${{ needs.metadata.outputs.release_tag }}",
     "commit": "${{ needs.metadata.outputs.candidate_commit }}",
@@ -207,6 +232,16 @@ def mutate_action(action: dict[str, object], mutation: str) -> None:
                 for line in run.splitlines()
                 if not line.strip().startswith("timeout --kill-after=")
             )
+        case "aggregate-bound-exceeded":
+            resolve = named_step(steps, RESOLVE_STEP)
+            # Every bound stays inside its own cap; together they outlast the
+            # step that contains them.
+            resolve["run"] = str(resolve["run"]).replace(
+                "timeout --kill-after=30s 300s",
+                f"timeout --kill-after=30s {MAX_COMMAND_BOUND_SECONDS}s",
+            )
+        case "stale-plan-kept" | "missing-plan-guard":
+            _mutate_plan_step(steps, mutation)
         case "gh-in-run":
             finalize = named_step(steps, FINALIZE_STEP)
             finalize["run"] = f'{finalize["run"]}gh release delete "$RELEASE_TAG"\n'
@@ -217,6 +252,28 @@ def mutate_action(action: dict[str, object], mutation: str) -> None:
             )
         case other:
             pytest.fail(f"unknown action mutation {other!r}")
+
+
+def _mutate_plan_step(steps: list[dict[str, object]], mutation: str) -> None:
+    """Break one of the plan step's two guards against a plan-less run."""
+    plan = named_step(steps, PLAN_STEP)
+    match mutation:
+        case "stale-plan-kept":
+            # The earlier attempt's plan survives, so a planner run that wrote
+            # nothing would leave it to be read as this run's answer.
+            plan["run"] = "\n".join(
+                line
+                for line in str(plan["run"]).splitlines()
+                if line.strip() != PLAN_RESET
+            )
+        case "missing-plan-guard":
+            # The guard stays syntactically present but never fires, which is
+            # the shape of a check that was written and then disabled.
+            plan["run"] = str(plan["run"]).replace(
+                PLAN_PRESENCE_GUARD, "if false; then"
+            )
+        case other:
+            pytest.fail(f"unknown plan-step mutation {other!r}")
 
 
 def mutate_workflow(workflow: dict[str, object], mutation: str) -> None:

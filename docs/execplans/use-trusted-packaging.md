@@ -3714,6 +3714,70 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `make fmt`, `make spelling`, and `make lint-python` (Pylint 10.00/10) all
   exit 0.
 
+- [x] (2026-11-09) Closed the eleventh CodeRabbit pass on the finalization
+  stage: the aggregate timeout invariant, a planner run that records no plan,
+  and the public helpers' docstrings.
+
+  **The step ceiling was asserted but never summed.** Each adapter command was
+  capped at 600 s, and four of them at that cap total 40 minutes — more than
+  the 28-minute step and the 30-minute job. `_assert_command_bound` now returns
+  the bound, `_assert_action_contract` sums the four, and the contract requires
+  the total to stay under `FINALIZE_STEP_TIMEOUT_MINUTES * 60`. The
+  `aggregate-bound-exceeded` mutation keeps every command inside its own cap
+  and is caught by the sum alone.
+
+  **A planner exit status that wrote no plan was read as success.** The step
+  accepted `0`, `1`, and `2` and then published `plan-path`, but `argparse`
+  usage errors and `uv` resolution failures also exit `2`, and an uncaught
+  exception exits `1`. The step now deletes any earlier plan before running the
+  planner and refuses to report a path when the run wrote none, so the release
+  stays a draft and the diagnosis names the planner rather than the finalizer's
+  unreadable-JSON message. The `stale-plan-kept` and `missing-plan-guard`
+  mutations prove both assertions fire.
+
+  **The public helpers' docstrings carry their contracts.** `run_gh`,
+  `write_json`, `write_github_output`, `fail`, and the operations module's
+  public functions now document their parameters, return values, and the exit
+  statuses they can produce. Those statuses appear under *Notes*, not *Raises*:
+  Ruff's `docstring-extraneous-exception` (DOC503) accepts only an exception a
+  function raises literally, and each of these stops through `release_io.fail`,
+  which raises `SystemExit` on its behalf. Declaring `Raises: SystemExit` failed
+  `make lint` with four such diagnostics, and the module docstring now records
+  why the information lives under *Notes* rather than silencing the rule.
+
+- [x] (2026-11-09) Split two modules the docstring work pushed past Pylint's
+  `max-module-lines = 400`, and registered the new one everywhere the existing
+  finalizer modules are named.
+
+  The written contracts arrived with a size cost. Documenting every public
+  helper in `scripts/finalize_github_release_operations.py` took it to 493
+  lines and `tests/workflow_contracts/release_finalize_contract_test.py` to
+  454, and `make lint-python` reported `C0302` for both. Neither was fixed by
+  thinning the documentation: each was split on a boundary the code already had.
+
+  The operations module answered two questions — "may this release be
+  un-drafted, and with which flag" and "what did GitHub say, and what did this
+  run record". The second now lives in
+  `scripts/finalize_github_release_records.py` (302 and 258 lines), which owns
+  the two read-only operations and the three records, including the renamed
+  public `report_remote_failure`. The contract test likewise held the action's
+  own step assertions beside the job that calls it; those moved to
+  `tests/workflow_contracts/release_finalize_action_contract.py`, leaving 218
+  lines behind.
+
+  A new source module is a registration, not just a file.
+  `release_publication_modules.SOURCE_MODULES` must equal
+  `POLICY_MODULES | ADAPTER_MODULES` exactly, so the records module joined both
+  `SOURCE_MODULES` and the adapter side, and the `Makefile`'s
+  `test-release-publication` doctest list. That target asserts every named
+  source carries a docstring example, so `record_outcome` gained one; and
+  because the split moved `import json` out of the operations module, its
+  existing `candidate` example now imports `json` itself, exactly as the
+  earlier type-checking-import discovery predicted.
+
+  Evidence: `make lint-python`, `make test-workflow-contracts` (2068 passed, 3
+  skipped), and `make test-release-publication` (1169 passed).
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

@@ -12,7 +12,8 @@ the trusted digest. It never uploads, deletes, or clobbers an asset; a missing
 or conflicting asset is a refusal that leaves the release as a draft.
 
 Both properties are enforced below the command line, in
-``finalize_github_release_operations``; this module only names the three
+``finalize_github_release_operations`` and
+``finalize_github_release_records``; this module only names the three
 operations the composite action invokes and the options each one takes. The
 command set is therefore part of the action's contract, and the example below
 is what the action's coverage asserts:
@@ -47,6 +48,7 @@ import pathlib  # ruff: ignore[typing-only-standard-library-import]
 import typing as typ
 
 import finalize_github_release_operations as operations
+import finalize_github_release_records as records
 
 from cyclopts import App, Parameter
 
@@ -62,7 +64,7 @@ def resolve(
     output: typ.Annotated[pathlib.Path, Parameter(required=True)],
 ) -> None:
     """Record the candidate the package stage built, after checking its identity."""
-    operations.record_candidate(identity, tag=tag, commit=commit, output=output)
+    records.record_candidate(identity, tag=tag, commit=commit, output=output)
 
 
 @app.command
@@ -74,7 +76,7 @@ def snapshot(
     assets_path: typ.Annotated[pathlib.Path, Parameter(required=True)],
 ) -> None:
     """Record the release's draft flag, prerelease flag, and reported digests."""
-    operations.record_snapshot(
+    records.record_snapshot(
         tag, repository, state_path=state_path, assets_path=assets_path
     )
 

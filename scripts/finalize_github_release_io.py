@@ -17,6 +17,12 @@ around its adapter invocation: the pinned Cuprum release has no in-process
 timeout, and the runner does not support ``timeout-minutes`` inside a
 composite action.
 
+Every helper that stops a run does so through :func:`fail`, which raises
+``SystemExit``. Those exit statuses are the workflow's contract, so each
+function documents the one it can produce under *Notes* rather than *Raises*:
+the project's ``docstring-extraneous-exception`` rule accepts only an
+exception a function raises literally, and these stop through a call.
+
 Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 ``scripts/tests/test_finalize_github_release_publish.py``.
 """
@@ -56,6 +62,14 @@ VIEW_FIELDS = "tagName,isDraft,isPrerelease,assets"
 def fail(code: int, message: str) -> typ.NoReturn:
     """Write one diagnosis to standard error and stop with ``code``.
 
+    Parameters
+    ----------
+    code
+        The exit status the workflow step reports.
+    message
+        The diagnosis to write. It names what failed and, where the distinction
+        matters to an operator, whether the release remains a draft.
+
     Raises
     ------
     SystemExit
@@ -80,13 +94,26 @@ def fail(code: int, message: str) -> typ.NoReturn:
 def run_gh(*arguments: str, echo: bool = False) -> CommandResult:
     """Run one allowlisted GitHub CLI command.
 
+    Parameters
+    ----------
+    *arguments
+        The arguments to ``gh``, one element each, so neither a tag nor a
+        repository name can become a second command or a flag.
+    echo
+        Whether Cuprum echoes the command before running it. The single
+        mutating call sets it, so the log names what changed the release.
+
     Returns
     -------
     CommandResult
         The captured output and exit status from ``gh``.
 
-    A failed launch stops the run through :func:`fail` with
-    :data:`EXIT_REMOTE_FAILED`, because no answer was produced to act on.
+    Notes
+    -----
+    A launch that fails stops the run with :data:`EXIT_REMOTE_FAILED`, because
+    no answer was produced to act on. A command that runs and exits non-zero is
+    not a failure here: its status and stderr are the answer, and the caller
+    decides what a given status means.
 
     Examples
     --------
@@ -106,10 +133,21 @@ def run_gh(*arguments: str, echo: bool = False) -> CommandResult:
 def read_json(path: pathlib.Path) -> object:
     """Decode one JSON input, stopping when it cannot be read.
 
+    Parameters
+    ----------
+    path
+        The record to decode, which this stage only ever reads.
+
     Returns
     -------
     object
-        The decoded value, unvalidated.
+        The decoded value, unvalidated: each reader checks the shape it needs,
+        because "valid JSON" and "a usable record" are different claims.
+
+    Notes
+    -----
+    A file that is absent, is not text, or does not parse stops the run with
+    :data:`EXIT_INPUT_UNREADABLE`.
 
     Examples
     --------
@@ -131,9 +169,31 @@ def write_json(path: pathlib.Path, value: object, *, context: str = "") -> None:
     The temporary path is a sibling of ``path``, so the replacement stays on
     one filesystem and a reader never observes a partially written record.
 
-    ``context`` is appended to the failure diagnosis. A record written after
-    an irreversible step needs it: an operator reading "could not be written"
-    alone cannot tell whether the release was left a draft.
+    Parameters
+    ----------
+    path
+        The record's final location. Its parent must exist.
+    value
+        The value to encode, as indented and key-sorted JSON, so two runs that
+        decide the same thing record byte-identical files.
+    context
+        A sentence appended to the failure diagnosis. A record written after an
+        irreversible step needs one: an operator reading "could not be written"
+        alone cannot tell whether the release was left a draft.
+
+    Notes
+    -----
+    A record that cannot be staged or moved into place stops the run with
+    :data:`EXIT_OUTPUT_UNWRITABLE`: a run whose decision cannot be recorded
+    must not report success and leave the next attempt to guess.
+
+    Examples
+    --------
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     target = pathlib.Path(directory) / "plan.json"
+    ...     write_json(target, {"actions": []})
+    ...     json.loads(target.read_text(encoding="utf-8"))
+    {'actions': []}
     """
     text = json.dumps(value, indent=2, sort_keys=True) + "\n"
     try:
@@ -151,7 +211,26 @@ def write_json(path: pathlib.Path, value: object, *, context: str = "") -> None:
 def write_github_output(
     path: pathlib.Path | None, outcome: str, *, is_prerelease: bool
 ) -> None:
-    """Publish the step's two outputs when the workflow asked for them."""
+    """Publish the step's two outputs when the workflow asked for them.
+
+    Parameters
+    ----------
+    path
+        The workflow's output file, or ``None`` when the step asked for no
+        outputs, which is why a missing destination is not a failure here.
+    outcome
+        ``finalized`` or ``already-finalized``: which of the two ways this run
+        left the release public.
+    is_prerelease
+        The validated candidate's prerelease state, written as ``true`` or
+        ``false`` rather than Python's capitalised spelling.
+
+    Notes
+    -----
+    A file that cannot be appended to stops the run with
+    :data:`EXIT_OUTPUT_UNWRITABLE`. The release is already public at that
+    point, so the diagnosis says so: the outcome is lost, not the publication.
+    """
     if path is None:
         return
     flag = "true" if is_prerelease else "false"

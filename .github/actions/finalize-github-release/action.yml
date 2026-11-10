@@ -182,6 +182,10 @@ runs:
         # write the plan, and the finalize step turns that plan into the
         # diagnosis, so only a run that produced no plan stops here.
         set +e
+        # A plan left by an earlier attempt must not outlive a run that wrote
+        # none: the presence check below would read the stale file as this
+        # run's answer, and the finalizer would act on a plan for other bytes.
+        rm -f "$WORK_DIRECTORY/plan.json"
         timeout --kill-after=30s 300s \
           uv run --no-project --python 3.14 scripts/finalize_github_release_cli.py \
             --identity "$DIGEST_RECORD_PATH" \
@@ -203,6 +207,15 @@ runs:
             exit 1
             ;;
         esac
+        # The status alone cannot say a plan exists: `argparse` usage errors and
+        # `uv` resolution failures also exit 2, and an uncaught exception exits
+        # 1. Reporting the plan's path without checking would pass the step and
+        # leave the finalizer diagnosing an absent file as unreadable JSON.
+        if [[ ! -f "$WORK_DIRECTORY/plan.json" ]]; then
+          printf 'the planner exited %s without recording a plan; ' "$status" >&2
+          printf 'the release remains a draft\n' >&2
+          exit 1
+        fi
         printf 'plan-path=%s\n' "$WORK_DIRECTORY/plan.json" >>"$GITHUB_OUTPUT"
 
     - name: Finalize the release

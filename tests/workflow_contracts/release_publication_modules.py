@@ -108,6 +108,7 @@ SOURCE_MODULES = (
     "scripts/finalize_github_release_io.py",
     "scripts/finalize_github_release_operations.py",
     "scripts/finalize_github_release_plan.py",
+    "scripts/finalize_github_release_records.py",
     "scripts/finalize_github_release_state.py",
     "scripts/release_inventory.py",
     "scripts/release_semver.py",
@@ -212,6 +213,7 @@ ADAPTER_MODULES = (
     "scripts/finalize_github_release.py",
     "scripts/finalize_github_release_io.py",
     "scripts/finalize_github_release_operations.py",
+    "scripts/finalize_github_release_records.py",
     "scripts/release_digest_files.py",
     "scripts/release_registry_response.py",
     "scripts/release_declaration_cli.py",
@@ -272,7 +274,9 @@ NETWORK_FREE_MODULES = tuple(
 #: view`` and ``gh release edit``, the publication boundary: it may be the last
 #: step to touch a release, and it must never upload. Every ``gh`` call in the
 #: release path belongs to one of those boundaries. A new entry here is a
-#: reviewed decision, not a registration.
+#: reviewed decision, not a registration. The finalizer's CLI, operations,
+#: and records modules sit above that boundary and issue no process of
+#: their own.
 PROCESS_MODULES = {
     "scripts/ensure_draft_release.py": "runs `gh release create`, the draft boundary",
     "scripts/package_crate_cli.py": "runs `cargo package`, a local build",

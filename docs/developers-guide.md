@@ -3445,7 +3445,12 @@ comes from the build.
 instead, whose own statuses are in Table 10, and reads `0`, `1`, and `2` as
 normal: a conflict and a missing asset are both decisions the finalize step
 turns into a diagnosis, and only a run whose planner could not record a plan
-stops there.
+stops there. The status alone cannot say a plan exists, because an `argparse`
+usage error and a `uv` resolution failure also exit `2` and an uncaught
+exception exits `1`. The step therefore deletes any plan an earlier attempt
+left behind before it runs the planner, and refuses to report a plan path if
+the run wrote no plan — otherwise a stale file, or an absent one, would be read
+as this run's answer and the diagnosis would name the wrong stage.
 
 | Exit | Meaning                                                      |
 | ---- | ------------------------------------------------------------ |
