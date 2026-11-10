@@ -3544,9 +3544,12 @@ those operations at the file or transport boundary:
   `settle_observation` takes the expected mapping as well as the observation:
   an observation says what the release holds, while what the payload should
   hold is the caller's, and a plan derived from the listing alone would decide
-  about names nobody declared. `upload_declared_assets_cli.settle` calls the
-  two separately around its transfer, because the re-read after an upload is a
-  second observation of the same release and not a second decision procedure.
+  about names nobody declared. Nothing in the module composes the two:
+  `upload_declared_assets_cli.settle` calls them separately around its
+  transfer, because the re-read after an upload is a second observation of the
+  same release and not a second decision procedure. A convenience wrapper
+  taking both in one call would hide the one effectful half at exactly the call
+  site the split exists to keep honest.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
 

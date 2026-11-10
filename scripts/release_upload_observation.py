@@ -13,8 +13,9 @@ downloaded is not decided in the boundary: it is
 :func:`release_reconcile_github.undigested`' answer, and the download is
 skipped entirely when that answer is empty.
 
-:func:`reconcile` composes the two for the caller that wants both, so the CLI
-states its orchestration once rather than restating the wiring at each site.
+No function here composes the two. An upload run has to decide, transfer, and
+then look again, so the caller does that orchestration itself and this module
+stays the two separable halves it is made of.
 
 An observation carries more than digests. Where a digest could not be
 established, :class:`release_upload_failures.DigestFailure` records which kind
@@ -45,7 +46,6 @@ __all__ = [
     "Settlement",
     "observe_release",
     "plan_release",
-    "reconcile",
     "settle_observation",
     "should_upload",
 ]
@@ -177,56 +177,6 @@ def plan_release(
     """
     return release_reconcile_github.plan_asset_actions(
         expected=expected, present=observed
-    )
-
-
-def reconcile(
-    tag: str, expected: cabc.Mapping[str, str], *, runner: SubprocessRunner
-) -> Settlement:
-    """Observe the release and plan its declared assets in one pass.
-
-    Parameters
-    ----------
-    tag
-        The validated release tag to observe.
-    expected
-        Published name mapped to the digest the trusted record demands.
-    runner
-        The injected subprocess seam.
-
-    Returns
-    -------
-    Settlement
-        The per-asset plan and the bounded reasons behind any asset whose
-        digest could not be established.
-
-    Notes
-    -----
-    :func:`observe_release` is the only function here that reaches outside the
-    process; this one composes it with the pure :func:`plan_release` and exists
-    so a caller that wants both states the wiring once. The failure
-    categories travel with the plan because they live only in the observation;
-    a caller given the plan alone could say an asset was unverifiable but not
-    whether the remedy is a retry. A caller that needs to interleave a transfer
-    between the effect and the decision calls this function once before the
-    transfer and once after, as :func:`upload_declared_assets_cli.settle` does
-    across its re-read.
-
-    Examples
-    --------
-    An asset the release has not attached is planned for upload:
-
-    >>> settlement = reconcile(
-    ...     "v1", {"a": "aa"},
-    ...     runner=release_upload_remote.StaticRunner('{"assets": []}'),
-    ... )
-    >>> [action.value for _name, action in settlement.actions]
-    ['upload']
-    >>> settlement.failures
-    {}
-    """
-    return settle_observation(
-        observe_release(tag, expected, runner=runner), expected=expected
     )
 
 

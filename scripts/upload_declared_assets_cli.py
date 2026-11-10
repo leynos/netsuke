@@ -267,21 +267,17 @@ def settle(
     Returns
     -------
     release_upload_observation.Settlement
-        The final per-asset plan, sorted by name, and the bounded reasons for
-        any asset whose digest could not be established.
+        The final plan, and the bounded reasons behind any unverified asset.
 
     Notes
     -----
-    :func:`verified_payload` runs before the first network call. The release
-    is re-listed after the upload, so the returned plan describes what GitHub
-    actually holds rather than what was sent. Every conflict is reported
-    before any upload, so a run with one conflicting asset publishes none of
-    the others.
-
-    The reasons describe the same listing the returned plan does: after a
-    transfer they come from the re-read release, not from the one that was
-    missing the asset, so a failure to establish a digest after the upload is
-    not confused with the absence that caused it.
+    :func:`verified_payload` runs before the first network call, and every
+    conflict is reported before any upload, so one conflicting asset publishes
+    none of the others. The two halves stay spelled out rather than folded into
+    one call: `observe_release` alone touches the network or the filesystem, and
+    `settle_observation` reads what it returns and nothing else. Observing again
+    after the transfer is what makes the returned plan describe what GitHub
+    holds now.
 
     Examples
     --------
@@ -311,20 +307,26 @@ def settle(
     ['upload']
     """
     expected = verified_payload(request)
-    settlement = release_upload_observation.reconcile(
-        request.tag, expected, runner=runner
+    settlement = release_upload_observation.settle_observation(
+        release_upload_observation.observe_release(
+            request.tag, expected, runner=runner
+        ),
+        expected=expected,
     )
     pending = release_reconcile_github.uploads(settlement.actions)
-    if not release_upload_observation.should_upload(
-        request, settlement.actions, pending
-    ):
-        return settlement
-    release_upload_remote.upload(
-        request.tag, pending, request.payload_dir, runner=runner
-    )
-    # A second observation of the same release, not a second decision
-    # procedure: the returned plan has to describe what GitHub holds now.
-    return release_upload_observation.reconcile(request.tag, expected, runner=runner)
+    if release_upload_observation.should_upload(request, settlement.actions, pending):
+        release_upload_remote.upload(
+            request.tag, pending, request.payload_dir, runner=runner
+        )
+        # A second observation of the same release, not a second decision
+        # procedure: the returned plan has to describe what GitHub holds now.
+        return release_upload_observation.settle_observation(
+            release_upload_observation.observe_release(
+                request.tag, expected, runner=runner
+            ),
+            expected=expected,
+        )
+    return settlement
 
 
 def verified_payload(request: UploadRequest) -> dict[str, str]:
