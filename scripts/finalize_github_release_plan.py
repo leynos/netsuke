@@ -115,6 +115,37 @@ def _plan_rows(plan: cabc.Mapping[str, object]) -> tuple[tuple[str, str], ...]:
     return tuple(rows)
 
 
+def _is_asset_name(value: object) -> bool:
+    """Report whether a decoded value is a usable asset name.
+
+    Returns
+    -------
+    bool
+        ``True`` for a non-empty string, which is the only shape an asset name
+        takes once decoded.
+    """
+    if not isinstance(value, str):
+        return False
+    return bool(value)
+
+
+def _asset_names(raw: object) -> list[str] | None:
+    """Return the decoded names when ``raw`` is a list of asset names.
+
+    Returns
+    -------
+    list[str] | None
+        The names, or ``None`` when the value is some other shape. Returning
+        the decoded list rather than a verdict keeps the caller from having to
+        re-check a value it has just been told is sound.
+    """
+    if not isinstance(raw, list):
+        return None
+    if not all(_is_asset_name(name) for name in raw):
+        return None
+    return raw
+
+
 def _named(plan: cabc.Mapping[str, object], member: str) -> tuple[str, ...]:
     """Decode one optional list of asset names from the plan.
 
@@ -135,13 +166,11 @@ def _named(plan: cabc.Mapping[str, object], member: str) -> tuple[str, ...]:
     >>> _named({"conflicts": ["a"]}, "conflicts")
     ('a',)
     """
-    raw = plan.get(member, [])
-    if not isinstance(raw, list) or not all(
-        isinstance(name, str) and name for name in raw
-    ):
+    names = _asset_names(plan.get(member, []))
+    if names is None:
         msg = f"the plan's {member} member is not a list of asset names"
         raise FinalizePolicyError(msg)
-    return tuple(raw)
+    return tuple(names)
 
 
 def _selected(
@@ -210,6 +239,24 @@ def assess_plan(plan: object) -> PlanAssessment:
         )
     except FinalizePolicyError as error:
         return PlanAssessment(PlanVerdict.UNREADABLE, detail=str(error))
+    return _verdict(rows, conflicts, unverifiable)
+
+
+def _verdict(
+    rows: tuple[tuple[str, str], ...],
+    conflicts: tuple[str, ...],
+    unverifiable: tuple[str, ...],
+) -> PlanAssessment:
+    """Return the assessment a decoded plan's rows and name lists support.
+
+    Returns
+    -------
+    PlanAssessment
+        The verdict and the names that justify it. The order of the checks is
+        the policy: no decisions at all is refused before any finding is read,
+        because emptiness cannot be told apart from a plan nothing was checked
+        against, and the two refusals outrank an upload.
+    """
     if not rows:
         return PlanAssessment(
             PlanVerdict.REFUSED,

@@ -87,6 +87,69 @@ def _asset_digest(asset: cabc.Mapping[str, object]) -> str | None:
     return digest if isinstance(digest, str) else None
 
 
+def _listed_assets(raw_assets: object) -> list[object]:
+    """Require the response to carry the asset list GitHub documents.
+
+    Returns
+    -------
+    list[object]
+        The listed entries, still undecoded.
+
+    Raises
+    ------
+    FinalizePolicyError
+        If the response carries no list where the assets belong.
+
+    Examples
+    --------
+    >>> _listed_assets([{"name": "a"}])
+    [{'name': 'a'}]
+    """
+    if not isinstance(raw_assets, list):
+        msg = "the release response does not carry an assets list"
+        raise FinalizePolicyError(msg)
+    return raw_assets
+
+
+def _asset_object(asset: object) -> cabc.Mapping[str, object]:
+    """Require one listed asset to be a JSON object.
+
+    Returns
+    -------
+    cabc.Mapping[str, object]
+        The entry, readable by field name.
+
+    Raises
+    ------
+    FinalizePolicyError
+        If the entry is not an object.
+    """
+    if not isinstance(asset, cabc.Mapping):
+        msg = f"the release asset {asset!r} is not a JSON object"
+        raise FinalizePolicyError(msg)
+    return asset
+
+
+def _asset_name(asset: cabc.Mapping[str, object]) -> str:
+    """Require one asset object to name itself.
+
+    Returns
+    -------
+    str
+        The non-empty name the entry reported.
+
+    Raises
+    ------
+    FinalizePolicyError
+        If the entry carries no usable name.
+    """
+    name = asset.get("name")
+    if not isinstance(name, str) or not name:
+        msg = f"the release asset {asset!r} does not name an asset"
+        raise FinalizePolicyError(msg)
+    return name
+
+
 def _asset_map(raw_assets: object) -> dict[str, str | None]:
     """Decode the response's asset list into a name-to-digest mapping.
 
@@ -111,18 +174,10 @@ def _asset_map(raw_assets: object) -> dict[str, str | None]:
     >>> _asset_map([{"name": "a", "digest": "sha256:ab"}])
     {'a': 'sha256:ab'}
     """
-    if not isinstance(raw_assets, list):
-        msg = "the release response does not carry an assets list"
-        raise FinalizePolicyError(msg)
     assets: dict[str, str | None] = {}
-    for asset in raw_assets:
-        if not isinstance(asset, cabc.Mapping):
-            msg = f"the release asset {asset!r} is not a JSON object"
-            raise FinalizePolicyError(msg)
-        name = asset.get("name")
-        if not isinstance(name, str) or not name:
-            msg = f"the release asset {asset!r} does not name an asset"
-            raise FinalizePolicyError(msg)
+    for listed in _listed_assets(raw_assets):
+        asset = _asset_object(listed)
+        name = _asset_name(asset)
         if name in assets:
             msg = f"the release response names the asset {name!r} more than once"
             raise FinalizePolicyError(msg)
