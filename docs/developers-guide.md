@@ -3312,8 +3312,8 @@ written and tested but are not yet wired into `release.yml`, so today the
 record is retained past the upload rather than consumed by them.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
-2. `select_release_payload_cli` hashes the sources it approves and writes
-   `selection.json` before copying them.
+2. `select_release_payload_cli` hashes the sources it approves, copies them,
+   and writes `selection.json` only once the copy has succeeded.
 3. `release_declaration_cli --digest-record` writes its own record from the
    staged tree, and `upload_declared_assets_cli` requires the two records to
    name the same bytes.
