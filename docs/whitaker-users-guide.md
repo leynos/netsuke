@@ -67,7 +67,7 @@ This:
 
 After installation, run `whitaker --all` in any Rust project to lint it. That
 is again upstream's default, which loads every installed library; Netsuke runs
-the suite alone instead, as the note below explains. Use `whitaker-ls` to list
+the suite alone instead, as the note below explains. Run `whitaker-ls` to list
 the installed Whitaker suite libraries.
 
 > **Netsuke deviation from upstream — preserve when re-importing this guide.**

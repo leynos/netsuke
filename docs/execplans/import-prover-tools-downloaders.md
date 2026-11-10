@@ -455,6 +455,13 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       Whitaker operator has cases for a recipe-line reference and `+=`, and
       the Verus property cases report fixture errors as case failures. See
       Revision 61.
+- [x] (2026-11-10) Close the review at `cfdd1563f`. `kani-check` now refuses
+      an unset `KANI_HOME` with an empty `HOME` as `home-unresolvable`, because
+      the `$HOME/.kani` fallback would otherwise inspect `/.kani`, a directory
+      no launcher derives; the category has a regression case and a documented
+      entry. The guide's `whitaker-ls` sentence and the Outcomes summary now
+      name what they mean, the summary extending through Revision 61. See
+      Revision 62.
 
 ## Surprises & discoveries
 
@@ -667,7 +674,7 @@ lane rather than skipping. Version checking is described as the local read-only
 
 The gate evidence above is historical: it is the Revision 41 sweep, and it was
 collected before the review at `5808594893` and the CodeScene delta on
-`adeb43dd6` raised their findings. Ten further candidates have since been
+`adeb43dd6` raised their findings. Fourteen further candidates have since been
 gated, each recording its own evidence at its own revision entry: Revision 49
 for those findings, Revision 50 after the rebase onto `main` at `6ff836603`,
 Revision 51 for the review at `5816957501`, Revision 52 for the Whitaker
@@ -675,11 +682,14 @@ duplicate-registration repair, Revision 53 for the `string-continuation- style`
 repair and the contract-test split, Revision 54 for the review at `5819530205`,
 Revision 55 for the runtime trace reader, Revision 56 for the
 installed-verifier query inside the boundary, Revision 57 for the control
-recipe that discards a write and a directory creation, and Revision 58 for the
-payload refusal and the syscall classes. The Revision 41 run quoted at the
-start of this section is the earliest of them and describes neither the current
-head nor the current gate set. Review at the current head and trusted-main
-warm-cache acceptance remain open.
+recipe that discards a write and a directory creation, Revision 58 for the
+payload refusal and the syscall classes, Revision 59 for the review at
+`715970069`, Revision 60 for its eight inline findings and the removed-guard
+check, Revision 61 for the review at `1f38b9e91` and the CodeScene
+string-argument repair, and Revision 62 for the review at `cfdd1563f`. The
+Revision 41 run quoted at the start of this section is the earliest of them and
+describes neither the current head nor the current gate set. Review at the
+current head and trusted-main warm-cache acceptance remain open.
 
 ## Context and orientation
 
@@ -2264,6 +2274,29 @@ needed Ruff's ordering, `_run_step` held twelve locals once it read the marker,
 and one assertion message reached 89 columns. Writing the stubs and the
 environment into their own helpers, and letting Ruff order the imports, cleared
 all three. All nine commit gates exited `0` on `5d9a6b6cf`.
+
+Revision 62 (2026-11-10): The review at `cfdd1563f`, taken on the work Revision
+61 recorded, raised two inline findings and two outside the diff. `kani-check`
+gained the `home-unresolvable` refusal: an unset `KANI_HOME` with an empty
+`HOME` left the `${HOME:-}/.kani` fallback naming `/.kani`, so the guard would
+clear a directory the launcher never reads. That is the same guard-and-launcher
+mismatch `kani-home-empty` removes, one step later, and it matters more than a
+cosmetic refusal: a payload found there says nothing about the installation the
+query is about to run. `kani_check_refuses_an_unresolvable_home` blanks both
+variables on the child process and asserts the category and an untouched
+verifier, and the developers' guide lists the category beside the others. The
+guide's `whitaker-ls` sentence now opens with `Run` rather than `Use`, which is
+what LanguageTool's false positive on `Use to` was reaching for; no repository
+gate runs LanguageTool, so the reword is for the reader rather than for a
+check. The Outcomes summary ended at Revision 58 while the document had
+recorded three more, so it now names Revisions 59 to 62 and counts fourteen
+gated candidates rather than ten. The remaining outside-diff finding, that
+Revision 61's date should be 9 November, does not hold: the commit is dated
+`2026-11-10 00:09:04 +0100`, every revision date in this document is a local
+one, and the review that raised it ran at 23:20 UTC. All nine commit gates
+exited `0`, from check-fmt at 23:50Z to test-kani-check-isolation at 00:21Z.
+The batch's first attempt failed at check-fmt because mdtablefix reflowed both
+edited documents, and `make fmt` supplied the layout it wanted.
 
 Keep Status: IN PROGRESS pending review at the new head and trusted-main
 warm-cache acceptance.

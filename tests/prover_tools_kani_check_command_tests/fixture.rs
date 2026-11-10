@@ -119,6 +119,16 @@ impl FakeKani {
     /// The home is a parameter rather than always this fixture's own so a case
     /// can name an empty value, which is the one setting the recipe refuses.
     pub(crate) fn command_with_kani_home(&self, home: &Path) -> Command {
+        let mut command = self.command_without_kani_home();
+        command.arg(format!("KANI_HOME={}", home.display()));
+        command
+    }
+
+    /// Build an invocation that leaves `KANI_HOME` unset.
+    ///
+    /// The recipe falls back to `$HOME/.kani` in that case, so a case can blank
+    /// `HOME` too and leave the fallback with nothing to resolve.
+    pub(crate) fn command_without_kani_home(&self) -> Command {
         let mut command = Command::new("make");
         command
             .arg("--no-print-directory")
@@ -126,7 +136,7 @@ impl FakeKani {
             .arg("Makefile")
             .arg(format!("KANI={}", self.executable.display()))
             .arg(format!("KANI_VERSION_FILE={}", self.version_file.display()))
-            .arg(format!("KANI_HOME={}", home.display()));
+            .env_remove("KANI_HOME");
         command
     }
 

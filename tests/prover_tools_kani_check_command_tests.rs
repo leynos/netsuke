@@ -226,6 +226,38 @@ fn kani_check_refuses_an_empty_kani_home() -> Result<()> {
     Ok(())
 }
 
+/// Check that an unset `KANI_HOME` with no `HOME` is refused.
+///
+/// The recipe falls back to `$HOME/.kani`, so without either variable it would
+/// inspect `/.kani` — a path no launcher derives from an empty environment. The
+/// guard would then clear a directory the verifier never reads, which is the
+/// same guard-and-launcher mismatch `kani-home-empty` removes. The variables are
+/// set on the child process, which is the only environment mutation this suite
+/// performs.
+#[test]
+fn kani_check_refuses_an_unresolvable_home() -> Result<()> {
+    let fake = FakeKani::new("0.67.0", Behaviour::Reports("0.67.0"))?;
+
+    let output = fake
+        .command_without_kani_home()
+        .env("HOME", "")
+        .arg("kani-check")
+        .output()
+        .context("run make kani-check with neither Kani home nor HOME")?;
+
+    ensure!(!output.status.success(), "an unresolvable home should fail");
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains("category=home-unresolvable"),
+        "the diagnostic should carry a stable category, got `{stderr}`"
+    );
+    ensure!(
+        fake.invocation_args()?.is_empty(),
+        "the verifier must not run when the home cannot be resolved"
+    );
+    Ok(())
+}
+
 /// Check that the query never reaches the network, a cache, or the remote
 /// runner, even when such a call would fail silently.
 ///

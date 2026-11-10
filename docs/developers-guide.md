@@ -5839,21 +5839,24 @@ Use the Make targets for day-to-day formal-verification checks:
   `make install-kani` instead of becoming an installer. It refuses a
   `KANI_HOME` that is set but empty as `kani-home-empty`: the launcher reads an
   empty value as the current directory, while a shell default would read it as
-  `$HOME/.kani`, so the guard and the launcher would inspect different homes. A
-  version mismatch, a failing verifier, or unparsable output fails the target.
-  Every failure names a stable `category=` — `pin-unreadable`,
-  `kani-home-empty`, `payload-missing`, `verifier-failed`,
-  `version-unparsable`, or `version-mismatch` — so a caller can branch on the
-  cause without parsing prose. The only text it takes from the verifier is the
-  version token it extracts: the `found` value of a mismatch, and the version
-  named by the success line, so a verifier reporting `kani 0.66.0` against a
-  0.67.0 pin prints `found 0.66.0`. The `kani-version=` field is the expected
-  pin as read from the file, not a value taken from the verifier. The text that
-  token was extracted from is never echoed. It comes from an external binary so
-  it could carry a credential, forge a log line, or flood a terminal, and no
-  amount of bounding or escaping makes arbitrary text safe to print. The
-  extracted version, the category, and the exit status are the actionable
-  facts; re-running the verifier by hand supplies anything else.
+  `$HOME/.kani`, so the guard and the launcher would inspect different homes.
+  It refuses an unset `KANI_HOME` together with an empty or unset `HOME` as
+  `home-unresolvable`, for the same reason: the fallback would name `/.kani`,
+  which no launcher derives, so the guard would report on a directory the
+  verifier never reads. A version mismatch, a failing verifier, or unparsable
+  output fails the target. Every failure names a stable `category=` —
+  `pin-unreadable`, `kani-home-empty`, `home-unresolvable`, `payload-missing`,
+  `verifier-failed`, `version-unparsable`, or `version-mismatch` — so a caller
+  can branch on the cause without parsing prose. The only text it takes from
+  the verifier is the version token it extracts: the `found` value of a
+  mismatch, and the version named by the success line, so a verifier reporting
+  `kani 0.66.0` against a 0.67.0 pin prints `found 0.66.0`. The `kani-version=`
+  field is the expected pin as read from the file, not a value taken from the
+  verifier. The text that token was extracted from is never echoed. It comes
+  from an external binary so it could carry a credential, forge a log line, or
+  flood a terminal, and no amount of bounding or escaping makes arbitrary text
+  safe to print. The extracted version, the category, and the exit status are
+  the actionable facts; re-running the verifier by hand supplies anything else.
 - `make kani-full` runs the complete Kani proof suite through that active-home
   `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.

@@ -704,12 +704,21 @@ install-kani: ## Install the pinned Kani verifier
 # default would resolve it to `$HOME/.kani`: the guard would pass on one
 # directory while the launcher installed into another. A `KANI_HOME` that is set
 # but empty is therefore refused rather than guessed at.
+#
+# An unset `KANI_HOME` with no `HOME` to fall back on is refused for the same
+# reason one step later. The fallback below would build `/.kani`, a path no
+# launcher derives, so the guard would report on a directory the verifier never
+# reads: an absent payload there says nothing about the installation in use.
 kani-check: ## Check the installed Kani verifier version
 	@version_file='$(subst ','"'"',$(KANI_VERSION_FILE))'; \
 	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check category=pin-unreadable could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
 	printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$expected" >&2; \
 	if [ -n "$${KANI_HOME+set}" ] && [ -z "$${KANI_HOME}" ]; then \
 		printf 'prover-tools: target=kani-check category=kani-home-empty KANI_HOME is set but empty; cargo-kani reads that as the current directory, so name the home that holds the payload or unset it\n' >&2; \
+		exit 1; \
+	fi; \
+	if [ -z "$${KANI_HOME+set}" ] && [ -z "$${HOME:-}" ]; then \
+		printf 'prover-tools: target=kani-check category=home-unresolvable KANI_HOME is unset and HOME is empty, so the Kani home cannot be resolved; set KANI_HOME to the home that holds the payload, or set HOME\n' >&2; \
 		exit 1; \
 	fi; \
 	kani_home="$${KANI_HOME:-$${HOME:-}/.kani}"; \
