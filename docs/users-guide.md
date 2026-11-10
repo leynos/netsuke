@@ -2052,10 +2052,14 @@ because environment variable names routinely identify credentials.
 
 #### Manifest schema-admission metrics
 
-Every document that reaches schema admission counts one decision against its
-declared `netsuke_version` in a single bounded series. Two failures return
-before that point and are therefore not counted: YAML that does not parse, and
-a manifest refused by the source-size budget. A non-mapping root does reach the
+Every *command* load that reaches schema admission counts one decision against
+its declared `netsuke_version` in a single bounded series. Three things are
+therefore not counted. YAML that does not parse, and a manifest refused by the
+source-size budget, both return before the gate. Discovery queries and
+`netsuke test` runs reach the gate but do not count: they are not admissions of
+a user's manifest, so counting them would inflate both terms of a refusal rate.
+The gate still validates those loads, so a query naming an unsupported schema
+still fails — only the counting is withheld. A non-mapping root does reach the
 gate and is counted as admitted:
 
 - `netsuke_manifest_schema_admissions_total` — a counter with a single `outcome`
@@ -2069,8 +2073,10 @@ gate and is counted as admitted:
 The six outcomes are the complete vocabulary. The declared version text, the
 manifest path, and the manifest body never appear in the label, so an operator
 can count version faults without collecting the versions themselves. The
-decision is recorded before it becomes a diagnostic, so each load increments
-exactly one series even though the manifest stops loading on a rejection.
+decision is recorded before it becomes a diagnostic, so each counted load
+increments exactly one series even though the manifest stops loading on a
+rejection. Read the counter as a count of command-load admission decisions —
+never as a denominator for total load attempts.
 
 The annotated [sample configuration](sample-netsuke.toml) lists every key. A
 small project configuration looks like this:

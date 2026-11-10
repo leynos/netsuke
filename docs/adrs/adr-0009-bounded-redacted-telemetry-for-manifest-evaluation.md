@@ -201,11 +201,16 @@ secret material. The accompanying `tracing` event records the same bounded
 
 ## Addendum — 2026-11-05: Manifest schema-admission boundary
 
-The manifest schema-version gate now counts every admission decision at the
-gate itself. `parse_admitted_document` in `src/manifest/mod.rs` records the
-decision returned by `schema_version::admit_document` before mapping a
-rejection into `ManifestError::Parse`, so the counter observes the rejections
-that abort the load rather than only the loads that survive.
+The manifest schema-version gate now counts every command-load admission
+decision at the gate itself. `parse_admitted_document` in `src/manifest/mod.rs`
+records the decision returned by `schema_version::admit_document` before
+mapping a rejection into `ManifestError::Parse`, so the counter observes the
+rejections that abort the load rather than only the loads that survive.
+Recording is gated on `StdlibRegistration::records_schema_admission`, which is
+true for `AmbientFull` and `Full` only: discovery queries and `netsuke test`
+runs share this loader and reach the same gate, but they are not admissions of
+a user's manifest, so the counter measures command-load admissions rather than
+load attempts.
 
 `src/manifest/schema_version/telemetry.rs::record_admission` returns the
 decision unchanged and increments `netsuke_manifest_schema_admissions_total`,

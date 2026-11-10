@@ -11937,8 +11937,9 @@ recording is a boundary observer rather than part of the predicate.
 
 Recording before the diagnostic is what keeps the count exact. A rejection
 aborts the load, so a counter placed after the error mapping would never run
-for the cases the series exists to measure. Every load that reaches the
-admission gate therefore increments exactly one series, admitted or not.
+for the cases the series exists to measure. Every *recording* load that reaches
+the admission gate therefore increments exactly one series, admitted or not.
+Which loads record is decided by the registration, below.
 
 Two earlier failures return before `record_admission` and increment nothing: a
 YAML document that does not parse, and a manifest refused by the source-size

@@ -11,6 +11,7 @@ use super::super::{
     from_path_for_manifest_query, from_str_with_limits, from_str_with_options,
 };
 use crate::stdlib::StdlibConfig;
+use crate::test_tracing_capture::with_test_subscriber;
 use anyhow::{Context, Result as AnyResult, anyhow, ensure};
 use metrics::SharedString;
 use metrics_util::{
@@ -19,8 +20,16 @@ use metrics_util::{
 };
 use tempfile::tempdir;
 use test_support::fs as test_fs;
+use tracing_subscriber::filter::LevelFilter;
 
 const ADMISSION_TOTAL: &str = "netsuke_manifest_schema_admissions_total";
+
+/// The span and event `record_admission` emits beside the counter.
+///
+/// Recording is two effects in one place: a counter increment and a trace
+/// event. Gating only the counter would leave the admission path observable
+/// through the event, so both are asserted.
+const ADMISSION_SPAN: &str = "manifest.schema.admission";
 
 /// One recorder snapshot as the debugging utilities expose it.
 type Snapshot = Vec<(
@@ -175,6 +184,61 @@ fn test_surface_load_does_not_record_schema_admission() -> AnyResult<()> {
     ensure!(
         counts.is_empty(),
         "a test-surface load must not record a schema admission: {counts:?}"
+    );
+    Ok(())
+}
+
+/// A discovery query must not emit the admission span or decision event.
+///
+/// The counter is only half of what recording does; `record_admission` also
+/// opens `manifest.schema.admission` and emits a decision event. Asserting the
+/// counter alone would let a regression re-introduce the event on the query
+/// path and still pass, which is precisely the side effect the registration
+/// gate exists to prevent.
+#[test]
+fn manifest_query_does_not_emit_admission_traces() -> AnyResult<()> {
+    let (_temp, path) = workspace_with("1.0.0")?;
+    let spans = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        from_path_for_manifest_query(&path, None)?;
+        Ok::<_, anyhow::Error>(captured.span_fields(ADMISSION_SPAN))
+    })?;
+    ensure!(
+        spans.is_empty(),
+        "a manifest query must not open the admission span: {spans:?}"
+    );
+    Ok(())
+}
+
+/// A command load must emit the admission span with its bounded outcome.
+///
+/// This is the positive control for
+/// [`manifest_query_does_not_emit_admission_traces`]: without it, an absent
+/// span would be equally explained by a subscriber that never captured
+/// anything.
+#[test]
+fn command_load_emits_the_admission_span() -> AnyResult<()> {
+    let yaml = concat!(
+        "netsuke_version: \"1.0.0\"\n",
+        "targets:\n",
+        "  - name: pure\n",
+        "    command: echo pure\n",
+    );
+    let spans = with_test_subscriber(LevelFilter::TRACE, |captured| {
+        from_str_with_limits(yaml, ManifestBudgetLimits::default())?;
+        Ok::<_, anyhow::Error>(captured.span_fields(ADMISSION_SPAN))
+    })?;
+    ensure!(
+        !spans.is_empty(),
+        "a command load must open the admission span"
+    );
+    let rendered = spans.join(" ");
+    ensure!(
+        rendered.contains("outcome=\"admitted\""),
+        "the admission span must carry the bounded outcome: {rendered}"
+    );
+    ensure!(
+        rendered.contains("operation=\"admit_schema\""),
+        "the admission span must name the operation: {rendered}"
     );
     Ok(())
 }

@@ -68,6 +68,11 @@ fn describe_schema_admission_metrics() {
 /// is counted exactly once, whatever the outcome. `outcome` is always one of
 /// the constants above — a literal never reaches the label — so the series stay
 /// bounded and neither the manifest path nor the declared version can appear.
+///
+/// Only a load whose registration records admission reaches this function;
+/// `StdlibRegistration::records_schema_admission` is the switch, and it is off
+/// for discovery queries and `netsuke test` runs. The counter therefore
+/// measures command-load admissions, not load attempts.
 pub(in crate::manifest) fn record_admission(
     decision: Result<(), SchemaVersionRejection>,
 ) -> Result<(), SchemaVersionRejection> {
