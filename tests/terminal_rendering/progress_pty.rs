@@ -1,4 +1,15 @@
 //! Check redraw and task-text behaviour with a Unix pseudo-terminal.
+//!
+//! The assertions here read the terminal stream, so they establish what the
+//! task update *looks like* after the line discipline has processed it: the
+//! stage animation redraws, and each task emission survives intact from the
+//! bidi isolate that opens it. They deliberately do not reach the bytes before
+//! that isolate, because the stage repaint shares the physical line and
+//! widening the slice would assert about the animation instead of the task.
+//! A prefix written ahead of the label is invisible to this file and is caught
+//! where the bytes are produced, by
+//! `reporter_text_write_carries_no_escape_from_its_first_byte` in
+//! `src/status/tests.rs`.
 
 use super::support::{
     STAGE_LABELS, TerminalWorkspace, display_plan_for_args, stage_labels_in_output_order,

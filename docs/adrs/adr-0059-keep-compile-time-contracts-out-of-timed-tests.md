@@ -131,10 +131,8 @@ _Table 1: Where each kind of compile-time contract runs under each option._
   harness tests, and the packaging test leave `nested-cargo-builds`, along with
   the three 900 s allowances they carried. With no build left in the default
   suite, the generated-completion readers leave the group too, and the
-  `#[ignore]`-gated mutation compile gate is its only member. Its 600 s was
-  then the largest per-test allowance in the default and coverage profiles; the
-  dedicated Kani profile added by the 2026-11-05 reassessment gives the same
-  test 2,400 s, and that allowance is now the repository's largest.
+  `#[ignore]`-gated mutation compile gate is its only member. Its 600 s is now
+  the largest per-test allowance.
 - **Discovery.** The child-Cargo discovery used by the workflow contracts no
   longer treats `cargo package --list` as build-capable, and a contract now
   requires that no test outside the mutation compile gate starts a
@@ -163,6 +161,20 @@ and 7 seconds finalizing. A 60-minute Kani job contains that setup, the full
 whole-run allowance, and finalization in 3,351 seconds, with 249 seconds
 remaining. The workflow contracts and a successful Kani run must confirm this
 budget before it is treated as validated.
+
+## Reassessment (2026-11-09)
+
+The 2026-11-05 addendum is the record that the mutation test's allowance is no
+longer 600 seconds. The _Decision outcome_ section still states 600 seconds as
+the largest per-test allowance, because that was true of the decision as
+accepted, and the terminal-rendering branch briefly edited it in place before
+restoring it here. Accepted decision text is a historical record: a later
+measurement belongs in an addendum beside it, where a reader can see both what
+was decided and what has since changed, and can tell which one a given sentence
+is describing. The dedicated Kani profile in `.config/nextest.toml` gives the
+same test 2,400 seconds under a 42-minute whole-run cap; that figure now lives
+in the 2026-11-05 addendum alone, so these two sections no longer give
+competing values for the same limit.
 
 ## Known risks and limitations
 

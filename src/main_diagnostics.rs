@@ -1,4 +1,16 @@
-//! Configure the process-wide Miette renderer from the resolved display plan.
+//! Own the binary's diagnostic rendering: mode selection, style, and JSON form.
+//!
+//! Startup has two diagnostic surfaces and this module keeps them in one place
+//! so their shared state cannot drift. The first is Miette's human renderer,
+//! whose colour, glyph and link settings come from the resolved display plan;
+//! `install_miette_handler` publishes the hook once and `set_style` records the
+//! plan before any report is built, so a report created during the merge still
+//! renders with the plain default rather than panicking.
+//!
+//! The second is `DiagMode`, the choice between human text and versioned JSON
+//! documents. `render_runtime_error_json` serves the JSON side and is where the
+//! two framings meet: a failure is rendered from the most specific typed error
+//! it carries, so callers do not have to decide which one to reach for.
 
 use miette::MietteHandlerOpts;
 use miette::Report;
