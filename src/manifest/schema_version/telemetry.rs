@@ -71,8 +71,10 @@ fn describe_schema_admission_metrics() {
 ///
 /// Only a load whose registration records admission reaches this function;
 /// `StdlibRegistration::records_schema_admission` is the switch, and it is off
-/// for discovery queries and `netsuke test` runs. The counter therefore
-/// measures command-load admissions, not load attempts.
+/// for discovery queries and `netsuke test` runs. What it admits is a full
+/// load, so a direct `netsuke::manifest::from_str` call is counted as well as a
+/// Netsuke command. The counter therefore measures full-load admissions, not
+/// load attempts.
 pub(in crate::manifest) fn record_admission(
     decision: Result<(), SchemaVersionRejection>,
 ) -> Result<(), SchemaVersionRejection> {
