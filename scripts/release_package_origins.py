@@ -82,16 +82,46 @@ def observe_package_origins(
     ...     observe_package_origins(Path(tmp), target_of_record={})
     {}
     """
-    origin_of: dict[str, str] = {}
+    seen: dict[str, str] = {}
     ambiguous: set[str] = set()
     for record_path, target in sorted(target_of_record.items()):
         subtree = _first_segment_below(dist_dir, record_path)
         if subtree is None:
             continue
-        for name in _packages_below(dist_dir / subtree):
-            if origin_of.setdefault(name, target) != target:
-                ambiguous.add(name)
-    return {name: target for name, target in origin_of.items() if name not in ambiguous}
+        _attribute(seen, ambiguous, _packages_below(dist_dir / subtree), target)
+    return {name: target for name, target in seen.items() if name not in ambiguous}
+
+
+def _attribute(
+    seen: dict[str, str],
+    ambiguous: set[str],
+    names: cabc.Iterable[str],
+    target: str,
+) -> None:
+    """Attribute one producer's package names to the target it names.
+
+    Parameters
+    ----------
+    seen
+        Package name mapped to the target whose subtree first staged it.
+    ambiguous
+        Names already observed under two different targets.
+    names
+        The package names staged below this producer's subtree.
+    target
+        The target this subtree's record names.
+
+    Notes
+    -----
+    A name already marked ambiguous is marked again rather than skipped, so a
+    third subtree that agrees with the first does not unlearn the second one's
+    disagreement. Both collections are updated together here because deciding
+    a clash and recording it are one fact; split across the caller, a reader
+    had to hold two loops in mind to see that no name could be both.
+    """
+    for name in names:
+        if seen.setdefault(name, target) != target:
+            ambiguous.add(name)
 
 
 def _first_segment_below(root: pathlib.Path, path: pathlib.Path) -> str | None:

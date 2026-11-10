@@ -72,6 +72,7 @@ import release_digest_record
 import release_digest_record_files
 import release_payload_tree
 import release_reconcile_github
+import release_upload_messages
 import release_upload_observation
 import release_upload_plan
 import release_upload_remote
@@ -236,7 +237,7 @@ def _report(
         return EXIT_OUTPUT_UNWRITABLE
     if blockers.conflicts or blockers.unverifiable:
         print(
-            release_upload_plan.blocked_message(
+            release_upload_messages.blocked_message(
                 blockers.conflicts, blockers.unverifiable, blockers.reasons
             ),
             file=sys.stderr,

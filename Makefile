@@ -545,6 +545,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_payload_regular_files.py \
 		scripts/select_release_payload_cli.py \
 		scripts/release_upload_digests.py scripts/release_upload_plan.py \
+		scripts/release_upload_messages.py \
 		scripts/release_upload_failures.py scripts/release_upload_remote.py \
 		scripts/release_upload_observation.py \
 		scripts/upload_declared_assets_cli.py \

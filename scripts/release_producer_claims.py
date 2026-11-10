@@ -74,8 +74,10 @@ def require_target_claims(
         Configured target key mapped to the platform it serves.
     package_origins
         Published package name mapped to the target key whose downloaded
-        subtree it was staged in. Omitted by a caller with no tree to observe,
-        which leaves the per-format count as the only package guarantee.
+        subtree it was staged in. Turns the package half from a count into an
+        observation, so a caller with a tree should always pass it; omitted,
+        the per-format count is the only package guarantee. Corroboration
+        rather than proof, as the module docstring sets out.
 
     Raises
     ------
@@ -87,22 +89,14 @@ def require_target_claims(
     Notes
     -----
     ``UnknownPlatformError`` reaches the caller from
-    :func:`_package_claim_offenders` when a record's configured platform
-    stages no package format at all, and so stays out of the ``Raises``
-    section.
+    :func:`_package_claim_offenders` rather than being raised here, so it stays
+    out of the ``Raises`` section.
 
-    A target with no entry in ``archives`` or ``targets`` is skipped here
-    rather than reported: coverage calls it an uncovered target, which sends
-    the operator to the configuration rather than to a producer record.
-
-    ``package_origins`` is what turns the package half from a count into an
-    observation of which target actually staged each name, so a caller that has
-    a tree should always pass it. It is corroboration, not proof: the adapter
-    reported where the download put each file, and a walked tree is only as
-    trustworthy as the producer that wrote into it. A name absent from the
-    mapping is not reported: the staged-tree check owns "this declared name was
-    never staged", and reporting it here would blame the producer for an
-    absence no record can cause.
+    A target with no entry in ``archives`` or ``targets`` is skipped rather
+    than reported: coverage calls it an uncovered target, which sends the
+    operator to the configuration rather than to a producer record. A name
+    absent from ``package_origins`` is passed over for the same reason -- the
+    staged-tree check owns an absence no record can cause.
 
     Examples
     --------
@@ -129,15 +123,37 @@ def require_target_claims(
     True
     """
     origins = {} if package_origins is None else package_origins
-    offenders = [
-        offender
-        for provenance in provenances
-        for offender in _target_claim_offenders(
-            provenance, archives=archives, targets=targets, origins=origins
-        )
-    ]
+    offenders = list(
+        _offenders(provenances, archives=archives, targets=targets, origins=origins)
+    )
     if offenders:
         raise TargetClaimMismatchError(offenders)
+
+
+def _offenders(
+    provenances: cabc.Iterable[ProducerProvenance],
+    *,
+    archives: cabc.Mapping[str, str],
+    targets: cabc.Mapping[str, str],
+    origins: cabc.Mapping[str, str],
+) -> cabc.Iterator[str]:
+    """Yield every way any record's claims are not its target's own.
+
+    Yields
+    ------
+    str
+        One description per finding, record by record.
+
+    Notes
+    -----
+    A generator rather than a flat list so one record's refusals are produced
+    and the next record's begin, which keeps a long release's refusal from
+    being assembled twice: once per record and once for the whole run.
+    """
+    for provenance in provenances:
+        yield from _target_claim_offenders(
+            provenance, archives=archives, targets=targets, origins=origins
+        )
 
 
 def _target_claim_offenders(

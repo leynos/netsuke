@@ -8,61 +8,25 @@ the shape is what crosses a job boundary.
 Run via ``make test-release-publication``.
 """
 
-import json
 import pathlib
-import typing as typ
 
 import pytest
 import release_reconcile_github
 from release_reconcile_github import AssetAction
 from release_upload_failures import DigestFailure
-from release_upload_plan import (
-    PLAN_NAME,
-    Blockers,
-    UploadRequest,
+from release_upload_messages import (
     blocked_message,
     conflict_message,
     unverifiable_message,
+)
+from release_upload_plan import (
+    PLAN_NAME,
+    Blockers,
+    PlanRecord,
+    UploadRequest,
+    read_plan,
     write_plan,
 )
-
-
-class UploadPlan(typ.TypedDict):
-    """Describe the decoded plan a run wrote.
-
-    Attributes
-    ----------
-    actions
-        One ``[name, action]`` pair per decided asset, in the order written.
-    conflicts
-        The names whose attached bytes were read and disagreed.
-    unverifiable
-        The names whose attached bytes could not be read at all.
-
-    Notes
-    -----
-    Typed rather than left as ``object`` so a case reading ``["conflicts"]`` is
-    checked against a mapping. A case still compares the whole plan against a
-    literal, which is what pins the serialized shape, so the value types stay
-    wide: the point of the comparison is the encoding, not the payload.
-    """
-
-    actions: list[list[str]]
-    conflicts: list[str]
-    unverifiable: list[str]
-    unverifiable_reasons: dict[str, str]
-
-
-def read_plan(path: pathlib.Path) -> UploadPlan:
-    """Return the decoded plan at ``path``.
-
-    Returns
-    -------
-    UploadPlan
-        The decoded JSON, described by what the writer records.
-    """
-    decoded: UploadPlan = json.loads(path.read_text(encoding="utf-8"))
-    return decoded
 
 
 def test_the_plan_name_is_a_plain_file_name() -> None:
@@ -75,7 +39,7 @@ def test_the_plan_name_is_a_plain_file_name() -> None:
 #: syrupy snapshot would store the same literal in a file that a reader has to
 #: open to see, and there is nothing generated about a two-entry plan to
 #: snapshot.
-TWO_ACTION_PLAN: UploadPlan = {
+TWO_ACTION_PLAN: PlanRecord = {
     "actions": [["a.deb", "upload"], ["b.rpm", "skip-verified"]],
     "conflicts": [],
     "unverifiable": [],

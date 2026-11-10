@@ -128,16 +128,16 @@ class Scenario:
             is_dry_run=is_dry_run,
         )
 
-    def stored_plan(self) -> dict[str, object]:
+    def stored_plan(self) -> release_upload_plan.PlanRecord:
         """Return the decoded plan the run wrote.
 
         Returns
         -------
-        dict[str, object]
-            The decoded JSON, left unchecked so a case can assert its shape.
+        release_upload_plan.PlanRecord
+            The plan, decoded through the writer's own record so a case reads
+            the fields the run actually wrote rather than re-describing them.
         """
-        raw: dict[str, object] = json.loads(self.plan.read_text(encoding="utf-8"))
-        return raw
+        return release_upload_plan.read_plan(self.plan)
 
 
 def listing(**attached: str | None) -> str:

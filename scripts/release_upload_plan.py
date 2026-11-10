@@ -13,6 +13,9 @@ The plan is written for a refusing run too. An operator who sees only ``the
 release holds assets that disagree`` still has to guess which assets were
 planned for upload; the record answers that without a second attempt.
 
+The refusal an operator reads is prose rather than a record, so it lives in
+:mod:`release_upload_messages`; this module keeps only what a job parses.
+
 Run via ``.github/actions/upload-declared-assets``; behavioural coverage lives
 in ``scripts/tests/test_upload_declared_assets_cli.py``.
 """
@@ -32,14 +35,48 @@ if typ.TYPE_CHECKING:
 __all__ = [
     "PLAN_NAME",
     "Blockers",
+    "PlanRecord",
     "UploadRequest",
-    "blocked_message",
-    "conflict_message",
+    "read_plan",
     "write_plan",
 ]
 
 #: Name of the JSON plan the step exposes to the job.
 PLAN_NAME = "upload-plan.json"
+
+
+class PlanRecord(typ.TypedDict):
+    """Describe the plan as it is written, for a reader of the file.
+
+    Attributes
+    ----------
+    actions
+        One ``[name, action]`` pair per decided asset, in the order decided.
+    conflicts
+        The names whose attached bytes were read and disagreed.
+    unverifiable
+        The names whose attached bytes could not be read at all.
+    unverifiable_reasons
+        Unverifiable name mapped to the bounded :class:`release_upload_failures.
+        DigestFailure` spelling that explains it.
+
+    Notes
+    -----
+    The writer's own type, declared beside it, so a reader that decodes the
+    file names the same shape the writer serialized. Without one, a test reads
+    a ``dict[str, object]`` and has to narrow every field by hand; with two
+    copies, the reader and the writer can drift while each stays self-consistent.
+
+    The fields are the wide types JSON actually yields. ``actions`` pairs are
+    lists rather than tuples because that is what the file holds, and the
+    point of the record is to describe the encoding rather than a richer value
+    a caller might prefer.
+    """
+
+    actions: list[list[str]]
+    conflicts: list[str]
+    unverifiable: list[str]
+    unverifiable_reasons: dict[str, str]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -250,131 +287,38 @@ def write_plan(
     )
 
 
-def conflict_message(conflicts: cabc.Iterable[str]) -> str:
-    """Describe the attached assets a run refused to overwrite.
+def read_plan(plan_path: pathlib.Path) -> PlanRecord:
+    """Return the plan at ``plan_path``, decoded to the shape written.
 
     Parameters
     ----------
-    conflicts
-        The names whose attached bytes disagree with the trusted record.
+    plan_path
+        The JSON plan :func:`write_plan` wrote.
 
     Returns
     -------
-    str
-        One line naming every conflicting asset.
-
-    Examples
-    --------
-    >>> conflict_message(["a.deb", "b.rpm"])
-    'the release holds assets that disagree with the trusted record: a.deb, b.rpm'
-    """
-    return (
-        "the release holds assets that disagree with the trusted record: "
-        + ", ".join(conflicts)
-    )
-
-
-def unverifiable_message(
-    unverifiable: cabc.Iterable[str],
-    reasons: cabc.Mapping[str, release_upload_failures.DigestFailure] | None = None,
-) -> str:
-    """Describe the attached assets whose bytes a run could not read.
-
-    Parameters
-    ----------
-    unverifiable
-        The names attached to the release whose digest neither the listing nor
-        a download could establish.
-    reasons
-        Name mapped to the bounded category explaining it. Each name's category
-        and suggested remedy are appended to the clause; a name with no known
-        category is still named, because the refusal stands without it.
-
-    Returns
-    -------
-    str
-        One line naming every unreadable asset, with each known reason.
+    PlanRecord
+        The decoded plan.
 
     Notes
     -----
-    The wording deliberately does not say the bytes disagree. Nothing compared
-    them: GitHub reported no digest and the download did not yield the file.
-    Reporting that as a disagreement would promise evidence the run does not
-    have and send an operator looking for wrong bytes that may be correct.
-
-    The reasons are rendered beside their names rather than replacing them, so
-    the sentence still names every asset the run refused over, and the remedy
-    is what tells an operator whether a retry is worth attempting.
+    Decoding here rather than at each reader keeps the reader and the writer on
+    one declaration: a case that reads the file names the same fields the
+    writer serialized, and a field renamed on one side fails to typecheck on
+    the other instead of silently reading as an unrelated JSON value. The cast
+    is the JSON boundary itself -- nothing validates the file's contents, and
+    a plan a run produced is read by cases that go on to assert its shape.
 
     Examples
     --------
-    >>> unverifiable_message(["a.deb"]) == (
-    ...     "the release attaches assets whose bytes could not be verified: a.deb"
-    ... )
-    True
-    >>> from release_upload_failures import DigestFailure
-    >>> unverifiable_message(
-    ...     ["a.deb"], {"a.deb": DigestFailure.DOWNLOAD_FAILED}
-    ... ) == (
-    ...     "the release attaches assets whose bytes could not be verified: "
-    ...     "a.deb (download-failed: retry the download)"
-    ... )
-    True
+    >>> import pathlib
+    >>> import tempfile
+    >>> from release_reconcile_github import AssetAction
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     destination = pathlib.Path(tmp) / "plan.json"
+    ...     write_plan(destination, [("a", AssetAction.SKIP_VERIFIED)], Blockers())
+    ...     read_plan(destination)["actions"]
+    [['a', 'skip-verified']]
     """
-    known = reasons or {}
-    described = ", ".join(
-        f"{name} ({known[name].value}: {known[name].remedy})" if name in known else name
-        for name in unverifiable
-    )
-    return "the release attaches assets whose bytes could not be verified: " + described
-
-
-def blocked_message(
-    conflicts: cabc.Iterable[str],
-    unverifiable: cabc.Iterable[str],
-    reasons: cabc.Mapping[str, release_upload_failures.DigestFailure] | None = None,
-) -> str:
-    """Describe every reason the run refused, one clause per kind present.
-
-    Parameters
-    ----------
-    conflicts
-        The names whose attached bytes were read and disagreed.
-    unverifiable
-        The names whose attached bytes could not be read.
-    reasons
-        Unverifiable name mapped to the bounded category explaining it, as
-        :func:`unverifiable_message` renders them.
-
-    Returns
-    -------
-    str
-        One line, naming each distinct reason that actually applies.
-
-    Notes
-    -----
-    Kept whole rather than composed by the caller so a run with both kinds
-    cannot report one and drop the other. Only the clauses with names are
-    emitted: reporting "no unverifiable assets" beside a conflict would bury
-    the finding in a statement about an absence.
-
-    Examples
-    --------
-    >>> blocked_message(["a.deb"], ["b.rpm"]) == (
-    ...     "the release holds assets that disagree with the trusted record: "
-    ...     "a.deb; the release attaches assets whose bytes could not be "
-    ...     "verified: b.rpm"
-    ... )
-    True
-    >>> blocked_message(["a.deb"], [])
-    'the release holds assets that disagree with the trusted record: a.deb'
-    >>> blocked_message([], [])
-    ''
-    """
-    disputed = tuple(conflicts)
-    unread = tuple(unverifiable)
-    clauses = [
-        conflict_message(disputed) if disputed else "",
-        unverifiable_message(unread, reasons) if unread else "",
-    ]
-    return "; ".join(clause for clause in clauses if clause)
+    decoded: PlanRecord = json.loads(plan_path.read_text(encoding="utf-8"))
+    return decoded
