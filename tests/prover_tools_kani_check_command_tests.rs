@@ -17,9 +17,10 @@
 mod fixture;
 
 use anyhow::{Context, Result, ensure};
-use fixture::{Behaviour, FakeKani};
+use fixture::{Behaviour, FakeKani, HomeRefusal};
+use rstest::rstest;
 use std::fs;
-use std::path::Path;
+use std::process::Output;
 
 /// Check that a matching pin succeeds and that the verifier is asked for its
 /// version rather than being run as a proof command.
@@ -196,66 +197,52 @@ fn kani_check_reports_unparsable_output_without_echoing_it() -> Result<()> {
     Ok(())
 }
 
-/// Check that an empty `KANI_HOME` is refused rather than resolved differently.
+/// Require the recipe to refuse with `category` before it consults the verifier.
 ///
-/// `cargo-kani` reads an empty `KANI_HOME` as the current directory, whereas
-/// the `${KANI_HOME:-...}` default the recipe would otherwise apply reads it as
-/// `$HOME/.kani`. The guard would then approve one home while the launcher
-/// installed into another, so the recipe refuses the setting rather than
-/// guessing which one was meant.
-#[test]
-fn kani_check_refuses_an_empty_kani_home() -> Result<()> {
-    let fake = FakeKani::new("0.67.0", Behaviour::Reports("0.67.0"))?;
-
-    let output = fake
-        .command_with_kani_home(Path::new(""))
-        .arg("kani-check")
-        .output()
-        .context("run make kani-check with an empty Kani home")?;
-
-    ensure!(!output.status.success(), "an empty Kani home should fail");
+/// Both home refusals have to stop before the launcher runs. The guard exists
+/// to keep a query from turning into an installer, so a refusal that still ran
+/// the verifier would have performed the thing it was protecting against.
+fn ensure_refused_before_the_verifier(
+    output: &Output,
+    fake: &FakeKani,
+    category: &str,
+) -> Result<()> {
+    ensure!(
+        !output.status.success(),
+        "the recipe should refuse with {category}"
+    );
     let stderr = String::from_utf8_lossy(&output.stderr);
     ensure!(
-        stderr.contains("category=kani-home-empty"),
+        stderr.contains(&format!("category={category}")),
         "the diagnostic should carry a stable category, got `{stderr}`"
     );
     ensure!(
         fake.invocation_args()?.is_empty(),
-        "the verifier must not run when the Kani home is ambiguous"
+        "the verifier must not run when the Kani home is refused"
     );
     Ok(())
 }
 
-/// Check that an unset `KANI_HOME` with no `HOME` is refused.
+/// Check that a Kani home the launcher and the guard cannot share is refused.
 ///
-/// The recipe falls back to `$HOME/.kani`, so without either variable it would
-/// inspect `/.kani` — a path no launcher derives from an empty environment. The
-/// guard would then clear a directory the verifier never reads, which is the
-/// same guard-and-launcher mismatch `kani-home-empty` removes. The variables are
-/// set on the child process, which is the only environment mutation this suite
-/// performs.
-#[test]
-fn kani_check_refuses_an_unresolvable_home() -> Result<()> {
+/// Each case is a setting where the recipe's default names a directory the
+/// verifier never reads: an empty `KANI_HOME`, and neither variable set at all.
+/// Both must be refused before the verifier runs, because the guard exists to
+/// stop the query from becoming an installer. The second case blanks `HOME` on
+/// the child process, which is the only environment mutation this suite makes.
+#[rstest]
+#[case::empty_kani_home(HomeRefusal::Empty)]
+#[case::no_home(HomeRefusal::Unresolvable)]
+fn kani_check_refuses_an_unusable_home(#[case] refusal: HomeRefusal) -> Result<()> {
     let fake = FakeKani::new("0.67.0", Behaviour::Reports("0.67.0"))?;
 
-    let output = fake
-        .command_without_kani_home()
-        .env("HOME", "")
+    let output = refusal
+        .command(&fake)
         .arg("kani-check")
         .output()
-        .context("run make kani-check with neither Kani home nor HOME")?;
+        .context("run make kani-check with an unusable Kani home")?;
 
-    ensure!(!output.status.success(), "an unresolvable home should fail");
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    ensure!(
-        stderr.contains("category=home-unresolvable"),
-        "the diagnostic should carry a stable category, got `{stderr}`"
-    );
-    ensure!(
-        fake.invocation_args()?.is_empty(),
-        "the verifier must not run when the home cannot be resolved"
-    );
-    Ok(())
+    ensure_refused_before_the_verifier(&output, &fake, refusal.category())
 }
 
 /// Check that the query never reaches the network, a cache, or the remote

@@ -460,8 +460,9 @@ Decision log, set `Status: BLOCKED`, and obtain approval for the deviation.
       the `$HOME/.kani` fallback would otherwise inspect `/.kani`, a directory
       no launcher derives; the category has a regression case and a documented
       entry. The guide's `whitaker-ls` sentence and the Outcomes summary now
-      name what they mean, the summary extending through Revision 61. See
-      Revision 62.
+      name what they mean, the summary extending through Revision 61. Hosted
+      CodeScene then caught the two home refusals as duplicates, so they are
+      one `#[rstest]` case over a fixture enum. See Revision 62.
 
 ## Surprises & discoveries
 
@@ -2293,10 +2294,23 @@ recorded three more, so it now names Revisions 59 to 62 and counts fourteen
 gated candidates rather than ten. The remaining outside-diff finding, that
 Revision 61's date should be 9 November, does not hold: the commit is dated
 `2026-11-10 00:09:04 +0100`, every revision date in this document is a local
-one, and the review that raised it ran at 23:20 UTC. All nine commit gates
-exited `0`, from check-fmt at 23:50Z to test-kani-check-isolation at 00:21Z.
-The batch's first attempt failed at check-fmt because mdtablefix reflowed both
-edited documents, and `make fmt` supplied the layout it wanted.
+one, and the review that raised it ran at 23:20 UTC.
+
+Hosted CodeScene then failed the resulting head with a duplication advisory on
+`tests/prover_tools_kani_check_command_tests.rs` at 9.39: the new refusal case
+had been written as a near copy of the empty-home case beside it. The two are
+now one `#[rstest]` case over a `HomeRefusal` fixture enum, which also gives
+both mechanisms a single place to be described, and `cs check` reports 10.00
+for the file and for its fixture. That is the disposition the two cases always
+wanted: both assert that a home the guard and the launcher cannot share is
+refused before the verifier runs, and only the setting that produces the
+mismatch differs.
+
+All nine commit gates exited `0` on the final tree, from check-fmt at 00:34Z to
+test-kani-check-isolation at 01:11Z, after an earlier full pass at 23:50Z had
+covered the same code before the duplication refactor. The first attempt failed
+at check-fmt because mdtablefix reflowed both edited documents, and `make fmt`
+supplied the layout it wanted.
 
 Keep Status: IN PROGRESS pending review at the new head and trusted-main
 warm-cache acceptance.

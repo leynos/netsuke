@@ -153,6 +153,44 @@ impl FakeKani {
     }
 }
 
+/// The ways a Kani home can fail to resolve to the directory the launcher reads.
+///
+/// The recipe and `cargo-kani` must agree on one home, and each variant is a
+/// setting where the recipe's own default would name a different directory
+/// from the one the launcher uses.
+#[derive(Clone, Copy)]
+pub(crate) enum HomeRefusal {
+    /// `KANI_HOME` is set but empty: `cargo-kani` reads that as the current
+    /// directory, while the recipe's `${KANI_HOME:-...}` default reads it as
+    /// `$HOME/.kani`.
+    Empty,
+    /// Neither `KANI_HOME` nor `HOME` is set, so the default has nothing to
+    /// resolve and would name `/.kani`, which no launcher derives.
+    Unresolvable,
+}
+
+impl HomeRefusal {
+    /// Return the stable category the recipe reports for this refusal.
+    pub(crate) fn category(self) -> &'static str {
+        match self {
+            Self::Empty => "kani-home-empty",
+            Self::Unresolvable => "home-unresolvable",
+        }
+    }
+
+    /// Build an invocation that provokes this refusal.
+    pub(crate) fn command(self, fake: &FakeKani) -> Command {
+        match self {
+            Self::Empty => fake.command_with_kani_home(Path::new("")),
+            Self::Unresolvable => {
+                let mut command = fake.command_without_kani_home();
+                command.env("HOME", "");
+                command
+            }
+        }
+    }
+}
+
 /// Render the shell line that makes the verifier answer as `behaviour` says.
 fn response_line(behaviour: Behaviour<'_>) -> String {
     match behaviour {
