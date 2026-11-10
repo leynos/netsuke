@@ -3453,6 +3453,17 @@ someone edited a pin without relocking — a generated file no gate verifies. Th
 cutoff needs neither. The action contract asserts the `[tool.uv]` table and the
 cutoff line, so removing either fails `make test-workflow-contracts`.
 
+A cutoff bounds which releases `uv` may choose; it says nothing about what a
+chosen package does while it installs. The two steps that hold `GH_TOKEN`
+therefore run `uv run --no-build`, so a dependency that ships no wheel fails
+resolution instead of running a build backend beside the credential, and the
+two steps that hold no token keep the default. The contract requires the flag
+on both token-bearing steps as well as asserting the finalize step's whole
+command, and the `source-build-allowed` mutation proves the requirement fires.
+`make test-release-publication` pins Cuprum and Cyclopts at the same exact
+releases for the same reason: the suites must exercise the pair the adapter
+runs on rather than whichever release a range resolves to next.
+
 The trusted record is the input, never the verifier's output. A record derived
 from GitHub agrees with GitHub however the upload was tampered with: replace an
 archive together with its sidecar and the download still agrees perfectly.

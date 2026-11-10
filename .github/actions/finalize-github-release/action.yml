@@ -161,8 +161,13 @@ runs:
         set -euo pipefail
         # Two read-only `gh` calls, each bounded by the same 300s: a draft's
         # asset listing is small, so anything slower is a stalled API.
+        # `--no-build` matters here because this step holds the token: a source
+        # distribution would run its build backend with the token in scope, and
+        # the script's own `exclude-newer` bounds which releases uv may choose,
+        # not what a chosen package's build code does.
         timeout --kill-after=30s 300s \
-          uv run --no-project --python 3.14 scripts/finalize_github_release.py \
+          uv run --no-project --no-build --python 3.14 \
+            scripts/finalize_github_release.py \
             snapshot \
             --tag "$RELEASE_TAG" \
             --repository "$RELEASE_REPOSITORY" \
@@ -235,9 +240,12 @@ runs:
         # release still a draft, so a retry starts from verified bytes rather
         # than from a rebuilt release. The 600s bound covers three `gh` calls;
         # a timeout here leaves the release a draft, which is the same state a
-        # refusal leaves, so a retry converges either way.
+        # refusal leaves, so a retry converges either way. `--no-build` is the
+        # same guard as the snapshot step's: this is the other step holding the
+        # token, and no dependency of the adapter needs a build backend.
         timeout --kill-after=30s 600s \
-          uv run --no-project --python 3.14 scripts/finalize_github_release.py \
+          uv run --no-project --no-build --python 3.14 \
+            scripts/finalize_github_release.py \
             publish \
             --tag "$RELEASE_TAG" \
             --commit "$RELEASE_COMMIT" \

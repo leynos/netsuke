@@ -183,6 +183,7 @@ def _assert_complete_contract(
         "aggregate-bound-exceeded",
         "stale-plan-kept",
         "missing-plan-guard",
+        "source-build-allowed",
         "gh-in-run",
         "wrong-output",
     ],

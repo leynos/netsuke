@@ -3,7 +3,8 @@
 The action is where a finalization run actually touches a release, so this
 module states what its steps may do: which environment each one receives,
 which of them may hold the token, how long each adapter invocation may run,
-and that the single mutating command is the contracted one. The test module
+what the token-bearing steps may resolve and build, and that the single
+mutating command is the contracted one. The test module
 keeps the job that calls the action and the mutation cases that prove these
 assertions fire; the assertions themselves live here so each file stays a size
 a reviewer can read in one sitting.
@@ -59,6 +60,12 @@ _UV_TABLE = "# [tool.uv]"
 #: The resolution cutoff itself. Dates only, so a malformed value cannot pass
 #: as a cutoff the resolver would reject anyway.
 _EXCLUDE_NEWER = re.compile(r'^# exclude-newer = "\d{4}-\d{2}-\d{2}T', re.MULTILINE)
+
+#: The flag that keeps `uv` from building a source distribution. The cutoff
+#: bounds which releases may be chosen; it says nothing about what a chosen
+#: package's build backend does, and a build runs arbitrary code in the same
+#: environment as the step's write token.
+NO_BUILD_FLAG = "--no-build"
 
 
 def _receives_token_value(value: object) -> bool:
@@ -200,6 +207,17 @@ def _assert_step_environments(steps: list[dict[str, object]]) -> list[int]:
             assert not leaked, (
                 f"{name} must not forward the token expression under any name; "
                 f"only {TOKEN_STEPS} reach GitHub, got {leaked}"
+            )
+        else:
+            # Holding the token is what makes this mandatory: resolution and
+            # installation run in the same environment, so a source build would
+            # execute a build backend beside the credential. The flag is read
+            # from the invocation's tokens rather than from the script's text,
+            # because the step's own comments name the flag.
+            assert NO_BUILD_FLAG in run_tokens(str(step.get("run"))), (
+                f"{name} holds the token, so its `uv run` must carry "
+                f"{NO_BUILD_FLAG!r}; without it a dependency with no wheel "
+                "runs its build backend with the credential in scope"
             )
         assert environment == EXPECTED_ENVIRONMENTS[name], (
             f"{name} must forward exactly its contracted environment names"

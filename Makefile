@@ -450,11 +450,15 @@ test-prover-tools-integration: ## Exercise the pinned prover-tools Verus CLI wit
 # prose nothing runs: deleting it breaks no import and changes no test, which
 # is how they would silently stop running. `test-workflow-contracts` pairs test
 # modules with doctested sources the same way.
+#
+# The Cuprum and Cyclopts pins are exact because the finalizer's own PEP 723
+# block pins those two releases: these suites must exercise the pair the
+# adapter runs on, not whichever release a range resolves to next.
 test-release-publication: ## Test release-candidate identity and staged inventory exactness
 	@PYTHONPATH=scripts $(UV_ENV) $(UV) run --no-project --python $(PYTHON_BASELINE) \
 		--with pytest==9.0.2 --with hypothesis==6.151.9 \
-		--with cmd-mox==0.2.0 --with 'cuprum>=0.1.0,<0.2.0' \
-		--with 'cyclopts>=4.25.3,<5' \
+		--with cmd-mox==0.2.0 --with 'cuprum==0.1.0' \
+		--with 'cyclopts==4.25.3' \
 		--with 'pyyaml>=6' python -m pytest \
 		scripts/tests/test_crates_io_candidate_action.py \
 		scripts/tests/test_crates_io_candidate_archive_properties.py \

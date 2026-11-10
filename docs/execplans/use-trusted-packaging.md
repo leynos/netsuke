@@ -3825,6 +3825,36 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   cutoff, and `test_the_dependency_cutoff_contract_rejects_a_removed_cutoff`
   proves the assertion notices a block from which the line was stripped.
 
+- [x] (2026-11-10) Closed the thirteenth pass, which found the cutoff
+  insufficient on its own: two steps still let a dependency run code, and the
+  suites ran a different tool pair from the adapter's.
+
+  **`exclude-newer` chooses a release; it does not say what installing one
+  does.** A dependency with no wheel for the interpreter is built from source by
+  `uv`, and a build backend runs arbitrary code with the environment's
+  `GH_TOKEN` in scope. Both token-bearing steps — `snapshot` and `finalize` —
+  now pass `--no-build`, so resolution fails closed instead of building. The
+  other two adapter steps hold no token and keep the default. A probe on this
+  host confirmed the flag is viable for this closure:
+  `uv run --no-project
+  --no-build --python 3.14 scripts/finalize_github_release.py --help`
+  resolved and printed usage, so no dependency of the adapter lacks a wheel.
+
+  The contract asserts the flag on both token-bearing steps (the finalize step
+  also through the exact `FINALIZE_COMMAND` token list), and the new
+  `source-build-allowed` mutation strips it from the snapshot step alone,
+  keeping that step's bound and token, so the assertion is shown to fire on the
+  flag rather than on a neighbouring property.
+
+  **`test-release-publication` resolved a different Cuprum and Cyclopts from
+  the adapter's.** The target used `cuprum>=0.1.0,<0.2.0` and
+  `cyclopts>=4.25.3,<5` while the script pins `cuprum==0.1.0` and
+  `cyclopts==4.25.3`; the adapter depends on version-specific behaviour
+  (`Parameter(name="*")` flattening and the `run_sync` signature), so the next
+  release of either could have passed here and failed in the release job. The
+  target now pins the two exactly, as `test-workflow-contracts`,
+  `test-release-admission`, and the CI script helpers already do.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

@@ -127,6 +127,7 @@ FINALIZE_COMMAND = [
     "uv",
     "run",
     "--no-project",
+    "--no-build",
     "--python",
     "3.14",
     "scripts/finalize_github_release.py",
@@ -204,24 +205,52 @@ def run_tokens(run: str) -> list[str]:
     return shlex.split(command)
 
 
+#: The mutations that put the credential on a step with no use for it, keyed by
+#: mutation id: the step, and the variable name the token arrives under. A step
+#: that asks only whether a token was supplied has no reason to hold one.
+_TOKEN_MUTATIONS = {
+    "token-on-validate": (VALIDATE_STEP, "GITHUB_TOKEN"),
+    "token-on-plan": (PLAN_STEP, "GH_TOKEN"),
+}
+
+#: The mutations that break a property of the command a step runs.
+_COMMAND_MUTATIONS = frozenset({
+    "unbounded-command",
+    "aggregate-bound-exceeded",
+    "source-build-allowed",
+    "gh-in-run",
+})
+
+
 def mutate_action(action: dict[str, object], mutation: str) -> None:
     """Change one dimension of an action step's command or environment."""
     steps = load_action_steps(action)
+    if mutation in _TOKEN_MUTATIONS:
+        _mutate_token(steps, mutation)
+    elif mutation in _COMMAND_MUTATIONS:
+        _mutate_command(steps, mutation)
+    elif mutation in {"stale-plan-kept", "missing-plan-guard"}:
+        _mutate_plan_step(steps, mutation)
+    elif mutation == "wrong-output":
+        _mutate_outputs(action)
+    else:
+        pytest.fail(f"unknown action mutation {mutation!r}")
+
+
+def _mutate_token(steps: list[dict[str, object]], mutation: str) -> None:
+    """Hand the credential to a step that only tests whether one exists."""
+    step_name, variable = _TOKEN_MUTATIONS[mutation]
+    step = named_step(steps, step_name)
+    # The expression the snapshot step legitimately holds, so the mutation
+    # differs from the contract in exactly one place.
+    require_mapping(step["env"], f"{step_name} environment")[variable] = (
+        EXPECTED_ENVIRONMENTS[SNAPSHOT_STEP]["GH_TOKEN"]
+    )
+
+
+def _mutate_command(steps: list[dict[str, object]], mutation: str) -> None:
+    """Break one property of the command a step runs."""
     match mutation:
-        case "token-on-validate":
-            validate = named_step(steps, VALIDATE_STEP)
-            # The shape this action actually had: the credential handed to a
-            # step that only needed to know whether one had been supplied.
-            require_mapping(validate["env"], "validate environment")["GITHUB_TOKEN"] = (
-                EXPECTED_ENVIRONMENTS[SNAPSHOT_STEP]["GH_TOKEN"]
-            )
-        case "token-on-plan":
-            plan = named_step(steps, PLAN_STEP)
-            # Reuse the expression the snapshot step legitimately holds, so the
-            # mutation differs from the contract in exactly one place.
-            require_mapping(plan["env"], "plan environment")["GH_TOKEN"] = (
-                EXPECTED_ENVIRONMENTS[SNAPSHOT_STEP]["GH_TOKEN"]
-            )
         case "unbounded-command":
             finalize = named_step(steps, FINALIZE_STEP)
             # The action's only available bound, removed: the adapter now runs
@@ -240,18 +269,24 @@ def mutate_action(action: dict[str, object], mutation: str) -> None:
                 "timeout --kill-after=30s 300s",
                 f"timeout --kill-after=30s {MAX_COMMAND_BOUND_SECONDS}s",
             )
-        case "stale-plan-kept" | "missing-plan-guard":
-            _mutate_plan_step(steps, mutation)
+        case "source-build-allowed":
+            # The token-bearing snapshot step keeps its bound and its token,
+            # and loses only the flag that stops a build backend running.
+            snapshot = named_step(steps, SNAPSHOT_STEP)
+            snapshot["run"] = str(snapshot["run"]).replace(" --no-build", "")
         case "gh-in-run":
             finalize = named_step(steps, FINALIZE_STEP)
             finalize["run"] = f'{finalize["run"]}gh release delete "$RELEASE_TAG"\n'
-        case "wrong-output":
-            outputs = require_mapping(action["outputs"], "action outputs")
-            require_mapping(outputs["outcome"], "outcome output")["value"] = (
-                "${{ steps.resolve.outputs.outcome }}"
-            )
         case other:
-            pytest.fail(f"unknown action mutation {other!r}")
+            pytest.fail(f"unknown command mutation {other!r}")
+
+
+def _mutate_outputs(action: dict[str, object]) -> None:
+    """Point the outcome output at another step's result."""
+    outputs = require_mapping(action["outputs"], "action outputs")
+    require_mapping(outputs["outcome"], "outcome output")["value"] = (
+        "${{ steps.resolve.outputs.outcome }}"
+    )
 
 
 def _mutate_plan_step(steps: list[dict[str, object]], mutation: str) -> None:
