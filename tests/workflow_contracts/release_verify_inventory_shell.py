@@ -71,6 +71,7 @@ class _Reader:
         self._current: list[str] = []
         self._quote = _Quote.PLAIN
         self._index = 0
+        self._escaped_last = False
 
     def read(self) -> list[str]:
         """Consume the script and return the commands it names, in order."""
@@ -89,6 +90,7 @@ class _Reader:
         char = self._char()
         self._quote = _Quote.PLAIN if char == "'" else self._quote
         self._current.append(char)
+        self._escaped_last = False
         self._index += 1
 
     def _read_double_quoted(self) -> None:
@@ -104,9 +106,11 @@ class _Reader:
             return
         elif char == "\\" and following in _DOUBLE_QUOTE_ESCAPES:
             self._current.extend((char, following))
+            self._escaped_last = True
             self._index += 2
             return
         self._current.append(char)
+        self._escaped_last = False
         self._index += 1
 
     def _read_plain(self) -> None:
@@ -126,6 +130,7 @@ class _Reader:
             self._index += 1
             return
         self._current.append(char)
+        self._escaped_last = False
         self._index += 1
 
     def _take_escape(self) -> bool:
@@ -145,11 +150,14 @@ class _Reader:
             return False
         following = self._following()
         if following == "\n":
+            # The pair is deleted, so the character before it remains the last
+            # one appended and the flag that describes it is still right.
             self._index += 2
             return True
         if not following:
             return False
         self._current.extend(("\\", following))
+        self._escaped_last = True
         self._index += 2
         return True
 
@@ -163,17 +171,22 @@ class _Reader:
         return self._script[following] if following < len(self._script) else ""
 
     def _at_word_start(self) -> bool:
-        """Report whether the current position starts a word.
+        r"""Report whether the current position starts a word.
 
         ``#`` opens a comment only there; inside a word it is ordinary text, as
-        in ``foo#bar`` or the ``$#`` parameter.
+        in ``foo#bar`` or the ``$#`` parameter. Whitespace only ends a word
+        when it is unquoted, so an escaped space keeps the word open:
+        ``foo\ #`` leaves the ``#`` inside the argument, and the command after
+        the next ``;`` still runs.
 
         Returns
         -------
         bool
-            Whether the text so far is empty or ends in whitespace.
+            Whether the text so far is empty, or ends in an unescaped space.
         """
-        return not self._current or self._current[-1].isspace()
+        if not self._current:
+            return True
+        return self._current[-1].isspace() and not self._escaped_last
 
     def _comment_end(self) -> int:
         """Return the index of the newline that ends the comment here.

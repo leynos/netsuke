@@ -99,6 +99,31 @@ def test_trailing_comment_text_is_dropped_from_a_command() -> None:
     )
 
 
+def test_an_escaped_space_keeps_a_hash_inside_the_word() -> None:
+    r"""Read ``foo\ #`` as one argument, so the ``#`` opens no comment.
+
+    The escaped space does not end the word, so the ``#`` is ordinary text and
+    the command after the ``;`` still runs. A reader that treats any space as a
+    word boundary discards that command -- the one carrying the call.
+    """
+    script = "printf '%s\\n' foo\\ #; gh api --method POST repos/o/r/releases\n"
+    assert logical_lines(script) == [
+        "printf '%s\\n' foo\\ #; gh api --method POST repos/o/r/releases"
+    ], "a hash after an escaped space must stay inside the argument"
+
+
+def test_an_escaped_space_does_not_hide_a_release_call() -> None:
+    r"""Keep a ``gh release`` after ``foo\ #`` visible to the release check.
+
+    The same reading decides this case: if the ``#`` opened a comment, the
+    release subcommand would be dropped before any check saw it.
+    """
+    script = "true foo\\ #; gh release delete v1\n"
+    assert logical_lines(script) == ["true foo\\ #; gh release delete v1"], (
+        "a hash after an escaped space must not swallow a release command"
+    )
+
+
 def test_a_trailing_backslash_at_the_end_of_the_script_is_kept() -> None:
     """Stop at the end of the script rather than reading past it."""
     assert logical_lines("gh api \\") == ["gh api \\"], (

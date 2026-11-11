@@ -298,6 +298,8 @@ def _assert_complete_contract(
         "gh-api-midword-continued",
         "gh-release-continued",
         "gh-release-midword-continued",
+        "gh-api-escaped-space",
+        "gh-release-escaped-space",
         "secret-token",
     ],
 )

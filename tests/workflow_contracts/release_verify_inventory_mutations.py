@@ -44,6 +44,13 @@ CONTINUATION_MUTATIONS = {
     "gh-release-continued": "gh \\\n  release delete v1",
     "gh-release-midword-continued": "gh re\\\nlease delete v1",
 }
+#: Commands a mutation appends after an escaped space, which keeps the ``#``
+#: inside the argument instead of opening a comment. A scanner that treats the
+#: space as a word boundary discards the call that follows the ``;``.
+ESCAPED_SPACE_MUTATIONS = {
+    "gh-api-escaped-space": 'true foo\\ #; gh api --method POST "repos/o/r/releases"',
+    "gh-release-escaped-space": "true foo\\ #; gh release delete v1",
+}
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.
 LISTING_ARGUMENT_MUTATIONS = {
@@ -97,6 +104,8 @@ def mutate_action(action: dict[str, object], mutation: str) -> None:
         _append_release_command(steps, RELEASE_MUTATIONS[mutation])
     elif mutation in CONTINUATION_MUTATIONS:
         _append_release_command(steps, CONTINUATION_MUTATIONS[mutation])
+    elif mutation in ESCAPED_SPACE_MUTATIONS:
+        _append_release_command(steps, ESCAPED_SPACE_MUTATIONS[mutation])
     elif mutation in LISTING_ARGUMENT_MUTATIONS:
         _add_to_listing_call(steps, LISTING_ARGUMENT_MUTATIONS[mutation])
     elif mutation == "gh-api-substitution":
