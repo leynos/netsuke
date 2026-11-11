@@ -111,20 +111,13 @@ class _Reader:
 
     def _read_plain(self) -> None:
         """Read one character outside quotes, where every rule applies."""
+        if self._take_escape():
+            return
         char = self._char()
-        following = self._following()
         if char == "'":
             self._quote = _Quote.SINGLE
         elif char == '"':
             self._quote = _Quote.DOUBLE
-        elif char == "\\" and following == "\n":
-            # Distinct from an escape: the pair is deleted, not replaced.
-            self._index += 2
-            return
-        elif char == "\\" and following:
-            self._current.extend((char, following))
-            self._index += 2
-            return
         elif char == "#" and self._at_word_start():
             self._index = self._comment_end()
             return
@@ -134,6 +127,31 @@ class _Reader:
             return
         self._current.append(char)
         self._index += 1
+
+    def _take_escape(self) -> bool:
+        r"""Consume a backslash and the character it protects, if there is one.
+
+        A backslash-newline is deleted outright, joining the next line with
+        nothing between the halves. Any other pair is kept, because the
+        backslash still escapes the character after it -- which is what stops
+        ``\\`` from continuing the line.
+
+        Returns
+        -------
+        bool
+            Whether a character was consumed.
+        """
+        if self._char() != "\\":
+            return False
+        following = self._following()
+        if following == "\n":
+            self._index += 2
+            return True
+        if not following:
+            return False
+        self._current.extend(("\\", following))
+        self._index += 2
+        return True
 
     def _char(self) -> str:
         """Return the character the reader is on."""
