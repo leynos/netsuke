@@ -33,6 +33,13 @@ RELEASE_MUTATIONS = {
     "gh-release-download": 'gh release download "$RELEASE_TAG"',
     "gh-release-spacing": 'gh  release view "$RELEASE_TAG"',
 }
+#: Commands a mutation appends with the word after ``gh`` moved past a
+#: backslash-newline. Bash reads the pair as one command; a scan of the raw
+#: lines sees neither a call nor a release subcommand.
+CONTINUATION_MUTATIONS = {
+    "gh-api-continued-method": 'gh \\\n  api --method POST "repos/o/r/releases"',
+    "gh-release-continued": "gh \\\n  release delete v1",
+}
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.
 LISTING_ARGUMENT_MUTATIONS = {
@@ -84,6 +91,8 @@ def mutate_action(action: dict[str, object], mutation: str) -> None:
     steps = load_action_steps(action)
     if mutation in RELEASE_MUTATIONS:
         _append_release_command(steps, RELEASE_MUTATIONS[mutation])
+    elif mutation in CONTINUATION_MUTATIONS:
+        _append_release_command(steps, CONTINUATION_MUTATIONS[mutation])
     elif mutation in LISTING_ARGUMENT_MUTATIONS:
         _add_to_listing_call(steps, LISTING_ARGUMENT_MUTATIONS[mutation])
     elif mutation == "gh-api-substitution":

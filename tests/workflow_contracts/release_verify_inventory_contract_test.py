@@ -42,6 +42,7 @@ from release_verify_inventory_support import (
     reject_secrets,
     retained_artifact_name,
     run_tokens,
+    script_lines,
 )
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
@@ -82,7 +83,7 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
     for step in steps:
         name = str(step.get("name"))
         run = str(step.get("run"))
-        assert not GH_RELEASE_CALL.search(run), (
+        assert not any(GH_RELEASE_CALL.search(line) for line in script_lines(run)), (
             f"{name} must not use the release subcommand: it can write"
         )
         invocations = gh_api_invocations(run)
@@ -293,6 +294,8 @@ def _assert_complete_contract(
         "gh-api-method-override",
         "gh-api-short-method",
         "gh-api-substitution",
+        "gh-api-continued-method",
+        "gh-release-continued",
         "secret-token",
     ],
 )
@@ -333,6 +336,7 @@ def test_workflow_mutations_are_rejected(mutation: str) -> None:
         "${{ secrets.CARGO_REGISTRY_TOKEN }}",
         "${{ secrets['CARGO_REGISTRY_TOKEN'] }}",
         "${{ toJSON(secrets) }}",
+        "${{ format('Hello {0}', secrets.CARGO_REGISTRY_TOKEN) }}",
     ],
 )
 def test_the_secret_scan_reaches_nested_values(reference: str) -> None:
@@ -357,6 +361,24 @@ def test_a_call_inside_a_substitution_is_still_scanned() -> None:
     script = 'body=$(gh api --method GET -f x=y "repos/o/r/releases")\n'
     (tokens,) = gh_api_invocations(script)
     assert forbidden_gh_flags(tokens) == ["-f"], tokens
+
+
+def test_a_continued_command_is_scanned_after_joining() -> None:
+    r"""Read a command split across a backslash-newline as bash does.
+
+    ``gh \`` then ``api --method POST`` is one command whose method override
+    no raw-line scan can see, and a separate ordinary call would satisfy the
+    expected count. The joined form exposes the write, and the release
+    subcommand split the same way is caught by the release check.
+    """
+    script = (
+        'gh \\\n  api --method POST "repos/o/r/releases"\ngh \\\n  release delete v1\n'
+    )
+    (tokens,) = gh_api_invocations(script)
+    assert forbidden_gh_flags(tokens) == ["--method"], tokens
+    assert [line for line in script_lines(script) if GH_RELEASE_CALL.search(line)], (
+        "a continued release command must still be recognised"
+    )
 
 
 def test_the_action_and_job_satisfy_the_complete_contract() -> None:

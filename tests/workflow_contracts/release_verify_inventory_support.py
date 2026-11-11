@@ -20,6 +20,7 @@ from workflow_loading import (
 )
 
 if typ.TYPE_CHECKING:
+    import collections.abc as cabc
     from pathlib import Path
 
 VERIFY_JOB = "verify-release-inventory"
@@ -139,9 +140,9 @@ GH_API_CALL = re.compile(r"\bgh\s+api\b")
 #: The `gh release` subcommand, which can write; `gh api` is what a read-only
 #: step must use instead.
 GH_RELEASE_CALL = re.compile(r"\bgh\s+release\b")
-#: A workflow expression naming the secrets context, whether dotted, indexed,
-#: or passed whole to `toJSON`.
-SECRET_REFERENCE = re.compile(r"\$\{\{[^}]*\bsecrets\b")
+#: The word naming the secrets context inside an expression, whether dotted,
+#: indexed, or passed whole to `toJSON`.
+SECRET_WORD = re.compile(r"\bsecrets\b")
 EXPECTED_JOB_INPUTS = {
     "tag": "${{ needs.metadata.outputs.release_tag }}",
     "repository": "${{ github.repository }}",
@@ -190,15 +191,44 @@ def load_action_steps(action: dict[str, object]) -> list[dict[str, object]]:
     return [require_mapping(step, "action step") for step in raw_steps]
 
 
+def script_lines(run: str) -> list[str]:
+    r"""Return a step's shell commands as bash reads them, one per line.
+
+    Bash deletes a backslash-newline, so ``gh \\`` on one line and ``api`` on
+    the next are a single ``gh api`` command. A scan of the raw lines sees
+    neither a call nor a release subcommand, and a separate ordinary call
+    satisfies the expected count, so every check runs over these joined lines.
+    Comment lines are dropped first: a comment names no command, and one that
+    happened to end in a backslash would otherwise swallow the next line.
+
+    Returns
+    -------
+    list[str]
+        The joined commands, in the order the step runs them.
+    """
+    joined: list[str] = []
+    pending = ""
+    for line in run.splitlines():
+        if line.lstrip().startswith("#"):
+            continue
+        stripped = line.rstrip()
+        if stripped.endswith("\\"):
+            pending = f"{pending}{stripped[:-1]} "
+            continue
+        joined.append(f"{pending}{stripped.strip()}".strip())
+        pending = ""
+    if pending:
+        joined.append(pending.strip())
+    return joined
+
+
 def gh_api_invocations(run: str) -> list[list[str]]:
     """Return the shell tokens of every ``gh api`` invocation in one step.
 
-    A line scanning for ``gh api`` would miss a call whose flags continue onto
-    later lines, so the continuation lines are joined first. Tokenizing the
-    joined command rather than the whole script keeps the flag checks from
-    seeing text that belongs to an unrelated line. The search starts wherever
-    the call sits on its line, so a call inside a command substitution is
-    scanned like any other.
+    Tokenizing one joined command rather than the whole script keeps the flag
+    checks from seeing text that belongs to an unrelated line. The search
+    starts wherever the call sits on its line, so a call inside a command
+    substitution is scanned like any other.
 
     Returns
     -------
@@ -211,22 +241,12 @@ def gh_api_invocations(run: str) -> list[list[str]]:
         If the script names more ``gh api`` calls than the scan tokenizes. An
         unmodelled shape must fail the contract rather than slip past it.
     """
-    lines = run.splitlines()
-    # A comment that mentions `gh api` names no call, so it neither counts
-    # towards the total nor gets tokenized as though it were one.
-    script = [line for line in lines if not line.lstrip().startswith("#")]
-    invocations: list[list[str]] = []
-    index = 0
-    while index < len(script):
-        command = script[index].strip()
-        call = GH_API_CALL.search(command)
-        if call is not None:
-            command = command[call.start() :]
-            while command.endswith("\\") and index + 1 < len(script):
-                index += 1
-                command = f"{command[:-1]} {script[index].strip()}"
-            invocations.append(shlex.split(command))
-        index += 1
+    script = script_lines(run)
+    invocations = [
+        shlex.split(line[call.start() :])
+        for line in script
+        if (call := GH_API_CALL.search(line)) is not None
+    ]
     mentioned = len(GH_API_CALL.findall("\n".join(script)))
     if mentioned != len(invocations):
         msg = (
@@ -275,6 +295,42 @@ def run_tokens(run: str) -> list[str]:
     return shlex.split(command)
 
 
+def expression_bodies(text: str) -> cabc.Iterator[str]:
+    """Yield the body of every ``${{ ... }}`` expression in ``text``.
+
+    Looking for the first closing brace stops inside a quoted format string:
+    ``format('Hello {0}', secrets.TOKEN)`` closes at the ``0`` and the secret
+    that follows is never examined. GitHub expressions quote with single
+    quotes only, so a single-quoted run is skipped whole and a brace inside it
+    cannot end the expression early.
+
+    Yields
+    ------
+    str
+        Each expression's text, without its ``${{`` and ``}}`` delimiters.
+    """
+    start = 0
+    while (opening := text.find("${{", start)) != -1:
+        quoted = False
+        for index in range(opening + 3, len(text)):
+            char = text[index]
+            if quoted:
+                quoted = char != "'"
+            elif char == "'":
+                quoted = True
+            elif text.startswith("}}", index):
+                yield text[opening + 3 : index]
+                start = index + 2
+                break
+        else:
+            return
+
+
+def references_secret(text: str) -> bool:
+    """Return whether any expression in ``text`` names the secrets context."""
+    return any(SECRET_WORD.search(body) for body in expression_bodies(text))
+
+
 def reject_secrets(node: object) -> None:
     """Fail if any value in a document references a workflow secret.
 
@@ -285,7 +341,7 @@ def reject_secrets(node: object) -> None:
     """
     match node:
         case str() as text:
-            assert not SECRET_REFERENCE.search(text), (
+            assert not references_secret(text), (
                 f"the verification boundary must not reference a secret: {text!r}"
             )
         case dict() as mapping:
