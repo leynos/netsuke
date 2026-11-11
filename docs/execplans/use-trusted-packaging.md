@@ -3270,6 +3270,22 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `SECTION_MODULES` entry because it lives under `tests/workflow_contracts/`
   rather than `scripts/tests/`.
 
+  The first form resolved the **wrong job**. `release` (staging) and
+  `publish-release` (publication) each carry a step named
+  `Upload artefacts to release` and one named `Check asset upload errors`; the
+  staging pair calls the shared action with `dry-run: true`, and only the
+  publication pair calls `./.github/actions/upload-declared-assets`. The
+  original cases asked `job_steps(workflow, "release")` and so asserted the
+  staging hand-off while claiming the publication one. They are fixed by
+  resolving `publish-release` and by a case that pins its `uses:` to the local
+  action, which is what makes the other cases about publication at all. The
+  failure step's `ERROR_MESSAGE` is likewise read from the workflow's own
+  `env:` expression and resolved against the step outputs, rather than restated
+  from the mapped value, so a workflow that started sourcing the message from
+  another step fails instead of passing on a literal the case supplied. Two
+  more mutations are caught: pointing the publication job at the shared action,
+  and sourcing `ERROR_MESSAGE` from `steps.select`.
+
   **Containment was lexical, and two components were one short.** The guard in
   `release_payload_regular_files._require_below` used `Path.is_relative_to`,
   which compares components as written and never resolves `..`. `dist/../x`

@@ -8,11 +8,15 @@ output the composite does not map, or the workflow can read a name the mapping
 never exports -- and every other execution case would stay green because it
 reads ``GITHUB_OUTPUT`` directly rather than through the mapping.
 
-These cases close that seam. They run the action's real steps, evaluate the
-real ``outputs:`` expressions in ``action.yml`` against what the run wrote,
-then execute ``release.yml``'s own failure step with the mapped values. The
-success half asserts the failure step is skipped; the conflict half asserts it
-exits non-zero and prints the uploader's diagnostic.
+These cases close that seam. Everything is resolved from ``publish-release``
+rather than from step names searched across the whole workflow, because the
+staging job ``release`` carries a same-named upload step that calls a shared
+action; the case that pins the job's ``uses:`` is what keeps the rest honest.
+From there the cases run the action's real steps, evaluate the real
+``outputs:`` expressions in ``action.yml`` against what the run wrote, resolve
+the failure step's own ``if:`` and ``env:`` expressions, and execute its script
+with those values. The success half asserts the failure step is skipped; the
+conflict half asserts it exits non-zero and prints the uploader's diagnostic.
 
 Run via ``make test-workflow-contracts``.
 """
@@ -37,6 +41,14 @@ from workflow_loading import job_steps, load_workflow, named_step, require_mappi
 
 #: The workflow that calls the action and raises its deferred error.
 RELEASE_WORKFLOW = pathlib.Path(".github/workflows/release.yml")
+
+#: The job that performs the real publication. The staging job ``release``
+#: carries a same-named pair of steps that calls a shared action, so resolving
+#: by step name alone would test the wrong job's hand-off.
+PUBLISH_JOB = "publish-release"
+
+#: The action the publication job must call.
+UPLOAD_ACTION = "./.github/actions/upload-declared-assets"
 
 #: The step that calls the action, and the step that reports its refusal.
 UPLOAD_STEP = "Upload artefacts to release"
@@ -74,19 +86,18 @@ def _composite_outputs() -> dict[str, str]:
     }
 
 
-def _resolve(expression: str, outputs: dict[str, str]) -> str:
-    """Resolve one composite output expression against the step's outputs.
+def _resolve(expression: str, outputs: dict[str, str], step_id: str) -> str:
+    """Resolve one ``${{ steps.<id>.outputs.<name> }}`` expression.
 
-    Only the ``${{ steps.<id>.outputs.<name> }}`` form is accepted. A literal
-    would mean the manifest stopped exporting a step output, which is exactly
-    the defect these cases exist to catch, so the case fails rather than
-    reading a value the mapping never took from the step.
+    Only that form is accepted. A literal would mean the declaration stopped
+    reading a step output, which is exactly the defect these cases exist to
+    catch, so the case fails rather than reading a value nothing wrote.
 
     The step id is part of the claim, not decoration: ``outputs`` is keyed by
-    the output name the *upload* step writes, so a mapping that read the same
-    name off a different step must resolve to nothing rather than quietly
-    finding the upload step's value. Dropping the id here would make the
-    mapping test pass for a manifest that pointed at the wrong step.
+    output name alone, so an expression that named a different step would
+    otherwise quietly find this one's value. ``step_id`` is supplied by the
+    caller because the action's own step and the workflow's calling step have
+    different ids for the same outputs.
 
     Returns
     -------
@@ -97,11 +108,11 @@ def _resolve(expression: str, outputs: dict[str, str]) -> str:
     text = expression.strip().removeprefix("${{").removesuffix("}}").strip()
     match = re.fullmatch(_STEP_OUTPUT, text)
     assert match is not None, (
-        f"the composite must export a step output, got {expression!r}"
+        f"the expression must read a step output, got {expression!r}"
     )
     step, name = match.groups()
-    assert step == ACTION_UPLOAD_STEP_ID, (
-        f"the composite must export {ACTION_UPLOAD_STEP_ID}'s outputs, got {step!r}"
+    assert step == step_id, (
+        f"the expression must read {step_id}'s outputs, got {step!r}"
     )
     return outputs.get(name, "")
 
@@ -115,7 +126,8 @@ def _mapped(run_outputs: dict[str, str]) -> dict[str, str]:
         The mapped composite outputs.
     """
     mapped = {
-        name: _resolve(expr, run_outputs) for name, expr in _composite_outputs().items()
+        name: _resolve(expr, run_outputs, ACTION_UPLOAD_STEP_ID)
+        for name, expr in _composite_outputs().items()
     }
     assert set(mapped) == {ERROR_OUTPUT, MESSAGE_OUTPUT}, (
         "the composite must export exactly the deferred error pair, got "
@@ -124,18 +136,57 @@ def _mapped(run_outputs: dict[str, str]) -> dict[str, str]:
     return mapped
 
 
-def _release_steps() -> list[dict[str, object]]:
-    """Return ``release.yml``'s publish job steps, in order."""
+def _publication_steps() -> list[dict[str, object]]:
+    """Return ``publish-release``'s steps, in order.
+
+    Resolving the job by name is the point: ``release`` carries a same-named
+    upload step that calls a shared action, so a case that searched the whole
+    workflow for ``Upload artefacts to release`` could pass against the
+    staging job and never touch the publication hand-off.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        The publication job's steps, in declaration order.
+    """
     workflow = load_workflow(pathlib.Path(RELEASE_WORKFLOW))
-    return job_steps(workflow, "release")
+    return job_steps(workflow, PUBLISH_JOB)
 
 
 def _failure_step_condition() -> str:
-    """Return the ``if:`` that guards the publication failure step."""
-    step = named_step(_release_steps(), FAILURE_STEP)
+    """Return the ``if:`` that guards the publication failure step.
+
+    Returns
+    -------
+    str
+        The guard expression, exactly as the workflow declares it.
+    """
+    step = named_step(_publication_steps(), FAILURE_STEP)
     condition = step.get("if")
     assert isinstance(condition, str), "the failure step must carry an if: guard"
     return condition
+
+
+def _failure_message_expression() -> str:
+    """Return the ``env:`` expression that supplies the printed diagnostic.
+
+    Reading the expression rather than restating its meaning keeps the case
+    honest: if the workflow started sourcing the message from another step or
+    output, the assertion below would fail instead of passing on a literal the
+    case supplied itself.
+
+    Returns
+    -------
+    str
+        The ``${{ ... }}`` expression bound to ``ERROR_MESSAGE``.
+    """
+    step = named_step(_publication_steps(), FAILURE_STEP)
+    environment = require_mapping(step.get("env"), f"{FAILURE_STEP} environment")
+    expression = environment.get("ERROR_MESSAGE")
+    assert isinstance(expression, str), (
+        "the failure step must read its diagnostic from the environment"
+    )
+    return expression
 
 
 def _run_failure_step(mapped: dict[str, str]) -> subprocess.CompletedProcess[str]:
@@ -146,12 +197,14 @@ def _run_failure_step(mapped: dict[str, str]) -> subprocess.CompletedProcess[str
     subprocess.CompletedProcess[str]
         The finished process, so a case can assert on its status and output.
     """
-    step = named_step(_release_steps(), FAILURE_STEP)
+    step = named_step(_publication_steps(), FAILURE_STEP)
     script = step.get("run")
     assert isinstance(script, str), "the failure step must carry its own script"
     environment = {
         "PATH": "/usr/bin:/bin",
-        "ERROR_MESSAGE": mapped[MESSAGE_OUTPUT],
+        "ERROR_MESSAGE": _resolve(
+            _failure_message_expression(), mapped, UPLOAD_STEP_ID
+        ),
     }
     # The argv is fixed and the script comes from this repository's own
     # workflow, so there is no untrusted input to check here.
@@ -170,6 +223,21 @@ def _guard_holds(mapped: dict[str, str], *, job_failed: bool = False) -> bool:
     return evaluate(_failure_step_condition(), outputs, job_failed=job_failed)
 
 
+def test_the_publication_job_calls_the_declared_asset_action() -> None:
+    """Invoke this repository's action from the job that really publishes.
+
+    ``release`` carries a same-named step that calls a shared third-party
+    action, so a suite that matched by step name alone could resolve the
+    staging job and never notice that the publication job had stopped calling
+    the new action. Naming both the job and the ``uses:`` here is what makes
+    every other case in this module about the publication hand-off.
+    """
+    upload = named_step(_publication_steps(), UPLOAD_STEP)
+    assert upload.get("uses") == UPLOAD_ACTION, (
+        f"{PUBLISH_JOB} must call {UPLOAD_ACTION}, got {upload.get('uses')!r}"
+    )
+
+
 def test_the_composite_exports_both_outputs_this_workflow_reads() -> None:
     """Export the deferred error pair, which is all the failure step names.
 
@@ -183,11 +251,11 @@ def test_the_composite_exports_both_outputs_this_workflow_reads() -> None:
     assert set(_composite_outputs()) == {ERROR_OUTPUT, MESSAGE_OUTPUT}, (
         "the composite must export exactly the outputs the workflow consumes"
     )
-    step = named_step(_release_steps(), FAILURE_STEP)
+    step = named_step(_publication_steps(), FAILURE_STEP)
     assert ERROR_OUTPUT in str(step.get("if", "")), (
         "the guard must read the mapped error output"
     )
-    assert MESSAGE_OUTPUT in str(step.get("env", {})), (
+    assert _failure_message_expression().find(MESSAGE_OUTPUT) >= 0, (
         "the failure step must print the mapped diagnostic"
     )
 
