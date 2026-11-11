@@ -115,14 +115,14 @@ is not one of the declared names. Build material that ships inside the packages
 -- the binary, licences, completions, and manual pages -- carries no release
 suffix and is simply left out of the upload. The job then hashes the declared
 bytes and retains the declaration and the digest record as workflow artefacts,
-so what was uploaded stays on record. The release stays a draft until two
-later jobs have used them: the inventory verification job downloads every
-attached asset and checks it against that record, and the finalization job
-then un-drafts the release only when every declared asset already holds its
-trusted digest, taking the prerelease flag from the validated candidate
-identity. The finalization job reconciles the release against that record twice:
-once from the plan the planner wrote, and again from a snapshot taken
-immediately before it un-drafts.
+so what was uploaded stays on record. The release stays a draft until two later
+jobs have used them: the inventory verification job downloads every attached
+asset and checks it against that record, and the finalization job then
+un-drafts the release only when every declared asset already holds its trusted
+digest, taking the prerelease flag from the validated candidate identity. The
+finalization job reconciles the release against that record twice: once from
+the plan the planner wrote, and again from a snapshot taken immediately before
+it un-drafts.
 
 A publishing run then verifies what GitHub ended up holding. The
 `verify-release-inventory` job runs only when the metadata, crates.io, and
@@ -137,19 +137,22 @@ without a sidecar of its own. It does not publish, un-draft, or replace
 anything.
 
 Only a release the workflow creates is a draft: when the tag already has one,
-the job attaches to that release whether or not it is public. An attached
-asset GitHub already reports with the recorded digest is skipped; an attached
-asset with different bytes stops the run, and the uploader never replaces an
-existing asset. An attached asset whose bytes cannot be established -- GitHub
-reports no usable digest for it and the download that would settle the
-question fails -- stops the run too, but the upload plan records it apart from
-a conflict, because "the release holds the wrong bytes" and "nobody could read
-the bytes" call for different remedies. A declared asset that is missing, one
-whose bytes changed, or an unreadable record stops the run with the release
-still a draft; correct the cause and rerun the verification and finalization
-jobs, which read the retained records and never rebuild the release. Rerunning
-a job is therefore safe, and a rerun cannot swap a release's bytes for a
-second build's.
+the job attaches to that release whether or not it is public. An attached asset
+GitHub already reports with the recorded digest is skipped; an attached asset
+with different bytes stops the run, and the uploader never replaces an existing
+asset. An attached asset whose bytes cannot be established -- GitHub reports no
+usable digest for it and the download that would settle the question fails --
+stops the run too, but the upload plan records it apart from a conflict,
+because "the release holds the wrong bytes" and "nobody could read the bytes"
+call for different remedies. A plan that still owes an upload, or one that
+reports a conflicting or unverifiable asset, is refused before the release is
+read: the run makes no edit, and says only that, rather than claiming a state
+it has not observed. A refusal made from the snapshot taken just before the
+edit -- a declared asset that is missing, one whose bytes changed, or an
+unreadable record -- stops the run with the release still a draft. In either
+case, correct the cause and rerun the verification and finalization jobs, which
+read the retained records and never rebuild the release. Rerunning a job is
+therefore safe, and a rerun cannot swap a release's bytes for a second build's.
 
 A GitHub call that fails before the edit is different. The run has not edited
 the release, but it cannot say what state the release is in: a retry can begin

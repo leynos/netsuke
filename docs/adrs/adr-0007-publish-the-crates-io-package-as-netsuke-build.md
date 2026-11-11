@@ -343,8 +343,12 @@ above.
   The package record's identity is re-decoded and re-checked rather than copied
   on trust, and the `publish` command re-reads the candidate and requires its
   tag and commit, so a hand-edited record cannot reclassify the release.
-- A verification failure, a reconciliation refusal, a missing or conflicting
-  asset, or a failed GitHub call leaves the release as a draft. A retry
+- A verification failure, or a refusal made from the pre-edit snapshot of the
+  release, leaves the release as a draft. A refusal made before the release is
+  read — a candidate from another revision, or a plan that still owes an upload
+  — stops the run without an edit and claims nothing about a state it has not
+  read. A failed GitHub call reports the state as unknown, because a retry may
+  begin after an earlier attempt already published the release. A retry
   converges: an interruption after the edit but before the result was recorded
   is recognized on the next run as already finalized.
 - A public release whose prerelease flag disagrees with the candidate cannot be
@@ -357,7 +361,7 @@ stage is the one place where "verified" has to mean the bytes already attached,
 not the bytes a rebuild would produce. It does not re-verify the downloaded
 assets; that is the inventory job's work, and this job depends on it having
 succeeded. It does not repair a release: every fault it can see is a refusal
-that leaves the draft in place for an operator.
+that leaves the release unpublished for an operator.
 
 **Status.** Implemented, with job and action contracts in
 `tests/workflow_contracts/release_finalize_contract_test.py` and

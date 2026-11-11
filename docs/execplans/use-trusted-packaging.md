@@ -3978,6 +3978,25 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   read, unreadable before any edit, ambiguous after an edit — and the
   developers' guide and both module docstrings follow the same distinction.
 
+- [x] (2026-11-12) Answered the seventh review: the prose still merged the two
+  reconciliation passes, and the CLI commands carried one-line docstrings.
+
+  **The finding.** The users' guide said a missing asset, a changed asset, or
+  an unreadable record "stops the run with the release still a draft", but the
+  first reconciliation runs over the saved plan, before `publish` reads GitHub
+  at all. The same merged claim appeared in the migration guide and in
+  ADR-0007. The guide now separates the passes: a plan refusal happens before
+  the read and claims no state, while a refusal from the pre-edit snapshot may
+  say the release is still a draft. The migration guide says only that the run
+  stops before publication, and the ADR states the three cases explicitly.
+
+  **The trivial finding.** `resolve`, `snapshot`, and `publish` had one-line
+  docstrings. Each now carries a NumPy-style `Parameters` section and a `Notes`
+  section naming the exit statuses it can produce. Cyclopts consumes the
+  `Parameters` section as the flag help — the two read-only commands previously
+  showed no help for their flags — and drops `Notes` from `--help`, so the
+  command-line surface is unchanged.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

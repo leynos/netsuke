@@ -904,13 +904,15 @@ Two consequences matter to anyone re-running a release:
 - The declaration and both digest records are retained as a
   `declared-assets-<job>-<attempt>` workflow artefact before the transfer, so a
   refusal later in the run does not cost the operator the evidence of what was
-declared. Two later jobs read them: the `verify-release-inventory` job
+  declared. Two later jobs read them: the `verify-release-inventory` job
   downloads what the release holds and compares it with those records, so a
   release whose bytes differ from the build stops the run, and the finalizer
   un-drafts the release only when every declared asset already holds its
-  recorded digest. Only a release the workflow creates is a draft; when the
-  tag already has one, the job attaches to that release whether or not it is
-  public. A missing or conflicting asset leaves the release as a draft.
+  recorded digest. Only a release the workflow creates is a draft; when the tag
+  already has one, the job attaches to that release whether or not it is
+  public. A missing or conflicting asset stops the run before the release is
+  published.
+
 Manifests, local builds, and the published contents are unchanged, and no new
 release input was added: the dry run and the publishing lane keep using the same
 `dry-run` output. The [users' guide](users-guide.md) describes the upload
