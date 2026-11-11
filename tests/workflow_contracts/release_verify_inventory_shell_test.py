@@ -9,6 +9,7 @@ before it parses.
 Run via ``make test-workflow-contracts``.
 """
 
+import pytest
 from release_verify_inventory_shell import logical_lines
 
 
@@ -122,6 +123,35 @@ def test_an_escaped_space_does_not_hide_a_release_call() -> None:
     assert logical_lines(script) == ["true foo\\ #; gh release delete v1"], (
         "a hash after an escaped space must not swallow a release command"
     )
+
+
+def test_a_quote_inside_a_substitution_does_not_close_the_outer_quote() -> None:
+    r"""Keep the enclosing quote open across a nested command substitution.
+
+    Bash parses the text of ``$(...)`` as a fresh command, so the ``"`` inside
+    it quotes that command and does not end the ``"`` that encloses the whole
+    substitution. A reader with a single quote state closes the outer quote
+    there, reads the following ``'`` as an opening quote, and swallows the rest
+    of the script -- including the continued call on the next line.
+    """
+    script = (
+        "printf '%s\\n' \"$(printf '%s' '\"')\"\n"
+        "gh a\\\npi --method POST repos/o/r/releases\n"
+    )
+    assert logical_lines(script) == [
+        "printf '%s\\n' \"$(printf '%s' '\"')\"",
+        "gh api --method POST repos/o/r/releases",
+    ], "a nested substitution must not close the quote that encloses it"
+
+
+def test_an_unbalanced_quote_fails_instead_of_swallowing_the_script() -> None:
+    """Refuse a script whose quoting the reader cannot resolve.
+
+    The reader cannot say which command the remaining text belongs to, so it
+    must fail rather than let a call pass unexamined.
+    """
+    with pytest.raises(AssertionError, match="ends inside a quote"):
+        logical_lines("printf 'unterminated\ngh api --method POST x\n")
 
 
 def test_a_trailing_backslash_at_the_end_of_the_script_is_kept() -> None:

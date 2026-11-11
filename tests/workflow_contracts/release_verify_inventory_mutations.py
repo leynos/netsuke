@@ -6,6 +6,9 @@ shape sits beside the helper that changes it rather than inside the test that
 observes the rejection.
 """
 
+import functools
+import typing as typ
+
 import pytest
 from release_verify_inventory_support import (
     DOWNLOAD_STEP,
@@ -50,6 +53,19 @@ CONTINUATION_MUTATIONS = {
 ESCAPED_SPACE_MUTATIONS = {
     "gh-api-escaped-space": 'true foo\\ #; gh api --method POST "repos/o/r/releases"',
     "gh-release-escaped-space": "true foo\\ #; gh release delete v1",
+}
+#: Commands a mutation appends after a command substitution whose own quotes
+#: would close the enclosing one. Bash parses the substitution as a fresh
+#: command, so the inner ``"`` is not the outer one; a reader with a single
+#: quote state loses the rest of the script, including the continued call.
+SUBSTITUTION_QUOTE_MUTATIONS = {
+    "gh-api-substitution-quote": (
+        "printf '%s\\n' \"$(printf '%s' '\"')\"\n"
+        'gh a\\\npi --method POST "repos/o/r/releases"'
+    ),
+    "gh-release-substitution-quote": (
+        "printf '%s\\n' \"$(printf '%s' '\"')\"\ngh re\\\nlease delete v1"
+    ),
 }
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.
@@ -97,23 +113,38 @@ def _add_secret_to_verify_step(steps: list[dict[str, object]]) -> None:
     )
 
 
+#: Every appending mutation, keyed by the name the contract test names. Each
+#: value changes the action's steps and nothing else, so a new spelling joins
+#: the dispatch table rather than widening a branch chain.
+APPENDING_MUTATIONS = {
+    **RELEASE_MUTATIONS,
+    **CONTINUATION_MUTATIONS,
+    **ESCAPED_SPACE_MUTATIONS,
+    **SUBSTITUTION_QUOTE_MUTATIONS,
+}
+
+#: Each action mutation, paired with the change it makes to the steps.
+ACTION_MUTATIONS: dict[str, cabc.Callable[[list[dict[str, object]]], None]] = {
+    **{
+        name: functools.partial(_append_release_command, command=command)
+        for name, command in APPENDING_MUTATIONS.items()
+    },
+    **{
+        name: functools.partial(_add_to_listing_call, argument=argument)
+        for name, argument in LISTING_ARGUMENT_MUTATIONS.items()
+    },
+    "gh-api-substitution": _hide_write_in_substitution,
+    "secret-token": _add_secret_to_verify_step,
+}
+
+
 def mutate_action(action: dict[str, object], mutation: str) -> None:
     """Change one dimension of an action step's command or environment."""
     steps = load_action_steps(action)
-    if mutation in RELEASE_MUTATIONS:
-        _append_release_command(steps, RELEASE_MUTATIONS[mutation])
-    elif mutation in CONTINUATION_MUTATIONS:
-        _append_release_command(steps, CONTINUATION_MUTATIONS[mutation])
-    elif mutation in ESCAPED_SPACE_MUTATIONS:
-        _append_release_command(steps, ESCAPED_SPACE_MUTATIONS[mutation])
-    elif mutation in LISTING_ARGUMENT_MUTATIONS:
-        _add_to_listing_call(steps, LISTING_ARGUMENT_MUTATIONS[mutation])
-    elif mutation == "gh-api-substitution":
-        _hide_write_in_substitution(steps)
-    elif mutation == "secret-token":
-        _add_secret_to_verify_step(steps)
-    else:
+    apply = ACTION_MUTATIONS.get(mutation)
+    if apply is None:
         pytest.fail(f"unknown action mutation {mutation!r}")
+    apply(steps)
 
 
 def _retarget_trusted_record(workflow: dict[str, object]) -> None:
@@ -193,3 +224,7 @@ def mutate_workflow(workflow: dict[str, object], mutation: str) -> None:
     if apply is None:
         pytest.fail(f"unknown workflow mutation {mutation!r}")
     apply(workflow)
+
+
+if typ.TYPE_CHECKING:
+    import collections.abc as cabc

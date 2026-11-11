@@ -16,7 +16,12 @@ import typing as typ
 import pytest
 from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
-from release_verify_inventory_mutations import mutate_action, mutate_workflow
+from release_verify_inventory_mutations import (
+    ACTION_MUTATIONS,
+    WORKFLOW_MUTATIONS,
+    mutate_action,
+    mutate_workflow,
+)
 from release_verify_inventory_support import (
     ARTIFACT_ACTION,
     CHECKOUT_ACTION,
@@ -282,27 +287,7 @@ def _assert_complete_contract(
     assert not violations, f"verify-job reachability contract: {violations}"
 
 
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        "gh-release-download",
-        "gh-release-spacing",
-        "gh-api-field",
-        "gh-api-inline-field",
-        "gh-api-short-field",
-        "gh-api-input",
-        "gh-api-method-override",
-        "gh-api-short-method",
-        "gh-api-substitution",
-        "gh-api-continued-method",
-        "gh-api-midword-continued",
-        "gh-release-continued",
-        "gh-release-midword-continued",
-        "gh-api-escaped-space",
-        "gh-release-escaped-space",
-        "secret-token",
-    ],
-)
+@pytest.mark.parametrize("mutation", ACTION_MUTATIONS)
 def test_action_mutations_are_rejected(mutation: str) -> None:
     """Prove the action contract detects each verifier mutation."""
     action = copy.deepcopy(load_action())
@@ -313,17 +298,7 @@ def test_action_mutations_are_rejected(mutation: str) -> None:
         _assert_complete_contract(action, workflow)
 
 
-@pytest.mark.parametrize(
-    "mutation",
-    [
-        "id-token",
-        "release-dependency",
-        "trusted-in-download",
-        "artifact-pattern",
-        "artifact-literal",
-        "publisher-output",
-    ],
-)
+@pytest.mark.parametrize("mutation", WORKFLOW_MUTATIONS)
 def test_workflow_mutations_are_rejected(mutation: str) -> None:
     """Prove the job contract detects each dependency and trust mutation."""
     action = copy.deepcopy(load_action())
