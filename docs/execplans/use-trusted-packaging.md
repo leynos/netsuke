@@ -3238,6 +3238,9 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   caller's own root spelling puts there.
 - [x] (2026-11-11) Added generated coverage for the containment invariant,
   scored against `os.path.realpath` rather than against the guard's own walk.
+  The link property's first form tested an absent leaf rather than the ancestor
+  walk; it now builds the leaf inside the link target, and deleting the
+  ancestor loop fails it.
 
   **Containment was lexical, and two components were one short.** The guard in
   `release_payload_regular_files._require_below` used `Path.is_relative_to`,
@@ -3278,14 +3281,26 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   **The invariant is also generated, against an independent oracle.**
   `scripts/tests/test_release_payload_regular_files_properties.py` varies
   depth, how many components are climbed, where a symlinked directory sits, and
-  a root whose own spelling carries a `..`. Two properties state the relation
+  a root whose own spelling carries a `..`. Four properties state the relation
   rather than one shape: a source the guard accepts must resolve inside the
-  root, and a source that resolves outside it must be refused. The oracle is
-  `os.path.realpath` on both sides, which is *not* the component walk the guard
-  uses, so agreement is evidence rather than restatement. The escape property
-  cancels part of the chain inside the root and then climbs past it, which is
-  precisely the shape lexical containment misses. Removing the depth walk fails
-  that property; the blanket ban fails the two acceptance properties.
+  root; a source that resolves outside it must be refused; a `..` in the root's
+  own spelling must never cause a refusal; and a link anywhere below the root
+  must be refused. The oracle is `os.path.realpath` on both sides, which is
+  *not* the component walk the guard uses, so agreement is evidence rather than
+  restatement. The escape property cancels part of the chain inside the root
+  and then climbs past it, which is precisely the shape lexical containment
+  misses. Removing the depth walk fails that property; the blanket ban fails
+  the two acceptance properties.
+
+  The link property had to be built twice. Its first form pointed a link at a
+  directory that held no leaf, so `require_regular` refused the *absent leaf*
+  before ever reaching the ancestor walk, and the permitted diagnostic let the
+  case pass with that walk deleted -- a test of the leaf check wearing the
+  ancestor check's name. It now creates the rest of the chain, and the leaf,
+  inside the link target, so the source exists and resolves outside the root,
+  and asserts both before expecting a refusal. Deleting the ancestor loop then
+  fails the property with `DID NOT RAISE`, which is the evidence the earlier
+  form could not give.
 
   The *names* cannot carry the escape:
   `release_payload_names.describe_offenders` refuses a staged name through

@@ -219,10 +219,13 @@ def test_a_symlinked_directory_anywhere_below_the_root_is_refused(
     """Refuse a source reached through a link at any depth.
 
     The generated position decides which directory in the chain is the link,
-    so the case covers the leaf's own parent and every ancestor above it. Each
-    is a link to a directory outside the tree holding a real file of the
-    requested name: the bytes exist, and only judging the link as itself
-    refuses them.
+    so the case covers the leaf's own parent and every ancestor above it. The
+    link points outside the tree, and the rest of the chain -- and the leaf --
+    is built *inside* the link target, because that is where a walked path
+    lands once it steps through. The leaf therefore lstat's as a regular file
+    and the source really does resolve outside the root, so only judging the
+    link as itself can refuse it; a case whose leaf were absent would let the
+    leaf check refuse first and pass with the ancestor walk deleted.
     """
     depth = data.draw(st.integers(min_value=1, max_value=MAX_DEPTH))
     link_at = data.draw(st.integers(min_value=0, max_value=depth - 1))
@@ -230,16 +233,25 @@ def test_a_symlinked_directory_anywhere_below_the_root_is_refused(
     root = base / "dist"
     root.mkdir()
     elsewhere = base / "elsewhere"
-    _ = write_asset(elsewhere, "a.deb")
+    elsewhere.mkdir()
 
-    current = root
+    # Two paths, because a walk through a link and the tree it lands in stop
+    # agreeing at the link: ``walked`` is the spelling the caller uses, and
+    # ``landed`` is the directory the next component is really created in.
+    walked = root
+    landed = root
     for index in range(depth):
-        current /= f"d{index}"
+        walked /= f"d{index}"
         if index == link_at:
-            _ = current.symlink_to(elsewhere, target_is_directory=True)
+            _ = walked.symlink_to(elsewhere, target_is_directory=True)
+            landed = elsewhere
         else:
-            current.mkdir()
+            landed /= f"d{index}"
+            landed.mkdir()
 
-    candidate = current / "outside" / ".." / "a.deb"
-    with pytest.raises(StagedFileMissingError, match=r"directory|regular file"):
+    candidate = walked / "a.deb"
+    _ = write_asset(landed, "a.deb")
+    assert candidate.is_file(), "the leaf must exist through the link"
+    assert not _resolves_inside(candidate, root), "the source must leave the root"
+    with pytest.raises(StagedFileMissingError, match="directory"):
         release_payload_tree.require_regular(candidate, staged_root=root)
