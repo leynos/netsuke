@@ -32,6 +32,22 @@ def test_record_file_round_trips_a_valid_mapping(tmp_path: pathlib.Path) -> None
     )
 
 
+def test_reading_a_record_normalizes_digest_case(tmp_path: pathlib.Path) -> None:
+    """Decode an uppercase digest into its lowercase value.
+
+    The writer only ever emits lowercase, but a record can be produced
+    elsewhere or hand-edited, and the comparison against the downloaded asset
+    is an exact string comparison. Normalizing at the adapter is what makes the
+    case of the stored text irrelevant to that comparison.
+    """
+    path = tmp_path / "record.json"
+    _ = path.write_text(json.dumps({"assets": {"a": DIGEST.upper()}}), encoding="utf-8")
+
+    assert read_digest_record(path).as_mapping() == {"a": DIGEST}, (
+        "an uppercase digest in the file must decode to the lowercase value"
+    )
+
+
 def test_the_record_is_written_in_sorted_order(tmp_path: pathlib.Path) -> None:
     """Write a stable file, so two runs over one tree are byte-identical."""
     path = tmp_path / "record.json"
