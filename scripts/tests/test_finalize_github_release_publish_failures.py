@@ -2,9 +2,9 @@
 
 Each case here begins with a plan that permits publication, so the failure is
 the only thing under test. The assertions say what state the release is left
-in: still a draft when the API refused before the edit, unknown once an edit
-has been attempted, already public when only the outcome record could not be
-written, and never holding bytes this command replaced.
+in: unedited but of unknown state when the first read failed, unknown once an
+edit has been attempted, already public when only the outcome record could not
+be written, and never holding bytes this command replaced.
 """
 
 import typing as typ
@@ -32,12 +32,34 @@ if typ.TYPE_CHECKING:
 pytest_plugins = ("cmd_mox.pytest_plugin",)
 
 
+@pytest.mark.parametrize(
+    "case",
+    [
+        pytest.param(
+            ("HTTP 403", "the API diagnostic must reach the workflow log"),
+            id="api-diagnostic",
+        ),
+        pytest.param(
+            (
+                "has not edited the release",
+                "a failure before the edit can promise this run never touched it",
+            ),
+            id="not-edited",
+        ),
+        pytest.param(
+            ("state is unknown", "a failed read cannot say what state it is in"),
+            id="unknown-state",
+        ),
+    ],
+)
 def test_publish_reports_an_api_failure_before_the_edit(
     tmp_path: pathlib.Path,
     cmd_mox: CmdMox,
     capsys: pytest.CaptureFixture[str],
+    case: tuple[str, str],
 ) -> None:
-    """Leave the draft untouched when the release state cannot be read."""
+    """Leave the release unedited and its state unknown when the read fails."""
+    fragment, reason = case
     sequenced_gh(cmd_mox, [("", "HTTP 403\n", 1)])
 
     with pytest.raises(SystemExit) as error:
@@ -49,11 +71,7 @@ def test_publish_reports_an_api_failure_before_the_edit(
     assert not (tmp_path / "result.json").exists(), (
         "a release that was never read must not record an outcome"
     )
-    message = capsys.readouterr().err
-    assert "HTTP 403" in message, "the API diagnostic must reach the workflow log"
-    assert "remains a draft" in message, (
-        "a failure before the edit can promise the release was never touched"
-    )
+    assert fragment in capsys.readouterr().err, reason
 
 
 def test_publish_reports_a_readback_that_is_still_a_draft(

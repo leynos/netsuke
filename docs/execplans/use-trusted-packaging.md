@@ -3940,13 +3940,43 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   reports the state as **unknown** after an edit, naming the two ways to
   establish it — inspect the release, or rerun, which records
   `already-finalized` without a second edit. Before the edit the message still
-  promises the draft was untouched. The users' guide, the action's step
-  comment, and both module docstrings were corrected with it.
+  promises the draft was untouched (superseded by the sixth round below). The
+  users' guide, the action's step comment, and both module docstrings were
+  corrected with it.
 
   **P3 — stale implementation status.** `release.yml` said the finalizer was
   not wired; the developers' guide called links 5 and 6 *Planned*; and two
   module docstrings said no job invokes them. All four now describe the
   workflow as it is.
+
+- [x] (2026-11-11) Answered the sixth review: the pre-edit half of the
+  draft-state guarantee was still an overclaim.
+
+  **The finding.** `release_state_failure` treated "no edit was attempted" as
+  sufficient to say the release "remains a draft". It is not. A retry can begin
+  after an earlier attempt already made the release public, and the retry's
+  first `gh release view` is exactly the call that failed — so this run never
+  read the state it was asserting.
+
+  **The rule now.** A message may say the release "remains a draft" only when a
+  read taken for this run saw `isDraft: true`. Everything else states the
+  weaker, checkable fact: *this run has not edited the release*.
+  `release_state_failure` reports the failing read's state as **unknown** and
+  names the two ways to establish it. `require_verified` takes
+  `draft_confirmed`, set only by the call reached after `_require_draft`, so
+  the refusal made from the plan alone claims no state at all.
+  `require_candidate`, `run_gh`'s launch-failure message, and the action's
+  three plan-step messages were corrected the same way: none of them reads the
+  release.
+
+  **Why the weaker claim is the honest one.** "Not edited by this run" is
+  provable from the code path; "still a draft" is a claim about GitHub that
+  only a successful read supports. The two coincide for a first attempt and
+  diverge precisely on the retry the feature exists to make safe.
+
+  The users' guide now separates the three cases — refused after a draft was
+  read, unreadable before any edit, ambiguous after an edit — and the
+  developers' guide and both module docstrings follow the same distinction.
 
 ## Surprises & discoveries
 

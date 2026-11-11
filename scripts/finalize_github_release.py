@@ -91,7 +91,7 @@ def snapshot(
 def publish(
     request: typ.Annotated[operations.PublishRequest, Parameter(name="*")],
 ) -> None:
-    """Un-draft a fully verified release, or report why it stays a draft."""
+    """Un-draft a fully verified release, or report why it is left unedited."""
     operations.publish_release(request)
 
 

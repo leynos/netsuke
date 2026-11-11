@@ -2,8 +2,8 @@
 
 Un-drafting a release is irreversible, so the guards here run before any API
 call: a candidate built from another revision, a plan that still owes an
-upload, and a plan whose bytes were never established each stop the run with
-the release still a draft. Only a release in which every declared asset already
+upload, and a plan whose bytes were never established each stop the run before
+it touches the release. Only a release in which every declared asset already
 holds the trusted digest reaches the one edit this feature performs.
 
 The plan answers for the snapshot the planner read, so the release is
@@ -113,7 +113,10 @@ def assessment(path: pathlib.Path) -> release_plan.PlanAssessment:
 
 
 def require_verified(
-    result: release_plan.PlanAssessment, *, source: str = "the reconciliation plan"
+    result: release_plan.PlanAssessment,
+    *,
+    source: str = "the reconciliation plan",
+    draft_confirmed: bool = False,
 ) -> None:
     """Stop unless the assessment says every declared asset is already correct.
 
@@ -125,6 +128,9 @@ def require_verified(
     source
         What the assessment was made from, named in the refusal so an operator
         can tell a stale plan from a release that changed under the run.
+    draft_confirmed
+        Whether a read taken for this run established that the release is
+        still a draft. Only then may the refusal say so.
 
     Notes
     -----
@@ -132,7 +138,11 @@ def require_verified(
     the run with :data:`EXIT_UPLOAD_REQUIRED`, pointing at the declared upload
     contract; a conflicting or unverifiable one stops it with
     :data:`EXIT_REFUSED`; an unreadable one with :data:`EXIT_INPUT_UNREADABLE`.
-    Each leaves the release a draft.
+    Each stops the run before the edit, so each can say this run has not
+    edited the release. A refusal made from the plan alone has read nothing,
+    and a retry may begin after an earlier attempt published the release, so
+    only an assessment made after :func:`_require_draft` passes
+    ``draft_confirmed``.
 
     Examples
     --------
@@ -148,13 +158,14 @@ def require_verified(
     """
     if result.verdict is release_plan.PlanVerdict.VERIFIED:
         return
+    state = _draft_state(draft_confirmed=draft_confirmed)
     if result.verdict is release_plan.PlanVerdict.UPLOAD_REQUIRED:
         release_io.fail(
             release_io.EXIT_UPLOAD_REQUIRED,
             f"{source} still requires uploads ("
             + ", ".join(result.uploads)
-            + "); run the declared upload contract before finalizing. "
-            "The release remains a draft",
+            + "); run the declared upload contract before finalizing; "
+            + state,
         )
     if result.verdict is release_plan.PlanVerdict.UNREADABLE:
         release_io.fail(release_io.EXIT_INPUT_UNREADABLE, result.detail)
@@ -162,11 +173,30 @@ def require_verified(
         release_upload_plan.blocked_message(result.conflicts, result.unverifiable)
         or result.detail
     )
-    release_io.fail(release_io.EXIT_REFUSED, f"{reason}; the release remains a draft")
+    release_io.fail(release_io.EXIT_REFUSED, f"{reason}; {state}")
+
+
+def _draft_state(*, draft_confirmed: bool) -> str:
+    """Name the release state only as far as this run has established it.
+
+    A refusal made from the plan alone has not read the release, and a retry
+    can begin after an earlier attempt already published it, so it may not
+    claim the release is a draft. A refusal made after the pre-edit read may,
+    because that read saw ``isDraft: true``.
+
+    Returns
+    -------
+    str
+        The clause a refusal appends, claiming a draft only when a read
+        established one.
+    """
+    if draft_confirmed:
+        return "the release remains a draft"
+    return "this run has not edited the release"
 
 
 def publish_release(request: PublishRequest) -> None:
-    """Un-draft a fully verified release, or report why it stays a draft.
+    """Un-draft a fully verified release, or report why it is left unedited.
 
     Parameters
     ----------
@@ -179,13 +209,14 @@ def publish_release(request: PublishRequest) -> None:
     revision, a plan that still owes an upload, a conflict, or a public
     release with the wrong prerelease flag stops the run with
     :data:`EXIT_REFUSED`, :data:`EXIT_UPLOAD_REQUIRED`, or
-    :data:`EXIT_INPUT_UNREADABLE`, leaving the release a draft. A failed call
-    or an unreadable readback stops it with :data:`EXIT_REMOTE_FAILED`, and an
-    outcome that cannot be recorded with :data:`EXIT_OUTPUT_UNWRITABLE` after
-    the edit has landed. Those two are the only failures that cannot promise
-    the release is still a draft: once the edit has been attempted, GitHub may
-    have applied it before the response was lost, so the run reports the state
-    as unknown and names the two ways to establish it.
+    :data:`EXIT_INPUT_UNREADABLE`, leaving the release unedited by this run. A
+    failed call or an unreadable readback stops it with
+    :data:`EXIT_REMOTE_FAILED`, and an outcome that cannot be recorded with
+    :data:`EXIT_OUTPUT_UNWRITABLE` after the edit has landed. Those two are the
+    only failures that cannot promise the release is unedited: once the edit
+    has been attempted, GitHub may have applied it before the response was
+    lost, so the run reports the state as unknown and names the two ways to
+    establish it.
 
     A release already public with the candidate's own flag is recorded as
     ``already-finalized`` without a second edit, so an interrupted retry
@@ -198,7 +229,8 @@ def publish_release(request: PublishRequest) -> None:
     :data:`EXIT_REFUSED` refusal, and an undeclared extra is still ignored
     exactly as the planner ignores it. A record that cannot be read stops the
     run with :data:`EXIT_INPUT_UNREADABLE`. Every one of those leaves the
-    release a draft.
+    release unedited, and each is reached after a read that saw it is still a
+    draft, so each may say so.
 
     What remains, and cannot be closed from this side, is the window between
     that read and the edit: GitHub offers no conditional edit, so a writer that
@@ -223,6 +255,7 @@ def publish_release(request: PublishRequest) -> None:
     require_verified(
         _reconcile_current(request.digest_record_path, current),
         source="the release's current inventory",
+        draft_confirmed=True,
     )
     _edit_release(request, identity)
     _confirm_published(request, identity)

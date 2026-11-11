@@ -67,8 +67,8 @@ def fail(code: int, message: str) -> typ.NoReturn:
     code
         The exit status the workflow step reports.
     message
-        The diagnosis to write. It names what failed and, where the distinction
-        matters to an operator, whether the release remains a draft.
+        The diagnosis to write. It names what failed and, where it matters to
+        an operator, what the run has established about the release.
 
     Raises
     ------
@@ -82,7 +82,7 @@ def fail(code: int, message: str) -> typ.NoReturn:
     >>> hidden = io.StringIO()
     >>> try:
     ...     with contextlib.redirect_stderr(hidden):
-    ...         fail(1, "the release remains a draft")
+    ...         fail(1, "the release state is unknown")
     ... except SystemExit as error:
     ...     print(error.code)
     1
@@ -111,9 +111,11 @@ def run_gh(*arguments: str, echo: bool = False) -> CommandResult:
     Notes
     -----
     A launch that fails stops the run with :data:`EXIT_REMOTE_FAILED`, because
-    no answer was produced to act on. A command that runs and exits non-zero is
-    not a failure here: its status and stderr are the answer, and the caller
-    decides what a given status means.
+    no answer was produced to act on. The diagnosis claims nothing about the
+    release: a launch failure on the edit and one on a read leave the same
+    evidence, which is none. A command that runs and exits non-zero is not a
+    failure here: its status and stderr are the answer, and the caller decides
+    what a given status means.
 
     Examples
     --------
@@ -126,7 +128,7 @@ def run_gh(*arguments: str, echo: bool = False) -> CommandResult:
     except OSError as error:
         fail(
             EXIT_REMOTE_FAILED,
-            f"gh could not be launched: {error}; the release remains a draft",
+            f"gh could not be launched: {error}; the release state is unknown",
         )
 
 

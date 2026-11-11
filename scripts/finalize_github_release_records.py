@@ -5,9 +5,10 @@ edit: the release snapshot, the candidate record it validates and reads back,
 and the three records the decision module writes. They are separated from the
 decision itself because their failure modes are the ones an operator reads
 first: a `gh` call that did not answer, and a record that could not be written.
-Neither changes the release. A failure before the edit stops the run with the
-release still a draft; a failure after one was attempted reports the state as
-unknown, because GitHub may have applied the edit before the response was lost.
+Neither changes the release. A failure before the edit reports only what this
+run established: that it has not edited the release. A failure after one was
+attempted reports the state as unknown, because GitHub may have applied the
+edit before the response was lost.
 
 The split is also a size boundary. ``finalize_github_release_operations``
 answers "may this release be un-drafted, and with which flag", and the module
@@ -49,8 +50,8 @@ def snapshot_release(
         upstream's, so it is never inferred from the checkout.
     after_edit
         Whether an un-drafting call has already been attempted for this run.
-        A read that fails then cannot promise the release is still a draft,
-        because GitHub may have applied the edit before the response was lost.
+        A read that fails then cannot promise the release is unedited, because
+        GitHub may have applied the edit before the response was lost.
 
     Returns
     -------
@@ -63,7 +64,8 @@ def snapshot_release(
     A ``gh`` call that fails or answers with something unusable stops the run
     with :data:`EXIT_REMOTE_FAILED`; nothing is decided from an unread release.
     The diagnosis distinguishes the two cases, because only the first can say
-    the release is still a draft.
+    an edit was attempted, and a retry may begin after an earlier attempt
+    already published the release.
     """
     result = release_io.run_gh(
         "release",
@@ -100,14 +102,16 @@ def release_state_failure(message: str, *, after_edit: bool) -> typ.NoReturn:
 
     Notes
     -----
-    Before the edit, the release has not been touched, so the run can promise
-    it remains a draft. After an edit has been attempted, GitHub may have
-    applied it before the response or the read-back was lost; saying it is
-    still a draft would be a claim the run cannot support, and an operator who
-    believed it might edit the release by hand. The state is therefore reported
-    as unknown, with the two ways to establish it: inspect the release, or
-    re-run the finalizer, which records ``already-finalized`` without a second
-    edit when the release did become public.
+    A failed read establishes nothing about the release, so neither case
+    reports it as a draft. A retry can begin after an earlier attempt already
+    published the release, and this attempt's first read is exactly what
+    failed; an operator told the release was still a draft might then edit it
+    by hand. Both cases therefore report the state as unknown, with the two
+    ways to establish it: inspect the release, or re-run the finalizer, which
+    records ``already-finalized`` without a second edit when the release did
+    become public. They still differ in what they say about this run, because
+    an attempted edit may already have landed and an operator should weigh
+    that possibility.
     """
     if after_edit:
         release_io.fail(
@@ -119,7 +123,10 @@ def release_state_failure(message: str, *, after_edit: bool) -> typ.NoReturn:
         )
     release_io.fail(
         release_io.EXIT_REMOTE_FAILED,
-        f"{message}; the release has not been edited and remains a draft",
+        f"{message}. This run has not edited the release, but its state is "
+        "unknown: the read that would establish it failed. Inspect the "
+        "release, or re-run the finalizer, which records an already-public "
+        "release without editing it again",
     )
 
 
@@ -143,10 +150,9 @@ def report_remote_failure(
 
     Notes
     -----
-    The run stops with :data:`EXIT_REMOTE_FAILED`. Only a failure before the
-    edit can promise the release is still a draft; see
-    :func:`release_state_failure` for why the other case is reported as
-    unknown.
+    The run stops with :data:`EXIT_REMOTE_FAILED`. Neither case can promise
+    anything about the release's state; see :func:`release_state_failure` for
+    why both are reported as unknown and how they still differ.
     """
     if stderr:
         print(stderr, end="", file=sys.stderr)
@@ -229,12 +235,14 @@ def require_candidate(
     package record ``resolve`` checks and the candidate record this module
     checks cannot disagree about what counts as this run's candidate. A
     mismatch stops the run with :data:`EXIT_REFUSED` before any API call, so
-    the release remains a draft.
+    this run cannot have edited the release. The release's own state is not
+    read here, and a retry may begin after an earlier attempt published it, so
+    the diagnosis claims no more than that.
     """
     reason = release_candidate.identity_refusal(identity, tag=tag, commit=commit)
     if reason is not None:
         release_io.fail(
-            release_io.EXIT_REFUSED, f"{reason}; the release remains a draft"
+            release_io.EXIT_REFUSED, f"{reason}; this run has not edited the release"
         )
 
 

@@ -51,7 +51,9 @@ def test_publish_refuses_an_upload_plan_before_reaching_github(
     )
     message = capsys.readouterr().err
     assert ARCHIVE in message, "the refusal must name the asset to upload"
-    assert "remains a draft" in message, "the operator must know the release state"
+    assert "has not edited the release" in message, (
+        "a refusal made from the plan alone has read no release state"
+    )
 
 
 @pytest.mark.parametrize(
@@ -81,7 +83,9 @@ def test_publish_refuses_a_plan_that_cannot_be_verified(
     message = capsys.readouterr().err
     assert ARCHIVE in message, "the refusal must name the blocked asset"
     assert word in message, "the refusal must distinguish the two blockages"
-    assert "remains a draft" in message, "the operator must know the release state"
+    assert "has not edited the release" in message, (
+        "a refusal made from the plan alone has read no release state"
+    )
 
 
 def test_publish_refuses_a_plan_with_no_decisions(

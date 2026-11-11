@@ -206,13 +206,13 @@ runs:
           0 | 1 | 2) ;;
           124)
             printf 'the reconciliation plan was not recorded within its 300s ' >&2
-            printf 'bound; the release remains a draft\n' >&2
+            printf 'bound; this run has not edited the release\n' >&2
             exit 1
             ;;
           *)
             printf 'the reconciliation plan could not be recorded (status %s); ' \
               "$status" >&2
-            printf 'the release remains a draft\n' >&2
+            printf 'this run has not edited the release\n' >&2
             exit 1
             ;;
         esac
@@ -222,7 +222,7 @@ runs:
         # leave the finalizer diagnosing an absent file as unreadable JSON.
         if [[ ! -f "$WORK_DIRECTORY/plan.json" ]]; then
           printf 'the planner exited %s without recording a plan; ' "$status" >&2
-          printf 'the release remains a draft\n' >&2
+          printf 'this run has not edited the release\n' >&2
           exit 1
         fi
         printf 'plan-path=%s\n' "$WORK_DIRECTORY/plan.json" >>"$GITHUB_OUTPUT"

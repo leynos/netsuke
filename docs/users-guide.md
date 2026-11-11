@@ -144,18 +144,24 @@ existing asset. An attached asset whose bytes cannot be established -- GitHub
 reports no usable digest for it and the download that would settle the
 question fails -- stops the run too, but the upload plan records it apart from
 a conflict, because "the release holds the wrong bytes" and "nobody could read
-the bytes" call for different remedies. A declared asset that is missing, one whose bytes changed, an unreadable
-record, or a failed GitHub call before the edit leaves the release as a
-draft;
-correct the cause and rerun the verification and finalization jobs, which read
-the retained records and never rebuild the release. Rerunning a job is
-therefore safe, and a rerun cannot swap a release's bytes for a second build's.
-A failed edit, or an unreadable read-back after one, is different: GitHub
-may have applied the edit before the response was lost, so the run reports
-the release state as **unknown** rather than claiming it is still a draft.
-Inspect the release, or simply rerun the finalization job. A rerun records
-an already-public release as finalized without editing it a second time, so
-it is always safe to rerun.
+the bytes" call for different remedies. A declared asset that is missing, one
+whose bytes changed, or an unreadable record stops the run with the release
+still a draft; correct the cause and rerun the verification and finalization
+jobs, which read the retained records and never rebuild the release. Rerunning
+a job is therefore safe, and a rerun cannot swap a release's bytes for a
+second build's.
+
+A GitHub call that fails before the edit is different. The run has not edited
+the release, but it cannot say what state the release is in: a retry can begin
+after an earlier attempt already published it, and this attempt's first read is
+exactly what failed. The run therefore reports the state as **unknown** rather
+than claiming the release is still a draft. Inspect the release, or simply
+rerun the finalization job.
+
+A failed edit, or an unreadable read-back after one, is reported the same way,
+for the same reason: GitHub may have applied the edit before the response was
+lost. A rerun records an already-public release as finalized without editing it
+a second time, so it is always safe to rerun.
 
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase
