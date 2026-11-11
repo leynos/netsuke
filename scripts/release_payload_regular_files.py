@@ -167,6 +167,17 @@ def _require_below(path: pathlib.Path, staged_root: pathlib.Path) -> None:
     subtree or a path elsewhere is not. Resolving either side would follow
     exactly the links :func:`require_regular` exists to judge.
 
+    Lexical containment alone is not enough, because ``is_relative_to``
+    compares components as written and never resolves ``..``. Under it,
+    ``dist/sub/../../outside/secret.txt`` is "relative to" ``dist``: every
+    ancestor down to ``dist`` still lstat's as a real directory, so the walk
+    below would pass and the copy would read a file outside the tree. A ``..``
+    component in a staged path is refused for that reason -- such a path does
+    not name an entry *below* the root whatever the arithmetic of its
+    components, and no producer can stage one. Undotted comparison stays,
+    because resolving ``staged_root`` would follow a symlinked segment above
+    the tree and reject a good runner path.
+
     This is also what keeps the bounded walk bounded. Without it, a path
     outside the root would exhaust ``parents`` and reach ``/`` again, which is
     the unbounded probe the root is passed in to avoid.
@@ -180,8 +191,12 @@ def _require_below(path: pathlib.Path, staged_root: pathlib.Path) -> None:
     Traceback (most recent call last):
         ...
     release_payload_errors.StagedFileMissingError: elsewhere is not inside ...
+    >>> _require_below(Path("d/s/../../x"), Path("d"))  # doctest: +ELLIPSIS
+    Traceback (most recent call last):
+        ...
+    release_payload_errors.StagedFileMissingError: d/s/../../x is not inside ...
     """
-    if path.is_relative_to(staged_root):
+    if ".." not in path.parts and path.is_relative_to(staged_root):
         return
     raise StagedFileMissingError(
         path, expected=f"inside the staged tree {staged_root!r}"

@@ -128,6 +128,26 @@ def test_require_regular_refuses_a_path_outside_the_staged_root(
         release_payload_tree.require_regular(asset, staged_root=dist)
 
 
+def test_require_regular_refuses_a_path_that_walks_out_with_dotdot(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a lexically relative path whose ``..`` reaches outside the root.
+
+    ``is_relative_to`` compares components as written, so
+    ``dist/sub/../../outside/a.deb`` answers ``True`` for ``dist``. Every
+    ancestor down to ``dist`` is then a real directory, so a containment check
+    that stopped at the comparison would pass this path and copy a file the
+    download never staged. The ``..`` itself is what has to be refused.
+    """
+    dist = tmp_path / "dist"
+    (dist / "sub").mkdir(parents=True)
+    asset = write_asset(tmp_path / "outside", "a.deb")
+    escaping = dist / "sub" / ".." / ".." / "outside" / asset.name
+    assert escaping.is_relative_to(dist), "the lexical check must be the weak one"
+    with pytest.raises(StagedFileMissingError, match="inside the staged tree"):
+        release_payload_tree.require_regular(escaping, staged_root=dist)
+
+
 def test_require_regular_refuses_a_symlinked_leaf(tmp_path: pathlib.Path) -> None:
     """Refuse a leaf that is a link, judged without following it."""
     real = write_asset(tmp_path / "real", "a.deb")
