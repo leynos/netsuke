@@ -9,25 +9,41 @@ use super::*;
 
 use rstest::rstest;
 
-/// Verify the migration remedies for an ambiguous `)#` boundary are accepted.
+/// Verify the migration remedies are accepted with their text intact.
 ///
 /// The migration guide tells affected users either to separate a comment from
 /// the closer with whitespace, to keep a literal `#` in a quoted region, or to
 /// escape it as `\#`. A guide that recommended a recipe the scanner still
-/// rejects would strand every user who followed it, so every presented form is
-/// pinned here for both interpolators.
+/// rejects would strand every user who followed it, and a remedy that changed
+/// the recipe's output would silently rewrite what the recipe prints. Each
+/// documented form is therefore pinned by its exact interpolated text, for both
+/// interpolators.
 #[rstest]
 #[case::whitespace_before_comment("echo \"$(case x in x) :;; esac)\" # trailing")]
 #[case::quoted_literal_hash(r#"echo "$(case x in x) :;; esac)"'# trailing comment'"#)]
-#[case::escaped_literal_hash("echo $(printf x)\\#literal")]
-fn migration_remedies_for_ambiguous_boundary_are_accepted(#[case] template: &str) {
+#[case::escaped_literal_hash("echo $(case x in x) :;; esac)\\#literal")]
+fn migration_remedies_preserve_the_recipe_text(#[case] template: &str) {
     let bindings = bindings();
     for interpolate in both_interpolators() {
-        assert!(
-            interpolate(template, &bindings).is_ok(),
-            "the documented remedy must be accepted: {template}"
+        assert_eq!(
+            interpolate(template, &bindings).expect("the documented remedy must be accepted"),
+            template,
+            "the documented remedy must leave the recipe unchanged: {template}"
         );
     }
+}
+
+/// Verify the recipe the migration guide presents as rejected is rejected.
+///
+/// The guide's worked example is the shape users are told will stop working, so
+/// the warning is only accurate while that exact text still fails closed.
+#[test]
+fn migration_guide_trigger_recipe_is_rejected() {
+    let template = "echo \"$(case x in x) :;; esac)# trailing comment\"";
+    assert_both_reject(
+        template,
+        "the recipe the migration guide presents as rejected must fail closed",
+    );
 }
 
 /// Verify a complete `case` substitution without a comment boundary is accepted.

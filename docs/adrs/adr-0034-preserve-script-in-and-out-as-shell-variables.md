@@ -81,7 +81,8 @@ backtick or command-substitution rejection for markers.
 - Script token matching:
   [`src/ir/cmd_interpolate/mod.rs`](../../src/ir/cmd_interpolate/mod.rs)
 - Script traversal:
-  [`src/ir/cmd_interpolate/script_substitution.rs`](../../src/ir/cmd_interpolate/script_substitution.rs)
+  [`src/ir/cmd_interpolate/script_substitution.rs`][historical-script-traversal]
+  (historical path; see the amendment below)
 - Backend escaping: [`src/ninja_gen_escape.rs`](../../src/ninja_gen_escape.rs)
 - Regression coverage:
   [`tests/ninja_dollar_escaping_tests.rs`](../../tests/ninja_dollar_escaping_tests.rs)
@@ -103,3 +104,5 @@ and its command-substitution delimiter tracking in
 [`src/ir/cmd_interpolate/script_substitution/delimiters.rs`](../../src/ir/cmd_interpolate/script_substitution/delimiters.rs).
 The decision itself, and the behaviour it requires of that traversal, are
 unchanged.
+
+[historical-script-traversal]: https://github.com/leynos/netsuke/blob/8dfbab416b5c01273da205c7954836588e93728e/src/ir/cmd_interpolate/script_substitution.rs

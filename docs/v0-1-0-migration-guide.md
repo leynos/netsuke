@@ -325,19 +325,31 @@ defaults: [output.txt]
 ```
 
 The `#` there is word data: the double quote that opens before `$(` closes after
-`comment`, so the literal text reaches `echo`. Two rewrites clear the
-rejection while keeping that output:
+`comment`, so the literal text reaches `echo`. This rewrite clears the
+rejection while keeping that output: it closes the double quote after the
+closer and reopens a single-quoted region for the literal hash.
 
 ```yaml
       echo "$(case x in x) :;; esac)"'# trailing comment'
-      echo $(printf x)\#literal
 ```
 
-The first closes the double quote after the closer and reopens a single-quoted
-region for the literal hash, so the argument is unchanged. Placing a space
-before the `#` instead, as in `... esac)" # trailing comment`, also clears the
-rejection but turns the text into a real comment: that is the correct form when
-the recipe never meant to echo it, and the wrong form when it did.
+The argument is unchanged, so the recipe prints what it printed before. Placing
+a space before the `#` also clears the rejection, as in
+`... esac)" # trailing comment`, but it turns the text into a real comment:
+that is the correct form when the recipe never meant to echo it, and the wrong
+form when it did.
+
+A separate unquoted recipe takes the other rewrite, escaping the `#`. Escaping
+is not an option inside the quoted recipe above, because a backslash inside
+double quotes does not escape `#`:
+
+```yaml
+      echo $(case x in x) :;; esac)\#literal
+```
+
+Without the escape this line is rejected, because `#literal` sits directly
+after the closer. With it, the `case` still emits nothing and the word stays
+`#literal`, so the line prints `#literal` rather than starting a comment.
 
 The check scans raw recipe source, so it also rejects a `case` that appears
 inside a string or a comment within the substitution. Anything that separates

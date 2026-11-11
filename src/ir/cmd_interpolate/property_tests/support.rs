@@ -322,6 +322,12 @@ impl HashBoundary {
 /// included because their closers sit at a different parenthesis depth from the
 /// substitution's own, which is exactly where a depth-blind closer check reads
 /// the wrong `)`.
+///
+/// The last three families combine two rules in one prefix, because a scanner
+/// can satisfy each rule alone and still mis-handle their interaction: a closer
+/// followed by a line continuation, a closer followed by an escaped character,
+/// and a comment opened inside an inner group. Each still states its own
+/// expectation, so the oracle stays independent of the implementation.
 pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
     let separator = prop::sample::select(POSIX_SEPARATORS.to_vec())
         .prop_map(|separator| HashBoundary::after_separator(format!("echo x{separator}")));
@@ -338,6 +344,14 @@ pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
         "echo $(printf $(printf x))".to_owned(),
     ));
     let subshell_closer = Just(HashBoundary::after_separator("echo (echo x)".to_owned()));
+    let closer_then_continuation =
+        prop::sample::select(vec!["$(printf x)", "$((1 + 2))", "$( (printf x) )"])
+            .prop_map(|closer| HashBoundary::inside_word(format!("echo {closer}\\\n")));
+    let closer_then_escape = prop::sample::select(vec![' ', '#', '-'])
+        .prop_map(|character| HashBoundary::inside_word(format!("echo $(printf x)\\{character}")));
+    let comment_inside_a_group = Just(HashBoundary::inside_word(
+        "echo $( (printf x # note\n) )".to_owned(),
+    ));
     prop_oneof![
         separator,
         start_of_input,
@@ -348,6 +362,9 @@ pub(super) fn hash_boundary_strategy() -> impl Strategy<Value = HashBoundary> {
         nested_group_closer,
         nested_substitution_closer,
         subshell_closer,
+        closer_then_continuation,
+        closer_then_escape,
+        comment_inside_a_group,
     ]
 }
 
