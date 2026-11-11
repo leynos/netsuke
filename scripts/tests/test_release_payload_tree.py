@@ -1,28 +1,32 @@
-"""Test the filesystem boundary the payload selection reads and writes through.
+"""Test the tree adapter's payload index, provenance read, and install.
 
-The tree adapter is where a symlink stops being an ordinary file and where an
-existing output directory stops being a merge target, so these cases build the
-hostile shapes a real download can contain rather than asserting on names.
+The adapter is where an existing output directory stops being a merge target
+and where a copy either lands whole or leaves nothing behind, so these cases
+build the shapes a real download can contain rather than asserting on names.
+The per-file proof that bounds the copy lives in
+``scripts/tests/test_release_payload_regular_files.py``.
 
 Run via ``make test-release-publication``.
 """
 
 import json
-import os
-import pathlib
+import typing as typ
 
 import pytest
 import release_digest_files
 import release_digest_record_files
 import release_payload_selection
 import release_payload_tree
-from release_payload_errors import StagedFileMissingError, StagedFileUnreadableError
+from release_payload_errors import StagedFileMissingError
 from release_payload_install_support import (
     selection_for,
     write_asset,
     write_provenance,
 )
 from release_payload_tree import RECORD_NAME
+
+if typ.TYPE_CHECKING:
+    import pathlib
 
 
 def test_observe_payload_indexes_files_by_published_name(
@@ -88,162 +92,6 @@ def test_read_provenances_reports_an_unusable_record(tmp_path: pathlib.Path) -> 
     _ = (tmp_path / RECORD_NAME).write_text("not json", encoding="utf-8")
     with pytest.raises(json.JSONDecodeError):
         release_payload_tree.read_provenances(tmp_path)
-
-
-def test_require_regular_accepts_an_ordinary_file(tmp_path: pathlib.Path) -> None:
-    """Accept a regular file below regular directories."""
-    asset = write_asset(tmp_path, "a.deb")
-    assert release_payload_tree.require_regular(asset, staged_root=tmp_path) == asset, (
-        "an ordinary file must be returned unchanged"
-    )
-
-
-def test_require_regular_ignores_a_link_above_the_staged_root(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Accept a good tree whose own path runs through a link.
-
-    A runner temp directory under a symlinked mount is the host's layout, not
-    the producers' claim. Refusing there would reject a perfectly good tree
-    with no corrective action available to an operator.
-    """
-    real = tmp_path / "mnt"
-    dist = real / "dist"
-    asset = write_asset(dist, "a.deb")
-    linked = tmp_path / "runner-temp"
-    _ = linked.symlink_to(real, target_is_directory=True)
-    assert release_payload_tree.require_regular(
-        linked / "dist" / asset.name, staged_root=linked / "dist"
-    ) == (linked / "dist" / asset.name), "the staged root bounds the walk"
-
-
-def test_require_regular_refuses_a_path_outside_the_staged_root(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Refuse a path the root does not contain, before any mode is read."""
-    dist = tmp_path / "dist"
-    dist.mkdir()
-    asset = write_asset(tmp_path / "elsewhere", "a.deb")
-    with pytest.raises(StagedFileMissingError, match="inside the staged tree"):
-        release_payload_tree.require_regular(asset, staged_root=dist)
-
-
-def test_require_regular_refuses_a_path_that_walks_out_with_dotdot(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Refuse a lexically relative path whose ``..`` reaches outside the root.
-
-    ``is_relative_to`` compares components as written, so
-    ``dist/sub/../../outside/a.deb`` answers ``True`` for ``dist``. Every
-    ancestor down to ``dist`` is then a real directory, so a containment check
-    that stopped at the comparison would pass this path and copy a file the
-    download never staged. The ``..`` itself is what has to be refused.
-    """
-    dist = tmp_path / "dist"
-    (dist / "sub").mkdir(parents=True)
-    asset = write_asset(tmp_path / "outside", "a.deb")
-    escaping = dist / "sub" / ".." / ".." / "outside" / asset.name
-    assert escaping.is_relative_to(dist), "the lexical check must be the weak one"
-    with pytest.raises(StagedFileMissingError, match="inside the staged tree"):
-        release_payload_tree.require_regular(escaping, staged_root=dist)
-
-
-def test_require_regular_refuses_a_symlinked_leaf(tmp_path: pathlib.Path) -> None:
-    """Refuse a leaf that is a link, judged without following it."""
-    real = write_asset(tmp_path / "real", "a.deb")
-    link = tmp_path / "link.deb"
-    _ = link.symlink_to(real)
-    with pytest.raises(StagedFileMissingError, match="regular file"):
-        release_payload_tree.require_regular(link, staged_root=tmp_path)
-
-
-def test_require_regular_refuses_a_symlinked_ancestor(tmp_path: pathlib.Path) -> None:
-    """Refuse a file reached through a linked directory inside the root.
-
-    Following it would let the payload hold bytes from outside the downloaded
-    tree, which is the substitution the trusted record exists to catch. The
-    stage the link occupies is also what keeps this case distinct from
-    ``test_require_regular_ignores_a_link_above_the_staged_root``: there the
-    link is the runner's own path, here it is inside the tree.
-    """
-    real_dir = tmp_path / "elsewhere"
-    asset = write_asset(real_dir, "a.deb")
-    linked_dir = tmp_path / "producer"
-    _ = linked_dir.symlink_to(real_dir, target_is_directory=True)
-    with pytest.raises(StagedFileMissingError, match="directory"):
-        release_payload_tree.require_regular(
-            linked_dir / asset.name, staged_root=tmp_path
-        )
-
-
-def test_require_regular_refuses_a_fifo(tmp_path: pathlib.Path) -> None:
-    """Refuse a non-regular leaf that is not a link.
-
-    A FIFO in a downloaded tree would block a copy indefinitely, which a release
-    job cannot distinguish from a slow transfer. The leaf is checked before the
-    ancestors, so a directory cannot be reached through this path; the
-    ancestor branch is covered by
-    :func:`test_require_regular_refuses_a_symlinked_ancestor`.
-    """
-    fifo = tmp_path / "a-fifo"
-    os.mkfifo(fifo)
-    with pytest.raises(StagedFileMissingError, match="regular file"):
-        release_payload_tree.require_regular(fifo, staged_root=tmp_path)
-
-
-def test_require_regular_refuses_a_missing_file(tmp_path: pathlib.Path) -> None:
-    """Surface the absent path rather than a bare ``FileNotFoundError``."""
-    with pytest.raises(StagedFileMissingError, match="regular file"):
-        release_payload_tree.require_regular(
-            tmp_path / "absent.deb", staged_root=tmp_path
-        )
-
-
-def test_require_regular_reports_an_unreadable_leaf(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Keep a permission refusal distinct from an absent file.
-
-    Absence and unreadability need different fixes: one is a staging bug, the
-    other is a permission, mount, or I/O fault. Reporting the second as the
-    first would send an operator to a step that did the right thing.
-
-    ``lstat`` is patched rather than the mode changed, because a test may run
-    as a user that ignores the permission bits entirely -- root certainly does
-    -- and the refusal would then never be reached.
-    """
-    asset = write_asset(tmp_path, "a.deb")
-
-    def refuse(_path: pathlib.Path) -> os.stat_result:
-        """Refuse every ``lstat``, as an unreadable file would."""
-        raise PermissionError(13, "Permission denied")
-
-    monkeypatch.setattr(pathlib.Path, "lstat", refuse)
-    with pytest.raises(StagedFileUnreadableError, match="could not be inspected"):
-        release_payload_tree.require_regular(asset, staged_root=tmp_path)
-
-
-def test_require_regular_reports_an_unreadable_ancestor(
-    tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Apply the same distinction to an ancestor probe.
-
-    The leaf is read first and is genuine here, so only the ancestor loop can
-    raise; that is what makes this the ancestor's case rather than a repeat of
-    the leaf's.
-    """
-    asset = write_asset(tmp_path, "a.deb")
-    genuine_lstat = pathlib.Path.lstat
-
-    def refuse_ancestors(path: pathlib.Path) -> os.stat_result:
-        """Refuse the ancestor probe while leaving the leaf readable."""
-        if path == tmp_path:
-            raise PermissionError(13, "Permission denied")
-        return genuine_lstat(path)
-
-    monkeypatch.setattr(pathlib.Path, "lstat", refuse_ancestors)
-    with pytest.raises(StagedFileUnreadableError, match="could not be inspected"):
-        release_payload_tree.require_regular(asset, staged_root=tmp_path)
 
 
 def test_copy_verified_copies_the_bytes(tmp_path: pathlib.Path) -> None:

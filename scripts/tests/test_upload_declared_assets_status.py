@@ -200,8 +200,8 @@ def test_a_payload_entry_the_system_will_not_describe_is_unreadable_input(
     would have escalated the wrong fault.
 
     ``lstat`` is patched rather than a mode changed, matching
-    ``test_release_payload_tree``: a test may run as a user whose permission
-    bits are not consulted, and the refusal would then never be reached.
+    ``test_release_payload_regular_files``: a test may run as a user whose
+    permission bits are not consulted, and the refusal would never be reached.
     """
     genuine_lstat = pathlib.Path.lstat
     unreadable = scenario.payload / DEB

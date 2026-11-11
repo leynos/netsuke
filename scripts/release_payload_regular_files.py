@@ -21,13 +21,14 @@ them anyway would reject a perfectly good tree on a host whose
 corrective action an operator could take.
 
 Run via :mod:`release_payload_tree`; behavioural coverage lives in
-``scripts/tests/test_release_payload_tree.py``.
+``scripts/tests/test_release_payload_regular_files.py``.
 """
 
 import shutil
 import stat
 import typing as typ
 
+from release_asset_names import walks_out_of_its_directory
 from release_payload_errors import StagedFileMissingError, StagedFileUnreadableError
 
 if typ.TYPE_CHECKING:
@@ -171,12 +172,25 @@ def _require_below(path: pathlib.Path, staged_root: pathlib.Path) -> None:
     compares components as written and never resolves ``..``. Under it,
     ``dist/sub/../../outside/secret.txt`` is "relative to" ``dist``: every
     ancestor down to ``dist`` still lstat's as a real directory, so the walk
-    below would pass and the copy would read a file outside the tree. A ``..``
-    component in a staged path is refused for that reason -- such a path does
-    not name an entry *below* the root whatever the arithmetic of its
-    components, and no producer can stage one. Undotted comparison stays,
-    because resolving ``staged_root`` would follow a symlinked segment above
-    the tree and reject a good runner path.
+    below would pass and the copy would read a file outside the tree.
+
+    What decides this is *depth*, not the presence of a ``..``. The part below
+    ``staged_root`` is walked by
+    :func:`release_asset_names.walks_out_of_its_directory`, which refuses only
+    a part that steps above its own origin. ``sub/../../outside/a.deb`` does,
+    and ``sub/../sub/a.deb`` does not: it resolves back under the root and
+    names a file producers really staged. Counting also matters more than a
+    leading component suggests, because ``a/../../b`` turns out of the tree two
+    components later.
+
+    A blanket ``..`` ban would be the wrong guard in the other direction. A
+    ``..`` in ``staged_root``'s own spelling cancels inside the root -- a root
+    of ``dist/sub/..`` is ``dist`` -- so it never reaches the relative part at
+    all, and refusing every dotted source would refuse a good file whose only
+    fault is the caller's spelling. Only the relative part is inspected for
+    that reason. Undotted comparison stays, because resolving ``staged_root``
+    would follow a symlinked segment above the tree and reject a good runner
+    path.
 
     This is also what keeps the bounded walk bounded. Without it, a path
     outside the root would exhaust ``parents`` and reach ``/`` again, which is
@@ -195,8 +209,11 @@ def _require_below(path: pathlib.Path, staged_root: pathlib.Path) -> None:
     Traceback (most recent call last):
         ...
     release_payload_errors.StagedFileMissingError: d/s/../../x is not inside ...
+    >>> _require_below(Path("d/s/../s/a.deb"), Path("d"))
     """
-    if ".." not in path.parts and path.is_relative_to(staged_root):
+    if path.is_relative_to(staged_root) and not walks_out_of_its_directory(
+        path.relative_to(staged_root).parts
+    ):
         return
     raise StagedFileMissingError(
         path, expected=f"inside the staged tree {staged_root!r}"

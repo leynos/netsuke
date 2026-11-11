@@ -3233,6 +3233,9 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 
 - [x] (2026-11-11) Closed the last two #1066 findings: the count check's stated
   guarantee, and a `..` escape in the staged-root containment.
+- [x] (2026-11-11) Replaced the containment fix's blanket `..` ban with a depth
+  walk below the root, after CodeRabbit showed the ban also refuses a `..` the
+  caller's own root spelling puts there.
 
   **Containment was lexical, and two components were one short.** The guard in
   `release_payload_regular_files._require_below` used `Path.is_relative_to`,
@@ -3241,27 +3244,44 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   more and `dist/sub/../../outside/a.deb` cancels the `..` *inside* the root, so
   `is_relative_to` answers `True`. Every `..`-bearing parent then lstats as a
   real directory, so `require_regular` returned and the payload would have
-  carried a file the download never staged. A `..` component is now refused
-  before any probing. The comparison itself stays lexical: resolving
-  `staged_root` would follow a symlinked segment above the tree and reject a
-  good runner path, which
+  carried a file the download never staged. The part below the staged root is
+  now walked by `release_asset_names.walks_out_of_its_directory`, which counts
+  depth and refuses only a part that steps above its own origin. The comparison
+  itself stays lexical: resolving `staged_root` would follow a symlinked
+  segment above the tree and reject a good runner path, which
   `test_require_regular_ignores_a_link_above_the_staged_root` pins.
   `test_require_regular_refuses_a_path_that_walks_out_with_dotdot` builds the
   nested escape and asserts both that `is_relative_to` is the weak check and
-  that `require_regular` refuses anyway; with the clause removed it fails and
-  the other 22 cases still pass.
+  that `require_regular` refuses anyway; with the depth walk removed it fails
+  and the other 24 cases still pass.
 
-  The names cannot carry the escape: `release_payload_names.describe_offenders`
-  refuses a staged name through `release_asset_names.rejected_names` before any
-  copy, so no published name holds a `..`. The *root* is another matter, and
-  CodeRabbit was right to correct an earlier draft of this entry that claimed
-  otherwise: `os.walk` does not resolve, and `walk_files` builds each result as
-  `Path(directory) / name` from the spelling it was handed. A `staged_root`
-  spelled with a `..` therefore propagates that `..` into every staged path, and
-  `--dist-dir` reaches `install_payload` as an unvalidated argument. The
-  workflows pass the literal `dist`, so the escape is not reachable through
-  this repository's own release path; it is reachable through the action input.
-  Rejecting the component is what makes the guard independent of both.
+  The first fix was a blanket ban on any `..` component, and that over-refused.
+  CodeRabbit was right on both counts. `os.walk` does not resolve, and
+  `walk_files` builds each result as `Path(directory) / name` from the spelling
+  it was handed, so a `staged_root` spelled `dist/sub/..` propagates that `..`
+  into every walked source. Such a `..` cancels *inside* the root -- the file
+  `dist/sub/../sub/a.deb` resolves to `dist/sub/a.deb` -- so banning it refuses
+  a file producers genuinely staged, for nothing worse than the caller's
+  phrasing. Depth is what separates the two: `sub/../sub/a.deb` stays inside and
+  `sub/../../outside/a.deb` escapes, and only the part below the root is
+  inspected, so a root's own `..` never enters the decision.
+  `test_require_regular_accepts_a_dotdot_that_stays_inside_the_root` and
+  `test_require_regular_accepts_a_staged_root_spelled_with_dotdot` fail under
+  the blanket ban, and the escape case fails without the depth walk; the suite
+  refuses each direction for its own reason. Those cases live in a new
+  `scripts/tests/test_release_payload_regular_files.py`, split out because
+  `test_release_payload_tree.py` passed the 400-line module limit. Both are
+  named in the `test-release-publication` recipe and in `SECTION_MODULES`.
+
+  The *names* cannot carry the escape:
+  `release_payload_names.describe_offenders` refuses a staged name through
+  `release_asset_names.rejected_names` before any copy, so no published name
+  holds a `..`. The root can be spelled with one, and `--dist-dir` reaches
+  `install_payload` as an unvalidated argument, but as shown it does not create
+  an escape. Containment is therefore decided by depth below the root, not by
+  whether the source path shows a `..`. This entry earlier claimed the escape
+  was "reachable through the action input"; that was wrong, and the cases above
+  are the correction.
 
   **The count check's guarantee is now stated as what it does.** The paragraph
   said the count "still refuses a record claiming a sibling's package", which
