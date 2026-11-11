@@ -4,6 +4,7 @@ import pytest
 from finalize_github_release_plan import (
     FinalizePolicyError,
     PlanVerdict,
+    assess_actions,
     assess_plan,
 )
 from finalize_github_release_state import (
@@ -11,9 +12,9 @@ from finalize_github_release_state import (
     ReleaseState,
     classify_readback,
     is_already_finalized,
-    missing_names,
     parse_release_state,
 )
+from release_reconcile_github import AssetAction
 
 ARCHIVE = "a.tar.gz"
 SIDECAR = "a.tar.gz.sha256"
@@ -60,6 +61,47 @@ def test_the_plan_verdict_names_what_publication_may_do(
     """Classify each plan the planner can produce."""
     assert assess_plan(plan).verdict is verdict, (
         f"the plan {plan!r} must be classified as {verdict}"
+    )
+
+
+@pytest.mark.parametrize(
+    ("action", "verdict"),
+    [
+        pytest.param(AssetAction.SKIP_VERIFIED, PlanVerdict.VERIFIED, id="verified"),
+        pytest.param(AssetAction.UPLOAD, PlanVerdict.UPLOAD_REQUIRED, id="missing"),
+        pytest.param(AssetAction.CONFLICT, PlanVerdict.REFUSED, id="changed"),
+        pytest.param(AssetAction.UNVERIFIABLE, PlanVerdict.REFUSED, id="unreadable"),
+    ],
+)
+def test_a_freshly_planned_action_set_reaches_the_same_verdict(
+    action: AssetAction, verdict: PlanVerdict
+) -> None:
+    """Judge a live reconciliation by the policy a recorded plan is judged by.
+
+    The finalizer re-runs the planner's reconciliation immediately before the
+    edit, so the two paths must agree on every action rather than only on the
+    ones a recorded plan happens to exercise.
+    """
+    assessment = assess_actions([(ARCHIVE, action)])
+
+    assert assessment.verdict is verdict, (
+        f"a fresh {action.value} row must be classified as {verdict}"
+    )
+
+
+def test_a_freshly_planned_conflict_names_the_asset() -> None:
+    """Carry the conflicting name, so the refusal can say what changed."""
+    assessment = assess_actions([(ARCHIVE, AssetAction.CONFLICT)])
+
+    assert assessment.conflicts == (ARCHIVE,), (
+        "the fresh reconciliation must report the asset that disagrees"
+    )
+
+
+def test_a_freshly_planned_empty_set_is_refused() -> None:
+    """Never read an empty reconciliation as a verified release."""
+    assert assess_actions([]).verdict is PlanVerdict.REFUSED, (
+        "no actions is indistinguishable from a release nothing was checked against"
     )
 
 
@@ -304,50 +346,4 @@ def test_readback_separates_a_draft_from_a_wrong_flag(
     assert classify_readback(state, is_prerelease=wanted) is expected, (
         f"draft={is_draft} prerelease={is_prerelease} wanted={wanted} must be "
         f"{expected}"
-    )
-
-
-@pytest.mark.parametrize(
-    ("attached", "verified", "expected"),
-    [
-        pytest.param([ARCHIVE], [ARCHIVE], (), id="still-attached"),
-        pytest.param([ARCHIVE], [ARCHIVE, SIDECAR], (SIDECAR,), id="one-vanished"),
-        pytest.param([SIDECAR], [ARCHIVE, SIDECAR], (ARCHIVE,), id="the-archive"),
-        pytest.param([], [ARCHIVE], (ARCHIVE,), id="everything-gone"),
-        pytest.param([ARCHIVE, SIDECAR], [], (), id="nothing-was-verified"),
-    ],
-)
-def test_missing_names_reports_only_what_the_release_lost(
-    *, attached: list[str], verified: list[str], expected: tuple[str, ...]
-) -> None:
-    """Report the verified names the release no longer attaches, in plan order."""
-    state = ReleaseState("v1.2.3", True, False, dict.fromkeys(attached, "sha256:ab"))
-
-    assert missing_names(state, verified) == expected, (
-        f"attached={attached} verified={verified} must report {expected}"
-    )
-
-
-def test_a_verified_plan_carries_the_names_it_verified() -> None:
-    """Record which assets the verdict rests on, so a later read can re-check."""
-    assessment = assess_plan({
-        "actions": [[ARCHIVE, "skip-verified"], [SIDECAR, "skip-verified"]]
-    })
-
-    assert assessment.verdict is PlanVerdict.VERIFIED, "the plan must permit publishing"
-    assert assessment.verified == (ARCHIVE, SIDECAR), (
-        "the verdict must name every asset it accepted"
-    )
-
-
-@pytest.mark.parametrize(
-    "action",
-    [pytest.param("upload", id="upload"), pytest.param("conflict", id="worse")],
-)
-def test_a_plan_that_does_not_verify_carries_no_verified_names(action: str) -> None:
-    """Keep the verified names empty unless the plan actually verified them."""
-    assessment = assess_plan({"actions": [[ARCHIVE, action]]})
-
-    assert assessment.verified == (), (
-        "a plan that does not permit publishing verified nothing"
     )

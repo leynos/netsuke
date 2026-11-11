@@ -2,9 +2,9 @@
 
 Each case here begins with a plan that permits publication, so the failure is
 the only thing under test. The assertions say what state the release is left
-in: still a draft when the API refused or ignored the edit, already public
-when only the outcome record could not be written, and never holding bytes
-this command replaced.
+in: still a draft when the API refused before the edit, unknown once an edit
+has been attempted, already public when only the outcome record could not be
+written, and never holding bytes this command replaced.
 """
 
 import typing as typ
@@ -49,8 +49,10 @@ def test_publish_reports_an_api_failure_before_the_edit(
     assert not (tmp_path / "result.json").exists(), (
         "a release that was never read must not record an outcome"
     )
-    assert "HTTP 403" in capsys.readouterr().err, (
-        "the API diagnostic must reach the workflow log"
+    message = capsys.readouterr().err
+    assert "HTTP 403" in message, "the API diagnostic must reach the workflow log"
+    assert "remains a draft" in message, (
+        "a failure before the edit can promise the release was never touched"
     )
 
 

@@ -92,6 +92,26 @@ def write_plan(
     return path
 
 
+def digest_record(
+    assets: cabc.Mapping[str, str] | None = None,
+) -> dict[str, object]:
+    """Return the trusted digest record the declaration stage writes."""
+    declared = {ARCHIVE: DIGEST} if assets is None else dict(assets)
+    return {"assets": declared}
+
+
+def write_digest_record(
+    directory: pathlib.Path,
+    *,
+    record: cabc.Mapping[str, object] | None = None,
+) -> pathlib.Path:
+    """Write the trusted digest record a publishing run reconciles against."""
+    written = digest_record() if record is None else record
+    path = directory / "trusted.json"
+    _ = path.write_text(json.dumps(written), encoding="utf-8")
+    return path
+
+
 def release_view(
     *,
     is_draft: bool,
@@ -121,12 +141,14 @@ def publish_arguments(
     *,
     candidate: cabc.Mapping[str, object] | None = None,
     plan: cabc.Mapping[str, object] | None = None,
+    trusted: cabc.Mapping[str, object] | None = None,
     github_output: pathlib.Path | None = None,
 ) -> list[str]:
     """Return a complete ``publish`` invocation over freshly written inputs."""
     record = identity_record() if candidate is None else candidate
     candidate_path = write_candidate(directory, identity=record)
     plan_path = write_plan(directory, plan=plan)
+    digest_path = write_digest_record(directory, record=trusted)
     arguments = [
         "publish",
         "--tag",
@@ -139,6 +161,8 @@ def publish_arguments(
         str(candidate_path),
         "--plan-path",
         str(plan_path),
+        "--digest-record-path",
+        str(digest_path),
         "--result-path",
         str(directory / RESULT_NAME),
     ]

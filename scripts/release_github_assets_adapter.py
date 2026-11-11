@@ -11,9 +11,10 @@ the release finalizer need that conversion, so it lives here rather than being
 copied into each CLI -- a second copy is a second place for the two to disagree
 about what an unusable digest is.
 
-The release workflow runs the declaration CLI, the staged-digest collector, and
-the uploader today; the finalizer is written and its suite passes but no job
-invokes it yet.
+The release workflow runs the declaration CLI, the staged-digest collector, the
+uploader, and the finalizer. The finalizer converts twice for one run: the
+planner normalises the snapshot it was given, and `publish` normalises the
+fresh snapshot it takes immediately before the edit.
 
 Run through the declaration CLI, staged-digest collector, uploader, and
 finalizer; behavioural coverage lives in

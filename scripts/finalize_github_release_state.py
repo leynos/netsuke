@@ -285,39 +285,6 @@ def is_already_finalized(state: ReleaseState, *, is_prerelease: bool) -> bool:
     return not state.is_draft and state.is_prerelease is is_prerelease
 
 
-def missing_names(state: ReleaseState, names: cabc.Iterable[str]) -> tuple[str, ...]:
-    """Return the names the release no longer attaches.
-
-    Parameters
-    ----------
-    state
-        The release as GitHub reports it just before the edit.
-    names
-        The names an earlier snapshot verified, in the order to report them.
-
-    Returns
-    -------
-    tuple[str, ...]
-        The names that snapshot accepted and this one does not carry.
-
-    Notes
-    -----
-    Only names already decided are asked about. An asset the release attaches
-    and the plan never named is not reported here, because the reconciliation
-    tolerates such a file by design and this check exists to detect the release
-    losing what was verified, not to add a rule the plan does not make.
-
-    Examples
-    --------
-    >>> state = ReleaseState("v1.2.3", True, False, {"a": "sha256:ab"})
-    >>> missing_names(state, ["a"])
-    ()
-    >>> missing_names(state, ["a", "b"])
-    ('b',)
-    """
-    return tuple(name for name in names if name not in state.assets)
-
-
 def classify_readback(state: ReleaseState, *, is_prerelease: bool) -> Readback:
     """Classify a release after the un-drafting call.
 

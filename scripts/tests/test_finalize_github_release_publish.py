@@ -156,8 +156,11 @@ def test_a_retry_after_a_failed_edit_finishes_without_a_second_edit(
     assert not (tmp_path / "result.json").exists(), (
         "a failed edit must not record a final outcome"
     )
-    assert "HTTP 502" in capsys.readouterr().err, (
-        "the API diagnostic must reach the workflow log"
+    message = capsys.readouterr().err
+    assert "HTTP 502" in message, "the API diagnostic must reach the workflow log"
+    assert "state is unknown" in message, (
+        "a failed edit may have been applied, so the state must not be reported "
+        "as a draft"
     )
 
     run_finalizer(*arguments)
@@ -170,7 +173,7 @@ def test_a_retry_after_a_failed_edit_finishes_without_a_second_edit(
 
 
 def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
-    tmp_path: pathlib.Path, cmd_mox: CmdMox
+    tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Treat a publish whose read-back failed as finished on the next run."""
     gh = sequenced_gh(
@@ -190,6 +193,9 @@ def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
     assert first.value.code == EXIT_REMOTE_FAILED, (
         "an unreadable read-back must fail the step"
     )
+    assert "state is unknown" in capsys.readouterr().err, (
+        "an unreadable read-back cannot promise the release is still a draft"
+    )
 
     run_finalizer(*arguments)
 
@@ -205,10 +211,15 @@ def test_a_retry_after_an_unreadable_readback_finishes_without_an_edit(
     }, "the retry must record the release as already finalized"
 
 
-def test_publish_refuses_a_release_that_lost_a_verified_asset(
+def test_publish_refuses_a_release_that_lost_a_declared_asset(
     tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """Stop before the edit when the draft no longer holds what was verified."""
+    """Stop before the edit when the draft no longer holds what was declared.
+
+    The plan verified the asset from an earlier snapshot. The pre-edit read
+    finds it gone, and the planner's own policy calls that an upload rather
+    than a conflict: the declared upload contract can put the bytes back.
+    """
     gh = sequenced_gh(
         cmd_mox,
         [(release_view(is_draft=True, is_prerelease=False, assets={}), "", 0)],
@@ -217,8 +228,8 @@ def test_publish_refuses_a_release_that_lost_a_verified_asset(
     with pytest.raises(SystemExit) as error:
         run_finalizer(*publish_arguments(tmp_path))
 
-    assert error.value.code == EXIT_REFUSED, (
-        "a draft that lost a verified asset must not be published"
+    assert error.value.code == EXIT_UPLOAD_REQUIRED, (
+        "a draft that lost a declared asset must be sent back to the uploader"
     )
     assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
         ("release", "view")
@@ -231,15 +242,76 @@ def test_publish_refuses_a_release_that_lost_a_verified_asset(
     assert "remains a draft" in message, "the operator must know the release state"
 
 
-def test_publish_tolerates_an_asset_the_plan_never_named(
+def test_publish_refuses_a_release_whose_asset_changed(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Stop before the edit when the draft's bytes no longer match the record.
+
+    The plan verified the asset from an earlier snapshot; the pre-edit read
+    reports a different digest. Publishing would make a release public whose
+    inventory the trusted record does not describe, so the run refuses.
+    """
+    gh = sequenced_gh(
+        cmd_mox,
+        [
+            (
+                release_view(
+                    is_draft=True,
+                    is_prerelease=False,
+                    assets={ARCHIVE: "sha256:" + "ef" * 32},
+                ),
+                "",
+                0,
+            )
+        ],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
+
+    assert error.value.code == EXIT_REFUSED, (
+        "a draft whose bytes changed must not be published"
+    )
+    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
+        ("release", "view")
+    ], "a refused run must not edit the release"
+    message = capsys.readouterr().err
+    assert ARCHIVE in message, "the refusal must name the asset that changed"
+    assert "disagree" in message, "the refusal must say the bytes disagree"
+    assert "remains a draft" in message, "the operator must know the release state"
+
+
+def test_publish_refuses_an_unreadable_digest_record(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Never reconcile against a record that cannot support a decision."""
+    gh = sequenced_gh(cmd_mox, release_views((True, False)))
+    arguments = publish_arguments(tmp_path)
+    _ = (tmp_path / "trusted.json").write_text('{"assets": {}}', encoding="utf-8")
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*arguments)
+
+    assert error.value.code == EXIT_INPUT_UNREADABLE, (
+        "an empty trusted record must be an input fault, not a verified release"
+    )
+    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
+        ("release", "view")
+    ], "an unreadable record must stop the run before the edit"
+    assert "digest record" in capsys.readouterr().err, (
+        "the diagnosis must name the record that could not be used"
+    )
+
+
+def test_publish_tolerates_an_asset_the_record_never_declared(
     tmp_path: pathlib.Path, cmd_mox: CmdMox
 ) -> None:
-    """Leave an undeclared attachment alone, exactly as the plan does.
+    """Leave an undeclared attachment alone, exactly as the planner does.
 
     The reconciliation decides only about names the trusted record declares, so
-    a file it never claimed must not stop a release the plan verified: the
-    check added for a vanished asset asks about the plan's own names, not about
-    every name GitHub reports.
+    a file it never claimed must not stop a release the record verified. The
+    pre-edit pass applies the same rule, so an extra attachment is tolerated
+    twice for the same reason rather than by a second, weaker check.
     """
     gh = sequenced_gh(
         cmd_mox,
@@ -263,7 +335,7 @@ def test_publish_tolerates_an_asset_the_plan_never_named(
     assert [
         invocation_arguments(invocation)[:2] for invocation in gh.invocations
     ].count(("release", "edit")) == 1, (
-        "an undeclared attachment must not block the plan's verified release"
+        "an undeclared attachment must not block the record's verified release"
     )
 
 

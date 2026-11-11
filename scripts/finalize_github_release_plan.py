@@ -61,10 +61,6 @@ class PlanAssessment:
         Names whose recorded digest could not be established.
     uploads
         Names the plan still expects to upload.
-    verified
-        Names the plan found attached with the trusted digest. Carried because
-        a verified verdict is a claim about specific assets, and a later reader
-        re-checking the release needs to know which ones were claimed.
     detail
         Why the document could not be read, for an
         :attr:`PlanVerdict.UNREADABLE` verdict; empty otherwise.
@@ -74,7 +70,6 @@ class PlanAssessment:
     conflicts: tuple[str, ...] = ()
     unverifiable: tuple[str, ...] = ()
     uploads: tuple[str, ...] = ()
-    verified: tuple[str, ...] = ()
     detail: str = ""
 
 
@@ -215,8 +210,6 @@ def assess_plan(plan: object) -> PlanAssessment:
     --------
     >>> assess_plan({"actions": [["a", "skip-verified"]]}).verdict.value
     'verified'
-    >>> assess_plan({"actions": [["a", "skip-verified"]]}).verified
-    ('a',)
     >>> verdict = assess_plan({"actions": [["a", "upload"]]}).verdict
     >>> verdict.value
     'upload-required'
@@ -249,6 +242,52 @@ def assess_plan(plan: object) -> PlanAssessment:
     return _verdict(rows, conflicts, unverifiable)
 
 
+def assess_actions(
+    actions: cabc.Iterable[tuple[str, release_reconcile_github.AssetAction]],
+) -> PlanAssessment:
+    """Decide whether a freshly planned action set permits publication.
+
+    Parameters
+    ----------
+    actions
+        One ``(name, action)`` pair per declared asset, as
+        :func:`release_reconcile_github.plan_asset_actions` returned them.
+
+    Returns
+    -------
+    PlanAssessment
+        The same verdict :func:`assess_plan` would reach for a recorded plan
+        holding these rows.
+
+    Notes
+    -----
+    The finalizer re-runs the planner's own reconciliation against the release
+    as it is immediately before the edit, so a draft that changed between the
+    planner's snapshot and the edit is judged by the same policy rather than
+    by a second, weaker rule. Going through the action values rather than
+    through a serialized plan keeps the two paths from drifting: there is one
+    precedence, stated once in :func:`_verdict`.
+
+    Examples
+    --------
+    >>> from release_reconcile_github import AssetAction
+    >>> assess_actions([("a", AssetAction.SKIP_VERIFIED)]).verdict.value
+    'verified'
+    >>> assess_actions([("a", AssetAction.UPLOAD)]).verdict.value
+    'upload-required'
+    >>> assess_actions([("a", AssetAction.CONFLICT)]).verdict.value
+    'refused'
+    >>> assess_actions([]).verdict.value
+    'refused'
+    """
+    settled = tuple(actions)
+    return _verdict(
+        tuple((name, action.value) for name, action in settled),
+        release_reconcile_github.conflicts(settled),
+        release_reconcile_github.unverifiable(settled),
+    )
+
+
 def _verdict(
     rows: tuple[tuple[str, str], ...],
     conflicts: tuple[str, ...],
@@ -262,9 +301,7 @@ def _verdict(
         The verdict and the names that justify it. The order of the checks is
         the policy: no decisions at all is refused before any finding is read,
         because emptiness cannot be told apart from a plan nothing was checked
-        against, and the two refusals outrank an upload. A verified verdict
-        carries the names it verified, so a caller that re-reads the release
-        can ask whether those names are still there.
+        against, and the two refusals outrank an upload.
     """
     if not rows:
         return PlanAssessment(
@@ -283,8 +320,7 @@ def _verdict(
     uploads = _selected(rows, release_reconcile_github.AssetAction.UPLOAD)
     if uploads:
         return PlanAssessment(PlanVerdict.UPLOAD_REQUIRED, uploads=_unique(uploads))
-    verified = _selected(rows, release_reconcile_github.AssetAction.SKIP_VERIFIED)
-    return PlanAssessment(PlanVerdict.VERIFIED, verified=_unique(verified))
+    return PlanAssessment(PlanVerdict.VERIFIED)
 
 
 def _unique(names: cabc.Iterable[str]) -> tuple[str, ...]:

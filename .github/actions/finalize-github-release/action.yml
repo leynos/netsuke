@@ -159,11 +159,12 @@ runs:
         GH_TOKEN: ${{ inputs['github-token'] }}
       run: |
         set -euo pipefail
-        # One read-only `gh release view`, bounded by the same 300s as every
-        # other command here: a draft's asset listing is small, so anything
-        # slower is a stalled API. The single response is recorded twice —
-        # state.json for the draft flag and assets.json for the planner —
-        # because one call is the only way the two records can agree.
+        # One read-only release read, issued by the adapter and bounded by the
+        # same 300s as every other command here: a draft's asset listing is
+        # small, so anything slower is a stalled API. The single response is
+        # recorded twice — state.json for the draft flag and assets.json for
+        # the planner — because one call is the only way the two records can
+        # agree.
         # `--no-build` matters here because this step holds the token: a source
         # distribution would run its build backend with the token in scope, and
         # the script's own `exclude-newer` bounds which releases uv may choose,
@@ -233,19 +234,25 @@ runs:
         RELEASE_TAG: ${{ inputs.tag }}
         RELEASE_COMMIT: ${{ inputs.commit }}
         RELEASE_REPOSITORY: ${{ inputs.repository }}
+        DIGEST_RECORD_PATH: ${{ inputs['digest-record-path'] }}
         WORK_DIRECTORY: ${{ inputs['work-directory'] }}
         GH_TOKEN: ${{ inputs['github-token'] }}
       run: |
         set -euo pipefail
         # This is the only step that changes the release, and it changes
         # exactly one thing: the draft flag. A missing or conflicting asset,
-        # an unreadable record, and a failed API call each stop it with the
-        # release still a draft, so a retry starts from verified bytes rather
-        # than from a rebuilt release. The 600s bound covers three `gh` calls;
-        # a timeout here leaves the release a draft, which is the same state a
-        # refusal leaves, so a retry converges either way. `--no-build` is the
-        # same guard as the snapshot step's: this is the other step holding the
-        # token, and no dependency of the adapter needs a build backend.
+        # an unreadable record, and a failed API call each stop it before the
+        # edit, so a retry starts from verified bytes rather than from a
+        # rebuilt release. The release is reconciled against the trusted
+        # record a second time here, from a snapshot taken immediately before
+        # the edit, so a draft that changed since the planner's read is judged
+        # by the same policy. A failure after the edit has been attempted
+        # reports the release state as unknown rather than claiming it is
+        # still a draft. The 600s bound covers three `gh` calls; a timeout
+        # here leaves the release in the state the last call left it, so a
+        # retry converges either way. `--no-build` is the same guard as the
+        # snapshot step's: this is the other step holding the token, and no
+        # dependency of the adapter needs a build backend.
         timeout --kill-after=30s 600s \
           uv run --no-project --no-build --python 3.14 \
             scripts/finalize_github_release.py \
@@ -255,5 +262,6 @@ runs:
             --repository "$RELEASE_REPOSITORY" \
             --candidate-path "$WORK_DIRECTORY/candidate.json" \
             --plan-path "$WORK_DIRECTORY/plan.json" \
+            --digest-record-path "$DIGEST_RECORD_PATH" \
             --result-path "$WORK_DIRECTORY/result.json" \
             --github-output "$GITHUB_OUTPUT"

@@ -3,8 +3,14 @@
 Un-drafting a release is irreversible, so the guards here run before any API
 call: a candidate built from another revision, a plan that still owes an
 upload, and a plan whose bytes were never established each stop the run with
-the release still a draft. Only a plan in which every declared asset already
+the release still a draft. Only a release in which every declared asset already
 holds the trusted digest reaches the one edit this feature performs.
+
+The plan answers for the snapshot the planner read, so the release is
+reconciled a second time against the trusted record immediately before the
+edit. That second pass is the planner's own policy, not a cheaper copy of it:
+a draft that lost or replaced an asset between the two reads is judged exactly
+as a first read would judge it.
 
 The plan is read from the file ``finalize_github_release_cli`` wrote, and the
 candidate from the record ``package-crate`` wrote. The inventory verifier's
@@ -30,7 +36,11 @@ import finalize_github_release_plan as release_plan
 import finalize_github_release_records as release_records
 import finalize_github_release_state as release_state
 import release_candidate
+import release_digest_record
+import release_digest_record_files
+import release_github_assets_adapter
 import release_identity_record
+import release_reconcile_github
 import release_upload_plan
 
 
@@ -50,6 +60,10 @@ class PublishRequest:
         The candidate record ``resolve`` wrote.
     plan_path
         The reconciliation plan ``finalize_github_release_cli`` wrote.
+    digest_record_path
+        The trusted digest record the declaration stage wrote before upload.
+        Re-read here so the release is reconciled against the same record the
+        planner used, not against the plan's restatement of it.
     result_path
         Where the outcome record is written.
     github_output
@@ -61,6 +75,7 @@ class PublishRequest:
     repository: str
     candidate_path: pathlib.Path
     plan_path: pathlib.Path
+    digest_record_path: pathlib.Path
     result_path: pathlib.Path
     github_output: pathlib.Path | None = None
 
@@ -179,52 +194,44 @@ def assessment(path: pathlib.Path) -> release_plan.PlanAssessment:
 
 
 def require_verified(
-    result: release_plan.PlanAssessment,
-) -> release_plan.PlanAssessment:
-    """Stop unless the plan says every declared asset is already correct.
+    result: release_plan.PlanAssessment, *, source: str = "the reconciliation plan"
+) -> None:
+    """Stop unless the assessment says every declared asset is already correct.
 
     Parameters
     ----------
     result
-        The plan assessment :func:`assessment` produced.
-
-    Returns
-    -------
-    release_plan.PlanAssessment
-        The assessment it accepted, so a caller can go on to use the verified
-        names without re-reading the plan or re-deciding what it permits.
+        The assessment :func:`assessment` or :func:`_reconcile_current`
+        produced.
+    source
+        What the assessment was made from, named in the refusal so an operator
+        can tell a stale plan from a release that changed under the run.
 
     Notes
     -----
-    Only a verified plan returns. A plan that still owes an upload stops the
-    run with :data:`EXIT_UPLOAD_REQUIRED`, pointing at the declared upload
-    contract; a conflicting or unverifiable plan stops it with
+    Only a verified assessment returns. One that still owes an upload stops
+    the run with :data:`EXIT_UPLOAD_REQUIRED`, pointing at the declared upload
+    contract; a conflicting or unverifiable one stops it with
     :data:`EXIT_REFUSED`; an unreadable one with :data:`EXIT_INPUT_UNREADABLE`.
     Each leaves the release a draft.
     """
-    match result.verdict:
-        case release_plan.PlanVerdict.VERIFIED:
-            return result
-        case release_plan.PlanVerdict.UPLOAD_REQUIRED:
-            release_io.fail(
-                release_io.EXIT_UPLOAD_REQUIRED,
-                "the plan still requires uploads ("
-                + ", ".join(result.uploads)
-                + "); run the declared upload contract before finalizing. "
-                "The release remains a draft",
-            )
-        case release_plan.PlanVerdict.REFUSED:
-            reason = (
-                release_upload_plan.blocked_message(
-                    result.conflicts, result.unverifiable
-                )
-                or result.detail
-            )
-            release_io.fail(
-                release_io.EXIT_REFUSED, f"{reason}; the release remains a draft"
-            )
-        case release_plan.PlanVerdict.UNREADABLE:
-            release_io.fail(release_io.EXIT_INPUT_UNREADABLE, result.detail)
+    if result.verdict is release_plan.PlanVerdict.VERIFIED:
+        return
+    if result.verdict is release_plan.PlanVerdict.UPLOAD_REQUIRED:
+        release_io.fail(
+            release_io.EXIT_UPLOAD_REQUIRED,
+            f"{source} still requires uploads ("
+            + ", ".join(result.uploads)
+            + "); run the declared upload contract before finalizing. "
+            "The release remains a draft",
+        )
+    if result.verdict is release_plan.PlanVerdict.UNREADABLE:
+        release_io.fail(release_io.EXIT_INPUT_UNREADABLE, result.detail)
+    reason = (
+        release_upload_plan.blocked_message(result.conflicts, result.unverifiable)
+        or result.detail
+    )
+    release_io.fail(release_io.EXIT_REFUSED, f"{reason}; the release remains a draft")
 
 
 def publish_release(request: PublishRequest) -> None:
@@ -244,17 +251,33 @@ def publish_release(request: PublishRequest) -> None:
     :data:`EXIT_INPUT_UNREADABLE`, leaving the release a draft. A failed call
     or an unreadable readback stops it with :data:`EXIT_REMOTE_FAILED`, and an
     outcome that cannot be recorded with :data:`EXIT_OUTPUT_UNWRITABLE` after
-    the edit has landed.
+    the edit has landed. Those two are the only failures that cannot promise
+    the release is still a draft: once the edit has been attempted, GitHub may
+    have applied it before the response was lost, so the run reports the state
+    as unknown and names the two ways to establish it.
 
     A release already public with the candidate's own flag is recorded as
     ``already-finalized`` without a second edit, so an interrupted retry
-    converges instead of re-publishing. A draft that no longer attaches a name
-    the plan verified stops the run with :data:`EXIT_REFUSED`: the plan answers
-    for an earlier snapshot, and publishing a release whose verified inventory
-    has since changed would report a completeness nothing checked.
+    converges instead of re-publishing.
+
+    The plan answers for the snapshot the planner read, not for the release as
+    it is at the edit. So the fresh snapshot is reconciled again against the
+    same trusted record before the call: a declared asset that vanished is an
+    :data:`EXIT_UPLOAD_REQUIRED` refusal, one whose bytes changed is an
+    :data:`EXIT_REFUSED` refusal, and an undeclared extra is still ignored
+    exactly as the planner ignores it. A record that cannot be read stops the
+    run with :data:`EXIT_INPUT_UNREADABLE`. Every one of those leaves the
+    release a draft.
+
+    What remains, and cannot be closed from this side, is the window between
+    that read and the edit: GitHub offers no conditional edit, so a writer that
+    changes the draft in those milliseconds is not observed. The window is one
+    API call wide and both endpoints are the trusted record, so a run that
+    loses the race is detected on the next reconciliation rather than silently
+    published over.
     """
     identity = candidate(request.candidate_path, tag=request.tag, commit=request.commit)
-    decision = require_verified(assessment(request.plan_path))
+    require_verified(assessment(request.plan_path))
     current = release_records.snapshot_release(request.tag, request.repository)
     if release_state.is_already_finalized(
         current, is_prerelease=identity.is_prerelease
@@ -263,7 +286,11 @@ def publish_release(request: PublishRequest) -> None:
             request.result_path, request.github_output, "already-finalized", identity
         )
         return
-    _require_editable(current, decision)
+    _require_draft(current)
+    require_verified(
+        _reconcile_current(request.digest_record_path, current),
+        source="the release's current inventory",
+    )
     edited = release_io.run_gh(
         "release",
         "edit",
@@ -276,10 +303,12 @@ def publish_release(request: PublishRequest) -> None:
     )
     if edited.exit_code != 0:
         release_records.report_remote_failure(
-            edited.exit_code, edited.stderr, "gh release edit"
+            edited.exit_code, edited.stderr, "gh release edit", after_edit=True
         )
     readback = release_state.classify_readback(
-        release_records.snapshot_release(request.tag, request.repository),
+        release_records.snapshot_release(
+            request.tag, request.repository, after_edit=True
+        ),
         is_prerelease=identity.is_prerelease,
     )
     match readback:
@@ -301,35 +330,50 @@ def publish_release(request: PublishRequest) -> None:
             )
 
 
-def _require_editable(
-    state: release_state.ReleaseState, decision: release_plan.PlanAssessment
-) -> None:
-    """Refuse to edit a release the accepted plan no longer describes.
+def _reconcile_current(
+    digest_record_path: pathlib.Path, state: release_state.ReleaseState
+) -> release_plan.PlanAssessment:
+    """Re-run the planner's reconciliation against the release as it is now.
 
-    Both refusals are preconditions of the same edit, so they share one guard.
+    Parameters
+    ----------
+    digest_record_path
+        The trusted digest record the declaration stage wrote before upload.
+    state
+        The release as the pre-edit snapshot reported it.
 
-    ``is_already_finalized`` has taken the case where the release is public
-    with the candidate's flag, so a public release reaching here has the other
-    one. Editing it would change a release someone may already have downloaded,
-    and a public release cannot be made a draft again, so the run stops before
-    the call rather than correcting a state it must not touch.
+    Returns
+    -------
+    release_plan.PlanAssessment
+        The verdict the planner would have reached for this listing.
 
-    The second answer is taken from a snapshot later than the plan's. The plan
-    was written from the one the record step took, and a name it verified that
-    the release no longer attaches means the draft changed under the run. The
-    two reads are the whole reason this is checked here rather than trusted, so
-    the release is left a draft and a re-run reconciles it again.
+    Notes
+    -----
+    The record is re-read rather than taken from the plan, so the comparison is
+    against the bytes the build declared and not against a document the
+    planner wrote. The digest conversion is
+    :func:`release_github_assets_adapter.normalise_github_digest`, the same one
+    the planner uses, so an unusable digest is unverifiable here for the same
+    reason it was there.
+
+    A record that cannot be read stops the run with
+    :data:`EXIT_INPUT_UNREADABLE`: an absent record would plan no actions, and
+    no actions is the shape of a fully verified release.
     """
-    _require_draft(state)
-    missing = release_state.missing_names(state, decision.verified)
-    if missing:
+    try:
+        expected = release_digest_record_files.read_digest_record(digest_record_path)
+    except release_digest_record.DigestRecordError as error:
         release_io.fail(
-            release_io.EXIT_REFUSED,
-            "the release no longer attaches "
-            + ", ".join(missing)
-            + ", which the reconciliation plan verified; the release remains a "
-            "draft and a re-run must reconcile it again",
+            release_io.EXIT_INPUT_UNREADABLE,
+            f"{digest_record_path} is not a usable digest record: {error}",
         )
+    present = {
+        name: release_github_assets_adapter.normalise_github_digest(digest)
+        for name, digest in state.assets.items()
+    }
+    return release_plan.assess_actions(
+        release_reconcile_github.plan_asset_actions(expected=expected, present=present)
+    )
 
 
 def _require_draft(state: release_state.ReleaseState) -> None:

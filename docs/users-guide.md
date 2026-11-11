@@ -120,7 +120,9 @@ later jobs have used them: the inventory verification job downloads every
 attached asset and checks it against that record, and the finalization job
 then un-drafts the release only when every declared asset already holds its
 trusted digest, taking the prerelease flag from the validated candidate
-identity.
+identity. The finalization job reconciles the release against that record twice:
+once from the plan the planner wrote, and again from a snapshot taken
+immediately before it un-drafts.
 
 A publishing run then verifies what GitHub ended up holding. The
 `verify-release-inventory` job runs only when the metadata, crates.io, and
@@ -142,11 +144,19 @@ existing asset. An attached asset whose bytes cannot be established -- GitHub
 reports no usable digest for it and the download that would settle the
 question fails -- stops the run too, but the upload plan records it apart from
 a conflict, because "the release holds the wrong bytes" and "nobody could read
-the bytes" call for different remedies. A missing or conflicting asset, a draft that has since lost an asset the
-reconciliation accepted, an unreadable record, or a failed GitHub call leaves the release as a draft;
+the bytes" call for different remedies. A declared asset that is missing, one whose bytes changed, an unreadable
+record, or a failed GitHub call before the edit leaves the release as a
+draft;
 correct the cause and rerun the verification and finalization jobs, which read
 the retained records and never rebuild the release. Rerunning a job is
 therefore safe, and a rerun cannot swap a release's bytes for a second build's.
+A failed edit, or an unreadable read-back after one, is different: GitHub
+may have applied the edit before the response was lost, so the run reports
+the release state as **unknown** rather than claiming it is still a draft.
+Inspect the release, or simply rerun the finalization job. A rerun records
+an already-public release as finalized without editing it a second time, so
+it is always safe to rerun.
+
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase
 40-character hexadecimal** object name of the candidate -- the value

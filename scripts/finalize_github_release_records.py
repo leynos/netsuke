@@ -4,7 +4,9 @@ This module holds the two read-only operations and the three records they and
 the decision module write. They are separated from the decision itself because
 their failure modes are the ones an operator reads first: a `gh` call that did
 not answer, and a record that could not be written. Neither changes the
-release, and every one of them stops the run with the release still a draft.
+release. A failure before the edit stops the run with the release still a
+draft; a failure after one was attempted reports the state as unknown, because
+GitHub may have applied the edit before the response was lost.
 
 The split is also a size boundary. ``finalize_github_release_operations``
 answers "may this release be un-drafted, and with which flag", and the module
@@ -32,7 +34,9 @@ if typ.TYPE_CHECKING:
     import pathlib
 
 
-def snapshot_release(tag: str, repository: str) -> release_state.ReleaseState:
+def snapshot_release(
+    tag: str, repository: str, *, after_edit: bool = False
+) -> release_state.ReleaseState:
     """Read GitHub's current view of the release and decode it.
 
     Parameters
@@ -42,6 +46,10 @@ def snapshot_release(tag: str, repository: str) -> release_state.ReleaseState:
     repository
         The ``OWNER/REPO`` the release belongs to. A fork's release is not the
         upstream's, so it is never inferred from the checkout.
+    after_edit
+        Whether an un-drafting call has already been attempted for this run.
+        A read that fails then cannot promise the release is still a draft,
+        because GitHub may have applied the edit before the response was lost.
 
     Returns
     -------
@@ -53,6 +61,8 @@ def snapshot_release(tag: str, repository: str) -> release_state.ReleaseState:
     -----
     A ``gh`` call that fails or answers with something unusable stops the run
     with :data:`EXIT_REMOTE_FAILED`; nothing is decided from an unread release.
+    The diagnosis distinguishes the two cases, because only the first can say
+    the release is still a draft.
     """
     result = release_io.run_gh(
         "release",
@@ -64,18 +74,57 @@ def snapshot_release(tag: str, repository: str) -> release_state.ReleaseState:
         release_io.VIEW_FIELDS,
     )
     if result.exit_code != 0:
-        report_remote_failure(result.exit_code, result.stderr, "gh release view")
+        report_remote_failure(
+            result.exit_code, result.stderr, "gh release view", after_edit=after_edit
+        )
     try:
         payload = json.loads(result.stdout or "")
         return release_state.parse_release_state(payload, tag=tag)
     except (json.JSONDecodeError, release_state.FinalizePolicyError) as error:
-        release_io.fail(
-            release_io.EXIT_REMOTE_FAILED,
+        release_state_failure(
             f"gh release view returned an unusable response: {error}",
+            after_edit=after_edit,
         )
 
 
-def report_remote_failure(exit_code: int, stderr: str | None, command: str) -> None:
+def release_state_failure(message: str, *, after_edit: bool) -> typ.NoReturn:
+    """Stop the run with a diagnosis that does not overstate what is known.
+
+    Parameters
+    ----------
+    message
+        What went wrong, as the caller would report it.
+    after_edit
+        Whether an un-drafting call has already been attempted for this run.
+
+    Notes
+    -----
+    Before the edit, the release has not been touched, so the run can promise
+    it remains a draft. After an edit has been attempted, GitHub may have
+    applied it before the response or the read-back was lost; saying it is
+    still a draft would be a claim the run cannot support, and an operator who
+    believed it might edit the release by hand. The state is therefore reported
+    as unknown, with the two ways to establish it: inspect the release, or
+    re-run the finalizer, which records ``already-finalized`` without a second
+    edit when the release did become public.
+    """
+    if after_edit:
+        release_io.fail(
+            release_io.EXIT_REMOTE_FAILED,
+            f"{message}. The release state is unknown: an edit was attempted, "
+            "so it may already be public. Inspect the release, or re-run the "
+            "finalizer, which records an already-public release without "
+            "editing it again",
+        )
+    release_io.fail(
+        release_io.EXIT_REMOTE_FAILED,
+        f"{message}; the release has not been edited and remains a draft",
+    )
+
+
+def report_remote_failure(
+    exit_code: int, stderr: str | None, command: str, *, after_edit: bool = False
+) -> None:
     """Relay the command's own diagnosis, then fail with the remote status.
 
     Parameters
@@ -87,18 +136,20 @@ def report_remote_failure(exit_code: int, stderr: str | None, command: str) -> N
         wording reaches the log rather than a paraphrase.
     command
         The command as it was written, so the log names what failed.
+    after_edit
+        Whether the failed command was the un-drafting edit, or a read taken
+        after one was attempted.
 
     Notes
     -----
-    The run stops with :data:`EXIT_REMOTE_FAILED`, and the message says the
-    release remains a draft: a failed read or a failed edit changes nothing.
+    The run stops with :data:`EXIT_REMOTE_FAILED`. Only a failure before the
+    edit can promise the release is still a draft; see
+    :func:`release_state_failure` for why the other case is reported as
+    unknown.
     """
     if stderr:
         print(stderr, end="", file=sys.stderr)
-    release_io.fail(
-        release_io.EXIT_REMOTE_FAILED,
-        f"{command} exited {exit_code}; the release remains a draft",
-    )
+    release_state_failure(f"{command} exited {exit_code}", after_edit=after_edit)
 
 
 def record_outcome(

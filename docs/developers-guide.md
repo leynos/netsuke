@@ -4030,13 +4030,21 @@ here because refusing over it would block a release over a file the plan never
 named.
 
 The finalize step does not take that decision on trust. It re-reads the release
-immediately before the single edit, and a name the plan verified that the
-re-read no longer attaches stops the run with `EXIT_REFUSED`. The plan answers
-for the snapshot the record step took, so publishing a release whose verified
-inventory has since changed would report a completeness nothing checked. The
-re-read decides only about the plan's own names, which leaves the tolerance
-above intact: an undeclared attachment neither blocks the run nor is removed
-from the release.
+immediately before the single edit and reconciles that fresh listing against
+the trusted record again, using the planner's own policy rather than a second
+rule. A declared asset that vanished is `EXIT_UPLOAD_REQUIRED`; one whose bytes
+changed is `EXIT_REFUSED`; an unreadable record is `EXIT_INPUT_UNREADABLE`. The
+plan answers for the snapshot the record step took, so publishing a release
+whose inventory has since changed would report a completeness nothing checked.
+The second pass decides only about the record's own names, which leaves the
+tolerance above intact: an undeclared attachment neither blocks the run nor is
+removed from the release.
+
+What the second pass cannot close is the window between its read and the edit.
+GitHub offers no conditional edit, so a writer that changes the draft in those
+milliseconds is not observed. The window is one API call wide and both
+endpoints are the same trusted record, so a run that loses the race is caught
+by the next reconciliation rather than silently publishing over it.
 
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |
