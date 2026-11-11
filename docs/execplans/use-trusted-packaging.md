@@ -712,10 +712,12 @@ no tree was walked.
 The limits are what the observation can see. It is a tree walk, so it says
 where a file was placed by the download that produced this tree, not who built
 its bytes; a package correctly placed but containing another target's build
-would pass. It attributes by subtree, so a package staged at the root is
-attributed to nothing and is refused rather than accepted. And it is supplied
-or omitted as a whole: with no observation the count is the entire guarantee,
-which is weaker, so the CLI always supplies one.
+would pass. It attributes by subtree, so a package staged at the `dist` root --
+where only archives legitimately sit -- is attributed to nothing, and a record
+claiming one is refused for claiming a package "which no producer subtree
+staged" rather than passed over. And it is supplied or omitted as a whole: with
+no observation the count is the entire guarantee, which is weaker, so the CLI
+always supplies one.
 
 The `trusted.json` record is now produced and retained for downstream
 consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
