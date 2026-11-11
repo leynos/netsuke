@@ -36,6 +36,7 @@ SECTION_MODULES = (
     "scripts/tests/test_finalize_github_release.py",
     "scripts/tests/test_finalize_github_release_publish.py",
     "scripts/tests/test_finalize_github_release_publish_failures.py",
+    "scripts/tests/test_finalize_github_release_publish_refusals.py",
     "scripts/tests/test_finalize_github_release_state.py",
     "scripts/tests/test_release_inventory.py",
     "scripts/tests/test_release_identity_record.py",

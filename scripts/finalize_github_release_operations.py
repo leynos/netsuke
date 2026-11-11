@@ -1,4 +1,4 @@
-"""Decide and perform the three operations a finalization run is built from.
+"""Decide and perform the two operations a publishing run is built from.
 
 Un-drafting a release is irreversible, so the guards here run before any API
 call: a candidate built from another revision, a plan that still owes an
@@ -18,30 +18,33 @@ output is deliberately not an input: comparing GitHub against a record derived
 from GitHub would agree with itself however the upload was tampered with.
 
 Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
-``scripts/tests/test_finalize_github_release.py`` and
-``scripts/tests/test_finalize_github_release_publish.py``.
+``scripts/tests/test_finalize_github_release_publish.py`` and
+``scripts/tests/test_finalize_github_release_publish_failures.py``.
 
-What GitHub answered and what this run recorded live in
-``finalize_github_release_records``. This module decides from those records; it
-does not produce them.
+What GitHub answered, what this run recorded, and the candidate record it read
+live in ``finalize_github_release_records``. This module decides from those
+records; it does not produce them.
 """
 
 import dataclasses
 
 # ``PublishRequest`` reads these annotations from the class at runtime.
 import pathlib  # ruff: ignore[typing-only-standard-library-import]
+import typing as typ
 
 import finalize_github_release_io as release_io
 import finalize_github_release_plan as release_plan
 import finalize_github_release_records as release_records
 import finalize_github_release_state as release_state
-import release_candidate
 import release_digest_record
 import release_digest_record_files
 import release_github_assets_adapter
-import release_identity_record
 import release_reconcile_github
 import release_upload_plan
+
+if typ.TYPE_CHECKING:
+    # Only the helper signatures name the identity; nothing here constructs one.
+    import release_candidate
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -78,90 +81,6 @@ class PublishRequest:
     digest_record_path: pathlib.Path
     result_path: pathlib.Path
     github_output: pathlib.Path | None = None
-
-
-def candidate(
-    path: pathlib.Path, *, tag: str, commit: str
-) -> release_candidate.ReleaseIdentity:
-    """Read the recorded candidate and require it to name this run's revision.
-
-    Parameters
-    ----------
-    path
-        The candidate record ``resolve`` wrote for this run.
-    tag
-        The release being finalized, which the record must name.
-    commit
-        The revision being published, which the record must name.
-
-    Returns
-    -------
-    release_candidate.ReleaseIdentity
-        The identity the package stage recorded.
-
-    Notes
-    -----
-    A record that cannot be read, does not hold a usable identity, or names
-    another tag or revision stops the run with :data:`EXIT_INPUT_UNREADABLE`
-    or :data:`EXIT_REFUSED`, so no bytes from another candidate can be
-    published under this release.
-
-    Examples
-    --------
-    >>> import json
-    >>> import tempfile
-    >>> record = {"tag": "v1.2.3", "commit": "0" * 40,
-    ...           "package_name": "p", "version": "1.2.3",
-    ...           "bin_name": "b", "is_prerelease": False}
-    >>> with tempfile.TemporaryDirectory() as directory:
-    ...     source = pathlib.Path(directory) / "candidate.json"
-    ...     _ = source.write_text(json.dumps(record), encoding="utf-8")
-    ...     candidate(source, tag="v1.2.3", commit="0" * 40).version
-    '1.2.3'
-    """
-    decoded = release_io.read_json(path)
-    if not isinstance(decoded, dict):
-        release_io.fail(
-            release_io.EXIT_INPUT_UNREADABLE, f"{path} does not hold a JSON object"
-        )
-    try:
-        identity = release_identity_record.identity_from_mapping(decoded)
-    except release_candidate.IdentityError as error:
-        release_io.fail(
-            release_io.EXIT_INPUT_UNREADABLE,
-            f"{path} is not a usable candidate: {error}",
-        )
-    require_candidate(identity, tag=tag, commit=commit)
-    return identity
-
-
-def require_candidate(
-    identity: release_candidate.ReleaseIdentity, *, tag: str, commit: str
-) -> None:
-    """Stop unless the identity names this run's tag and revision.
-
-    Parameters
-    ----------
-    identity
-        The identity an earlier stage recorded.
-    tag
-        The release this run is finalizing.
-    commit
-        The revision being published.
-
-    Notes
-    -----
-    The agreement itself is :func:`release_candidate.identity_refusal`, so the
-    package record ``resolve`` checks and the candidate record this module
-    checks cannot disagree about what counts as this run's candidate. A
-    mismatch stops the run with :data:`EXIT_REFUSED` before any API call, so
-    the release remains a draft.
-    """
-    reason = release_candidate.identity_refusal(identity, tag=tag, commit=commit)
-    if reason is not None:
-        release_io.fail(
-            release_io.EXIT_REFUSED, f"{reason}; the release remains a draft"
-        )
 
 
 def assessment(path: pathlib.Path) -> release_plan.PlanAssessment:
@@ -276,7 +195,9 @@ def publish_release(request: PublishRequest) -> None:
     loses the race is detected on the next reconciliation rather than silently
     published over.
     """
-    identity = candidate(request.candidate_path, tag=request.tag, commit=request.commit)
+    identity = release_records.candidate(
+        request.candidate_path, tag=request.tag, commit=request.commit
+    )
     require_verified(assessment(request.plan_path))
     current = release_records.snapshot_release(request.tag, request.repository)
     if release_state.is_already_finalized(
@@ -291,6 +212,21 @@ def publish_release(request: PublishRequest) -> None:
         _reconcile_current(request.digest_record_path, current),
         source="the release's current inventory",
     )
+    _edit_release(request, identity)
+    _confirm_published(request, identity)
+
+
+def _edit_release(
+    request: PublishRequest, identity: release_candidate.ReleaseIdentity
+) -> None:
+    """Un-draft the release with the candidate's own prerelease flag.
+
+    Notes
+    -----
+    This is the only mutating call the feature makes. A failure stops the run
+    with :data:`EXIT_REMOTE_FAILED` and reports the state as unknown, because
+    GitHub may have applied the edit before the response was lost.
+    """
     edited = release_io.run_gh(
         "release",
         "edit",
@@ -305,6 +241,21 @@ def publish_release(request: PublishRequest) -> None:
         release_records.report_remote_failure(
             edited.exit_code, edited.stderr, "gh release edit", after_edit=True
         )
+
+
+def _confirm_published(
+    request: PublishRequest, identity: release_candidate.ReleaseIdentity
+) -> None:
+    """Read the release back and record the outcome that read supports.
+
+    Notes
+    -----
+    A read-back that cannot be taken stops the run with
+    :data:`EXIT_REMOTE_FAILED` and reports the state as unknown. A release that
+    is still a draft, or public with the wrong prerelease flag, is a failure
+    the run cannot repair: GitHub does not allow a public release to become a
+    draft again.
+    """
     readback = release_state.classify_readback(
         release_records.snapshot_release(
             request.tag, request.repository, after_edit=True

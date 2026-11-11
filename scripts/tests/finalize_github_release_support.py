@@ -7,6 +7,7 @@ response a test mocks is built by the same code path that names the
 invocation, so the two cannot drift into describing different releases.
 """
 
+import dataclasses
 import json
 import typing as typ
 
@@ -72,14 +73,21 @@ def plan_record(
     }
 
 
+def _write_json_record(
+    directory: pathlib.Path, name: str, record: cabc.Mapping[str, object]
+) -> pathlib.Path:
+    """Write one JSON record into the run's directory and return its path."""
+    path = directory / name
+    _ = path.write_text(json.dumps(record), encoding="utf-8")
+    return path
+
+
 def write_candidate(
     directory: pathlib.Path, *, identity: cabc.Mapping[str, object] | None = None
 ) -> pathlib.Path:
     """Write the candidate record a publishing run reads."""
     record = identity_record() if identity is None else identity
-    path = directory / "candidate.json"
-    _ = path.write_text(json.dumps(record), encoding="utf-8")
-    return path
+    return _write_json_record(directory, "candidate.json", record)
 
 
 def write_plan(
@@ -87,9 +95,7 @@ def write_plan(
 ) -> pathlib.Path:
     """Write a reconciliation plan, defaulting to one fully verified asset."""
     record = plan_record() if plan is None else plan
-    path = directory / "plan.json"
-    _ = path.write_text(json.dumps(record), encoding="utf-8")
-    return path
+    return _write_json_record(directory, "plan.json", record)
 
 
 def digest_record(
@@ -107,9 +113,7 @@ def write_digest_record(
 ) -> pathlib.Path:
     """Write the trusted digest record a publishing run reconciles against."""
     written = digest_record() if record is None else record
-    path = directory / "trusted.json"
-    _ = path.write_text(json.dumps(written), encoding="utf-8")
-    return path
+    return _write_json_record(directory, "trusted.json", written)
 
 
 def release_view(
@@ -136,19 +140,41 @@ def release_view(
     })
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class PublishRecords:
+    """Name the record overrides one publishing test needs.
+
+    The three records a ``publish`` run reads are usually the well-formed
+    defaults, so grouping the overrides keeps the fixture's signature about the
+    run rather than about each document it happens to write.
+
+    Attributes
+    ----------
+    candidate
+        The candidate record to write instead of the default identity.
+    plan
+        The reconciliation plan to write instead of the verified default.
+    trusted
+        The trusted digest record to write instead of the default.
+    """
+
+    candidate: cabc.Mapping[str, object] | None = None
+    plan: cabc.Mapping[str, object] | None = None
+    trusted: cabc.Mapping[str, object] | None = None
+
+
 def publish_arguments(
     directory: pathlib.Path,
+    records: PublishRecords | None = None,
     *,
-    candidate: cabc.Mapping[str, object] | None = None,
-    plan: cabc.Mapping[str, object] | None = None,
-    trusted: cabc.Mapping[str, object] | None = None,
     github_output: pathlib.Path | None = None,
 ) -> list[str]:
     """Return a complete ``publish`` invocation over freshly written inputs."""
-    record = identity_record() if candidate is None else candidate
+    records = PublishRecords() if records is None else records
+    record = identity_record() if records.candidate is None else records.candidate
     candidate_path = write_candidate(directory, identity=record)
-    plan_path = write_plan(directory, plan=plan)
-    digest_path = write_digest_record(directory, record=trusted)
+    plan_path = write_plan(directory, plan=records.plan)
+    digest_path = write_digest_record(directory, record=records.trusted)
     arguments = [
         "publish",
         "--tag",

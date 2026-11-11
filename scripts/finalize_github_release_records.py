@@ -1,17 +1,18 @@
 """Read the release and record what a finalization run observed.
 
-This module holds the two read-only operations and the three records they and
-the decision module write. They are separated from the decision itself because
-their failure modes are the ones an operator reads first: a `gh` call that did
-not answer, and a record that could not be written. Neither changes the
-release. A failure before the edit stops the run with the release still a
-draft; a failure after one was attempted reports the state as unknown, because
-GitHub may have applied the edit before the response was lost.
+This module holds every read and every write the run performs around the one
+edit: the release snapshot, the candidate record it validates and reads back,
+and the three records the decision module writes. They are separated from the
+decision itself because their failure modes are the ones an operator reads
+first: a `gh` call that did not answer, and a record that could not be written.
+Neither changes the release. A failure before the edit stops the run with the
+release still a draft; a failure after one was attempted reports the state as
+unknown, because GitHub may have applied the edit before the response was lost.
 
 The split is also a size boundary. ``finalize_github_release_operations``
 answers "may this release be un-drafted, and with which flag", and the module
-here answers "what did GitHub say, and what did this run record". Keeping them
-apart lets each stay small enough to read in one sitting.
+here answers "what did GitHub say, and what did this run read or record".
+Keeping them apart lets each stay small enough to read in one sitting.
 
 Run via ``scripts/finalize_github_release.py``; behavioural coverage lives in
 ``scripts/tests/test_finalize_github_release_publish.py`` and
@@ -150,6 +151,91 @@ def report_remote_failure(
     if stderr:
         print(stderr, end="", file=sys.stderr)
     release_state_failure(f"{command} exited {exit_code}", after_edit=after_edit)
+
+
+def candidate(
+    path: pathlib.Path, *, tag: str, commit: str
+) -> release_candidate.ReleaseIdentity:
+    """Read the recorded candidate and require it to name this run's revision.
+
+    Parameters
+    ----------
+    path
+        The candidate record ``resolve`` wrote for this run.
+    tag
+        The release being finalized, which the record must name.
+    commit
+        The revision being published, which the record must name.
+
+    Returns
+    -------
+    release_candidate.ReleaseIdentity
+        The identity the package stage recorded.
+
+    Notes
+    -----
+    A record that cannot be read, does not hold a usable identity, or names
+    another tag or revision stops the run with :data:`EXIT_INPUT_UNREADABLE`
+    or :data:`EXIT_REFUSED`, so no bytes from another candidate can be
+    published under this release.
+
+    Examples
+    --------
+    >>> import json
+    >>> import pathlib
+    >>> import tempfile
+    >>> record = {"tag": "v1.2.3", "commit": "0" * 40,
+    ...           "package_name": "p", "version": "1.2.3",
+    ...           "bin_name": "b", "is_prerelease": False}
+    >>> with tempfile.TemporaryDirectory() as directory:
+    ...     source = pathlib.Path(directory) / "candidate.json"
+    ...     _ = source.write_text(json.dumps(record), encoding="utf-8")
+    ...     candidate(source, tag="v1.2.3", commit="0" * 40).version
+    '1.2.3'
+    """
+    decoded = release_io.read_json(path)
+    if not isinstance(decoded, dict):
+        release_io.fail(
+            release_io.EXIT_INPUT_UNREADABLE, f"{path} does not hold a JSON object"
+        )
+    try:
+        identity = release_identity_record.identity_from_mapping(decoded)
+    except release_candidate.IdentityError as error:
+        release_io.fail(
+            release_io.EXIT_INPUT_UNREADABLE,
+            f"{path} is not a usable candidate: {error}",
+        )
+    require_candidate(identity, tag=tag, commit=commit)
+    return identity
+
+
+def require_candidate(
+    identity: release_candidate.ReleaseIdentity, *, tag: str, commit: str
+) -> None:
+    """Stop unless the identity names this run's tag and revision.
+
+    Parameters
+    ----------
+    identity
+        The identity an earlier stage recorded.
+    tag
+        The release this run is finalizing.
+    commit
+        The revision being published.
+
+    Notes
+    -----
+    The agreement itself is :func:`release_candidate.identity_refusal`, so the
+    package record ``resolve`` checks and the candidate record this module
+    checks cannot disagree about what counts as this run's candidate. A
+    mismatch stops the run with :data:`EXIT_REFUSED` before any API call, so
+    the release remains a draft.
+    """
+    reason = release_candidate.identity_refusal(identity, tag=tag, commit=commit)
+    if reason is not None:
+        release_io.fail(
+            release_io.EXIT_REFUSED, f"{reason}; the release remains a draft"
+        )
 
 
 def record_outcome(
