@@ -26,21 +26,43 @@ if typ.TYPE_CHECKING:
     import pathlib
 
 
+#: The bytes every accepting case installs and the record then demands.
+INSTALLED = b"payload"
+
+
+def _installed(payload: pathlib.Path) -> str:
+    """Write the declared asset into ``payload`` and return its digest.
+
+    Returns
+    -------
+    str
+        The SHA-256 the trusted record would carry for that file.
+
+    Examples
+    --------
+    >>> import tempfile
+    >>> from pathlib import Path
+    >>> with tempfile.TemporaryDirectory() as tmp:
+    ...     len(_installed(Path(tmp)))
+    64
+    """
+    return release_digest_files.digest_of_file(write_asset(payload, "a.deb", INSTALLED))
+
+
 def test_require_payload_matches_accepts_the_installed_bytes(
     tmp_path: pathlib.Path,
 ) -> None:
     """Accept a payload directory holding exactly the recorded bytes."""
-    asset = write_asset(tmp_path, "a.deb", b"payload")
-    digest = release_digest_files.digest_of_file(asset)
-    release_payload_handoff.require_payload_matches(tmp_path, {"a.deb": digest})
+    release_payload_handoff.require_payload_matches(
+        tmp_path, {"a.deb": _installed(tmp_path)}
+    )
 
 
 def test_require_payload_matches_names_what_the_payload_omits(
     tmp_path: pathlib.Path,
 ) -> None:
     """Report a hand-off that lost a declared asset."""
-    asset = write_asset(tmp_path, "a.deb")
-    digest = release_digest_files.digest_of_file(asset)
+    digest = _installed(tmp_path)
     with pytest.raises(release_payload_handoff.PayloadHandoffError, match="omits"):
         release_payload_handoff.require_payload_matches(
             tmp_path, {"a.deb": digest, "b.rpm": "b" * 64}
@@ -51,9 +73,8 @@ def test_require_payload_matches_names_what_the_payload_adds(
     tmp_path: pathlib.Path,
 ) -> None:
     """Report a hand-off that gained a file nobody selected."""
-    asset = write_asset(tmp_path, "a.deb")
+    digest = _installed(tmp_path)
     write_asset(tmp_path, "extra.rpm")
-    digest = release_digest_files.digest_of_file(asset)
     with pytest.raises(release_payload_handoff.PayloadHandoffError, match="adds"):
         release_payload_handoff.require_payload_matches(tmp_path, {"a.deb": digest})
 
@@ -62,9 +83,10 @@ def test_require_payload_matches_refuses_replaced_bytes(
     tmp_path: pathlib.Path,
 ) -> None:
     """Refuse a payload whose bytes are not the recorded ones."""
+    recorded = _installed(tmp_path)
     write_asset(tmp_path, "a.deb", b"tampered")
     with pytest.raises(release_digest_record.RecordedDigestMismatchError):
-        release_payload_handoff.require_payload_matches(tmp_path, {"a.deb": "b" * 64})
+        release_payload_handoff.require_payload_matches(tmp_path, {"a.deb": recorded})
 
 
 def test_a_producer_record_is_not_a_payload_asset(tmp_path: pathlib.Path) -> None:
@@ -83,9 +105,8 @@ def test_a_nested_duplicate_of_a_declared_name_is_refused(
     ``present[name][0]`` would have accepted it while the root-level entry the
     uploader sends went unread.
     """
-    asset = write_asset(tmp_path, "a.deb", b"payload")
-    write_asset(tmp_path / "sub", "a.deb", b"payload")
-    digest = release_digest_files.digest_of_file(asset)
+    digest = _installed(tmp_path)
+    write_asset(tmp_path / "sub", "a.deb", INSTALLED)
     with pytest.raises(release_payload_handoff.PayloadHandoffError, match="adds"):
         release_payload_handoff.require_payload_matches(tmp_path, {"a.deb": digest})
 
@@ -105,9 +126,8 @@ def test_a_root_symlink_is_refused_beside_a_regular_nested_file(
     """
     payload = tmp_path / "payload"
     elsewhere = write_asset(tmp_path / "elsewhere", "a.deb", b"not the payload")
-    asset = write_asset(payload / "sub", "a.deb", b"payload")
+    digest = _installed(payload / "sub")
     _ = (payload / "a.deb").symlink_to(elsewhere)
-    digest = release_digest_files.digest_of_file(asset)
     with pytest.raises(
         release_payload_handoff.PayloadHandoffError, match="cannot upload"
     ):
