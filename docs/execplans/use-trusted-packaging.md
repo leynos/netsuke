@@ -3904,6 +3904,50 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   the plan records actions rather than digests; it detects a release that lost
   what was verified, which is the failure the extra read can settle.
 
+- [x] (2026-11-11) Rebased onto the advanced #1067 head (`c40601b3f`, nine new
+  commits) and answered the fifth review's three findings.
+
+  **The rebase conflicted only in prose.** Five of the seventeen replayed
+  commits touch `docs/developers-guide.md` or this plan, and the base had
+  rewritten the same passages to say publication was *not* gated on
+  verification and that the verifier proves the staged bytes rather than
+  package origin. Both intents survive: the base's corrected claims about what
+  the verifier establishes are kept, and this branch's statement that
+  `finalize-github-release` now depends on it replaces the base's "planned
+  finalizer" framing. `range-diff` shows commits 1–4 and 6–17 identical and
+  only the documentation commit changed.
+
+  **P1 — reconcile the current inventory before publishing.** The previous pass
+  compared the pre-edit read with the names the plan verified, which detected a
+  vanished asset and nothing else. The reviewer was right that the plan answers
+  for an earlier snapshot: a replaced asset, or one whose digest changed,
+  passed unremarked. `publish` now re-runs the planner's own reconciliation —
+  `release_digest_record_files.read_digest_record` → `normalise_github_digest` →
+  `plan_asset_actions` — against the fresh snapshot, and judges it with the
+  same `_verdict` precedence via the new `assess_actions`. Missing is
+  `EXIT_UPLOAD_REQUIRED`, changed is `EXIT_REFUSED`, unreadable record is
+  `EXIT_INPUT_UNREADABLE`, and an undeclared extra stays ignored exactly as the
+  planner ignores it. `missing_names` and its suite were deleted: they
+  implemented a weaker rule that the second reconciliation subsumes. The
+  residual read→edit race is now documented rather than implied, since GitHub
+  offers no conditional edit.
+
+  **P2 — do not claim a draft after an ambiguous edit failure.** Every `gh`
+  failure reported "the release remains a draft", which is false once the edit
+  has been attempted: GitHub may have applied it before the response was lost,
+  and the suite's own retry tests model exactly that. `snapshot_release` and
+  `report_remote_failure` take `after_edit`, and `release_state_failure`
+  reports the state as **unknown** after an edit, naming the two ways to
+  establish it — inspect the release, or rerun, which records
+  `already-finalized` without a second edit. Before the edit the message still
+  promises the draft was untouched. The users' guide, the action's step
+  comment, and both module docstrings were corrected with it.
+
+  **P3 — stale implementation status.** `release.yml` said the finalizer was
+  not wired; the developers' guide called links 5 and 6 *Planned*; and two
+  module docstrings said no job invokes them. All four now describe the
+  workflow as it is.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
