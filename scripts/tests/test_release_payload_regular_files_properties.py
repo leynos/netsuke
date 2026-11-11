@@ -16,6 +16,7 @@ against itself would not be.
 Run via ``make test-release-publication``.
 """
 
+import dataclasses
 import itertools
 import os
 import pathlib
@@ -140,6 +141,72 @@ def test_an_accepted_source_always_resolves_inside_the_root(
     )
 
 
+@dataclasses.dataclass(frozen=True)
+class _EscapeShape:
+    """The three generated numbers that decide one escape's spelling."""
+
+    #: How many directories deep the chain inside the root goes.
+    depth: int
+    #: How many components the candidate climbs before descending again.
+    cancel: int
+    #: How many components the candidate climbs past the root.
+    overrun: int
+
+
+@dataclasses.dataclass(frozen=True)
+class _EscapedTree:
+    """A staged tree whose spelling leaves the root, plus where it really lands.
+
+    Each field exists so the case can assert the shape *before* expecting a
+    refusal: ``candidate`` must exist and must resolve outside ``root``, or
+    the refusal would not be about containment at all.
+    """
+
+    #: The staged root the guard is given.
+    root: pathlib.Path
+    #: The deepest real directory inside the root, where the walk starts.
+    deepest: pathlib.Path
+    #: The part of the chain the candidate re-descends after climbing.
+    descent: tuple[pathlib.Path, ...]
+    #: The directory the candidate actually names, outside the root.
+    landed: pathlib.Path
+
+
+def _escaped_tree(
+    tmp_path: pathlib.Path, counter: itertools.count, shape: _EscapeShape
+) -> _EscapedTree:
+    """Build the tree for a candidate that climbs ``overrun`` past the root.
+
+    Three enclosing levels sit above the root so the largest generated overrun
+    still lands inside this example's own directory, which keeps a failing
+    example readable and two examples from sharing a landing site.
+
+    Returns
+    -------
+    _EscapedTree
+        The root, the walk's starting directory, the re-descent, and the
+        directory the file was really staged in.
+    """
+    base = _case_directory(tmp_path, counter)
+    enclosing = base / "e0" / "e1" / "e2"
+    root = enclosing / "dist"
+    root.mkdir(parents=True)
+    chain = _build_chain(root, shape.depth)
+
+    # Climbing ``overrun`` past the root lands ``overrun - 1`` levels above
+    # ``enclosing``, and the candidate then names ``outside/a.deb`` there.
+    landed = pathlib.Path(
+        os.path.realpath(enclosing.joinpath(*("..",) * (shape.overrun - 1)))
+    )
+    _ = write_asset(landed / "outside", "a.deb")
+    return _EscapedTree(
+        root=root,
+        deepest=chain[-1],
+        descent=chain[shape.depth - shape.cancel :],
+        landed=landed,
+    )
+
+
 @_SETTINGS
 @given(data=st.data())
 def test_a_source_that_resolves_outside_the_root_is_always_refused(
@@ -148,33 +215,40 @@ def test_a_source_that_resolves_outside_the_root_is_always_refused(
     """Refuse every spelling whose bytes are outside the downloaded tree.
 
     The shape cancels part of the chain *inside* the root, descends again, and
-    then climbs past the root to a real file one directory above it. That is
-    the case a purely lexical containment misses: ``is_relative_to`` compares
-    components as written and the ``..`` components cancel before the final
-    climb, so the comparison answers ``True`` while the bytes are outside.
+    then climbs past the root to a file the example really staged outside it.
+    That is the case a purely lexical containment misses: ``is_relative_to``
+    compares components as written and the ``..`` components cancel before the
+    final climb, so the comparison answers ``True`` while the bytes are
+    outside.
+
+    The file is created where each generated overrun actually lands, not only
+    one level above the root. A shallower fix -- a fixed ``outside`` directory
+    beside the root -- would leave the deeper overruns naming nothing, and the
+    refusal would then be the leaf check's, so the case would pass with the
+    containment walk removed.
     """
     depth = data.draw(st.integers(min_value=1, max_value=MAX_DEPTH))
-    cancel = data.draw(st.integers(min_value=1, max_value=depth))
-    overrun = data.draw(st.integers(min_value=1, max_value=3))
-    base = _case_directory(tmp_path, counter)
-    root = base / "dist"
-    root.mkdir()
-    chain = _build_chain(root, depth)
-    deepest = chain[-1]
-    asset = write_asset(base / "outside", "a.deb")
-
-    descent = chain[depth - cancel :]
-    candidate = deepest.joinpath(
-        *(("..",) * cancel),
-        *(part.name for part in descent),
-        *(("..",) * (depth + overrun)),
-        "outside",
-        asset.name,
+    shape = _EscapeShape(
+        depth=depth,
+        cancel=data.draw(st.integers(min_value=1, max_value=depth)),
+        overrun=data.draw(st.integers(min_value=1, max_value=3)),
     )
-    assert not _resolves_inside(candidate, root), "the generated shape must escape"
+    tree = _escaped_tree(tmp_path, counter, shape)
+    candidate = tree.deepest.joinpath(
+        *(("..",) * shape.cancel),
+        *(part.name for part in tree.descent),
+        *(("..",) * (shape.depth + shape.overrun)),
+        "outside",
+        "a.deb",
+    )
+    assert not _resolves_inside(candidate, tree.root), "the generated shape must escape"
+    assert candidate.is_file(), "the escaped file must exist before the refusal"
+    assert candidate.resolve() == (tree.landed / "outside" / "a.deb").resolve(), (
+        "the candidate must name the bytes staged outside the root"
+    )
 
     with pytest.raises(StagedFileMissingError, match="inside the staged tree"):
-        release_payload_tree.require_regular(candidate, staged_root=root)
+        release_payload_tree.require_regular(candidate, staged_root=tree.root)
 
 
 @_SETTINGS

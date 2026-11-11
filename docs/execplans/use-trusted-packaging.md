@@ -3241,6 +3241,34 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   The link property's first form tested an absent leaf rather than the ancestor
   walk; it now builds the leaf inside the link target, and deleting the
   ancestor loop fails it.
+- [x] (2026-11-11) Made the escape property's overrun point at a file that
+  exists, so every generated case fails at the containment walk rather than at
+  the leaf check. The earlier form staged one `outside` directory beside the
+  root; with an overrun greater than one the candidate landed above that
+  directory and named nothing, so the refusal came from the absent leaf and the
+  case would have passed with the containment walk removed. The example now
+  always creates three enclosing levels above the root, and the landing site is
+  computed from the drawn overrun, so the candidate `is_file()` before the
+  refusal is expected. Deleting the containment walk now fails *both* the
+  escape property and the symlink property, with `DID NOT RAISE`; the earlier
+  form failed only the symlink one, because its escape case was refused by the
+  leaf check before the walk was ever reached.
+- [x] (2026-11-11) Held the composite output mapping and the publication
+  hand-off with executed cases rather than YAML tokens.
+  `tests/workflow_contracts/upload_declared_assets_handoff_test.py` runs the
+  action's real steps, resolves `action.yml`'s own `outputs:` expressions
+  against what the run wrote, and executes `release.yml`'s failure step with
+  the mapped values. The step id in each expression is checked as part of the
+  claim, because the outputs are keyed by name and a mapping that read the same
+  name off a different step would otherwise resolve to the upload step's value.
+  A conflict must surface as `upload-error` `true`, must make the guard fire,
+  and must fail the publication step while printing the uploader's diagnostic
+  verbatim; a success must export `false` with no message and must not fire the
+  guard. Four mutations are caught: pointing the mapping at another step's
+  output, dropping the `error-message` export, inverting the workflow's guard,
+  and replacing the failure step's `printf` with a no-op. The module needs no
+  `SECTION_MODULES` entry because it lives under `tests/workflow_contracts/`
+  rather than `scripts/tests/`.
 
   **Containment was lexical, and two components were one short.** The guard in
   `release_payload_regular_files._require_below` used `Path.is_relative_to`,
