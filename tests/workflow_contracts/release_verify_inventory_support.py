@@ -11,6 +11,7 @@ import re
 import shlex
 import typing as typ
 
+import release_verify_inventory_shell as shell
 import yaml
 from workflow_loading import (
     REPO_ROOT,
@@ -194,32 +195,17 @@ def load_action_steps(action: dict[str, object]) -> list[dict[str, object]]:
 def script_lines(run: str) -> list[str]:
     r"""Return a step's shell commands as bash reads them, one per line.
 
-    Bash deletes a backslash-newline, so ``gh \\`` on one line and ``api`` on
-    the next are a single ``gh api`` command. A scan of the raw lines sees
-    neither a call nor a release subcommand, and a separate ordinary call
-    satisfies the expected count, so every check runs over these joined lines.
-    Comment lines are dropped first: a comment names no command, and one that
-    happened to end in a backslash would otherwise swallow the next line.
+    A backslash-newline is deleted before bash parses, so ``gh a\\`` on one
+    line and ``pi`` on the next are one ``gh api`` call -- and a scan of the raw
+    lines sees neither. The quoting and escape rules that make the deletion
+    conditional live in ``release_verify_inventory_shell``.
 
     Returns
     -------
     list[str]
         The joined commands, in the order the step runs them.
     """
-    joined: list[str] = []
-    pending = ""
-    for line in run.splitlines():
-        if line.lstrip().startswith("#"):
-            continue
-        stripped = line.rstrip()
-        if stripped.endswith("\\"):
-            pending = f"{pending}{stripped[:-1]} "
-            continue
-        joined.append(f"{pending}{stripped.strip()}".strip())
-        pending = ""
-    if pending:
-        joined.append(pending.strip())
-    return joined
+    return shell.logical_lines(run)
 
 
 def gh_api_invocations(run: str) -> list[list[str]]:
@@ -285,13 +271,18 @@ def forbidden_gh_flags(tokens: list[str]) -> list[str]:
 
 
 def run_tokens(run: str) -> list[str]:
-    """Return shell tokens from the step's complete ``uv run`` invocation."""
-    lines = run.splitlines()
-    start = next(index for index, line in enumerate(lines) if "uv run " in line)
-    command = lines[start].strip()
-    while command.endswith("\\"):
-        start += 1
-        command = f"{command[:-1]} {lines[start].strip()}"
+    """Return shell tokens from the step's complete ``uv run`` invocation.
+
+    The invocation is read as a logical line, so a continuation inside it is
+    already joined the way bash joins it and the token list cannot be cut short
+    at a backslash.
+
+    Returns
+    -------
+    list[str]
+        The invocation's shell tokens, in the order it passes them.
+    """
+    command = next(line for line in script_lines(run) if "uv run " in line)
     return shlex.split(command)
 
 

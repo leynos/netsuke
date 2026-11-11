@@ -34,11 +34,15 @@ RELEASE_MUTATIONS = {
     "gh-release-spacing": 'gh  release view "$RELEASE_TAG"',
 }
 #: Commands a mutation appends with the word after ``gh`` moved past a
-#: backslash-newline. Bash reads the pair as one command; a scan of the raw
-#: lines sees neither a call nor a release subcommand.
+#: backslash-newline. Bash reads each pair as one command; a scan of the raw
+#: lines sees neither a call nor a release subcommand. The ``midword`` spellings
+#: continue *inside* the subcommand name, which joins the halves with nothing
+#: between them -- a join that inserted a space would still miss these.
 CONTINUATION_MUTATIONS = {
     "gh-api-continued-method": 'gh \\\n  api --method POST "repos/o/r/releases"',
+    "gh-api-midword-continued": 'gh a\\\npi --method POST "repos/o/r/releases"',
     "gh-release-continued": "gh \\\n  release delete v1",
+    "gh-release-midword-continued": "gh re\\\nlease delete v1",
 }
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.

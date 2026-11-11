@@ -295,7 +295,9 @@ def _assert_complete_contract(
         "gh-api-short-method",
         "gh-api-substitution",
         "gh-api-continued-method",
+        "gh-api-midword-continued",
         "gh-release-continued",
+        "gh-release-midword-continued",
         "secret-token",
     ],
 )
@@ -368,16 +370,25 @@ def test_a_continued_command_is_scanned_after_joining() -> None:
 
     ``gh \`` then ``api --method POST`` is one command whose method override
     no raw-line scan can see, and a separate ordinary call would satisfy the
-    expected count. The joined form exposes the write, and the release
-    subcommand split the same way is caught by the release check.
+    expected count. The ``midword`` spellings split the subcommand name itself,
+    which bash joins with nothing between the halves, so a join that inserted a
+    space would still miss them. Both shapes must expose the write, and the
+    release subcommand split either way must be caught by the release check.
     """
     script = (
-        'gh \\\n  api --method POST "repos/o/r/releases"\ngh \\\n  release delete v1\n'
+        'gh \\\n  api --method POST "repos/o/r/releases"\n'
+        'gh a\\\npi --method POST "repos/o/r/releases"\n'
+        "gh \\\n  release delete v1\n"
+        "gh re\\\nlease delete v1\n"
     )
-    (tokens,) = gh_api_invocations(script)
-    assert forbidden_gh_flags(tokens) == ["--method"], tokens
-    assert [line for line in script_lines(script) if GH_RELEASE_CALL.search(line)], (
-        "a continued release command must still be recognised"
+    invocations = gh_api_invocations(script)
+    assert [forbidden_gh_flags(tokens) for tokens in invocations] == [
+        ["--method"],
+        ["--method"],
+    ], invocations
+    releases = [line for line in script_lines(script) if GH_RELEASE_CALL.search(line)]
+    assert len(releases) == 2, (
+        f"a continued release command must still be recognised, got {releases}"
     )
 
 
