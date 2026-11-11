@@ -14,6 +14,7 @@ already at its line budget.
 Run via ``make test-release-publication``.
 """
 
+import json
 import typing as typ
 
 import release_digest_files
@@ -69,6 +70,7 @@ __all__ = [
     "TWO_LINUX_STAGING",
     "TWO_LINUX_TARGETS",
     "X86_ARCHIVE",
+    "exchange_claims",
     "two_target_tree",
 ]
 
@@ -124,3 +126,49 @@ def two_target_tree(tmp_path: pathlib.Path) -> StagedTree:
         "output": tmp_path / "artifacts",
         "record": tmp_path / "artifacts" / "trusted-record.json",
     }
+
+
+def exchange_claims(dist: pathlib.Path) -> None:
+    """Rewrite both records so each claims the other's packages.
+
+    Parameters
+    ----------
+    dist
+        A tree built by :func:`two_target_tree`.
+
+    Notes
+    -----
+    A one-for-one exchange, so nothing about the tree's *contents* changes:
+    the files stay in their own subtrees, every digest is the real digest of
+    the file it names, and the per-format counts, the formats, and the union
+    of published names are exactly what an honest tree holds. Only the
+    pairing of claim to target is wrong, in both records at once, which is
+    what a count or digest check is blind to and an origin check is not.
+
+    The archives stay put because they bind by name, and a record must still
+    claim its own; moving those too would refuse for a reason this case is
+    not about.
+    """
+    records = {
+        target: dist / target / "producer-provenance.json"
+        for target, _archive, _packages in TWO_LINUX_STAGING
+    }
+    for target, other in (
+        ("linux-x86_64", "linux-aarch64"),
+        ("linux-aarch64", "linux-x86_64"),
+    ):
+        record = json.loads(records[target].read_text(encoding="utf-8"))
+        own_archive = next(
+            archive for name, archive, _packages in TWO_LINUX_STAGING if name == target
+        )
+        sibling_packages = next(
+            packages for name, _archive, packages in TWO_LINUX_STAGING if name == other
+        )
+        record["assets"] = {
+            name: release_digest_files.digest_of_file(dist / name)
+            for name in (own_archive, f"{own_archive}.sha256")
+        } | {
+            name: release_digest_files.digest_of_file(dist / other / name)
+            for name in sibling_packages
+        }
+        _ = records[target].write_text(json.dumps(record), encoding="utf-8")

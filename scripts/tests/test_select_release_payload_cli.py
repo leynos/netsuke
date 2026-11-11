@@ -23,6 +23,7 @@ from select_release_payload_origins_support import (
     ARM_DEB,
     ARM_RPM,
     X86_ARCHIVE,
+    exchange_claims,
     two_target_tree,
 )
 from select_release_payload_support import (
@@ -166,6 +167,25 @@ def test_a_package_moved_into_a_siblings_subtree_is_refused(
     _ = (tree["dist"] / "linux-x86_64" / DEB).unlink()
     assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
         "a package from a sibling's subtree must be refused"
+    )
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
+
+
+def test_two_records_exchanging_same_format_claims_are_refused(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse two records that trade their package claims one for one.
+
+    A swap rather than a move, so every count, every format, the union of
+    published names, and every digest are all exactly what an honest tree
+    holds. Both records are equally wrong: each claims its sibling's
+    same-format packages. Only the origin pairing separates that from a
+    correct tree, which is why a count or digest check cannot see it.
+    """
+    tree = two_target_tree(tmp_path)
+    exchange_claims(tree["dist"])
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "each record claims the other's packages, so both must be refused"
     )
     assert not tree["output"].exists(), "a refusal must not leave a payload"
 
