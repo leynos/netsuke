@@ -3251,11 +3251,17 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   that `require_regular` refuses anyway; with the clause removed it fails and
   the other 22 cases still pass.
 
-  Not reachable today: `observe_payload` walks a real directory, so `os.walk`
-  yields resolved paths, and `release_payload_names.describe_offenders` refuses
-  a staged name through `release_asset_names.rejected_names` before any copy.
-  The guard is fixed regardless, because one that depends on its callers
-  staying well-behaved is not a guard.
+  The names cannot carry the escape: `release_payload_names.describe_offenders`
+  refuses a staged name through `release_asset_names.rejected_names` before any
+  copy, so no published name holds a `..`. The *root* is another matter, and
+  CodeRabbit was right to correct an earlier draft of this entry that claimed
+  otherwise: `os.walk` does not resolve, and `walk_files` builds each result as
+  `Path(directory) / name` from the spelling it was handed. A `staged_root`
+  spelled with a `..` therefore propagates that `..` into every staged path, and
+  `--dist-dir` reaches `install_payload` as an unvalidated argument. The
+  workflows pass the literal `dist`, so the escape is not reachable through
+  this repository's own release path; it is reachable through the action input.
+  Rejecting the component is what makes the guard independent of both.
 
   **The count check's guarantee is now stated as what it does.** The paragraph
   said the count "still refuses a record claiming a sibling's package", which
