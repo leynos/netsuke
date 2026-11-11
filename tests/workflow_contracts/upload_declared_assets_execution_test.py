@@ -17,7 +17,6 @@ Run via ``make test-workflow-contracts``.
 
 import hashlib
 import json
-import pathlib
 import typing as typ
 
 from composite_action_execution import interpreter_baseline
@@ -26,7 +25,12 @@ from upload_declared_assets_manifest import (
     RUN_STEPS,
     release_tag,
 )
-from upload_declared_assets_records import interpreter_baseline
+from upload_declared_assets_run_view import (
+    basename,
+    read_record,
+    recorded_uploads,
+    stored_plan,
+)
 from upload_declared_assets_staging import (
     DIST,
     declared_names,
@@ -40,109 +44,11 @@ if typ.TYPE_CHECKING:
 
     from upload_declared_assets_harness import ActionRun
 
-#: Each ``gh`` line records the arguments it was given, so an upload's asset
-#: names are the last path segments of those arguments.
-_UPLOAD_PREFIX = "release upload"
-
-
-class UploadPlan(typ.TypedDict):
-    """Describe the plan the upload step retained.
-
-    Attributes
-    ----------
-    actions
-        One ``[name, action]`` pair per decided asset.
-    conflicts
-        The names whose attached bytes disagreed with the trusted record.
-    unverifiable
-        The names the run could not establish anything about. Separate from
-        ``conflicts`` because "the release holds different bytes" and "the
-        release could not be read" call for different operator responses, and
-        a plan that folded them together would report one as the other.
-    unverifiable_reasons
-        Unverifiable name mapped to the bounded reason the run could not read
-        it, so a plan that names the blocked asset also keeps the remedy an
-        operator needs to choose.
-    """
-
-    actions: list[list[str]]
-    conflicts: list[str]
-    unverifiable: list[str]
-    unverifiable_reasons: dict[str, str]
-
-
-class DigestRecord(typ.TypedDict):
-    """Describe one retained digest record.
-
-    Attributes
-    ----------
-    assets
-        Published name mapped to the SHA-256 of the bytes the record covers.
-    """
-
-    assets: dict[str, str]
-
-
-def _basename(argument: str) -> str:
-    """Return the last path segment of one recorded path argument.
-
-    The recorded arguments are POSIX paths from the runner, so the segment is
-    taken with a pure POSIX path rather than by splitting the string.
-
-    Returns
-    -------
-    str
-        The segment ``gh`` would name the asset from.
-    """
-    return pathlib.PurePosixPath(argument).name
-
-
-def _uploads(run: ActionRun) -> list[list[str]]:
-    """Return each recorded upload as its list of arguments.
-
-    Returns
-    -------
-    list[list[str]]
-        One argument list per ``gh release upload`` invocation.
-    """
-    return [
-        line.split()
-        for line in run.gh_log.splitlines()
-        if line.startswith(_UPLOAD_PREFIX)
-    ]
-
-
-def _plan(run: ActionRun) -> UploadPlan:
-    """Return the upload plan the uploader wrote.
-
-    Returns
-    -------
-    UploadPlan
-        The decoded plan, holding ``actions``, ``conflicts``,
-        ``unverifiable``, and ``unverifiable_reasons``.
-    """
-    path = run.declared_root / "upload-plan.json"
-    decoded: UploadPlan = json.loads(path.read_text(encoding="utf-8"))
-    return decoded
-
-
-def _read_record(run: ActionRun, name: str) -> DigestRecord:
-    """Return one decoded digest record the action retained.
-
-    Returns
-    -------
-    DigestRecord
-        The decoded record, holding the asset digests under ``assets``.
-    """
-    path = run.declared_root / name
-    decoded: DigestRecord = json.loads(path.read_text(encoding="utf-8"))
-    return decoded
-
 
 def _require_payload_matches_records(run: ActionRun, expected: tuple[str, ...]) -> None:
     """Assert the payload, and both digest records, describe the same bytes."""
-    trusted = _read_record(run, "trusted.json")
-    selection = _read_record(run, "selection.json")
+    trusted = read_record(run, "trusted.json")
+    selection = read_record(run, "selection.json")
     # The two records are produced from the same tree by different steps, so
     # agreement is evidence the payload did not change between them.
     assert trusted["assets"] == selection["assets"], (
@@ -174,14 +80,14 @@ def test_the_steps_upload_exactly_the_declared_assets(tmp_path: Path) -> None:
         "the declaration must list every declared name, once"
     )
     _require_payload_matches_records(run, expected)
-    uploads = _uploads(run)
+    uploads = recorded_uploads(run)
     assert len(uploads) == 1, run.gh_log
     # `--clobber` would replace an attached asset rather than refuse it, and
     # the whole point of the reconciliation is that a release never does that.
     assert "--clobber" not in run.gh_log, "the uploader must never clobber"
     arguments = uploads[0]
     assert arguments[2] == release_tag(facts), arguments[2]
-    assert {_basename(argument) for argument in arguments[3:]} == set(expected), (
+    assert {basename(argument) for argument in arguments[3:]} == set(expected), (
         "the transferred asset names must be the declared set"
     )
     assert set(run.baselines) == {interpreter_baseline()}, run.baselines
@@ -198,10 +104,10 @@ def test_an_identical_attached_asset_is_left_alone(tmp_path: Path) -> None:
     run = execute(tmp_path, workspace, facts, release=Release(attached=tuple(attached)))
     message = run.outputs.get("error-message")
     assert run.outputs.get("upload-error") == "false", message
-    assert not _uploads(run), run.gh_log
-    assert {action for _name, action in _plan(run)["actions"]} == {"skip-verified"}, (
-        "every identical attachment must be skipped, not re-uploaded"
-    )
+    assert not recorded_uploads(run), run.gh_log
+    assert {action for _name, action in stored_plan(run)["actions"]} == {
+        "skip-verified"
+    }, "every identical attachment must be skipped, not re-uploaded"
 
 
 def test_a_conflicting_attachment_blocks_every_upload(tmp_path: Path) -> None:
@@ -218,11 +124,13 @@ def test_a_conflicting_attachment_blocks_every_upload(tmp_path: Path) -> None:
     message = run.outputs.get("error-message", "")
     assert offender in message, message
     assert "disagree with the trusted record" in message, message
-    assert not _uploads(run), run.gh_log
+    assert not recorded_uploads(run), run.gh_log
     # The plan is written even though the upload is refused, so the operator
     # can see which asset the release disagreed over.
-    assert _plan(run)["conflicts"] == [offender], "the plan must name the conflict"
-    assert _plan(run)["unverifiable"] == [], (
+    assert stored_plan(run)["conflicts"] == [offender], (
+        "the plan must name the conflict"
+    )
+    assert stored_plan(run)["unverifiable"] == [], (
         "bytes that were read and disagreed are not an unreadable asset"
     )
 
@@ -252,7 +160,7 @@ def test_an_asset_github_cannot_vouch_for_is_reported_as_unverifiable(
     message = run.outputs.get("error-message", "")
     assert offender in message, message
     assert "could not be verified" in message, message
-    plan = _plan(run)
+    plan = stored_plan(run)
     assert plan["unverifiable"] == [offender], plan
     assert plan["unverifiable_reasons"] == {offender: "download-failed"}, (
         "the plan must keep the reason the digest could not be established, "
@@ -261,7 +169,7 @@ def test_an_asset_github_cannot_vouch_for_is_reported_as_unverifiable(
     assert plan["conflicts"] == [], (
         "an asset nobody could read must not be reported as a conflict"
     )
-    assert not _uploads(run), run.gh_log
+    assert not recorded_uploads(run), run.gh_log
 
 
 def _disagree_with_the_declaration(step: int, records: Path) -> None:
@@ -310,4 +218,4 @@ def test_a_selection_record_disagreeing_with_the_declaration_is_refused(
     assert not run.gh_log, (
         "a run that cannot account for its bytes must not reach GitHub"
     )
-    assert not _uploads(run), run.gh_log
+    assert not recorded_uploads(run), run.gh_log
