@@ -133,6 +133,18 @@ def require_verified(
     contract; a conflicting or unverifiable one stops it with
     :data:`EXIT_REFUSED`; an unreadable one with :data:`EXIT_INPUT_UNREADABLE`.
     Each leaves the release a draft.
+
+    Examples
+    --------
+    >>> from finalize_github_release_plan import PlanAssessment, PlanVerdict
+    >>> require_verified(PlanAssessment(PlanVerdict.VERIFIED))
+    >>> try:
+    ...     require_verified(
+    ...         PlanAssessment(PlanVerdict.REFUSED, conflicts=("a.tar.gz",))
+    ...     )
+    ... except SystemExit as refusal:
+    ...     refusal.code
+    1
     """
     if result.verdict is release_plan.PlanVerdict.VERIFIED:
         return
