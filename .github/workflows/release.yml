@@ -994,8 +994,8 @@ jobs:
     # The verification step itself runs without a token: it reads only bytes
     # already downloaded.
     permissions:
-      # Reading a draft release's listing requires write access.
-      contents: write
+      # zizmor reads the key's own line, so the justification sits on it.
+      contents: write  # Reading a draft release's listing requires write access.
     steps:
       - uses: >-
           actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
