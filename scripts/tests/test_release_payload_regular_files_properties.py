@@ -141,7 +141,7 @@ def test_an_accepted_source_always_resolves_inside_the_root(
     )
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class _EscapeShape:
     """The three generated numbers that decide one escape's spelling."""
 
@@ -153,7 +153,7 @@ class _EscapeShape:
     overrun: int
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True, slots=True)
 class _EscapedTree:
     """A staged tree whose spelling leaves the root, plus where it really lands.
 
