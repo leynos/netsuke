@@ -3236,6 +3236,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
 - [x] (2026-11-11) Replaced the containment fix's blanket `..` ban with a depth
   walk below the root, after CodeRabbit showed the ban also refuses a `..` the
   caller's own root spelling puts there.
+- [x] (2026-11-11) Added generated coverage for the containment invariant,
+  scored against `os.path.realpath` rather than against the guard's own walk.
 
   **Containment was lexical, and two components were one short.** The guard in
   `release_payload_regular_files._require_below` used `Path.is_relative_to`,
@@ -3272,6 +3274,18 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `scripts/tests/test_release_payload_regular_files.py`, split out because
   `test_release_payload_tree.py` passed the 400-line module limit. Both are
   named in the `test-release-publication` recipe and in `SECTION_MODULES`.
+
+  **The invariant is also generated, against an independent oracle.**
+  `scripts/tests/test_release_payload_regular_files_properties.py` varies
+  depth, how many components are climbed, where a symlinked directory sits, and
+  a root whose own spelling carries a `..`. Two properties state the relation
+  rather than one shape: a source the guard accepts must resolve inside the
+  root, and a source that resolves outside it must be refused. The oracle is
+  `os.path.realpath` on both sides, which is *not* the component walk the guard
+  uses, so agreement is evidence rather than restatement. The escape property
+  cancels part of the chain inside the root and then climbs past it, which is
+  precisely the shape lexical containment misses. Removing the depth walk fails
+  that property; the blanket ban fails the two acceptance properties.
 
   The *names* cannot carry the escape:
   `release_payload_names.describe_offenders` refuses a staged name through
