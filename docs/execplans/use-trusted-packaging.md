@@ -3231,6 +3231,42 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   #1069 are open for that work, and the plan's Stage C entry already records
   the partial.
 
+- [x] (2026-11-11) Closed the last two #1066 findings: the count check's stated
+  guarantee, and a `..` escape in the staged-root containment.
+
+  **Containment was lexical, and two components were one short.** The guard in
+  `release_payload_regular_files._require_below` used `Path.is_relative_to`,
+  which compares components as written and never resolves `..`. `dist/../x`
+  happened to be refused because the `..` lands outside `dist`; nest it once
+  more and `dist/sub/../../outside/a.deb` cancels the `..` *inside* the root, so
+  `is_relative_to` answers `True`. Every `..`-bearing parent then lstats as a
+  real directory, so `require_regular` returned and the payload would have
+  carried a file the download never staged. A `..` component is now refused
+  before any probing. The comparison itself stays lexical: resolving
+  `staged_root` would follow a symlinked segment above the tree and reject a
+  good runner path, which
+  `test_require_regular_ignores_a_link_above_the_staged_root` pins.
+  `test_require_regular_refuses_a_path_that_walks_out_with_dotdot` builds the
+  nested escape and asserts both that `is_relative_to` is the weak check and
+  that `require_regular` refuses anyway; with the clause removed it fails and
+  the other 22 cases still pass.
+
+  Not reachable today: `observe_payload` walks a real directory, so `os.walk`
+  yields resolved paths, and `release_payload_names.describe_offenders` refuses
+  a staged name through `release_asset_names.rejected_names` before any copy.
+  The guard is fixed regardless, because one that depends on its callers
+  staying well-behaved is not a guard.
+
+  **The count check's guarantee is now stated as what it does.** The paragraph
+  said the count "still refuses a record claiming a sibling's package", which
+  is the one thing a count cannot do. It now says the check requires one
+  package per format the target's platform stages, that this catches a *second*
+  same-format claim, and that with `package_origins` absent a one-for-one
+  exchange of same-format claims leaves every count intact and is not seen at
+  all -- which is what the observation closes. The closing sentence was also
+  wrong: the observation is supplied or omitted as a whole, so a caller that
+  skips it falls back to the count alone rather than to a partial observation.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
