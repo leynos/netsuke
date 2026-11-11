@@ -273,10 +273,14 @@ developers' guides rather than implied.
 
 **Status.** Implemented and exercised by an executed-shell harness in
 `tests/workflow_contracts/`; not yet exercised by a live release. The inventory
-verifier is delivered in *inventory verification stage implemented* above; the
-GitHub release finalizer and the consumer smoke test remain open in the
-trusted-packaging ExecPlan, so the retained records have no consumer in the
-workflow yet and the release is not published by this decision.
+verifier is delivered in *inventory verification stage implemented* above, and
+it is what consumes the retained records: `verify-release-inventory` downloads
+the publisher's artefact and hands the declaration and the trusted record to
+the verifier. The GitHub release finalizer is the part still unwired -- it
+depends on verification and would un-draft the release -- and it and the
+consumer smoke test remain open in the trusted-packaging ExecPlan, so the
+verified digests have no consumer yet and the release is not published by this
+decision.
 
 Only a release the workflow *creates* is a draft: `ensure_draft_release.py`
 returns as soon as the tag already has a release, without checking whether it
