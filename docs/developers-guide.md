@@ -3933,13 +3933,13 @@ presents a payload matching its declaration record but not its selection record
 is refused as a conflict.
 
 The provenance chain has six links and each one refuses rather than
-interpolates. Links 1 to 4 are steps of the two publisher jobs, and link 5 runs
-only in a publishing-mode run whose publisher jobs both succeeded: a tagged
-workflow that skips verification, or that stops before reaching it, has not
-verified its assets, so its silence says nothing about the bytes a release
-holds. Link 6 is written and tested but is not yet wired into `release.yml`, so
-today the record is consumed by verification and retained past it, but nothing
-yet acts on the verified result.
+interpolates. Links 1 to 4 are steps of the two publisher jobs, and links 5 and
+6 run only in a publishing-mode run whose earlier stages all succeeded: a
+tagged workflow that skips verification, or that stops before reaching it, has
+not verified its assets, so its silence says nothing about the bytes a release
+holds. Link 5 runs in `verify-release-inventory` and link 6 in
+`finalize-github-release`. Nothing in the chain reads another link's output as
+its evidence; each compares against the record the declaration stage wrote.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
 2. `select_release_payload_cli` hashes the sources it approves, requires them
@@ -3955,13 +3955,15 @@ yet acts on the verified result.
    against the record, and refuses a record that does not cover exactly the
    declared set. `verify-release-inventory` runs it over the assets GitHub
    actually attached.
-6. *Planned.* `finalize_github_release_cli --identity` reads the same record to
-   decide what a re-run should do.
+6. `finalize_github_release_cli --identity` reads the same record to decide
+   what a re-run should do, and `finalize_github_release.py publish` re-reads
+   it to reconcile the release again immediately before the edit.
 
 The action retains `declaration.txt`, `selection.json`, and `trusted.json` as a
-workflow artefact for exactly that reason: a job added to the chain later needs
-this run's account of the release, and a record reconstructed after the fact
-would be derived from the bytes it is meant to judge.
+workflow artefact because the later links run in other jobs and need this run's
+account of the release. A record reconstructed after the fact would be derived
+from the bytes it is meant to judge, which is the substitution the chain exists
+to detect.
 
 The record is never derived from downloaded bytes, and that is the whole point.
 A record derived from the download proves only that GitHub agrees with itself:
