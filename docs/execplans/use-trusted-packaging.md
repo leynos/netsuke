@@ -705,9 +705,16 @@ attributes each package to the producer subtree that staged it, and
 subtree did not stage -- including one no subtree staged. That closes the
 sibling-subtree case a count cannot see: a package moved out of its owner's
 directory leaves the per-format count, the formats, and the union of names all
-unchanged, so only the origin attribute distinguishes it. Beside it, the count
-check still refuses a record claiming a sibling's package, and still holds when
-no tree was walked.
+unchanged, so only the origin attribute distinguishes it.
+
+The count check stands beside the observation and is weaker, not equivalent. It
+requires one package per format the target's platform stages, and it holds
+whether or not a tree was walked. It can refuse a record that claims *two* of a
+format, which is how a sibling's package usually arrives, but it cannot say
+whose a package is: with `package_origins` absent, a one-for-one exchange of
+same-format claims between two records leaves every per-format count intact and
+is not seen at all. That is the gap the observation closes, and it is why the
+CLI always supplies one rather than relying on the count.
 
 The limits are what the observation can see. It is a tree walk, so it says
 where a file was placed by the download that produced this tree, not who built
@@ -715,9 +722,9 @@ its bytes; a package correctly placed but containing another target's build
 would pass. It attributes by subtree, so a package staged at the `dist` root --
 where only archives legitimately sit -- is attributed to nothing, and a record
 claiming one is refused for claiming a package "which no producer subtree
-staged" rather than passed over. And it is supplied or omitted as a whole: with
-no observation the count is the entire guarantee, which is weaker, so the CLI
-always supplies one.
+staged" rather than passed over. And it is supplied or omitted as a whole,
+which is why a caller that skips it falls back to the count alone rather than
+to a partial observation.
 
 The `trusted.json` record is now produced and retained for downstream
 consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
