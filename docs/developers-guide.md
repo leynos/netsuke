@@ -11572,12 +11572,14 @@ status-parsing adapter, and the closed forwarding-failure vocabulary in
   flushes, interrupted-read retries, draining after a failure, the
   `ForwardStats` record, and the failure classification that telemetry
   publishes.
-- **Permitted call-sites:** exactly two. `output_forwarding::forward_stdout`
-  forwards stdout, choosing `forward_child_output_with_ninja_status` when
-  progress updates are wanted and `forward_child_output` otherwise.
+- **Permitted call-sites:** exactly two. `output_forwarding`'s
+  `StdoutForwarding::forward` forwards stdout, choosing
+  `forward_child_output_with_ninja_status` when progress updates are wanted and
+  `forward_child_output` otherwise.
   `failure_attribution::forward_stderr_with_attribution` forwards stderr
-  through its marker-observing writer. Both pass the stream identity as
-  `ForwardStream`; no caller may invent a stream label.
+  through its marker-observing writer. Both pass a `ForwardRoute`, which pairs
+  the stream identity with the reporter for that stream; no caller may invent a
+  stream label, and none can pair a label with another stream's reporter.
 - **Composition rules:** flush each chunk before reading the next one, so a
   flush failure cannot cause already-accepted bytes to be written again. Retry
   `io::ErrorKind::Interrupted` reads rather than reporting them. Treat a reader
@@ -11598,6 +11600,15 @@ value is dropped rather than retained. Each failure also emits a warning event
 carrying the same two fields plus the I/O error. Neither label admits output
 content, paths, or reader and writer types. Adding a failure kind means adding
 an enum variant and its array entry together, never passing a raw string.
+
+The copy loop does not publish telemetry itself. It classifies the failure and
+hands it to the reporter carried by the `ForwardRoute` it was given:
+`output_forwarding`'s `report_forward_failure` is the single production
+reporter, and it records the counter and emits the warning in one place, at the
+process boundary that owns what a failure means for the run. A test passes its
+own reporter, so the reporting contract is exercised through an explicit
+dependency instead of a global recorder reached from inside the byte-moving
+code.
 
 #### Result policy
 

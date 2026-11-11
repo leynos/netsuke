@@ -7,8 +7,8 @@ use super::{
         CommandListFailure, NinjaFailureOutputTail, forward_stderr_with_attribution,
     },
     streaming::{
-        ForwardFailureKind, ForwardStats, ForwardStream, forward_child_output,
-        forward_child_output_with_ninja_status,
+        ForwardFailure, ForwardFailureKind, ForwardRoute, ForwardStats, ForwardStream,
+        forward_child_output, forward_child_output_with_ninja_status, record_failure,
     },
 };
 use std::{
@@ -25,47 +25,64 @@ use std::{
 /// callback for the call duration, so callers can retain state across updates.
 pub(super) type StatusObserver<'a> = &'a mut dyn FnMut(u32, u32, &str);
 
-/// Forward child stdout, parsing status updates and optionally the failure tail.
+/// Bundle the per-run choices for forwarding one child stdout stream.
 ///
-/// Returns forwarding statistics and any command-list failure marker recovered
-/// from the bounded output tail.
-fn forward_stdout<W>(
-    stdout: impl io::Read,
-    output: &mut W,
-    status_observer: Option<StatusObserver<'_>>,
+/// These settings are chosen once per run and never vary independently, so they
+/// travel together: the two call sites differ only in the destination, and
+/// every one of them reports failures through the same route.
+struct StdoutForwarding<'observer, 'report> {
+    /// Observer receiving parsed Ninja status updates, when one is wanted.
+    status_observer: Option<StatusObserver<'observer>>,
+    /// Whether to retain the bounded tail that carries the failure marker.
     captures_ninja_failure_output: bool,
-) -> (ForwardStats, Option<CommandListFailure>)
-where
-    W: io::Write,
-{
-    if captures_ninja_failure_output {
-        let mut tail_writer = NinjaFailureOutputTail::new(output);
+    /// Stream identity and reporter for classified forwarding failures.
+    route: ForwardRoute<'report>,
+}
+
+impl StdoutForwarding<'_, '_> {
+    /// Forward child stdout, parsing status updates and optionally the failure tail.
+    ///
+    /// Returns forwarding statistics and any command-list failure marker
+    /// recovered from the bounded output tail.
+    fn forward<W>(
+        self,
+        stdout: impl io::Read,
+        output: &mut W,
+    ) -> (ForwardStats, Option<CommandListFailure>)
+    where
+        W: io::Write,
+    {
+        let Self {
+            status_observer,
+            captures_ninja_failure_output,
+            route,
+        } = self;
+
+        if captures_ninja_failure_output {
+            let mut tail_writer = NinjaFailureOutputTail::new(output);
+            let stats = match status_observer {
+                Some(observer) => forward_child_output_with_ninja_status(
+                    BufReader::new(stdout),
+                    &mut tail_writer,
+                    observer,
+                    route,
+                ),
+                None => forward_child_output(BufReader::new(stdout), &mut tail_writer, route),
+            };
+            return (stats, tail_writer.into_failure());
+        }
+
         let stats = match status_observer {
             Some(observer) => forward_child_output_with_ninja_status(
                 BufReader::new(stdout),
-                &mut tail_writer,
+                output,
                 observer,
-                ForwardStream::Stdout,
+                route,
             ),
-            None => forward_child_output(
-                BufReader::new(stdout),
-                &mut tail_writer,
-                ForwardStream::Stdout,
-            ),
+            None => forward_child_output(BufReader::new(stdout), output, route),
         };
-        return (stats, tail_writer.into_failure());
+        (stats, None)
     }
-
-    let stats = match status_observer {
-        Some(observer) => forward_child_output_with_ninja_status(
-            BufReader::new(stdout),
-            output,
-            observer,
-            ForwardStream::Stdout,
-        ),
-        None => forward_child_output(BufReader::new(stdout), output, ForwardStream::Stdout),
-    };
-    (stats, None)
 }
 
 /// Stream a Ninja child and return its exit status and bounded failure marker.
@@ -84,38 +101,41 @@ pub(super) fn spawn_and_stream_output(
         return Err(io::Error::other("child process missing stderr pipe"));
     };
 
-    let err_handle = thread::spawn(move || match stderr_mode {
-        // Avoid a long-lived stderr lock: status observers invoked while
-        // draining stdout may emit task updates to stderr, and that path must
-        // not block behind stderr forwarding. In JSON diagnostics mode we still
-        // drain child stderr, but discard it to keep stderr machine-readable.
-        StderrMode::Suppress => forward_stderr_with_attribution(BufReader::new(stderr), io::sink()),
-        StderrMode::Forward => {
-            forward_stderr_with_attribution(BufReader::new(stderr), io::stderr())
+    let err_handle = thread::spawn(move || {
+        let mut report = report_forward_failure;
+        let route = ForwardRoute::new(ForwardStream::Stderr, &mut report);
+        match stderr_mode {
+            // Avoid a long-lived stderr lock: status observers invoked while
+            // draining stdout may emit task updates to stderr, and that path
+            // must not block behind stderr forwarding. In JSON diagnostics mode
+            // we still drain child stderr, but discard it to keep stderr
+            // machine-readable.
+            StderrMode::Suppress => {
+                forward_stderr_with_attribution(BufReader::new(stderr), io::sink(), route)
+            }
+            StderrMode::Forward => {
+                forward_stderr_with_attribution(BufReader::new(stderr), io::stderr(), route)
+            }
         }
     });
 
     // Intentionally drain stdout on the main thread when `status_observer` is
     // present so forwarding and callback-driven status updates keep a stable
     // ordering; moving this elsewhere can regress output timing/interleaving.
+    let mut report = report_forward_failure;
+    let forwarding = StdoutForwarding {
+        status_observer,
+        captures_ninja_failure_output,
+        route: ForwardRoute::new(ForwardStream::Stdout, &mut report),
+    };
     let (stdout_stats, stdout_failure) = match stderr_mode {
         StderrMode::Suppress => {
             let mut output = io::sink();
-            forward_stdout(
-                stdout,
-                &mut output,
-                status_observer,
-                captures_ninja_failure_output,
-            )
+            forwarding.forward(stdout, &mut output)
         }
         StderrMode::Forward => {
             let mut output = io::stdout().lock();
-            forward_stdout(
-                stdout,
-                &mut output,
-                status_observer,
-                captures_ninja_failure_output,
-            )
+            forwarding.forward(stdout, &mut output)
         }
     };
 
@@ -139,6 +159,37 @@ pub(super) fn spawn_and_stream_output(
         stderr_failure.or(stdout_failure)
     };
     Ok((status, failure))
+}
+
+/// Record and announce one classified forwarding failure.
+///
+/// The copy loop only classifies what went wrong; this boundary decides what a
+/// failure means for the process. Keeping the decision here means the metric
+/// and the warning share one owner, the byte-moving code stays free of
+/// telemetry policy, and a test can drive the contract through an injected
+/// [`FailureReporter`] instead of a global recorder.
+///
+/// A drain failure is reported under its own message, because it describes the
+/// cleanup after the failure that stopped forwarding rather than a second
+/// failure of the forwarding itself.
+fn report_forward_failure(stream: ForwardStream, failure: &ForwardFailure) {
+    record_failure(stream, failure.kind);
+    match failure.kind {
+        ForwardFailureKind::Drain => tracing::warn!(
+            stream = stream.label(),
+            failure_kind = failure.kind.label(),
+            error = %failure.source,
+            "failed to drain child output after a forwarding failure"
+        ),
+        ForwardFailureKind::Read | ForwardFailureKind::Write | ForwardFailureKind::Flush => {
+            tracing::warn!(
+                stream = stream.label(),
+                failure_kind = failure.kind.label(),
+                error = %failure.source,
+                "failed to forward child output; discarding the remaining bytes"
+            );
+        }
+    }
 }
 
 /// Warn on stdout when the stderr destination itself rejected child output.

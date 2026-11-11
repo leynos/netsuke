@@ -1,8 +1,9 @@
 //! Tests for bounded forwarding telemetry.
 
 use super::{
-    FORWARD_FAILURES_TOTAL, ForwardFailureKind, ForwardStream, NINJA_STATUS_OVERSIZED_LINES_TOTAL,
-    forward_child_output, forward_child_output_with_ninja_status, tests::FailingWriter,
+    FORWARD_FAILURES_TOTAL, ForwardFailureKind, ForwardRoute, ForwardStream,
+    NINJA_STATUS_OVERSIZED_LINES_TOTAL, forward_child_output,
+    forward_child_output_with_ninja_status, tests::FailingWriter, tests::record_each,
 };
 use metrics_util::{
     MetricKind,
@@ -29,7 +30,7 @@ fn records_oversized_status_lines_once_per_line() {
             Cursor::new(input),
             std::io::sink(),
             |_current, _total, _description| {},
-            ForwardStream::Stdout,
+            ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
         );
     });
 
@@ -61,7 +62,7 @@ fn records_a_stderr_destination_failure() {
         forward_child_output(
             Cursor::new(b"child stderr\n".to_vec()),
             FailingWriter::new(writes.clone()),
-            ForwardStream::Stderr,
+            ForwardRoute::new(ForwardStream::Stderr, &mut record_each),
         )
     });
 

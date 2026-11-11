@@ -13,8 +13,9 @@ use std::{
 
 mod forward_failure;
 pub use forward_failure::{FORWARD_FAILURE_LABELS, FORWARD_FAILURES_TOTAL};
-use forward_failure::{ForwardFailure, record_failure};
-pub(super) use forward_failure::{ForwardFailureKind, ForwardStream};
+pub(super) use forward_failure::{
+    ForwardFailure, ForwardFailureKind, ForwardRoute, ForwardStream, record_failure,
+};
 
 /// Forwarding statistics for a child output stream.
 #[derive(Debug, Default, PartialEq, Eq, Clone, Copy)]
@@ -270,7 +271,11 @@ where
 ///
 /// Byte counts are recorded on every path, including a failed drain, so they
 /// always describe bytes the forwarder actually consumed and accepted.
-fn copy_with_stats<R, W>(reader: &mut R, writer: &mut W, stream: ForwardStream) -> ForwardStats
+fn copy_with_stats<R, W>(
+    reader: &mut R,
+    writer: &mut W,
+    mut route: ForwardRoute<'_>,
+) -> ForwardStats
 where
     R: Read,
     W: Write,
@@ -287,14 +292,8 @@ where
 
     if let Err(failure) = copy_and_flush(&mut counting_reader, &mut counting_writer) {
         stats.failure = Some(failure.kind);
-        record_failure(stream, failure.kind);
-        tracing::warn!(
-            stream = stream.label(),
-            failure_kind = failure.kind.label(),
-            error = %failure.source,
-            "failed to forward child output; discarding the remaining bytes"
-        );
-        stats.drain_failed = drain_remaining(&mut counting_reader, stream);
+        route.report(&failure);
+        stats.drain_failed = drain_remaining(&mut counting_reader, route);
     }
 
     stats.bytes_read = clamp_u64_to_usize(counting_reader.read);
@@ -307,20 +306,14 @@ where
 /// Draining keeps the child from blocking on a full pipe once the parent has
 /// stopped consuming its output. A drain failure is recorded under its own
 /// classification so it never replaces the failure that stopped forwarding.
-fn drain_remaining<R>(reader: &mut CountingReader<'_, R>, stream: ForwardStream) -> bool
+fn drain_remaining<R>(reader: &mut CountingReader<'_, R>, mut route: ForwardRoute<'_>) -> bool
 where
     R: Read,
 {
     match io::copy(reader, &mut io::sink()) {
         Ok(_) => false,
         Err(error) => {
-            record_failure(stream, ForwardFailureKind::Drain);
-            tracing::warn!(
-                stream = stream.label(),
-                failure_kind = ForwardFailureKind::Drain.label(),
-                error = %error,
-                "failed to drain child output after a forwarding failure"
-            );
+            route.report(&ForwardFailure::drain(error));
             true
         }
     }
@@ -330,13 +323,13 @@ where
 pub(super) fn forward_child_output<R, W>(
     mut reader: R,
     mut writer: W,
-    stream: ForwardStream,
+    route: ForwardRoute<'_>,
 ) -> ForwardStats
 where
     R: Read,
     W: Write,
 {
-    copy_with_stats(&mut reader, &mut writer, stream)
+    copy_with_stats(&mut reader, &mut writer, route)
 }
 
 /// Forward child output and parse Ninja status updates from complete lines.
@@ -344,7 +337,7 @@ pub(super) fn forward_child_output_with_ninja_status<R, W, F>(
     mut reader: R,
     mut writer: W,
     mut observer: F,
-    stream: ForwardStream,
+    route: ForwardRoute<'_>,
 ) -> ForwardStats
 where
     R: Read,
@@ -358,7 +351,7 @@ where
         line_state: NinjaStatusLineState::Buffering,
         observer: &mut observer,
     };
-    copy_with_stats(&mut parsing_reader, &mut writer, stream)
+    copy_with_stats(&mut parsing_reader, &mut writer, route)
 }
 
 #[cfg(test)]

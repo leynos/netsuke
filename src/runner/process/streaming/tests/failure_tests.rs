@@ -6,8 +6,8 @@
 //! an unclassified or unbounded series fails the test rather than widening the
 //! vocabulary.
 
-use super::super::{FORWARD_FAILURES_TOTAL, ForwardFailureKind, ForwardStream};
-use super::{ChunkedReader, forward_child_output};
+use super::super::{FORWARD_FAILURES_TOTAL, ForwardFailureKind, ForwardRoute, ForwardStream};
+use super::{ChunkedReader, forward_child_output, record_each};
 use metrics::{SharedString, Unit};
 use metrics_util::{
     CompositeKey,
@@ -70,11 +70,11 @@ impl Read for FailsOnce {
 }
 
 /// Reader that returns one chunk and then fails while the forwarder drains.
-struct FailsWhileDraining {
+pub(super) struct FailsWhileDraining {
     /// Bytes delivered by the first read.
-    bytes: Vec<u8>,
+    pub(super) bytes: Vec<u8>,
     /// Whether the chunk has already been delivered.
-    delivered: bool,
+    pub(super) delivered: bool,
 }
 
 impl Read for FailsWhileDraining {
@@ -129,7 +129,7 @@ impl Read for Interrupting {
 }
 
 /// Writer that rejects every chunk with a closed pipe.
-struct ClosedWriter;
+pub(super) struct ClosedWriter;
 
 impl Write for ClosedWriter {
     fn write(&mut self, _bytes: &[u8]) -> io::Result<usize> {
@@ -173,7 +173,7 @@ fn read_failure_is_classified_and_counted_once() {
                 failed: false,
             },
             io::sink(),
-            ForwardStream::Stdout,
+            ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
         )
     });
 
@@ -191,7 +191,11 @@ fn invalid_read_count_is_classified_as_a_read_failure() {
     let recorder = DebuggingRecorder::new();
     let snapshotter = recorder.snapshotter();
     let stats = metrics::with_local_recorder(&recorder, || {
-        forward_child_output(OverlongOnce::default(), io::sink(), ForwardStream::Stdout)
+        forward_child_output(
+            OverlongOnce::default(),
+            io::sink(),
+            ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
+        )
     });
 
     assert_eq!(stats.failure, Some(ForwardFailureKind::Read));
@@ -213,7 +217,7 @@ fn interrupted_reads_are_retried_without_recording_a_failure() {
         forward_child_output(
             io::Cursor::new(input.clone()).chain(Interrupting { remaining: 2 }),
             Vec::new(),
-            ForwardStream::Stdout,
+            ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
         )
     });
 
@@ -241,12 +245,12 @@ fn write_failures_are_counted_for_each_stream_separately() {
         let stdout = forward_child_output(
             Cursor::new(b"lost".to_vec()),
             ClosedWriter,
-            ForwardStream::Stdout,
+            ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
         );
         let stderr = forward_child_output(
             Cursor::new(b"lost".to_vec()),
             ClosedWriter,
-            ForwardStream::Stderr,
+            ForwardRoute::new(ForwardStream::Stderr, &mut record_each),
         );
         (stdout, stderr)
     });
@@ -287,7 +291,7 @@ fn flush_failure_keeps_accepted_bytes_without_rewriting_them() {
         let stats = forward_child_output(
             ChunkedReader::new(b"firstlast".to_vec(), vec![5, 4]),
             &mut writer,
-            ForwardStream::Stdout,
+            ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
         );
         (stats, writer)
     });
@@ -329,7 +333,7 @@ fn drain_failure_is_recorded_without_replacing_the_initiating_failure() {
                 delivered: false,
             },
             ClosedWriter,
-            ForwardStream::Stderr,
+            ForwardRoute::new(ForwardStream::Stderr, &mut record_each),
         )
     });
 
@@ -360,7 +364,7 @@ fn successful_forwarding_records_no_failure_series() {
         forward_child_output(
             Cursor::new(b"forwarded".to_vec()),
             Vec::new(),
-            ForwardStream::Stdout,
+            ForwardRoute::new(ForwardStream::Stdout, &mut record_each),
         )
     });
 

@@ -83,11 +83,49 @@ impl ForwardFailureKind {
 /// The error is retained only for the warning event's `error` field; it never
 /// reaches a metric label.
 #[derive(Debug)]
-pub(super) struct ForwardFailure {
+pub(in crate::runner::process) struct ForwardFailure {
     /// Classification reported through telemetry.
-    pub(super) kind: ForwardFailureKind,
+    pub(in crate::runner::process) kind: ForwardFailureKind,
     /// Original error, reported in the warning event.
-    pub(super) source: io::Error,
+    pub(in crate::runner::process) source: io::Error,
+}
+
+/// Narrow sink receiving each classified forwarding failure.
+///
+/// The copy loop only classifies what went wrong; the process boundary decides
+/// what a failure means. Injecting the reporter keeps metric emission and
+/// warning policy out of the byte-moving code, and lets a test observe the
+/// reporting contract through an explicit dependency instead of a global
+/// recorder.
+pub(in crate::runner::process) type FailureReporter<'a> =
+    &'a mut dyn FnMut(ForwardStream, &ForwardFailure);
+
+/// Pair one forwarded stream's identity with the reporter that hears about it.
+///
+/// The two always travel together: the stream name exists only to label a
+/// failure, and the reporter is its sole consumer. Bundling them keeps the copy
+/// helpers inside the argument budget, and makes it impossible to hand a
+/// reporter the label of the other stream.
+pub(in crate::runner::process) struct ForwardRoute<'a> {
+    /// Child stream these bytes came from.
+    stream: ForwardStream,
+    /// Sink receiving each classified failure on that stream.
+    report: FailureReporter<'a>,
+}
+
+impl<'a> ForwardRoute<'a> {
+    /// Pair a stream identity with the reporter for that stream's failures.
+    pub(in crate::runner::process) const fn new(
+        stream: ForwardStream,
+        report: FailureReporter<'a>,
+    ) -> Self {
+        Self { stream, report }
+    }
+
+    /// Hand one classified failure to the reporter, labelled with the stream.
+    pub(super) fn report(&mut self, failure: &ForwardFailure) {
+        (self.report)(self.stream, failure);
+    }
 }
 
 impl ForwardFailure {
@@ -114,6 +152,14 @@ impl ForwardFailure {
             source,
         }
     }
+
+    /// Classify a failure to drain output after a forwarding failure.
+    pub(super) const fn drain(source: io::Error) -> Self {
+        Self {
+            kind: ForwardFailureKind::Drain,
+            source,
+        }
+    }
 }
 
 /// Describe the forwarding-failure counter once per process.
@@ -128,7 +174,7 @@ fn describe_metric() {
 }
 
 /// Record one classified forwarding failure under bounded labels.
-pub(super) fn record_failure(stream: ForwardStream, kind: ForwardFailureKind) {
+pub(in crate::runner::process) fn record_failure(stream: ForwardStream, kind: ForwardFailureKind) {
     describe_metric();
     counter!(
         FORWARD_FAILURES_TOTAL,
