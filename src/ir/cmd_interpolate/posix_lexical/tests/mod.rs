@@ -1,7 +1,6 @@
 //! Unit tests for POSIX heredoc delimiter interpolation and comment boundaries.
 
-mod case_boundary;
-mod case_tracker;
+mod case;
 mod support;
 
 use super::super::{

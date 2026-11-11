@@ -104,21 +104,8 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
-        let ended_comment = self.posix_lexical.in_comment() && ch == '\n';
-        let copied_inert_character = {
-            let mut character = PosixCharacter {
-                chars: self.chars,
-                pos,
-                ch,
-                output: &mut self.output,
-            };
-            self.posix_lexical.append_inert_character(&mut character)
-        };
-        if copied_inert_character {
-            if ended_comment {
-                self.end_case_comment();
-            }
-            return Ok(Some(pos + 1));
+        if let Some(next) = self.copy_inert_character(pos, ch) {
+            return Ok(Some(next));
         }
         if self.is_escaped {
             self.output.push(ch);
@@ -134,6 +121,42 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if let Some(next) = self.append_unquoted_posix_lexical_character(pos, ch)? {
             return Ok(Some(next));
         }
+        self.append_lexical_character(pos, ch)
+    }
+
+    /// Copy a character the scanner treats as inert, ending any comment it closes.
+    ///
+    /// Comment text and heredoc bodies are copied without inspection, so the
+    /// traversal is the only part of the pass that can tell the tracker which
+    /// newline ended a comment.
+    fn copy_inert_character(&mut self, pos: usize, ch: char) -> Option<usize> {
+        let ends_comment = self.posix_lexical.in_comment() && ch == '\n';
+        let mut character = PosixCharacter {
+            chars: self.chars,
+            pos,
+            ch,
+            output: &mut self.output,
+        };
+        if !self.posix_lexical.append_inert_character(&mut character) {
+            return None;
+        }
+        if ends_comment {
+            self.end_case_comment();
+        }
+        Some(pos + 1)
+    }
+
+    /// Copy a character that opens a comment, a substitution, or a quote region.
+    ///
+    /// # Errors
+    ///
+    /// Returns an invalid-command error when a nested command substitution
+    /// would lower a marker in a context its encoding cannot preserve.
+    fn append_lexical_character(
+        &mut self,
+        pos: usize,
+        ch: char,
+    ) -> Result<Option<usize>, IrGenError> {
         if self.starts_comment(pos, ch) {
             self.output.push(ch);
             self.posix_lexical.begin_comment();

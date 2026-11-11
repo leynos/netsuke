@@ -5,7 +5,7 @@
 //! the spellings it must recognise, the comments whose text it must never read,
 //! and the command position that decides whether a reserved word counts.
 
-use super::*;
+use super::super::*;
 
 /// Verify a keyword spelled across a line continuation is recognised.
 ///

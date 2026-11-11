@@ -5,7 +5,7 @@
 //! the two are lexically identical, so these cases pin both the accepted shape
 //! and the boundary that still fails closed.
 
-use super::*;
+use super::super::*;
 
 use rstest::rstest;
 
