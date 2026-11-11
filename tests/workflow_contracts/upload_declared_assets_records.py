@@ -26,7 +26,9 @@ if typ.TYPE_CHECKING:
 __all__ = [
     "BASELINE_PATTERN",
     "interpreter_baseline",
+    "output_file",
     "read_outputs",
+    "read_step_outputs",
 ]
 
 #: The Makefile declaration every step must agree with when it names an
@@ -77,6 +79,39 @@ def read_outputs(path: pathlib.Path) -> dict[str, str]:
         name, _separator, plain = line.partition("=")
         outputs[name] = plain
     return outputs
+
+
+def output_file(outputs_directory: pathlib.Path, step_id: str) -> pathlib.Path:
+    """Return the ``GITHUB_OUTPUT`` file one manifest step writes.
+
+    The file is created empty when first asked for, which is how a runner
+    behaves: a step that writes nothing leaves an empty file rather than an
+    absent one.
+
+    Returns
+    -------
+    pathlib.Path
+        The file the step appends to.
+    """
+    path = outputs_directory / f"{step_id}.output"
+    path.touch(exist_ok=True)
+    return path
+
+
+def read_step_outputs(
+    outputs_directory: pathlib.Path,
+) -> dict[str, dict[str, str]]:
+    """Read every step's ``GITHUB_OUTPUT`` entries, keyed by step id.
+
+    Returns
+    -------
+    dict[str, dict[str, str]]
+        Step id mapped to the entries that step wrote. A step that wrote
+        nothing maps to an empty mapping.
+    """
+    return {
+        path.stem: read_outputs(path) for path in outputs_directory.glob("*.output")
+    }
 
 
 def interpreter_baseline() -> str:

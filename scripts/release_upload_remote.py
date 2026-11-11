@@ -14,8 +14,12 @@ successful:
    caller reads as "unknown", never as "matches".
 2. An unknown digest may still be established by downloading the asset and
    hashing it. The download is *not* reported as a failure when it does not
-   happen: the name simply keeps its ``None``, and reconciliation turns that
-   into a conflict rather than into a match on no evidence.
+   happen: the name simply keeps its ``None``, and reconciliation classifies it
+   as ``UNVERIFIABLE`` rather than as a match on no evidence. That is
+   deliberately not the same outcome as a conflicting digest: a conflict says
+   the release holds demonstrably wrong bytes, while an unverifiable name says
+   the run could not tell, so the fault may lie in the listing or the download
+   rather than in the release.
 
 Uploads are sent without ``--clobber``. The flag deletes the existing asset
 before transferring, so a failed upload would lose the original; and a release

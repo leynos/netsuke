@@ -24,7 +24,10 @@ Three properties make the copy trustworthy:
 
 The claim that a *later* job received this payload is a different one, and
 :mod:`release_payload_handoff` makes it: it judges the paths the uploader will
-actually send, which are not necessarily the paths this module wrote.
+actually send, which are not necessarily the paths this module wrote. That
+hand-off happens inside one job, not across two: the composite action selects
+and uploads the payload in the same job, so no artefact transfer stands between
+them.
 
 Run via ``scripts/select_release_payload_cli.py``; behavioural coverage lives
 in ``scripts/tests/test_select_release_payload_cli.py``.

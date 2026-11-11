@@ -29,8 +29,13 @@ import subprocess  # ruff: ignore[suspicious-subprocess-import] - the action's o
 import sys
 import typing as typ
 
-from upload_declared_assets_manifest import run_bodies, step_environment
-from upload_declared_assets_records import read_outputs
+from upload_declared_assets_manifest import (
+    UPLOAD_STEP,
+    manifest_step_id,
+    run_bodies,
+    step_environment,
+)
+from upload_declared_assets_records import output_file, read_step_outputs
 from upload_declared_assets_stubs import GH_HELPER, GH_STUB, UV_STUB
 
 if typ.TYPE_CHECKING:
@@ -48,8 +53,9 @@ class ActionRun:
     completed
         Each step's completed process, in execution order. Fewer than
         :data:`RUN_STEPS` when a step failed and the job stopped there.
-    outputs
-        The ``GITHUB_OUTPUT`` entries the upload step wrote.
+    step_outputs
+        The ``GITHUB_OUTPUT`` entries each step wrote, keyed by the step's
+        manifest id.
     declared_root
         The directory the action was told to keep its records in.
     gh_log
@@ -59,7 +65,7 @@ class ActionRun:
     """
 
     completed: tuple[subprocess.CompletedProcess[str], ...]
-    outputs: dict[str, str]
+    step_outputs: dict[str, dict[str, str]]
     declared_root: Path
     gh_log: str
     baselines: tuple[str, ...]
@@ -68,6 +74,16 @@ class ActionRun:
     def payload(self) -> Path:
         """The directory the selection step installed the payload in."""
         return self.declared_root / "selected" / "payload"
+
+    @property
+    def outputs(self) -> dict[str, str]:
+        """The ``GITHUB_OUTPUT`` entries the upload step wrote.
+
+        Kept as a named accessor over :attr:`step_outputs` because almost every
+        case reads that step's pair and only the hand-off case has to look at
+        another step's file.
+        """
+        return self.step_outputs[manifest_step_id(UPLOAD_STEP)]
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -80,8 +96,9 @@ class Sandbox:
         The directory holding the ``uv`` and ``gh`` stand-ins.
     scratch
         A writable home for the child processes, also holding their scripts.
-    output_file
-        The ``GITHUB_OUTPUT`` file the steps append to.
+    outputs_directory
+        The directory holding one ``GITHUB_OUTPUT`` file per script step, so a
+        step's entries can be read back as that step's alone.
     gh_log
         Every ``gh`` invocation the stub recorded.
     attached
@@ -96,7 +113,7 @@ class Sandbox:
 
     stubs: Path
     scratch: Path
-    output_file: Path
+    outputs_directory: Path
     gh_log: Path
     attached: Path
     helper: Path
@@ -186,12 +203,12 @@ def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
     gh_log.touch()
     listing = root / "gh-attached.json"
     listing.write_text(json.dumps({"assets": attached or []}), encoding="utf-8")
-    output_file = root / "github-output"
-    output_file.touch()
+    outputs_directory = root / "github-output"
+    outputs_directory.mkdir()
     return Sandbox(
         stubs=stubs,
         scratch=scratch,
-        output_file=output_file,
+        outputs_directory=outputs_directory,
         gh_log=gh_log,
         attached=listing,
         helper=helper,
@@ -205,7 +222,9 @@ def _environment(sandbox: Sandbox) -> dict[str, str]:
 
     The stubs come first on ``PATH`` so the steps reach them rather than any
     real install, and ``HOME`` and ``TMPDIR`` point at scratch so nothing
-    writes into the reader's own caches.
+    writes into the reader's own caches. ``GITHUB_OUTPUT`` is deliberately
+    absent: a step's output file is that step's own, and :func:`run_steps`
+    supplies it per step.
 
     Returns
     -------
@@ -217,7 +236,6 @@ def _environment(sandbox: Sandbox) -> dict[str, str]:
         "HOME": str(sandbox.scratch),
         "TMPDIR": str(sandbox.scratch),
         "PYTHONDONTWRITEBYTECODE": "1",
-        "GITHUB_OUTPUT": str(sandbox.output_file),
         "GITHUB_RUN_ID": "4242",
         "GH_LOG": str(sandbox.gh_log),
         "GH_ATTACHED": str(sandbox.attached),
@@ -293,6 +311,12 @@ def run_steps(
     the caller can then tell a refusal from a later upload fault by how many
     steps completed.
 
+    Each step is handed a ``GITHUB_OUTPUT`` file of its own, exactly as a
+    runner does. Sharing one file would make every step's entries
+    indistinguishable from every other's, so a case could resolve the action's
+    ``outputs:`` expressions against the wrong step and still find the value it
+    expected.
+
     Returns
     -------
     list[subprocess.CompletedProcess[str]]
@@ -308,11 +332,15 @@ def run_steps(
             run.before_step(number, sandbox.declared_root)
         script = steps / f"{number}.sh"
         script.write_text(str(step.get("run", "")), encoding="utf-8")
+        step_id = manifest_step_id(str(step.get("name", "")))
         environment = base_env | step_environment(
             step,
             facts=facts,
             declared_root=sandbox.declared_root,
             dry_run=run.dry_run,
+        )
+        environment["GITHUB_OUTPUT"] = str(
+            output_file(sandbox.outputs_directory, step_id)
         )
         result = _run_one(workspace, script, environment)
         completed.append(result)
@@ -335,7 +363,8 @@ def execute(
     Returns
     -------
     ActionRun
-        The completed steps, the outputs they wrote, and the recorded calls.
+        The completed steps, the outputs each step wrote, and the recorded
+        calls.
     """
     sandbox = _sandbox(tmp_path, list(release.attached))
     completed = run_steps(
@@ -349,7 +378,7 @@ def execute(
     )
     return ActionRun(
         completed=tuple(completed),
-        outputs=read_outputs(sandbox.output_file),
+        step_outputs=read_step_outputs(sandbox.outputs_directory),
         declared_root=sandbox.declared_root,
         gh_log=sandbox.gh_log.read_text(encoding="utf-8"),
         baselines=tuple(sandbox.baseline_log.read_text(encoding="utf-8").split()),

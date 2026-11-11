@@ -53,6 +53,38 @@ def action_document() -> dict[str, object]:
     return sources[ACTION]
 
 
+def manifest_step_id(step_name: str) -> str:
+    """Return the ``id:`` the manifest gives one of its script steps.
+
+    The id is read rather than assumed because GitHub keys a step's outputs by
+    that id, and the action's ``outputs:`` block spells it in a
+    ``steps.<id>.outputs.<name>`` expression. A case that hard-coded the id
+    would keep passing after the manifest renamed the step, while the
+    expressions in ``outputs:`` named an id no step carried and GitHub
+    substituted an empty string.
+
+    Parameters
+    ----------
+    step_name
+        The ``name`` of the step whose id is wanted.
+
+    Returns
+    -------
+    str
+        The ``id`` the manifest declares for that step.
+    """
+    document = action_document()
+    step = action_steps(ACTION, document)[
+        require_action_step(ACTION, document, step_name)
+    ]
+    step_id = step.get("id")
+    assert isinstance(step_id, str), (
+        f"{ACTION} step {step_name!r} must declare an id: for its outputs"
+    )
+    assert step_id, f"{ACTION} step {step_name!r} must declare a non-empty id:"
+    return step_id
+
+
 def run_bodies() -> tuple[dict[str, object], ...]:
     """Return the manifest's script steps, in declaration order.
 
