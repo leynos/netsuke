@@ -3223,10 +3223,13 @@ at the point the release becomes public.
 
 ### Verifying the downloaded release inventory
 
-`verify-release-inventory` answers one question about a draft release: are the
-bytes GitHub holds the bytes the publishers built? It is the downloaded-side
-counterpart of the pre-upload checks, and it needs no registry or GitHub
-credential beyond the visibility a draft requires.
+`verify-release-inventory` answers one question about a draft release: do the
+bytes GitHub serves still match the payload the publisher staged for upload? It
+compares the downloads with the digest record taken before upload, so it
+witnesses those staged bytes; it does not establish package origin, which the
+upload-time selection cannot yet prove. It is the downloaded-side counterpart
+of the pre-upload checks, and it needs no registry or GitHub credential beyond
+the visibility a draft requires.
 
 The job downloads exactly one artefact into `trusted/`, selecting it by the
 exact name in `publish-release`'s `trusted-artifact` output, never a `pattern`,
