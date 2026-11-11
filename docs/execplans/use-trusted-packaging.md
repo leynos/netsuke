@@ -3126,6 +3126,56 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `observe_release`/`settle_observation` split with the reason it takes the
   expected mapping.
 
+- [x] (2026-11-11) Reconciled the six pre-merge rows and four unresolved
+  threads on the #1066 head. Three of the rows named a defect and are repaired;
+  three named a claim the tree does not make and are answered with evidence.
+
+  **The read-only half of the upload decision now has its own suite.**
+  `scripts/tests/test_release_upload_observation.py` hands `settle_observation`
+  a handwritten `Observation` with `release_upload_remote.attached_digests`
+  replaced by a refusal, so a decision that reached the network would fail as a
+  called stub rather than as a plan that merely came out right; a second case
+  substitutes refusing `Path.write_text`, `write_bytes`, `mkdir`, and `touch`
+  and decides anyway. `observe_release` is taken through the real
+  `StaticRunner` and records one `view` for a fully digested listing. The
+  module is registered in both `SECTION_MODULES` and the
+  `test-release-publication` recipe.
+
+  **`TimedRunner` overwrote a repeated boundary.** `_record` assigned the
+  member, so the second download replaced the first and `download_ms` reported
+  the cost of one asset as the cost of the boundary. It now accumulates, with
+  `test_a_boundary_crossed_twice_records_the_whole_cost` proving the sum.
+  `BoundaryTimings.download_ms` and the class `Notes` say so.
+
+  **Three documentation claims were wrong and are corrected.** The payload is
+  copied into `runner.temp` and handed to the uploader *in the same job*;
+  nothing transfers it through a workflow artefact, so the guide's hand-off
+  paragraph now describes the check as protecting the copied payload between
+  selection and upload, and names the plan's own artefact name. The timing
+  record carries `null` for an uncrossed boundary, not "integers only". And
+  `publish-release` runs `ensure_draft_release.py` before selection, so the
+  migration guide's "before any network call" is now "before any release asset
+  is transferred", with the draft-release step named.
+
+  **The two `settle`-level refusal cases the oldest thread asked for exist.** A
+  nested duplicate of a declared name and a root-level symlink beside a regular
+  nested file now go through `settle`, not only the hand-off helper, and both
+  assert the runner recorded no call. The four refusal cases bind a named
+  `exchange` fixture and assert `not exchange.calls`.
+
+  **Domain Architecture is rebutted, not deferred.** The row asked that
+  schema-version and record-shape validation move out of
+  `release_producer_provenance.py`. That file is new in this PR, and the
+  2026-10-28 maintainer decision for this branch is to retain the mapping-based
+  policy boundary, with typed records tracked in netsuke#964;
+  `release_publication_boundary_test.py` already asserts the file sits in
+  `POLICY_MODULES`.
+
+  **Linked Issues stays partial by design.** `release.yml` carries no verifier,
+  finalizer, or consumer-smoke step for the retained record; #1067, #1068, and
+  #1069 are open for that work, and the plan's Stage C entry already records
+  the partial.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a
@@ -4875,3 +4925,19 @@ issues in 215 files), spelling with no generated-configuration drift, and
 Mermaid validation (all diagrams valid). The action's exit-trap timing and its
 six new outputs remain unexercised by a hosted run; the first release workflow
 run on this head is what will exercise them.
+
+Draft 27, 2026-11-11: reconciled the #1066 pre-merge rows and unresolved
+threads. `TimedRunner` now accumulates a repeated boundary instead of replacing
+it, the read-only half of the upload decision gained its own suite, and three
+documentation claims about a payload artefact, about "integers only" timings,
+and about "before any network call" were corrected against the tree. Domain
+Architecture and Linked Issues rows are disposed of with evidence rather than
+repair: the mapping boundary is the maintainer's recorded decision for this
+branch, and the verifier and finalizer jobs are #1067 to #1069.
+
+The ten local gates passed sequentially on the final candidate: formatting,
+lint, typecheck, documentation coverage (98.33%), Rust tests (5,155 passed, 7
+skipped, plus doctests), workflow contracts (2,008 passed plus 30 script-helper
+checks), release-publication tests (1,037 passed), documentation contracts,
+Markdown lint (0 issues), and Mermaid validation. Stage C remains partial; no
+live exchange or release has been exercised.

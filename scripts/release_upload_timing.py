@@ -10,9 +10,11 @@ A boundary that was not crossed is ``None`` rather than ``0``. "Nothing needed
 downloading" and "the download was instantaneous" are different facts, and a
 zero would report the first as the second.
 
-Only integers are recorded. The plan beside this file is deliberately free of
-command output for the same reason: an artefact outlives the run, and a
-duration is the only thing about a boundary that is safe to publish.
+Every value is a measured duration in whole milliseconds, or ``null`` for a
+boundary the run did not cross; nothing else is recorded. The plan beside this
+file is deliberately free of command output for the same reason: an artefact
+outlives the run, and a duration is the only thing about a boundary that is
+safe to publish.
 
 Every boundary a run crosses is a ``gh`` invocation, so :class:`TimedRunner`
 measures them by wrapping the one subprocess seam the uploader already
@@ -70,8 +72,8 @@ class BoundaryTimings:
     listing_ms
         The reconciliation listing, taken before any byte moves.
     download_ms
-        Downloading the attached assets the listing reported no digest for, or
-        ``None`` when it named none.
+        Downloading the attached assets the listing reported no digest for,
+        summed over the assets, or ``None`` when it named none.
     upload_ms
         The transfer, or ``None`` when the run sent nothing -- a dry run, a
         plan with nothing missing, or a refusal.
@@ -131,6 +133,10 @@ class TimedRunner[Result]:
     This is the timing seam rather than a set of timed call sites because a
     boundary is exactly one ``gh`` invocation: measuring at the runner means a
     call site added later is measured without knowing anything about telemetry.
+
+    Boundary durations accumulate. A run downloads once per undigested name,
+    so ``download_ms`` is the time all of those took; recording only the last
+    one would report the cost of one asset as the cost of the boundary.
 
     A command this class does not recognise as a boundary is passed through
     unmeasured. Attributing an unknown subcommand's duration to one of the four
@@ -201,9 +207,12 @@ class TimedRunner[Result]:
         return _SUBCOMMAND_BOUNDARIES.get(subcommand)
 
     def _record(self, boundary: str, milliseconds: int) -> None:
-        """Replace one boundary's recorded duration."""
+        """Accumulate one boundary's duration across the calls that crossed it."""
+        member = f"{boundary}_ms"
+        previous = getattr(self._timings, member)
         self._timings = dataclasses.replace(
-            self._timings, **{f"{boundary}_ms": milliseconds}
+            self._timings,
+            **{member: milliseconds if previous is None else previous + milliseconds},
         )
 
 

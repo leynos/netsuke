@@ -58,6 +58,7 @@ SECTION_MODULES = (
     "scripts/tests/test_select_release_payload_cli.py",
     "scripts/tests/test_release_upload_plan.py",
     "scripts/tests/test_release_upload_remote.py",
+    "scripts/tests/test_release_upload_observation.py",
     "scripts/tests/test_upload_declared_assets_cli.py",
     "scripts/tests/test_upload_declared_assets_properties.py",
     "scripts/tests/test_upload_declared_assets_status.py",

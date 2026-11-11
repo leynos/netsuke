@@ -40,6 +40,18 @@ def scenario(tmp_path: pathlib.Path) -> Scenario:
     return Scenario(tmp_path, contents={DEB: b"deb bytes", RPM: b"rpm bytes"})
 
 
+@pytest.fixture
+def exchange() -> Exchange:
+    """Build a release holding no assets, recording every call it receives.
+
+    Returns
+    -------
+    Exchange
+        The stub a case hands to :func:`settle` as its runner.
+    """
+    return Exchange(attached={})
+
+
 def test_an_empty_release_receives_every_declared_asset(
     scenario: Scenario,
 ) -> None:
@@ -184,31 +196,80 @@ def test_the_returned_plan_describes_the_post_upload_release(
     )
 
 
-def test_a_payload_that_lost_an_asset_is_refused(scenario: Scenario) -> None:
+def test_a_payload_that_lost_an_asset_is_refused(
+    scenario: Scenario, exchange: Exchange
+) -> None:
     """Refuse a hand-off that does not hold the declared set."""
     _ = (scenario.payload / RPM).unlink()
     with pytest.raises(release_payload_handoff.PayloadHandoffError, match="omits"):
-        settle(scenario.request(), runner=Exchange(attached={}))
+        settle(scenario.request(), runner=exchange)
+    assert not exchange.calls, "a refused payload must not reach the network"
 
 
-def test_a_payload_that_gained_an_asset_is_refused(scenario: Scenario) -> None:
+def test_a_payload_that_gained_an_asset_is_refused(
+    scenario: Scenario, exchange: Exchange
+) -> None:
     """Refuse a hand-off carrying a file nobody selected."""
     _ = (scenario.payload / "extra.rpm").write_bytes(b"extra")
     with pytest.raises(release_payload_handoff.PayloadHandoffError, match="adds"):
-        settle(scenario.request(), runner=Exchange(attached={}))
+        settle(scenario.request(), runner=exchange)
+    assert not exchange.calls, "a refused payload must not reach the network"
 
 
-def test_a_payload_whose_bytes_changed_is_refused(scenario: Scenario) -> None:
+def test_a_payload_publishing_a_name_twice_is_refused(
+    scenario: Scenario, exchange: Exchange
+) -> None:
+    """Refuse a nested copy of a declared name before anything is sent.
+
+    The nested file is a regular file, so a hand-off check that indexed the
+    directory by published name would find a file to hash and accept the tree.
+    """
+    _ = (scenario.payload / "sub").mkdir()
+    _ = (scenario.payload / "sub" / DEB).write_bytes(b"deb bytes")
+    with pytest.raises(release_payload_handoff.PayloadHandoffError, match="adds"):
+        settle(scenario.request(), runner=exchange)
+    assert not exchange.calls, "a refused payload must not reach the network"
+
+
+def test_a_root_symlink_beside_a_nested_file_is_refused(
+    scenario: Scenario, exchange: Exchange
+) -> None:
+    """Refuse the entry ``gh`` would be handed, not the copy that vouches.
+
+    ``sub/<deb>`` is a regular file holding the recorded bytes while
+    ``<deb>`` at the root is a link pointing outside the payload entirely, so
+    a check that hashed whichever match the walk found first would approve a
+    tree whose transfer reads a different file.
+    """
+    elsewhere = scenario.root / "elsewhere"
+    elsewhere.mkdir()
+    (elsewhere / DEB).write_bytes(b"not the payload")
+    (scenario.payload / "sub").mkdir()
+    (scenario.payload / "sub" / DEB).write_bytes(b"deb bytes")
+    (scenario.payload / DEB).unlink()
+    (scenario.payload / DEB).symlink_to(elsewhere / DEB)
+    with pytest.raises(
+        release_payload_handoff.PayloadHandoffError, match="cannot upload"
+    ):
+        settle(scenario.request(), runner=exchange)
+    assert not exchange.calls, "a refused payload must not reach the network"
+
+
+def test_a_payload_whose_bytes_changed_is_refused(
+    scenario: Scenario, exchange: Exchange
+) -> None:
     """Refuse a payload the trusted record no longer describes."""
     _ = (scenario.payload / DEB).write_bytes(b"rebuilt")
     with pytest.raises(release_digest_record.RecordedDigestMismatchError):
-        settle(scenario.request(), runner=Exchange(attached={}))
+        settle(scenario.request(), runner=exchange)
+    assert not exchange.calls, "a refused payload must not reach the network"
 
 
-def test_a_refused_payload_never_reaches_the_network(scenario: Scenario) -> None:
+def test_a_refused_payload_never_reaches_the_network(
+    scenario: Scenario, exchange: Exchange
+) -> None:
     """Verify the payload before the first call, not after the upload."""
     _ = (scenario.payload / DEB).write_bytes(b"rebuilt")
-    exchange = Exchange(attached={})
     with pytest.raises(release_digest_record.RecordedDigestMismatchError):
         settle(scenario.request(), runner=exchange)
     assert not exchange.calls, "a refused payload must not reach the network"

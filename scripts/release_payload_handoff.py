@@ -1,10 +1,11 @@
 """Hold the installed payload to the bytes the trusted record declares.
 
 Selection copies the approved sources into a fresh directory and writes the
-record that describes them. Everything after that reads a tree this run no
-longer controls: the records and the payload travel through job artefacts, and
-a restored artefact, an appended file, or a step that rewrote a name is not
-something selection can prevent.
+record that describes them. That directory is then handed to another step, and
+the stretch in between is one selection cannot police: the action copies the
+payload under ``runner.temp`` and passes that local path to the uploader, so an
+appended file, a replaced entry, or a step that rewrote a name is not something
+selection can prevent.
 
 This module is that second claim. It asks two questions of the directory it is
 handed -- does it hold exactly the declared set of names, and are the bytes

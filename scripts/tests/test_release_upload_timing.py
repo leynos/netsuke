@@ -197,6 +197,27 @@ def test_the_timed_runner_measures_each_boundary(tmp_path: pathlib.Path) -> None
     assert timings.verification_ms == 1, timings
 
 
+def test_a_boundary_crossed_twice_records_the_whole_cost() -> None:
+    """Sum a boundary's calls, rather than reporting only the last one.
+
+    A run downloads once per undigested name, so a record that replaced the
+    value each time would report the cost of the final asset as the cost of
+    downloading everything the listing hid.
+    """
+    timed = TimedRunner(
+        _completed,
+        clock_ns=_clock(
+            0,
+            2_000_000,  # first download
+            2_000_000,
+            5_000_000,  # second download
+        ),
+    )
+    for name in ("a.deb", "b.rpm"):
+        _ = timed(["gh", "release", "download", "v1", "--pattern", name, "--dir", "d"])
+    assert timed.timings.download_ms == 5, timed.timings
+
+
 def test_a_command_that_is_not_a_boundary_is_left_untimed() -> None:
     """Pass an unrecognised command through without inventing a boundary."""
     timed = TimedRunner(_completed, clock_ns=_clock())

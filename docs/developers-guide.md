@@ -2604,13 +2604,16 @@ the artefacts this run's producer records vouch for, writes the declaration and
 the trusted digest record from the staged bytes, retains all three files as the
 `declared-assets-${{ github.job }}-${{ github.run_attempt }}` workflow
 artefact, and only then uploads the declared names. The upload plan it wrote,
-which names the assets of a refusing run, is retained afterwards under the same
-naming. The attempt suffix keeps a job re-run from colliding with the first
-attempt's record, which v7 refuses to overwrite. The shared action remains in
-use by the rehearsal, so the same `dry-run` expression decides both lanes' mode.
-`publish-release` checks out the candidate commit rather than the triggering
-ref because the selection, the declaration, and the uploader all read
-repository files and those files must be the ones the producers built.
+which names the assets of a refusing run, is retained afterwards as a separate
+`declared-assets-plan-${{ github.job }}-${{ github.run_attempt }}` artefact,
+because it only exists once the upload has run and a second retention of the
+same name would collide with the record. The attempt suffix keeps a job re-run
+from colliding with the first attempt's record, which v7 refuses to overwrite.
+The shared action remains in use by the rehearsal, so the same `dry-run`
+expression decides both lanes' mode. `publish-release` checks out the candidate
+commit rather than the triggering ref because the selection, the declaration,
+and the uploader all read repository files and those files must be the ones the
+producers built.
 
 Only *the upload step itself* defers its failure; the action as a whole can
 still fail. That step captures the uploader's status, writes `upload-error` and
@@ -2640,8 +2643,11 @@ timing exists. It is generic over the runner it wraps rather than importing
 `subprocess` itself, so the module that names the boundaries stays free of the
 process boundary. Writing and reading the record live in
 `release_upload_timing_files`, following the `release_digest` and
-`release_digest_files` split. The file carries integers only, for the same
-reason the plan carries a bounded failure vocabulary rather than command output.
+`release_digest_files` split. Each member is a measured integer or a JSON
+`null` for a boundary the run did not cross, and nothing else: a reader that
+assumed every member were a number would misparse a valid record, and the same
+reason that keeps the plan to a bounded failure vocabulary rather than command
+output keeps this file to durations.
 
 Three earlier steps have no such treatment, and a reader who takes "the action
 never fails" literally will misdiagnose their failures. Selection can refuse a
@@ -3354,10 +3360,17 @@ beyond it is a different claim.
 
 `release_payload_handoff.require_payload_matches` is the later claim, made by
 the uploader against the directory it is about to publish. Selection verified
-the staged bytes; this verifies the *hand-off*, after the payload has travelled
-through a job artefact that this run no longer controls. It requires the
-directory to hold exactly the declared names, and it hashes the path
-`release_upload_remote.upload` will actually pass to `gh` --
+the staged bytes; this verifies the *hand-off*, over the copy the action
+installed under `runner.temp` and passes to the uploader step in the same job.
+Nothing transfers the payload through a workflow artefact: only the
+declaration, the two digest records, and the plan are retained, and a later job
+restoring them would receive evidence *about* the payload rather than the
+payload itself. What the check covers is therefore the local stretch between
+`select` and `upload` -- a step that rewrote, appended, or replaced an entry in
+`declared-assets/selected/payload` after selection approved it.
+
+It requires the directory to hold exactly the declared names, and it hashes the
+path `release_upload_remote.upload` will actually pass to `gh` --
 `payload_dir / name` -- after proving that path a regular file with `lstat`.
 Indexing the directory by published name would answer a question about names
 instead: a regular `sub/a.deb` would satisfy the digest check for a declared

@@ -6,7 +6,7 @@ is about what a job was handed. The leaf claim -- is ``payload/a.deb`` the file
 ``gh`` will receive -- is about *which* entry that name resolves to, and a tree
 can satisfy the first while failing the second.
 
-The cases build the shapes a restored artefact can really contain rather than
+The cases build the shapes a payload directory can really contain rather than
 asserting on message text: a nested duplicate, a symlink beside a regular file
 of the same published name, and an appended file. Each is a hand-off that
 would otherwise publish bytes nobody selected.
