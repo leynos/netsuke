@@ -22,7 +22,7 @@ import typing as typ
 
 import pytest
 from action_run_sources import action_steps, require_action_step
-from upload_declared_assets_harness import Release, execute, interpreter_baseline
+from upload_declared_assets_harness import Release, execute
 from upload_declared_assets_manifest import (
     ACTION,
     PLAN_STEP,
@@ -31,6 +31,7 @@ from upload_declared_assets_manifest import (
     action_document,
     release_tag,
 )
+from upload_declared_assets_records import interpreter_baseline
 from upload_declared_assets_staging import (
     DIST,
     declared_names,
@@ -260,6 +261,55 @@ def test_an_asset_github_cannot_vouch_for_is_reported_as_unverifiable(
     assert not _uploads(run), run.gh_log
 
 
+def _disagree_with_the_declaration(step: int, records: Path) -> None:
+    """Rewrite selection's record so it names bytes the declaration does not.
+
+    Runs after the declaration step and before the upload step, which is the
+    only window in which this damage is possible: both records are written
+    from the same tree by different steps, and the uploader is what compares
+    them.
+    """
+    if step != RUN_STEPS.index(RUN_STEPS[-1]):
+        return
+    path = records / "selection.json"
+    record = json.loads(path.read_text(encoding="utf-8"))
+    offender = min(record["assets"])
+    record["assets"][offender] = "0" * 64
+    path.write_text(json.dumps(record), encoding="utf-8")
+
+
+def test_a_selection_record_disagreeing_with_the_declaration_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Stop before the network when the two records name different bytes.
+
+    The records are the account the uploader compares the payload against, and
+    each is produced from the staged tree by a different step. If they
+    disagree, at least one of them does not describe this release, so nothing
+    about the payload can be established -- and a run that contacted GitHub
+    anyway would have already told it the release exists.
+    """
+    facts = release_facts()
+    workspace = stage_workspace(tmp_path, facts)
+    run = execute(
+        tmp_path,
+        workspace,
+        facts,
+        release=Release(before_step=_disagree_with_the_declaration),
+    )
+    assert run.outputs.get("upload-error") == "true", (
+        "a record disagreement must be reported as a deferred upload error"
+    )
+    message = run.outputs.get("error-message", "")
+    assert (
+        "the selection and declaration records describe different bytes" in message
+    ), message
+    assert not run.gh_log, (
+        "a run that cannot account for its bytes must not reach GitHub"
+    )
+    assert not _uploads(run), run.gh_log
+
+
 def test_the_declared_record_is_retained_before_the_upload() -> None:
     """Retain the declaration and both digest records, failing if any is absent."""
     document = action_document()
@@ -306,9 +356,14 @@ def test_the_upload_plan_is_retained_after_the_upload() -> None:
     assert plan.get("if") == "always()", (
         "the plan must be retained even when the upload was refused"
     )
-    assert _basename(str(with_block["path"]).strip()) == "upload-plan.json", (
-        "the retained file must be the plan the uploader wrote"
-    )
+    retained = {
+        _basename(line.strip())
+        for line in str(with_block["path"]).splitlines()
+        if line.strip()
+    }
+    # The timings ride with the plan: the uploader writes them beside it, and a
+    # boundary duration is only readable against the run that measured it.
+    assert retained == {"upload-plan.json", "upload-timings.json"}, retained
     # `warn`, not `error`: a failure before the uploader runs leaves no plan,
     # and that must not replace the uploader's diagnostic with a second one.
     assert with_block["if-no-files-found"] == "warn", (

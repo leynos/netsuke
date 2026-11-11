@@ -52,6 +52,7 @@ SECTION_MODULES = (
     "scripts/tests/test_release_payload_selection.py",
     "scripts/tests/test_release_payload_selection_properties.py",
     "scripts/tests/test_release_payload_selection_origins.py",
+    "scripts/tests/test_release_payload_handoff.py",
     "scripts/tests/test_release_payload_tree.py",
     "scripts/tests/test_release_package_origins.py",
     "scripts/tests/test_select_release_payload_cli.py",
@@ -60,6 +61,7 @@ SECTION_MODULES = (
     "scripts/tests/test_upload_declared_assets_cli.py",
     "scripts/tests/test_upload_declared_assets_properties.py",
     "scripts/tests/test_upload_declared_assets_status.py",
+    "scripts/tests/test_release_upload_timing.py",
 )
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
@@ -108,6 +110,7 @@ SOURCE_MODULES = (
     "scripts/release_payload_identity.py",
     "scripts/release_payload_names.py",
     "scripts/release_payload_selection.py",
+    "scripts/release_payload_handoff.py",
     "scripts/release_payload_tree.py",
     "scripts/release_payload_regular_files.py",
     "scripts/release_package_origins.py",
@@ -118,6 +121,8 @@ SOURCE_MODULES = (
     "scripts/release_upload_observation.py",
     "scripts/release_upload_plan.py",
     "scripts/release_upload_remote.py",
+    "scripts/release_upload_timing.py",
+    "scripts/release_upload_timing_files.py",
     "scripts/upload_declared_assets_cli.py",
     "scripts/upload_declared_assets_refusals.py",
 )
@@ -174,6 +179,7 @@ ADAPTER_MODULES = (
     "scripts/record_producer_provenance_cli.py",
     "scripts/record_producer_provenance_errors.py",
     "scripts/record_producer_provenance_record.py",
+    "scripts/release_payload_handoff.py",
     "scripts/release_payload_tree.py",
     "scripts/release_payload_regular_files.py",
     "scripts/release_package_origins.py",
@@ -183,6 +189,8 @@ ADAPTER_MODULES = (
     "scripts/release_upload_observation.py",
     "scripts/release_upload_plan.py",
     "scripts/release_upload_remote.py",
+    "scripts/release_upload_timing.py",
+    "scripts/release_upload_timing_files.py",
     "scripts/upload_declared_assets_cli.py",
 )
 

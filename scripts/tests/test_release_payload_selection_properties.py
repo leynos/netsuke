@@ -22,7 +22,6 @@ import pytest
 import release_payload_generation_support as generated
 import release_payload_selection as selection
 from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
 from release_payload_errors import PayloadRefusedError
 from release_payload_generation_support import (
     CANDIDATE,
@@ -162,39 +161,42 @@ def test_selection_is_indifferent_to_record_and_staging_order(
     derandomize=True,
     suppress_health_check=[HealthCheck.function_scoped_fixture],
 )
-@given(pairs=generated.target_set(), index=st.integers(min_value=0, max_value=2))
-def test_a_missing_declared_name_is_refused(
-    pairs: list[tuple[str, str]], index: int
+@given(pairs=generated.target_set())
+def test_every_declared_name_is_refused_when_omitted(
+    pairs: list[tuple[str, str]],
 ) -> None:
-    """Refuse a staged tree that omits one declared name.
+    """Refuse a staged tree that omits any one of its declared names.
 
-    Generated from a valid tree with exactly one name removed, so the case is
-    the omission and not some other defect.
+    Every name in the generated tree is damaged in turn rather than one drawn
+    index. An index bounded by a constant only ever reached the names sorted
+    first -- a tree may hold twelve -- so the property held for whichever names
+    the generator happened to produce early and for none of the rest.
     """
     records, names = generated.valid_tree(pairs)
-    omitted = names[index % len(names)]
-    staged = generated.staged_for(names)
-    del staged[omitted]
-    with pytest.raises(PayloadRefusedError, match="was not staged"):
-        _select(records, staged, pairs)
+    for omitted in names:
+        staged = generated.staged_for(names)
+        del staged[omitted]
+        with pytest.raises(PayloadRefusedError, match="was not staged"):
+            _select(records, staged, pairs)
 
 
 @settings(max_examples=50, deadline=None, derandomize=True)
-@given(pairs=generated.target_set(), index=st.integers(min_value=0, max_value=2))
-def test_a_doubly_staged_declared_name_is_refused(
-    pairs: list[tuple[str, str]], index: int
+@given(pairs=generated.target_set())
+def test_every_declared_name_is_refused_when_doubly_staged(
+    pairs: list[tuple[str, str]],
 ) -> None:
-    """Refuse a staged tree that stages one declared name twice.
+    """Refuse a staged tree that stages any one declared name twice.
 
     Two sources claim one published name and nothing says which is the
-    release's, so neither may be chosen.
+    release's, so neither may be chosen. As with the omission case, every name
+    is doubled in turn so no generated name goes unchecked.
     """
     records, names = generated.valid_tree(pairs)
-    doubled = names[index % len(names)]
-    staged = generated.staged_for(names)
-    staged[doubled] = [*staged[doubled], f"duplicate:{doubled}"]
-    with pytest.raises(PayloadRefusedError, match="was staged 2 times"):
-        _select(records, staged, pairs)
+    for doubled in names:
+        staged = generated.staged_for(names)
+        staged[doubled] = [*staged[doubled], f"duplicate:{doubled}"]
+        with pytest.raises(PayloadRefusedError, match="was staged 2 times"):
+            _select(records, staged, pairs)
 
 
 @settings(max_examples=50, deadline=None, derandomize=True)

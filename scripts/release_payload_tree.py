@@ -22,6 +22,10 @@ Three properties make the copy trustworthy:
    :mod:`release_payload_regular_files`; this module re-exports it so a caller
    keeps importing one name.
 
+The claim that a *later* job received this payload is a different one, and
+:mod:`release_payload_handoff` makes it: it judges the paths the uploader will
+actually send, which are not necessarily the paths this module wrote.
+
 Run via ``scripts/select_release_payload_cli.py``; behavioural coverage lives
 in ``scripts/tests/test_select_release_payload_cli.py``.
 """
@@ -33,8 +37,6 @@ import stat
 import typing as typ
 
 import hoist_binstall_discovery
-import release_digest_files
-import release_digest_record
 import release_digest_record_files
 import release_github_assets_adapter
 import release_producer_provenance
@@ -59,36 +61,17 @@ if typ.TYPE_CHECKING:
 __all__ = [
     "PAYLOAD_DIRECTORY",
     "RECORD_NAME",
-    "PayloadHandoffError",
     "copy_verified",
     "install_payload",
     "observe_payload",
     "read_provenance_by_path",
     "read_provenances",
     "record_locations",
-    "require_payload_matches",
     "require_regular",
 ]
 
 #: Directory name the selected payload is copied into, below the output root.
 PAYLOAD_DIRECTORY = "payload"
-
-
-class PayloadHandoffError(PayloadError):
-    """Report a payload directory that is not the set the record declares.
-
-    The selection stage is the only writer of this directory, so a mismatch
-    means the hand-off -- not the release -- is wrong, and uploading any part
-    of it would publish bytes nobody selected.
-    """
-
-
-class _HandoffDisagreementError(PayloadHandoffError):
-    """Report exactly which declared names the payload omits and adds."""
-
-    def __init__(self, missing: list[str], extra: list[str]) -> None:
-        """Name both sides of the disagreement in one operator-readable line."""
-        super().__init__(f"payload omits {missing!r} and adds {extra!r}")
 
 
 def observe_payload(dist_dir: pathlib.Path) -> dict[str, list[pathlib.Path]]:
@@ -318,64 +301,3 @@ def install_payload[Source: pathlib.Path](
         raise
 
 
-def require_payload_matches(
-    payload_dir: pathlib.Path, expected: cabc.Mapping[str, str]
-) -> None:
-    """Require the payload directory to hold exactly the declared bytes.
-
-    Parameters
-    ----------
-    payload_dir
-        The directory the selection stage installed.
-    expected
-        Published name mapped to the digest the trusted record demands.
-
-    Raises
-    ------
-    _HandoffDisagreementError
-        If the directory names any other set of files.
-
-    Notes
-    -----
-    A stored file whose bytes differ surfaces
-    ``release_digest_record.RecordedDigestMismatchError`` from
-    :func:`release_digest_record.require_downloads_match_record`.
-
-    Selection verified these bytes before copying them; this checks the
-    *hand-off*, which is a different claim. A job that restored the wrong
-    artefact, or a step that appended a file, is caught here rather than after
-    the upload.
-
-    Examples
-    --------
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     root = Path(tmp)
-    ...     _ = (root / "a.deb").write_bytes(b"deb")
-    ...     digest = release_digest_files.digest_of_file(root / "a.deb")
-    ...     require_payload_matches(root, {"a.deb": digest})
-    ...     try:
-    ...         require_payload_matches(root, {})
-    ...     except PayloadHandoffError as refusal:
-    ...         print("adds" in str(refusal))
-    True
-    """
-    present = observe_payload(payload_dir)
-    missing = sorted(set(expected) - set(present))
-    # A name two files publish under is refused alongside an undeclared name.
-    # Without this, `present[name][0]` decides which copy is hashed: an
-    # appended `sub/a.deb` beside `a.deb` leaves `missing` and `extra` both
-    # empty, and the file this check exists to catch is never read at all.
-    duplicated = {name for name, paths in present.items() if len(paths) > 1}
-    extra = sorted((set(present) - set(expected)) | duplicated)
-    if missing or extra:
-        raise _HandoffDisagreementError(missing, extra)
-    computed = {
-        name: release_digest_files.digest_of_file(present[name][0])
-        for name in sorted(expected)
-    }
-    release_digest_record.require_downloads_match_record(
-        computed,
-        trusted=release_digest_record.DigestRecord.from_mapping(expected),
-    )

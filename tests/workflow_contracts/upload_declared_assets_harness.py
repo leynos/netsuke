@@ -22,25 +22,21 @@ that use this harness live in ``upload_declared_assets_execution_test.py``.
 Run via ``make test-workflow-contracts``.
 """
 
+import collections.abc as cabc
 import dataclasses
 import json
-import re
 import subprocess  # ruff: ignore[suspicious-subprocess-import] - the action's own steps are under test.
 import sys
 import typing as typ
 
 from upload_declared_assets_manifest import run_bodies, step_environment
+from upload_declared_assets_records import read_outputs
 from upload_declared_assets_stubs import GH_HELPER, GH_STUB, UV_STUB
-from workflow_loading import REPO_ROOT
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
 
     from upload_declared_assets_staging import Facts
-
-#: The Makefile declaration every step must agree with when it names an
-#: interpreter, read rather than restated so a pin bump changes one file.
-BASELINE_PATTERN = r"^PYTHON_BASELINE \?= (\S+)$"
 
 
 @dataclasses.dataclass(frozen=True, slots=True)
@@ -108,9 +104,18 @@ class Sandbox:
     declared_root: Path
 
 
+#: What a case may do to the run's records between two of its steps.
+#:
+#: The steps write their records to one directory, so a case that wants to
+#: damage what a later step reads has to act in the gap between them. It is
+#: handed the next step's index and the directory the records live in, and it
+#: returns nothing: the run continues exactly as it would have.
+type BeforeStep = cabc.Callable[[int, Path], None]
+
+
 @dataclasses.dataclass(frozen=True, slots=True)
 class Release:
-    """Describe the release a run observes and the mode it runs in.
+    """Describe everything a run is handed from outside its own tree.
 
     Attributes
     ----------
@@ -118,17 +123,25 @@ class Release:
         The assets the release already holds, as the listing reports them.
     dry_run
         The value the caller sets the ``dry-run`` input to.
+    before_step
+        Called with the next step's index and the records directory before
+        that step runs. A case that damages a record one step wrote uses this
+        rather than reaching into the workspace after the whole run, which
+        would only ever model damage no later step reads.
 
     Notes
     -----
-    The two are one value because both describe the *outside* a run is handed
+    These are one value because each describes the *outside* a run is handed
     rather than the tree it works on: a case that models a partially attached
-    release in a rehearsal asks for both at once, and either alone would leave
-    the other at a default the case did not choose.
+    release in a rehearsal asks for its listing and its mode at once, and
+    either alone would leave the other at a default the case did not choose.
+    The hook belongs here for the same reason -- it stands in for a second
+    attempt or a damaged runner, neither of which the tree can express.
     """
 
     attached: tuple[dict[str, str], ...] = ()
     dry_run: str = "false"
+    before_step: BeforeStep | None = None
 
 
 #: The release a case that names none is handed: nothing attached, publishing.
@@ -139,65 +152,6 @@ def _write_stub(path: Path, body: str) -> None:
     """Install one executable stand-in for an external command."""
     path.write_text(body, encoding="utf-8")
     path.chmod(0o755)
-
-
-def _take_heredoc(
-    lines: list[str], start: int, header: str, outputs: dict[str, str]
-) -> int:
-    """Decode the heredoc output whose value lines begin at ``start``.
-
-    Returns
-    -------
-    int
-        The index just past the closing delimiter.
-    """
-    name, _marker, delimiter = header.partition("<<")
-    end = start
-    while end < len(lines) and lines[end] != delimiter:
-        end += 1
-    outputs[name] = "\n".join(lines[start:end])
-    return end + 1
-
-
-def read_outputs(path: Path) -> dict[str, str]:
-    """Decode a ``GITHUB_OUTPUT`` file, including its heredoc values.
-
-    A heredoc value is written as ``name<<DELIMITER``, one or more lines, then
-    the delimiter again, so a multi-line diagnostic survives the encoding. The
-    entries this action writes never carry ``<<`` in a plain value, which is
-    what lets the two forms be told apart by the marker alone.
-
-    Returns
-    -------
-    dict[str, str]
-        Output name mapped to its decoded value.
-    """
-    outputs: dict[str, str] = {}
-    lines = path.read_text(encoding="utf-8").splitlines()
-    index = 0
-    while index < len(lines):
-        line = lines[index]
-        index += 1
-        if "<<" in line:
-            index = _take_heredoc(lines, index, line, outputs)
-            continue
-        name, _separator, plain = line.partition("=")
-        outputs[name] = plain
-    return outputs
-
-
-def interpreter_baseline() -> str:
-    """Return the interpreter the Makefile pins, which every step must name.
-
-    Returns
-    -------
-    str
-        The value of ``PYTHON_BASELINE`` in the Makefile.
-    """
-    text = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
-    match = re.search(BASELINE_PATTERN, text, flags=re.MULTILINE)
-    assert match is not None, "the Makefile must declare PYTHON_BASELINE ?="
-    return match.group(1)
 
 
 def _sandbox(tmp_path: Path, attached: list[dict[str, str]] | None) -> Sandbox:
@@ -294,17 +248,46 @@ def _run_one(
     )
 
 
+@dataclasses.dataclass(frozen=True, slots=True)
+class RunSetup:
+    """Hold everything one executed run needs beyond its tree and its facts.
+
+    Attributes
+    ----------
+    sandbox
+        The paths the run writes to and reads from.
+    dry_run
+        The value the caller sets the ``dry-run`` input to. It reaches the
+        upload step as an environment variable, which is what its ``case``
+        statement reads.
+    before_step
+        Called with the next step's index and the records directory before
+        that step runs.
+
+    Notes
+    -----
+    ``execute`` takes the caller's :class:`Release` and resolves it into this
+    value, so the three things a run is handed from outside its tree travel
+    together rather than as a growing keyword list.
+    """
+
+    sandbox: Sandbox
+    dry_run: str
+    before_step: BeforeStep | None = None
+
+
 def run_steps(
-    workspace: Path, facts: Facts, sandbox: Sandbox, *, dry_run: str
+    workspace: Path,
+    facts: Facts,
+    run: RunSetup,
 ) -> list[subprocess.CompletedProcess[str]]:
     """Run each script step in order, stopping where a job would stop.
 
     Parameters
     ----------
-    dry_run
-        The value the caller sets the ``dry-run`` input to. It reaches the
-        upload step as an environment variable, which is what its ``case``
-        statement reads.
+    run
+        The sandbox to write into, the mode to run in, and the hook a case
+        may damage a record from.
 
     A failed step stops the loop because GitHub would not start the next one;
     the caller can then tell a refusal from a later upload fault by how many
@@ -315,15 +298,21 @@ def run_steps(
     list[subprocess.CompletedProcess[str]]
         Each completed step, in execution order.
     """
+    sandbox = run.sandbox
     steps = sandbox.scratch / "steps"
     steps.mkdir()
     base_env = _environment(sandbox)
     completed: list[subprocess.CompletedProcess[str]] = []
     for number, step in enumerate(run_bodies()):
+        if run.before_step is not None:
+            run.before_step(number, sandbox.declared_root)
         script = steps / f"{number}.sh"
         script.write_text(str(step.get("run", "")), encoding="utf-8")
         environment = base_env | step_environment(
-            step, facts=facts, declared_root=sandbox.declared_root, dry_run=dry_run
+            step,
+            facts=facts,
+            declared_root=sandbox.declared_root,
+            dry_run=run.dry_run,
         )
         result = _run_one(workspace, script, environment)
         completed.append(result)
@@ -333,13 +322,15 @@ def run_steps(
 
 
 def execute(
-    tmp_path: Path,
-    workspace: Path,
-    facts: Facts,
-    *,
-    release: Release = NO_RELEASE,
+    tmp_path: Path, workspace: Path, facts: Facts, *, release: Release = NO_RELEASE
 ) -> ActionRun:
     """Run the action's script steps in order, stopping where a job would stop.
+
+    Parameters
+    ----------
+    release
+        The release the run observes and the mode it runs in. Its
+        ``before_step`` hook, if any, acts between two of the steps.
 
     Returns
     -------
@@ -347,7 +338,15 @@ def execute(
         The completed steps, the outputs they wrote, and the recorded calls.
     """
     sandbox = _sandbox(tmp_path, list(release.attached))
-    completed = run_steps(workspace, facts, sandbox, dry_run=release.dry_run)
+    completed = run_steps(
+        workspace,
+        facts,
+        RunSetup(
+            sandbox=sandbox,
+            dry_run=release.dry_run,
+            before_step=release.before_step,
+        ),
+    )
     return ActionRun(
         completed=tuple(completed),
         outputs=read_outputs(sandbox.output_file),

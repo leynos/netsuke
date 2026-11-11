@@ -25,7 +25,7 @@ Run via ``make test-release-publication``; exercised through its only caller,
 
 import release_digest_record
 import release_payload_errors
-import release_payload_tree
+import release_payload_handoff
 import release_upload_remote
 
 EXIT_OK = 0
@@ -71,7 +71,7 @@ REFUSAL_LABELS: tuple[tuple[type[Exception], int, str], ...] = (
         "the trusted record is unusable",
     ),
     (
-        release_payload_tree.PayloadHandoffError,
+        release_payload_handoff.PayloadHandoffError,
         EXIT_CONFLICT,
         "the selected payload is not the declared one",
     ),

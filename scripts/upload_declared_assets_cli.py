@@ -70,15 +70,17 @@ import sys
 
 import release_digest_record
 import release_digest_record_files
-import release_payload_tree
+import release_payload_handoff
 import release_reconcile_github
 import release_upload_messages
 import release_upload_observation
 import release_upload_plan
 import release_upload_remote
+import release_upload_timing_files
 import upload_declared_assets_refusals
 from release_upload_plan import PLAN_NAME, UploadRequest
 from release_upload_remote import PRODUCTION_RUNNER, SubprocessRunner
+from release_upload_timing import TimedRunner
 from upload_declared_assets_refusals import (
     EXIT_CONFLICT,
     EXIT_INPUT_UNREADABLE,
@@ -183,13 +185,22 @@ def main(argv: list[str] | None = None) -> int:
         plan_path=arguments.plan,
         is_dry_run=arguments.dry_run,
     )
+    # Every boundary a run crosses is a `gh` invocation, so timing the one
+    # subprocess seam measures the listing, the download, and the transfer
+    # without any call site knowing this wrapper exists.
+    timed = TimedRunner(PRODUCTION_RUNNER)
     try:
-        settlement = settle(request, runner=PRODUCTION_RUNNER)
+        settlement = settle(request, runner=timed)
     except upload_declared_assets_refusals.REFUSALS as error:
         exit_code, label = upload_declared_assets_refusals.refusal(error)
         print(f"{label}: {error}", file=sys.stderr)
+        release_upload_timing_files.record_timings(request.plan_path, timed.timings)
         return exit_code
-    return _report(request, settlement)
+    # After the plan, so the two records describe one run: a timings file but
+    # no plan is a run that measured boundaries it never finished reporting.
+    status = _report(request, settlement)
+    release_upload_timing_files.record_timings(request.plan_path, timed.timings)
+    return status
 
 
 def _report(
@@ -352,8 +363,9 @@ def verified_payload(request: UploadRequest) -> dict[str, str]:
 
     ``release_digest_record.DigestRecordError`` and its
     ``RecordedDigestMismatchError`` subclass reach the caller from the record
-    readers and the comparison, and ``release_payload_tree.PayloadHandoffError``
-    from :func:`release_payload_tree.require_payload_matches`.
+    readers and the comparison, and
+    ``release_payload_handoff.PayloadHandoffError`` from
+    :func:`release_payload_handoff.require_payload_matches`.
 
     Examples
     --------
@@ -382,7 +394,7 @@ def verified_payload(request: UploadRequest) -> dict[str, str]:
     release_digest_record.require_records_agree(
         selected.as_mapping(), declaration=declared
     )
-    release_payload_tree.require_payload_matches(request.payload_dir, declared)
+    release_payload_handoff.require_payload_matches(request.payload_dir, declared)
     return declared
 
 

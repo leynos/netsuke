@@ -13,7 +13,6 @@ import pathlib
 
 import pytest
 import release_digest_files
-import release_digest_record
 import release_digest_record_files
 import release_payload_selection
 import release_payload_tree
@@ -349,51 +348,3 @@ def test_install_payload_refuses_a_source_outside_the_staged_root(
             selection_for({"a.deb": source}), output, tmp_path / "record.json", dist
         )
     assert not output.exists(), "a refused install must not leave a payload to upload"
-
-
-def test_require_payload_matches_accepts_the_installed_bytes(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Accept a payload directory holding exactly the recorded bytes."""
-    asset = write_asset(tmp_path, "a.deb", b"payload")
-    digest = release_digest_files.digest_of_file(asset)
-    release_payload_tree.require_payload_matches(tmp_path, {"a.deb": digest})
-
-
-def test_require_payload_matches_names_what_the_payload_omits(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Report a hand-off that lost a declared asset."""
-    asset = write_asset(tmp_path, "a.deb")
-    digest = release_digest_files.digest_of_file(asset)
-    with pytest.raises(release_payload_tree.PayloadHandoffError, match="omits"):
-        release_payload_tree.require_payload_matches(
-            tmp_path, {"a.deb": digest, "b.rpm": "b" * 64}
-        )
-
-
-def test_require_payload_matches_names_what_the_payload_adds(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Report a hand-off that gained a file nobody selected."""
-    asset = write_asset(tmp_path, "a.deb")
-    write_asset(tmp_path, "extra.rpm")
-    digest = release_digest_files.digest_of_file(asset)
-    with pytest.raises(release_payload_tree.PayloadHandoffError, match="adds"):
-        release_payload_tree.require_payload_matches(tmp_path, {"a.deb": digest})
-
-
-def test_require_payload_matches_refuses_replaced_bytes(
-    tmp_path: pathlib.Path,
-) -> None:
-    """Refuse a payload whose bytes are not the recorded ones."""
-    write_asset(tmp_path, "a.deb", b"tampered")
-    with pytest.raises(release_digest_record.RecordedDigestMismatchError):
-        release_payload_tree.require_payload_matches(tmp_path, {"a.deb": "b" * 64})
-
-
-def test_a_producer_record_is_not_a_payload_asset(tmp_path: pathlib.Path) -> None:
-    """Keep the hand-off check from accepting a record as an asset."""
-    write_provenance(tmp_path, "linux-x86_64")
-    with pytest.raises(release_payload_tree.PayloadHandoffError, match="omits"):
-        release_payload_tree.require_payload_matches(tmp_path, {"a.deb": "b" * 64})

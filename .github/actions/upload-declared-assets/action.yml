@@ -159,6 +159,13 @@ runs:
         if [[ "$upload_status" -ne 0 ]]; then
           upload_error=true
           upload_message="$(cat "$DECLARED_ASSETS_ROOT/upload-error.txt")"
+          # Log the diagnostic here, before anything else can fail. The plan
+          # retention step runs `always()`, but a runner that cannot write an
+          # artefact, or a cancellation between the steps, leaves the caller's
+          # failure step unreached -- and that step is the only other place
+          # this message is ever printed. The job log is then the one durable
+          # record of why the upload refused.
+          printf 'declared asset upload refused: %s\n' "$upload_message" >&2
         fi
         # A delimiter no diagnostic line can be: the shell's own pid plus two
         # random draws, so a multi-line refusal survives the output encoding.
@@ -188,6 +195,13 @@ runs:
         # v7.0.1. The attempt suffix is for the same reason as the record
         # above: a re-run must not collide with, or overwrite, its own earlier
         # plan.
+        #
+        # The timings file rides with the plan because the uploader writes it
+        # into the same directory and it is only meaningful beside the run it
+        # measured. A run that failed before the uploader ran leaves neither,
+        # which `warn` reports without masking the uploader's diagnostic.
         name: declared-assets-plan-${{ github.job }}-${{ github.run_attempt }}
-        path: ${{ runner.temp }}/declared-assets/upload-plan.json
+        path: |
+          ${{ runner.temp }}/declared-assets/upload-plan.json
+          ${{ runner.temp }}/declared-assets/upload-timings.json
         if-no-files-found: warn

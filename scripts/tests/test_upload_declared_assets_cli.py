@@ -19,7 +19,7 @@ import typing as typ
 
 import pytest
 import release_digest_record
-import release_payload_tree
+import release_payload_handoff
 import release_upload_plan
 from release_upload_support import DEB, RPM, Exchange, Scenario
 from upload_declared_assets_cli import settle
@@ -187,14 +187,14 @@ def test_the_returned_plan_describes_the_post_upload_release(
 def test_a_payload_that_lost_an_asset_is_refused(scenario: Scenario) -> None:
     """Refuse a hand-off that does not hold the declared set."""
     _ = (scenario.payload / RPM).unlink()
-    with pytest.raises(release_payload_tree.PayloadHandoffError, match="omits"):
+    with pytest.raises(release_payload_handoff.PayloadHandoffError, match="omits"):
         settle(scenario.request(), runner=Exchange(attached={}))
 
 
 def test_a_payload_that_gained_an_asset_is_refused(scenario: Scenario) -> None:
     """Refuse a hand-off carrying a file nobody selected."""
     _ = (scenario.payload / "extra.rpm").write_bytes(b"extra")
-    with pytest.raises(release_payload_tree.PayloadHandoffError, match="adds"):
+    with pytest.raises(release_payload_handoff.PayloadHandoffError, match="adds"):
         settle(scenario.request(), runner=Exchange(attached={}))
 
 

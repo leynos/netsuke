@@ -2622,6 +2622,27 @@ it means the surrounding steps did not move: the outcome record still reads
 classifies a planned-but-refused upload as `upload_plan_validation` from the
 flag rather than from a phase outcome.
 
+Deferring the failure is what makes the upload step's own log line
+load-bearing, so the step prints its diagnostic to standard error as well as
+writing it to the output. The caller's failure step is not guaranteed to run: a
+runner that cannot retain the plan artefact, or a cancellation between the two
+steps, skips it, and the job log would then hold no explanation at all.
+
+The uploader also retains `upload-timings.json` beside its plan, and the
+plan-retention step carries both. It records how long the reconciliation
+listing, the asset download, the transfer, and the post-upload verification
+each took, with `null` for a boundary the run did not cross. Those are the four
+places the step reaches GitHub, and one duration for the whole step could not
+tell a slow transfer from a listing that retried. `TimedRunner` in
+`release_upload_timing` is the seam: it wraps the injected `subprocess` runner,
+so every `gh` invocation is measured at one point and no call site knows the
+timing exists. It is generic over the runner it wraps rather than importing
+`subprocess` itself, so the module that names the boundaries stays free of the
+process boundary. Writing and reading the record live in
+`release_upload_timing_files`, following the `release_digest` and
+`release_digest_files` split. The file carries integers only, for the same
+reason the plan carries a bounded failure vocabulary rather than command output.
+
 Three earlier steps have no such treatment, and a reader who takes "the action
 never fails" literally will misdiagnose their failures. Selection can refuse a
 stale candidate, a missing target, an ambiguous staged file, or an artefact
@@ -3331,6 +3352,17 @@ a false refusal with no corrective action available. A source outside the root
 is refused separately, because selection's names came from that tree and a path
 beyond it is a different claim.
 
+`release_payload_handoff.require_payload_matches` is the later claim, made by
+the uploader against the directory it is about to publish. Selection verified
+the staged bytes; this verifies the *hand-off*, after the payload has travelled
+through a job artefact that this run no longer controls. It requires the
+directory to hold exactly the declared names, and it hashes the path
+`release_upload_remote.upload` will actually pass to `gh` --
+`payload_dir / name` -- after proving that path a regular file with `lstat`.
+Indexing the directory by published name would answer a question about names
+instead: a regular `sub/a.deb` would satisfy the digest check for a declared
+`a.deb` while a symlink at the root carried the transfer somewhere else.
+
 ### Trusted digest records
 
 A release has to state, before anything is uploaded, which bytes it intends to
@@ -3554,6 +3586,11 @@ those operations at the file or transport boundary:
   observations for `release_reconcile_crates`. `release_crates_io_adapter` maps
   download status and file bytes into a `DownloadObservation` for
   `verify_crates_io_bytes`.
+- `release_payload_selection` chooses from names and already-parsed records.
+  `release_payload_tree` walks, copies, and writes the selection's record, and
+  `release_payload_handoff` judges the installed directory against that record
+  at the paths the uploader will send. `release_payload_regular_files` owns the
+  regularity proof both of the latter two reach for.
 - `release_upload_observation` splits the release listing into an effectful
   `observe_release` and a read-only `settle_observation`. The first lists the
   release through `release_upload_remote` and, only for names the listing left
