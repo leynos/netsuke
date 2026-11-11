@@ -7243,10 +7243,24 @@ contains `case`, both POSIX traversals fail closed with
 context. The check over-approximates on purpose: it scans the raw source, so a
 `case` inside quotes or a comment also triggers it, and it does not consult the
 enclosing quote context, because a substitution is parsed as its own script.
-The diagnostic carries the one-based character offset of the `#` and no recipe
-text, so it survives the 160-character snippet truncation and cannot copy
-executable syntax into a log line. PowerShell has no `case` patterns and keeps
-its unquoted-only rule. The regressions live in
+The diagnostic carries the one-based character offset of the closing `)`, which
+is also the zero-based index of the `#` that follows it, and no recipe text, so
+it survives the 160-character snippet truncation and cannot copy executable
+syntax into a log line.
+
+`CaseNesting` counts a reserved word only in command position, because that is
+the only place the shell reads one: `printf esac` passes `esac` as an argument
+and must leave the construct open. Command position holds at the start of the
+substitution, after a command separator, a newline, or a parenthesis, and after
+a reserved word that opens or continues a command list (`if`, `then`, `else`,
+`elif`, `while`, `until`, `do`, `!`, or `time`); a completed argument, a
+redirection operator, or quoted text clears it. An `esac` also closes only the
+construct open at its own depth, so a pattern spelled `esac` does not end an
+outer case. The tracker takes comments from the traversal rather than inferring
+them from `#`, because comment text is copied verbatim and is never offered to
+it: the traversal reports the comment's start and the newline that ends it, so a
+`case` on the line after a comment still opens its construct. PowerShell has no
+`case` patterns and keeps its unquoted-only rule. The regressions live in
 `src/ir/cmd_interpolate/posix_lexical/tests/case_boundary.rs`; the property
 `hash_boundary_follows_the_posix_comment_rule` in
 `src/ir/cmd_interpolate/property_tests/mod.rs` checks the comment rule against

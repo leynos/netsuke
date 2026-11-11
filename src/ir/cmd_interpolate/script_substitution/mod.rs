@@ -104,6 +104,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         pos: usize,
         ch: char,
     ) -> Result<Option<usize>, IrGenError> {
+        let ended_comment = self.posix_lexical.in_comment() && ch == '\n';
         let copied_inert_character = {
             let mut character = PosixCharacter {
                 chars: self.chars,
@@ -114,6 +115,9 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
             self.posix_lexical.append_inert_character(&mut character)
         };
         if copied_inert_character {
+            if ended_comment {
+                self.end_case_comment();
+            }
             return Ok(Some(pos + 1));
         }
         if self.is_escaped {
@@ -133,6 +137,7 @@ impl<'template, 'bindings> ScriptSubstitutionTraversal<'template, 'bindings> {
         if self.starts_comment(pos, ch) {
             self.output.push(ch);
             self.posix_lexical.begin_comment();
+            self.begin_case_comment();
             return Ok(Some(pos + 1));
         }
         if let Some(next) = self.append_command_substitution_delimiter(pos, ch)? {

@@ -481,6 +481,18 @@ source, so a `case` keyword inside quotes or a comment also triggers the
 rejection; re-lexing the substitution to narrow it would repeat the ambiguity
 the check exists to avoid.
 
+The tracker decides two things by the grammar rather than by spelling alone. A
+reserved word counts only in command position, because `printf esac` passes
+`esac` as an argument; command position follows a separator, a newline, or a
+parenthesis and survives blanks, and a word that completes an argument list
+clears it. An `esac` also closes only a construct open at its own depth, so a
+pattern spelled `esac` cannot end an outer case. Comment boundaries are
+reported by the traversal instead of inferred from `#`, because comment text is
+copied verbatim and never reaches the tracker: the traversal announces the
+comment's start and the newline that ends it, so a `case` on the following line
+still opens its construct. Without both rules, losing or gaining a construct
+would move the real closer and let the following `)#` read as a comment.
+
 The boundary predicate is `is_word_terminator` in
 `src/ir/cmd_interpolate/posix_lexical/mod.rs`. Comment detection and heredoc
 delimiter parsing both call it, so the two cannot drift back to Unicode

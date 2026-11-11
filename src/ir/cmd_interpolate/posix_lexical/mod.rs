@@ -126,6 +126,16 @@ impl PosixLexicalState {
         self.in_comment = true;
     }
 
+    /// Report whether the traversal is inside a POSIX comment.
+    ///
+    /// Comment text is copied verbatim rather than interpreted, so a caller
+    /// that tracks token state has to report the comment's end itself. Asking
+    /// before copying a character distinguishes the newline that ends a comment
+    /// from any other inert character.
+    pub(super) const fn in_comment(&self) -> bool {
+        self.in_comment
+    }
+
     /// Report whether an unquoted number sign begins a POSIX comment.
     ///
     /// `closed_substitution` names the `)` that closed a command substitution

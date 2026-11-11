@@ -96,6 +96,8 @@ pub(super) struct CaseNesting {
     word: String,
     /// Record that the traversal is inside an unquoted `#` comment.
     in_comment: bool,
+    /// Record whether the next unquoted word would stand in command position.
+    expects_command: bool,
     /// Record that a `case` keyword was seen, even if `esac` later closed it.
     saw_case: bool,
 }
@@ -107,8 +109,35 @@ impl CaseNesting {
             depths: Vec::new(),
             word: String::new(),
             in_comment: false,
+            expects_command: true,
             saw_case: false,
         }
+    }
+
+    /// Record that the traversal began an unquoted comment.
+    ///
+    /// The traversal owns comment detection, so it reports the transition
+    /// instead of letting the tracker infer it. Inferring from a `#` would put
+    /// the tracker in comment mode for a `#` the traversal treats as word data,
+    /// which is exactly the disagreement that mislocates the substitution
+    /// closer.
+    pub(super) fn begin_comment(&mut self) {
+        self.in_comment = true;
+        self.word.clear();
+    }
+
+    /// Record that the traversal consumed the newline that ended a comment.
+    ///
+    /// Comment text is copied verbatim and never offered to the tracker, so the
+    /// terminating newline would otherwise be invisible to it. Missing that
+    /// newline keeps the tracker inside the comment for the rest of the
+    /// substitution, where it then ignores a later `case` and misreads the
+    /// closer. A newline also starts a new command, so the next word stands in
+    /// command position.
+    pub(super) fn end_comment(&mut self) {
+        self.in_comment = false;
+        self.word.clear();
+        self.expects_command = true;
     }
 
     /// Report whether the innermost open `case` began at `parenthesis_depth`.
@@ -143,6 +172,9 @@ impl CaseNesting {
     pub(super) fn observe(&mut self, observation: CaseObservation) {
         if !observation.is_unquoted {
             self.finish_word(observation.parenthesis_depth);
+            // Quoted text is part of a word, so whatever follows it is not
+            // in command position.
+            self.expects_command = false;
         } else if self.in_comment {
             self.observe_comment_character(observation.ch);
         } else {
@@ -154,6 +186,7 @@ impl CaseNesting {
     const fn observe_comment_character(&mut self, ch: char) {
         if ch == '\n' {
             self.in_comment = false;
+            self.expects_command = true;
         }
     }
 
@@ -166,28 +199,39 @@ impl CaseNesting {
         }
         if ends_word(observation.ch) {
             self.finish_word(observation.parenthesis_depth);
-            return;
-        }
-        // A number sign starts a comment only at a word start; mid-word it is
-        // ordinary word data, so `case#x` must not read as the keyword.
-        if observation.ch == '#' && self.word.is_empty() {
-            self.in_comment = true;
+            if !is_blank(observation.ch) {
+                self.expects_command = starts_command_after(observation.ch);
+            }
             return;
         }
         self.word.push(observation.ch);
     }
 
     /// Apply the completed word to the `case` nesting state.
+    ///
+    /// A reserved word counts only in command position, so `printf esac` passes
+    /// `esac` as an argument and leaves the construct open. Popping there would
+    /// end the construct early, and the pattern terminator that follows would
+    /// then be read as the substitution closer one `)` too soon.
     fn finish_word(&mut self, parenthesis_depth: usize) {
+        if self.word.is_empty() {
+            return;
+        }
+        let is_command_position = self.expects_command;
         match self.word.as_str() {
-            "case" => {
+            "case" if is_command_position => {
                 self.depths.push(parenthesis_depth);
                 self.saw_case = true;
+                self.expects_command = false;
             }
-            "esac" => {
+            // A case pattern may itself be spelled `esac`. Only a construct
+            // open at this depth is the one this word closes; anything deeper
+            // is inside a pattern group and must not close it.
+            "esac" if is_command_position && self.is_open_at(parenthesis_depth) => {
                 self.depths.pop();
+                self.expects_command = false;
             }
-            _ => {}
+            word => self.expects_command = is_command_position && starts_command_list(word),
         }
         self.word.clear();
     }
@@ -201,6 +245,30 @@ impl CaseNesting {
 /// identically.
 const fn ends_word(ch: char) -> bool {
     is_word_terminator(ch) || matches!(ch, '\'' | '"' | '`')
+}
+
+/// Report whether `ch` is an unquoted blank that leaves token position alone.
+const fn is_blank(ch: char) -> bool {
+    matches!(ch, ' ' | '\t')
+}
+
+/// Report whether a command may begin immediately after the operator `ch`.
+///
+/// A redirection operator introduces a filename rather than a command, so it is
+/// deliberately absent: `esac` after `>` is a filename, not a keyword.
+const fn starts_command_after(ch: char) -> bool {
+    matches!(ch, ';' | '&' | '|' | '\n' | '(' | ')')
+}
+
+/// Report whether a reserved word ends with the next word in command position.
+///
+/// These words open or continue a command list, so the following word is again
+/// a command word. Any other word completes an argument list.
+fn starts_command_list(word: &str) -> bool {
+    matches!(
+        word,
+        "if" | "then" | "else" | "elif" | "while" | "until" | "do" | "!" | "time"
+    )
 }
 
 /// Describe the `)` that closed a command substitution.

@@ -357,6 +357,11 @@ the `#` from the closer, including the `\#` escape, lifts the rejection whether
 or not the `case` was a real keyword. A rejection therefore means "the scanner
 cannot prove which `)` this is", not "this recipe is unsafe".
 
+Heredoc bodies follow the same inert-text rule. A marker in a heredoc body in a
+`script:` recipe is copied literally, while a marker in the delimiter word is
+interpolated. A recipe that needs a marker lowered on a body line must close
+the heredoc first, so the marker stands in ordinary script text instead.
+
 Recipes that do not place `#` directly after a substitution closer are
 unaffected. The
 [users' guide safety boundary](users-guide.md#review-the-safety-boundary)

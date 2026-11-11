@@ -2370,13 +2370,18 @@ Netsuke reduces some common quoting mistakes, but it is not a sandbox:
   shows a form that preserves the emitted word and one that turns the text
   into a comment. A non-breaking space or another non-ASCII space before `#`
   does not start a comment, so a quote after it still opens or closes a quoted
-  region. Netsuke also rejects a marker that directly follows an unpaired
-  backslash, because that backslash would escape the first character of the
-  substituted path; write `\\{{ outs }}` to keep one literal backslash, or
-  place the marker inside single quotes. In PowerShell `command:` and `script:`
-  recipes, markers are valid only at unquoted sites. Netsuke rejects markers in
-  single-quoted strings, double-quoted strings, here-strings, `$()`, and
-  immediately after a backtick. Netsuke rejects markers in the raw
+  region. A heredoc in a `script:` recipe has its own boundary: a marker in the
+  delimiter word is interpolated, while a marker in the body is copied
+  literally, because the body is inert text. The body ends at the line that
+  spells the delimiter, so a marker on a later line is interpolated again. A
+  `<<-` heredoc allows a tab-indented delimiter line, and Netsuke strips the
+  leading tabs before comparing it. Netsuke also rejects a marker that directly
+  follows an unpaired backslash, because that backslash would escape the first
+  character of the substituted path; write `\\{{ outs }}` to keep one literal
+  backslash, or place the marker inside single quotes. In PowerShell `command:`
+  and `script:` recipes, markers are valid only at unquoted sites. Netsuke
+  rejects markers in single-quoted strings, double-quoted strings, here-strings,
+  `$()`, and immediately after a backtick. Netsuke rejects markers in the raw
   native-command region after PowerShell's `--%` stop-parsing token. That
   region ends at a newline or pipeline character; a semicolon does not end it,
   and scanning resumes after the boundary. Only ASCII double quotes are

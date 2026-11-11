@@ -133,6 +133,20 @@ impl ScriptSubstitutionTraversal<'_, '_> {
         }
     }
 
+    /// Tell the innermost substitution's tracker that an unquoted comment began.
+    pub(super) fn begin_case_comment(&mut self) {
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution.case_nesting.begin_comment();
+        }
+    }
+
+    /// Tell the innermost substitution's tracker that a comment ended.
+    pub(super) fn end_case_comment(&mut self) {
+        if let Some(substitution) = self.command_substitutions.last_mut() {
+            substitution.case_nesting.end_comment();
+        }
+    }
+
     /// Report whether the current `)` terminates a `case` pattern.
     ///
     /// While a `case` construct is open, a `)` at that construct's own depth

@@ -17,6 +17,7 @@ impl SubstitutionTraversal<'_, '_> {
         pos: usize,
         ch: char,
     ) -> Result<usize, IrGenError> {
+        let ended_comment = self.posix_lexical.in_comment() && ch == '\n';
         let copied_inert_character = {
             let mut character = PosixCharacter {
                 chars: self.chars,
@@ -27,6 +28,9 @@ impl SubstitutionTraversal<'_, '_> {
             self.posix_lexical.append_inert_character(&mut character)
         };
         if copied_inert_character {
+            if ended_comment {
+                self.end_case_comment();
+            }
             return Ok(pos + 1);
         }
         self.observe_case_word(pos, ch);
@@ -78,6 +82,7 @@ impl SubstitutionTraversal<'_, '_> {
         if PosixLexicalState::starts_comment(self.chars, pos, ch, self.closed_command_substitution)
         {
             self.posix_lexical.begin_comment();
+            self.begin_case_comment();
             self.output.push(ch);
             return Ok(Some(pos + 1));
         }
