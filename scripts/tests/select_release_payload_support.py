@@ -264,6 +264,7 @@ __all__ = [
     "ARCHIVE",
     "CANDIDATE",
     "DEB",
+    "MANIFEST",
     "RETAINED",
     "RPM",
     "RUN_ID",

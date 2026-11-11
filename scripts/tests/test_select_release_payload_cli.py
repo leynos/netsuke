@@ -18,6 +18,13 @@ import pytest
 import release_digest_files
 import release_digest_record_files
 import select_release_payload_cli as cli
+from select_release_payload_origins_support import (
+    ARM_ARCHIVE,
+    ARM_DEB,
+    ARM_RPM,
+    X86_ARCHIVE,
+    two_target_tree,
+)
 from select_release_payload_support import (
     ARCHIVE,
     DEB,
@@ -117,6 +124,49 @@ def refused_after_reprovenance(
     tree = staged_tree(tmp_path, producer=False)
     record_provenance(tree["dist"], fields=fields, assets=staged_assets(tree))
     assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, why
+    assert not tree["output"].exists(), "a refusal must not leave a payload"
+
+
+def test_two_correctly_attributed_producers_are_accepted(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Accept the control: each package sits below the subtree that claims it.
+
+    Without this case the refusal below could be caused by the two-target
+    configuration rather than by the moved package.
+    """
+    tree = two_target_tree(tmp_path)
+    assert run_cli(tree) == cli.EXIT_OK, "two clean producers must be accepted"
+    assert installed_names(tree["output"]) == sorted([
+        X86_ARCHIVE,
+        f"{X86_ARCHIVE}.sha256",
+        ARM_ARCHIVE,
+        f"{ARM_ARCHIVE}.sha256",
+        DEB,
+        RPM,
+        ARM_DEB,
+        ARM_RPM,
+    ]), "the payload must hold both targets' declared names"
+
+
+def test_a_package_moved_into_a_siblings_subtree_is_refused(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a package the claiming record's own subtree did not stage.
+
+    The x86 owner still claims ``DEB`` and the counts, formats, and union are
+    all unchanged -- only the file's location moved, into the aarch64
+    subtree. A check that stopped at count and format would accept this tree
+    and publish a ``.deb`` whose bytes came out of another target's download.
+    """
+    tree = two_target_tree(tmp_path)
+    moved = tree["dist"] / "linux-aarch64" / DEB
+    moved.parent.mkdir(parents=True, exist_ok=True)
+    _ = moved.write_bytes((tree["dist"] / "linux-x86_64" / DEB).read_bytes())
+    _ = (tree["dist"] / "linux-x86_64" / DEB).unlink()
+    assert run_cli(tree) == cli.EXIT_PAYLOAD_REFUSED, (
+        "a package from a sibling's subtree must be refused"
+    )
     assert not tree["output"].exists(), "a refusal must not leave a payload"
 
 

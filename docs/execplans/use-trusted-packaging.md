@@ -687,13 +687,35 @@ exchange them, and non-release-shaped retained files are excluded while
 release-shaped strays are refused. Negative cases for each refusal live in
 `scripts/tests/test_release_payload_selection.py` and
 `test_select_release_payload_cli.py`, and the executed-shell harness runs the
-action's own steps end to end.
+action's own steps end to end. The CLI's own two-target cases matter for the
+package half in particular: the selection tests build a `StagedTree` by hand,
+so they exercise the origin refusal but not the step that observes origins off
+disk. `test_a_package_moved_into_a_siblings_subtree_is_refused` moves a package
+into the sibling's directory and runs the real CLI, which is the only place
+`observe_package_origins` is driven from a downloaded tree.
 
 What remains open is narrower and is recorded rather than implied: the archive
 half binds by name, but a package name cannot be derived, because three
-external shared actions own those names. The package half therefore holds a
-record to the right count and format for its platform only. It refuses a record
-that claims a sibling's count, and it does not claim to prove origin.
+external shared actions own those names.
+
+The package half is checked two ways, and neither is a proof of origin.
+`release_package_origins.observe_package_origins` walks the downloaded tree,
+attributes each package to the producer subtree that staged it, and
+`require_target_claims` refuses a record claiming a package its *own* target's
+subtree did not stage -- including one no subtree staged. That closes the
+sibling-subtree case a count cannot see: a package moved out of its owner's
+directory leaves the per-format count, the formats, and the union of names all
+unchanged, so only the origin attribute distinguishes it. Beside it, the count
+check still refuses a record claiming a sibling's package, and still holds when
+no tree was walked.
+
+The limits are what the observation can see. It is a tree walk, so it says
+where a file was placed by the download that produced this tree, not who built
+its bytes; a package correctly placed but containing another target's build
+would pass. It attributes by subtree, so a package staged at the root is
+attributed to nothing and is refused rather than accepted. And it is supplied
+or omitted as a whole: with no observation the count is the entire guarantee,
+which is weaker, so the CLI always supplies one.
 
 The `trusted.json` record is now produced and retained for downstream
 consumption (`declared-assets-${job}-${attempt}`), and the upload step requires
@@ -3125,6 +3147,30 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   The developers' guide's policy-and-adapter bullet list gained the
   `observe_release`/`settle_observation` split with the reason it takes the
   expected mapping.
+
+- [x] (2026-11-11) Closed the two newly-failing pre-merge rows on the refreshed
+  #1066 head: Testing (Overall) and Developer Documentation.
+
+  **The package-origin hand-off now has an executed CLI case.**
+  `release_package_origins.observe_package_origins` was tested only in
+  isolation, and the selection-level exchange tests build a `StagedTree` by
+  hand, so nothing drove the CLI's own `observe_package_origins` call over a
+  downloaded tree. `two_target_tree` stages two Linux producers in their own
+  subtrees with records hashed from the staged bytes, and
+  `test_a_package_moved_into_a_siblings_subtree_is_refused` moves one `.deb`
+  into its sibling's directory. Disabling the observation makes that case
+  accept the tree and install eight assets, so the refusal is load-bearing
+  rather than incidental; the control case keeps the same tree accepted.
+  `release_package_origins` and `select_release_payload_cli` are unchanged.
+
+  **The ExecPlan no longer understates the package check.** It said the package
+  half held a record "to the right count and format for its platform only" and
+  did "not claim to prove origin", which stopped being true when the origin
+  observation landed. It now describes the subtree observation, what it closes
+  (a package moved out of its owner's directory, which leaves count, format,
+  and the union of names unchanged), and its limits: a tree walk says where a
+  file was placed, not who built its bytes, and an unattributed root-level
+  package is refused rather than accepted.
 
 - [x] (2026-11-11) Reconciled the six pre-merge rows and four unresolved
   threads on the #1066 head. Three of the rows named a defect and are repaired;
