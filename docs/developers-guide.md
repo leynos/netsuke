@@ -2599,9 +2599,29 @@ diagnostic artefacts remain behind `should_upload_workflow_artifacts`, which
 stays false during dry runs.
 
 The publishing lane takes the same download and hoist path but hands the result
-to `./.github/actions/upload-declared-assets` instead. That action selects only
-the artefacts this run's producer records vouch for, writes the declaration and
-the trusted digest record from the staged bytes, retains all three files as the
+to `./.github/actions/upload-declared-assets` instead. Its interface is four
+required inputs and three optional ones. The required set is `release-tag` (the
+validated tag to reconcile against), `commit` (the full, lowercase 40-character
+hexadecimal commit the release publishes, forwarded from the metadata job so
+the producer records are bound to it), and `version` (the release version the
+archive names interpolate). The optional set is `dry-run` (default `false`,
+reconciling and planning without uploading), `dist-dir` (default `dist`, the
+staged tree the download and hoist steps left behind), `staging-config` (default
+`.github/release-staging.toml`, the file naming targets and platforms), and
+`manifest` (default `Cargo.toml`).
+
+`./.github/workflows/build-and-package.yml` takes the same `commit` input, and
+there it is **required**: a reusable-workflow caller that omits it is refused
+before the job starts, and one that passes an abbreviated SHA, an uppercase
+spelling, a tag, or a branch name is refused once the producer compares it with
+the checkout's `HEAD`. Because the metadata job is the only place that
+validates the spelling, a direct caller forwards that job's exported
+`candidate_commit`; `release.yml` publishes it from `workflow_call.outputs` for
+exactly that reason.
+
+That action selects only the artefacts this run's producer records vouch for,
+writes the declaration and the trusted digest record from the staged bytes,
+retains all three files as the
 `declared-assets-${{ github.job }}-${{ github.run_attempt }}` workflow
 artefact, and only then uploads the declared names. The upload plan it wrote,
 which names the assets of a refusing run, is retained afterwards as a separate

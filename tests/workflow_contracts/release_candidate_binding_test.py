@@ -67,6 +67,29 @@ def test_metadata_job_publishes_the_candidate_commit() -> None:
     )
 
 
+def test_the_reusable_workflow_exports_the_candidate_commit() -> None:
+    """Expose the candidate to callers of the reusable workflow.
+
+    The metadata job is the only place that validates the commit's spelling,
+    so a caller that invokes the declared-asset upload itself cannot derive an
+    acceptable value from its own triggering ref. It has to forward the name
+    this workflow published, which means the reusable interface must carry it:
+    a job output alone is invisible across a ``workflow_call`` boundary, and
+    both guides tell a direct caller to forward this exact output.
+    """
+    workflow = load_workflow(RELEASE_WORKFLOW_PATH)
+    trigger = require_mapping(workflow.get("on"), "the release workflow's on:")
+    call = require_mapping(trigger.get("workflow_call"), "workflow_call")
+    outputs = require_mapping(call.get("outputs"), "workflow_call outputs")
+    exported = require_mapping(
+        outputs.get("candidate_commit"), "the exported candidate_commit"
+    )
+    assert exported.get("value") == "${{ jobs.metadata.outputs.candidate_commit }}", (
+        "the reusable workflow must export the candidate commit its metadata "
+        "job validated, or a direct caller has nothing to forward"
+    )
+
+
 def test_metadata_candidate_step_validates_a_full_commit() -> None:
     """The candidate must be a full lowercase hexadecimal commit."""
     steps = job_steps(load_workflow(RELEASE_WORKFLOW_PATH), "metadata")

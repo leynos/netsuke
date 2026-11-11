@@ -51,6 +51,14 @@ name: Release Binary
           Resolved WixToolset.UI.wixext version compatible with the configured
           WiX CLI toolchain
         value: ${{ jobs.metadata.outputs.wix_extension_version }}
+      candidate_commit:
+        description: >-
+          The full, lowercase 40-character hexadecimal commit every producer
+          checked out and every later job binds its bytes to. This workflow is
+          the only place that validates the spelling, so a caller that invokes
+          the declared-asset upload itself forwards this value rather than
+          deriving one from its own triggering ref.
+        value: ${{ jobs.metadata.outputs.candidate_commit }}
 
 # Every job declares its own required token scopes; deny the default grant.
 permissions: {}
