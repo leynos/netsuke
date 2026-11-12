@@ -1,6 +1,8 @@
 # A Netsuke parancssorának honosítási erőforrásai.
 
 runner.io.dyndep.retention = A generált dyndep { $path } alatti megőrzését nem sikerült alkalmazni.
+runner.io.dyndep.alias = A létrehozott dyndep-útvonal ({ $path }) szimbolikus hivatkozás, csatlakozási pont, vagy nem könyvtár; cserélje valódi könyvtárra.
+runner.io.dyndep.open = A létrehozott dyndep-könyvtár ({ $path }) megnyitása nem sikerült.
 cli.about = A Netsuke YAML- és Jinja-jegyzékeket fordít Ninja-építési tervekké.
 cli.long_about = A Netsuke a YAML- és Jinja-jegyzékeket reprodukálható Ninja-gráfokká alakítja, majd biztonságos alapértelmezésekkel futtatja a Ninját.
 cli.usage = { $usage }

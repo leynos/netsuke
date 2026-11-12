@@ -1,6 +1,8 @@
 # Netsuken komentorivin lokalisointiresurssit.
 
 runner.io.dyndep.retention = Luodun dyndep-tiedoston säilytystä sijainnissa { $path } ei voitu ottaa käyttöön.
+runner.io.dyndep.alias = Luotu dyndep-polku { $path } on symbolinen linkki, liitoskohta tai ei hakemisto; korvaa se oikealla hakemistolla.
+runner.io.dyndep.open = Luodun dyndep-hakemiston { $path } avaaminen epäonnistui.
 cli.about = Netsuke kääntää YAML- ja Jinja-manifestit Ninja-koontisuunnitelmiksi.
 cli.long_about = Netsuke muuntaa YAML- ja Jinja-manifestit toistettaviksi Ninja-graafeiksi ja suorittaa Ninjan turvallisin oletusasetuksin.
 cli.usage = { $usage }

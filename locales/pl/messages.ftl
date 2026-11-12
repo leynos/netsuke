@@ -1,6 +1,8 @@
 # Zasoby lokalizacyjne wiersza poleceń Netsuke.
 
 runner.io.dyndep.retention = Nie udało się zastosować zasad retencji wygenerowanego pliku dyndep (ścieżka: { $path }).
+runner.io.dyndep.alias = Wygenerowana ścieżka dyndep { $path } jest dowiązaniem symbolicznym, połączeniem lub nie jest katalogiem; zastąp ją prawdziwym katalogiem.
+runner.io.dyndep.open = Nie udało się otworzyć wygenerowanego katalogu dyndep { $path }.
 cli.about = Netsuke kompiluje manifesty YAML + Jinja do planów budowania Ninja.
 cli.long_about = Netsuke przekształca manifesty YAML + Jinja w powtarzalne grafy Ninja i uruchamia Ninję z bezpiecznymi ustawieniami domyślnymi.
 cli.usage = { $usage }

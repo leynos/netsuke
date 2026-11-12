@@ -297,6 +297,66 @@ fn clean_prunes_only_after_ninja_succeeds() -> Result<()> {
     Ok(())
 }
 
+/// Stage a workspace whose `.netsuke/dyndep` is a symlink to `victim/`.
+///
+/// The victim directory holds a sidecar-shaped file and a stale temporary
+/// file, so a command that follows the alias would treat both as disposable
+/// generated state.
+#[cfg(unix)]
+fn aliased_dyndep_workspace() -> Result<(TempDir, std::path::PathBuf)> {
+    let (directory, _root) = cli_workspace(SERIAL_MANIFEST)?;
+    let victim = directory.path().join("victim");
+    test_support::fs::create_dir(&victim)?;
+    test_support::fs::write(victim.join("keep.dd"), "keep")?;
+    test_support::fs::write(victim.join("stale.tmp"), "stale")?;
+    test_support::fs::create_dir(directory.path().join(".netsuke"))?;
+    test_support::fs::symlink("../victim", directory.path().join(".netsuke/dyndep"))?;
+    Ok((directory, victim))
+}
+
+/// Assert that a command refused the alias and left the victim files intact.
+#[cfg(unix)]
+fn assert_alias_refused(output: &std::process::Output, victim: &Path) -> Result<()> {
+    ensure!(
+        !output.status.success(),
+        "the command must reject a dyndep directory symlink"
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    ensure!(
+        stderr.contains("symbolic link") && stderr.contains(".netsuke/dyndep"),
+        "stderr must name the aliased component: {stderr}"
+    );
+    ensure!(
+        test_support::fs::exists(victim.join("keep.dd")),
+        "the victim sidecar must survive"
+    );
+    ensure!(
+        test_support::fs::exists(victim.join("stale.tmp")),
+        "the victim temporary file must survive"
+    );
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn build_rejects_a_dyndep_directory_symlink() -> Result<()> {
+    let (directory, victim) = aliased_dyndep_workspace()?;
+
+    let output = run_netsuke(&directory, &["--locale", "en-US", "-j", "3", "build"])?;
+
+    assert_alias_refused(&output, &victim)
+}
+
+#[cfg(unix)]
+#[test]
+fn clean_rejects_a_dyndep_directory_symlink() -> Result<()> {
+    let (directory, victim) = aliased_dyndep_workspace()?;
+
+    let output = run_netsuke(&directory, &["--locale", "en-US", "-j", "3", "clean"])?;
+
+    assert_alias_refused(&output, &victim)
+}
+
 #[test]
 fn failed_clean_leaves_sidecar_cleanup_for_a_later_successful_command() -> Result<()> {
     let (directory, root) = cli_workspace(SERIAL_MANIFEST)?;

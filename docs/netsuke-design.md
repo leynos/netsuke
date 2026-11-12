@@ -2954,7 +2954,16 @@ retention preserves the current bundle plus at most 32 obsolete `.dd` files and
 materialization; `clean` prunes only after successful `ninja -t clean` and not
 on failure. Sidecars remain immutable and content-addressed. Consequently, an
 older arbitrary `generate --output` manifest may lose its sidecars after a
-later command and must be regenerated. See
+later command and must be regenerated.
+
+The generated-state directory is established through a verified handle rather
+than resolved through the workspace capability. `.netsuke` and
+`.netsuke/dyndep` are project-controlled, so either may be a symbolic link or a
+Windows junction; following one would let retention delete unrelated workspace
+files. The runner walks the two components one at a time, refuses any entry
+that is not a real directory, and addresses publication, locking, and retention
+by bare entry name through the resulting handle. The lease remains advisory and
+coordinates only cooperating Netsuke processes. See
 [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for this policy.
 
 4\. **Write Defaults:** Finally, write the `default` statement, listing all

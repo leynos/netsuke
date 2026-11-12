@@ -1,6 +1,8 @@
 # Recursos de localización para la CLI de Netsuke (español de América Latina).
 
 runner.io.dyndep.retention = No se pudo aplicar la retención del dyndep generado bajo { $path }.
+runner.io.dyndep.alias = La ruta dyndep generada { $path } es un enlace simbólico, una unión o no es un directorio; reemplázala por un directorio real.
+runner.io.dyndep.open = No se pudo abrir el directorio dyndep generado { $path }.
 cli.about = Netsuke compila manifiestos YAML + Jinja en planes de compilación de Ninja.
 cli.long_about = Netsuke transforma manifiestos YAML + Jinja en grafos de Ninja reproducibles y ejecuta Ninja con valores predeterminados seguros.
 cli.usage = { $usage }
