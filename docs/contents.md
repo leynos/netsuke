@@ -44,6 +44,9 @@ operator, user, and contributor references are easier to find.
 - [roadmap-hexagonal-hardening.md](roadmap-hexagonal-hardening.md):
   Proposed phases 26 to 29 for semantic hardening, architecture checking, and a
   compatibility-gated Paralegal experiment.
+- [hexagonal-hardening-inventory.md](hexagonal-hardening-inventory.md):
+  Revision-pinned constructors, mutators, consumers, findings, and
+  compatibility obligations for the semantic-hardening work.
 - [archive/roadmap-completed-foundations.md](archive/roadmap-completed-foundations.md):
   Archived completed roadmap foundations with relevance assessments and
   traceability notes.
