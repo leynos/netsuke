@@ -1111,17 +1111,28 @@ Date/Author: 2026-11-08, implementation agent.
 the tree at `245515675`. All nine are now satisfied, and the run below names
 the evidence so a reviewer can re-check rather than take the claim.
 
-| Row                                         | Disposition                       | Evidence in the current tree                                                                                                                                                                                                                                                                                                                                                                                              |
-| ------------------------------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Testing (Overall)                           | Satisfied                         | Only the *enclosing-line* reading is unsatisfiable (D29's probe numbers: the stage-6 repaint fills the 962 bytes before the label with `has_redraw=true`). `task_update_emissions` instead slices from the bidi isolate that opens each emission and asserts no escape and no redraw, and `reporter_text_write_carries_no_escape_from_its_first_byte` covers the pre-isolate prefix from the reporter's own write buffer. |
-| User-Facing Documentation                   | Satisfied                         | `docs/v0-1-0-migration-guide.md:301-315` documents the removed `output_mode::resolve`, the `DisplayPlan` arguments on `runner::run` and `run_with_ninja_program`, and the `parse_with_localizer_from` colour argument.                                                                                                                                                                                                    |
-| Developer Documentation                     | Satisfied                         | `docs/developers-guide.md:158-160` describes `with_ansi(false)` plus the `set_tracing_ansi` reload, which is the mechanism `main` actually uses.                                                                                                                                                                                                                                                                          |
-| Module-Level Documentation                  | Satisfied                         | `tests/terminal_rendering/json.rs` opens with the configuration-error and tracing contract; `json_pty.rs` opens with "Verify JSON output stays plain when attached to a Unix pseudo-terminal", which is its role.                                                                                                                                                                                                         |
-| Testing (Property / Proof)                  | Satisfied                         | `test_support/src/terminal/classify_tests.rs` compares against an independent byte-level oracle over arbitrary streams, and `escapable_strings_hide_payload_carriage_returns` generates both terminated and unterminated strings (`is_terminated` is a generated boolean).                                                                                                                                                |
-| Testing (Compile-Time / Ui)                 | Satisfied                         | `tests/clippy_env_policy_ui_tests.rs` locates the `disallowed_methods` exception by its attribute and asserts it decorates `fn main` specifically.                                                                                                                                                                                                                                                                        |
-| Unit Architecture                           | Rebutted                          | `src/main.rs` separates the boundary already: `run_with_args` (106), `resolve_startup_window` (171), `run_merged_command` (245) and `run_configured_command` (265) name the signal resolution, the merge, and the configuration step, with `run_cli` and `configure_runtime` after them. The startup side effects the row names are unchanged from base. Recorded earlier as D26 and re-verified here.                    |
-| Domain Architecture                         | Rebutted                          | The policy enums live in `src/cli/config/mod.rs` and the resolver consumes them through `DisplayPolicies`, which is the adapter boundary the row asks for. Recorded earlier as D26.                                                                                                                                                                                                                                       |
-| Outside-diff: document the removed resolver | Satisfied, and broader than asked | `docs/v0-1-0-migration-guide.md:301-305` names both replacements — `EnvSignals::read` with `resolve_output_mode`, and `resolve_with` — where the finding suggested only `resolve_with`.                                                                                                                                                                                                                                   |
+The *Evidence* column describes the tree at the end of this branch's work, not
+the `245515675` basis. For most rows those are the same file and the citation
+resolves at both. The Testing (Overall) row is the exception, and this table
+overstated its case by citing tests that did not exist at the basis: neither
+`task_update_emissions` nor
+`reporter_text_write_carries_no_escape_from_its_first_byte` is present at
+`245515675`, so D31 could not have reconciled that row against them. What D31
+recorded for it was the narrower D29 disposition, and the two tests arrived
+later under D34. The row below is labelled accordingly rather than rewritten,
+so the sequence of decisions stays readable.
+
+| Row                                         | Disposition                          | Evidence in the current tree                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------- | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Testing (Overall)                           | Satisfied *(later than D31's basis)* | Only the *enclosing-line* reading is unsatisfiable (D29's probe numbers: the stage-6 repaint fills the 962 bytes before the label with `has_redraw=true`). That was D31's disposition. The two tests named here post-date `245515675` and arrived under D34: `task_update_emissions` slices from the bidi isolate that opens each emission and asserts no escape and no redraw, and `reporter_text_write_carries_no_escape_from_its_first_byte` covers the pre-isolate prefix from the reporter's own write buffer. |
+| User-Facing Documentation                   | Satisfied                            | `docs/v0-1-0-migration-guide.md:301-315` documents the removed `output_mode::resolve`, the `DisplayPlan` arguments on `runner::run` and `run_with_ninja_program`, and the `parse_with_localizer_from` colour argument.                                                                                                                                                                                                                                                                                              |
+| Developer Documentation                     | Satisfied                            | `docs/developers-guide.md:158-160` describes `with_ansi(false)` plus the `set_tracing_ansi` reload, which is the mechanism `main` actually uses.                                                                                                                                                                                                                                                                                                                                                                    |
+| Module-Level Documentation                  | Satisfied                            | `tests/terminal_rendering/json.rs` opens with the configuration-error and tracing contract; `json_pty.rs` opens with "Verify JSON output stays plain when attached to a Unix pseudo-terminal", which is its role.                                                                                                                                                                                                                                                                                                   |
+| Testing (Property / Proof)                  | Satisfied                            | `test_support/src/terminal/classify_tests.rs` compares against an independent byte-level oracle over arbitrary streams, and `escapable_strings_hide_payload_carriage_returns` generates both terminated and unterminated strings (`is_terminated` is a generated boolean).                                                                                                                                                                                                                                          |
+| Testing (Compile-Time / Ui)                 | Satisfied                            | `tests/clippy_env_policy_ui_tests.rs` locates the `disallowed_methods` exception by its attribute and asserts it decorates `fn main` specifically.                                                                                                                                                                                                                                                                                                                                                                  |
+| Unit Architecture                           | Rebutted                             | `src/main.rs` separates the boundary already: `run_with_args` (106), `resolve_startup_window` (171), `run_merged_command` (245) and `run_configured_command` (265) name the signal resolution, the merge, and the configuration step, with `run_cli` and `configure_runtime` after them. The startup side effects the row names are unchanged from base. Recorded earlier as D26 and re-verified here.                                                                                                              |
+| Domain Architecture                         | Rebutted                             | The policy enums live in `src/cli/config/mod.rs` and the resolver consumes them through `DisplayPolicies`, which is the adapter boundary the row asks for. Recorded earlier as D26.                                                                                                                                                                                                                                                                                                                                 |
+| Outside-diff: document the removed resolver | Satisfied, and broader than asked    | `docs/v0-1-0-migration-guide.md:301-305` names both replacements — `EnvSignals::read` with `resolve_output_mode`, and `resolve_with` — where the finding suggested only `resolve_with`.                                                                                                                                                                                                                                                                                                                             |
 
 **Why the rebuttals are not stonewalling.** Two rows ask for changes that are
 already present, and one asks for an observation the binary cannot produce. In
@@ -1572,6 +1583,37 @@ which closes the *Domain Architecture* rebuttal as a shared reading rather than
 a disagreement.
 
 Date/Author: 2026-11-09, implementation agent.
+
+### D36: two claims narrowed to what the code and the history support
+
+**Decision.** Correct two statements that read as established but were not
+supported by their own evidence. Both were raised by CodeRabbit against
+`9f8ecf8c4`, and both survived checking against source and history.
+
+**The D31 table cited evidence newer than its own basis tree.** The row named
+`task_update_emissions` and
+`reporter_text_write_carries_no_escape_from_its_first_byte` as the evidence for
+a reconciliation "against the tree at `245515675`". Neither exists at that
+commit — `git grep` for either name at `245515675` returns nothing. D31's real
+disposition for the row was the narrower D29 measurement; the two tests arrived
+under D34, later. The table now labels the row *(later than D31's basis)* and
+says in the preamble which tree the Evidence column describes. The row keeps
+its Satisfied disposition because the current tree does satisfy it; what was
+wrong was the implied date of the evidence, and rewriting the row to look as
+though D31 had cited the right thing would have destroyed the record of how the
+error happened.
+
+**The `main_diagnostics` header described the wrong ordering.** It said
+`set_style` records the plan "before any report is built". It does not: it runs
+inside `configure_runtime`, which is reached from `run_cli` after
+`resolve_configuration` has returned, so a report created *during* the merge
+sees `DEFAULT_STYLE`. The module header now states that ordering, says why it
+is deliberate (a configuration failure must be readable before terminal
+capabilities are known), and explains why the default exists rather than
+`set_style` being a precondition. This is a documentation correction only; no
+behaviour changed.
+
+Date/Author: 2026-11-10, implementation agent.
 
 ## Outcomes & retrospective
 

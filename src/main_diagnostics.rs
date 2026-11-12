@@ -2,10 +2,17 @@
 //!
 //! Startup has two diagnostic surfaces and this module keeps them in one place
 //! so their shared state cannot drift. The first is Miette's human renderer,
-//! whose colour, glyph and link settings come from the resolved display plan;
-//! `install_miette_handler` publishes the hook once and `set_style` records the
-//! plan before any report is built, so a report created during the merge still
-//! renders with the plain default rather than panicking.
+//! whose colour, glyph and link settings come from the resolved display plan.
+//! `install_miette_handler` publishes the hook once, at startup, and the hook
+//! reads `STYLE` each time a report is rendered rather than capturing it.
+//!
+//! The ordering that follows is deliberate: `set_style` runs after the
+//! configuration merge succeeds, because the resolved display plan does not
+//! exist before then. A report created *during* the merge therefore still sees
+//! the plain default. That is the intended behaviour — a configuration failure
+//! must be readable on a terminal whose capabilities are not yet known — and it
+//! is why the default exists at all rather than `set_style` being required
+//! before the hook can render anything.
 //!
 //! The second is `DiagMode`, the choice between human text and versioned JSON
 //! documents. `render_runtime_error_json` serves the JSON side and is where the
