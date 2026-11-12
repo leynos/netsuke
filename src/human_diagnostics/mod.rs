@@ -116,26 +116,55 @@ pub fn handle_failure(err: &Error, prefs: &OutputPrefs) -> ExitCode {
 
 /// Compose the human report for a failure, or `None` when it has no diagnostic.
 ///
-/// A rendered diagnostic replaces the context line only when it names the
-/// artefact itself. A YAML diagnostic carries a `NamedSource`, so it does; a
-/// schema-version rejection carries no source code at all, and its message
-/// names the declaration and the supported schema but never which Netsukefile
-/// was refused. Printing only that diagnostic would leave a refusal
-/// unattributable in a project with more than one manifest, so the context
-/// line is kept ahead of it.
+/// A rendered diagnostic replaces the context line only when it visibly names
+/// the artefact itself. A schema-version rejection names the declaration and
+/// the supported schema but never which Netsukefile was refused, so it keeps
+/// the context line; a YAML diagnostic draws a labelled snippet of the file and
+/// so does not repeat it.
 ///
-/// The test is [`Diagnostic::source_code`] rather than the message text: a
-/// diagnostic that supplies a source has already named the file, and one that
-/// does not has not. Matching on rendered text would make the decision depend
-/// on a localized string.
+/// "Names the artefact" is [`names_its_own_source`], not merely
+/// [`Diagnostic::source_code`]: a source with no label prints no snippet, so
+/// the file never appears. Judging on the source alone would drop the context
+/// line for a diagnostic that never showed the path, and the failure would name
+/// no file at all.
 fn failure_report(err: &Error, theme: &GraphicalTheme) -> Option<String> {
     let rendered = render_failure(err, theme)?;
-    let names_artefact =
-        select_diagnostic(err).is_some_and(|diagnostic| diagnostic.source_code().is_some());
-    if names_artefact {
+    if select_diagnostic(err).is_some_and(names_its_own_source) {
         return Some(rendered);
     }
     Some(format!("{err}\n{rendered}"))
+}
+
+/// Report whether a diagnostic renders a snippet naming its own file.
+///
+/// `miette` draws a snippet only where a diagnostic supplies *both* a source
+/// and at least one label: `render_snippets` returns early when there are no
+/// labels. A source with no label therefore prints nothing, so judging on the
+/// source alone would drop the path from the report entirely.
+///
+/// The pair is looked for on the selected diagnostic and then down its
+/// [`Diagnostic::diagnostic_source`] chain, because the wrapper that carries the
+/// snippet is rarely the one selected. A manifest parse failure selects
+/// [`manifest::ManifestError`], whose `#[source_code]` is absent and whose
+/// `#[diagnostic_source]` is the YAML diagnostic that does name the file; the
+/// nested render, not the wrapper, decides whether the path appears.
+///
+/// This mirrors [`netsuke::diagnostic_json`]'s rule for the same reason: the
+/// JSON path emits `source` and `spans` only for a labelled diagnostic, so
+/// both modes agree on when a file is named.
+fn names_its_own_source(diagnostic: &dyn Diagnostic) -> bool {
+    let names = |candidate: &dyn Diagnostic| {
+        candidate.source_code().is_some()
+            && candidate
+                .labels()
+                .is_some_and(|labels| labels.into_iter().next().is_some())
+    };
+    if names(diagnostic) {
+        return true;
+    }
+    diagnostic
+        .diagnostic_source()
+        .is_some_and(names_its_own_source)
 }
 
 /// Classify a runner failure into the fixed category logged at this boundary.

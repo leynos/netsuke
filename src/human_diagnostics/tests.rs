@@ -81,8 +81,11 @@ fn reports_keep_the_manifest_path_when_the_diagnostic_omits_it() -> Result<()> {
 /// A diagnostic that names the file it is about, as a YAML failure does.
 ///
 /// `MietteDiagnostic` cannot carry a source, so the shape is built here: a
-/// `NamedSource` is how a diagnostic says "this is the file and the span I am
-/// about", and it is the field [`failure_report`] keys on.
+/// `NamedSource` plus a `#[label]` is how a diagnostic says "this is the file,
+/// and this is the span I am about". The label is not decoration. `miette`
+/// returns before drawing a snippet when a diagnostic has no labels, so without
+/// one the file name is never printed however good the source is — and a test
+/// built on the source alone would pass while proving nothing.
 #[derive(Debug, thiserror::Error, miette::Diagnostic)]
 #[error("unexpected tab indentation")]
 #[diagnostic(code(netsuke::manifest::parse))]
@@ -90,20 +93,27 @@ struct NamedSourceDiagnostic {
     /// The manifest source text, labelled with the manifest name.
     #[source_code]
     src: miette::NamedSource<String>,
+    /// The tab the parser rejected.
+    #[label("unexpected tab")]
+    span: miette::SourceSpan,
 }
 
 /// A diagnostic that names its own source must not repeat the context line.
 ///
-/// Repeating the context line above a diagnostic that already names the path
-/// would print it twice, so the rule is keyed on the source, not on the
-/// failure's shape. This is the counterpart of
+/// The assertion is on the *context line*, not on how many times the path
+/// appears. A snippet names the file and so does the context line, so a count
+/// would be satisfied by a snippet with the context line still above it — the
+/// duplicate this rule exists to prevent. Requiring its absence makes the test
+/// fail if the decision is ever taken on the wrong signal.
+///
+/// The counterpart of
 /// [`reports_keep_the_manifest_path_when_the_diagnostic_omits_it`]: together
-/// they pin both sides of the decision, so neither branch can be dropped
-/// without a failure.
+/// they pin both sides, so neither branch can be dropped without a failure.
 #[test]
 fn reports_drop_the_context_line_when_the_diagnostic_names_its_source() -> Result<()> {
     let named = NamedSourceDiagnostic {
         src: miette::NamedSource::new("Netsukefile", String::from("a:\n\tb")),
+        span: miette::SourceSpan::from((3, 1)),
     };
     let error = manifest::ManifestError::Parse {
         source: Box::new(named),
@@ -112,10 +122,48 @@ fn reports_drop_the_context_line_when_the_diagnostic_names_its_source() -> Resul
     let wrapped = anyhow::Error::new(error).context("Failed to load manifest at Netsukefile.");
     let report = failure_report(&wrapped, &theme_for(theme_prefs()))
         .context("a named source should report")?;
-    let occurrences = report.matches("Netsukefile").count();
     ensure!(
-        occurrences == 1,
-        "a diagnostic naming its source must not repeat the path: {report}"
+        report.contains("Netsukefile"),
+        "the report must name the file the diagnostic is about: {report}"
+    );
+    ensure!(
+        !report.contains("Failed to load manifest at Netsukefile."),
+        "a diagnostic naming its source must not repeat the context line: {report}"
+    );
+    Ok(())
+}
+
+/// A source without a label names nothing, so the context line must stay.
+///
+/// This is the case the rule exists for: `miette` draws no snippet for an
+/// unlabelled diagnostic, so the source it carries never reaches the report.
+/// Deciding on the source alone would drop the context line here and leave the
+/// failure naming no file at all.
+#[test]
+fn reports_keep_the_context_line_when_the_source_carries_no_label() -> Result<()> {
+    /// A source with no label, so no snippet is drawn from it.
+    #[derive(Debug, thiserror::Error, miette::Diagnostic)]
+    #[error("unexpected tab indentation")]
+    #[diagnostic(code(netsuke::manifest::parse))]
+    struct UnlabelledSourceDiagnostic {
+        /// Manifest source text that nothing points into.
+        #[source_code]
+        src: miette::NamedSource<String>,
+    }
+
+    let unlabelled = UnlabelledSourceDiagnostic {
+        src: miette::NamedSource::new("Netsukefile", String::from("a:\n\tb")),
+    };
+    let error = manifest::ManifestError::Parse {
+        source: Box::new(unlabelled),
+        message: localization::message(keys::MANIFEST_PARSE),
+    };
+    let wrapped = anyhow::Error::new(error).context("Failed to load manifest at Netsukefile.");
+    let report = failure_report(&wrapped, &theme_for(theme_prefs()))
+        .context("an unlabelled source reports")?;
+    ensure!(
+        report.contains("Failed to load manifest at Netsukefile."),
+        "without a snippet the context line is the only place the path appears: {report}"
     );
     Ok(())
 }

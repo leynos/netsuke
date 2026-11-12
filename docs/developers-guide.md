@@ -907,15 +907,27 @@ new diagnostic type has to be added to both or the modes disagree.
 
 A failure carrying none of those diagnostics keeps its context line, which is
 the whole report for errors such as a missing manifest. A failure that does
-carry one prints the rendered diagnostic instead of the context line when the
-diagnostic names its own source, because the diagnostic already names the path
-the context line repeats. The test is [`Diagnostic::source_code`], not the
-rendered text: a YAML diagnostic carries a `NamedSource`, but a schema-version
-rejection carries none, and its message names the declaration and the supported
-schema without naming the file. A schema rejection therefore keeps the context
-line above its diagnostic, so a refusal stays attributable in a project with
-more than one manifest. Circular dependencies keep a separate branch: its
-bounded rendering is what keeps manifest target names out of the tracing event.
+carry one prints the rendered diagnostic instead of the context line when that
+diagnostic renders a snippet naming the file, because the snippet repeats the
+path the context line carries.
+
+Naming the file takes more than a source. `miette` returns from
+`render_snippets` before drawing anything when a diagnostic supplies no label,
+so a `#[source_code]` with no `#[label]` never prints its file name. The
+predicate is therefore "has a source *and* at least one label", looked for on
+the selected diagnostic and then down its `diagnostic_source` chain, because
+`ManifestError::Parse` is the wrapper that gets selected while the labelled
+`YamlDiagnostic` sits beneath it. Judging on the source alone would drop the
+context line for a diagnostic that never showed the path, leaving the failure
+naming no file at all.
+
+A schema-version rejection satisfies neither half: it carries no source and no
+label, and its message names the declaration and the supported schema without
+naming the file. It therefore keeps the context line above its diagnostic, so a
+refusal stays attributable in a project with more than one manifest. Both
+branches are pinned by a test, and the CLI exercises them against the real
+binary. Circular dependencies keep a separate branch: its bounded rendering is
+what keeps manifest target names out of the tracing event.
 
 The glyph theme comes from `human_diagnostics::theme_for`, which derives it
 from the resolved `OutputPrefs` rather than reading `NO_COLOR` itself, so the

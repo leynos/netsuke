@@ -364,11 +364,47 @@ decision D-15.
     (`e6892979…e6892979`): `check-fmt` 2s, `typecheck` 440s, `lint` 2709s,
     `doc-coverage` 1472s (98.16%), `test` 378s, `markdownlint` 28s, `nixie`
     2s, `test-documentation-contracts` 88s, `test-workflow-contracts` 286s.
-    The next commit carries the second review round: both schema-telemetry
-    module headers now state that only `AmbientFull` and `Full` record, a
-    schema rejection keeps the manifest path in human output, and ADR-0066 is
-    restored to its accepted text with a dated addendum for the zero-ceiling
-    rule.
+  - (2026-11-12) `be8ef14ff` closed the six pre-merge rows. Both
+    schema-telemetry module headers now state that only `AmbientFull` and
+    `Full` record, the remedy assertion uses a phrase unique to
+    `manifest.schema_version.help` rather than `MAJOR.MINOR.0` (which also
+    appears in the `invalid` summary), ADR-0066 is restored to its accepted
+    text with a dated addendum for the zero-ceiling rule, and this ExecPlan is
+    brought up to date. All nine gates passed with the content hash stable
+    (`410d7c0e…410d7c0e`): `check-fmt` 3s, `typecheck` 756s, `lint` 2661s,
+    `doc-coverage` 1872s (98.16%, 6123/6238), `test` 1511s (5208 cases plus
+    doctests), `markdownlint` 30s, `nixie` 2s,
+    `test-documentation-contracts` 260s, `test-workflow-contracts` 289s. The
+    `check-fmt` failure the first attempt recorded was a real formatting fault
+    in two files, fixed by `make fmt` and amended into the same unpushed
+    commit.
+  - (2026-11-12) Three commits preceded it. `d76b6064e` gave each rejection
+    class its own `RejectionSummary` variant carrying a phrase only that
+    class's summary renders, added a positive control for the admission-span
+    test (asserting a query opens no span proves nothing if the subscriber
+    captured nothing), narrowed the documented counting claim to command loads
+    across the users' guide, developers' guide, ADR-0009 addendum and
+    `record_admission`, and recorded that batch in this plan. `5e092ce42`
+    folded the admitted and rejected admission cases into one `#[rstest]` table
+    after CodeScene flagged the duplication, and extracted
+    `command_load_manifest`. `311124850` replaced an `assert_eq!` inside a
+    `Result`-returning test closure with `ensure!`, which
+    `clippy::panic_in_result_fn` rejects. Only `d76b6064e` touched production
+    documentation, and none changed runtime behaviour.
+  - (2026-11-12) CodeRabbit's review of `be8ef14ff` found the human-path
+    predicate wrong, and the finding was correct. `failure_report` dropped the
+    context line on `Diagnostic::source_code()` alone, but `miette`'s
+    `render_snippets` returns before drawing anything when a diagnostic has no
+    labels, so a source with no label never prints its file name. The real
+    binary confirmed it: a tab-indented manifest printed `Netsukefile` twice —
+    once in the context line, once in the nested YAML snippet — while the unit
+    test passed because its own fixture had no label and therefore no snippet.
+    The predicate now requires a source *and* a label, searched down the
+    `diagnostic_source` chain because `ManifestError::Parse` is the selected
+    wrapper and the labelled `YamlDiagnostic` sits beneath it. Three tests pin
+    it: one per branch of the decision, plus a CLI case that runs both against
+    the real binary. Both unit tests were shown to fail under a mutation that
+    reverts each half of the rule.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and
