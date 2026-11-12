@@ -77,8 +77,31 @@ pub(super) fn install_miette_handler() -> Result<(), miette::InstallError> {
 }
 
 /// Store the resolved diagnostic style for reports created later in startup.
-pub(super) fn set_style(style: DiagnosticStyle) {
-    STYLE.set(style).ok();
+///
+/// Startup calls this exactly once, after the configuration merge succeeds, so
+/// a rejected write means a caller installed a style twice. That is a defect in
+/// the caller rather than a condition to recover from, but it must not pass
+/// silently: the rejected style is returned so the call site can report it,
+/// and rendering continues with whichever style was installed first.
+///
+/// # Errors
+///
+/// Returns the style that was *not* stored when one was already installed.
+pub(super) fn set_style(style: DiagnosticStyle) -> Result<(), DiagnosticStyle> {
+    store_style(&STYLE, style)
+}
+
+/// Store `style` in `slot`, returning the style the slot rejected.
+///
+/// The slot is a parameter rather than captured from [`STYLE`] so the one-shot
+/// contract can be exercised directly. A test that installed into the real slot
+/// would decide the outcome for every later test sharing the process, and would
+/// have nothing to assert about the first install.
+pub(super) fn store_style(
+    slot: &OnceLock<DiagnosticStyle>,
+    style: DiagnosticStyle,
+) -> Result<(), DiagnosticStyle> {
+    slot.set(style)
 }
 
 /// Select the most specific JSON-safe diagnostic representation for a failure.
@@ -96,4 +119,52 @@ pub(super) fn render_runtime_error_json(err: &anyhow::Error) -> serde_json::Resu
         return diagnostic_json::render_report_json(report);
     }
     diagnostic_json::render_error_json(err.as_ref())
+}
+
+#[cfg(test)]
+mod tests {
+    //! Pin the one-shot installation contract of [`super::store_style`].
+    use super::{DiagnosticStyle, OnceLock, store_style};
+
+    /// The first installed diagnostic style wins and the second is handed back.
+    ///
+    /// `set_style` runs once per process, after the configuration merge. The
+    /// contract worth pinning is what happens when that assumption is broken:
+    /// the earlier style must survive, because reports already rendered under it
+    /// cannot be recalled, and the refused style must come back so the call site
+    /// can say so rather than losing the discrepancy.
+    ///
+    /// The slot is local rather than the process-wide `STYLE`: installing into
+    /// the real one would decide every later test's rendering in this process,
+    /// and there would be nothing left to assert about the first install.
+    #[test]
+    fn only_the_first_style_is_installed() {
+        let first = DiagnosticStyle {
+            colour: true,
+            unicode: true,
+            links: true,
+        };
+        let second = DiagnosticStyle {
+            colour: false,
+            unicode: false,
+            links: false,
+        };
+        let slot = OnceLock::new();
+
+        assert_eq!(
+            store_style(&slot, first),
+            Ok(()),
+            "the first install succeeds"
+        );
+        assert_eq!(
+            store_style(&slot, second),
+            Err(second),
+            "a second install is refused and returns the style it refused"
+        );
+        assert_eq!(
+            slot.get().copied(),
+            Some(first),
+            "rendering keeps the first style"
+        );
+    }
 }

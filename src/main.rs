@@ -309,7 +309,12 @@ fn configure_runtime(
     plan: DisplayPlan,
 ) {
     main_tracing::set_tracing_ansi(plan.stderr_colour());
-    main_diagnostics::set_style(plan.diagnostic_style());
+    // A rejected style means startup installed two, which cannot happen on the
+    // single call path but would otherwise pass unnoticed; rendering keeps the
+    // first style, and a debug event records the discrepancy.
+    if main_diagnostics::set_style(plan.diagnostic_style()).is_err() {
+        tracing::debug!("diagnostic style already installed; keeping the first");
+    }
     // Raised before the localizer is built, so a fallback warning is both
     // visible in a normal run and suppressed in JSON mode, where stderr
     // carries the diagnostic document.

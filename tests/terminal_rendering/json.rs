@@ -8,10 +8,15 @@
 //! message or unstyled the events would break one contract and satisfy the
 //! other.
 //!
-//! JSON output itself is asserted in `json_pty.rs`. That module attaches the
-//! run to a pseudo-terminal, which is the only way to show that JSON mode
-//! suppresses the status reporter and every tracing event even when the
-//! terminal would otherwise license colour and redraws.
+//! JSON output itself is asserted in `json_pty.rs`. That module attaches one
+//! stream to a pseudo-terminal and runs `--json --color always --verbose`,
+//! then asserts three separate claims about the successful `generate`: the
+//! result stream carries one versioned document matched on `schema_version`
+//! and `result.command`, the diagnostic stream is empty so no stage label and
+//! no tracing marker appears, and neither captured stream contains an escape
+//! byte. It also runs the same fixture in human mode to show that the stage
+//! label and verbose tracing do appear there, so the negative assertions are
+//! measured rather than assumed.
 
 use super::support::{TerminalWorkspace, visible_text};
 use anyhow::{Context, Result, ensure};

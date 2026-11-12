@@ -45,32 +45,24 @@ environment or call `is_terminal()`.
 
 The user-visible contract is:
 
-| Policy                       | Resolution                                                      | Observable behaviour                                                                                                                        |
-| ---------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `--color auto`               | Uses the target stream's terminal fact.                         | Styles only a terminal when `TERM` is not `dumb` and `NO_COLOR` is absent or empty.                                                         |
-| `--color always`             | Forces colour for human-readable Netsuke-controlled output.     | Styles tracing and diagnostics on stderr and help/version on stdout, including pipes; JSON output remains unstyled.                         |
-| `--color never`              | Disables ANSI styling.                                          | Also selects accessible mode when accessibility is `auto`.                                                                                  |
-| `--emoji auto`               | Follows the resolved output mode.                               | Uses Unicode in standard mode and ASCII in accessible mode.                                                                                 |
-| `--emoji always` / `never`   | Selects the corresponding glyph set.                            | Unicode or ASCII status symbols are used, while every status retains a text label.                                                          |
-| `--progress auto` / `always` | These policies are equivalent.                                  | Both request stage reporting; neither forces animation into a pipe, dumb terminal, or accessible mode.                                      |
-| `--progress never`           | Selects the silent reporter.                                    | No stage or task progress is emitted.                                                                                                       |
-| `--accessibility auto`       | Uses colour, environment, and terminal mode.                    | Selects accessible mode for `--color never`, non-empty `NO_COLOR`, or `TERM=dumb`. `--color always` suppresses the `NO_COLOR` trigger only. |
-| `--accessibility on` / `off` | Overrides automatic mode selection.                             | `on` uses static labelled output; `off` keeps standard mode, while colour `auto` still respects `NO_COLOR`.                                 |
-| `--json`                     | Selects machine-readable output.                                | Progress and tracing are suppressed; diagnostics use the JSON document path.                                                                |
-| Help and version             | Uses the last CLI `--color`, then `NETSUKE_COLOR`, then `auto`. | Configuration files are not read; ordinary usage errors remain plain.                                                                       |
+| Policy                       | Resolution                                                      | Observable behaviour                                                                                                |
+| ---------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `--color auto`               | Uses the target stream's terminal fact.                         | Styles only a terminal when `TERM` is not `dumb` and `NO_COLOR` is absent or empty.                                 |
+| `--color always`             | Forces colour for human-readable Netsuke-controlled output.     | Styles tracing and diagnostics on stderr and help/version on stdout, including pipes; JSON output remains unstyled. |
+| `--color never`              | Disables ANSI styling.                                          | Also selects accessible mode when accessibility is `auto`.                                                          |
+| `--emoji auto`               | Follows the resolved output mode.                               | Uses Unicode in standard mode and ASCII in accessible mode.                                                         |
+| `--emoji always` / `never`   | Selects the corresponding glyph set.                            | Unicode or ASCII status symbols are used, while every status retains a text label.                                  |
+| `--progress auto` / `always` | These policies are equivalent.                                  | Both request stage reporting; neither forces animation into a pipe, dumb terminal, or accessible mode.              |
+| `--progress never`           | Selects the silent reporter.                                    | No stage or task progress is emitted.                                                                               |
+| `--accessibility auto`       | Uses colour, environment, and terminal mode.                    | Selects accessible mode for `--color never`, non-empty `NO_COLOR`, or `TERM=dumb`.                                  |
+| `--accessibility on` / `off` | Overrides automatic mode selection.                             | `on` uses static labelled output; `off` keeps standard mode, while colour `auto` still respects `NO_COLOR`.         |
+| `--json`                     | Selects machine-readable output.                                | Progress and tracing are suppressed; diagnostics use the JSON document path.                                        |
+| Help and version             | Uses the last CLI `--color`, then `NETSUKE_COLOR`, then `auto`. | Configuration files are not read; ordinary usage errors remain plain.                                               |
 
 Colour applies only to Netsuke-controlled tracing, diagnostics, and Clap
 help/version output. Generated artefacts and subprocess streams are forwarded
 unchanged. `TERM=dumb` prevents live redraws even when standard output is
 forced with `--accessibility off`.
-
-The three accessible-mode triggers are not equally overridable. `NO_COLOR` is a
-colour hint, so `--color always` suppresses it: `no_color_active` returns
-`false` for `ColourPolicy::Always`, and automatic accessibility selection then
-sees no `NO_COLOR` trigger. `TERM=dumb` is not a colour hint — it is a
-statement that the terminal cannot redraw — so no colour policy suppresses it,
-and `--accessibility off` is the only override. `--color never` is itself the
-third trigger, since it acts like an internal `NO_COLOR`.
 
 A configuration-load failure is emitted before any configuration value has been
 read, so it cannot follow a configured colour policy. It is therefore split:
@@ -136,6 +128,25 @@ on both it and the root dev-dependency.
   responsibility.
 - Accessible diagnostics use Miette's configured Unicode and link settings,
   but do not force Miette's narratable handler.
+
+## Addendum (2026-11-12): display-policy clarifications
+
+Two clarifications were made while implementing roadmap task 3.12.3. Both
+refine what the accepted decision already said; neither changes its resolution
+rules, and the accepted text above is left as it was written.
+
+**The accessible-mode triggers are not equally overridable.** `NO_COLOR` is a
+colour hint, so `--color always` suppresses it: `no_color_active` returns
+`false` for `ColourPolicy::Always`, and automatic accessibility selection then
+sees no `NO_COLOR` trigger. `TERM=dumb` is not a colour hint — it is a
+statement that the terminal cannot redraw — so no colour policy suppresses it,
+and `--accessibility off` is the only override. `--color never` is itself the
+third trigger, since it acts like an internal `NO_COLOR`.
+
+For the same reason the `--accessibility auto` row above is not narrowed by
+colour policy: `--color always` removes the `NO_COLOR` trigger it would
+otherwise act on, but the row's remaining triggers still apply, so the row's
+wording stands unchanged.
 
 ## References
 

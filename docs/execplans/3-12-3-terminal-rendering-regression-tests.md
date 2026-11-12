@@ -461,24 +461,30 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `cs check` reproduces the hosted score and now reports 10.00. Clippy is
   clean and the classifier's 31 cases still pass. Remaining: the ten-gate set
   on the rewritten tree, then the refactor's own commit and push.
-- [ ] Hosted CI still red on two lanes, both from the same pinned action and
-  neither caused by this branch: `build-test`'s `Lint` step panics with
-  `duplicate specification of lint string_continuation_style` because the
-  action loads both `libstring_continuation_style` and `libwhitaker_suite`, and
-  `Windows / lint-windows` fails with `could not find dylint_version` in
-  `string_continuation_style@nightly-2026-05-28.dll`. The duplicate-lint panic
-  is confirmed on the parent commit `0131235af`, so it precedes this work.
-  Reported as an infrastructure impasse (see Outcomes). Re-confirmed on
-  `245515675` and again on `0abe086d4` (run jobs `128658183191` and
-  `128658182341`): each time the `Lint` panic reports the same two-library
-  `DYLINT_LIBS` value, and the Windows lane prints the same `dylint_version`
-  diagnostic. Everything else on that run passed — `Default features`,
-  `Windows / build-test-windows`, `Windows / windows-msi-upgrade`,
-  `kani-smoke`, and the CodeScene advisory gate, which now reports **Quality
-  Gate Passed** with all six gates green. The CodeScene turnaround is the
-  measurement that matters here: the same gate failed on `e3786ad2f` and passed
-  on `245515675`, so the cursor rewrite cleared the only red check that was
-  this branch's.
+- [x] (2026-11-09) Both hosted lanes that were red for reasons outside this
+  branch are now green, and the cause was cleared upstream rather than here.
+  The two failures were one fault seen twice: `build-test`'s `Lint` step
+  panicked with `duplicate specification of lint string_continuation_style`
+  because the rolling archive carried both `libstring_continuation_style` and
+  `libwhitaker_suite`, and `Windows / lint-windows` failed to find
+  `dylint_version` in that same library. The panic reproduces on the parent
+  commit `0131235af`, so it always preceded this work. The clearance was a
+  *packaging* change: Whitaker PR 577 rewrote the prune to scan the staging
+  directory, merged at 22:10:34Z, and the rolling archive was republished at
+  22:17:40Z — seven minutes six seconds later (D32). The next `build-test` run
+  on this branch finished with `Install Whitaker`, `Lint`, and `Typecheck` all
+  green. D32 records the interval and the reason the earlier "sixteen minutes"
+  figure was wrong arithmetic. The recovery did cost lint coverage: #570 moved
+  `string_continuation_style` behind an `--experimental` flag that neither
+  installation route passes, so the lint that caused the outage no longer runs
+  here at all. That trade-off is recorded in D32 rather than papered over. The
+  branch's own red check had already cleared one head earlier: the CodeScene
+  advisory failed on `e3786ad2f` and passed on `245515675`, so the cursor
+  rewrite cleared the only failure this branch owned. Re-confirmed on the
+  rebased head `e12ad2f3e`, which is the citation that closes this item:
+  `build-test` (check run `130927078213`) and `Windows / lint-windows` (check
+  run `130927078492`) both report `success`, where the same two lanes had
+  failed on `245515675` and `0abe086d4`.
 - [x] (2026-11-12) Rebased the branch off its merge base
   `9213200866dac4c0a783e5b216213cfdd1036ba4` onto the live target
   `b19386767282cb7ef6e75317aa249006131d543d`, replaying all 57 commits. One
@@ -1632,6 +1638,91 @@ capabilities are known), and explains why the default exists rather than
 behaviour changed.
 
 Date/Author: 2026-11-10, implementation agent.
+
+### D37: the JSON PTY test now asserts the contract it was credited with
+
+**Decision.** Replace `json_pty.rs`'s escape-byte-only assertion with three
+observable claims, and make the two module docs describe exactly those claims.
+
+**Why the old test was too weak.** It asserted only that neither captured
+stream contained an escape byte, yet `json.rs` credited it with showing that
+JSON mode "suppresses the status reporter and every tracing event". A run that
+emitted a stage label, a tracing marker, or no JSON document at all would have
+passed. The finding is correct and the documentation claim was unfounded.
+
+**What the test asserts now.** For each of the two single-stream attachments,
+under `--json --color always --verbose`, on a successful `generate`:
+
+- the result stream parses as JSON, with `schema_version == 1` and
+  `"result"."command" == "generate"`. Matching on the document's fields rather
+  than on the presence of braces matters here, because the document is
+  pretty-printed and a brace check would pass on any output at all.
+- the diagnostic stream is empty once trailing whitespace is trimmed. That
+  single assertion subsumes the stage-label and tracing-marker checks, and
+  those two are kept beside it so a failure names which marker appeared.
+- neither stream contains an escape byte.
+
+**`--verbose` is part of the policy under test.** The review asked for a
+verbose case, and it earns its place: `--json` silences tracing by setting the
+filter to `OFF`, so a JSON run that only suppressed tracing at the default
+level would pass a non-verbose test and leak a `TRACE` line here.
+
+**The human-mode contrast is now measured on the same fixture.**
+`human_mode_contrast` runs `--color always --verbose generate` — differing from
+the JSON case in the one flag under test and nothing else — and asserts that
+its stderr carries `Stage 1/6` and a tracing marker. Without that, "stderr is
+empty" would pass on a fixture that produces nothing either way. The contrast
+had to go through `visible_text`: the stage reporter wraps each number in
+Fluent bidi isolates, so the literal `Stage 1/6` never appears in the raw bytes
+and a substring search over them reports every stage as absent. That also
+mattered for the JSON side, where the same raw-bytes search would have made the
+negative assertion vacuous.
+
+**The locally-built plan assertion was dropped.** The review's item 6 asked for
+it, and it was right: `display_plan_for_args` builds a plan from the parsed CLI
+and the test then asserted a property of that plan, which restates the resolver
+rather than observing the run. The replacement is the human-mode contrast,
+which measures the behaviour the plan is supposed to produce.
+
+**Non-vacuity was measured, not assumed.** Changing the expected command to
+`NOT_THE_COMMAND` fails both JSON cases, so the document really is parsed and
+the comparison really is live. Without that check a passing test says nothing
+about whether the JSON was read.
+
+**Where the other contrasts already lived.** `json.rs` owns the piped
+configuration-error split and `progress_pty.rs` owns the stage-label assertion
+for the progress policy, which is what shows a progress-enabled run prints
+every stage. The new `json_pty.rs` doc comment points at both rather than
+duplicating them.
+
+**The other four findings in the same review.** The ADR-0072 addendum restores
+the accepted *Decision outcome* text (verified byte-identical against
+`6da703aeb`'s parent) and carries the overridability clarification in a dated
+addendum; the two developer-guide passages now state what the code does, naming
+`resolve_theme_from_signals`, `ThemePreference::from_unicode_override` and
+`resolve_from_signals` and the removal of `resolve_from_theme`; and the stale
+Progress item is checked off with the run IDs that close it. The fifth, Domain
+Architecture, is the row D34 already rebutted on measured cost; it is not
+reopened here, and the reasoning is unchanged.
+
+**The second installation of a diagnostic style is now visible.** `set_style`
+had discarded the write outcome, so a hypothetical second installation would
+have been silent. It now returns the style it refused, and the one call site in
+`configure_runtime` logs a debug event carrying the discrepancy rather than
+dropping it. The write itself moved into a `store_style(slot, style)` helper
+that takes the slot as a parameter, which is what makes the one-shot contract
+testable: a test installing into the process-wide `STYLE` would fix the outcome
+for every later test in the same process and would have nothing to assert about
+the first installation. `only_the_first_style_is_installed` drives the helper
+with a local slot, asserts that the first install succeeds, that the second is
+rejected *and returns the refused value*, and that the slot still holds the
+first style. It sits in a `#[cfg(test)] mod tests` inside
+`src/main_diagnostics.rs` rather than in `src/tests.rs`, which the module-size
+lint caps at 400 lines; the inline module is the house shape for a unit that
+tests one file. The developers' guide states the arrangement, including why a
+report created during the merge keeps the plain default.
+
+Date/Author: 2026-11-12, implementation agent.
 
 ## Outcomes & retrospective
 

@@ -163,18 +163,31 @@ the adapters apply them differently because their libraries do:
   therefore holds only for the window before the first call — the parse
   diagnostics. A configuration-load failure is emitted *after* the startup
   reload, so its structured events already follow the startup colour hint, and
-  that is the split `tests/terminal_rendering/json.rs` pins. Only the
-  runner-rendered help — `help` and `help <subcommand>` — reaches the startup
-  plan at all. Clap's own `--help` and `--version` exit from inside
-  `parse_with_localizer_from` via `err.exit()`, before `set_tracing_ansi` is
-  called once, so their buffered tracing events stay plain even under
-  `--color always`. The styling Clap puts in the help body is a separate
-  matter, decided by `parser_color` at parse time.
+  that is the split `tests/terminal_rendering/json.rs` pins. Every successfully
+  parsed command resolves the startup plan before configuration loading, so the
+  plan reaches every command that gets past parsing. Informational help — the
+  `help` topics other than `targets` — returns through `run_cli` with the
+  startup plan and skips the configuration merge; `help targets` loads and
+  validates the manifest, so it takes the merged plan but renders a plain
+  catalogue from `plan.prefs()` without calling `stdout_colour()`. Clap's own
+  `--help` and `--version` exit from inside `parse_with_localizer_from` via
+  `err.exit()`, before `set_tracing_ansi` is called once, so their buffered
+  tracing events stay plain even under `--color always`. The styling Clap puts
+  in the help body is a separate matter, decided by `parser_color` at parse
+  time.
 - The Miette hook builds one `MietteHandlerOpts` handler per report from
   `diagnostic_style()`, passing its `colour`, `unicode` and `links` fields to
   `color`, `unicode` and `terminal_links`. It does not choose between graphical
   and narratable handlers; Miette decides the rendering, and the plan only
   supplies those three facts.
+- The hook reads the style from a `OnceLock`, so the first installation wins
+  and it happens after the configuration merge. `set_style` therefore stores
+  exactly once and is fallible: it returns the style it refused rather than
+  discarding it, and startup logs a debug event if that ever happens. Reports
+  created *during* the merge keep the plain default, which is deliberate — a
+  configuration failure has to be readable on a terminal whose capabilities are
+  not yet known — and that is why the default exists rather than the hook
+  requiring an installation before it can render.
 - Clap's own `--help` path does *not* use the plan's stdout decision. It exits
   from inside `parse_with_localizer_from`, before any plan exists, so its
   `colour_choice` comes from `startup_signals.parser_color`, which is
@@ -7131,10 +7144,12 @@ modules under `tests/cli_tests/`:
   resolution (`EmojiPolicy`, `ColourPolicy`, `ProgressPolicy`,
   `AccessibilityPolicy`, `json`, `NO_COLOR`, and `TERM`/output mode) against
   the truth model in `display_policy_truth.rs`, using one flat
-  Cartesian-product sweep. It adds coverage only; the production resolution in
-  `src/theme/mod.rs` and `src/output/prefs/mod.rs` is not changed. The
-  environment-signal property test lives elsewhere, as
-  `environment_signal_resolver_matches_reference_policy` in
+  Cartesian-product sweep. It adds coverage for the resolution this branch
+  consolidated: `resolve_theme_from_signals` and
+  `ThemePreference::from_unicode_override` in `src/theme/mod.rs`, and
+  `resolve_from_signals` in `src/output/prefs/mod.rs`, which replaces the
+  removed `resolve_from_theme`. The environment-signal property test lives
+  elsewhere, as `environment_signal_resolver_matches_reference_policy` in
   `src/output/mode/tests.rs`, because it drives the resolver directly rather
   than through the CLI.
 - `display_plan_contract.rs` pins the same plan from the other direction, as
