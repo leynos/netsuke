@@ -37,6 +37,9 @@ import dataclasses
 import time
 import typing as typ
 
+import release_upload_trace
+from release_upload_trace import CallTrace
+
 if typ.TYPE_CHECKING:
     import collections.abc as cabc
 
@@ -127,6 +130,10 @@ class TimedRunner[Result]:
     clock_ns
         The monotonic reading, injected so a test can make a boundary take a
         known time without sleeping. Defaults to ``time.monotonic_ns``.
+    context
+        The run identity each trace record carries, or ``None`` to trace with
+        none. Supplied by the caller because this seam does not own process
+        state.
 
     Notes
     -----
@@ -162,10 +169,17 @@ class TimedRunner[Result]:
         inner: cabc.Callable[..., Result],
         *,
         clock_ns: cabc.Callable[[], int] = time.monotonic_ns,
+        wall_clock_ns: cabc.Callable[[], int] = time.time_ns,
+        context: cabc.Mapping[str, str] | None = None,
     ) -> None:
-        """Hold the runner to measure and the clock to measure it with."""
+        """Hold the runner to measure, the clocks, and the context to trace with."""
         self._inner = inner
         self._clock_ns = clock_ns
+        self._wall_clock_ns = wall_clock_ns
+        # A run's trace always starts empty: seeding it would let a caller
+        # attribute another run's calls to this one.
+        self._trace = CallTrace()
+        self._context = dict(context or {})
         self._listings = 0
         self._timings = BoundaryTimings()
 
@@ -175,13 +189,28 @@ class TimedRunner[Result]:
         if boundary is None:
             return self._inner(arguments, **keywords)
         started_ns = self._clock_ns()
+        outcome = release_upload_trace.OUTCOME_COMPLETED
         try:
-            return self._inner(arguments, **keywords)
+            result = self._inner(arguments, **keywords)
+        except BaseException:
+            outcome = release_upload_trace.OUTCOME_FAILED
+            raise
+        else:
+            # A command that ran and exited non-zero crossed the boundary and
+            # failed at it. Reading only exceptions would trace every refusal
+            # ``gh`` reports through its status as a completed call, which is
+            # the opposite of what an operator reads the trace for.
+            if _failed(result):
+                outcome = release_upload_trace.OUTCOME_FAILED
+            return result
         finally:
             # Recorded even when the command raises: a boundary that failed
             # still took the time it took, and a record missing exactly the
-            # slow failure is the one an operator most needs.
-            self._record(boundary, elapsed_ms(started_ns, self._clock_ns()))
+            # slow failure is the one an operator most needs. One clock reading
+            # serves both records, so the two cannot disagree about it.
+            ended_ns = self._clock_ns()
+            self._record(boundary, elapsed_ms(started_ns, ended_ns))
+            self._trace_call(boundary, started_ns, ended_ns, outcome)
 
     @property
     def timings(self) -> BoundaryTimings:
@@ -193,6 +222,17 @@ class TimedRunner[Result]:
             What each crossed boundary took, with ``None`` for the rest.
         """
         return self._timings
+
+    @property
+    def trace(self) -> CallTrace:
+        """The per-call records this runner has produced.
+
+        Returns
+        -------
+        CallTrace
+            One record for each traced call, in the order they finished.
+        """
+        return self._trace
 
     def _boundary(self, arguments: cabc.Sequence[str]) -> str | None:
         """Name the boundary a command is, or ``None`` when it is not one."""
@@ -214,6 +254,65 @@ class TimedRunner[Result]:
             self._timings,
             **{member: milliseconds if previous is None else previous + milliseconds},
         )
+
+    def _trace_call(
+        self, boundary: str, started_ns: int, ended_ns: int, outcome: str
+    ) -> None:
+        """Append one bounded record for the call that just finished.
+
+        One record per call, where :meth:`_record` sums a boundary: the
+        aggregate answers how long listing took, and only a per-call record
+        answers which of several calls failed.
+        """
+        # Read in seconds from the raw nanoseconds rather than from the
+        # millisecond aggregate: a call faster than a millisecond rounds to
+        # zero there, and a trace that reported every stub call as taking no
+        # time would hide exactly the calls a test is watching for.
+        duration_seconds = max(0, ended_ns - started_ns) / 1_000_000_000
+        self._trace = self._trace.appended(
+            release_upload_trace.TraceRecord(
+                operation=release_upload_trace.operation_for_boundary(boundary),
+                outcome=outcome,
+                error_category=(
+                    None
+                    if outcome == release_upload_trace.OUTCOME_COMPLETED
+                    else release_upload_trace.ERROR_CATEGORY_FAILED
+                ),
+                duration_seconds=round(duration_seconds, 9),
+                timestamp_ns=self._wall_clock_ns(),
+                context=self._context,
+            )
+        )
+
+
+#: The attribute a completed command reports its exit status through. Read
+#: structurally rather than by importing ``subprocess``: this module wraps a
+#: seam, and the caller may supply any stand-in whose result carries a status.
+_STATUS_ATTRIBUTE = "returncode"
+
+
+def _failed(result: object) -> bool:
+    """Report whether a returned result describes a call that failed.
+
+    Returns
+    -------
+    bool
+        ``True`` when the result carries a non-zero status. A result with no
+        status at all, or one of another type, is left to the caller: this
+        function only recognises the shape it can read.
+
+    Examples
+    --------
+    >>> import subprocess
+    >>> _failed(subprocess.CompletedProcess([], 1, "", ""))
+    True
+    >>> _failed(subprocess.CompletedProcess([], 0, "", ""))
+    False
+    >>> _failed("no status here")
+    False
+    """
+    status = getattr(result, _STATUS_ATTRIBUTE, 0)
+    return isinstance(status, int) and status != 0
 
 
 def _is_release_command(arguments: cabc.Sequence[str]) -> bool:

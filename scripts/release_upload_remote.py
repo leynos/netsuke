@@ -1,9 +1,9 @@
 """Read and write a release's attached assets at the ``gh`` boundary.
 
-:mod:`upload_declared_assets_cli` decides which names must be uploaded; this
-module is the only place that talks to GitHub. Every call goes through one
-injected ``SubprocessRunner``, so a test replaces the whole boundary with a
-stub and no test reaches the network.
+:mod:`release_upload_run` decides which names must be uploaded; this module is
+the only place that talks to GitHub. Every call goes through one injected
+``SubprocessRunner``, so a test replaces the whole boundary with a stub and no
+test reaches the network.
 
 Two behaviours here exist to keep a reconciliation honest rather than merely
 successful:

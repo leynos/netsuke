@@ -35,6 +35,21 @@ UPLOAD_STEP_INDEX = RUN_STEPS.index(RUN_STEPS[-1])
 #: What the step writes before deferring the failure to its caller.
 REFUSAL_PREFIX = "declared asset upload refused:"
 
+#: The bounded field set one completed trace record may carry. A completed call
+#: carries no ``error_category``, so its presence here would be a writer that
+#: attributed a failure to a call that returned.
+TRACE_FIELDS = frozenset({
+    "record_type",
+    "event",
+    "operation",
+    "timestamp_ns",
+    "outcome",
+    "duration_seconds",
+    "run_id",
+    "job",
+    "run_attempt",
+})
+
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class RefusedRun:
@@ -107,3 +122,31 @@ def test_a_refused_run_still_records_the_boundaries_it_crossed(tmp_path: Path) -
     # A refused run sends no transfer, so the boundary is absent rather than
     # recorded as a zero-duration upload that never happened.
     assert timings["upload_ms"] is None, timings
+
+
+def test_the_upload_step_traces_each_call_it_made(tmp_path: Path) -> None:
+    """Retain a per-call trace beside the plan, one record per ``gh`` call.
+
+    The aggregate timings sum a boundary, so they cannot say which of a run's
+    calls failed. The trace names each one, and the two files must describe the
+    same run: a trace line with no timings beside it would be a different
+    upload step's record.
+    """
+    facts = release_facts()
+    workspace = stage_workspace(tmp_path, facts)
+    run = execute(tmp_path, workspace, facts)
+    lines = (run.declared_root / "upload-trace.jsonl").read_text(encoding="utf-8")
+    records = [json.loads(line) for line in lines.splitlines()]
+    assert [record["operation"] for record in records] == [
+        "release_listing",
+        "asset_upload",
+        "release_verification",
+    ], records
+    for record in records:
+        assert record["event"] == "release_upload_call", record
+        assert record["outcome"] == "completed", record
+        # The run identity links a line to the run that wrote it, and the
+        # harness supplies none, so the bounded absence is what a local run
+        # records rather than an omitted field.
+        assert set(record) == TRACE_FIELDS, record
+        assert isinstance(record["duration_seconds"], float), record

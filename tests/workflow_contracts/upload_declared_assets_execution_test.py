@@ -20,15 +20,9 @@ import json
 import pathlib
 import typing as typ
 
-import pytest
-from action_run_sources import action_steps, require_action_step
 from upload_declared_assets_harness import Release, execute
 from upload_declared_assets_manifest import (
-    ACTION,
-    PLAN_STEP,
-    RETAIN_STEP,
     RUN_STEPS,
-    action_document,
     release_tag,
 )
 from upload_declared_assets_records import interpreter_baseline
@@ -39,7 +33,6 @@ from upload_declared_assets_staging import (
     release_facts,
     stage_workspace,
 )
-from workflow_loading import require_mapping
 
 if typ.TYPE_CHECKING:
     from pathlib import Path
@@ -308,90 +301,3 @@ def test_a_selection_record_disagreeing_with_the_declaration_is_refused(
         "a run that cannot account for its bytes must not reach GitHub"
     )
     assert not _uploads(run), run.gh_log
-
-
-def test_the_declared_record_is_retained_before_the_upload() -> None:
-    """Retain the declaration and both digest records, failing if any is absent."""
-    document = action_document()
-    steps = action_steps(ACTION, document)
-    retain_index = require_action_step(ACTION, document, RETAIN_STEP)
-    upload_index = require_action_step(ACTION, document, RUN_STEPS[-1])
-    # The name and docstring above are an ordering claim, so the test checks
-    # the order. Retention that slipped after the upload would still name the
-    # right files, and would then retain nothing for exactly the refused runs
-    # the record exists for.
-    assert retain_index < upload_index, (
-        "the declared record must be retained before the step that may refuse"
-    )
-    retain = steps[retain_index]
-    with_block = require_mapping(retain.get("with"), f"{ACTION} {RETAIN_STEP} with")
-    names = {
-        _basename(line.strip())
-        for line in str(with_block["path"]).splitlines()
-        if line.strip()
-    }
-    # The declaration travels with both digest records: one from the selection
-    # and one from the declaration step, so verification can compare them.
-    assert names == {"declaration.txt", "selection.json", "trusted.json"}, names
-    assert with_block["if-no-files-found"] == "error", (
-        "a missing record must fail the step rather than silently upload"
-    )
-
-
-def test_the_upload_plan_is_retained_after_the_upload() -> None:
-    """Keep the plan for a refusing run, without masking the uploader."""
-    document = action_document()
-    steps = action_steps(ACTION, document)
-    plan_index = require_action_step(ACTION, document, PLAN_STEP)
-    upload_index = require_action_step(ACTION, document, RUN_STEPS[-1])
-    # The plan is written by the upload step, so its retention has to come
-    # after it. A retention declared earlier would upload nothing.
-    assert plan_index > upload_index, (
-        "the plan must be retained after the step that writes it"
-    )
-    plan = steps[plan_index]
-    with_block = require_mapping(plan.get("with"), f"{ACTION} {PLAN_STEP} with")
-    # `always()` is the whole point: a refused run is exactly when an operator
-    # needs the plan, and a default `if:` would skip it on failure.
-    assert plan.get("if") == "always()", (
-        "the plan must be retained even when the upload was refused"
-    )
-    retained = {
-        _basename(line.strip())
-        for line in str(with_block["path"]).splitlines()
-        if line.strip()
-    }
-    # The timings ride with the plan: the uploader writes them beside it, and a
-    # boundary duration is only readable against the run that measured it.
-    assert retained == {"upload-plan.json", "upload-timings.json"}, retained
-    # `warn`, not `error`: a failure before the uploader runs leaves no plan,
-    # and that must not replace the uploader's diagnostic with a second one.
-    assert with_block["if-no-files-found"] == "warn", (
-        "a missing plan must not mask the uploader's own diagnostic"
-    )
-
-
-@pytest.mark.parametrize("step_name", [RETAIN_STEP, PLAN_STEP])
-def test_a_job_rerun_retains_its_own_artefact(step_name: str) -> None:
-    """Keep each attempt's evidence apart instead of colliding or replacing it.
-
-    ``upload-artifact`` v7 refuses to overwrite an existing artefact and a job
-    re-run keeps the run id, so a name without the attempt would fail the
-    re-run's retention step. Recording ``overwrite: true`` instead would
-    resolve that collision by deleting the first attempt's record, which is the
-    opposite of what these steps exist to preserve.
-    """
-    document = action_document()
-    steps = action_steps(ACTION, document)
-    step = steps[require_action_step(ACTION, document, step_name)]
-    with_block = require_mapping(step.get("with"), f"{ACTION} {step_name} with")
-    name = str(with_block["name"]).strip()
-    assert name.endswith("-${{ github.run_attempt }}"), (
-        f"{step_name} must distinguish attempts, got {name!r}"
-    )
-    # The job name separates these artefacts from each other, and from any
-    # other job that retains its own record in the same run.
-    assert "${{ github.job }}" in name, f"{step_name} must name its job: {name!r}"
-    assert "overwrite" not in with_block, (
-        f"{step_name} must preserve an earlier attempt's artefact, not replace it"
-    )

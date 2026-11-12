@@ -65,6 +65,7 @@ SECTION_MODULES = (
     "scripts/tests/test_upload_declared_assets_properties.py",
     "scripts/tests/test_upload_declared_assets_status.py",
     "scripts/tests/test_release_upload_timing.py",
+    "scripts/tests/test_release_upload_trace.py",
 )
 
 #: Source modules named by ``--doctest-modules`` in the Makefile target.
@@ -126,6 +127,8 @@ SOURCE_MODULES = (
     "scripts/release_upload_remote.py",
     "scripts/release_upload_timing.py",
     "scripts/release_upload_timing_files.py",
+    "scripts/release_upload_trace.py",
+    "scripts/release_upload_run.py",
     "scripts/upload_declared_assets_cli.py",
     "scripts/upload_declared_assets_refusals.py",
 )
@@ -194,6 +197,8 @@ ADAPTER_MODULES = (
     "scripts/release_upload_remote.py",
     "scripts/release_upload_timing.py",
     "scripts/release_upload_timing_files.py",
+    "scripts/release_upload_trace.py",
+    "scripts/release_upload_run.py",
     "scripts/upload_declared_assets_cli.py",
 )
 

@@ -40,7 +40,8 @@ Listing the release and downloading an asset it hid are effectful and live in
 is the pure query beside them. Separating the two lets the decision be stated
 as a table of observations and tested without a stub, and leaves exactly one
 function that reaches the outside world. This module is the argument surface
-and the exit-status contract over that boundary.
+and the exit-status contract over that boundary; the run itself — verify the
+payload, transfer, re-observe — is :func:`release_upload_run.settle`.
 
 Two records arrive with the payload, and the step requires them to agree before
 it acts. Neither proves the copy on its own: a staged tree replaced between
@@ -65,21 +66,20 @@ in ``scripts/tests/test_upload_declared_assets_cli.py``.
 """
 
 import argparse
+import os
 import pathlib
 import sys
+import typing as typ
 
-import release_digest_record
-import release_digest_record_files
-import release_payload_handoff
 import release_reconcile_github
 import release_upload_messages
-import release_upload_observation
 import release_upload_plan
-import release_upload_remote
 import release_upload_timing_files
+import release_upload_trace
 import upload_declared_assets_refusals
 from release_upload_plan import PLAN_NAME, UploadRequest
-from release_upload_remote import PRODUCTION_RUNNER, SubprocessRunner
+from release_upload_remote import PRODUCTION_RUNNER
+from release_upload_run import settle
 from release_upload_timing import TimedRunner
 from upload_declared_assets_refusals import (
     EXIT_CONFLICT,
@@ -88,6 +88,9 @@ from upload_declared_assets_refusals import (
     EXIT_OUTPUT_UNWRITABLE,
     EXIT_UPLOAD_FAILED,
 )
+
+if typ.TYPE_CHECKING:
+    import release_upload_observation
 
 __all__ = [
     "EXIT_CONFLICT",
@@ -187,20 +190,44 @@ def main(argv: list[str] | None = None) -> int:
     )
     # Every boundary a run crosses is a `gh` invocation, so timing the one
     # subprocess seam measures the listing, the download, and the transfer
-    # without any call site knowing this wrapper exists.
-    timed = TimedRunner(PRODUCTION_RUNNER)
+    # without any call site knowing this wrapper exists. The same seam traces
+    # each call, which is what separates "the transfer was slow" from "the
+    # listing retried and the transfer never began".
+    timed = TimedRunner(
+        PRODUCTION_RUNNER, context=release_upload_trace.trace_context(os.environ)
+    )
     try:
         settlement = settle(request, runner=timed)
     except upload_declared_assets_refusals.REFUSALS as error:
         exit_code, label = upload_declared_assets_refusals.refusal(error)
         print(f"{label}: {error}", file=sys.stderr)
-        release_upload_timing_files.record_timings(request.plan_path, timed.timings)
+        _record_measurements(request, timed)
         return exit_code
-    # After the plan, so the two records describe one run: a timings file but
-    # no plan is a run that measured boundaries it never finished reporting.
+    # After the plan, so the records describe one run: a timings file but no
+    # plan is a run that measured boundaries it never finished reporting.
     status = _report(request, settlement)
-    release_upload_timing_files.record_timings(request.plan_path, timed.timings)
+    _record_measurements(request, timed)
     return status
+
+
+def _record_measurements(request: UploadRequest, timed: TimedRunner[object]) -> None:
+    """Write the aggregate timings and the per-call trace beside the plan.
+
+    Parameters
+    ----------
+    request
+        The run whose plan destination names the directory.
+    timed
+        The seam that measured and traced every boundary the run crossed.
+
+    Notes
+    -----
+    The trace goes second so a run that dies writing it has still published the
+    aggregate, and neither file can fail the run: the plan is the contract, and
+    the uploader has already said on standard error why it refused.
+    """
+    release_upload_timing_files.record_timings(request.plan_path, timed.timings)
+    release_upload_trace.record_trace(request.plan_path, timed.trace)
 
 
 def _report(
@@ -262,140 +289,6 @@ def _report(
     return EXIT_OK
 
 
-def settle(
-    request: UploadRequest, *, runner: SubprocessRunner
-) -> release_upload_observation.Settlement:
-    """Decide, upload, and re-verify one release's declared assets.
-
-    Parameters
-    ----------
-    request
-        The tag, payload, trusted record, plan destination, and dry-run flag.
-    runner
-        The subprocess seam. Production supplies ``subprocess.run``; a test
-        supplies a stub, so no test reaches GitHub.
-
-    Returns
-    -------
-    release_upload_observation.Settlement
-        The final plan, and the bounded reasons behind any unverified asset.
-
-    Notes
-    -----
-    :func:`verified_payload` runs before the first network call, and every
-    conflict is reported before any upload, so one conflicting asset publishes
-    none of the others. The two halves stay spelled out rather than folded into
-    one call: `observe_release` alone touches the network or the filesystem, and
-    `settle_observation` reads what it returns and nothing else. Observing again
-    after the transfer is what makes the returned plan describe what GitHub
-    holds now.
-
-    Examples
-    --------
-    A dry run plans the upload but sends nothing:
-
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> import release_digest_record_files, release_digest_files
-    >>> import release_upload_remote
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     root = Path(tmp)
-    ...     payload = root / "payload"
-    ...     payload.mkdir()
-    ...     asset = payload / "a.deb"
-    ...     _ = asset.write_bytes(b"deb")
-    ...     digests = {"a.deb": release_digest_files.digest_of_file(asset)}
-    ...     record, selection = root / "r.json", root / "s.json"
-    ...     for destination in (record, selection):
-    ...         release_digest_record_files.write_digest_record(
-    ...             digests, destination)
-    ...     settlement = settle(
-    ...         UploadRequest("v1", payload, record, selection,
-    ...                       root / "plan.json", is_dry_run=True),
-    ...         runner=release_upload_remote.StaticRunner('{"assets": []}'),
-    ...     )
-    >>> [action.value for _name, action in settlement.actions]
-    ['upload']
-    """
-    expected = verified_payload(request)
-    settlement = release_upload_observation.settle_observation(
-        release_upload_observation.observe_release(
-            request.tag, expected, runner=runner
-        ),
-        expected=expected,
-    )
-    pending = release_reconcile_github.uploads(settlement.actions)
-    if release_upload_observation.should_upload(request, settlement.actions, pending):
-        release_upload_remote.upload(
-            request.tag, pending, request.payload_dir, runner=runner
-        )
-        # A second observation of the same release, not a second decision
-        # procedure: the returned plan has to describe what GitHub holds now.
-        return release_upload_observation.settle_observation(
-            release_upload_observation.observe_release(
-                request.tag, expected, runner=runner
-            ),
-            expected=expected,
-        )
-    return settlement
-
-
-def verified_payload(request: UploadRequest) -> dict[str, str]:
-    """Return the digests the payload must hold, refusing any other bytes.
-
-    Parameters
-    ----------
-    request
-        The payload directory and the two records that describe it.
-
-    Returns
-    -------
-    dict[str, str]
-        Published name mapped to the digest both records agree on.
-
-    Notes
-    -----
-    The declaration record is written from the staged tree after selection has
-    hashed the sources it approved, so a tree replaced in between yields a
-    declaration record that faithfully describes the replacement. The
-    selection record is the independent account; only once the two name the
-    same bytes is the payload compared with either.
-
-    ``release_digest_record.DigestRecordError`` and its
-    ``RecordedDigestMismatchError`` subclass reach the caller from the record
-    readers and the comparison, and
-    ``release_payload_handoff.PayloadHandoffError`` from
-    :func:`release_payload_handoff.require_payload_matches`.
-
-    Examples
-    --------
-    >>> import tempfile
-    >>> from pathlib import Path
-    >>> import release_digest_record_files, release_digest_files
-    >>> with tempfile.TemporaryDirectory() as tmp:
-    ...     root = Path(tmp)
-    ...     (root / "payload").mkdir()
-    ...     asset = root / "payload" / "a.deb"
-    ...     _ = asset.write_bytes(b"deb")
-    ...     digests = {"a.deb": release_digest_files.digest_of_file(asset)}
-    ...     record, selection = root / "r.json", root / "s.json"
-    ...     for destination in (record, selection):
-    ...         release_digest_record_files.write_digest_record(
-    ...             digests, destination)
-    ...     verified_payload(
-    ...         UploadRequest("v1", root / "payload", record, selection,
-    ...                       root / "plan.json", is_dry_run=False)
-    ...     ) == digests
-    True
-    """
-    declaration = release_digest_record_files.read_digest_record(request.digest_record)
-    selected = release_digest_record_files.read_digest_record(request.selection_record)
-    declared = declaration.as_mapping()
-    release_digest_record.require_records_agree(
-        selected.as_mapping(), declaration=declared
-    )
-    release_payload_handoff.require_payload_matches(request.payload_dir, declared)
-    return declared
 
 
 if __name__ == "__main__":

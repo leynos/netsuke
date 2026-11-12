@@ -511,6 +511,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_upload_declared_assets_properties.py \
 		scripts/tests/test_upload_declared_assets_status.py \
 		scripts/tests/test_release_upload_timing.py \
+		scripts/tests/test_release_upload_trace.py \
 		scripts/crates_io_candidate_cli.py \
 		scripts/crates_io_candidate_archive.py \
 		scripts/crates_io_candidate_errors.py \
@@ -557,7 +558,9 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_upload_failures.py scripts/release_upload_remote.py \
 		scripts/release_upload_timing.py \
 		scripts/release_upload_timing_files.py \
+		scripts/release_upload_trace.py \
 		scripts/release_upload_observation.py \
+		scripts/release_upload_run.py \
 		scripts/upload_declared_assets_cli.py \
 		scripts/upload_declared_assets_refusals.py \
 		-c /dev/null --rootdir=. \

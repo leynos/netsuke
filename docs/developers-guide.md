@@ -2599,16 +2599,24 @@ diagnostic artefacts remain behind `should_upload_workflow_artifacts`, which
 stays false during dry runs.
 
 The publishing lane takes the same download and hoist path but hands the result
-to `./.github/actions/upload-declared-assets` instead. Its interface is four
-required inputs and three optional ones. The required set is `release-tag` (the
-validated tag to reconcile against), `commit` (the full, lowercase 40-character
-hexadecimal commit the release publishes, forwarded from the metadata job so
-the producer records are bound to it), and `version` (the release version the
-archive names interpolate). The optional set is `dry-run` (default `false`,
-reconciling and planning without uploading), `dist-dir` (default `dist`, the
-staged tree the download and hoist steps left behind), `staging-config` (default
-`.github/release-staging.toml`, the file naming targets and platforms), and
-`manifest` (default `Cargo.toml`).
+to `./.github/actions/upload-declared-assets` instead. Its interface is three
+required inputs and four optional ones, and `action.yml` is the authority for
+that count:
+
+| Input            | Required | Default                        | Purpose                                                 |
+| ---------------- | -------- | ------------------------------ | ------------------------------------------------------- |
+| `release-tag`    | yes      | --                             | The validated release tag to reconcile against.         |
+| `commit`         | yes      | --                             | The candidate commit the producer records are bound to. |
+| `version`        | yes      | --                             | The release version the archive names interpolate.      |
+| `dry-run`        | no       | `false`                        | Reconcile and plan without uploading.                   |
+| `dist-dir`       | no       | `dist`                         | The tree the download and hoist steps left behind.      |
+| `staging-config` | no       | `.github/release-staging.toml` | The file naming targets and platforms.                  |
+| `manifest`       | no       | `Cargo.toml`                   | The package the archives belong to.                     |
+
+`commit` must be the full, lowercase 40-character hexadecimal commit the
+release publishes. It is forwarded from the metadata job rather than derived
+from the triggering ref, because only that job validates the spelling and the
+producer records are keyed by the value it produces.
 
 `./.github/workflows/build-and-package.yml` takes the same `commit` input, and
 there it is **required**: a reusable-workflow caller that omits it is refused
@@ -2618,6 +2626,40 @@ the checkout's `HEAD`. Because the metadata job is the only place that
 validates the spelling, a direct caller forwards that job's exported
 `candidate_commit`; `release.yml` publishes it from `workflow_call.outputs` for
 exactly that reason.
+
+The upload CLI's exit status is a contract rather than a diagnostic detail: the
+workflow branches on it, and an operator retries one status and escalates
+another. `scripts/upload_declared_assets_refusals.py` owns the table that maps
+each exception the step can raise to the status a shell sees and the sentence
+its log line leads with, which is what keeps the promise the CLI's docstring
+makes checkable against the code that keeps it.
+
+| Status | Constant                 | Meaning                                                     |
+| ------ | ------------------------ | ----------------------------------------------------------- |
+| `0`    | `EXIT_OK`                | Every declared asset reconciled; nothing left to upload.    |
+| `1`    | `EXIT_CONFLICT`          | A staged artefact disagrees with the release or the record. |
+| `2`    | `EXIT_INPUT_UNREADABLE`  | An input the run cannot read at all.                        |
+| `3`    | `EXIT_UPLOAD_FAILED`     | The transfer itself failed.                                 |
+| `4`    | `EXIT_OUTPUT_UNWRITABLE` | A record the run had to write could not be written.         |
+
+A subclass must precede its base in that table, or the base's label would
+describe the wrong failure; and every status the CLI documents must be
+reachable, since a status with no entry is a promise the workflow can never
+observe. Both properties are tested rather than assumed.
+
+The pieces that action is built from are named after what they own.
+`scripts/record_producer_provenance_cli.py` and its sibling modules write the
+producer record each build job leaves in its staging directory, and
+`scripts/release_producer_provenance.py` is the policy that validates one;
+`scripts/release_package_origins.py` decides whether a package's recorded
+origins support publishing it; `scripts/release_payload_selection.py` chooses
+the declared names and `scripts/release_payload_tree.py` copies exactly those
+files; `scripts/release_upload_observation.py` splits the effectful release
+listing from the read-only reconciliation decision;
+`scripts/release_upload_run.py` sequences one run — verify the payload,
+transfer, re-observe — through the injected runner; and
+`scripts/upload_declared_assets_cli.py` is the entry point the action's steps
+call, owning the argument surface and the exit-status contract over that run.
 
 That action selects only the artefacts this run's producer records vouch for,
 writes the declaration and the trusted digest record from the staged bytes,
@@ -2668,6 +2710,30 @@ process boundary. Writing and reading the record live in
 assumed every member were a number would misparse a valid record, and the same
 reason that keeps the plan to a bounded failure vocabulary rather than command
 output keeps this file to durations.
+
+The aggregate says how long a boundary took, not which of its calls failed: a
+run downloads once per undigested name, and eleven calls summed into four
+numbers cannot say which one refused. `upload-trace.jsonl` is the per-call
+record, written by `release_upload_trace` to the same directory and retained by
+the same `always()` step. It follows the JSONL style
+`release_operation_records` already uses: one `trace_event` per `gh`
+invocation, carrying the operation (`release_listing`, `asset_download`,
+`asset_upload`, or `release_verification`), the outcome (`completed` or
+`failed`), an error category on a failed call, its duration in seconds, and the
+run identity (`run_id`, `job`, `run_attempt`, each `unknown` when the
+environment carries none). The two vocabularies are deliberately separate: a
+boundary names a duration to sum, and an operation names a call to trace, so
+the mapping between them lives in one table rather than in either caller. The
+seam is the same `TimedRunner`, and it traces a call that returned non-zero as
+`failed` rather than only one that raised: a `gh` refusal reported through its
+exit status is exactly the call an operator reads the trace to find. The record
+is bounded by construction. No asset name, URL, or command output reaches it,
+because the file outlives the run and an asset name is both unbounded and
+attacker-visible in a way a duration is not. `TraceRecord` refuses an operation
+or outcome outside that vocabulary when it is constructed, so an unfilterable
+value cannot be written at all, and the run identity is read from the
+environment once by the command line rather than by the seam that writes the
+file.
 
 Three earlier steps have no such treatment, and a reader who takes "the action
 never fails" literally will misdiagnose their failures. Selection can refuse a
@@ -3634,11 +3700,11 @@ those operations at the file or transport boundary:
   an observation says what the release holds, while what the payload should
   hold is the caller's, and a plan derived from the listing alone would decide
   about names nobody declared. Nothing in the module composes the two:
-  `upload_declared_assets_cli.settle` calls them separately around its
-  transfer, because the re-read after an upload is a second observation of the
-  same release and not a second decision procedure. A convenience wrapper
-  taking both in one call would hide the one effectful half at exactly the call
-  site the split exists to keep honest.
+  `release_upload_run.settle` calls them separately around its transfer,
+  because the re-read after an upload is a second observation of the same
+  release and not a second decision procedure. A convenience wrapper taking
+  both in one call would hide the one effectful half at exactly the call site
+  the split exists to keep honest.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
 

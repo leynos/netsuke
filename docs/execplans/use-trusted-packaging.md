@@ -3366,6 +3366,42 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   wrong: the observation is supplied or omitted as a whole, so a caller that
   skips it falls back to the count alone rather than to a partial observation.
 
+  **The timings were not enough for the Observability check.**
+  `upload-timings.json` answers how long a boundary took, and CodeRabbit's
+  Warning row asked for a record answering which call failed. That is a
+  different question: a boundary is summed across every call that crossed it,
+  so four numbers stand for as many as eleven `gh` invocations and cannot say
+  which one refused. The first disposition -- "this is Python, the repository
+  has no tracing dependency, the timings are the trace" -- was wrong on
+  inspection, because the repository already has a JSONL trace style
+  (`release_operation_records`) and the row named `TimedRunner` as the seam it
+  expected. A per-call record there costs no new dependency.
+
+  `scripts/release_upload_trace.py` is that record. `TimedRunner` appends one
+  `TraceRecord` per traced call beside the aggregate it already kept, and
+  `upload_declared_assets_cli` writes the file next to the plan and timings,
+  passing the run identity in from `os.environ` at the command line. Three
+  things were worth learning there. A `gh` refusal normally arrives as a
+  non-zero *status*, not an exception, so the seam also reads `returncode`:
+  without that, a run whose transfer failed but whose listing succeeded traced
+  every call as `completed`, which is precisely the confusion the file exists
+  to remove, and two cases failed on it. A trace starts empty on every runner:
+  an earlier draft accepted a seeded `CallTrace`, which would let one run's
+  calls be attributed to another, and the repository's
+  `function-call-in-default-argument` lint was right to refuse it. The two
+  vocabularies stay separate -- a boundary names a duration to sum, an
+  operation names a call to trace -- so the mapping is one table in
+  `release_upload_trace` rather than a caller's assumption.
+
+  The Makefile holds both lists. `test_release_upload_trace.py` had to join
+  `SECTION_MODULES` *and* the `test-release-publication` command line, and
+  `release_upload_trace.py` had to join both `SOURCE_MODULES` and the doctest
+  argument list. The wiring contract caught the first omission immediately
+  (`these test modules are not run by any Makefile recipe`) and the target
+  contract caught the second. That is the contract doing its job, and it is why
+  the module is registered in four places rather than one: each registration is
+  a separate reachability claim.
+
 ## Surprises & discoveries
 
 - Observation: **a stale `.pyc` in `scripts/__pycache__` can serve a

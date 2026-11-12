@@ -196,12 +196,16 @@ runs:
         # above: a re-run must not collide with, or overwrite, its own earlier
         # plan.
         #
-        # The timings file rides with the plan because the uploader writes it
-        # into the same directory and it is only meaningful beside the run it
-        # measured. A run that failed before the uploader ran leaves neither,
-        # which `warn` reports without masking the uploader's diagnostic.
+        # The timings and trace files ride with the plan because the uploader
+        # writes them into the same directory and they are only meaningful
+        # beside the run they measured. The trace is the per-call record: the
+        # timings say how long listing took, and only the trace says which of
+        # several calls failed. A run that failed before the uploader ran
+        # leaves none of the three, which `warn` reports without masking the
+        # uploader's diagnostic.
         name: declared-assets-plan-${{ github.job }}-${{ github.run_attempt }}
         path: |
           ${{ runner.temp }}/declared-assets/upload-plan.json
           ${{ runner.temp }}/declared-assets/upload-timings.json
+          ${{ runner.temp }}/declared-assets/upload-trace.jsonl
         if-no-files-found: warn
