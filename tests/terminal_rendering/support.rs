@@ -1,4 +1,12 @@
 //! Own an isolated child workspace and command environment for rendering tests.
+//!
+//! Every rendering test needs the same three things: a scratch directory the
+//! binary can write into, a command line built with the same `clap` definition
+//! the binary uses, and the display plan that command line resolves to under
+//! the terminal facts the test sets up. [`TerminalWorkspace`] supplies the
+//! first, and [`display_plan_for_args`] resolves the third from the second.
+//! [`visible_text`] is the shared reader for captured bytes: the stage labels
+//! carry Fluent bidi isolates, so a raw substring search silently finds nothing.
 
 use anyhow::{Context, Result};
 use camino::Utf8Path;

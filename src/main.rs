@@ -1,7 +1,28 @@
-//! Application entry point.
+//! Application entry point: the composition root for one Netsuke invocation.
 //!
-//! Parses command-line arguments and delegates execution to [`runner::run`].
-//! It records configuration-load outcomes and latency during startup.
+//! `main` captures argv and the two terminal facts once, installs the tracing
+//! subscriber and the Miette hook, and hands everything to [`run_with_args`],
+//! which is the part a test can drive. The work either side of that call lives
+//! in the private adapters this module declares, and the ordering among them is
+//! the contract:
+//!
+//! - [`main_startup`] resolves the pre-configuration signals — locale, JSON
+//!   from raw argv, and the colour for clap's help and version renderers —
+//!   and parses argv. It also owns [`settle_startup_diagnostics`], which is
+//!   what releases the startup buffer once the diagnostic mode is known.
+//! - [`main_tracing`] installs the one process-wide subscriber and later
+//!   adjusts its filter and ANSI mode; it takes the early-event writer from
+//!   [`startup_tracing::StartupWriter`], which holds what was emitted while the
+//!   effective mode was still unknown.
+//! - [`main_diagnostics`] selects human or JSON rendering, stores the resolved
+//!   diagnostic style for later reports, and renders failures in their
+//!   most specific form.
+//! - [`config_load`] times the configuration merge and records its outcome, and
+//!   [`observability`] holds the operation names those records use.
+//!
+//! Only after the merge succeeds does the resolved display plan exist, so the
+//! adapters above are wired in the order the plan becomes available rather than
+//! the reverse. Execution itself is delegated to [`runner::run`].
 
 use miette::Report;
 use netsuke::{

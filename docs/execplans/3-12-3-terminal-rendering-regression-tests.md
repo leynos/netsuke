@@ -520,11 +520,22 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `test-package-verify` 4 s, `test-coverage-artifact` 1 s,
   `test-documentation-contracts` 1 s, `markdownlint` 23 s, `nixie` 1 s; all
   exited 0.
-- [ ] (2026-11-12) Reach equilibrium on `8be5f702d`: CodeRabbit has auto-paused
-  the branch (head not reviewed), the resume has been posted twice through the
-  pool account and not yet picked up, and eleven hosted checks are still
-  running. The formal-review signal and the standing `CHANGES_REQUESTED` both
-  remain open.
+- [x] (2026-11-12) Addressed review `5871342914`'s blocking row, `5e2208f7f`
+  (D38). Module-Level Documentation held: `src/main.rs`'s doc still described
+  the module as it was on `origin/main`, naming none of the four adapters this
+  branch moved out of it, so a reader reaching the entry point saw four sibling
+  modules with no statement of why or in what order. Rewritten around them, with
+  `main_tracing`'s relationship paragraph added and the five other short
+  module docs extended. The review's Domain Architecture row is not a new
+  finding — it was re-raised as a warning with the note that the inputs changed
+  and its verdict is no longer current, and it is the row D34 already rebuts
+  with a fresh measurement of 365 lines across 39 files against a 600-line
+  tolerance.
+- [ ] (2026-11-12) Reach equilibrium on `5e2208f7f`: CodeRabbit reviewed it as
+  `5871342914` (one error, the Module-Level Documentation row), the fix for
+  which is the commit after it. The branch was rate-limited to one review per
+  hour at that point, `CHANGES_REQUESTED` stands from `5870783715`, and the
+  hosted checks for the new head were still running.
 
 ## Surprises & discoveries
 
@@ -1743,6 +1754,54 @@ first style. It sits in a `#[cfg(test)] mod tests` inside
 lint caps at 400 lines; the inline module is the house shape for a unit that
 tests one file. The developers' guide states the arrangement, including why a
 report created during the merge keeps the plain default.
+
+Date/Author: 2026-11-12, implementation agent.
+
+### D38: the composition root's module docs now name what it composes
+
+**Decision.** Rewrite `src/main.rs`'s module doc around the adapters it
+declares, add the relationship paragraph `src/main_tracing.rs` was missing, and
+extend the short module docs in the five other files the same review named.
+
+**Why it held.** This branch moved startup and tracing out of `src/main.rs` into
+`main_startup`, `main_tracing`, `main_diagnostics` and `startup_tracing`, and
+left the module doc reading "Parses command-line arguments and delegates
+execution to [`runner::run`]" — unchanged from `origin/main`. The doc described
+a module that no longer exists. The four adapters are binary-private, so the
+only place their relationship can be stated is the composition root that owns
+them, and `src/main/` is not available to hold a parent module doc because
+`src/main.rs` *is* the crate root (the layout contract's own rationale, at
+`_MAIN_PREFIX_EXCEPTION`). A reader arriving at the entry point therefore had
+four sibling modules and no statement of why there are four, which of them
+settles the startup buffer, or why the ordering between them matters. That is
+what the Module-Level Documentation check requires and what was missing.
+
+**What the docs now say.** `src/main.rs` names each adapter with its
+responsibility and states the ordering contract: the display plan does not
+exist until the configuration merge succeeds, so the adapters are wired in the
+order the plan becomes available. `main_tracing` gains the paragraph the review
+asked for — that its writer is a `StartupWriter` from `startup_tracing`, that
+`crate::main` is what calls `set_tracing_ansi` after the merge, and that the
+buffer is settled by `config_load` on the failure paths and by `main` once the
+mode is known. Both of those halves were checked against the call sites rather
+than inferred: an earlier draft of that paragraph named `main_startup` as the
+`set_tracing_ansi` caller and was corrected at `src/main.rs:154` and `:332`,
+with `config_load/mod.rs:71` and `:77` settling the buffer.
+
+**The other five files.** The review named `src/runner/build_targets.rs`,
+`test_support/src/terminal/classify.rs`, `test_support/src/terminal/pty/`
+`process.rs`, `.../readers.rs` and `tests/terminal_rendering/support.rs` as
+one-line summaries whose parent or sibling relationship is not obvious from the
+path. Each gains the sentence that makes it obvious, and each claim was checked
+against the code: `BuildTargets` is filled from both `--targets` and the
+configured defaults at `src/runner/mod.rs:222-224`; the classifier reports SGR,
+redraw, OSC and a *live* carriage return as separate facts; `process.rs`
+signals the process group rather than the child, which is what stops a
+grandchild outliving a test; `readers.rs` drains both streams on their own
+threads because a full pipe buffer would otherwise stop the child before it
+could exit; and `support.rs` resolves its plan through `display_plan_for_args`
+rather than `TerminalWorkspace` holding one. All six files stay inside the
+400-line module limit, the largest at 299 lines before and after.
 
 Date/Author: 2026-11-12, implementation agent.
 

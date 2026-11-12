@@ -1,4 +1,15 @@
 //! Identify terminal-control sequences and non-ASCII glyphs in captured bytes.
+//!
+//! A regression test cannot assert "this run styled its output" by searching
+//! for `\x1b`, because the same byte opens a cursor move, a redraw or an OSC
+//! hyperlink, and a test that treats them as one class reports the wrong cause
+//! when it fails. So this module reports each class as its own fact — SGR
+//! specifically for styling, `has_redraw` for cursor traffic, `has_osc` for
+//! operating-system commands — and a *live* carriage return for redraws,
+//! excluding those that sit inside an OSC, DCS, SOS, PM or APC payload and are
+//! therefore never acted on. `has_any_escape` stays as the coarse fact for the
+//! "no escape byte reached this stream" assertion, which is a different claim
+//! from any of the above and the one JSON mode actually has to satisfy.
 
 #[cfg(test)]
 #[path = "classify_tests.rs"]

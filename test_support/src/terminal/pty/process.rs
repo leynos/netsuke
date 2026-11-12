@@ -1,4 +1,12 @@
 //! Spawn PTY children and manage their process groups.
+//!
+//! Everything here exists so a test can hang up on a real terminal without
+//! leaving anything running: the child gets its own process group, and
+//! [`kill_process_group`] signals the group rather than the child so a
+//! grandchild cannot outlive the test. [`super::readers`] owns the other half
+//! of the lifecycle — draining the two streams while this module supervises the
+//! child — because a PTY whose master side is not drained will block the child
+//! before it ever exits.
 
 use super::{Attach, PtyRequest};
 use anyhow::{Context, Result, anyhow};

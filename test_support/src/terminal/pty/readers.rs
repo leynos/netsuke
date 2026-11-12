@@ -1,4 +1,11 @@
 //! Drain PTY and piped child output without blocking process management.
+//!
+//! Both streams have to be read while the child is still running, or a full
+//! pipe buffer stops it before it can exit and the test deadlocks instead of
+//! failing. Reading blocks, though, and the same thread has to notice when the
+//! child is gone — so each stream is drained on its own thread and this module
+//! joins them. [`super::process`] owns spawning, signalling and reaping; this
+//! module never decides that the child should stop.
 
 use super::process::{kill_process_group, stop_child};
 use anyhow::{Context, Result, anyhow};

@@ -3,6 +3,18 @@
 //! The binary buffers early events until configuration resolves the effective
 //! diagnostic mode, then changes the subscriber's filter without installing a
 //! second global subscriber.
+//!
+//! The two halves of that handshake live either side of this module. The writer
+//! is a [`StartupWriter`], which is where the buffered events actually sit:
+//! [`init_tracing`] is handed one by [`crate::main`] and treats it as opaque,
+//! so this module decides where events go while `startup_tracing` decides how
+//! long they are held and where they are released. [`crate::main`] is what
+//! later calls [`set_tracing_ansi`], after the configuration merge resolves the
+//! display plan; the buffer is settled by [`crate::config_load`] on the failure
+//! paths and by [`crate::main`] once the mode is known. Neither is optional
+//! — a release before the mode is known can corrupt a JSON document, and an
+//! ANSI change before the merge would style the startup records with a plan
+//! that does not exist yet.
 
 use std::sync::OnceLock;
 use tracing_subscriber::filter::LevelFilter;

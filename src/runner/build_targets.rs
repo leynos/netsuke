@@ -1,4 +1,12 @@
 //! Carry a borrowed target list through runner dispatch.
+//!
+//! The list arrives from command-line parsing — either from `--targets` or from
+//! the configured defaults — and has to reach the Ninja invocation several
+//! layers down. It is borrowed rather than cloned because nothing on that path
+//! owns it, and empty means "whatever the IR declares", which is why the
+//! wrapper exists instead of a bare `&[String]`: the difference between "no
+//! targets named" and "targets named" is the type's whole job, and a slice
+//! alone would leave every call site to re-derive it.
 
 /// Target names passed through to Ninja; an empty slice uses IR defaults.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
