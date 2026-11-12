@@ -1,10 +1,14 @@
-"""Load, tokenize, and mutate the release-inventory verification contract.
+"""Load and tokenize the documents the release-inventory contract reads.
 
-The contract test needs the action and the job twice: once to assert their
-current shape, and once per deliberate mutation, to show the assertion notices
-the change. This module holds the loading, the shell tokenizers, and that
-mutation set, so the test module can state the contract while each mutation
-stays beside the shape it changes.
+The contract test asserts the action's and the job's current shape, and then
+re-asserts it once per deliberate mutation to show that the assertion notices
+the change. This module holds the shared loading and the shell tokenizers: how
+a step's ``run`` text becomes the commands bash would execute, and how an
+expression or a ``gh api`` call is recognised inside it.
+
+The mutations themselves live in ``release_verify_inventory_mutations.py``,
+beside the shape each one changes, so this module stays the reading side of the
+contract rather than growing a second responsibility.
 """
 
 import re
@@ -73,7 +77,19 @@ EXPECTED_INPUTS = {
     "github-token": True,
 }
 EXPECTED_OUTPUTS = {
-    "verified-record-path": "${{ steps.verify.outputs.verified-record-path }}"
+    "verified-record-path": "${{ steps.verify.outputs.verified-record-path }}",
+    # The job's telemetry reads these, so each phase's outcome and timing has
+    # to be published by the action: the workflow cannot see the boundary
+    # between the two listings, the downloads, and the verifier.
+    "release-listing-outcome": "${{ steps.list-assets.outcome }}",
+    "release-listing-started-ns": "${{ steps.list-releases.outputs.started_ns }}",
+    "release-listing-ended-ns": "${{ steps.list-assets.outputs.ended_ns }}",
+    "release-download-outcome": "${{ steps.download.outcome }}",
+    "release-download-started-ns": "${{ steps.download.outputs.started_ns }}",
+    "release-download-ended-ns": "${{ steps.download.outputs.ended_ns }}",
+    "inventory-verification-outcome": "${{ steps.verify.outcome }}",
+    "inventory-verification-started-ns": "${{ steps.verify.outputs.started_ns }}",
+    "inventory-verification-ended-ns": "${{ steps.verify.outputs.ended_ns }}",
 }
 EXPECTED_ENVIRONMENTS = {
     VALIDATE_STEP: {

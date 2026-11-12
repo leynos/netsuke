@@ -29,6 +29,14 @@ STAGED_PHASES = (
 #: timed inside the package action, because the boundary between them is not
 #: visible to the workflow; the upload is timed by markers around it.
 PACKAGING_PHASES = ("crate_packaging", "crate_candidate_validation", "artifact_upload")
+#: The phases the verification job runs. The action times all three, because
+#: the workflow cannot see the boundary between the two listings, the
+#: downloads, and the verifier.
+VERIFICATION_PHASES = (
+    "release_listing",
+    "release_download",
+    "inventory_verification",
+)
 #: The step-id prefix each phase's timing markers carry. Draft creation has no
 #: markers: its outcome is the step's own, so there is nothing to time around
 #: it. The upload plan's markers are named for the plan rather than for the
@@ -123,6 +131,23 @@ def assert_packaging_phases_read_action_outputs(env: dict[str, object]) -> None:
             key = f"{phase.upper()}_{suffix.upper().replace('-', '_')}"
             assert env.get(key) == expected, (
                 f"the summary must read the {phase} {suffix} from the package action"
+            )
+
+
+def assert_verification_phases_read_action_outputs(env: dict[str, object]) -> None:
+    """Require every verification phase to be read from the verifier action.
+
+    The action is the only place that sees the boundary between the two
+    listings, the downloads, and the verifier, so a phase read from anywhere
+    else would report a span the workflow cannot actually observe.
+    """
+    for phase in VERIFICATION_PHASES:
+        output = phase.replace("_", "-")
+        for suffix in ("outcome", "started-ns", "ended-ns"):
+            expected = f"${{{{ steps.verify_inventory.outputs.{output}-{suffix} }}}}"
+            key = f"{phase.upper()}_{suffix.upper().replace('-', '_')}"
+            assert env.get(key) == expected, (
+                f"the summary must read the {phase} {suffix} from the verifier action"
             )
 
 
@@ -317,6 +342,7 @@ __all__ = [
     "OBSERVABILITY_SUMMARY_STEP",
     "PACKAGING_PHASES",
     "STAGED_PHASES",
+    "VERIFICATION_PHASES",
     "assert_draft_outcome_policy",
     "assert_packaging_phases_read_action_outputs",
     "assert_packaging_steps_expose_outcomes",
@@ -326,6 +352,7 @@ __all__ = [
     "assert_summary_environment",
     "assert_summary_phase_timings",
     "assert_timing_markers_run_after_failures",
+    "assert_verification_phases_read_action_outputs",
     "staging_observation",
     "timed_phases",
 ]

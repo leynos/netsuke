@@ -3698,9 +3698,10 @@ presents a payload matching its declaration record but not its selection record
 is refused as a conflict.
 
 The provenance chain has six links and each one refuses rather than
-interpolates. Links 1 to 4 run in every tagged workflow; links 5 and 6 are
-written and tested but are not yet wired into `release.yml`, so today the
-record is retained past the upload rather than consumed by them.
+interpolates. Links 1 to 5 run in every tagged workflow; link 6 is written and
+tested but is not yet wired into `release.yml`, so today the record is consumed
+by verification and retained past it, but nothing yet acts on the verified
+result.
 
 1. `release_staged_digests` hashes each declared name in the staged tree.
 2. `select_release_payload_cli` hashes the sources it approves, requires them
@@ -3712,9 +3713,10 @@ record is retained past the upload rather than consumed by them.
 4. `upload_declared_assets_cli --digest-record --selection-record` refuses a
    payload whose bytes disagree with the records, and uploads only names they
    cover.
-5. *Planned.* `verify_release_inventory_cli --trusted` compares every
-   downloaded asset against the record, and refuses a record that does not
-   cover exactly the declared set.
+5. `verify_release_inventory_cli --trusted` compares every downloaded asset
+   against the record, and refuses a record that does not cover exactly the
+   declared set. `verify-release-inventory` runs it over the assets GitHub
+   actually attached.
 6. *Planned.* `finalize_github_release_cli --identity` reads the same record to
    decide what a re-run should do.
 

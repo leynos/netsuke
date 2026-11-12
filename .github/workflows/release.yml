@@ -1005,6 +1005,10 @@ jobs:
           # the publisher does, rather than with whatever the tag resolves to.
           ref: ${{ needs.metadata.outputs.candidate_commit }}
           persist-credentials: false
+      - id: release_operation_start
+        name: Start release operation timing
+        shell: bash
+        run: printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
       - name: Install uv
         uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884
         with:
@@ -1023,7 +1027,8 @@ jobs:
         with:
           name: ${{ needs.publish-release.outputs.trusted-artifact }}
           path: trusted
-      - name: Verify the downloaded release inventory
+      - id: verify_inventory
+        name: Verify the downloaded release inventory
         uses: ./.github/actions/verify-release-inventory
         with:
           tag: ${{ needs.metadata.outputs.release_tag }}
@@ -1034,3 +1039,48 @@ jobs:
           download-directory: release-download
           output-path: verified/verified-digests.json
           github-token: ${{ github.token }}
+      # Verification is where a release is first compared with the record the
+      # publisher kept, so its phases are what an operator reads after a
+      # failure. The summary runs even when verification refused the release,
+      # because that refusal is the outcome it exists to report.
+      - name: Record release operation observability
+        if: always()
+        env:
+          RELEASE_OPERATION: verify_release_inventory
+          # Verification runs only when the run is publishing, so the mode is
+          # fixed rather than read from an output that could disagree.
+          RELEASE_DRY_RUN: 'false'
+          JOB_STATUS: ${{ job.status }}
+          OPERATION_STARTED_NS: ${{ steps.release_operation_start.outputs.started_ns }}
+          RELEASE_LISTING_OUTCOME: >-
+            ${{ steps.verify_inventory.outputs.release-listing-outcome }}
+          RELEASE_LISTING_STARTED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-listing-started-ns }}
+          RELEASE_LISTING_ENDED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-listing-ended-ns }}
+          RELEASE_DOWNLOAD_OUTCOME: >-
+            ${{ steps.verify_inventory.outputs.release-download-outcome }}
+          RELEASE_DOWNLOAD_STARTED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-download-started-ns }}
+          RELEASE_DOWNLOAD_ENDED_NS: >-
+            ${{ steps.verify_inventory.outputs.release-download-ended-ns }}
+          INVENTORY_VERIFICATION_OUTCOME: >-
+            ${{ steps.verify_inventory.outputs.inventory-verification-outcome }}
+          INVENTORY_VERIFICATION_STARTED_NS: >-
+            ${{ steps.verify_inventory.outputs.inventory-verification-started-ns }}
+          INVENTORY_VERIFICATION_ENDED_NS: >-
+            ${{ steps.verify_inventory.outputs.inventory-verification-ended-ns }}
+          # The verifier never uploads, so there is no upload error to report.
+          UPLOAD_ERROR_PRESENT: 'false'
+          OBSERVABILITY_PATH: ${{ runner.temp }}/release-operation-observability.jsonl
+        run: |
+          set -euo pipefail
+          python3 scripts/release_operation_observability.py
+      - name: Upload release operation observability
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        # v7.0.1
+        with:
+          name: release-operation-observability-${{ github.job }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-operation-observability.jsonl
+          if-no-files-found: ignore

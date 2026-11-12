@@ -62,6 +62,41 @@ outputs:
   verified-record-path:
     description: The verified digest record written by the verification step.
     value: ${{ steps.verify.outputs.verified-record-path }}
+  # The job times the three phases from inside the action, because the workflow
+  # cannot see the boundary between the two listings, the downloads, and the
+  # verifier. Reporting them separately is what lets an operator tell a listing
+  # failure from a download failure from a release that disagrees with its
+  # build. The listing phase spans both listing steps: it starts when the
+  # release listing starts and ends when the asset listing ends, and its
+  # outcome is the asset listing's, which is skipped when the release listing
+  # failed.
+  release-listing-outcome:
+    description: Outcome of the two listing steps together.
+    value: ${{ steps.list-assets.outcome }}
+  release-listing-started-ns:
+    description: Release listing start time in nanoseconds.
+    value: ${{ steps.list-releases.outputs.started_ns }}
+  release-listing-ended-ns:
+    description: Asset listing end time in nanoseconds.
+    value: ${{ steps.list-assets.outputs.ended_ns }}
+  release-download-outcome:
+    description: Outcome of the attachment downloads alone.
+    value: ${{ steps.download.outcome }}
+  release-download-started-ns:
+    description: Attachment download start time in nanoseconds.
+    value: ${{ steps.download.outputs.started_ns }}
+  release-download-ended-ns:
+    description: Attachment download end time in nanoseconds.
+    value: ${{ steps.download.outputs.ended_ns }}
+  inventory-verification-outcome:
+    description: Outcome of the verifier alone.
+    value: ${{ steps.verify.outcome }}
+  inventory-verification-started-ns:
+    description: Verifier start time in nanoseconds.
+    value: ${{ steps.verify.outputs.started_ns }}
+  inventory-verification-ended-ns:
+    description: Verifier end time in nanoseconds.
+    value: ${{ steps.verify.outputs.ended_ns }}
 
 runs:
   using: composite
@@ -163,6 +198,11 @@ runs:
         INVENTORY_WORK_DIR: ${{ runner.temp }}/release-inventory
       run: |
         set -euo pipefail
+        printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
         mkdir -p "$INVENTORY_WORK_DIR"
         # GET with `--slurp` wraps every page in one array, which is the shape
         # the selection policy models. A POST would be rejected by the endpoint,
@@ -185,6 +225,10 @@ runs:
         INVENTORY_WORK_DIR: ${{ runner.temp }}/release-inventory
       run: |
         set -euo pipefail
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
         release_id="$(cat "$INVENTORY_WORK_DIR/release-id.txt")"
         gh api --method GET --paginate --slurp \
           "repos/$RELEASE_REPOSITORY/releases/$release_id/assets" \
@@ -204,6 +248,11 @@ runs:
         DOWNLOAD_DIRECTORY: ${{ inputs['download-directory'] }}
       run: |
         set -euo pipefail
+        printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
         mkdir -p "$DOWNLOAD_DIRECTORY"
         # A name repeated in the plan would otherwise let the second download
         # replace the first, so the plan is refused for duplicates upstream and
@@ -223,10 +272,18 @@ runs:
             printf 'download plan entry %s has no asset name\n' "$asset_id" >&2
             exit 1
           fi
-          gh api --method GET \
+          # The identifier and the name are the only facts about the failure
+          # that are safe to print: the response body and the token are not.
+          # Naming the asset is what lets an operator tell which attachment
+          # stopped the run without reading the whole plan.
+          if ! gh api --method GET \
             -H 'Accept: application/octet-stream' \
             "repos/$RELEASE_REPOSITORY/releases/assets/$asset_id" \
-            >"$DOWNLOAD_DIRECTORY/$asset_name"
+            >"$DOWNLOAD_DIRECTORY/$asset_name"; then
+            printf 'download of asset %s (%s) failed\n' \
+              "$asset_id" "$asset_name" >&2
+            exit 1
+          fi
         done <"$INVENTORY_WORK_DIR/download-plan.txt"
 
     - name: Verify inventory
@@ -239,6 +296,11 @@ runs:
         OUTPUT_PATH: ${{ inputs['output-path'] }}
       run: |
         set -euo pipefail
+        printf 'started_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        record_ended_ns() {
+          printf 'ended_ns=%s\n' "$(date +%s%N)" >>"$GITHUB_OUTPUT"
+        }
+        trap record_ended_ns EXIT
         # This step deliberately receives no token: every byte it reads is
         # already on disk, so a credential here could only widen the blast
         # radius of a compromised verifier.

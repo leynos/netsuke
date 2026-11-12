@@ -115,18 +115,33 @@ is not one of the declared names. Build material that ships inside the packages
 -- the binary, licences, completions, and manual pages -- carries no release
 suffix and is simply left out of the upload. The job then hashes the declared
 bytes and retains the declaration and the digest record as workflow artefacts,
-so what was uploaded stays on record. No later job consumes those artefacts
-yet, and no job in this workflow publishes a release. Only a release the
-workflow creates is a draft; when the tag already has one, the job attaches to
-that release whether or not it is public. An attached asset GitHub already
-reports with the recorded digest is skipped; an attached asset with different
-bytes stops the run, and the uploader never replaces an existing asset. An
-attached asset whose bytes cannot be established -- GitHub reports no usable
-digest for it and the download that would settle the question fails -- stops
-the run too, but the upload plan records it apart from a conflict, because "the
-release holds the wrong bytes" and "nobody could read the bytes" call for
-different remedies. Rerunning a job is therefore safe, and a rerun cannot swap
-a release's bytes for a second build's.
+so what was uploaded stays on record. No job in this workflow publishes a
+release. Only a release the workflow creates is a draft; when the tag already
+has one, the job attaches to that release whether or not it is public. An
+attached asset GitHub already reports with the recorded digest is skipped; an
+attached asset with different bytes stops the run, and the uploader never
+replaces an existing asset. An attached asset whose bytes cannot be established
+-- GitHub reports no usable digest for it and the download that would settle
+the question fails -- stops the run too, but the upload plan records it apart
+from a conflict, because "the release holds the wrong bytes" and "nobody could
+read the bytes" call for different remedies. Rerunning a job is therefore safe,
+and a rerun cannot swap a release's bytes for a second build's.
+
+A publishing run then verifies what GitHub ended up holding. The
+`verify-release-inventory` job downloads every asset the draft release carries
+and compares it with the declaration and the digest record the publisher
+retained, so it judges the release against bytes recorded before the upload
+rather than against anything it downloaded itself. The job runs only when the
+metadata, crates.io, and release publishers all succeeded and the run is
+publishing, and it never contacts the registry: it holds `contents: write` to
+read a draft's listing, the verifier step receives no token at all, and its own
+bytes are already on disk. It stops the run when the release carries an asset
+the declaration does not name, when a declared asset is missing, when a
+downloaded asset's digest differs from the recorded one, or when the record
+does not cover exactly the declared set -- including a package swapped for
+another build's, which travels without a sidecar of its own. It does not
+publish, un-draft, or replace anything, and a person still promotes a valid
+draft.
 
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase
