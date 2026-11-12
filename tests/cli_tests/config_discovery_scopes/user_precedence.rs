@@ -181,11 +181,14 @@ fn missing_extends_parent_in_user_config_stops_discovery() -> Result<()> {
 }
 
 /// When the working directory is the home directory, `$HOME/.netsuke.toml` is
-/// both the user configuration and the project configuration. Its operator
-/// grant must stay authoritative rather than being quarantined as a project
-/// request.
+/// both the user configuration and the project configuration.
+///
+/// The dual role resolves to project scope, so its environment grant stays
+/// quarantined rather than being promoted to operator authority. Reading the
+/// user scope first must not turn `$HOME` into an operator root: a project
+/// configuration's grants are untrusted wherever they are found.
 #[rstest]
-fn home_dotfile_keeps_operator_authority_when_it_is_also_the_project_config() -> Result<()> {
+fn home_dotfile_acting_as_project_config_keeps_project_quarantine() -> Result<()> {
     let home = tempdir().context("create temporary home directory")?;
     let system = tempdir().context("create temporary system directory")?;
     write_system_config(system.path())?;
@@ -200,14 +203,12 @@ fn home_dotfile_keeps_operator_authority_when_it_is_also_the_project_config() ->
     // discovery resolves the same physical file as the user base.
     let merged = merge_in_child(&["netsuke"], home.path(), &environment)?;
 
+    // An empty allowlist is default-allow, so only the quarantined field itself
+    // shows whether the grant survived.
     ensure!(
-        merged.env_allow_var == ["SAFE"],
-        "the operator grant must survive the dual user/project role: {:?}",
+        merged.env_allow_var.is_empty(),
+        "a project configuration must not contribute an environment grant: {:?}",
         merged.env_allow_var
-    );
-    ensure!(
-        merged.env_access_policy().evaluate("SAFE").is_ok(),
-        "the operator grant must remain effective"
     );
     ensure!(
         merged.emoji == EmojiPolicy::Never,
