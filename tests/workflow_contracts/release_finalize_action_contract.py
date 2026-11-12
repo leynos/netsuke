@@ -53,13 +53,18 @@ _PRESENCE_TEST = re.compile(
 #: resolves its own dependencies at run time, with a write token in scope.
 FINALIZER_SCRIPT = "scripts/finalize_github_release.py"
 
+#: The delimiters of the PEP 723 inline-metadata block. `uv` reads the block
+#: and nothing else, so a setting outside it is a comment the resolver ignores.
+_METADATA_OPEN = "# /// script"
+_METADATA_CLOSE = "# ///"
+
 #: The inline-metadata table a PEP 723 block needs for any setting beyond
 #: `dependencies` and `requires-python`.
 _UV_TABLE = "# [tool.uv]"
 
 #: The resolution cutoff itself. Dates only, so a malformed value cannot pass
 #: as a cutoff the resolver would reject anyway.
-_EXCLUDE_NEWER = re.compile(r'^# exclude-newer = "\d{4}-\d{2}-\d{2}T', re.MULTILINE)
+_EXCLUDE_NEWER = re.compile(r'^# exclude-newer = "\d{4}-\d{2}-\d{2}T')
 
 #: The flag that keeps `uv` from building a source distribution. The cutoff
 #: bounds which releases may be chosen; it says nothing about what a chosen
@@ -274,29 +279,66 @@ def _assert_finalize_step(steps: list[dict[str, object]]) -> None:
     assert "|| " not in run, "the finalize step must not fall back after a refusal"
 
 
+def _metadata_block(text: str) -> list[str]:
+    """Return the lines inside the script's PEP 723 metadata block.
+
+    Parameters
+    ----------
+    text
+        The adapter's full text.
+
+    Returns
+    -------
+    list[str]
+        The block's body as written, comment markers included, so a caller can
+        match a setting the way the resolver reads it. Empty when either
+        delimiter is missing.
+
+    Notes
+    -----
+    The block is bounded, not the file: `uv` ignores everything outside it, so
+    a setting that moved past the closing delimiter is a comment the resolver
+    never sees even though the file still contains the text.
+    """
+    lines = text.splitlines()
+    if _METADATA_OPEN not in lines or _METADATA_CLOSE not in lines:
+        return []
+    opened = lines.index(_METADATA_OPEN)
+    closed = lines.index(_METADATA_CLOSE, opened + 1)
+    return lines[opened + 1 : closed]
+
+
 def assert_adapter_pins_its_closure(source: str | None = None) -> None:
     """Require the token-bearing adapter to constrain its resolution.
 
     Parameters
     ----------
     source
-        The adapter's text. The contract reads the checked-in script, and the
-        control passes a block whose cutoff was removed, so the assertion is
-        shown to notice the change rather than to pass on any text.
+        The adapter's text. The contract reads the checked-in script; the
+        negative controls pass blocks with the cutoff removed, or with it
+        relocated outside the block, so the assertion is shown to notice each
+        change rather than to pass on any text.
     """
     text = (
         source
         if source is not None
         else (REPO_ROOT / FINALIZER_SCRIPT).read_text(encoding="utf-8")
     )
-    assert _UV_TABLE in text, (
-        f"{FINALIZER_SCRIPT} must carry a [tool.uv] table: the PEP 723 block "
-        "has no other place for a resolution setting"
+    block = _metadata_block(text)
+    assert block, (
+        f"{FINALIZER_SCRIPT} must carry one PEP 723 metadata block: `uv` reads "
+        "that block and nothing else, so a setting outside it is ignored"
     )
-    assert _EXCLUDE_NEWER.search(text), (
-        f"{FINALIZER_SCRIPT} must set `exclude-newer`: its two direct pins "
-        "leave the transitive closure to resolve afresh in a step that holds a "
-        "write token, and the cutoff is what refuses a later dependency release"
+    assert _UV_TABLE in block, (
+        f"{FINALIZER_SCRIPT} must carry a [tool.uv] table inside the metadata "
+        "block: it has no other place for a resolution setting"
+    )
+    cutoff = block[block.index(_UV_TABLE) :]
+    assert any(_EXCLUDE_NEWER.match(line) for line in cutoff), (
+        f"{FINALIZER_SCRIPT} must set `exclude-newer` inside its [tool.uv] "
+        "table: its two direct pins leave the transitive closure to resolve "
+        "afresh in a step that holds a write token, and the cutoff is what "
+        "refuses a later dependency release"
     )
 
 

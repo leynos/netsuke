@@ -337,16 +337,55 @@ def mutate_workflow(workflow: dict[str, object], mutation: str) -> None:
             require_mapping(download["with"], "artifact inputs")["name"] = (
                 TRUSTED_ARTIFACT_VALUE
             )
+        case "missing-step-timeout" | "verifier-record":
+            _mutate_finalize_step(workflow, mutation)
+        case "guard-bypass" | "early-finalize" | "extra-edit":
+            _mutate_bypass(workflow, mutation)
+        case other:
+            pytest.fail(f"unknown workflow mutation {other!r}")
+
+
+def _mutate_finalize_step(workflow: dict[str, object], mutation: str) -> None:
+    """Break one property of the step that invokes the action."""
+    local = _finalize_step(workflow)
+    match mutation:
         case "missing-step-timeout":
-            local = _finalize_step(workflow)
             del local["timeout-minutes"]
         case "verifier-record":
-            local = _finalize_step(workflow)
             require_mapping(local["with"], "finalizer inputs")["digest-record-path"] = (
                 "verified/verified-digests.json"
             )
         case other:
-            pytest.fail(f"unknown workflow mutation {other!r}")
+            pytest.fail(f"unknown finalize-step mutation {other!r}")
+
+
+def _mutate_bypass(workflow: dict[str, object], mutation: str) -> None:
+    """Let the job run, or the release change, outside the contracted shape."""
+    steps = job_steps(workflow, FINALIZE_JOB)
+    match mutation:
+        case "guard-bypass":
+            # Every fragment the assertions could look for survives; only the
+            # appended alternative changes what may start the job.
+            job = workflow_job(workflow, FINALIZE_JOB)
+            job["if"] = f"{job['if']} || true"
+        case "early-finalize":
+            # The action runs before the records it reconciles arrive: the
+            # shape of a step moved up while every name stays right.
+            local = _finalize_step(workflow)
+            steps.remove(local)
+            steps.insert(2, local)
+        case "extra-edit":
+            # A second, unreviewed step publishes before the action can check
+            # the release it is publishing.
+            steps.insert(
+                2,
+                {
+                    "name": "Publish the release before reconciling it",
+                    "run": 'gh release edit "$RELEASE_TAG" --draft=false',
+                },
+            )
+        case other:
+            pytest.fail(f"unknown bypass mutation {other!r}")
 
 
 def _trusted_download(workflow: dict[str, object]) -> dict[str, object]:

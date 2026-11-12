@@ -35,10 +35,14 @@ from release_finalize_contract_support import (
     JOB_TIMEOUT_MINUTES,
     LOCAL_ACTION,
     SETUP_UV_ACTION,
-    TRUSTED_ARTIFACT_OUTPUT,
     load_action,
     mutate_action,
     mutate_workflow,
+)
+from release_finalize_job_expectations import (
+    EXPECTED_JOB_GUARD,
+    EXPECTED_JOB_STEPS,
+    step_signature,
 )
 from release_publish_needs import job_names
 from workflow_loading import (
@@ -70,18 +74,13 @@ def _assert_job_guard(job: dict[str, object]) -> None:
     assert len(needs) == len(EXPECTED_NEEDS), (
         "a repeated dependency is an error GitHub rejects, not an extra witness"
     )
-    guard = str(job.get("if"))
-    assert "!cancelled()" in guard, "the job must keep its explicit cancellation guard"
-    assert "needs.metadata.outputs.should_publish == 'true'" in guard, (
-        "a rehearsal must never finalize a release"
+    # The whole expression, not its fragments: appending `|| true` keeps every
+    # fragment intact while letting a failed verifier start the job.
+    guard = " ".join(str(job.get("if")).split())
+    assert guard == EXPECTED_JOB_GUARD, (
+        "the job's guard must be exactly the contracted expression; "
+        f"`!cancelled()` suppresses the implicit success check, got {guard!r}"
     )
-    for name in EXPECTED_NEEDS:
-        if name == "metadata":
-            continue
-        assert f"needs.{name}.result == 'success'" in guard, (
-            f"the guard must name {name}'s success; `!cancelled()` suppresses "
-            "the implicit success check"
-        )
     permissions = require_mapping(job.get("permissions"), "finalize permissions")
     assert permissions == EXPECTED_PERMISSIONS, (
         "finalization needs the release token and nothing else"
@@ -94,9 +93,16 @@ def _assert_job_guard(job: dict[str, object]) -> None:
 
 
 def _assert_job_contract(workflow: dict[str, object]) -> None:
-    """Check the job's guard, permissions, artefact trust, and local action."""
+    """Check the job's guard, permissions, step sequence, and local action."""
     _assert_job_guard(workflow_job(workflow, FINALIZE_JOB))
     steps = job_steps(workflow, FINALIZE_JOB)
+    signatures = [step_signature(step) for step in steps]
+    assert signatures == list(EXPECTED_JOB_STEPS), (
+        "the job may run only its checkout, its interpreter, the two record "
+        "downloads, and the action, in that order; a reordering runs the "
+        "action without its records and an extra step could change the "
+        f"release before the action checks it, got {signatures!r}"
+    )
     checkout = steps[step_index_by_key(steps, "uses", CHECKOUT_ACTION)]
     checkout_with = require_mapping(checkout.get("with"), "checkout inputs")
     assert checkout_with.get("persist-credentials") is False, (
@@ -117,29 +123,15 @@ def _assert_job_contract(workflow: dict[str, object]) -> None:
         for step in steps
         if str(step.get("uses", "")).startswith(ARTIFACT_ACTION)
     ]
-    trusted = [values for values in downloads if values.get("path") == "trusted"]
-    assert len(trusted) == 1, "exactly one download must feed the trusted record"
-    assert trusted[0].get("name") == TRUSTED_ARTIFACT_OUTPUT, (
-        "the digest record must be the artefact the publisher recorded, not one "
-        "recomputed from this job's attempt"
-    )
-    assert "pattern" not in trusted[0], (
-        "a pattern could select another run's digest record"
-    )
-    package = [values for values in downloads if values.get("path") != "trusted"]
-    assert len(package) == 1, "exactly one download must feed the package record"
-    assert package[0].get("name") == "release-crate-package", (
-        "the package record must come from the packaging stage's artefact"
-    )
-    assert "pattern" not in package[0], (
-        "a pattern could select another run's package record"
-    )
+    for values in downloads:
+        assert set(values) == {"name", "path"}, (
+            "a record download may select only by exact name, and may choose "
+            "no other attempt's artefact: a pattern or a re-run override would "
+            f"let the cross-check agree with the wrong record, got {values!r}"
+        )
 
     local = steps[step_index_by_key(steps, "uses", LOCAL_ACTION)]
     _assert_local_action(local)
-    assert steps.index(local) > max(steps.index(checkout), steps.index(setup_uv)), (
-        "the finalization action must run after its checkout and tools"
-    )
 
 
 def _assert_local_action(step: dict[str, object]) -> None:
@@ -208,6 +200,9 @@ def test_action_mutations_are_rejected(mutation: str) -> None:
         "trusted-literal",
         "missing-step-timeout",
         "verifier-record",
+        "guard-bypass",
+        "early-finalize",
+        "extra-edit",
     ],
 )
 def test_workflow_mutations_are_rejected(mutation: str) -> None:
@@ -234,3 +229,17 @@ def test_the_dependency_cutoff_contract_rejects_a_removed_cutoff() -> None:
     )
     with pytest.raises(AssertionError):
         assert_adapter_pins_its_closure(stripped)
+
+
+def test_the_dependency_cutoff_contract_rejects_a_relocated_cutoff() -> None:
+    """Prove the closure assertion reads the block, not the whole file."""
+    source = (REPO_ROOT / FINALIZER_SCRIPT).read_text(encoding="utf-8")
+    lines = source.splitlines()
+    cutoff = [line for line in lines if line.startswith("# exclude-newer")]
+    assert len(cutoff) == 1, "the control assumes exactly one cutoff line"
+    remainder = [line for line in lines if line != cutoff[0]]
+    closing = remainder.index("# ///")
+    relocated = [*remainder[: closing + 1], cutoff[0], *remainder[closing + 1 :]]
+
+    with pytest.raises(AssertionError):
+        assert_adapter_pins_its_closure("\n".join(relocated))
