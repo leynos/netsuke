@@ -4215,8 +4215,12 @@ flowchart TD
 
 #### Discovery scopes and layered merging
 
-Automatic configuration discovery asks OrthoConfig's `ConfigDiscovery` for its
-candidate paths, then loads each candidate's `extends` chain with
+Automatic configuration discovery first runs a Netsuke-owned user-scope pass
+over the injected environment. That pass checks every user location in
+preference order and stops at the first file it can load; a user file that
+exists but cannot be loaded is an error rather than a reason to continue. Only
+when no user file exists does discovery ask OrthoConfig's `ConfigDiscovery` for
+its candidate paths, then load each candidate's `extends` chain with
 `load_config_file_as_chain()`, retaining the first chain that exists. It does
 not call `compose_layers()`, because that call returns a flattened layer list
 without reporting which candidate root supplied it, and root provenance is what
@@ -4229,6 +4233,16 @@ a second pass loads that file directly and appends its layers. Thus, this walk
 does not merge every scope, and it does not by itself establish
 project/user/system precedence. Environment variables and CLI arguments then
 override the file layers.
+
+The user pass exists because OrthoConfig 0.10.0 probes `XDG_CONFIG_DIRS` before
+its home fallbacks, so a valid system file would otherwise suppress a user file
+whenever `XDG_CONFIG_HOME` does not name that user file directly. Netsuke
+therefore owns the user-before-system ordering; see
+[ADR-0048](adrs/adr-0048-explicit-config-selection-outside-orthoconfig.md). A
+user candidate that is present but unreadable, unparsable, or unresolvable
+through its `extends` chain fails discovery instead of falling through to a
+later candidate, so a broken user file cannot silently re-enable the system
+policy it was meant to override.
 
 Definition authority is recorded per occurrence at discovery time, before any
 flattening, so it survives quarantine and cached replay. A candidate root is
@@ -4243,6 +4257,13 @@ candidate; a missing project file cannot appear as an occurrence and keeps it.
 An occurrence with no recorded path has unknown provenance and is untrusted.
 Only a trusted occurrence may declare the `shells` key, and that key is
 rejected from environment ingress by its normalized top-level spelling.
+||||||| parent of 922a12537 (Document the user-before-system discovery pass (#986))
+Automatic configuration discovery first calls OrthoConfig's `compose_layers()`
+to retain its primary automatic match. If that match does not include the
+project-scope file, a second pass loads that file directly and appends its
+layers. Thus, `compose_layers()` does not merge every scope, and it does not by
+itself establish project/user/system precedence. Environment variables and CLI
+arguments then override the file layers.
 
 1. **Explicit override**: `--config <PATH>` and `NETSUKE_CONFIG` are evaluated
    in that precedence order before discovery. These explicit selectors bypass
@@ -4274,26 +4295,38 @@ rejected from environment ingress by its normalized top-level spelling.
    applies. Project-chain `fetch_block_host` and `env_block_var` remain
    cumulative.
 
-3. **User scope**: Configuration files in user-specific directories:
-   - **Unix-like systems**:
-     - `$HOME/.netsuke.toml` (user home dotfile)
+3. **User scope**: Configuration files in user-specific directories, checked
+   before any system location:
+   - **Unix-like systems**, in order:
      - `$XDG_CONFIG_HOME/netsuke/config.toml` (XDG (X Desktop Group) Base
        Directory config home, typically `~/.config/netsuke/config.toml`)
-     - Fallback: `$HOME/.config/netsuke/config.toml`
-   - **Windows**:
+     - `$XDG_CONFIG_HOME/.netsuke.toml`
+     - `$HOME/.config/netsuke/config.toml`
+     - `$HOME/.config/.netsuke.toml`
+     - `$HOME/.netsuke.toml` (user home dotfile)
+   - **Windows**, in order:
      - `%APPDATA%\netsuke\config.toml`
+     - `%APPDATA%\.netsuke.toml`
      - `%LOCALAPPDATA%\netsuke\config.toml`
+     - `%LOCALAPPDATA%\.netsuke.toml`
+     - The same home locations as Unix-like systems.
 
-4. **System scope**: System-wide configuration directories:
+   `HOME` supplies the home directory when it is set and non-empty; otherwise
+   `USERPROFILE` does. An empty `XDG_CONFIG_HOME`, `APPDATA`, or `LOCALAPPDATA`
+   counts as unset.
+
+4. **System scope**: System-wide configuration directories, consulted only when
+   no user file exists:
    - **Unix-like systems**:
-     - Each directory in `$XDG_CONFIG_DIRS/netsuke/config.toml` (XDG Base
-       Directory system config directories, defaults to
-       `/etc/xdg/netsuke/config.toml` when `XDG_CONFIG_DIRS` is unset)
+     - Each directory in `$XDG_CONFIG_DIRS`, looking for
+       `netsuke/config.toml` and `.netsuke.toml` (XDG Base Directory system
+       config directories, defaulting to `/etc/xdg` when `XDG_CONFIG_DIRS` is
+       unset)
 
-The candidate order `ConfigDiscovery` generates determines which automatic file
-is retained first. The `-C/--directory` flag anchors the project-scope fallback
-to the specified directory while leaving the scanner's user- and system-scope
-lookups unchanged.
+The Netsuke-owned user pass decides which user file is retained first, and the
+candidate order `ConfigDiscovery` generates decides only when that pass finds
+nothing. The `-C/--directory` flag anchors the project-scope fallback to the
+specified directory while leaving the user- and system-scope lookups unchanged.
 
 #### Manifest resource budget precedence
 
