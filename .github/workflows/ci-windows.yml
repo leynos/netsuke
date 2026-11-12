@@ -82,8 +82,8 @@ jobs:
       SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
       # default (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md), so CI
-      # builds with the dated nightly pinned in rust-toolchain.toml.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
+      # builds with the dated nightly pinned in rust-toolchain.toml; the
+      # "Resolve the pinned toolchain" step exports it as NETSUKE_RUST_TOOLCHAIN.
     defaults:
       run:
         # The Makefile uses POSIX shell constructs throughout; Git Bash is
@@ -95,6 +95,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Resolve the pinned toolchain
+        uses: ./.github/actions/resolve-toolchain
       - name: Restore gate caches
         id: caches
         # Restores before every install so a warm run reuses work an earlier
@@ -252,8 +254,8 @@ jobs:
       SCCACHE_CACHE_SIZE: 4G
       # The tree requires the Polonius borrow checker, which nightly enables by
       # default (see docs/adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md), so CI
-      # builds with the dated nightly pinned in rust-toolchain.toml.
-      NETSUKE_RUST_TOOLCHAIN: nightly-2026-10-22
+      # builds with the dated nightly pinned in rust-toolchain.toml; the
+      # "Resolve the pinned toolchain" step exports it as NETSUKE_RUST_TOOLCHAIN.
     defaults:
       run:
         # The Makefile uses POSIX shell constructs throughout; Git Bash is
@@ -265,6 +267,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           persist-credentials: false
+      - name: Resolve the pinned toolchain
+        uses: ./.github/actions/resolve-toolchain
       - name: Restore gate caches
         id: caches
         # Restores before every install so a warm run reuses work an earlier

@@ -80,10 +80,9 @@ fn plain_len(slice: &str) -> usize {
     let comment = trimmed
         .char_indices()
         .find(|(index, character)| *character == '#' && preceded_by_space(trimmed, *index));
-    comment.map_or_else(
-        || trimmed.len(),
-        |(index, _)| trimmed.get(..index).unwrap_or_default().trim_end().len(),
-    )
+    comment.map_or(trimmed.len(), |(index, _)| {
+        trimmed.get(..index).unwrap_or_default().trim_end().len()
+    })
 }
 
 /// Report whether the character before `index` is a space or tab.

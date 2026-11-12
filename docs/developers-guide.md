@@ -2350,15 +2350,19 @@ the three cached homes, so raising the pin in `tools/kani/VERSION` cannot be
 satisfied by a binary an earlier run left behind. A missing binary is a CI
 failure, not permission to compile a tool from source.
 
-`NETSUKE_RUST_TOOLCHAIN` follows a separate rule. The CI jobs and Netsukefile
-pin it to the channel in `rust-toolchain.toml` so those jobs provision the
-dated nightly explicitly; coverage and packaging must leave it unset, because
-they select their toolchain through the action's own `toolchain` input and a
-second, independently edited pin would let the two disagree. The
-`default-features` lane is a reusable workflow, which cannot read its caller's
-`env`, so the channel reaches it as a required `rust-toolchain` input from
-`ci.yml` rather than a literal inside the lane. That keeps one authoritative
-value per pin, as the nextest pin does.
+`NETSUKE_RUST_TOOLCHAIN` follows a separate rule. No workflow declares it: the
+`resolve-toolchain` composite action reads the channel from
+`rust-toolchain.toml` and exports it through `GITHUB_ENV`, and each job that
+provisions the dated nightly explicitly runs that action after checkout and
+before the step that reads the variable (the Kani job runs it after its scope
+decision, under the same guard as its other proof steps). The value is always a
+non-empty explicit channel, so `setup-rust` keeps its explicit-toolchain arm.
+Packaging selects its toolchain through its own action and leaves the variable
+unset. The `default-features` lane is a reusable workflow that resolves the
+channel itself rather than receiving it from `ci.yml`. The channel therefore
+has exactly one source, `rust-toolchain.toml`, and Dependabot's bumps reach
+every job. The action fails with an annotation when the file declares no
+channel.
 
 [`tests/polonius_toolchain_contract.rs`](../tests/polonius_toolchain_contract.rs)
 enforces all seven callers. For each one it asserts:
@@ -2370,10 +2374,12 @@ enforces all seven callers. For each one it asserts:
 - the `with.rustflags` value matches the table above exactly, including the
   two jobs that must pass no `rustflags` input at all;
 - the job declares no `env.RUSTFLAGS`;
-- the `NETSUKE_RUST_TOOLCHAIN` policy above — pinned to the
-  `rust-toolchain.toml` channel for the CI jobs and Netsukefile, read from the
-  caller's input for the default-feature lane, absent for coverage and
-  packaging.
+- the `NETSUKE_RUST_TOOLCHAIN` policy above — no job declares a channel, the
+  `resolve-toolchain` action runs before the shared action that reads it (for
+  the CI jobs, Netsukefile, the default-feature lane and coverage), and
+  packaging leaves it absent. A separate test runs the action's script against
+  throwaway toolchain files and checks what it exports and that it fails on a
+  missing or empty channel.
 
 The same test carries the two toolchain-level assertions: that the pinned
 channel is a dated nightly at or after 2026-08-04, the first nightly on which
@@ -3258,18 +3264,21 @@ or interpret provider-specific digest strings. The surrounding modules own
 those operations at the file or transport boundary:
 
 - `release_candidate` exposes a stable mapping; `release_candidate_cli`
-  serializes it, while `release_identity_record` validates a decoded mapping.
+  serializes it, while `release_identity_record` decodes a recorded identity
+  into `ReleaseIdentity` at the adapter boundary.
 - `release_digest` parses and compares sidecar text and digest strings.
   `release_digest_files` hashes files and reads sidecars; the package CLI,
   staged-digest collector, inventory verifier, and crates.io adapter are its
   only production callers. `release_staged_digests` scans the staged tree and
   hashes exactly the declared names for `release_declaration_cli`.
-- `release_digest_record` validates in-memory digest mappings.
-  `release_digest_record_files` owns JSON and path errors; declaration writes
-  through it, and inventory verification and finalization read through it.
-- `release_declaration` derives names from parsed target facts and staged
-  basenames. `release_declaration_cli` reads TOML, asks the hoist adapter for
-  archive names, scans the staged tree, and passes those observations in.
+- `release_digest_record` compares `DigestRecord` values and keeps the
+  record's rejection categories. `release_digest_record_files` owns JSON, the
+  `assets` member, and path errors; declaration writes through it, and
+  inventory verification and finalization read through it.
+- `release_declaration` derives names from a `StagingTargets` record and
+  staged basenames. `release_declaration_cli` reads TOML, decodes the `targets`
+  table once, asks the hoist adapter for archive names, scans the staged tree,
+  and passes those observations in.
 - `release_inventory` checks `PublishedAsset` names and sizes.
   Flat asset names are checked under both POSIX and Windows path rules;
   separators, drive-qualified names, traversal, and nested paths are refused.
@@ -3281,6 +3290,33 @@ those operations at the file or transport boundary:
   `verify_crates_io_bytes`.
 - `finalize_github_release_cli` normalizes GitHub's `sha256:` digest prefix;
   `release_reconcile_github` receives bare digests and only plans actions.
+
+External record shapes cross the boundary exactly once. A module that already
+owns a file, stream, or provider response decodes its field names and shape
+into a frozen slotted dataclass, and policy functions accept that record. The
+adapter owns the wire names, including `targets`, `platform`, and `assets`, and
+a decoding factory owns any normalization.
+
+Where the invariant is a property of the record's own fields, the constructor
+owns it as well. `DigestRecord` shows the split: `from_mapping` lowercases a
+digest, while `__post_init__` refuses one that is not already lowercase, so a
+directly constructed record carries the same invariant as a decoded one.
+`StagingTarget` and `StagingTargets` likewise refuse a malformed platform or an
+empty target set on every construction path.
+
+Where the judgement needs context the record does not carry, the constructor
+checks nothing and the step that holds that context decides. `ReleaseIdentity`
+carries no validation of its own and is checked by `resolve_identity`, and
+`PublishedAsset` performs no validation at construction and is checked later by
+`validate_inventory`. A directly constructed instance of either is unvalidated,
+and code must not read one as evidence that it was checked.
+
+A mapping remains acceptable when the policy decides over a domain-shaped
+name-to-value relation that no external format defines, such as the
+name-to-digest plans in `release_reconcile_github` and the computed side of a
+download comparison; adding a decoder for one of those would invent a format
+boundary that does not exist. See
+[ADR-0074](adrs/adr-0074-typed-records-for-release-policy-boundaries.md).
 
 Each adapter has a narrow scope and named callers. File adapters do not own
 release policy, response adapters do not choose whether a run publishes, and

@@ -43,6 +43,7 @@ SETUP_RUST_ACTION = "leynos/shared-actions/.github/actions/setup-rust@"
 NON_CACHE_ACTIONS = (
     "./.github/actions/install-mdtablefix",
     "./.github/actions/memory-sampler",
+    "./.github/actions/resolve-toolchain",
 )
 
 #: Cargo's build tree is archived by no cache step anywhere in this

@@ -360,13 +360,14 @@ def test_the_producer_records_a_digest_for_every_declared_asset(
     declared = workspace["output"].read_text(encoding="utf-8").splitlines()
 
     recorded = release_digest_record_files.read_digest_record(workspace["record"])
+    digests = recorded.as_mapping()
 
-    assert sorted(recorded) == sorted(declared), (
+    assert recorded.names() == set(declared), (
         "the record must cover exactly the declared assets, or the verifier's "
-        f"exact-set check will refuse a correct release: {sorted(recorded)}"
+        f"exact-set check will refuse a correct release: {sorted(recorded.names())}"
     )
     for name in declared:
-        assert recorded[name] == release_digest_files.digest_of_file(
+        assert digests[name] == release_digest_files.digest_of_file(
             workspace["dist"] / name
         ), f"the recorded digest for {name} must describe its staged bytes"
 

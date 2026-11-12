@@ -1,14 +1,13 @@
 //! Assertions describing how one workflow job obtains its Rust channel.
 //!
-//! A job can take the pin from its own `env`, from a reusable workflow's
-//! `rust-toolchain` input, or not at all, and each shape has its own failure
-//! mode. These helpers read one already-parsed job and assert the shape its
+//! A job can take the pin from `rust-toolchain.toml` through the resolve step,
+//! or not at all, and each shape has its own failure mode. These helpers read one already-parsed job and assert the shape its
 //! [`ToolchainPin`] arm names.
 
 use anyhow::{Context, Result, ensure};
 use serde_yaml::Value as YamlValue;
 
-use super::{ENV_TOOLCHAIN_INPUT, INPUT_TOOLCHAIN_ENV, ToolchainPin, pinned_toolchain, yaml_str};
+use super::{ENV_TOOLCHAIN_INPUT, RESOLVE_TOOLCHAIN_ACTION, ToolchainPin, yaml_str};
 
 /// Name one workflow job for diagnostics: its file path and job identifier.
 ///
@@ -49,6 +48,10 @@ pub struct ToolchainWiring<'a> {
     pub toolchain_env: Option<&'a str>,
     /// What the shared action receives as its `toolchain` input, or `None`.
     pub toolchain_input: Option<&'a str>,
+    /// The job's steps, in order.
+    pub steps: &'a [YamlValue],
+    /// The step that invokes the shared action.
+    pub shared_action: &'a YamlValue,
 }
 
 /// Assert the job obtains its channel the way `pin` describes.
@@ -57,26 +60,33 @@ pub fn ensure_toolchain_pin(wiring: &ToolchainWiring<'_>, pin: ToolchainPin) -> 
         named,
         toolchain_env,
         toolchain_input,
+        steps,
+        shared_action,
     } = *wiring;
     match pin {
-        ToolchainPin::JobEnv => {
-            let expected = pinned_toolchain()?;
-            let toolchain = toolchain_env
-                .with_context(|| format!("{named} should pin NETSUKE_RUST_TOOLCHAIN"))?;
+        ToolchainPin::FromFile => {
+            // The channel is a property of `rust-toolchain.toml` alone: a job
+            // that declares its own copy restates the date Dependabot moves.
             ensure!(
-                toolchain == expected,
-                "{named} pins {toolchain:?}, but rust-toolchain.toml pins {expected:?}"
+                toolchain_env.is_none(),
+                "{named} declares NETSUKE_RUST_TOOLCHAIN {toolchain_env:?}; the \
+                 resolve step must export it from rust-toolchain.toml instead"
             );
-            // A pin nothing reads is not a pin: `env` resolves per job, so a
-            // step naming a variable only another job declared expands to the
-            // empty string rather than failing, and the two disagree in silence.
-            ensure_pin_is_read(named, toolchain_input)
-        }
-        ToolchainPin::CallerInput => {
+            // `env` resolves per job, so a job that reads the variable without
+            // exporting it itself gets the empty string, and the shared action
+            // would then take its rust-toolchain-file arm. The export has to
+            // come before the step that reads it.
+            let resolve = steps
+                .iter()
+                .position(|step| yaml_str(step, &["uses"]) == Some(RESOLVE_TOOLCHAIN_ACTION))
+                .with_context(|| format!("{named} should run {RESOLVE_TOOLCHAIN_ACTION}"))?;
+            let setup = steps
+                .iter()
+                .position(|step| std::ptr::eq(step, shared_action))
+                .with_context(|| format!("{named} should contain its shared-action step"))?;
             ensure!(
-                toolchain_env == Some(INPUT_TOOLCHAIN_ENV),
-                "{named} should read NETSUKE_RUST_TOOLCHAIN from the caller's \
-                 `rust-toolchain` input, found {toolchain_env:?}"
+                resolve < setup,
+                "{named} runs {RESOLVE_TOOLCHAIN_ACTION} after the step that reads the pin"
             );
             ensure_pin_is_read(named, toolchain_input)
         }
