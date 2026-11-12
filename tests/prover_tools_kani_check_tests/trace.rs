@@ -176,21 +176,15 @@ fn requests_write(arguments: &str) -> bool {
 /// `strace` quotes the path in each call that takes one, so a name inside a
 /// quoted run is path text rather than a flag or an address selector. An
 /// unterminated quote — a line `strace` truncated mid-write — ends the retained
-/// text, since nothing after it can be read as an argument. Inside a quoted run
-/// a backslash escapes the next character, as `strace` writes a `"` or `\` in a
-/// path, so an escaped quote does not end the run.
+/// text, since nothing after it can be read as an argument. A backslash inside
+/// a quoted run escapes the next character, as `strace` writes `\"` in a path.
 fn unquoted(text: &str) -> String {
-    let mut kept = String::with_capacity(text.len());
-    let mut in_quotes = false;
-    let mut chars = text.chars();
-    while let Some(character) = chars.next() {
-        match (in_quotes, character) {
-            (false, '"') => in_quotes = true,
-            (false, other) => kept.push(other),
-            (true, '"') => in_quotes = false,
-            (true, '\\') => {
-                chars.next();
-            }
+    let (mut kept, mut quoted, mut chars) = (String::new(), false, text.chars());
+    while let Some(c) = chars.next() {
+        match (quoted, c) {
+            (_, '"') => quoted = !quoted,
+            (true, '\\') => drop(chars.next()),
+            (false, _) => kept.push(c),
             (true, _) => {}
         }
     }
