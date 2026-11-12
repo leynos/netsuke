@@ -355,6 +355,20 @@ decision D-15.
     passed; `test` ran 5203 cases. Doc-comment coverage measured 98.16%
     (6121/6236) against the 80% threshold. Any later commit needs its own run;
     a green gate does not carry forward to a revision it did not read.
+  - (2026-11-10) Review repairs moved the head past that run, so each carries
+    its own batch. `4e62b7c70` closed three findings — the users' guide and
+    ADR-0009 addendum now say "full load" (`AmbientFull | Full`) rather than
+    "command load", the query trace test asserts the decision event as well as
+    the span, and the rejection-class CLI test pins `--locale en-GB`. All nine
+    gates passed on it with the content hash stable before and after
+    (`e6892979…e6892979`): `check-fmt` 2s, `typecheck` 440s, `lint` 2709s,
+    `doc-coverage` 1472s (98.16%), `test` 378s, `markdownlint` 28s, `nixie`
+    2s, `test-documentation-contracts` 88s, `test-workflow-contracts` 286s.
+    The next commit carries the second review round: both schema-telemetry
+    module headers now state that only `AmbientFull` and `Full` record, a
+    schema rejection keeps the manifest path in human output, and ADR-0066 is
+    restored to its accepted text with a dated addendum for the zero-ceiling
+    rule.
 - [x] EP-M4: developers' guide and documentation clean-up. The developers'
   guide gained "Manifest schema versioning and feature admission" (reservation,
   admission, allocation, the registry contract, and the rejection ladder) and

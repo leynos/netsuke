@@ -907,10 +907,15 @@ new diagnostic type has to be added to both or the modes disagree.
 
 A failure carrying none of those diagnostics keeps its context line, which is
 the whole report for errors such as a missing manifest. A failure that does
-carry one prints the rendered diagnostic instead of the context line, because
-the diagnostic already names the path the context line repeats. Circular
-dependencies keep a separate branch: its bounded rendering is what keeps
-manifest target names out of the tracing event.
+carry one prints the rendered diagnostic instead of the context line when the
+diagnostic names its own source, because the diagnostic already names the path
+the context line repeats. The test is [`Diagnostic::source_code`], not the
+rendered text: a YAML diagnostic carries a `NamedSource`, but a schema-version
+rejection carries none, and its message names the declaration and the supported
+schema without naming the file. A schema rejection therefore keeps the context
+line above its diagnostic, so a refusal stays attributable in a project with
+more than one manifest. Circular dependencies keep a separate branch: its
+bounded rendering is what keeps manifest target names out of the tracing event.
 
 The glyph theme comes from `human_diagnostics::theme_for`, which derives it
 from the resolved `OutputPrefs` rather than reading `NO_COLOR` itself, so the

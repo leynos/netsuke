@@ -7,8 +7,11 @@
 //!
 //! [`telemetry`] observes the same single gate. The predicate decides and
 //! stays free of a metrics recorder; the telemetry child records the decision
-//! at the one boundary every loaded document crosses, so the counter's series
-//! count is fixed here rather than by anything a manifest supplies.
+//! at the one boundary every full load crosses, so the counter's series count
+//! is fixed here rather than by anything a manifest supplies. Only an
+//! `AmbientFull` or `Full` load records: discovery queries and `netsuke test`
+//! runs reach the gate and are still validated, but they are not admissions of
+//! a user's manifest, so they emit no counter increment and no decision event.
 
 use semver::Version;
 use serde_json::Value;

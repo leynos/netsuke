@@ -1,10 +1,14 @@
 //! Bounded telemetry for the manifest schema-admission gate.
 //!
-//! Every loaded document passes exactly one admission decision, and every
-//! decision reaches [`record_admission`], so the gate has a single telemetry
-//! point rather than one per call site. The counter is the operational signal
-//! for the gate: a rejection is otherwise visible only in the diagnostic a
-//! person reads, which is neither aggregated nor retained.
+//! Every full load passes exactly one admission decision, and every decision
+//! that records reaches [`record_admission`], so the gate has a single
+//! telemetry point rather than one per call site. Recording is gated on
+//! `StdlibRegistration::records_schema_admission`, which is true for
+//! `AmbientFull` and `Full` only: discovery queries and `netsuke test` runs
+//! reach the same gate but are not admissions of a user's manifest, so they
+//! emit neither a counter increment nor a decision event. The counter is the
+//! operational signal for the gate: a rejection is otherwise visible only in
+//! the diagnostic a person reads, which is neither aggregated nor retained.
 //!
 //! What is recorded is deliberately bounded. The only label is `outcome`,
 //! drawn from the closed vocabulary below, so the series count is fixed by this

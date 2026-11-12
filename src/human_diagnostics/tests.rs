@@ -56,6 +56,70 @@ fn manifest_failures_render_their_inner_diagnostic() -> Result<()> {
     Ok(())
 }
 
+/// A schema rejection must still say which manifest was refused.
+///
+/// `SchemaVersionDiagnostic` carries no source code, so its rendering names
+/// the declared and supported schema but never the file. The context line is
+/// the only place the path appears, which is why it is kept for a diagnostic
+/// that does not name its artefact. Rendering the diagnostic alone would make
+/// a refusal unattributable in a project with several manifests.
+#[test]
+fn reports_keep_the_manifest_path_when_the_diagnostic_omits_it() -> Result<()> {
+    let report = failure_report(&manifest_failure(), &theme_for(theme_prefs()))
+        .context("a manifest failure should render a report")?;
+    ensure!(
+        report.contains("Failed to load manifest at Netsukefile."),
+        "the report must name the manifest the context line identified: {report}"
+    );
+    ensure!(
+        report.contains("netsuke::manifest::schema_version"),
+        "the report must still carry the rejection's stable code: {report}"
+    );
+    Ok(())
+}
+
+/// A diagnostic that names the file it is about, as a YAML failure does.
+///
+/// `MietteDiagnostic` cannot carry a source, so the shape is built here: a
+/// `NamedSource` is how a diagnostic says "this is the file and the span I am
+/// about", and it is the field [`failure_report`] keys on.
+#[derive(Debug, thiserror::Error, miette::Diagnostic)]
+#[error("unexpected tab indentation")]
+#[diagnostic(code(netsuke::manifest::parse))]
+struct NamedSourceDiagnostic {
+    /// The manifest source text, labelled with the manifest name.
+    #[source_code]
+    src: miette::NamedSource<String>,
+}
+
+/// A diagnostic that names its own source must not repeat the context line.
+///
+/// Repeating the context line above a diagnostic that already names the path
+/// would print it twice, so the rule is keyed on the source, not on the
+/// failure's shape. This is the counterpart of
+/// [`reports_keep_the_manifest_path_when_the_diagnostic_omits_it`]: together
+/// they pin both sides of the decision, so neither branch can be dropped
+/// without a failure.
+#[test]
+fn reports_drop_the_context_line_when_the_diagnostic_names_its_source() -> Result<()> {
+    let named = NamedSourceDiagnostic {
+        src: miette::NamedSource::new("Netsukefile", String::from("a:\n\tb")),
+    };
+    let error = manifest::ManifestError::Parse {
+        source: Box::new(named),
+        message: localization::message(keys::MANIFEST_PARSE),
+    };
+    let wrapped = anyhow::Error::new(error).context("Failed to load manifest at Netsukefile.");
+    let report = failure_report(&wrapped, &theme_for(theme_prefs()))
+        .context("a named source should report")?;
+    let occurrences = report.matches("Netsukefile").count();
+    ensure!(
+        occurrences == 1,
+        "a diagnostic naming its source must not repeat the path: {report}"
+    );
+    Ok(())
+}
+
 /// A diagnostic that supplies a URL, as every `netsuke check` finding does.
 fn linked_diagnostic() -> MietteDiagnostic {
     MietteDiagnostic::new("a finding with a rule reference")

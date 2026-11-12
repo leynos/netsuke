@@ -3511,13 +3511,18 @@ enrichment:
    `miette::Report` — and renders that one with `miette`'s graphical handler:
    the diagnostic's own message, code, cause chain, help text, and — where it
    supplies one — its rule-reference URL. A rendered diagnostic replaces the
-   contextual summary rather than following it, because the diagnostic already
-   names the artefact and printing both repeats it. A failure carrying no
-   diagnostic keeps its `anyhow` context line, which is the whole report
-   available for errors such as a missing manifest. A circular-dependency
-   failure keeps a separate branch that prints the bounded cycle rendering and
-   logs a fixed `error_kind` category, so manifest target names stay out of
-   tracing events.
+   contextual summary rather than following it when the diagnostic names its
+   own source, because it then already names the artefact and printing both
+   repeats it. The test is the diagnostic's source code, not its rendered text,
+   so the decision does not depend on a localized string. A schema-version
+   rejection supplies no source: its message names the declaration and the
+   supported schema but never the file, so it keeps the contextual summary
+   above it and a refusal stays attributable in a project with several
+   manifests. A failure carrying no diagnostic keeps its `anyhow` context line,
+   which is the whole report available for errors such as a missing manifest. A
+   circular-dependency failure keeps a separate branch that prints the bounded
+   cycle rendering and logs a fixed `error_kind` category, so manifest target
+   names stay out of tracing events.
 
    Links are disabled in the graphical handler even though every
    `netsuke check` finding supplies a URL: `miette` emits OSC 8 hyperlinks
