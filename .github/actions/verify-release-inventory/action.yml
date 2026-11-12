@@ -67,12 +67,12 @@ outputs:
   # verifier. Reporting them separately is what lets an operator tell a listing
   # failure from a download failure from a release that disagrees with its
   # build. The listing phase spans both listing steps: it starts when the
-  # release listing starts and ends when the asset listing ends, and its
-  # outcome is the asset listing's, which is skipped when the release listing
-  # failed.
+  # release listing starts and ends when the asset listing ends. Its outcome is
+  # the release listing's whenever that step does not succeed, because the
+  # asset listing never runs then and reports only that it was skipped.
   release-listing-outcome:
     description: Outcome of the two listing steps together.
-    value: ${{ steps.list-assets.outcome }}
+    value: ${{ steps.list-releases.outcome != 'success' && steps.list-releases.outcome || steps.list-assets.outcome }}
   release-listing-started-ns:
     description: Release listing start time in nanoseconds.
     value: ${{ steps.list-releases.outputs.started_ns }}

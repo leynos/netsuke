@@ -80,8 +80,14 @@ EXPECTED_OUTPUTS = {
     "verified-record-path": "${{ steps.verify.outputs.verified-record-path }}",
     # The job's telemetry reads these, so each phase's outcome and timing has
     # to be published by the action: the workflow cannot see the boundary
-    # between the two listings, the downloads, and the verifier.
-    "release-listing-outcome": "${{ steps.list-assets.outcome }}",
+    # between the two listings, the downloads, and the verifier. The listing
+    # phase reports the release listing's own outcome when that step fails,
+    # because the asset listing is then skipped and says only that it did not
+    # run.
+    "release-listing-outcome": (
+        "${{ steps.list-releases.outcome != 'success'"
+        " && steps.list-releases.outcome || steps.list-assets.outcome }}"
+    ),
     "release-listing-started-ns": "${{ steps.list-releases.outputs.started_ns }}",
     "release-listing-ended-ns": "${{ steps.list-assets.outputs.ended_ns }}",
     "release-download-outcome": "${{ steps.download.outcome }}",
