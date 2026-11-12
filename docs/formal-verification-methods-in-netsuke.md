@@ -22,7 +22,7 @@ The highest-return verification work is concentrated in the semantic core:
 
 ## Current repository state
 
-This section describes the tree as it stands on 2026-10-13. The rest of this
+This section describes the tree as it stands on 2026-11-01. The rest of this
 document is a forward-looking plan, so its tenses read as design intent rather
 than as a description of what exists; this section is the one kept current.
 
@@ -34,11 +34,12 @@ ordinary dependency set.
 
 The `Makefile` now exposes the formal-verification surface the "Repository
 integration plan" below describes: `install-kani`, `kani-check`, `kani-full`,
-`kani-ir`, `test-kani-mutations`, `test-kani-scope-wrapper`, `install-verus`,
-`verus`, and `formal-pr`, alongside the build, test, lint, formatting, Markdown
-lint, and Mermaid validation targets.[^2]
+`kani-ir`, `test-kani-mutations`, `test-kani-scope-wrapper`,
+`test-kani-check-isolation`, `install-verus`, `verus`, and `formal-pr`,
+alongside the build, test, lint, formatting, Markdown lint, and Mermaid
+validation targets.[^2]
 
-The `CI` workflow does define a separate proof job. `kani-smoke` is a dedicated
+The `CI` workflow defines a separate proof job. `kani-smoke` is a dedicated
 required job covering every harness on pushes to `main`, nightly schedules, and
 manual dispatches, and on pull requests it runs only when a proof input changes
 (see
@@ -48,6 +49,31 @@ The 17 harnesses live in three verification modules:
 (4), and `src/ir/cmd_interpolate/verification.rs` (2).
 `src/ir/graph/kani_map.rs` is `cfg(kani)` support code those harnesses use, not
 a harness location.
+
+The Makefile pins `rust-prover-tools` to
+[`592558f7183b554fc749696246984c5d7300d029`][upstream]. Kani and Verus
+installation and Verus proof execution delegate to that pinned CLI through
+`uv tool run`. Kani version checking does not: `make kani-check` is a local
+read-only query that reads `tools/kani/VERSION` and asks the installed
+`cargo-kani` for `--version`, so it never resolves the shared CLI and never
+touches the network. `make kani-full` and `make kani-ir` execute the
+`cargo-kani` executable from the active `$CARGO_HOME/bin` directly. This keeps
+a competing binary in the build-tools prefix from taking precedence without
+changing the global PATH order used to select the pinned `mold`. The repository
+no longer carries a Kani downloader. `make install-kani` uses the verified
+prebuilt release on Linux x86_64 and keeps the Cargo compile fallback for other
+local hosts. CI passes explicit paths for the Kani front-end and verified
+archives. `make verus` defaults to `verus/canonical_value/main.rs`; callers can
+repeat `--proof-file` through `VERUS_FLAGS` to select an ordered batch. The
+runner stops at the first failed proof and returns the verifier's status. The
+developers' guide documents the commands and their local usage.
+
+The composite [Kani cache action](../.github/actions/kani-cache/action.yml) owns
+`.kani-cargo`, `.kani-home`, and `.kani-rustup` under a key that includes the
+runner lane and Kani version. It restores these paths together and saves only
+after a cache miss on a push to `main`. A pull request or manual dispatch
+cannot seed the cache; a dispatch can measure a warm restore only after a
+trusted `main` run has populated that key.
 
 That earlier absence still shapes the design. Netsuke did not need a new
 verification workspace as a first step: the strongest verification targets
@@ -148,9 +174,9 @@ should lock down these invariants:
 Verus is optional in phase 1 and remains proof-kernel-only. A proof kernel is a
 small proof-specific model for one mathematical contract; it is not a
 production subsystem, a replacement implementation, or a normal developer
-workflow gate. Netsuke should not add Verus installer scripts, Verus Make
-targets, Verus Continuous Integration (CI), or Verus files under ordinary Cargo
-as part of the phase-1 boundary.
+workflow gate. The repository provides `make install-verus` and `make verus` as
+optional maintainer tools, but has no Verus installer script or CI job, and
+keeps Verus files outside ordinary Cargo.
 
 Verus is not the correct first tool for the manifest or command-interpolation
 layers. Two kernels are accepted, and both are narrow normalization or
@@ -282,7 +308,10 @@ The first formal-verification commands should extend the existing `Makefile`
 without disturbing the current developer workflow.[^2]
 
 - `make kani-check` should run the fast pinned-version drift guard suitable
-  for pull requests.
+  for pull requests. It stays a local read-only query: read
+  `tools/kani/VERSION`, ask the installed `cargo-kani` for `--version`, and
+  compare. It must not resolve `rust-prover-tools` through `uv`, so a cold host
+  needs no network access and the uv cache is not written by a check.
 - The bounded Kani harness suite now also runs on pull requests through
   `make kani-ir`.
 - `make kani-full` should run the full Kani suite.
@@ -316,14 +345,18 @@ When the proofs run, it:
   the manifest, cycle, and command-interpolation verification modules), then
   `make install-build-tools` and the mutation patch compile gate through
   `make test-kani-mutations`,
-- caches tool downloads separately from the ordinary Rust build artefacts, and
+- restores `.kani-cargo`, `.kani-home`, and `.kani-rustup` together under a key
+  containing the runner lane and Kani version, and saves only on a cache miss
+  from a push to `main`,
 - is bounded by a 30-minute job timeout (`timeout-minutes: 30`).
 
-The dispatch trigger exists for the cache: a dispatch cannot publish a
-generation, because the save gates on a push to `main`, so what it measures is
-a warm restore. The compile gate is the reason the ceiling moved from 20
-minutes, since it builds the whole dependency graph through the Kani frontend
-into a `CARGO_TARGET_DIR` no cache restores.
+The dispatch trigger can measure a warm restore only after a trusted push to
+`main` has populated the cache key. A dispatch cannot publish a generation
+because saving is gated on a push to `main`; after a cache-key change, the
+first trusted `main` run is cold. The compile gate is the reason the ceiling
+moved from 20 minutes, since it builds the whole dependency graph through the
+Kani frontend into a target directory selected by `CARGO_TARGET_DIR`, which
+cache restores do not provide.
 
 Any later Verus job should be added only after a stable proof kernel exists.
 

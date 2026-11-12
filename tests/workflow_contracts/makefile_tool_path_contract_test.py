@@ -174,6 +174,61 @@ def test_makefile_curates_the_go_tool_directory_on_path(
     )
 
 
+@pytest.mark.parametrize("cargo_home_kind", ["default", "custom"])
+def test_kani_uses_the_active_cargo_home_before_other_kani_binaries(
+    tmp_path: Path, cargo_home_kind: str
+) -> None:
+    """Run active-home Kani while preserving build-tools PATH precedence."""
+    home = tmp_path / "home with spaces"
+    default_cargo_home = home / ".cargo"
+    active_cargo_home = (
+        default_cargo_home
+        if cargo_home_kind == "default"
+        else tmp_path / "custom-cargo"
+    )
+    conflicting_cargo_home = (
+        tmp_path / "conflicting-cargo"
+        if cargo_home_kind == "default"
+        else default_cargo_home
+    )
+    active_marker = tmp_path / "active-kani-invoked"
+    conflicting_marker = tmp_path / "conflicting-kani-invoked"
+    build_tools_prefix = tmp_path / "build-tools"
+    _write_stub(active_cargo_home / "bin" / "cargo-kani", active_marker)
+    _write_stub(conflicting_cargo_home / "bin" / "cargo-kani", conflicting_marker)
+    _write_stub(
+        build_tools_prefix / "bin" / "cargo-kani",
+        tmp_path / "build-tools-kani-invoked",
+    )
+
+    overrides = {
+        "PATH": f"{conflicting_cargo_home / 'bin'}:{MINIMAL_PATH}",
+        "BUILD_TOOLS_PREFIX": str(build_tools_prefix),
+    }
+    if cargo_home_kind != "default":
+        overrides["CARGO_HOME"] = str(active_cargo_home)
+
+    result = _run_make(home, "KANI_FLAGS=--version", "kani-ir", **overrides)
+
+    assert result.returncode == 0, (
+        f"the Kani Make target should execute successfully; stderr was: {result.stderr}"
+    )
+    assert active_marker.exists(), (
+        "cargo kani must resolve cargo-kani from the active CARGO_HOME"
+    )
+    assert not conflicting_marker.exists(), (
+        "another cargo-kani later on PATH must not override the active installation"
+    )
+    assert not (tmp_path / "build-tools-kani-invoked").exists(), (
+        "the build-tools prefix's cargo-kani must not override the active installation"
+    )
+
+    curated_path = _observed_path(home, **overrides)
+    assert curated_path.index(str(build_tools_prefix / "bin")) < curated_path.index(
+        str(active_cargo_home / "bin")
+    ), "the pinned build-tools directory must retain mold precedence over CARGO_HOME"
+
+
 @pytest.mark.parametrize("go_environment", GO_TOOL_DIRECTORY_CASES)
 def test_github_actions_lint_finds_a_go_installed_actionlint(
     tmp_path: Path, go_environment: GoEnvironment

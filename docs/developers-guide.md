@@ -1526,6 +1526,21 @@ the route would carry the parallel frontend and the `mold` flag. The same test
 module parses the recipe and asserts that the route clears the encoded flags,
 assigns the warning policy alone, and composes no contracted variable.
 
+Both commands select the suite by name through `WHITAKER_SUITE_SELECTION`
+(`--lib whitaker_suite --fail-on-no-libraries`) rather than taking `--all`. The
+rolling release publishes a standalone library for every lint as well as the
+suite, and the suite already registers all of them, so `--all` loads several
+lints twice: on Linux rustc aborts with `duplicate specification of lint`, and
+on Windows one of the duplicated standalone libraries fails its own metadata
+check. Naming the suite loads the same lint set once. The variable is assigned
+with `:=` rather than `?=`, so an exported value cannot replace it with one
+that loads the standalone libraries as well. It is still a whole-suite load, so
+a lint added upstream arrives without a change here; it is not the per-lint
+`pattern` selection that the Whitaker guide's Netsuke deviation note rules out.
+`--fail-on-no-libraries` keeps the gate honest, because without it a missing
+suite would leave Whitaker running a lint-free `cargo check` that reports
+success.
+
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)
 records the policy decision, and the [polonius migration notes](polonius.md)
 track every site whose design depends on the analysis. Sites tagged
@@ -4050,13 +4065,12 @@ invokes each one as `uv run --script scripts/ci/<name>.py`, so the step body is
 one line and every pin the script needs is an `env:` entry beside it, where the
 workflow contract tests can read it.
 
-| Script                         | Workflow step                        |
-| ------------------------------ | ------------------------------------ |
-| `stage_test_shell.py`          | Install test shell dependencies      |
-| `install_actionlint.py`        | Download actionlint                  |
-| `report_sccache_stats.py`      | Show sccache statistics              |
-| `discard_instrumented_tree.py` | Discard the instrumented build tree  |
-| `install_kani.py`              | Install prebuilt Kani (`kani-smoke`) |
+| Script                         | Workflow step                       |
+| ------------------------------ | ----------------------------------- |
+| `stage_test_shell.py`          | Install test shell dependencies     |
+| `install_actionlint.py`        | Download actionlint                 |
+| `report_sccache_stats.py`      | Show sccache statistics             |
+| `discard_instrumented_tree.py` | Discard the instrumented build tree |
 
 `report_sccache_stats.py` also replaces the same report in `ci-windows.yml`,
 `netsukefile-test.yml`, and `coverage-main.yml`, and `coverage-main.yml` runs
@@ -4065,14 +4079,13 @@ purpose. `tests/workflow_contracts/sccache_contract_test.py` requires the
 script on every compiling lane except the release smoke job, which only prints
 the JSON form.
 
-`scripts/ci/ci_support.py` holds what they share: the catalogue, a synchronous
-runner, and `GITHUB_PATH` publication. The installers' other shared concern --
-checksum-verified download and extraction of release archives -- lives in
-`scripts/ci/ci_archive.py`, which is one failure mode (a hostile or stale
-artefact) rather than a second command runner. Downloads accept `https://` and
-`file://` URLs only, and apply the same allowlist to every request `urllib`
-sends, including redirect targets, so a release URL cannot be answered with a
-redirect to a scheme the downloader refuses; the tests serve release fixtures
+`scripts/ci/ci_support.py` holds what the Python helpers share: the catalogue,
+a synchronous runner, and `GITHUB_PATH` publication. The actionlint installer
+uses `scripts/ci/ci_archive.py` for checksum-verified download and extraction
+of release archives. The Kani workflow delegates its archive handling to the
+pinned `rust-prover-tools` package. The shared archive helper restricts URLs to
+`https://` and `file://`, including redirect targets, so a release URL cannot
+redirect to a scheme the downloader refuses. The tests serve release fixtures
 over `file://` so the real download, verification, and extraction path runs
 without a network. Extraction writes each named member under its own base name
 in the destination, and refuses a member whose base name cannot name a file, so
@@ -5814,40 +5827,214 @@ Install or refresh the pinned Kani tool with:
 make install-kani
 ```
 
-Local `make install-kani` delegates to the pinned `rust-prover-tools` CLI
-through `uv tool run`. Continuous integration instead downloads both the
-prebuilt `cargo-kani` front-end and Kani's pinned release bundle, checks their
-pinned SHA-256 values, and caches their installation directories. The CI job
-therefore never compiles the verifier from source. Kani manages its own
-supporting Rust nightly toolchain during setup; CI gives that toolchain a
-separate cached `RUSTUP_HOME`. It must not replace the repository's pinned
-nightly workflow (see
+Both local and CI `make install-kani` calls delegate to the pinned
+`rust-prover-tools` CLI through `uv tool run`. In `kani-smoke`, the workflow
+passes `tools/kani/VERSION`, installs the prebuilt `cargo-kani` front-end into
+the cached `$CARGO_HOME/bin`, and stores verified release archives under
+`$KANI_HOME/archives`. The immutable package revision owns the SHA-256 pins for
+both prebuilt assets, so CI no longer carries a separate downloader or builds
+the verifier from source. The workflow publishes `$CARGO_HOME/bin` through
+`GITHUB_PATH`, then runs `make kani-check` in a later step to check the
+installed command against the version file. Kani manages its own supporting
+Rust nightly toolchain during setup; CI gives that toolchain a separate cached
+`RUSTUP_HOME`. It must not replace the repository's pinned nightly workflow (see
 [ADR-0006](adrs/adr-0006-adopt-the-polonius-borrow-checker-on-a-pinned-nightly-toolchain.md)).
-Kani 0.67.0's supporting nightly is `nightly-2025-11-21`, which predates the
-Polonius default, so Kani borrow-checks under NLL. That is currently harmless —
-the tree has no `POLONIUS(...)`-tagged sites — but a future tagged site could
-fail to verify under Kani while compiling everywhere else. If that happens,
-move Kani to a build whose nightly is 2026-08-04 or later rather than
-reinstating a `-Zpolonius` directive.
+The composite [Kani cache action](../.github/actions/kani-cache/action.yml)
+owns those three workspace-local directories under a key containing the runner
+lane and Kani version. It saves only a cache miss on a push to `main`; pull
+requests and manual dispatches cannot seed a cache generation. Upstream
+publishes prebuilt Kani only for Linux x86_64, so Make uses the verified
+archive there and defaults to `--compile` on other local hosts to preserve
+Cargo-based installation. The CI job supplies explicit installation flags and
+stays on the prebuilt route. Kani 0.67.0's supporting nightly is
+`nightly-2025-11-21`, which predates the Polonius default, so Kani
+borrow-checks under NLL. That is currently harmless — the tree has no
+`POLONIUS(...)`-tagged sites — but a future tagged site could fail to verify
+under Kani while compiling everywhere else. If that happens, move Kani to a
+build whose nightly is 2026-08-04 or later rather than reinstating a
+`-Zpolonius` directive.
 
-Delegated prover targets print maintainer diagnostics to standard error before
-invoking `rust-prover-tools`. Expect `prover-tools:` lines containing the
-pinned source, Make target, redacted command shape, relevant Kani version, and
-non-zero exit status on failure.
+`make install-kani`, `make install-verus`, and `make verus` print maintainer
+diagnostics to standard error before invoking `rust-prover-tools`. Expect
+`prover-tools:` lines containing the pinned source, Make target, redacted
+command shape, relevant Kani version, and non-zero exit status on failure.
+`make kani-check` is not delegated and prints no `prover-tools:` invocation
+line; it reports its own `prover-tools: target=kani-check` diagnostics.
 
 Use the Make targets for day-to-day formal-verification checks:
 
 - `make kani-check` runs the fast local version check used by `formal-pr`.
-  This check verifies the installed `cargo kani` command matches
-  `tools/kani/VERSION`.
-- `make kani-full` runs the complete Kani proof suite through `cargo kani`.
+  It reads `tools/kani/VERSION`, runs the `cargo-kani` executable in the active
+  `$CARGO_HOME` with `--version`, and compares the first semantic version in
+  its output with the file. The query is deliberately local and read-only: it
+  never resolves `rust-prover-tools` through `uv`, so it works without network
+  access and does not write the uv cache. It also refuses to run the launcher
+  when `<KANI_HOME>/kani-<version>` is absent because `cargo-kani` treats that
+  as an incomplete installation and starts a first-time setup, which downloads
+  and unpacks a release bundle; the query names `payload-missing` and points at
+  `make install-kani` instead of becoming an installer. It refuses a
+  `KANI_HOME` that is set but empty as `kani-home-empty`: the launcher reads an
+  empty value as the current directory, while a shell default would read it as
+  `$HOME/.kani`, so the guard and the launcher would inspect different homes.
+  It refuses an unset `KANI_HOME` together with an empty or unset `HOME` as
+  `home-unresolvable`, for the same reason: the fallback would name `/.kani`,
+  which no launcher derives, so the guard would report on a directory the
+  verifier never reads. A version mismatch, a failing verifier, or unparsable
+  output fails the target. Every failure names a stable `category=` —
+  `pin-unreadable`, `kani-home-empty`, `home-unresolvable`, `payload-missing`,
+  `verifier-failed`, `version-unparsable`, or `version-mismatch` — so a caller
+  can branch on the cause without parsing prose. The only text it takes from
+  the verifier is the version token it extracts: the `found` value of a
+  mismatch, and the version named by the success line, so a verifier reporting
+  `kani 0.66.0` against a 0.67.0 pin prints `found 0.66.0`. The `kani-version=`
+  field is the expected pin as read from the file, not a value taken from the
+  verifier. The text that token was extracted from is never echoed. It comes
+  from an external binary so it could carry a credential, forge a log line, or
+  flood a terminal, and no amount of bounding or escaping makes arbitrary text
+  safe to print. The extracted version, the category, and the exit status are
+  the actionable facts; re-running the verifier by hand supplies anything else.
+- `make kani-full` runs the complete Kani proof suite through that active-home
+  `cargo-kani` executable.
 - `make kani-ir` is the Intermediate Representation (IR) proof-suite alias.
   It currently delegates to `make kani-full` because all Kani harnesses are IR
   harnesses.
 - `make formal-pr` aliases the pull-request formal-verification smoke path.
 - `make install-verus` and `make verus` delegate to `rust-prover-tools` for
-  the optional Verus installer and proof runner. These targets are not part of
-  the ordinary pull-request gate.
+  the optional Verus installer and proof runner. `make verus` defaults to
+  `verus/canonical_value/main.rs`; setting `VERUS_FLAGS` replaces that default.
+  Repeat `--proof-file` for an ordered batch, quoting each path with spaces as
+  one shell argument:
+
+  ```bash
+  make verus VERUS_FLAGS='--proof-file "verus/first proof.rs" --proof-file verus/second.rs'
+  ```
+
+  The pinned CLI runs files in order, stops at the first failed proof, and
+  returns the verifier's exit status. `make test-prover-tools-integration`
+  exercises this contract with fake verifier processes and never installs
+  Verus, and covers the `make verus` target itself as well as the CLI: the
+  default proof, an ordered batch, and a failing proof whose diagnostic names
+  the verifier's status. GNU make normalizes any failed recipe to its own exit
+  status 2, so that diagnostic, not make's status, is what carries the
+  verifier's code. The fake verifier and the single-word `PROVER_TOOLS` shim
+  live in `scripts/tests/prover_tools_integration_support.py`; both are started
+  through a POSIX launcher rather than a shebang, so an interpreter path
+  containing spaces still resolves. Every subprocess in that module runs under
+  a deadline that kills the whole process group, so a stalled fetch fails the
+  test with the offending command instead of holding the captured pipes open.
+  These targets are not part of the ordinary pull-request gate.
+
+`tests/prover_tools_verus_e2e_tests.rs` is the real-verifier lane. It drives
+`make verus` against the pinned Verus install for the default proof, an ordered
+batch, and a genuine verification failure. Two property cases then run the
+pinned CLI against a fake verifier so the batching contract is checked over
+generated batch lengths, failure positions, and exit statuses: a successful
+batch must run every proof exactly once in order, and a failing batch must run
+exactly the prefix up to and including the failing proof and report that
+proof's status. Verus is an optional maintainer tool and the repository has no
+Verus CI job, so the cases skip when the pinned install is absent;
+`make test-verus-e2e` sets `NETSUKE_VERUS_E2E_STRICT=1` to turn that skip into
+a failure for a maintainer who means to run them.
+
+`tests/prover_tools_kani_check_tests.rs` holds the boundary around
+`make kani-check`. It requires that the query reads the pin, asks the installed
+verifier for `--version` and nothing else, and never resolves
+`rust-prover-tools` through a network path. Its isolation case goes further: it
+runs the real recipe inside a read-only chroot with no network, proving the
+query still answers. Every mounted path is read-only — `/usr`, `/etc`, the
+repository, the fixture directory, the chroot root, `/tmp`, the caller's home
+and, when an installed verifier is named, that verifier's directory and its
+Kani home. Three paths are writable, and none of them is storage the query can
+use. The first is the `control` probe at `/proc/self/comm`, which proves the
+probe can report a plain failure instead of classifying everything as blocked.
+The second is the trace directory at `/var/trace`, which `strace` needs in
+order to record what the query attempted and which survives on the host for the
+case to read back; the recipe is never told about it. The third is `/dev/null`,
+bound read-write because shells and the recipe's own diagnostics write there
+unconditionally, and its absence would abort a redirection rather than report a
+refused write. That case needs unprivileged user namespaces, so a host that
+forbids them reports a skip rather than failing `make test`.
+`make test-kani-check-isolation` runs the same binary with
+`NETSUKE_KANI_CHECK_SANDBOX_STRICT=1`, turning the skip into a failure.
+`kani-smoke` runs that target as its own step, so the required lane exercises
+the boundary instead of reporting green without it. That lane also sets
+`NETSUKE_KANI_ISOLATION_VERIFIER` to the `cargo-kani` it installed, so a
+further traced query runs the real executable through the recipe and its trace
+must be as clean as the stub's. The path is resolved before the sandbox is
+built, and a variable that names something unresolvable fails the case rather
+than skipping it. `cargo-kani` is a launcher as well as a driver, so that query
+also exposes the Kani home — `KANI_HOME`, or `$HOME/.kani` when it is unset —
+read-only at its own path, and points the launcher at it. Without the payload
+the launcher starts a first-time setup that downloads a release and installs a
+toolchain, which would make the query under test an installer rather than a
+version query. The capability probe binds the same `/etc`, repository, fixture,
+verifier-directory and Kani-home paths the sandbox will use, and names the
+operation a host refused. That name is the evidence to collect before changing
+the lane.
+
+The sandbox proves a write cannot succeed. It cannot show that the recipe never
+tries, because an attempt whose error is discarded (`2>/dev/null`, `|| true`)
+leaves success behind. Two mechanisms supply that half.
+
+The runtime one runs each query under `strace` and reads the log back through
+`tests/prover_tools_kani_check_tests/trace.rs`. A write-intent open, a
+path-mutating call, or a socket address aimed at another host is reported
+whether the kernel refused it or not. Flags and address families are read only
+outside the quoted runs, because `strace` quotes every path it reports: a path
+may be named `/repo/O_CREAT.log`, or a Unix socket `/run/AF_INET`, without
+being a write or a remote address. The filter names the `%file` and `%network`
+classes rather than individual calls. No call can then be missing from the
+trace a reader entry expects, and no architecture-specific name can stop
+`strace` before it starts. The real query must report no attempts, and the
+control verifier must report the write and the connection it discarded. That
+pair is what makes the reader known to fire rather than known to pass on a
+clean log. A further run queries a Kani home with no payload. The recipe must
+refuse it with `payload-missing`, and its trace must also be clean. The refusal
+is what fails if the guard is removed, not the trace: this run uses the same
+stub verifier as the others, and a stub answers `--version` without installing
+anything, so a removed guard would let the run succeed rather than leave a
+setup attempt behind. The clean trace adds the narrower claim that the refusal
+itself attempted nothing. The trace wraps `make`, so the recipe's own commands
+are followed as well as the verifier it invokes, and the case asserts it by
+requiring the recipe's read of the pin file to appear in the trace. A second
+control moves the attempt from the verifier to the recipe. A makefile whose own
+lines discard a write and a directory creation, and then report the version,
+runs to success, and the case requires both attempts in its trace. That shows
+an attempt added to the recipe — not just to the program the recipe runs —
+would be caught, because the discarded failures leave the run looking identical
+to one that never tried.
+
+The static mechanism is `tests/prover_tools_kani_check_tests/recipe.rs`. It
+parses the shipped `kani-check` recipe and reports any error-suppression
+fragment, any write-intent command, and any redirect that names a path rather
+than duplicating a descriptor. Representative suppressions and writes are
+asserted to be reported, so the check is known to fire rather than merely known
+to pass, and adding `mkdir -p "$cache" 2>/dev/null || true` to the recipe fails
+it. A diagnostic that ever needed to print a literal `>` is reported too; that
+is deliberate, and such a change should be reviewed.
+
+Ubuntu 24.04 ships `kernel.apparmor_restrict_unprivileged_userns=1`, which makes
+`unshare --user` fail before the sandbox script runs. The `kani-smoke` step
+therefore lifts the restriction for its own duration and restores it
+afterwards. The sysctl path comes from `KANI_APPARMOR_RESTRICTION` rather than
+being repeated in the step body, so
+`tests/workflow_contracts/kani_isolation_step_test.py` can execute the
+checked-in step with `make` and `sudo` stubbed and the path pointed at a
+temporary file. A host that refuses the lift fails the step with an `::error::`
+annotation instead of reporting a sandbox fault that never reached the sandbox.
+A refused restore is reported the same way and fails the step even when the
+suite passed, because leaving the host modified is a fault in its own right. A
+suite failure keeps its own status, which is the more specific diagnosis.
+
+`tests/prover_tools_kani_check_command_tests.rs` drives the recipe itself with
+a fake verifier. It covers a matching pin, a mismatched pin, a missing pin, a
+pin that is not a file, an empty `KANI_HOME`, and a failing verifier. That
+verifier's diagnostic must carry its category and its status, echo nothing the
+verifier printed, and stay free of control characters. A further case puts a
+recorder in place of both network-capable tools the repository defines. The
+recorder marks its invocation before failing, so an attempt is visible even if
+the recipe ignores the error, and the isolated cache and home directories must
+still be empty afterwards.
 
 Kani is intentionally not part of `make test`, `make lint`, `make check-fmt`, or
 `make all`. `Cargo.toml` declares `cfg(kani)` under
@@ -9539,14 +9726,15 @@ provisioned and run the following in order:
    $whitaker = Join-Path $profileHome '.local\bin\whitaker.ps1'
    $env:RUSTFLAGS = "$env:RUSTFLAGS -D warnings"
    $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-   & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
+   $suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'
+   & $whitaker @suite --no-deps --package netsuke-build '--' --all-targets --all-features
    if ($LASTEXITCODE -ne 0) {
      exit $LASTEXITCODE
    }
    Push-Location test_support
    try {
      $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-     & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
+     & $whitaker @suite --no-deps --package test_support '--' --all-targets --all-features
      if ($LASTEXITCODE -ne 0) {
        exit $LASTEXITCODE
      }

@@ -3,7 +3,7 @@
 //! The capability policy is enforced by configuration rather than by code, so
 //! a regression here is silent: widening an entry from a module path to a whole
 //! crate, or dropping the second Whitaker run, stops the lint reporting real
-//! violations without failing anything. These tests pin the two invariants that
+//! violations without failing anything. These tests pin the invariants that
 //! keep the boundary honest.
 //!
 //! First, `test_support` is a Cargo workspace member, but its sanctioned
@@ -24,6 +24,17 @@
 //! `[workspace.metadata.dylint]` block would quietly reverse it, so the absence
 //! is asserted here rather than left to review.
 //!
+//! Fourth, both invocations must select the suite by name and refuse to run
+//! without it. The rolling release publishes a standalone library for every
+//! lint as well as the suite, and the suite already registers all of them, so
+//! `--all` loads several lints twice and rustc aborts with `duplicate
+//! specification of lint`. `--fail-on-no-libraries` is the other half: without
+//! it a missing suite leaves Whitaker running a lint-free `cargo check` that
+//! reports success.
+//!
+//! Both invocation contracts live in the `whitaker_invocation` submodule so
+//! each file stays inside the 400-line limit.
+//!
 //! These assertions are deterministic file checks. They do not invoke Whitaker:
 //! the suite needs its own pinned toolchain and driver, which `make test` does
 //! not require. `make lint-whitaker` remains the gate that actually runs it,
@@ -33,9 +44,14 @@
 #[path = "support/makefile.rs"]
 mod makefile;
 
+// The `make lint-whitaker` invocation contracts live in their own module to
+// keep both files inside the 400-line limit.
+#[path = "whitaker_boundary_contract/whitaker_invocation.rs"]
+mod whitaker_invocation;
+
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use makefile::{read_repo_file, target_recipe};
+use makefile::read_repo_file;
 use rstest::rstest;
 use toml::Value as TomlValue;
 
@@ -116,98 +132,6 @@ fn exclusion_list(dylint_toml: &str, key: &str) -> Result<Vec<String>> {
                 .with_context(|| format!("{key} entries should be strings, found {entry:?}"))
         })
         .collect()
-}
-
-/// Collect the package names selected by a Makefile recipe line.
-///
-/// Substring matching cannot tell `--package test_support` apart from
-/// `--package test_support-extra`, nor spot a second selection appended later,
-/// so the line is tokenized and whole arguments are compared. Both the
-/// separated and `--package=value` spellings are recognized, as is the `-p`
-/// short form.
-fn package_selections(line: &str) -> Vec<&str> {
-    let mut tokens = line.split_whitespace();
-    let mut packages = Vec::new();
-    while let Some(token) = tokens.next() {
-        if let Some(value) = token.strip_prefix("--package=") {
-            packages.push(value);
-        } else if token == "--package" || token == "-p" {
-            packages.extend(tokens.next());
-        }
-    }
-    packages
-}
-
-#[test]
-fn lint_whitaker_also_runs_inside_test_support() -> Result<()> {
-    let makefile = read_repo_file(Utf8Path::new("Makefile"))?;
-    let recipe = target_recipe(&makefile, "lint-whitaker")
-        .context("the Makefile should declare a lint-whitaker target")?;
-
-    let invocations: Vec<&str> = recipe
-        .lines()
-        .filter(|line| line.contains("$(WHITAKER)"))
-        .collect();
-    ensure!(
-        invocations.len() == 2,
-        concat!(
-            "lint-whitaker should invoke Whitaker twice — once at the ",
-            "repository root for netsuke and once inside test_support — ",
-            "found {count}: {recipe:?}",
-        ),
-        count = invocations.len(),
-        recipe = recipe
-    );
-
-    // Counted separately rather than with `any`, which two test_support runs
-    // would satisfy while leaving the whole application crate unlinted.
-    let (scoped, root): (Vec<&str>, Vec<&str>) = invocations
-        .iter()
-        .partition(|line| line.contains("cd test_support"));
-    ensure!(
-        scoped.len() == 1,
-        concat!(
-            "exactly one lint-whitaker invocation should run from ",
-            "test_support/, found {count}: {recipe:?}",
-        ),
-        count = scoped.len(),
-        recipe = recipe
-    );
-    ensure!(
-        scoped.first().is_some_and(|line| {
-            line.contains(r#"DYLINT_TOML="$$(cat dylint.toml)""#)
-                && package_selections(line) == ["test_support"]
-                && line.contains("--no-deps")
-        }),
-        concat!(
-            "the scoped Whitaker invocation must explicitly load ",
-            "test_support/dylint.toml and select exactly test_support after ",
-            "workspace membership changes Cargo's configuration and package ",
-            "roots; found {scoped:?}",
-        ),
-        scoped = format!("{scoped:?}")
-    );
-    ensure!(
-        root.len() == 1,
-        concat!(
-            "exactly one lint-whitaker invocation should run from the ",
-            "repository root, found {count}: {recipe:?}",
-        ),
-        count = root.len(),
-        recipe = recipe
-    );
-    ensure!(
-        root.first().is_some_and(|line| {
-            package_selections(line) == ["netsuke-build"] && line.contains("--no-deps")
-        }),
-        concat!(
-            "the root Whitaker invocation must select exactly netsuke-build and skip ",
-            "dependency checks so test_support loads its own dylint.toml; ",
-            "found {root:?}",
-        ),
-        root = format!("{root:?}")
-    );
-    Ok(())
 }
 
 #[test]

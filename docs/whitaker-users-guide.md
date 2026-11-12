@@ -36,6 +36,9 @@ whitaker-installer
 whitaker --all
 ```
 
+The final line is upstream's default: `--all` loads every installed library.
+Netsuke deliberately names the suite instead, and the note below says why.
+
 This:
 
 1. Installs `cargo-dylint` and `dylint-link` if not present
@@ -62,8 +65,21 @@ This:
    lists installed Whitaker suite libraries
 5. Ensures the pinned Rust toolchain and components are installed via rustup
 
-After installation, run `whitaker --all` in any Rust project to lint it. Use
-`whitaker-ls` to list the installed Whitaker suite libraries.
+After installation, run `whitaker --all` in any Rust project to lint it. That
+is again upstream's default, which loads every installed library; Netsuke runs
+the suite alone instead, as the note below explains. Run `whitaker-ls` to list
+the installed Whitaker suite libraries.
+
+> **Netsuke deviation from upstream — preserve when re-importing this guide.**
+> Netsuke runs `whitaker --lib whitaker_suite --fail-on-no-libraries` instead.
+> The rolling release publishes a standalone library for every lint as well as
+> the suite, and the suite already registers all of them, so `--all` loads
+> several lints twice: on Linux rustc aborts with
+> `duplicate specification of lint`, and on Windows one of the duplicated
+> standalone libraries fails its metadata check. Naming the suite loads the
+> same lint set once, and `--fail-on-no-libraries` stops a missing suite from
+> passing as a lint-free `cargo check`. See "Quality gates" in
+> `docs/developers-guide.md`.
 
 On Windows, the installer's `PATH` check honours `PATHEXT` and falls back to
 the usual executable suffixes when `PATHEXT` is unset, so a normal

@@ -1,4 +1,4 @@
-.PHONY: help all clean fetch test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
+.PHONY: help all clean fetch test test-nextest proptest test-documentation-contracts doctest test-default-features lint-default-features test-kani-mutations test-workflow-contracts test-windows-msi-release-rank test-release-admission test-coverage-artifact test-linux-package-metadata test-ci-scripts test-prover-tools-integration test-package-verify test-release-publication build release lint lint-clippy lint-whitaker lint-python interrogate lint-workflow-scripts github-actions-lint doc-coverage doc-coverage-test validate-coverage-artifact fmt check-fmt typecheck typecheck-python markdownlint spelling nixie install-kani kani-check kani-full kani-ir test-kani-scope-wrapper test-kani-check-isolation test-verus-e2e install-verus verus formal-pr install-build-tools check-build-tools bench-build bench-config-load bench-glob-expansion
 
 RUST_TOOLCHAIN_FILE ?= rust-toolchain.toml
 # Export this path before shell probes expand it, so Make does not interpolate
@@ -23,6 +23,12 @@ APP ?= netsuke
 # started with instead, and what that environment exports to a shell function
 # is neither documented nor stable across Make releases.
 CARGO ?= cargo
+# Kani is installed into the active Cargo home; its targets name that binary
+# directly so PATH can keep the pinned build-tools directory first for mold.
+CARGO_HOME ?= $(HOME)/.cargo
+# The compiled Kani installer invokes `cargo kani` by name. Export the home so
+# its recipe can prefer the newly installed subcommand for that invocation.
+export CARGO_HOME
 # The default must be defined before the export: `export CARGO` on its own
 # would define the variable empty and shadow the `?=` default for every recipe.
 export CARGO
@@ -40,10 +46,14 @@ NEXTEST_BUILD_JOBS ?=
 # parallelism: `cargo-nextest` uses `-j` for test processes, not Cargo jobs.
 NEXTEST_TEST_JOBS ?=
 CLIPPY_FLAGS ?= --workspace --all-targets --all-features -- -D warnings
-KANI ?= cargo kani
+KANI ?= "$(CARGO_HOME)/bin/cargo-kani"
+# Escape shell single quotes so the maintainer diagnostic prints the command as
+# one value even when the active Cargo home contains an apostrophe.
+KANI_SHELL_ARG := $(subst ','"'"',$(KANI))
 KANI_FLAGS ?=
-KANI_INSTALL_FLAGS ?=
-KANI_CHECK_FLAGS ?=
+# Use the verified archive on its supported host; retain Cargo installation
+# for developers on other platforms. CI sets explicit cached install flags.
+KANI_INSTALL_FLAGS ?= $(if $(filter Linux-x86_64,$(KANI_HOST_TRIPLE)),,--compile)
 KANI_VERSION_FILE ?= tools/kani/VERSION
 # The development build standard: the `mold` linker and the parallel `rustc`
 # frontend are the defaults for development, test, lint, and typecheck builds.
@@ -73,6 +83,8 @@ STANDARD_MOLD_FLAG ?= -Clink-arg=-fuse-ld=mold
 # `mold` ships for Linux only. macOS and Windows keep their platform linker,
 # matching the `cfg(target_os = "linux")` gate in `.cargo/config.toml`.
 BUILD_HOST_OS := $(shell uname -s)
+BUILD_HOST_ARCH := $(shell uname -m)
+KANI_HOST_TRIPLE := $(BUILD_HOST_OS)-$(BUILD_HOST_ARCH)
 STANDARD_RUSTFLAGS = $(STANDARD_THREADS_FLAG)$(if $(filter Linux,$(BUILD_HOST_OS)), $(STANDARD_MOLD_FLAG))
 # Warnings-as-errors plus the standard, appended to whatever the caller set.
 GATE_RUSTFLAGS = RUSTFLAGS="$${RUSTFLAGS:+$$RUSTFLAGS }-D warnings $(STANDARD_RUSTFLAGS)"
@@ -215,22 +227,43 @@ TYPOS_CONFIG_BUILDER = $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
 	--python $(PYTHON_BASELINE) \
 	--from "git+https://github.com/leynos/typos-config-builder.git@$(TYPOS_CONFIG_BUILDER_VERSION)" \
 	typos-config-builder
-PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@2ba17da6b7e24160c4041e8d41ba1ba6cca87b35
-PROVER_TOOLS ?= uv tool run --from $(PROVER_TOOLS_SOURCE) prover-tools
+PROVER_TOOLS_SOURCE ?= git+https://github.com/leynos/rust-prover-tools@592558f7183b554fc749696246984c5d7300d029
+PROVER_TOOLS ?= $(PUBLIC_GIT_SOURCE_ENV) $(UV_ENV) $(UV) tool run \
+	--python $(PYTHON_BASELINE) --from "$(PROVER_TOOLS_SOURCE)" prover-tools
 RUSTDOC_FLAGS ?= --cfg docsrs -D warnings
 unexport RUSTDOC_FLAGS
 export RUSTDOCFLAGS := $(value RUSTDOC_FLAGS)
-VERUS_FLAGS ?=
+VERUS_FLAGS ?= --proof-file verus/canonical_value/main.rs
 VERUS_INSTALL_FLAGS ?=
 WHITAKER ?= whitaker
+# Name the suite instead of taking `--all`, and refuse to run without it.
+#
+# The rolling release publishes a standalone library for every lint as well as
+# the suite, and the suite already registers all of them. `--all` therefore
+# loads several lints twice: on Linux rustc aborts with "duplicate
+# specification of lint", and on Windows one of the duplicated standalone
+# libraries fails its own metadata check. Selecting `whitaker_suite` loads the
+# same lint set once.
+#
+# This is still a whole-suite load, which is what the repository deliberately
+# relies on so a lint added upstream arrives without a change here. It is not
+# the per-lint `pattern` selection the Whitaker guide's Netsuke deviation note
+# rules out. `--fail-on-no-libraries` keeps the gate honest: without it a
+# missing suite would leave Whitaker running a lint-free `cargo check` that
+# reports success. The assignment is unconditional rather than `?=`, so an
+# exported value cannot replace the selection with one that loads the
+# standalone libraries as well.
+WHITAKER_SUITE_SELECTION := --lib whitaker_suite --fail-on-no-libraries
 
 # The build-tools install prefix leads: `-fuse-ld=mold` resolves by PATH order, so
 # the pinned release must outrank any distribution `mold`. Every build target
 # now links with it, so this is global rather than target-specific.
+# Kani names its active Cargo-home executable directly and does not depend on
+# this order.
 # GO_BIN is appended after the three fixed directories so a tool present in
 # more than one location keeps its current precedence; CI's explicit
 # `ACTIONLINT=` override still wins over all of them.
-export PATH := $(BUILD_TOOLS_PREFIX)/bin:$(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
+export PATH := $(BUILD_TOOLS_PREFIX)/bin:$(CARGO_HOME)/bin:$(HOME)/.cargo/bin:$(HOME)/.local/bin:$(HOME)/.bun/bin:$(GO_BIN):$(PATH)
 
 build: target/debug/$(APP) ## Build debug binary
 release: target/release/$(APP) ## Build release binary
@@ -394,11 +427,16 @@ test-ci-scripts: ## Test the CI helper scripts under scripts/ci with pytest and 
 		scripts/tests/test_ci_discard_instrumented_tree.py \
 		scripts/tests/test_ci_install_actionlint.py \
 		scripts/tests/test_ci_install_actionlint_cache.py \
-		scripts/tests/test_ci_install_kani.py \
 		scripts/tests/test_ci_report_sccache_stats.py \
 		scripts/tests/test_ci_scripts_metadata.py \
 		scripts/tests/test_ci_stage_test_shell.py \
 		scripts/tests/test_ci_support.py \
+		-c /dev/null --rootdir=. -p no:cacheprovider
+
+test-prover-tools-integration: ## Exercise the pinned prover-tools Verus CLI with a fake verifier
+	@PROVER_TOOLS="$(PROVER_TOOLS)" $(UV_ENV) $(UV) run --no-project \
+		--python $(PYTHON_BASELINE) --with pytest==9.0.2 --with hypothesis==6.151.9 \
+		python -m pytest scripts/tests/test_prover_tools_integration.py -q \
 		-c /dev/null --rootdir=. -p no:cacheprovider
 
 # Release-policy modules receive names, digests, mappings, or typed transport
@@ -547,10 +585,10 @@ lint-clippy: check-build-tools ## Run rustdoc and Clippy with warnings denied
 # assigns the warning policy as its own `RUSTFLAGS`. An unset value would leave
 # Cargo reading the configuration's `rustflags`.
 lint-whitaker: check-build-tools ## Run the Whitaker Dylint suite with warnings denied
-	env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) --all --no-deps --package netsuke-build -- --all-targets --all-features
+	env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package netsuke-build -- --all-targets --all-features
 	# Run from the crate directory as well so Whitaker loads the narrow
 	# `test_support::fs` exemption from test_support/dylint.toml.
-	cd test_support && env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) --all --no-deps --package test_support -- --all-targets --all-features
+	cd test_support && env -u CARGO_ENCODED_RUSTFLAGS DYLINT_TOML="$$(cat dylint.toml)" RUSTFLAGS="-D warnings" $(WHITAKER) $(WHITAKER_SUITE_SELECTION) --no-deps --package test_support -- --all-targets --all-features
 
 # actionlint is resolved in the recipe shell below, never while Make parses the
 # file: only the recipe shell receives the curated PATH, so a parse-time probe
@@ -641,13 +679,69 @@ install-kani: ## Install the pinned Kani verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
 	@printf 'prover-tools: target=install-kani kani-version=%s\n' "$$(cat '$(KANI_VERSION_FILE)')" >&2
 	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani install <redacted-flags>' >&2
-	@$(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-kani failed exit=%s\n' "$$status" >&2; exit "$$status"; }
+	@PATH="$$CARGO_HOME/bin:$$PATH" $(PROVER_TOOLS) kani install $(KANI_INSTALL_FLAGS) || { status=$$?; printf 'prover-tools: target=install-kani failed exit=%s\n' "$$status" >&2; exit "$$status"; }
 
+# A query path must stay local: read the pin, ask the installed verifier for
+# its version, and compare. Resolving the shared CLI through `uv tool run` here
+# would fetch a Git package and write the uv cache on a cold host, so that work
+# stays in `install-kani` alone.
+#
+# Every failure names a stable `category=` so a caller can branch on the cause
+# without parsing prose. The verifier's own output is never echoed: it comes
+# from an external binary, so it could carry a secret, forge a log line or
+# flood a terminal, and no bounding or escaping makes arbitrary text safe to
+# print. The category and the exit status are the actionable facts; re-running
+# the verifier by hand supplies the rest.
+#
+# The pinned payload is checked before the launcher runs. `cargo-kani` treats a
+# home without `<home>/kani-<version>` as an incomplete installation and starts
+# a first-time setup: it downloads a release bundle and unpacks it. That would
+# make this query an installer, which is exactly what a read-only check must
+# never be, so an absent payload is refused instead and the operator is pointed
+# at the target that does install it.
+#
+# The guard and the launcher must read the same home. `cargo-kani` resolves an
+# empty `KANI_HOME` to the current directory, whereas a `${KANI_HOME:-...}`
+# default would resolve it to `$HOME/.kani`: the guard would pass on one
+# directory while the launcher installed into another. A `KANI_HOME` that is set
+# but empty is therefore refused rather than guessed at.
+#
+# An unset `KANI_HOME` with no `HOME` to fall back on is refused for the same
+# reason one step later. The fallback below would build `/.kani`, a path no
+# launcher derives, so the guard would report on a directory the verifier never
+# reads: an absent payload there says nothing about the installation in use.
 kani-check: ## Check the installed Kani verifier version
-	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2
-	@printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI)' "$$(cat '$(KANI_VERSION_FILE)')" >&2
-	@printf 'prover-tools: command=%s\n' '$(PROVER_TOOLS) kani check-version --kani-command <redacted-command> <redacted-flags>' >&2
-	@$(PROVER_TOOLS) kani check-version --kani-command "$(KANI)" $(KANI_CHECK_FLAGS) || { status=$$?; printf 'prover-tools: target=kani-check failed exit=%s\n' "$$status" >&2; exit "$$status"; }
+	@version_file='$(subst ','"'"',$(KANI_VERSION_FILE))'; \
+	expected="$$(cat "$$version_file")" || { status=$$?; printf 'prover-tools: target=kani-check category=pin-unreadable could not read %s\n' "$$version_file" >&2; exit "$$status"; }; \
+	printf 'prover-tools: target=kani-check kani-command=%s kani-version=%s\n' '$(KANI_SHELL_ARG)' "$$expected" >&2; \
+	if [ -n "$${KANI_HOME+set}" ] && [ -z "$${KANI_HOME}" ]; then \
+		printf 'prover-tools: target=kani-check category=kani-home-empty KANI_HOME is set but empty; cargo-kani reads that as the current directory, so name the home that holds the payload or unset it\n' >&2; \
+		exit 1; \
+	fi; \
+	if [ -z "$${KANI_HOME+set}" ] && [ -z "$${HOME:-}" ]; then \
+		printf 'prover-tools: target=kani-check category=home-unresolvable KANI_HOME is unset and HOME is empty, so the Kani home cannot be resolved; set KANI_HOME to the home that holds the payload, or set HOME\n' >&2; \
+		exit 1; \
+	fi; \
+	kani_home="$${KANI_HOME:-$${HOME:-}/.kani}"; \
+	if [ ! -d "$$kani_home/kani-$$expected" ]; then \
+		printf 'prover-tools: target=kani-check category=payload-missing Kani %s payload is absent from %s; run make install-kani\n' "$$expected" "$$kani_home" >&2; \
+		exit 1; \
+	fi; \
+	output="$$($(KANI) --version 2>&1)"; status=$$?; \
+	if [ "$$status" -ne 0 ]; then \
+		printf 'prover-tools: target=kani-check category=verifier-failed failed exit=%s\n' "$$status" >&2; \
+		exit "$$status"; \
+	fi; \
+	actual="$$(printf '%s\n' "$$output" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n 1)"; \
+	if [ -z "$$actual" ]; then \
+		printf 'prover-tools: target=kani-check category=version-unparsable could not parse a Kani version from the verifier output\n' >&2; \
+		exit 1; \
+	fi; \
+	if [ "$$actual" != "$$expected" ]; then \
+		printf 'prover-tools: target=kani-check category=version-mismatch expected Kani %s from %s, found %s\n' "$$expected" "$$version_file" "$$actual" >&2; \
+		exit 1; \
+	fi; \
+	printf 'Kani %s matches %s.\n' "$$actual" "$$version_file"
 
 kani-full: ## Run the full Kani verification suite
 	$(KANI_RUSTFLAGS) $(KANI) $(KANI_FLAGS)
@@ -675,6 +769,26 @@ KANI_SCOPE_WRAPPER_STRICT ?= 1
 test-kani-scope-wrapper: ## Verify the Kani scope wrapper end to end
 	NETSUKE_KANI_SCOPE_WRAPPER_STRICT=$(KANI_SCOPE_WRAPPER_STRICT) \
 		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test kani_scope_wrapper_e2e_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+# The `kani-check` isolation boundary's own lane. The Rust suite runs the case
+# as part of `make test`, but a host that forbids unprivileged user namespaces
+# reports it as a skip, and a lane that skipped it would read as green. The
+# strict variable turns that skip into a failure, exactly as the scope wrapper
+# target above does. It takes `KANI_RUSTFLAGS` for the same reason: this lane
+# builds on the stable toolchain, which rejects `-Zthreads`.
+KANI_CHECK_ISOLATION_STRICT ?= 1
+test-kani-check-isolation: ## Verify the kani-check boundary inside a read-only sandbox
+	NETSUKE_KANI_CHECK_SANDBOX_STRICT=$(KANI_CHECK_ISOLATION_STRICT) \
+		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test prover_tools_kani_check_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
+
+# The real-verifier end-to-end lane. Verus is an optional maintainer tool and
+# the repository deliberately has no Verus CI job, so the cases skip on a host
+# without the pinned install. This target is for a maintainer who has run
+# `make install-verus` and wants the skip to be a failure instead.
+VERUS_E2E_STRICT ?= 1
+test-verus-e2e: ## Verify make verus against the pinned real verifier
+	NETSUKE_VERUS_E2E_STRICT=$(VERUS_E2E_STRICT) \
+		$(KANI_RUSTFLAGS) $(CARGO) nextest run --test prover_tools_verus_e2e_tests $(NEXTEST_BUILD_JOBS) $(NEXTEST_TEST_JOBS)
 
 install-verus: ## Install the pinned Verus verifier
 	@printf 'prover-tools: source=%s\n' '$(PROVER_TOOLS_SOURCE)' >&2

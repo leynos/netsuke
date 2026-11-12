@@ -6,6 +6,13 @@ median, and it must run through the installer's PowerShell wrapper rather than
 Git Bash, lint both workspace packages, and propagate a failure from either.
 Each of those is a separate way the lint gate can quietly stop being a gate.
 
+Both invocations must also select the suite by name and refuse to run without
+it. `--all` loads every installed library, and the rolling release ships a
+standalone library per lint beside the suite, so `--all` registers several
+lints twice and rustc rejects the duplicate. `--fail-on-no-libraries` is the
+other half: without it a missing suite would leave a lint-free `cargo check`
+reporting success.
+
 These live here rather than in ``ci_windows_job_test.py`` to keep both modules
 inside the repository's 400-line file limit. Shared parsing helpers live in
 ``workflow_loading.py``.
@@ -35,8 +42,9 @@ WHITAKER_WORKSPACE_FRAGMENTS = (
     "Remove-Item Env:CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue",
     '$env:RUSTFLAGS = "-D warnings"',
     "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
+    "$suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'",
     (
-        "& $whitaker --all --no-deps --package netsuke-build '--' "
+        "& $whitaker @suite --no-deps --package netsuke-build '--' "
         "--all-targets --all-features"
     ),
     "Push-Location test_support",
@@ -46,7 +54,7 @@ WHITAKER_WORKSPACE_FRAGMENTS = (
 WHITAKER_TEST_SUPPORT_FRAGMENTS = (
     "$env:DYLINT_TOML = Get-Content dylint.toml -Raw",
     (
-        "& $whitaker --all --no-deps --package test_support '--' "
+        "& $whitaker @suite --no-deps --package test_support '--' "
         "--all-targets --all-features"
     ),
     "finally {",

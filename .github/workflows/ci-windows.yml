@@ -191,14 +191,20 @@ jobs:
           Remove-Item Env:CARGO_ENCODED_RUSTFLAGS -ErrorAction SilentlyContinue
           $env:RUSTFLAGS = "-D warnings"
           $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-          & $whitaker --all --no-deps --package netsuke-build '--' --all-targets --all-features
+          # Name the suite rather than taking `--all`: the rolling release also
+          # publishes a standalone library per lint, and loading both makes
+          # rustc reject the duplicate registration. `--fail-on-no-libraries`
+          # keeps a missing suite from passing as a lint-free check. The
+          # Makefile's `WHITAKER_SUITE_SELECTION` carries the full rationale.
+          $suite = '--lib', 'whitaker_suite', '--fail-on-no-libraries'
+          & $whitaker @suite --no-deps --package netsuke-build '--' --all-targets --all-features
           if ($LASTEXITCODE -ne 0) {
             exit $LASTEXITCODE
           }
           Push-Location test_support
           try {
             $env:DYLINT_TOML = Get-Content dylint.toml -Raw
-            & $whitaker --all --no-deps --package test_support '--' --all-targets --all-features
+            & $whitaker @suite --no-deps --package test_support '--' --all-targets --all-features
             if ($LASTEXITCODE -ne 0) {
               exit $LASTEXITCODE
             }
