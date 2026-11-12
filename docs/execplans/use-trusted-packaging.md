@@ -1146,11 +1146,14 @@ missing and `EXIT_CONFLICT` when one disagrees, and only un-drafts when every
 asset is already the declared one. Its own upload path was removed by the
 2026-10-19 Decision entry, because a job that both verified and wrote could not
 report a missing asset as a failure. Nothing in this change deletes a remote
-object. The delivered job holds that shape: a verification failure, a
-reconciliation refusal, or a failed API call leaves the release as a draft, and
-a retry re-reads the retained records rather than rebuilding anything. An
-interruption after the edit but before the result is recorded converges on the
-next run, which recognizes the release as already finalized.
+object. The delivered job holds that shape: a verification failure, or a
+reconciliation refusal made from the pre-edit snapshot, leaves the release as a
+draft, because the read that decided it saw a draft. A failed API call reports
+the state as unknown instead, since a retry can begin after an earlier attempt
+already published the release. In either case a retry re-reads the retained
+records rather than rebuilding anything. An interruption after the edit but
+before the result is recorded converges on the next run, which recognizes the
+release as already finalized.
 
 Local recovery: `git switch --detach ebcedaef` restores the pre-change tree.
 Re-running a release is a maintainer action and is documented, not performed
@@ -3163,9 +3166,12 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   retry after an interruption converges instead of failing; a missing asset is
   reported as a missing asset rather than being uploaded here; and an asset
   with different bytes is a conflict that stops the run, because a published
-  digest is a promise to whoever already downloaded it. A verification failure,
-  a reconciliation refusal, or a failed API call leaves the release as a draft,
-  and the guide records how to recover without rebuilding.
+  digest is a promise to whoever already downloaded it. A verification failure
+  or a reconciliation refusal made from the pre-edit snapshot leaves the
+  release as a draft, because the read that decided it saw a draft. A failed
+  API call reports the state as unknown instead, since the edit may have landed
+  before the response was lost. In either case the guide records how to recover
+  without rebuilding.
 
   Exit statuses are the workflow's vocabulary: 0 final, 1 refused or
   conflicting, 2 upload required, 3 input unreadable, 4 output unwritable, 5

@@ -235,9 +235,12 @@ def publish_release(request: PublishRequest) -> None:
     What remains, and cannot be closed from this side, is the window between
     that read and the edit: GitHub offers no conditional edit, so a writer that
     changes the draft in those milliseconds is not observed. The window is one
-    API call wide and both endpoints are the trusted record, so a run that
-    loses the race is detected on the next reconciliation rather than silently
-    published over.
+    API call wide and both endpoints are the trusted record, which narrows it
+    but does not close it. A run that loses the race can publish a release
+    holding bytes the record does not match, and no later pass repairs that: a
+    rerun of an already-public release records it as finalized or refuses its
+    flag without re-reading the assets, so the mismatch stands until an
+    operator finds it.
     """
     identity = release_records.candidate(
         request.candidate_path, tag=request.tag, commit=request.commit

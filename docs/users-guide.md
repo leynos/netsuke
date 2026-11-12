@@ -164,7 +164,9 @@ rerun the finalization job.
 A failed edit, or an unreadable read-back after one, is reported the same way,
 for the same reason: GitHub may have applied the edit before the response was
 lost. A rerun records an already-public release as finalized without editing it
-a second time, so it is always safe to rerun.
+a second time, but only when its prerelease flag already matches the validated
+candidate; a public release whose flag disagrees is refused, because it cannot
+be made a draft again. Either way the rerun is safe.
 
 A caller that invokes `./.github/actions/upload-declared-assets` directly,
 rather than through `release.yml`, must pass `commit` as the **full, lowercase

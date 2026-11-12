@@ -3508,15 +3508,16 @@ different bytes, an asset whose digest could not be established, a candidate
 that names another tag or commit, and a release already public with the wrong
 prerelease flag — and only the last leaves the release public, because it
 already was; the rest leave the draft untouched. Exit 2 names the assets the
-declared upload contract still owes. Exit 3 stops before the API is called.
-Exit 4 is always an output fault, and where it happens decides what it means: a
-candidate or snapshot record that could not be written leaves the draft
-untouched, while `publish` failing to record its outcome says the release
-itself is already final, because the edit succeeded before the record was
-written. Read the message rather than the status to tell those apart. Exit 5
-covers both an unreadable release and an edit GitHub accepted without
-publishing it; the read-back distinguishes them, and neither is retried by this
-stage.
+declared upload contract still owes. Exit 3 is an input fault and stops the run
+before the edit, though the snapshot read that precedes the fresh
+reconciliation may already have happened. Exit 4 is always an output fault, and
+where it happens decides what it means: a candidate or snapshot record that
+could not be written leaves the draft untouched, while `publish` failing to
+record its outcome says the release itself is already final, because the edit
+succeeded before the record was written. Read the message rather than the
+status to tell those apart. Exit 5 covers both an unreadable release and an
+edit GitHub accepted without publishing it; the read-back distinguishes them,
+and neither is retried by this stage.
 
 The finalize step neither sets `continue-on-error` nor swallows the adapter's
 exit status, which is how "leave the release a draft on failure" is
@@ -4044,9 +4045,13 @@ removed from the release.
 
 What the second pass cannot close is the window between its read and the edit.
 GitHub offers no conditional edit, so a writer that changes the draft in those
-milliseconds is not observed. The window is one API call wide and both
-endpoints are the same trusted record, so a run that loses the race is caught
-by the next reconciliation rather than silently publishing over it.
+milliseconds is not observed. The window is one API call wide, and both
+endpoints are the same trusted record, which narrows it but does not close it:
+a run that loses the race can publish a release holding bytes the record does
+not match. No later pass repairs that. A rerun of an already-public release
+records it as finalized when the flag agrees and refuses it when the flag
+disagrees; neither path re-reads the assets. The mismatch therefore stands
+until an operator finds it.
 
 | Exit constant            | Code | Meaning                                                  |
 | ------------------------ | ---- | -------------------------------------------------------- |
