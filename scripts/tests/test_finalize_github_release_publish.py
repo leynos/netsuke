@@ -19,18 +19,20 @@ from finalize_github_release_io import (
     EXIT_REMOTE_FAILED,
     EXIT_UPLOAD_REQUIRED,
 )
-from finalize_github_release_support import (
+from finalize_github_release_records_support import (
     ARCHIVE,
     DIGEST,
     TAG,
     PublishRecords,
-    edit_arguments,
     identity_record,
+    release_view,
+    result_record,
+)
+from finalize_github_release_support import (
+    edit_arguments,
     invocation_arguments,
     publish_arguments,
-    release_view,
     release_views,
-    result_record,
     run_finalizer,
     sequenced_gh,
 )

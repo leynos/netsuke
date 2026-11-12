@@ -15,8 +15,8 @@ from finalize_github_release_io import (
     EXIT_REFUSED,
     EXIT_REMOTE_FAILED,
 )
+from finalize_github_release_records_support import DIGEST
 from finalize_github_release_support import (
-    DIGEST,
     invocation_arguments,
     publish_arguments,
     release_views,

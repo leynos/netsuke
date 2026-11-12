@@ -17,7 +17,7 @@ from finalize_github_release_io import (
     EXIT_REFUSED,
     EXIT_REMOTE_FAILED,
 )
-from finalize_github_release_support import (
+from finalize_github_release_records_support import (
     ARCHIVE,
     COMMIT,
     DIGEST,
@@ -26,8 +26,8 @@ from finalize_github_release_support import (
     VIEW_ARGUMENTS,
     identity_record,
     release_view,
-    run_finalizer,
 )
+from finalize_github_release_support import run_finalizer
 
 if typ.TYPE_CHECKING:
     import pathlib

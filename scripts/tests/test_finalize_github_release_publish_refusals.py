@@ -17,16 +17,15 @@ from finalize_github_release_io import (
     EXIT_REFUSED,
     EXIT_UPLOAD_REQUIRED,
 )
-from finalize_github_release_support import (
+from finalize_github_release_records_support import (
     ARCHIVE,
     COMMIT,
     TAG,
     PublishRecords,
     identity_record,
     plan_record,
-    publish_arguments,
-    run_finalizer,
 )
+from finalize_github_release_support import publish_arguments, run_finalizer
 
 if typ.TYPE_CHECKING:
     import pathlib
