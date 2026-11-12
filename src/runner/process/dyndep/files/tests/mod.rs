@@ -170,19 +170,20 @@ fn oversized_existing_sidecar_is_rejected() -> Result<()> {
 fn sidecar_growth_during_verification_is_a_mismatch() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/growing.dd");
-    let expected = "expected";
     dir.create_dir_all(DYNDEP_DIR)?;
-    dir.write(rel, expected)?;
-    let mut file = open_existing_sidecar(&dir, rel)?.context("sidecar must exist")?;
-    let size = verified_sidecar_size(&file, rel)?;
+    let dyndep = dir.open_dir(DYNDEP_DIR)?;
+    let name = Utf8Path::new("growing.dd");
+    let expected = "expected";
+    dyndep.write(name, expected)?;
+    let mut file = open_existing_sidecar(&dyndep, name)?.context("sidecar must exist")?;
+    let size = verified_sidecar_size(&file, name)?;
     let mut append_options = OpenOptions::new();
     append_options.append(true);
-    let mut writer = dir.open_with(rel, &append_options)?;
+    let mut writer = dyndep.open_with(name, &append_options)?;
     writer.write_all(b" growth")?;
     writer.flush()?;
 
-    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, rel)?;
+    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, name)?;
 
     ensure!(
         grew_while_reading,
@@ -208,10 +209,12 @@ fn no_temp_files_left_behind() -> Result<()> {
 fn failed_atomic_write_removes_temp_file() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/destination.dd");
-    dir.create_dir_all(rel)?;
+    dir.create_dir_all(DYNDEP_DIR)?;
+    let dyndep = dir.open_dir(DYNDEP_DIR)?;
+    let name = Utf8Path::new("destination.dd");
+    dyndep.create_dir(name)?;
 
-    let result = write_atomic(&dir, rel, "content");
+    let result = write_atomic(&dyndep, name, "content");
 
     ensure!(result.is_err(), "rename over a directory must fail");
     ensure_no_temp_files(&dir)?;
@@ -222,48 +225,52 @@ fn failed_atomic_write_removes_temp_file() -> Result<()> {
 fn stale_temp_file_does_not_block_materialization() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/stale.dd");
+    let rel = ".netsuke/dyndep/stale.dd";
     let content = "ninja_dyndep_version = 1\n";
     dir.create_dir_all(DYNDEP_DIR)?;
-    let stale = TempNameSource::new("stale".to_owned()).next_name(rel);
-    dir.write(stale, "stale temporary content")?;
+    let stale = TempNameSource::new("stale".to_owned()).next_name(Utf8Path::new("stale.dd"));
+    dir.write(
+        Utf8Path::new(DYNDEP_DIR).join(&stale),
+        "stale temporary content",
+    )?;
 
-    materialize_dyndep_files(&dir, &[sidecar(rel.as_str(), content)])?;
+    materialize_dyndep_files(&dir, &[sidecar(rel, content)])?;
 
-    ensure_matching(&dir, rel.as_str(), content)
+    ensure_matching(&dir, rel, content)
 }
 
 #[test]
 fn separate_temp_names_for_same_sidecar_differ() {
-    let rel = Utf8Path::new(".netsuke/dyndep/names.dd");
+    let name = Utf8Path::new("names.dd");
     let mut names = TempNameSource::new("fixture".to_owned());
-    let first = names.next_name(rel);
-    let second = names.next_name(rel);
+    let first = names.next_name(name);
+    let second = names.next_name(name);
 
     assert_ne!(first, second, "temporary names must differ per attempt");
-    assert_eq!(first.parent(), rel.parent());
-    assert_eq!(second.parent(), rel.parent());
+    assert_eq!(first.parent(), name.parent());
+    assert_eq!(second.parent(), name.parent());
 }
 
 #[test]
 fn temporary_name_collision_retries_are_bounded() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/collisions.dd");
+    let name = Utf8Path::new("collisions.dd");
     dir.create_dir_all(DYNDEP_DIR)?;
+    let dyndep = dir.open_dir(DYNDEP_DIR)?;
     let mut occupied_names = TempNameSource::new("collisions".to_owned());
     for _ in 0..MAX_TEMP_FILE_ATTEMPTS {
-        dir.write(occupied_names.next_name(rel), "occupied")?;
+        dyndep.write(occupied_names.next_name(name), "occupied")?;
     }
     let mut attempted_names = TempNameSource::new("collisions".to_owned());
 
     let (result, snapshot) =
-        recorded(|| create_unique_temp_file_with_source(&dir, rel, &mut attempted_names));
+        recorded(|| create_unique_temp_file_with_source(&dyndep, name, &mut attempted_names));
     let error = result
         .err()
         .context("all occupied temporary names must exhaust the retry bound")?;
     let expected = localization::message(keys::RUNNER_IO_DYNDEP_TEMP_COLLISIONS)
-        .with_arg("path", rel.as_str())
+        .with_arg("path", entry_display_path(name.as_str()))
         .to_string();
     ensure!(
         format!("{error:#}").contains(&expected),
@@ -284,17 +291,18 @@ fn temporary_name_collision_retries_are_bounded() -> Result<()> {
 fn temporary_name_collision_retry_is_observed_before_success() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/retry.dd");
+    let name = Utf8Path::new("retry.dd");
     dir.create_dir_all(DYNDEP_DIR)?;
+    let dyndep = dir.open_dir(DYNDEP_DIR)?;
     let mut occupied_names = TempNameSource::new("retry".to_owned());
-    dir.write(occupied_names.next_name(rel), "occupied")?;
+    dyndep.write(occupied_names.next_name(name), "occupied")?;
     let mut attempted_names = TempNameSource::new("retry".to_owned());
 
     let (result, snapshot) =
-        recorded(|| create_unique_temp_file_with_source(&dir, rel, &mut attempted_names));
+        recorded(|| create_unique_temp_file_with_source(&dyndep, name, &mut attempted_names));
     let (temp_path, file) = result?;
     drop(file);
-    dir.remove_file(temp_path)?;
+    dyndep.remove_file(temp_path)?;
 
     ensure!(
         temporary_file_retry_count(&snapshot, "retry") == Some(1),
@@ -311,16 +319,18 @@ fn temporary_name_collision_retry_is_observed_before_success() -> Result<()> {
 fn matching_final_sidecar_succeeds_with_another_temp_file() -> Result<()> {
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
-    let rel = Utf8Path::new(".netsuke/dyndep/matching.dd");
+    let rel = ".netsuke/dyndep/matching.dd";
+    let name = Utf8Path::new("matching.dd");
     let content = "ninja_dyndep_version = 1\n";
     dir.create_dir_all(DYNDEP_DIR)?;
-    dir.write(rel, content)?;
-    let other_temp = TempNameSource::new("concurrent".to_owned()).next_name(rel);
-    dir.write(other_temp, "concurrent temporary content")?;
+    let dyndep = dir.open_dir(DYNDEP_DIR)?;
+    dyndep.write(name, content)?;
+    let other_temp = TempNameSource::new("concurrent".to_owned()).next_name(name);
+    dyndep.write(other_temp, "concurrent temporary content")?;
 
-    write_atomic(&dir, rel, content)?;
+    write_atomic(&dyndep, name, content)?;
 
-    ensure_matching(&dir, rel.as_str(), content)
+    ensure_matching(&dir, rel, content)
 }
 
 #[test]
