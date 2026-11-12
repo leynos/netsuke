@@ -368,7 +368,9 @@ def _reconcile_current(
         for name, digest in state.assets.items()
     }
     return release_plan.assess_actions(
-        release_reconcile_github.plan_asset_actions(expected=expected, present=present)
+        release_reconcile_github.plan_asset_actions(
+            expected=expected.as_mapping(), present=present
+        )
     )
 
 
