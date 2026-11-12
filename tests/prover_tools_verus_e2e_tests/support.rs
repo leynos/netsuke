@@ -134,9 +134,10 @@ pub fn write_fake_verus(dir: &Path) -> Result<PathBuf> {
         "    exit 0\n",
         "fi\n",
         "if [ -n \"$FAKE_VERUS_FAIL\" ] && [ \"$1\" = \"$FAKE_VERUS_FAIL\" ]; then\n",
-        "    exit \"$FAKE_VERUS_STATUS\"\n",
+        "    exit \"${FAKE_VERUS_STATUS:-1}\"\n",
         "fi\n",
         "printf 'verification results:: 1 verified, 0 errors\\n'\n",
+        "exit 0\n",
     );
     fs::write(&executable, script)
         .with_context(|| format!("write fake verifier to {}", executable.display()))?;

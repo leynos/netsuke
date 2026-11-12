@@ -176,15 +176,24 @@ fn requests_write(arguments: &str) -> bool {
 /// `strace` quotes the path in each call that takes one, so a name inside a
 /// quoted run is path text rather than a flag or an address selector. An
 /// unterminated quote — a line `strace` truncated mid-write — ends the retained
-/// text, since nothing after it can be read as an argument.
+/// text, since nothing after it can be read as an argument. Inside a quoted run
+/// a backslash escapes the next character, as `strace` writes a `"` or `\` in a
+/// path, so an escaped quote does not end the run.
 fn unquoted(text: &str) -> String {
     let mut kept = String::with_capacity(text.len());
-    let mut rest = text;
-    while let Some((before, after)) = rest.split_once('"') {
-        kept.push_str(before);
-        rest = after.split_once('"').map_or("", |(_, tail)| tail);
+    let mut in_quotes = false;
+    let mut chars = text.chars();
+    while let Some(character) = chars.next() {
+        match (in_quotes, character) {
+            (false, '"') => in_quotes = true,
+            (false, other) => kept.push(other),
+            (true, '"') => in_quotes = false,
+            (true, '\\') => {
+                chars.next();
+            }
+            (true, _) => {}
+        }
     }
-    kept.push_str(rest);
     kept
 }
 
@@ -224,6 +233,10 @@ mod tests {
     )]
     #[case::device_path_as_a_prefix(
         r#"7     openat(AT_FDCWD, "/dev/ttyUSB0", O_WRONLY) = -1 EROFS (Read-only file system)"#,
+        "write-intent"
+    )]
+    #[case::escaped_quote_in_path(
+        r#"7     openat(AT_FDCWD, "/tmp/a\"b", O_WRONLY|O_CREAT) = -1 EROFS (Read-only file system)"#,
         "write-intent"
     )]
     #[case::directory_creation(r#"7     mkdir("/tmp/x", 0777) = -1 EROFS"#, "`mkdir`")]
