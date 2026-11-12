@@ -479,6 +479,24 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   measurement that matters here: the same gate failed on `e3786ad2f` and passed
   on `245515675`, so the cursor rewrite cleared the only red check that was
   this branch's.
+- [x] (2026-11-12) Rebased the branch off its merge base
+  `9213200866dac4c0a783e5b216213cfdd1036ba4` onto the live target
+  `b19386767282cb7ef6e75317aa249006131d543d`, replaying all 57 commits. One
+  commit conflicted, `e3bacb89f`, and only in `docs/contents.md`: the target
+  had added ADR-0074's list entry where this branch added ADR-0072's. Both
+  entries are correct and both ADR files exist, so the resolution keeps them in
+  serial order. `git range-diff` reports every other commit unchanged (`=`),
+  and the target-versus-head diff contains no deleted or renamed path. The PR
+  moved from `CONFLICTING`/`DIRTY` to `MERGEABLE` as a result.
+- [x] (2026-11-12) Committed the review round's two repairs (D36) on the rebased
+  tree, `e1d04fe3a`. The full ten-gate set ran sequentially against a content
+  fingerprint taken before the batch and re-checked identical after it, so the
+  gates bind exactly the committed tree: `check-fmt` 3 s, `lint` 1,204 s,
+  `doc-coverage` 134 s, `test` 171 s, `test-workflow-contracts` 244 s,
+  `test-package-verify` 28 s, `test-coverage-artifact` 1 s,
+  `test-documentation-contracts` 3 s, `markdownlint` 23 s, `nixie` 1 s; all
+  exited 0. `lint` is long because the rebase invalidated the compiler cache
+  and admission was saturating four slots for the whole run.
 
 ## Surprises & discoveries
 
