@@ -121,6 +121,13 @@ def assert_packaging_phases_read_action_outputs(env: dict[str, object]) -> None:
     An outcome that the summary reads from anywhere else cannot distinguish a
     rejected candidate from a failed packaging step, which is the whole reason
     the action reports the two separately.
+
+    Parameters
+    ----------
+    env
+        The summary step's environment, keyed by upper-cased phase and timing
+        suffix, as ``CRATE_PACKAGING_OUTCOME`` and ``CRATE_PACKAGING_STARTED_NS``.
+        Each key must name the package action's corresponding output.
     """
     for phase, output in (
         ("crate_packaging", "crate-packaging"),
@@ -140,6 +147,13 @@ def assert_verification_phases_read_action_outputs(env: dict[str, object]) -> No
     The action is the only place that sees the boundary between the two
     listings, the downloads, and the verifier, so a phase read from anywhere
     else would report a span the workflow cannot actually observe.
+
+    Parameters
+    ----------
+    env
+        The summary step's environment, keyed by upper-cased phase and timing
+        suffix, as ``RELEASE_LISTING_OUTCOME`` and ``RELEASE_LISTING_ENDED_NS``.
+        Each key must name the verifier action's corresponding output.
     """
     for phase in VERIFICATION_PHASES:
         output = phase.replace("_", "-")

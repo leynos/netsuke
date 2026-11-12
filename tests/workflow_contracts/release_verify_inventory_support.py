@@ -200,7 +200,14 @@ def retained_artifact_name() -> str:
 
 
 def load_action() -> dict[str, object]:
-    """Read the verification action as a checked mapping."""
+    """Read the verification action as a checked mapping.
+
+    Returns
+    -------
+    dict[str, object]
+        The action document: its inputs, outputs and ``runs`` mapping, read
+        from disk afresh so one case's mutation cannot reach the next.
+    """
     return require_mapping(
         yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8")),
         "verify-release-inventory action",
@@ -208,7 +215,21 @@ def load_action() -> dict[str, object]:
 
 
 def load_action_steps(action: dict[str, object]) -> list[dict[str, object]]:
-    """Return the action's steps with each step narrowed to a mapping."""
+    """Return the action's steps with each step narrowed to a mapping.
+
+    Parameters
+    ----------
+    action
+        The action document :func:`load_action` read, whose ``runs.steps``
+        list this call narrows.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        The steps in the order the action runs them, each a mapping whose
+        ``name``, ``uses``, ``run``, ``with`` and ``env`` keys the contract
+        reads.
+    """
     runs = require_mapping(action.get("runs"), "action runs")
     raw_steps = require_list(runs.get("steps"), "action steps")
     return [require_mapping(step, "action step") for step in raw_steps]
