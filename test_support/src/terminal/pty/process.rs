@@ -1,12 +1,19 @@
 //! Spawn PTY children and manage their process groups.
 //!
-//! Everything here exists so a test can hang up on a real terminal without
-//! leaving anything running: the child gets its own process group, and
-//! [`kill_process_group`] signals the group rather than the child so a
-//! grandchild cannot outlive the test. [`super::readers`] owns the other half
-//! of the lifecycle — draining the two streams while this module supervises the
-//! child — because a PTY whose master side is not drained will block the child
-//! before it ever exits.
+//! The child is put in its own process group so that signalling reaches
+//! descendants as well as the child, and [`kill_process_group`] is what the
+//! rest of the harness calls at the points where a run cannot finish on its
+//! own: when the direct child times out, when the wait itself fails, or when
+//! [`super::readers`] finds a reader still blocked past its grace period. Those
+//! are the conditions, and they are not a blanket guarantee. A grandchild that
+//! closes its inherited descriptors before the direct child exits leaves no
+//! reader blocked, so nothing here notices it and it can outlive a test that
+//! otherwise succeeded; only a descendant still holding a captured stream keeps
+//! the group reachable through this path.
+//!
+//! [`super::readers`] owns the other half of the lifecycle, draining the two
+//! streams while this module supervises the child, because a PTY whose master
+//! side is not drained will block the child before it ever exits.
 
 use super::{Attach, PtyRequest};
 use anyhow::{Context, Result, anyhow};

@@ -4,8 +4,18 @@
 //! pipe buffer stops it before it can exit and the test deadlocks instead of
 //! failing. Reading blocks, though, and the same thread has to notice when the
 //! child is gone — so each stream is drained on its own thread and this module
-//! joins them. [`super::process`] owns spawning, signalling and reaping; this
-//! module never decides that the child should stop.
+//! joins them.
+//!
+//! [`super::process`] owns spawning, signalling and reaping, but this module
+//! decides *when* to stop the child on two conditions it is the first to see.
+//! Setup can fail after the child has started: a reader thread that cannot be
+//! spawned has nothing to drain its stream, so the child is stopped rather than
+//! left to fill a buffer nobody reads. And [`finish_readers`] waits a grace
+//! period for both readers; if they are still blocked at the end of it, a
+//! descendant is holding a descriptor, so it calls [`kill_process_group`] and
+//! waits once more. A reader that outlives even that is reported as an error.
+//! The direct child's timeout is [`super::process`]'s decision, not this
+//! module's.
 
 use super::process::{kill_process_group, stop_child};
 use anyhow::{Context, Result, anyhow};

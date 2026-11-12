@@ -1777,31 +1777,48 @@ settles the startup buffer, or why the ordering between them matters. That is
 what the Module-Level Documentation check requires and what was missing.
 
 **What the docs now say.** `src/main.rs` names each adapter with its
-responsibility and states the ordering contract: the display plan does not
-exist until the configuration merge succeeds, so the adapters are wired in the
-order the plan becomes available. `main_tracing` gains the paragraph the review
-asked for — that its writer is a `StartupWriter` from `startup_tracing`, that
-`crate::main` is what calls `set_tracing_ansi` after the merge, and that the
-buffer is settled by `config_load` on the failure paths and by `main` once the
-mode is known. Both of those halves were checked against the call sites rather
-than inferred: an earlier draft of that paragraph named `main_startup` as the
-`set_tracing_ansi` caller and was corrected at `src/main.rs:154` and `:332`,
-with `config_load/mod.rs:71` and `:77` settling the buffer.
+responsibility and states the ordering contract. Two display plans are resolved
+at different points, and the first revision of this decision collapsed them
+into one: the *startup* plan comes from raw argv and the environment before the
+configuration is merged, and it styles the informational-help route, which
+deliberately never reads configuration; the *runtime* plan comes from the
+merged configuration and exists only if the merge succeeds.
+
+`main_tracing` gains the paragraph the review asked for, and it too needed a
+second revision. Settling the startup buffer is not a single moment and not
+`main`'s decision: `config_load` settles it after diagnostic-mode resolution
+succeeds and *before* the merge (`config_load/mod.rs:71`, with the comment
+explaining why the warning should precede configuration processing) and again
+when that resolution fails (`:77`); `main_startup::parse_cli_or_exit` settles
+it on every parse exit (`main_startup/mod.rs:189`), where help, version and
+usage errors all terminate; and `main` settles the informational-help path
+(`src/main.rs:160`), which reaches neither of the others. Only the ANSI reload
+is unconditional: `main` calls `set_tracing_ansi` once the plan is resolved
+(`src/main.rs:158` and `:336`), before anything is styled with it.
 
 **The other five files.** The review named `src/runner/build_targets.rs`,
 `test_support/src/terminal/classify.rs`, `test_support/src/terminal/pty/`
 `process.rs`, `.../readers.rs` and `tests/terminal_rendering/support.rs` as
 one-line summaries whose parent or sibling relationship is not obvious from the
-path. Each gains the sentence that makes it obvious, and each claim was checked
-against the code: `BuildTargets` is filled from both `--targets` and the
-configured defaults at `src/runner/mod.rs:222-224`; the classifier reports SGR,
-redraw, OSC and a *live* carriage return as separate facts; `process.rs`
-signals the process group rather than the child, which is what stops a
-grandchild outliving a test; `readers.rs` drains both streams on their own
-threads because a full pipe buffer would otherwise stop the child before it
-could exit; and `support.rs` resolves its plan through `display_plan_for_args`
-rather than `TerminalWorkspace` holding one. All six files stay inside the
-400-line module limit, the largest at 299 lines before and after.
+path. Each gains the sentence that makes it obvious: `BuildTargets` is filled
+from both `--targets` and the configured defaults at
+`src/runner/mod.rs:222-224`; the classifier reports SGR, redraw, OSC and a
+*live* carriage return as separate facts; `readers.rs` drains both streams on
+their own threads because a full pipe buffer would otherwise stop the child
+before it could exit; and `support.rs` resolves its plan through
+`display_plan_for_args` rather than `TerminalWorkspace` holding one.
+
+The process-group claim needed the same narrowing, and it is the one place
+where an over-claim was worth catching: an earlier revision said signalling the
+group is "what stops a grandchild outliving a test". It is not. The group is
+killed at three conditions — the direct child times out, the wait itself fails,
+or `finish_readers` finds a reader still blocked past its grace period. A
+grandchild that closes its inherited descriptors leaves no reader blocked, so
+nothing notices it and it can outlive a test that otherwise passed.
+`process.rs` now states the conditions and the gap rather than the guarantee.
+
+All six files stay inside the 400-line module limit, the largest at 299 lines
+before and after.
 
 Date/Author: 2026-11-12, implementation agent.
 

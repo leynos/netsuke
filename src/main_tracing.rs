@@ -8,13 +8,17 @@
 //! is a [`StartupWriter`], which is where the buffered events actually sit:
 //! [`init_tracing`] is handed one by [`crate::main`] and treats it as opaque,
 //! so this module decides where events go while `startup_tracing` decides how
-//! long they are held and where they are released. [`crate::main`] is what
-//! later calls [`set_tracing_ansi`], after the configuration merge resolves the
-//! display plan; the buffer is settled by [`crate::config_load`] on the failure
-//! paths and by [`crate::main`] once the mode is known. Neither is optional
-//! — a release before the mode is known can corrupt a JSON document, and an
-//! ANSI change before the merge would style the startup records with a plan
-//! that does not exist yet.
+//! long they are held and where they are released.
+//!
+//! Settling is not this module's decision and it is not a single moment.
+//! [`crate::config_load`] settles the buffer after diagnostic-mode resolution
+//! succeeds and *before* the merge, so the startup warning reaches the user
+//! ahead of any configuration processing, and again when that resolution fails.
+//! [`crate::main_startup::parse_cli_or_exit`] settles it on every parse exit,
+//! because help, version and usage errors all terminate there. [`crate::main`]
+//! settles the informational-help path, which never reaches either. Only the
+//! ANSI reload is unconditional and ordered: it happens once the plan is
+//! resolved and before anything is styled with it.
 
 use std::sync::OnceLock;
 use tracing_subscriber::filter::LevelFilter;

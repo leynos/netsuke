@@ -8,8 +8,11 @@
 //!
 //! - [`main_startup`] resolves the pre-configuration signals — locale, JSON
 //!   from raw argv, and the colour for clap's help and version renderers —
-//!   and parses argv. It also owns [`settle_startup_diagnostics`], which is
-//!   what releases the startup buffer once the diagnostic mode is known.
+//!   parses argv, and defines [`settle_startup_diagnostics`]. That function is
+//!   what releases the buffer or drops it; the callers are several: parse exits
+//!   settle through `parse_cli_or_exit`, `config_load` settles when the mode
+//!   resolves and on a resolution failure, and this module settles the
+//!   informational-help route.
 //! - [`main_tracing`] installs the one process-wide subscriber and later
 //!   adjusts its filter and ANSI mode; it takes the early-event writer from
 //!   [`startup_tracing::StartupWriter`], which holds what was emitted while the
@@ -20,9 +23,13 @@
 //! - [`config_load`] times the configuration merge and records its outcome, and
 //!   [`observability`] holds the operation names those records use.
 //!
-//! Only after the merge succeeds does the resolved display plan exist, so the
-//! adapters above are wired in the order the plan becomes available rather than
-//! the reverse. Execution itself is delegated to [`runner::run`].
+//! There are two display plans and they are resolved at different points. The
+//! *startup* plan comes from raw argv and the environment, before configuration
+//! is merged, and it is what styles the informational-help route — that route
+//! deliberately never reads configuration. The *runtime* plan comes from the
+//! merged configuration and exists only if the merge succeeds. Ordering follows
+//! from that: the adapters are wired as each plan becomes available, not the
+//! reverse. Execution itself is delegated to [`runner::run`].
 
 use miette::Report;
 use netsuke::{
