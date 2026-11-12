@@ -550,12 +550,25 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `test-package-verify` 5 s, `test-coverage-artifact` 1 s,
   `test-documentation-contracts` 2 s, `markdownlint` 24 s, `nixie` 1 s; all
   exited 0. All nineteen hosted checks on `f1bb033a6` are green.
-- [ ] (2026-11-12) Reach equilibrium on `bc483ec56`: CodeRabbit paused
+- [ ] (2026-11-12) Reach equilibrium on `e7c829ff3`: CodeRabbit paused
   `f1bb033a6` rather than reviewing it, the resume was picked up and arrived as
   a rate limit with a 20-minute window, and the formal review was queued as
   `5c95e787`. `CHANGES_REQUESTED` stands from `5872122115` and clears only when
   a later review says otherwise; the Domain Architecture warning remains
-  rebutted under D34.
+  rebutted under D34. The replay onto `25da87df9` superseded that head
+  altogether: `e7c829ff3` carries the same 64 commits on the new base, and the
+  rebase voids the earlier review coverage as well as the earlier CI.
+- [x] (2026-11-12) Ran the ten-gate set against `e7c829ff3`. The rebase
+  invalidated every build cache, and sixteen other `make lint` processes shared
+  the compile admission pool, so this batch is far slower than the earlier
+  rounds and that is expected rather than a regression. Fingerprint `44aec833`
+  taken before the batch and re-read identical after it, so the gates tested
+  exactly the tree that was pushed. `check-fmt` 4 s, `lint` 3346 s,
+  `doc-coverage` 2468 s, `test` 1376 s, `test-workflow-contracts` 325 s,
+  `test-package-verify` 702 s, `test-coverage-artifact` 2 s,
+  `test-documentation-contracts` 134 s, `markdownlint` 33 s and `nixie` 1 s;
+  all ten exited 0 and the batch reported `OVERALL 0`. The tree was clean
+  before and after, so no gate mutated a tracked file.
 - [x] (2026-11-12) Replayed the branch onto `origin/main` at `25da87df9`.
   `main` advanced twice under the PR — `5fcca57d7` adopting shared prover
   downloaders and `25da87df9` repinning `install-whitaker` to 0.2.12 — and the
