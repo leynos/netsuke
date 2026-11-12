@@ -167,34 +167,6 @@ def _digests_of_downloads(
     return computed
 
 
-def _declared_names(declared_text: str) -> list[str]:
-    r"""Return the declaration's asset names, refusing any repetition.
-
-    Parameters
-    ----------
-    declared_text
-        The declaration file's text, one asset name per line.
-
-    Returns
-    -------
-    list[str]
-        The non-blank names, in declaration order.
-
-    Notes
-    -----
-    A repeated name is refused by
-    :func:`release_inventory.require_unique_declaration`, which raises
-    :class:`release_inventory.DuplicateDeclarationError`.
-
-    Examples
-    --------
-    >>> _declared_names("a.tar.gz\n\na.tar.gz.sha256\n")
-    ['a.tar.gz', 'a.tar.gz.sha256']
-    """
-    names = [line.strip() for line in declared_text.splitlines() if line.strip()]
-    return release_inventory.require_unique_declaration(names)
-
-
 def build_parser() -> argparse.ArgumentParser:
     """Build the parser for the inventory-verification CLI.
 
@@ -390,7 +362,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"trusted digest record rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED
     try:
-        expected = _declared_names(declared_text)
+        expected = release_inventory.declared_names_from_text(declared_text)
     except release_inventory.DuplicateDeclarationError as error:
         print(f"declaration rejected: {error}", file=sys.stderr)
         return EXIT_INVENTORY_REJECTED

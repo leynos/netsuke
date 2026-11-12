@@ -318,6 +318,35 @@ def require_unique_declaration(names: cabc.Iterable[str]) -> list[str]:
     return ordered
 
 
+def declared_names_from_text(declared_text: str) -> list[str]:
+    r"""Return the names a declaration file lists, one per line.
+
+    Parameters
+    ----------
+    declared_text
+        The declaration file's text.
+
+    Returns
+    -------
+    list[str]
+        The non-blank names, in declaration order.
+
+    Notes
+    -----
+    Blank lines separate the names the producer writes and carry no meaning,
+    so dropping them here is what lets a trailing newline go unnoticed. A
+    repeated name is refused by :func:`require_unique_declaration`, because
+    repetition is a fault in the declaration rather than in its layout.
+
+    Examples
+    --------
+    >>> declared_names_from_text("a.tar.gz\n\na.tar.gz.sha256\n")
+    ['a.tar.gz', 'a.tar.gz.sha256']
+    """
+    names = [line.strip() for line in declared_text.splitlines() if line.strip()]
+    return require_unique_declaration(names)
+
+
 def validate_inventory(
     present: cabc.Iterable[PublishedAsset], *, expected: cabc.Iterable[str]
 ) -> None:
