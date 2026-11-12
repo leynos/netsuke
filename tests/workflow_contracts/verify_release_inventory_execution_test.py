@@ -106,6 +106,30 @@ def test_a_substituted_archive_that_agrees_with_its_sidecar_is_refused(
     assert not run.output_path.exists(), "a rejected release must leave no record"
 
 
+def test_a_substituted_package_is_refused_by_the_trusted_record(
+    tmp_path: pathlib.Path,
+) -> None:
+    """Refuse a package whose bytes differ from the build's, with no sidecar.
+
+    An operating-system package travels without a sidecar, so nothing the
+    release itself carries can corroborate it. Only the digest record the
+    publisher wrote from its own tree can, which is why the action passes that
+    record to the verifier rather than recomputing one from the download.
+    """
+    publisher = default_publisher()
+    forged = dict(publisher.files)
+    forged[PACKAGE] = b"a different package entirely"
+    run = execute(
+        tmp_path,
+        Scenario(publisher=publisher, remote=draft_release(release_assets(forged))),
+    )
+    assert run.completed[-1].returncode != 0, final_diagnostic(run)
+    assert PACKAGE in final_diagnostic(run), (
+        "the diagnostic must name the substituted package"
+    )
+    assert not run.output_path.exists(), "a rejected release must leave no record"
+
+
 def _refuse_release_holding(
     tmp_path: pathlib.Path, served: dict[str, bytes], named: str
 ) -> None:
