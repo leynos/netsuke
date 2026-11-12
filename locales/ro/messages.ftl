@@ -1,6 +1,8 @@
 # Resurse de localizare pentru linia de comandă Netsuke.
 
 runner.io.dyndep.retention = Nu s-a putut aplica păstrarea fișierului dyndep generat sub { $path }.
+runner.io.dyndep.alias = Calea dyndep generată { $path } este o legătură simbolică, o joncțiune sau nu este un director; înlocuiți-o cu un director real.
+runner.io.dyndep.open = Deschiderea directorului dyndep generat { $path } a eșuat.
 cli.about = Netsuke compilează manifeste YAML + Jinja în planuri de construire Ninja.
 cli.long_about = Netsuke transformă manifestele YAML + Jinja în grafuri Ninja reproductibile și rulează Ninja cu valori implicite sigure.
 cli.usage = { $usage }

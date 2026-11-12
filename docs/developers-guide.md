@@ -7116,6 +7116,20 @@ content, then uses a same-directory temporary file plus atomic rename. Keep
 generated sidecars content-addressed and idempotent; corruption is an error,
 not a reason to overwrite an unknown file.
 
+`src/runner/process/dyndep/directory.rs` establishes the generated-state
+directory. `.netsuke` and `.netsuke/dyndep` are project-controlled, so a
+manifest can ship either as a symbolic link or a Windows junction. The module
+walks the two components one at a time, refuses any entry that is not a real
+directory, and returns a verified handle. Publication, locking, and retention
+then address bare entry names through that handle, so no operation can resolve
+a component outside the directory it verified. The refusal is checked on the
+entry before it is opened, so the diagnostic names the aliased component, and
+again on the opened handle, so an entry swapped in between cannot smuggle an
+alias past the check. Unix opens with `O_NOFOLLOW`; Windows opens the reparse
+point itself and rejects every reparse attribute, not only the tags `std`
+reports as symlinks. The `--directory` root itself may still be a symbolic
+link: it is the caller's chosen capability root, not generated state.
+
 `src/runner/process/dyndep/retention/mod.rs` owns the publication lease and
 retention cleanup. The command-boundary module invokes it after materialization
 or successful clean while retaining the lease through bundle consumption.
@@ -7128,7 +7142,9 @@ obsolete `.dd` files are retained in deterministic path order up to 32 files
 and 1 MiB. The current bundle is always retained. `build` and `generate` prune
 after materialization; `clean` prunes only after successful `ninja -t clean`,
 never after a failed clean. Do not introduce age-based cleanup or mutate an
-existing content-addressed sidecar. See
+existing content-addressed sidecar. The lease is an advisory lock: it
+coordinates cooperating Netsuke processes and does not defend against a process
+that ignores it. See
 [ADR-0012](adrs/adr-0012-bound-dyndep-sidecar-retention.md) for the durable
 policy.
 

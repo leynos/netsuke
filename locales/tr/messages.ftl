@@ -1,6 +1,8 @@
 # Netsuke komut satırı için yerelleştirme kaynakları.
 
 runner.io.dyndep.retention = { $path } altındaki oluşturulan dyndep dosyasının tutulması uygulanamadı.
+runner.io.dyndep.alias = Oluşturulan dyndep yolu { $path } bir sembolik bağlantı, bağlantı noktası veya dizin değil; gerçek bir dizinle değiştirin.
+runner.io.dyndep.open = Oluşturulan dyndep dizini { $path } açılamadı.
 cli.about = Netsuke, YAML + Jinja bildirimlerini Ninja derleme planlarına derler.
 cli.long_about = Netsuke, YAML + Jinja bildirimlerini yeniden üretilebilir Ninja çizgelerine dönüştürür ve Ninja'yı güvenli varsayılanlarla çalıştırır.
 cli.usage = { $usage }

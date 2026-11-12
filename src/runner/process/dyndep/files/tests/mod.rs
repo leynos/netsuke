@@ -349,6 +349,38 @@ fn retention_prunes_historical_sidecars_but_keeps_the_current_bundle() -> Result
     Ok(())
 }
 
+#[cfg(unix)]
+#[test]
+fn materialization_rejects_a_netsuke_directory_symlink() -> Result<()> {
+    let temp = tempfile::tempdir()?;
+    let dir = temporary_dir(&temp)?;
+    let victim = temp.path().join("victim");
+    test_support::fs::create_dir(&victim)?;
+    test_support::fs::symlink("victim", temp.path().join(".netsuke"))?;
+
+    let result = materialize_dyndep_files(&dir, &[sidecar(".netsuke/dyndep/abc.dd", "content")]);
+
+    let Err(error) = result else {
+        anyhow::bail!("materialization must reject a .netsuke directory symlink");
+    };
+    let expected = localization::message(keys::RUNNER_IO_DYNDEP_ALIAS)
+        .with_arg("path", ".netsuke")
+        .to_string();
+    ensure!(
+        format!("{error:#}").contains(&expected),
+        "the refusal must name the aliased component: {error:#}"
+    );
+    ensure!(
+        !test_support::fs::exists(victim.join("dyndep/abc.dd")),
+        "materialization must not write a sidecar through the alias"
+    );
+    ensure!(
+        !test_support::fs::exists(victim.join("dyndep/.netsuke-publication.lock")),
+        "materialization must not create a lock through the alias"
+    );
+    Ok(())
+}
+
 fn ensure_matching(dir: &Dir, path: &str, expected: &str) -> Result<()> {
     anyhow::ensure!(
         dir.read_to_string(path)? == expected,

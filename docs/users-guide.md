@@ -759,6 +759,14 @@ then at most 32 obsolete `.dd` files and 1 MiB of obsolete `.dd` bytes. Stale
 `build` and `generate` prune after materialization; `clean` prunes only after
 successful `ninja -t clean`, and does not prune when clean fails.
 
+Netsuke refuses to use `.netsuke` or `.netsuke/dyndep` when either is a
+symbolic link, a Windows junction, or not a directory. The command fails with
+an error naming the offending path and deletes nothing. Replace the alias with
+a real directory before retrying. This protects unrelated files that a
+project-supplied alias could otherwise make look like disposable cache entries.
+The `--directory` root itself may be a symbolic link; only the generated-state
+components beneath it are checked.
+
 An older arbitrary manifest written with `generate --output` may lose its
 referenced sidecars after a later command. Regenerate that manifest before
 using it if retention has removed any of its sidecars. The paths
