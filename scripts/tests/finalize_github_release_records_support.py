@@ -141,25 +141,41 @@ def _write_json_record(
     return path
 
 
+def _write_defaulted_record(
+    directory: pathlib.Path,
+    name: str,
+    record: cabc.Mapping[str, object] | None,
+    default: cabc.Callable[[], cabc.Mapping[str, object]],
+) -> pathlib.Path:
+    """Write one record, supplying the well-formed default when none is given.
+
+    A suite names a record only to depart from the healthy one, so the default
+    is what makes every other case a single departure from a run that passes.
+
+    Returns
+    -------
+    pathlib.Path
+        The path ``name`` resolves to inside ``directory``.
+    """
+    return _write_json_record(directory, name, default() if record is None else record)
+
+
 def write_candidate(
     directory: pathlib.Path, *, identity: cabc.Mapping[str, object] | None = None
 ) -> pathlib.Path:
     """Write the candidate record a publishing run reads.
 
-    Parameters
-    ----------
-    directory
-        Directory to write into.
-    identity
-        The identity to record. Defaults to :func:`identity_record`'s.
+    Defaults to :func:`identity_record`'s identity, so a suite overrides
+    ``identity`` only to depart from one a healthy run accepts.
 
     Returns
     -------
     pathlib.Path
-        The written ``candidate.json``.
+        Where ``candidate.json`` was written.
     """
-    record = identity_record() if identity is None else identity
-    return _write_json_record(directory, "candidate.json", record)
+    return _write_defaulted_record(
+        directory, "candidate.json", identity, identity_record
+    )
 
 
 def write_plan(
@@ -167,20 +183,15 @@ def write_plan(
 ) -> pathlib.Path:
     """Write a reconciliation plan, defaulting to one fully verified asset.
 
-    Parameters
-    ----------
-    directory
-        Directory to write into.
-    plan
-        The plan to record. Defaults to :func:`plan_record`'s.
+    Defaults to :func:`plan_record`'s plan, so a suite overrides ``plan`` only
+    to stage the reconciliation it means to exercise.
 
     Returns
     -------
     pathlib.Path
-        The written ``plan.json``.
+        Where ``plan.json`` was written.
     """
-    record = plan_record() if plan is None else plan
-    return _write_json_record(directory, "plan.json", record)
+    return _write_defaulted_record(directory, "plan.json", plan, plan_record)
 
 
 def write_digest_record(
@@ -190,20 +201,15 @@ def write_digest_record(
 ) -> pathlib.Path:
     """Write the trusted digest record a publishing run reconciles against.
 
-    Parameters
-    ----------
-    directory
-        Directory to write into.
-    record
-        The record to write. Defaults to :func:`digest_record`'s.
+    Defaults to :func:`digest_record`'s record, so a suite overrides ``record``
+    only to deviate from the digests a healthy run trusts.
 
     Returns
     -------
     pathlib.Path
-        The written ``trusted.json``.
+        Where ``trusted.json`` was written.
     """
-    written = digest_record() if record is None else record
-    return _write_json_record(directory, "trusted.json", written)
+    return _write_defaulted_record(directory, "trusted.json", record, digest_record)
 
 
 def release_view(
