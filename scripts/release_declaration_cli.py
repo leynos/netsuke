@@ -40,12 +40,83 @@ import hoist_binstall_discovery
 import release_declaration
 import release_digest_record_files
 import release_github_assets_adapter
+import release_package_formats
 import release_staged_digests
 
 EXIT_OK = 0
 EXIT_MISSING_ASSETS = 1
 EXIT_INPUT_UNUSABLE = 2
 EXIT_OUTPUT_UNWRITABLE = 3
+
+#: Name of the target table in the parsed staging configuration.
+TARGETS_TABLE = "targets"
+
+#: Member naming one target's package platform.
+PLATFORM_MEMBER = "platform"
+
+
+def staging_targets(config: object) -> release_declaration.StagingTargets:
+    """Decode the staging configuration's target tables into typed facts.
+
+    Parameters
+    ----------
+    config
+        Parsed staging TOML, as :func:`tomllib.loads` returns it.
+
+    Returns
+    -------
+    release_declaration.StagingTargets
+        One entry per configured target, carrying only its platform.
+
+    Raises
+    ------
+    release_declaration.MalformedTargetError
+        If the configuration or a target table is not a string-keyed mapping,
+        or a target names no string platform.
+    release_declaration.MissingTargetsError
+        If the configuration declares no target.
+
+    Examples
+    --------
+    >>> staging_targets({"targets": {"linux": {"platform": "linux"}}}).targets
+    (StagingTarget(platform='linux'),)
+    """
+    if not isinstance(config, dict) or not all(isinstance(key, str) for key in config):
+        raise release_declaration.MalformedTargetError(
+            release_package_formats.MalformedTargetKind.INVALID_MAPPING
+        )
+    declared = config.get(TARGETS_TABLE)
+    if not isinstance(declared, dict):
+        raise release_declaration.MissingTargetsError
+    return release_declaration.StagingTargets.from_targets(
+        _staging_target(entry) for entry in declared.values()
+    )
+
+
+def _staging_target(entry: object) -> release_declaration.StagingTarget:
+    """Return one target table's platform as a typed staging target.
+
+    Returns
+    -------
+    release_declaration.StagingTarget
+        The target's platform.
+
+    Raises
+    ------
+    release_declaration.MalformedTargetError
+        If the entry is not a table with a string ``platform`` member.
+
+    Examples
+    --------
+    >>> _staging_target({"platform": "macos"})
+    StagingTarget(platform='macos')
+    """
+    platform = entry.get(PLATFORM_MEMBER) if isinstance(entry, dict) else None
+    if not isinstance(platform, str):
+        raise release_declaration.MalformedTargetError(
+            release_package_formats.MalformedTargetKind.MISSING_PLATFORM
+        )
+    return release_declaration.StagingTarget(platform)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -296,8 +367,8 @@ def _compute_declaration(
     refused
     """
     config = tomllib.loads(arguments.staging_config.read_text(encoding="utf-8"))
-    # Validate target tables before the discovery adapter iterates them.
-    _ = release_declaration.platform_target_counts(config)
+    # Decode once, before discovery, so a malformed table fails on the config.
+    targets = staging_targets(config)
     archive_names = hoist_binstall_discovery.expected_archive_names(
         arguments.staging_config, arguments.manifest, arguments.version
     )
@@ -307,7 +378,7 @@ def _compute_declaration(
     ]
     names = release_declaration.declared_asset_names(
         archive_names=archive_names,
-        target_config=config,
+        targets=targets,
         staged_package_names=staged_package_names,
     )
     digests = release_staged_digests.staged_digests(arguments.dist_dir, expected=names)
