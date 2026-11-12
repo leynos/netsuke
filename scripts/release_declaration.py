@@ -103,8 +103,6 @@ class StagingTarget:
             raise MalformedTargetError(MalformedTargetKind.MISSING_PLATFORM)
 
 
-
-
 def archive_asset_names(archives: cabc.Iterable[str]) -> tuple[str, ...]:
     """Pair each configured archive name with its checksum-sidecar name.
 

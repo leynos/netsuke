@@ -302,5 +302,3 @@ def install_payload[Source: pathlib.Path](
         # be published as though it were the whole release.
         shutil.rmtree(output_dir, ignore_errors=True)
         raise
-
-

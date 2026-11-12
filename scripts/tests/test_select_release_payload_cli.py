@@ -301,9 +301,9 @@ def test_a_source_swapped_after_the_digest_check_disagrees_with_the_record(
     assert recorded.as_mapping()[DEB] == approved[DEB], (
         "the record must keep the digests selection verified"
     )
-    assert recorded.as_mapping()[DEB] != release_digest_files.digest_of_file(installed), (
-        "the record must disagree with the bytes that were copied"
-    )
+    assert recorded.as_mapping()[DEB] != release_digest_files.digest_of_file(
+        installed
+    ), "the record must disagree with the bytes that were copied"
 
 
 def test_a_missing_producer_record_is_refused(tmp_path: pathlib.Path) -> None:

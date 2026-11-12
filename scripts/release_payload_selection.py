@@ -303,8 +303,7 @@ def _require_declaration(
     declared = release_declaration.declared_asset_names(
         archive_names=archive_names,
         targets=release_declaration.StagingTargets.from_targets(
-            release_declaration.StagingTarget(platform)
-            for platform in targets.values()
+            release_declaration.StagingTarget(platform) for platform in targets.values()
         ),
         staged_package_names=claimed,
     )

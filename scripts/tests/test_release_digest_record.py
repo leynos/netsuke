@@ -305,7 +305,9 @@ def test_a_mismatch_is_catchable_through_the_digest_hierarchy() -> None:
 
 def test_two_records_naming_the_same_bytes_agree() -> None:
     """Accept records written independently from one verified tree."""
-    release_digest_record.require_records_agree({"a": DIGEST}, declaration={"a": DIGEST})
+    release_digest_record.require_records_agree(
+        {"a": DIGEST}, declaration={"a": DIGEST}
+    )
 
 
 def test_records_that_differ_about_one_asset_are_refused() -> None:

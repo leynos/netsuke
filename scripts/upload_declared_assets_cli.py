@@ -289,7 +289,5 @@ def _report(
     return EXIT_OK
 
 
-
-
 if __name__ == "__main__":
     raise SystemExit(main())
