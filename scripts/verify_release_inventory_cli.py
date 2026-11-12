@@ -294,7 +294,7 @@ def _verify_and_record(
     arguments: argparse.Namespace,
     *,
     expected: list[str],
-    trusted: dict[str, str],
+    trusted: release_digest_record.DigestRecord,
 ) -> int:
     """Verify the download and record the digests, reporting either fault.
 

@@ -16,6 +16,7 @@ from unittest import mock
 
 import pytest
 import release_digest_files
+import release_digest_record
 import verify_release_inventory_cli as verifier
 from release_staging_support import ARCHIVE, PACKAGE, SIDECAR
 from release_staging_support import stage_archive as _stage
@@ -140,10 +141,13 @@ def test_an_undeclared_directory_or_symlink_is_not_observed(
     declaration = _declaration(tmp_path / "declared.txt", [ARCHIVE, SIDECAR])
     trusted = _write_record(
         tmp_path / "trusted.json",
-        {
+        # Only the two declared files are covered: the record's job here is to
+        # agree with the declaration, so the undeclared package must be absent
+        # from it rather than supplied and then ignored.
+        release_digest_record.DigestRecord.from_mapping({
             ARCHIVE: release_digest_files.digest_of_file(staging / ARCHIVE),
             SIDECAR: release_digest_files.digest_of_file(staging / SIDECAR),
-        },
+        }),
     )
     destination = tmp_path / "verified.json"
 
