@@ -3488,10 +3488,10 @@ leaves neither the payload nor a record behind.
 
 A record compared only with a later hash of the copied tree would accept bytes
 swapped between the two hashes, so
-`release_digest_record.require_records_agree` makes the two records answer for
-one another before either is used against the payload. A run that presents a
-payload matching its declaration record but not its selection record is refused
-as a conflict.
+`release_digest_record_agreement.require_records_agree` makes the two records
+answer for one another before either is used against the payload. A run that
+presents a payload matching its declaration record but not its selection record
+is refused as a conflict.
 
 The provenance chain has six links and each one refuses rather than
 interpolates. Links 1 to 4 run in every tagged workflow; links 5 and 6 are

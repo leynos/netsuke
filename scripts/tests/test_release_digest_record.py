@@ -301,39 +301,3 @@ def test_a_mismatch_is_catchable_through_the_digest_hierarchy() -> None:
     assert issubclass(mismatch, digest_family), (
         "a caller guarding DigestMismatchError must not need a second clause"
     )
-
-
-def test_two_records_naming_the_same_bytes_agree() -> None:
-    """Accept records written independently from one verified tree."""
-    release_digest_record.require_records_agree(
-        {"a": DIGEST}, declaration={"a": DIGEST}
-    )
-
-
-def test_records_that_differ_about_one_asset_are_refused() -> None:
-    """Refuse records that describe different bytes under the same name."""
-    with pytest.raises(release_digest_record.RecordedDigestMismatchError) as caught:
-        release_digest_record.require_records_agree(
-            {"a": DIGEST}, declaration={"a": OTHER}
-        )
-
-    assert "'a'" in str(caught.value), (
-        f"the disagreeing asset must be named, got {caught.value}"
-    )
-
-
-def test_a_record_naming_an_asset_the_other_omits_is_refused() -> None:
-    """Refuse either side naming an asset the other never saw.
-
-    Absence is not agreement: a selection that hashed a file the declaration
-    never covered, or the reverse, means the two stages looked at different
-    trees and neither record speaks for the payload.
-    """
-    with pytest.raises(release_digest_record.RecordedDigestMismatchError) as caught:
-        release_digest_record.require_records_agree(
-            {"a": DIGEST, "b": OTHER}, declaration={"a": DIGEST}
-        )
-
-    assert "['b']" in str(caught.value), (
-        f"the absent asset must be named, got {caught.value}"
-    )

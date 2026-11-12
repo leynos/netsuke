@@ -490,6 +490,7 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/tests/test_release_declaration_decode.py \
 		scripts/tests/test_release_declaration_invalid_config.py \
 		scripts/tests/test_release_digest_record.py \
+		scripts/tests/test_release_digest_record_agreement.py \
 		scripts/tests/test_release_digest_record_files.py \
 		scripts/tests/test_release_staged_digests.py \
 		scripts/tests/test_release_producer_provenance.py \
@@ -536,7 +537,9 @@ test-release-publication: ## Test release-candidate identity and staged inventor
 		scripts/release_reconcile_github.py \
 		scripts/release_asset_names.py scripts/release_package_formats.py \
 		scripts/release_declaration.py scripts/release_declaration_cli.py \
-		scripts/release_digest_record.py scripts/release_digest_record_files.py \
+		scripts/release_digest_record.py \
+		scripts/release_digest_record_agreement.py \
+		scripts/release_digest_record_files.py \
 		scripts/release_staged_digests.py \
 		scripts/release_producer_claims.py \
 		scripts/release_producer_assets.py \

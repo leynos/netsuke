@@ -2977,8 +2977,8 @@ Dependencies: none new. `rust-lang/crates-io-auth-action` at
   `trusted.json`, which the declaration step writes from the staged tree
   *afterwards*. A tree replaced between the two hashes produced a declaration
   record that faithfully described the replacement, so the uploader accepted it.
-  `release_digest_record.require_records_agree` now makes the two records
-  answer for one another before either is used against the payload, and
+  `release_digest_record_agreement.require_records_agree` now makes the two
+  records answer for one another before either is used against the payload, and
   `UploadRequest` carries `selection_record` so the CLI can reach it. The
   regression test rewrites the payload *and* re-hashes the declaration record
   from the same tree, which is the only case the payload-versus-declaration

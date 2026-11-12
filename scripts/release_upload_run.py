@@ -28,7 +28,7 @@ Run via ``scripts/upload_declared_assets_cli.py``; behavioural coverage lives in
 
 import typing as typ
 
-import release_digest_record
+import release_digest_record_agreement
 import release_digest_record_files
 import release_payload_handoff
 import release_reconcile_github
@@ -200,7 +200,7 @@ def verified_payload(request: UploadRequest) -> dict[str, str]:
     declaration = release_digest_record_files.read_digest_record(request.digest_record)
     selected = release_digest_record_files.read_digest_record(request.selection_record)
     declared = declaration.as_mapping()
-    release_digest_record.require_records_agree(
+    release_digest_record_agreement.require_records_agree(
         selected.as_mapping(), declaration=declared
     )
     release_payload_handoff.require_payload_matches(request.payload_dir, declared)
