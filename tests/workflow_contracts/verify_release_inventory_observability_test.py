@@ -92,4 +92,6 @@ def test_the_verification_operation_reports_only_its_own_phases() -> None:
     A phase the job does not run would be reported as skipped on every run,
     which reads as a failure that never happened.
     """
-    assert OPERATION_PHASES["verify_release_inventory"] == VERIFICATION_PHASES
+    assert OPERATION_PHASES["verify_release_inventory"] == VERIFICATION_PHASES, (
+        "the catalogue must name exactly the phases the verification job runs"
+    )
