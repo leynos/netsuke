@@ -3220,11 +3220,18 @@ and digest before it probes crates.io. Its action consumes the recorded
 `cargo build`.
 
 The registry job and `publish-release` remain independent siblings: neither
-needs the other, so an upload interrupted on one surface can be resumed without
-repeating the other. `verify-release-inventory` needs both. A tagged run in
-which either publisher fails or is skipped therefore leaves the draft
-unverified, and `finalize-github-release` needs the verifier as well, so the
-two surfaces cannot diverge at the point the release becomes public.
+depends on the other, so an upload interrupted on one surface can be resumed
+without repeating the other. `verify-release-inventory` runs only after both. A
+tagged run in which either publisher fails or is skipped therefore leaves the
+draft unverified, and `finalize-github-release` runs only after the verifier as
+well, so the two surfaces cannot diverge at the point this finalizer makes the
+release public.
+
+That gate governs the transition, not a state. A rerun that begins with a
+release already public leaves it public whether or not the verifier and
+finalizer run, so the guarantee is that this finalizer never publishes an
+unverified draft; it cannot vouch for a release that was already public before
+the run, including one whose publishers both fail.
 
 ### Verifying the downloaded release inventory
 

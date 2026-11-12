@@ -309,6 +309,48 @@ def test_publish_refuses_an_unreadable_digest_record(
     )
 
 
+def test_a_retry_refuses_a_public_release_that_lost_the_trusted_asset(
+    tmp_path: pathlib.Path, cmd_mox: CmdMox, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Report a lost race on every pass, not only on the run that lost it.
+
+    The earlier attempt published the release and then failed before it could
+    record the outcome. This one finds the release public, and the assets it
+    reads back are the only evidence that the bytes no longer match the trusted
+    record. Recording ``already-finalized`` here would turn that mismatch into a
+    success, so the retry refuses instead.
+    """
+    gh = sequenced_gh(
+        cmd_mox,
+        [
+            (
+                release_view(
+                    is_draft=False,
+                    is_prerelease=False,
+                    assets={ARCHIVE: "sha256:" + "ef" * 32},
+                ),
+                "",
+                0,
+            )
+        ],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
+
+    assert error.value.code == EXIT_REFUSED, (
+        "a retry that finds unmatched bytes must refuse to record a success"
+    )
+    assert [invocation_arguments(invocation)[:2] for invocation in gh.invocations] == [
+        ("release", "view")
+    ], "a refused retry must not edit the release"
+    message = capsys.readouterr().err
+    assert ARCHIVE in message, "the refusal must name the asset that changed"
+    assert not (tmp_path / "result.json").exists(), (
+        "a mismatched release must not be recorded as already finalized"
+    )
+
+
 def test_publish_tolerates_an_asset_the_record_never_declared(
     tmp_path: pathlib.Path, cmd_mox: CmdMox
 ) -> None:

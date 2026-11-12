@@ -908,10 +908,13 @@ Two consequences matter to anyone re-running a release:
   downloads what the release holds and compares it with those records, so a
   release whose bytes differ from the build stops the run, and the finalizer
   un-drafts the release only when every declared asset already holds its
-  recorded digest. Only a release the workflow creates is a draft; when the tag
-  already has one, the job attaches to that release whether or not it is
-  public. A missing or conflicting asset stops the run before the release is
-  published.
+  recorded digest. That check governs the un-draft the finalizer performs: a
+  release that is already public stays public whether or not those jobs run, so
+  the guarantee is that the workflow never publishes an unverified draft, not
+  that it verifies one it finds already published. Only a release the workflow
+  creates is a draft; when the tag already has one, the job attaches to that
+  release whether or not it is public. A missing or conflicting asset stops the
+  run before the release is published.
 
 Manifests, local builds, and the published contents are unchanged, and no new
 release input was added: the dry run and the publishing lane keep using the same

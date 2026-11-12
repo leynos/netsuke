@@ -10,7 +10,10 @@ The plan answers for the snapshot the planner read, so the release is
 reconciled a second time against the trusted record immediately before the
 edit. That second pass is the planner's own policy, not a cheaper copy of it:
 a draft that lost or replaced an asset between the two reads is judged exactly
-as a first read would judge it.
+as a first read would judge it. The same reconciliation runs on the read-back
+after the edit, and on a retry that finds the release already public, so a
+change made in the window between the pre-edit read and the edit is reported
+rather than recorded as a success.
 
 The plan is read from the file ``finalize_github_release_cli`` wrote, and the
 candidate from the record ``package-crate`` wrote. The inventory verifier's
@@ -34,12 +37,9 @@ import typing as typ
 
 import finalize_github_release_io as release_io
 import finalize_github_release_plan as release_plan
+import finalize_github_release_reconcile as release_reconcile
 import finalize_github_release_records as release_records
 import finalize_github_release_state as release_state
-import release_digest_record
-import release_digest_record_files
-import release_github_assets_adapter
-import release_reconcile_github
 import release_upload_messages
 
 if typ.TYPE_CHECKING:
@@ -123,8 +123,8 @@ def require_verified(
     Parameters
     ----------
     result
-        The assessment :func:`assessment` or :func:`_reconcile_current`
-        produced.
+        The assessment :func:`assessment` or
+        :func:`finalize_github_release_reconcile.reconcile` produced.
     source
         What the assessment was made from, named in the refusal so an operator
         can tell a stale plan from a release that changed under the run.
@@ -232,15 +232,15 @@ def publish_release(request: PublishRequest) -> None:
     release unedited, and each is reached after a read that saw it is still a
     draft, so each may say so.
 
-    What remains, and cannot be closed from this side, is the window between
-    that read and the edit: GitHub offers no conditional edit, so a writer that
-    changes the draft in those milliseconds is not observed. The window is one
-    API call wide and both endpoints are the trusted record, which narrows it
-    but does not close it. A run that loses the race can publish a release
-    holding bytes the record does not match, and no later pass repairs that: a
-    rerun of an already-public release records it as finalized or refuses its
-    flag without re-reading the assets, so the mismatch stands until an
-    operator finds it.
+    The window between that read and the edit cannot be closed: GitHub offers
+    no conditional edit, so a writer that changes the draft in those
+    milliseconds is not observed. What the run can do is notice afterwards. The
+    post-edit read-back is reconciled against the same trusted record, and a
+    retry that finds the release already public is reconciled too, so a
+    mismatch a lost race published is reported by the run that lost it and by
+    every pass after it. The release is public by then and GitHub cannot make
+    it a draft again, so the run refuses with :data:`EXIT_REFUSED` rather than
+    record a success nobody can rely on.
     """
     identity = release_records.candidate(
         request.candidate_path, tag=request.tag, commit=request.commit
@@ -250,13 +250,16 @@ def publish_release(request: PublishRequest) -> None:
     if release_state.is_already_finalized(
         current, is_prerelease=identity.is_prerelease
     ):
+        release_reconcile.refuse_published_mismatch(
+            request.digest_record_path, identity, current
+        )
         release_records.record_outcome(
             request.result_path, request.github_output, "already-finalized", identity
         )
         return
     _require_draft(current)
     require_verified(
-        _reconcile_current(request.digest_record_path, current),
+        release_reconcile.reconcile(request.digest_record_path, current),
         source="the release's current inventory",
         draft_confirmed=True,
     )
@@ -302,16 +305,21 @@ def _confirm_published(
     :data:`EXIT_REMOTE_FAILED` and reports the state as unknown. A release that
     is still a draft, or public with the wrong prerelease flag, is a failure
     the run cannot repair: GitHub does not allow a public release to become a
-    draft again.
+    draft again. A public release whose flag is right but whose inventory no
+    longer matches the trusted record is refused for the same reason, through
+    :func:`finalize_github_release_reconcile.refuse_published_mismatch`.
     """
+    published = release_records.snapshot_release(
+        request.tag, request.repository, after_edit=True
+    )
     readback = release_state.classify_readback(
-        release_records.snapshot_release(
-            request.tag, request.repository, after_edit=True
-        ),
-        is_prerelease=identity.is_prerelease,
+        published, is_prerelease=identity.is_prerelease
     )
     match readback:
         case release_state.Readback.FINALIZED:
+            release_reconcile.refuse_published_mismatch(
+                request.digest_record_path, identity, published
+            )
             release_records.record_outcome(
                 request.result_path, request.github_output, "finalized", identity
             )
@@ -327,54 +335,6 @@ def _confirm_published(
                 "the release is public but its prerelease state contradicts "
                 "the validated candidate; it cannot be made a draft again",
             )
-
-
-def _reconcile_current(
-    digest_record_path: pathlib.Path, state: release_state.ReleaseState
-) -> release_plan.PlanAssessment:
-    """Re-run the planner's reconciliation against the release as it is now.
-
-    Parameters
-    ----------
-    digest_record_path
-        The trusted digest record the declaration stage wrote before upload.
-    state
-        The release as the pre-edit snapshot reported it.
-
-    Returns
-    -------
-    release_plan.PlanAssessment
-        The verdict the planner would have reached for this listing.
-
-    Notes
-    -----
-    The record is re-read rather than taken from the plan, so the comparison is
-    against the bytes the build declared and not against a document the
-    planner wrote. The digest conversion is
-    :func:`release_github_assets_adapter.normalise_github_digest`, the same one
-    the planner uses, so an unusable digest is unverifiable here for the same
-    reason it was there.
-
-    A record that cannot be read stops the run with
-    :data:`EXIT_INPUT_UNREADABLE`: an absent record would plan no actions, and
-    no actions is the shape of a fully verified release.
-    """
-    try:
-        expected = release_digest_record_files.read_digest_record(digest_record_path)
-    except release_digest_record.DigestRecordError as error:
-        release_io.fail(
-            release_io.EXIT_INPUT_UNREADABLE,
-            f"{digest_record_path} is not a usable digest record: {error}",
-        )
-    present = {
-        name: release_github_assets_adapter.normalise_github_digest(digest)
-        for name, digest in state.assets.items()
-    }
-    return release_plan.assess_actions(
-        release_reconcile_github.plan_asset_actions(
-            expected=expected.as_mapping(), present=present
-        )
-    )
 
 
 def _require_draft(state: release_state.ReleaseState) -> None:

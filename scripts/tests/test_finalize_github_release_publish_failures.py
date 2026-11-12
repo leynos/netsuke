@@ -15,7 +15,11 @@ from finalize_github_release_io import (
     EXIT_REFUSED,
     EXIT_REMOTE_FAILED,
 )
-from finalize_github_release_records_support import DIGEST
+from finalize_github_release_records_support import (
+    ARCHIVE,
+    DIGEST,
+    release_view,
+)
 from finalize_github_release_support import (
     invocation_arguments,
     publish_arguments,
@@ -152,6 +156,45 @@ def test_publish_reports_a_readback_with_the_wrong_flag(
     )
     assert not (tmp_path / "result.json").exists(), (
         "a contradictory read-back must not be recorded as a success"
+    )
+
+
+def test_publish_refuses_a_readback_that_lost_the_trusted_asset(
+    tmp_path: pathlib.Path,
+    cmd_mox: CmdMox,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Refuse a release published with an inventory the record does not describe.
+
+    The pre-edit read and the edit are separate calls, so a writer that changes
+    the draft between them is invisible to the guard. The read-back is the only
+    place that change can be seen, and the release is public by then, so the
+    run has to say so rather than record a success.
+    """
+    changed = release_view(
+        is_draft=False,
+        is_prerelease=False,
+        assets={ARCHIVE: "sha256:" + "ef" * 32},
+    )
+    sequenced_gh(
+        cmd_mox,
+        [*release_views((True, False)), ("", "", 0), (changed, "", 0)],
+    )
+
+    with pytest.raises(SystemExit) as error:
+        run_finalizer(*publish_arguments(tmp_path))
+
+    assert error.value.code == EXIT_REFUSED, (
+        "a published release holding unmatched bytes must be refused"
+    )
+    message = capsys.readouterr().err
+    assert ARCHIVE in message, "the refusal must name the asset that changed"
+    assert "public" in message, "the refusal must say the release is public"
+    assert "cannot make a public release a draft again" in message, (
+        "the operator must be told the edit cannot be undone"
+    )
+    assert not (tmp_path / "result.json").exists(), (
+        "a mismatched read-back must not be recorded as a success"
     )
 
 

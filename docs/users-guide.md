@@ -120,9 +120,18 @@ jobs have used them: the inventory verification job downloads every attached
 asset and checks it against that record, and the finalization job then
 un-drafts the release only when every declared asset already holds its trusted
 digest, taking the prerelease flag from the validated candidate identity. The
-finalization job reconciles the release against that record twice: once from
-the plan the planner wrote, and again from a snapshot taken immediately before
-it un-drafts.
+finalization job reconciles the release against that record three times: from
+the plan the planner wrote, from a snapshot taken immediately before it
+un-drafts, and from the read-back taken afterwards. A read-back that no longer
+matches the record is reported as a failure rather than recorded as a success,
+so a release that became public holding an inventory the record does not
+describe is named instead of announced.
+
+That guard governs the transition the job performs. It cannot make an already
+public release a draft again, so a rerun that begins with a public release
+leaves it public whether or not the verification and finalization jobs run: the
+guarantee is that this workflow never publishes an unverified draft, not that
+every public release it encounters has been verified.
 
 A publishing run then verifies what GitHub ended up holding. The
 `verify-release-inventory` job runs only when the metadata, crates.io, and
