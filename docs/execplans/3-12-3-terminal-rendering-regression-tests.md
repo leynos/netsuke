@@ -550,12 +550,33 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `test-package-verify` 5 s, `test-coverage-artifact` 1 s,
   `test-documentation-contracts` 2 s, `markdownlint` 24 s, `nixie` 1 s; all
   exited 0. All nineteen hosted checks on `f1bb033a6` are green.
-- [ ] (2026-11-12) Reach equilibrium on `f1bb033a6`: CodeRabbit paused the
-  branch rather than reviewing it, the resume was picked up and arrived as a
-  rate limit with a 20-minute window, and the formal review is queued as
+- [ ] (2026-11-12) Reach equilibrium on `bc483ec56`: CodeRabbit paused
+  `f1bb033a6` rather than reviewing it, the resume was picked up and arrived as
+  a rate limit with a 20-minute window, and the formal review was queued as
   `5c95e787`. `CHANGES_REQUESTED` stands from `5872122115` and clears only when
   a later review says otherwise; the Domain Architecture warning remains
   rebutted under D34.
+- [x] (2026-11-12) Replayed the branch onto `origin/main` at `25da87df9`.
+  `main` advanced twice under the PR — `5fcca57d7` adopting shared prover
+  downloaders and `25da87df9` repinning `install-whitaker` to 0.2.12 — and the
+  second made the PR `CONFLICTING`. The replay ran with `--merge`,
+  `--reapply-cherry-picks`, `--keep-empty`, `--empty=stop`, `zdiff3` conflicts
+  and an explicit `--onto`, over the boundary `b19386767..4456f759c`. It
+  completed without a single conflict stop: all 64 commits were carried, none
+  became empty, and `git range-diff` shows all 64 as unchanged (`=`). The six
+  overlapping paths — `Makefile`, `.github/workflows/ci.yml`,
+  `docs/developers-guide.md`, `tests/workflow_ci.rs`, `typos.toml` and
+  `typos.local.toml` — merged textually because the edits are additive rather
+  than contradictory: `main` reworks the Kani install path and `CANON`
+  configuration while this branch changes one recipe line
+  (`test-kani-mutations` now selects `--profile kani`) and adds one ignore
+  pattern to each typos file. Both sides' additions are present in the result.
+  `main`'s generated `AppArmor` entries in `typos.toml` are carried through
+  unchanged, which is required because those files come from
+  `typos-config-builder`. New head `bc483ec56`; recovery refs
+  `refs/recovery/809-old-base`, `refs/recovery/809-old-head` and
+  `refs/recovery/809-target` retain the pre-replay identities. Every earlier
+  gate and hosted-CI result now applies to a superseded tree.
 
 ## Surprises & discoveries
 
