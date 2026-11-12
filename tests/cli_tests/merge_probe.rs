@@ -121,6 +121,78 @@ pub(super) fn environment_with_system_scope(
     environment
 }
 
+/// How a discovery scenario supplies `XDG_CONFIG_HOME` to the child process.
+///
+/// The reported defect only appears when the variable does not name a usable
+/// user configuration directory, so each variant removes one route to the
+/// `$XDG_CONFIG_HOME/netsuke/config.toml` user candidate.
+#[cfg(unix)]
+#[derive(Clone, Copy, Debug)]
+pub(super) enum XdgConfigHomeMode {
+    /// Remove the variable so only the home fallbacks can supply a user file.
+    Unset,
+    /// Set the variable to an empty value, which discovery treats as unset.
+    Empty,
+    /// Point the variable at a directory that contains no Netsuke config file.
+    NoConfigFile,
+}
+
+/// Build the environment for a system-scope probe with a chosen
+/// `XDG_CONFIG_HOME` state.
+///
+/// Unlike [`environment_with_system_scope`], this variant lets a test omit,
+/// empty or misdirect `XDG_CONFIG_HOME` while still redirecting the system
+/// scope through `XDG_CONFIG_DIRS`. The caller retains ownership of
+/// `system_dirs` and must keep it alive until the child process exits.
+///
+/// # Examples
+///
+/// ```rust,ignore
+/// let home = tempfile::tempdir()?;
+/// let system = tempfile::tempdir()?;
+/// std::fs::create_dir_all(system.path().join("netsuke"))?;
+/// std::fs::write(system.path().join("netsuke/config.toml"), "emoji = \"always\"\n")?;
+/// std::fs::write(home.path().join(".netsuke.toml"), "emoji = \"never\"\n")?;
+/// let environment = environment_with_xdg_mode(
+///     home.path(),
+///     system.path(),
+///     XdgConfigHomeMode::Unset,
+///     &[],
+/// );
+/// let merged = merge_in_child(&["netsuke"], home.path(), &environment)?;
+/// assert_eq!(merged.emoji, netsuke::cli::EmojiPolicy::Never);
+/// # Ok::<(), anyhow::Error>(())
+/// ```
+#[cfg(unix)]
+pub(super) fn environment_with_xdg_mode(
+    home: &Path,
+    system_dirs: &Path,
+    mode: XdgConfigHomeMode,
+    overrides: &[(OsString, OsString)],
+) -> Vec<(OsString, OsString)> {
+    let mut environment = vec![
+        (OsString::from("HOME"), home.as_os_str().to_owned()),
+        (
+            OsString::from("XDG_CONFIG_DIRS"),
+            system_dirs.as_os_str().to_owned(),
+        ),
+    ];
+    match mode {
+        XdgConfigHomeMode::Unset => {}
+        XdgConfigHomeMode::Empty => {
+            environment.push((OsString::from("XDG_CONFIG_HOME"), OsString::new()));
+        }
+        XdgConfigHomeMode::NoConfigFile => {
+            environment.push((
+                OsString::from("XDG_CONFIG_HOME"),
+                home.join("xdg-without-config").into_os_string(),
+            ));
+        }
+    }
+    environment.extend_from_slice(overrides);
+    environment
+}
+
 /// Merge configuration in an isolated process with the supplied environment.
 pub(super) fn merge_in_child(
     args: &[&str],

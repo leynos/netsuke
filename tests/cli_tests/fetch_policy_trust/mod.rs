@@ -17,6 +17,8 @@ struct FetchPolicyFileLayers<'a> {
     system: Option<&'a str>,
     /// Hold user-scope configuration contents.
     user: Option<&'a str>,
+    /// Hold the home-dotfile user configuration (`$HOME/.netsuke.toml`).
+    user_dotfile: Option<&'a str>,
     /// Hold primary project-scope configuration contents.
     project: Option<&'a str>,
     /// Hold project-relative files selected by the project configuration.
@@ -65,6 +67,9 @@ fn merge_fetch_policy_in_project(
     }
     if let Some(config) = file_layers.user {
         write_expanded_config(user_config_dir.join("config.toml"), config, &project_path)?;
+    }
+    if let Some(config) = file_layers.user_dotfile {
+        write_expanded_config(home.path().join(".netsuke.toml"), config, &project_path)?;
     }
     if let Some(config) = file_layers.project {
         write_expanded_config(project.path().join(".netsuke.toml"), config, &project_path)?;

@@ -293,6 +293,7 @@ fn project_layer_scan_normalizes_only_the_project_key() -> Result<()> {
 }
 
 mod project_chain_tests;
+mod user_scope;
 
 /// Canonicalization failure falls back to literal comparison without failing
 /// discovery.
