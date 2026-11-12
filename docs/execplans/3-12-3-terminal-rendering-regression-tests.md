@@ -503,6 +503,28 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   `test-documentation-contracts` 3 s, `markdownlint` 23 s, `nixie` 1 s; all
   exited 0. `lint` is long because the rebase invalidated the compiler cache
   and admission was saturating four slots for the whole run.
+- [x] (2026-11-12) Answered review `5870784231`'s six pre-merge rows on the
+  rebased tree, `8be5f702d` (D37). Five were real defects and are fixed: the
+  JSON PTY test now asserts the three claims the module doc credited it with,
+  including a `--verbose` case and a human-mode contrast measured on the same
+  fixture; `set_style` returns the style it refuses; ADR-0072's accepted
+  decision region is restored byte-for-byte with the clarification in a dated
+  addendum; the two developers'-guide passages name the functions the branch
+  actually left behind; and the hosted-CI Progress item is checked with its
+  closing check runs. The sixth, Domain Architecture, is rebutted on a
+  measurement re-taken at this head: 365 lines across 39 tracked Rust files
+  name the four enums, against a 600-line tolerance. The ten-gate set ran
+  sequentially against a fingerprint taken before the batch and re-checked
+  identical after it: `check-fmt` 2 s, `lint` 24 s, `doc-coverage` 9 s at
+  98.19%, `test` 27 s at 5332/5332, `test-workflow-contracts` 233 s,
+  `test-package-verify` 4 s, `test-coverage-artifact` 1 s,
+  `test-documentation-contracts` 1 s, `markdownlint` 23 s, `nixie` 1 s; all
+  exited 0.
+- [ ] (2026-11-12) Reach equilibrium on `8be5f702d`: CodeRabbit has auto-paused
+  the branch (head not reviewed), the resume has been posted twice through the
+  pool account and not yet picked up, and eleven hosted checks are still
+  running. The formal-review signal and the standing `CHANGES_REQUESTED` both
+  remain open.
 
 ## Surprises & discoveries
 
