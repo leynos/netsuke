@@ -17,6 +17,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import copy
+import re
 
 import pytest
 from release_finalize_action_contract import (
@@ -55,10 +56,42 @@ from workflow_loading import (
     workflow_job,
 )
 
+#: The names a write token is conventionally stored under. A scope that
+#: declares one of these hands it to every step beneath it.
+_TOKEN_NAMES = frozenset({"GH_TOKEN", "GITHUB_TOKEN"})
+
+#: The expressions that resolve to a write token, whatever name they are
+#: stored under, so renaming the variable does not evade the check.
+_TOKEN_EXPRESSION = re.compile(r"\bgithub\.token\b|\bsecrets\b")
+
 
 def _workflow() -> dict[str, object]:
     """Read the release workflow for the finalization job contract."""
     return load_workflow(RELEASE_WORKFLOW_PATH)
+
+
+def _assert_no_inherited_token(
+    workflow: dict[str, object], job: dict[str, object]
+) -> None:
+    """Require the token to reach only the steps that ask for it.
+
+    A workflow- or job-level ``env`` is inherited by every step, including the
+    action's validate and plan steps, which the action contract deliberately
+    keeps token-free. The action receives the credential as an input, so no
+    enclosing scope has a reason to define one.
+    """
+    for scope, label in ((workflow, "workflow"), (job, "job")):
+        environment = require_mapping(scope.get("env") or {}, f"{label} environment")
+        leaked = sorted(
+            name
+            for name, value in environment.items()
+            if name.upper() in _TOKEN_NAMES
+            or _TOKEN_EXPRESSION.search(str(value)) is not None
+        )
+        assert not leaked, (
+            f"the {label} must not define a token variable: every step inherits "
+            f"it, including the ones the action keeps token-free, got {leaked}"
+        )
 
 
 def _assert_job_guard(job: dict[str, object]) -> None:
@@ -94,7 +127,9 @@ def _assert_job_guard(job: dict[str, object]) -> None:
 
 def _assert_job_contract(workflow: dict[str, object]) -> None:
     """Check the job's guard, permissions, step sequence, and local action."""
-    _assert_job_guard(workflow_job(workflow, FINALIZE_JOB))
+    job = workflow_job(workflow, FINALIZE_JOB)
+    _assert_job_guard(job)
+    _assert_no_inherited_token(workflow, job)
     steps = job_steps(workflow, FINALIZE_JOB)
     signatures = [step_signature(step) for step in steps]
     assert signatures == list(EXPECTED_JOB_STEPS), (
@@ -156,6 +191,18 @@ def _assert_local_action(step: dict[str, object]) -> None:
     assert timeout < JOB_TIMEOUT_MINUTES, (
         "the action's ceiling must leave the job's own timeout room to report it"
     )
+    # The step's signature, its inputs, and its ceiling all survive either
+    # control, so neither is visible to the assertions above: one discards the
+    # record of a refusal, and the other skips the publication outright.
+    assert "continue-on-error" not in step, (
+        "the step that invokes the action must fail the job when the action "
+        "refuses: continue-on-error would report an unpublished release as a "
+        "passing step"
+    )
+    assert "if" not in step, (
+        "the step that invokes the action must not be conditional: a false "
+        "condition skips the finalization the job exists to perform"
+    )
 
 
 def _assert_complete_contract(
@@ -175,8 +222,10 @@ def _assert_complete_contract(
         "aggregate-bound-exceeded",
         "stale-plan-kept",
         "missing-plan-guard",
+        "commented-plan-reset",
         "source-build-allowed",
         "gh-in-run",
+        "extra-command",
         "wrong-output",
     ],
 )
@@ -198,8 +247,12 @@ def test_action_mutations_are_rejected(mutation: str) -> None:
         "missing-verifier",
         "artifact-pattern",
         "trusted-literal",
+        "job-token",
+        "workflow-token",
         "missing-step-timeout",
         "verifier-record",
+        "step-continue-on-error",
+        "step-disabled",
         "guard-bypass",
         "early-finalize",
         "extra-edit",

@@ -168,6 +168,13 @@ def write_candidate(
     Defaults to :func:`identity_record`'s identity, so a suite overrides
     ``identity`` only to depart from one a healthy run accepts.
 
+    Parameters
+    ----------
+    directory
+        Directory ``candidate.json`` is written to.
+    identity
+        The candidate record to write. ``None`` writes the healthy default.
+
     Returns
     -------
     pathlib.Path
@@ -186,6 +193,13 @@ def write_plan(
     Defaults to :func:`plan_record`'s plan, so a suite overrides ``plan`` only
     to stage the reconciliation it means to exercise.
 
+    Parameters
+    ----------
+    directory
+        Directory ``plan.json`` is written to.
+    plan
+        The plan document to write. ``None`` writes the verified default.
+
     Returns
     -------
     pathlib.Path
@@ -203,6 +217,13 @@ def write_digest_record(
 
     Defaults to :func:`digest_record`'s record, so a suite overrides ``record``
     only to deviate from the digests a healthy run trusts.
+
+    Parameters
+    ----------
+    directory
+        Directory ``trusted.json`` is written to.
+    record
+        The trust declaration to write. ``None`` writes the default digests.
 
     Returns
     -------

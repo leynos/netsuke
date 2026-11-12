@@ -13,6 +13,7 @@ Run via ``make test-workflow-contracts``.
 """
 
 import re
+import shlex
 
 from release_finalize_contract_support import (
     EXPECTED_ENVIRONMENTS,
@@ -32,6 +33,7 @@ from release_finalize_contract_support import (
     TOKEN_STEPS,
     load_action_steps,
     run_tokens,
+    script_lines,
 )
 from workflow_loading import REPO_ROOT, named_step, require_mapping
 
@@ -71,6 +73,10 @@ _EXCLUDE_NEWER = re.compile(r'^# exclude-newer = "\d{4}-\d{2}-\d{2}T')
 #: package's build backend does, and a build runs arbitrary code in the same
 #: environment as the step's write token.
 NO_BUILD_FLAG = "--no-build"
+
+#: The shell operators that would let a second command share a step, and so
+#: the environment of the command the contract pins.
+_SHELL_OPERATORS = frozenset({"&&", "||", ";", "|"})
 
 
 def _receives_token_value(value: object) -> bool:
@@ -250,11 +256,14 @@ def _assert_bounds_fit_the_step(bounds: list[int]) -> None:
 def _assert_plan_step(steps: list[dict[str, object]]) -> None:
     """Require the plan step to refuse a run that recorded no plan."""
     run = str(named_step(steps, PLAN_STEP).get("run"))
-    assert PLAN_RESET in run, (
+    # The executable lines, not the file: a reset that was commented out still
+    # reads as present to a substring check while the stale plan survives.
+    commands = script_lines(run)
+    assert PLAN_RESET in commands, (
         "the plan step must delete any earlier plan before planning: a stale "
         "file would let an unreadable plan stand in for this run's answer"
     )
-    assert PLAN_PRESENCE_GUARD in run, (
+    assert PLAN_PRESENCE_GUARD in commands, (
         "the plan step must refuse a planner status that wrote no plan; usage "
         "errors and resolution failures exit with the statuses it accepts"
     )
@@ -264,6 +273,23 @@ def _assert_finalize_step(steps: list[dict[str, object]]) -> None:
     """Require the finalize step to run the contracted command and fail on it."""
     finalize = named_step(steps, FINALIZE_STEP)
     run = str(finalize.get("run"))
+    # `run_tokens` reads the invocation and ignores every other line, so it
+    # says nothing about a second command sharing the step's environment and
+    # therefore its token. The step is a prelude and one command, and no more.
+    commands = script_lines(run)
+    assert len(commands) == 2, (
+        "the finalize step must run the strict-shell prelude and one adapter "
+        f"invocation and nothing else, got {commands!r}"
+    )
+    tokens = [shlex.split(command) for command in commands]
+    assert [command[:1] for command in tokens] == [["set"], ["timeout"]], (
+        "the finalize step must run the prelude and then the bounded adapter "
+        f"invocation, got {commands!r}"
+    )
+    assert not any(_SHELL_OPERATORS & set(command) for command in tokens), (
+        "the finalize step must run its adapter as a single command: another "
+        "command joined by a shell operator would share the step's token"
+    )
     assert run_tokens(run) == FINALIZE_COMMAND, (
         "the finalize step must run exactly the contracted adapter command"
     )
@@ -343,7 +369,15 @@ def assert_adapter_pins_its_closure(source: str | None = None) -> None:
 
 
 def assert_action_contract(action: dict[str, object]) -> None:
-    """Check the action's interface, token routing, and single mutating call."""
+    """Check the action's interface, token routing, and single mutating call.
+
+    Parameters
+    ----------
+    action
+        The parsed action document, usually :func:`load_action`'s result. A
+        caller may pass a mutated copy, which is how the contract test shows
+        each assertion notices the change it describes.
+    """
     _assert_interface(action)
     steps = load_action_steps(action)
     assert [step.get("name") for step in steps] == list(STEP_NAMES), (
