@@ -37,13 +37,13 @@ from release_finalize_contract_support import (
     SETUP_UV_ACTION,
     load_action,
     mutate_action,
-    mutate_workflow,
 )
 from release_finalize_job_expectations import (
     EXPECTED_JOB_GUARD,
     EXPECTED_JOB_STEPS,
     step_signature,
 )
+from release_finalize_workflow_mutations import mutate_workflow
 from release_publish_needs import job_names
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
