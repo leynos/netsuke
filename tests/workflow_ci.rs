@@ -16,7 +16,6 @@ enum StepField {
 
 const INSTALL_NIXIE_ACTION: &str = "leynos/shared-actions/.github/actions/install-nixie";
 const INSTALL_WHITAKER_ACTION: &str = "leynos/shared-actions/.github/actions/install-whitaker";
-const WHITAKER_INSTALLER_VERSION: &str = "0.2.11";
 
 impl StepField {
     const fn yaml_key(self) -> &'static str {
@@ -347,8 +346,12 @@ fn behavioural_ci_workflow_runs_tests_through_the_make_target() -> Result<()> {
     Ok(())
 }
 
-/// Assert that a job installs Whitaker through the pinned shared action.
-fn ensure_shared_whitaker_installer(workflow: &Value, job_name: &'static str) -> Result<()> {
+/// Assert that a job installs Whitaker through the pinned shared action, and
+/// return the exact installer version it passes.
+///
+/// The version is checked for shape, not value: a release bump edits the
+/// workflows alone. The caller checks that the jobs agree.
+fn ensure_shared_whitaker_installer(workflow: &Value, job_name: &'static str) -> Result<String> {
     let whitaker = named_step(steps(job(workflow, job_name)?)?, "Install Whitaker")?;
     let uses = mapping_get(whitaker, YamlKey("uses"))
         .and_then(Value::as_str)
@@ -357,15 +360,17 @@ fn ensure_shared_whitaker_installer(workflow: &Value, job_name: &'static str) ->
         is_pinned_action_ref(uses, INSTALL_WHITAKER_ACTION),
         "{job_name} Install Whitaker should use a commit-pinned shared installer, found {uses:?}"
     );
-    ensure!(
-        step_input(whitaker, YamlKey("installer-version")) == Some(WHITAKER_INSTALLER_VERSION),
-        "{job_name} Install Whitaker should retain installer version {WHITAKER_INSTALLER_VERSION}"
-    );
+    let version = step_input(whitaker, YamlKey("installer-version"))
+        .filter(|version| is_exact_version(version))
+        .with_context(|| {
+            format!("{job_name} Install Whitaker should pass an exact installer-version")
+        })?
+        .to_owned();
     ensure!(
         mapping_get(whitaker, YamlKey("run")).is_none(),
         "{job_name} Install Whitaker should not retain an ad hoc installation script"
     );
-    Ok(())
+    Ok(version)
 }
 
 /// Assert that Windows lints both packages through the PowerShell wrapper.
@@ -401,8 +406,12 @@ fn behavioural_ci_workflow_uses_shared_tool_installers() -> Result<()> {
     let windows_workflow: Value =
         serde_yaml::from_str(&windows_contents).context("parse Windows CI workflow YAML")?;
 
-    ensure_shared_whitaker_installer(&workflow, "build-test")?;
-    ensure_shared_whitaker_installer(&windows_workflow, "lint-windows")?;
+    let linux_installer = ensure_shared_whitaker_installer(&workflow, "build-test")?;
+    let windows_installer = ensure_shared_whitaker_installer(&windows_workflow, "lint-windows")?;
+    ensure!(
+        linux_installer == windows_installer,
+        "Linux ({linux_installer}) and Windows ({windows_installer}) should install the same Whitaker installer"
+    );
     ensure_windows_whitaker_wrapper(&windows_workflow)?;
 
     let linux_steps = steps(job(&workflow, "build-test")?)?;
