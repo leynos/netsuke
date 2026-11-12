@@ -531,11 +531,31 @@ conflict in `Decision log`, set the status to `BLOCKED`, and escalate.
   and its verdict is no longer current, and it is the row D34 already rebuts
   with a fresh measurement of 365 lines across 39 files against a 600-line
   tolerance.
-- [ ] (2026-11-12) Reach equilibrium on `5e2208f7f`: CodeRabbit reviewed it as
-  `5871342914` (one error, the Module-Level Documentation row), the fix for
-  which is the commit after it. The branch was rate-limited to one review per
-  hour at that point, `CHANGES_REQUESTED` stands from `5870783715`, and the
-  hosted checks for the new head were still running.
+- [x] (2026-11-12) Answered review `5871342914` on `5e2208f7f`. Its single
+  error was Module-Level Documentation, which held for the reason D38 records;
+  `4f2f468d4` fixed it and posted the disposition as `6818920750`. All nineteen
+  hosted checks on that head were green.
+- [x] (2026-11-12) Answered review `5872122115` on `4f2f468d4`. Four findings,
+  all valid, all about claims D38 had just written: the startup buffer is
+  settled by `config_load` before the merge and by `parse_cli_or_exit` on parse
+  exits, not by `main` once the mode is known; there are two display plans and
+  only the runtime one depends on the merge; the process-group kill fires on
+  three specific conditions and does not catch a grandchild that closed its
+  descriptors; and `readers.rs` does decide to stop the child on reader-setup
+  failure and on grace-period expiry. `f1bb033a6` corrects all three claims in
+  the module docs and the plan, with a threaded reply under each inline comment
+  and a summary disposition as `6820165966`. The ten-gate set ran against the
+  new tree with the fingerprint held identical: `check-fmt` 2 s, `lint` 58 s,
+  `doc-coverage` 9 s, `test` 70 s, `test-workflow-contracts` 234 s,
+  `test-package-verify` 5 s, `test-coverage-artifact` 1 s,
+  `test-documentation-contracts` 2 s, `markdownlint` 24 s, `nixie` 1 s; all
+  exited 0. All nineteen hosted checks on `f1bb033a6` are green.
+- [ ] (2026-11-12) Reach equilibrium on `f1bb033a6`: CodeRabbit paused the
+  branch rather than reviewing it, the resume was picked up and arrived as a
+  rate limit with a 20-minute window, and the formal review is queued as
+  `5c95e787`. `CHANGES_REQUESTED` stands from `5872122115` and clears only when
+  a later review says otherwise; the Domain Architecture warning remains
+  rebutted under D34.
 
 ## Surprises & discoveries
 
