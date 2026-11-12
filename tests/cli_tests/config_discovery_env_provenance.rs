@@ -1,6 +1,8 @@
 //! Preserve environment-policy authority across discovered config chains.
 
-use super::super::merge_probe::{isolated_environment, merge_in_child};
+use super::super::merge_probe::{
+    environment_with_system_scope, isolated_environment, merge_in_child,
+};
 use anyhow::{Context, Result, anyhow, bail, ensure};
 use netsuke::ast::NetsukeManifest;
 use netsuke::ast::Recipe;
@@ -283,6 +285,59 @@ fn inherited_project_grant_alone_does_not_activate_restrictive_mode() -> Result<
     ensure!(
         *recorded_calls == ["CI_TOKEN"],
         "the default-allowed name should reach the reader"
+    );
+    Ok(())
+}
+
+/// A restrictive home-directory grant must outrank a conflicting system policy
+/// when `XDG_CONFIG_HOME` is unset.
+///
+/// The reported defect let a valid system file suppress the user file, so the
+/// operator's `env_allow_var` restriction never reached policy construction.
+#[test]
+fn home_user_grant_outranks_system_policy_without_xdg_config_home() -> Result<()> {
+    let project = tempdir().context("create project directory")?;
+    let home = tempdir().context("create fake operator home")?;
+    let system = tempdir().context("create system configuration directory")?;
+    write_config(
+        home.path().join(".netsuke.toml"),
+        "env_allow_var = [\"SAFE\"]\n",
+    )?;
+    write_config(
+        system.path().join("netsuke/config.toml"),
+        "env_allow_var = [\"SYSTEM_ONLY\"]\n",
+    )?;
+
+    // Remove XDG_CONFIG_HOME so the user file is reachable only through the
+    // home fallback that the dependency probes after the system scope.
+    let mut environment = environment_with_system_scope(home.path(), system.path(), &[]);
+    environment.retain(|(key, _)| key.to_str() != Some("XDG_CONFIG_HOME"));
+    let cli = merge_in_child(&["netsuke"], project.path(), &environment)?;
+
+    let policy = cli.env_access_policy();
+    ensure!(
+        policy.evaluate("SAFE").is_ok(),
+        "the home operator grant must remain effective"
+    );
+    ensure!(
+        policy.evaluate("SYSTEM_ONLY").is_err(),
+        "the system allowlist must not replace the home operator grant"
+    );
+    assert_blocked_without_read(&policy, "SYSTEM_ONLY")?;
+
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let reader = recording_env_reader(&calls);
+    let rendered = manifest::from_str_with_env_and_policy(&env_manifest("SAFE"), &reader, &policy)?;
+    ensure!(
+        first_rule_command(&rendered) == Some("echo safe-value"),
+        "the operator-allowed value should render"
+    );
+    let recorded_calls = calls
+        .lock()
+        .map_err(|_| anyhow!("recording reader mutex poisoned"))?;
+    ensure!(
+        *recorded_calls == ["SAFE"],
+        "only the allowed name should reach the reader"
     );
     Ok(())
 }

@@ -86,6 +86,7 @@ impl PathNormalizer for CountingPathNormalizer {
         FsPathNormalizer.exists(path)
     }
 }
+
 /// Build a [`Cli`] for `scenario`, rooted in the isolated `temp` directory.
 ///
 /// The explicit case writes a config file and selects it through `--config`; the
@@ -147,6 +148,7 @@ fn injected_automatic_discovery_uses_xdg_config_home() -> Result<()> {
     assert_eq!(paths, vec![expected_path]);
     Ok(())
 }
+
 /// Discovered configuration candidates retain the outcome that their content
 /// warrants; an unreadable candidate is never mistaken for an absent one.
 #[rstest]
@@ -303,8 +305,12 @@ fn project_layer_scan_normalizes_only_the_project_key() -> Result<()> {
 }
 
 mod authority;
+
 mod discovery_differential_tests;
+
 mod project_chain_tests;
+
+mod user_scope;
 
 /// Canonicalization failure falls back to literal comparison without failing
 /// discovery.
