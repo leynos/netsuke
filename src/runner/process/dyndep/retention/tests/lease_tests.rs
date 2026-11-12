@@ -50,10 +50,16 @@ fn worker_directory() -> Result<Dir> {
     Dir::open_ambient_dir(path, cap_std::ambient_authority()).map_err(Into::into)
 }
 
+/// Establish the verified dyndep handle of a workspace that must already have one.
+fn verified_directory(dir: &Dir) -> Result<DyndepDirectory> {
+    DyndepDirectory::open_existing(dir)?.context("the dyndep directory must exist")
+}
+
 fn assert_lease_is_unavailable(dir: &Dir) -> Result<()> {
+    let dyndep = verified_directory(dir)?;
     let mut options = cap_std::fs_utf8::OpenOptions::new();
     options.read(true).write(true);
-    let file = dir.open_with(DYNDEP_LOCK, &options)?.into_std();
+    let file = dyndep.dir().open_with(DYNDEP_LOCK, &options)?.into_std();
     let error =
         FileExt::try_lock(&file).expect_err("the parent lease must block the child lock attempt");
     ensure!(
@@ -71,7 +77,7 @@ fn lease_blocks_other_processes_until_the_active_sidecar_is_released(
     let active = sidecar(ACTIVE_SIDECAR_PATH, ACTIVE_SIDECAR_CONTENT);
     let publication_lease = materialize_dyndep_files(&dir, std::slice::from_ref(&active))?;
     drop(publication_lease);
-    let lease = DyndepPublicationLease::acquire(&dir)?;
+    let lease = DyndepPublicationLease::acquire(&verified_directory(&dir)?)?;
     let mut child = Command::new(std::env::current_exe()?)
         .args(["--ignored", "--exact", LEASE_WORKER_NAME, "--nocapture"])
         .env(LEASE_WORKER_DIRECTORY, temp.path())
@@ -110,6 +116,6 @@ fn dyndep_publication_lease_worker() -> Result<()> {
 
     let active = sidecar(ACTIVE_SIDECAR_PATH, ACTIVE_SIDECAR_CONTENT);
     let lease = materialize_dyndep_files(&dir, std::slice::from_ref(&active))?;
-    lease.prune(&dir, std::slice::from_ref(&active))?;
+    lease.prune(std::slice::from_ref(&active))?;
     write_worker_marker(std::io::stdout().lock(), "completed")
 }

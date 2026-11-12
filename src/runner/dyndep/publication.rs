@@ -13,9 +13,11 @@ use anyhow::{Context, Result};
 use cap_std::{ambient_authority, fs_utf8::Dir};
 
 /// Publication lease that protects one serial bundle while a command consumes it.
+///
+/// The lease owns the verified dyndep directory handle, so a command that
+/// published a bundle prunes through exactly the directory it wrote, never
+/// through a fresh resolution of the workspace capability.
 pub(in crate::runner) struct DyndepPublication {
-    /// Effective Ninja working directory opened for a sidecar-bearing bundle.
-    dir: Option<Dir>,
     /// Advisory lease holding sidecar publication for command consumption.
     lease: DyndepPublicationLease,
 }
@@ -27,29 +29,29 @@ pub(in crate::runner) fn materialize_dyndep_bundle(
 ) -> Result<DyndepPublication> {
     if bundle.dyndep_files().is_empty() {
         return Ok(DyndepPublication {
-            dir: None,
             lease: DyndepPublicationLease::empty(),
         });
     }
     let dir = open_effective_dir(cli)?;
     let lease = process::materialize_dyndep_files(&dir, bundle.dyndep_files())?;
-    Ok(DyndepPublication {
-        dir: Some(dir),
-        lease,
-    })
+    Ok(DyndepPublication { lease })
 }
 
 /// Apply retention while respecting a bundle publication lease when available.
+///
+/// A sidecar-free bundle never opened the dyndep directory, so retention has to
+/// establish it here; that path refuses an aliased component instead of
+/// resolving through it.
 pub(in crate::runner) fn prune_dyndep_bundle(
     cli: &Cli,
     current: &[GeneratedDyndep],
     publication: &DyndepPublication,
 ) -> Result<()> {
-    if let Some(dir) = &publication.dir {
-        publication.lease.prune(dir, current)?;
-    } else {
+    if publication.lease.is_empty() {
         let dir = open_effective_dir(cli)?;
         process::prune_dyndep_cache(&dir, current)?;
+    } else {
+        publication.lease.prune(current)?;
     }
     Ok(())
 }

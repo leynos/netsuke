@@ -8,12 +8,14 @@
 //! an existing file whose bytes match is reused, while a mismatch is treated as
 //! corruption.
 //!
-//! All writes go through a capability-scoped directory handle opened on the
-//! effective Ninja working directory, using a same-directory temporary file and
-//! an atomic rename so concurrent Netsuke processes cannot observe partial
-//! content.
+//! All writes go through the verified dyndep directory handle, using a
+//! same-directory temporary file and an atomic rename so concurrent Netsuke
+//! processes cannot observe partial content. Every path below that handle is a
+//! bare entry name, so publication cannot resolve a component outside the
+//! directory the handle verified.
 
 use super::super::DYNDEP_DIR;
+use super::directory::{DyndepDirectory, entry_display_path};
 use super::{retention::DyndepPublicationLease, telemetry};
 use crate::localization::{self, keys};
 use crate::ninja_gen::GeneratedDyndep;
@@ -34,59 +36,77 @@ const MAX_TEMP_FILE_ATTEMPTS: usize = 16;
 /// from driving an unbounded allocation during publication.
 const MAX_VERIFIED_DYNDEP_SIZE: u64 = 16 * 1024 * 1024;
 
-/// Materialize every sidecar in `dyndep_files` through `dir`.
+/// Materialize every sidecar in `dyndep_files` through `workspace`.
 ///
 /// # Errors
 ///
 /// Returns successfully without creating generated state when `dyndep_files`
 /// is empty. Otherwise returns an error if the `.netsuke/dyndep` directory
-/// cannot be created, or if any sidecar write, rename, or content verification
-/// fails.
+/// cannot be established, is a symbolic link, junction, or non-directory, or if
+/// any sidecar write, rename, or content verification fails.
 pub(crate) fn materialize_dyndep_files(
-    dir: &Dir,
+    workspace: &Dir,
     dyndep_files: &[GeneratedDyndep],
 ) -> Result<DyndepPublicationLease> {
     telemetry::instrument_materialization(dyndep_files.len(), || {
-        materialize_dyndep_files_inner(dir, dyndep_files)
+        materialize_dyndep_files_inner(workspace, dyndep_files)
     })
 }
 
 /// Apply the sidecar publication command through the supplied capability.
 fn materialize_dyndep_files_inner(
-    dir: &Dir,
+    workspace: &Dir,
     dyndep_files: &[GeneratedDyndep],
 ) -> Result<DyndepPublicationLease> {
     if dyndep_files.is_empty() {
         return Ok(DyndepPublicationLease::empty());
     }
-    dir.create_dir_all(DYNDEP_DIR).with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_CREATE_DIR)
-            .with_arg("path", DYNDEP_DIR.to_owned())
-    })?;
-    let lease = DyndepPublicationLease::acquire(dir)?;
+    let dyndep = DyndepDirectory::open_or_create(workspace)?;
+    let lease = DyndepPublicationLease::acquire(&dyndep)?;
     for sidecar in dyndep_files {
-        materialize_one(dir, sidecar)?;
+        materialize_one(dyndep.dir(), sidecar)?;
     }
     Ok(lease)
 }
 
 /// Materialize one sidecar idempotently and atomically.
-fn materialize_one(dir: &Dir, sidecar: &GeneratedDyndep) -> Result<()> {
-    telemetry::instrument_sidecar_materialization(|| materialize_one_inner(dir, sidecar))
+fn materialize_one(dyndep: &Dir, sidecar: &GeneratedDyndep) -> Result<()> {
+    let name = sidecar_name(sidecar)?;
+    telemetry::instrument_sidecar_materialization(|| {
+        materialize_one_inner(dyndep, name, sidecar.content())
+    })
+}
+
+/// Return the sidecar's bare entry name within the verified directory.
+///
+/// # Errors
+///
+/// Returns an error when the sidecar path is not a direct child of
+/// `.netsuke/dyndep`, which would place it outside the verified handle.
+fn sidecar_name(sidecar: &GeneratedDyndep) -> Result<&Utf8Path> {
+    let path = sidecar.relative_path();
+    let name = path.file_name().unwrap_or_default();
+    if path.parent() == Some(Utf8Path::new(DYNDEP_DIR)) && !name.is_empty() {
+        Ok(Utf8Path::new(name))
+    } else {
+        Err(anyhow!(
+            localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", path.as_str())
+        ))
+    }
 }
 
 /// Publish or verify one sidecar without attaching observability policy.
-fn materialize_one_inner(dir: &Dir, sidecar: &GeneratedDyndep) -> Result<()> {
-    let rel = sidecar.relative_path();
-    match read_verified(dir, rel, sidecar.content())? {
+fn materialize_one_inner(dyndep: &Dir, name: &Utf8Path, content: &str) -> Result<()> {
+    match read_verified(dyndep, name, content)? {
         ReadOutcome::Matching => {
             tracing::debug!(operation = "reuse", "reusing existing dyndep sidecar",);
             Ok(())
         }
         ReadOutcome::Mismatch => Err(anyhow!(
-            localization::message(keys::RUNNER_IO_DYNDEP_CORRUPT).with_arg("path", rel.as_str())
+            localization::message(keys::RUNNER_IO_DYNDEP_CORRUPT)
+                .with_arg("path", entry_display_path(name.as_str()))
         )),
-        ReadOutcome::Missing => write_atomic(dir, rel, sidecar.content()),
+        ReadOutcome::Missing => write_atomic(dyndep, name, content),
     }
 }
 
@@ -102,12 +122,12 @@ enum ReadOutcome {
 }
 
 /// Read an existing sidecar and compare it with the expected content.
-fn read_verified(dir: &Dir, rel: &Utf8Path, expected: &str) -> Result<ReadOutcome> {
-    let Some(mut file) = open_existing_sidecar(dir, rel)? else {
+fn read_verified(dyndep: &Dir, name: &Utf8Path, expected: &str) -> Result<ReadOutcome> {
+    let Some(mut file) = open_existing_sidecar(dyndep, name)? else {
         return Ok(ReadOutcome::Missing);
     };
-    let size = verified_sidecar_size(&file, rel)?;
-    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, rel)?;
+    let size = verified_sidecar_size(&file, name)?;
+    let (content, grew_while_reading) = read_sidecar_content(&mut file, size, name)?;
     Ok(content_outcome(&content, expected, grew_while_reading))
 }
 
@@ -117,14 +137,15 @@ fn read_verified(dir: &Dir, rel: &Utf8Path, expected: &str) -> Result<ReadOutcom
 ///
 /// Returns an error when the sidecar cannot be read for any reason other than
 /// its absence.
-fn open_existing_sidecar(dir: &Dir, rel: &Utf8Path) -> Result<Option<cap_std::fs_utf8::File>> {
+fn open_existing_sidecar(dyndep: &Dir, name: &Utf8Path) -> Result<Option<cap_std::fs_utf8::File>> {
     let mut options = OpenOptions::new();
     options.read(true);
-    match dir.open_with(rel, &options) {
+    match dyndep.open_with(name, &options) {
         Ok(file) => Ok(Some(file)),
         Err(err) if err.kind() == std::io::ErrorKind::NotFound => Ok(None),
         Err(err) => Err(err).with_context(|| {
-            localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
+            localization::message(keys::RUNNER_IO_DYNDEP_READ)
+                .with_arg("path", entry_display_path(name.as_str()))
         }),
     }
 }
@@ -135,17 +156,18 @@ fn open_existing_sidecar(dir: &Dir, rel: &Utf8Path) -> Result<Option<cap_std::fs
 ///
 /// Returns an error when the file metadata cannot be read or the size exceeds
 /// the accepted verification ceiling.
-fn verified_sidecar_size(file: &cap_std::fs_utf8::File, rel: &Utf8Path) -> Result<u64> {
+fn verified_sidecar_size(file: &cap_std::fs_utf8::File, name: &Utf8Path) -> Result<u64> {
+    let display = entry_display_path(name.as_str());
     let size = file
         .metadata()
         .with_context(|| {
-            localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
+            localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", display.as_str())
         })?
         .len();
     if size > MAX_VERIFIED_DYNDEP_SIZE {
         return Err(anyhow!(
             localization::message(keys::RUNNER_IO_DYNDEP_TOO_LARGE)
-                .with_arg("path", rel.as_str())
+                .with_arg("path", display.as_str())
                 .with_arg("limit", MAX_VERIFIED_DYNDEP_SIZE)
         ));
     }
@@ -163,22 +185,19 @@ fn verified_sidecar_size(file: &cap_std::fs_utf8::File, rel: &Utf8Path) -> Resul
 fn read_sidecar_content(
     file: &mut cap_std::fs_utf8::File,
     size: u64,
-    rel: &Utf8Path,
+    name: &Utf8Path,
 ) -> Result<(Vec<u8>, bool)> {
-    let verified_size = usize::try_from(size).with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
-    })?;
+    let display = entry_display_path(name.as_str());
+    let read_error =
+        || localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", display.as_str());
+    let verified_size = usize::try_from(size).with_context(read_error)?;
     let mut buf = Vec::with_capacity(verified_size);
     Read::by_ref(file)
         .take(size)
         .read_to_end(&mut buf)
-        .with_context(|| {
-            localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
-        })?;
+        .with_context(read_error)?;
     let mut growth_probe = [0_u8; 1];
-    let grew_while_reading = file.read(&mut growth_probe).with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_READ).with_arg("path", rel.as_str())
-    })? != 0;
+    let grew_while_reading = file.read(&mut growth_probe).with_context(read_error)? != 0;
     Ok((buf, grew_while_reading))
 }
 
@@ -193,35 +212,35 @@ fn content_outcome(content: &[u8], expected: &str, grew_while_reading: bool) -> 
 
 /// Write a sidecar via a unique same-directory temporary file and an atomic
 /// rename, tolerating a concurrent writer that wins the race.
-fn write_atomic(dir: &Dir, rel: &Utf8Path, content: &str) -> Result<()> {
-    let (temp, mut file) = create_unique_temp_file(dir, rel)?;
-    let write_result = write_and_sync_temp_file(&mut file, rel, content);
+fn write_atomic(dyndep: &Dir, name: &Utf8Path, content: &str) -> Result<()> {
+    let (temp, mut file) = create_unique_temp_file(dyndep, name)?;
+    let write_result = write_and_sync_temp_file(&mut file, name, content);
     drop(file);
-    let result = write_result.and_then(|()| rename_temp_file(dir, &temp, rel, content));
+    let result = write_result.and_then(|()| rename_temp_file(dyndep, &temp, name, content));
     if result.is_err() {
-        drop(dir.remove_file(&temp));
+        drop(dyndep.remove_file(&temp));
     }
     result
 }
 
 /// Create a temporary sidecar with a path that no other entry claims.
 fn create_unique_temp_file(
-    dir: &Dir,
-    rel: &Utf8Path,
+    dyndep: &Dir,
+    name: &Utf8Path,
 ) -> Result<(Utf8PathBuf, cap_std::fs_utf8::File)> {
     let mut names = TempNameSource::for_operation();
-    create_unique_temp_file_with_source(dir, rel, &mut names)
+    create_unique_temp_file_with_source(dyndep, name, &mut names)
 }
 
 /// Create a temporary sidecar from an operation-scoped candidate source.
 fn create_unique_temp_file_with_source(
-    dir: &Dir,
-    rel: &Utf8Path,
+    dyndep: &Dir,
+    name: &Utf8Path,
     names: &mut TempNameSource,
 ) -> Result<(Utf8PathBuf, cap_std::fs_utf8::File)> {
     for _ in 0..MAX_TEMP_FILE_ATTEMPTS {
-        let temp = names.next_name(rel);
-        if let Some(file) = create_temp_file(dir, &temp, rel)? {
+        let temp = names.next_name(name);
+        if let Some(file) = create_temp_file(dyndep, &temp, name)? {
             return Ok((temp, file));
         }
         telemetry::record_temp_file_retry("retry");
@@ -229,23 +248,24 @@ fn create_unique_temp_file_with_source(
     telemetry::record_temp_file_retry("exhausted");
     Err(anyhow!(
         localization::message(keys::RUNNER_IO_DYNDEP_TEMP_COLLISIONS)
-            .with_arg("path", rel.as_str())
+            .with_arg("path", entry_display_path(name.as_str()))
     ))
 }
 
 /// Create a temporary sidecar, reporting a name collision to the caller.
 fn create_temp_file(
-    dir: &Dir,
+    dyndep: &Dir,
     temp: &Utf8Path,
-    rel: &Utf8Path,
+    name: &Utf8Path,
 ) -> Result<Option<cap_std::fs_utf8::File>> {
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
-    match dir.open_with(temp, &options) {
+    match dyndep.open_with(temp, &options) {
         Ok(file) => Ok(Some(file)),
         Err(err) if err.kind() == std::io::ErrorKind::AlreadyExists => Ok(None),
         Err(err) => Err(err).with_context(|| {
-            localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
+            localization::message(keys::RUNNER_IO_DYNDEP_WRITE)
+                .with_arg("path", entry_display_path(name.as_str()))
         }),
     }
 }
@@ -253,28 +273,32 @@ fn create_temp_file(
 /// Write, flush, and synchronize a temporary sidecar before renaming it.
 fn write_and_sync_temp_file(
     file: &mut cap_std::fs_utf8::File,
-    rel: &Utf8Path,
+    name: &Utf8Path,
     content: &str,
 ) -> Result<()> {
-    file.write_all(content.as_bytes()).with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
-    })?;
-    file.flush().with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
-    })?;
-    file.sync_all().with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", rel.as_str())
-    })?;
+    let display = entry_display_path(name.as_str());
+    let write_error =
+        || localization::message(keys::RUNNER_IO_DYNDEP_WRITE).with_arg("path", display.as_str());
+    file.write_all(content.as_bytes())
+        .with_context(write_error)?;
+    file.flush().with_context(write_error)?;
+    file.sync_all().with_context(write_error)?;
     Ok(())
 }
 
 /// Rename a completed temporary sidecar into its final location.
-fn rename_temp_file(dir: &Dir, temp: &Utf8Path, rel: &Utf8Path, content: &str) -> Result<()> {
-    match dir.rename(temp, dir, rel) {
+fn rename_temp_file(dyndep: &Dir, temp: &Utf8Path, name: &Utf8Path, content: &str) -> Result<()> {
+    match dyndep.rename(temp, dyndep, name) {
         Ok(()) => Ok(()),
-        Err(rename_error) => {
-            handle_rename_failure(dir, &RenameAttempt { temp, rel, content }, rename_error)
-        }
+        Err(rename_error) => handle_rename_failure(
+            dyndep,
+            &RenameAttempt {
+                temp,
+                name,
+                content,
+            },
+            rename_error,
+        ),
     }
 }
 
@@ -282,27 +306,28 @@ fn rename_temp_file(dir: &Dir, temp: &Utf8Path, rel: &Utf8Path, content: &str) -
 struct RenameAttempt<'a> {
     /// Same-directory temporary path of the finished sidecar.
     temp: &'a Utf8Path,
-    /// Final sidecar-relative destination path.
-    rel: &'a Utf8Path,
+    /// Final sidecar entry name.
+    name: &'a Utf8Path,
     /// Expected content, used to verify a concurrent writer's result.
     content: &'a str,
 }
 
 /// Verify a final sidecar when another process wins the rename race.
 fn handle_rename_failure(
-    dir: &Dir,
+    dyndep: &Dir,
     attempt: &RenameAttempt<'_>,
     rename_error: std::io::Error,
 ) -> Result<()> {
     // Rename is relative to the same directory; `rename` replaces an existing
     // destination, so if another process already wrote the final file, the
     // atomic replace yields content identical to ours.
-    if read_verified(dir, attempt.rel, attempt.content)? == ReadOutcome::Matching {
-        drop(dir.remove_file(attempt.temp));
+    if read_verified(dyndep, attempt.name, attempt.content)? == ReadOutcome::Matching {
+        drop(dyndep.remove_file(attempt.temp));
         return Ok(());
     }
     Err(rename_error).with_context(|| {
-        localization::message(keys::RUNNER_IO_DYNDEP_RENAME).with_arg("path", attempt.rel.as_str())
+        localization::message(keys::RUNNER_IO_DYNDEP_RENAME)
+            .with_arg("path", entry_display_path(attempt.name.as_str()))
     })
 }
 
@@ -342,13 +367,13 @@ impl TempNameSource {
         Self { nonce, sequence: 0 }
     }
 
-    /// Return the next candidate temporary path beside `rel`.
-    fn next_name(&mut self, rel: &Utf8Path) -> Utf8PathBuf {
-        let name = rel.file_name().unwrap_or("sidecar.dd");
+    /// Return the next candidate temporary path beside `name`.
+    fn next_name(&mut self, name: &Utf8Path) -> Utf8PathBuf {
+        let file_name = name.file_name().unwrap_or("sidecar.dd");
         let sequence = self.sequence;
         self.sequence += 1;
-        let temp_name = format!("{name}.{}.{sequence}.tmp", self.nonce);
-        rel.parent().map_or_else(
+        let temp_name = format!("{file_name}.{}.{sequence}.tmp", self.nonce);
+        name.parent().map_or_else(
             || Utf8PathBuf::from(&temp_name),
             |parent| parent.join(&temp_name),
         )

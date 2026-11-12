@@ -201,12 +201,13 @@ fn retention_uses_lexical_selection_when_directory_entries_are_nonlexical(
     dir.write(&earliest, "0123456789")?;
     dir.write(&later_first, "12345")?;
     dir.write(&later_second, "67890")?;
+    let dyndep = dir.open_dir(DYNDEP_DIR)?;
 
     let mut selection = RetentionSelection::new(RetentionPolicy::new(2, 10));
     let mut summary = RetentionSummary::default();
-    retain_or_remove_sidecar(&dir, later_first, &mut selection, &mut summary)?;
-    retain_or_remove_sidecar(&dir, later_second, &mut selection, &mut summary)?;
-    retain_or_remove_sidecar(&dir, earliest.clone(), &mut selection, &mut summary)?;
+    retain_or_remove_sidecar(&dyndep, "b-small.dd", &mut selection, &mut summary)?;
+    retain_or_remove_sidecar(&dyndep, "c-small.dd", &mut selection, &mut summary)?;
+    retain_or_remove_sidecar(&dyndep, "a-large.dd", &mut selection, &mut summary)?;
 
     ensure!(dir.open(current.relative_path()).is_ok());
     ensure!(dir.open(&earliest).is_ok());
@@ -261,7 +262,7 @@ fn empty_lease_leaves_obsolete_sidecars_untouched() -> Result<()> {
     dir.create_dir_all(DYNDEP_DIR)?;
     dir.write(stale, "stale")?;
 
-    let summary = DyndepPublicationLease::empty().prune(&dir, &[])?;
+    let summary = DyndepPublicationLease::empty().prune(&[])?;
 
     ensure!(
         dir.open(stale).is_ok(),
@@ -479,12 +480,10 @@ fn retention_rejects_a_dyndep_directory_junction(
 #[cfg(windows)]
 #[test]
 fn windows_retention_removes_stale_sidecars_by_native_path_identity() -> Result<()> {
-    // Regression for the Windows path-identity bug fixed by comparing
-    // sidecar paths as `Path` values rather than `str` spellings: pruning
-    // must preserve the bundle that produced the lease and remove a stale
-    // sidecar even when the stale path is addressed through the native
-    // Windows separator spelling. The assertion resolves both paths through
-    // the capability directory, so NTFS treats them as the files on disk.
+    // Retention now compares bare directory-entry names, so a sidecar
+    // addressed through the native Windows separator spelling must still be
+    // recognised and pruned. The assertion resolves both paths through the
+    // capability directory, so NTFS treats them as the files on disk.
     let temp = tempfile::tempdir()?;
     let dir = temporary_dir(&temp)?;
     let current = sidecar(".netsuke/dyndep/current.dd", "current");
