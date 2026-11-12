@@ -6872,6 +6872,15 @@ modules under `tests/cli_tests/`:
 - `merge_targets_proptests.rs` holds the handwritten proptest strategies (no
   `#[derive(Arbitrary)]`) for the `default_targets` append-in-discovery-order
   invariant and scalar merge ordering (defaults → file → environment → CLI).
+- `config_discovery_scopes/user_precedence.rs` pins user-before-system
+  discovery for every `XDG_CONFIG_HOME` state that leaves the home fallbacks
+  unreachable, and checks that a broken user file stops discovery instead of
+  falling back to a system file. Unit tests in
+  `src/cli/discovery/layers/tests/user_scope.rs` cover the same ordering
+  through the injected environment seam, and
+  `config_discovery_env_provenance.rs` plus `fetch_policy_trust/merge_tests.rs`
+  assert that a home-dotfile operator grant and fetch policy outrank a system
+  file.
 
 These tests drive a re-executed worker process through
 `tests/cli_tests/merge_probe.rs`. `merge_probe` builds an isolated environment
@@ -9205,6 +9214,46 @@ The projection is closed — only `NETSUKE_CONFIG`, `HOME`, `USERPROFILE`,
 `XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`, and `LOCALAPPDATA` appear — so
 it is not a general environment-copy helper; `EnvironmentLayer` alone
 enumerates the full `NETSUKE_*` value environment.
+
+#### Netsuke-owned user-scope pass
+
+`ortho_config` 0.10.0 assembles automatic candidates in the order
+`XDG_CONFIG_HOME`, `XDG_CONFIG_DIRS`, `APPDATA`/`LOCALAPPDATA`, then the home
+fallbacks, and stops at the first candidate that loads. A valid system file
+therefore suppresses `$HOME/.config/netsuke/config.toml` or
+`$HOME/.netsuke.toml` whenever `XDG_CONFIG_HOME` does not name that user file
+directly. That ordering is unsafe for Netsuke, whose user configuration carries
+operator fetch and environment policy.
+
+`src/cli/discovery/paths.rs::user_scope_candidates` derives the user subset in
+preference order from the injected `SharedEnvSource`:
+`$XDG_CONFIG_HOME/netsuke/config.toml`, `$XDG_CONFIG_HOME/.netsuke.toml`,
+`%APPDATA%` and `%LOCALAPPDATA%` equivalents, then
+`$HOME/.config/netsuke/config.toml`, `$HOME/.config/.netsuke.toml`, and
+`$HOME/.netsuke.toml`. Empty values count as unset, and `HOME` outranks
+`USERPROFILE`. The pass never reads `XDG_CONFIG_DIRS` or project roots, and it
+does not consult `EnvSource::home_fallback`: Netsuke always supplies a
+`MapEnv`, whose fallback is `None`, so mirroring it would add an ambient lookup
+without changing behaviour.
+
+`src/cli/discovery/layers/mod.rs` loads those candidates before calling
+`compose_layers()`. An absent candidate is skipped, a load error is returned
+immediately, and the first successful chain becomes the base layers. Only when
+no user candidate exists does `compose_layers()` run, which is what still
+reaches system scope and the project roots. Authority assignment is unchanged:
+a base chain whose last layer is the project file stays project-scoped, so a
+`$HOME/.netsuke.toml` that is also the project configuration keeps its existing
+project quarantine instead of gaining operator authority. Reading the user
+scope first changes which candidates are considered, not how a loaded file is
+trusted.
+
+Re-check the user-path derivation on every `ortho_config` upgrade. The
+dependency's flat candidate order still places system scope before the home
+fallbacks, and Netsuke's aggregation of `compose_layers()` still drops an
+optional candidate's load error when a later candidate succeeds; the user pass
+is what bounds both behaviours. The regression matrix is Unix-only because it
+injects the XDG variables; Windows discovers user configuration through
+`APPDATA`/`LOCALAPPDATA`.
 
 `explicit_config_path_with_env` is the crate-internal seam for explicit
 config-file selection. It evaluates the precedence chain in this order:
