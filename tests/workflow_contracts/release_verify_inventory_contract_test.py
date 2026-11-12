@@ -249,7 +249,21 @@ def _assert_job_contract(workflow: dict[str, object]) -> None:
     assert steps.index(local) > max(
         steps.index(checkout), steps.index(setup_uv), steps.index(download)
     ), "the verification action must run after its checkout, tools, and artefact"
+    # The step-level check above sees only the verifier's own `env`. A token
+    # declared at either enclosing scope reaches that step too, and the
+    # verifier runs scripts from the candidate checkout.
+    assert "GH_TOKEN" not in _declared_environment(workflow), (
+        "the verifier must not inherit GH_TOKEN from the workflow"
+    )
+    assert "GH_TOKEN" not in _declared_environment(job), (
+        "the verifier must not inherit GH_TOKEN from the job"
+    )
     reject_secrets(job)
+
+
+def _declared_environment(scope: dict[str, object]) -> dict[str, object]:
+    """Return the ``env`` mapping a workflow or job declares, or an empty one."""
+    return require_mapping(scope.get("env") or {}, "declared environment")
 
 
 def _assert_publisher_records_the_artifact_name(workflow: dict[str, object]) -> None:

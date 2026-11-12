@@ -12,6 +12,7 @@ import typing as typ
 import pytest
 from release_verify_inventory_support import (
     DOWNLOAD_STEP,
+    EXPECTED_ENVIRONMENTS,
     LIST_RELEASES_STEP,
     LOCAL_ACTION,
     PUBLISH_JOB,
@@ -139,7 +140,19 @@ ACTION_MUTATIONS: dict[str, cabc.Callable[[list[dict[str, object]]], None]] = {
 
 
 def mutate_action(action: dict[str, object], mutation: str) -> None:
-    """Change one dimension of an action step's command or environment."""
+    """Change one dimension of an action step's command or environment.
+
+    Parameters
+    ----------
+    action
+        The loaded verification action, which this call edits in place. The
+        contract reads a freshly loaded action per case, so the edit never
+        reaches a later case.
+    mutation
+        The name of the change to make, one of :data:`ACTION_MUTATIONS`. An
+        unknown name fails the calling case through :func:`pytest.fail`, so a
+        renamed or mistyped mutation cannot leave a case asserting nothing.
+    """
     steps = load_action_steps(action)
     apply = ACTION_MUTATIONS.get(mutation)
     if apply is None:
@@ -200,6 +213,36 @@ def _depend_on_release(workflow: dict[str, object]) -> None:
     job["needs"] = [*needs, "release"]
 
 
+#: The environment variable the action forwards its token under. Read from the
+#: step the contract already pins rather than restated, so a renamed routing
+#: variable cannot leave these mutations widening a name nothing reads.
+TOKEN_VARIABLE = next(
+    name for name in EXPECTED_ENVIRONMENTS[LIST_RELEASES_STEP] if name.endswith("TOKEN")
+)
+
+
+def _inherit_token_from_workflow(workflow: dict[str, object]) -> None:
+    """Declare the token once, where every job in the workflow inherits it.
+
+    The value names the workflow's own credential rather than a ``secrets``
+    entry, because that is the expression a job may legitimately hold and the
+    secrets scan allows.
+    """
+    env = require_mapping(workflow.setdefault("env", {}), "workflow environment")
+    env.update({TOKEN_VARIABLE: "${{ github.token }}"})
+
+
+def _inherit_token_from_job(workflow: dict[str, object]) -> None:
+    """Declare the token on the job, where all of its steps inherit it.
+
+    Same expression as the workflow-scope mutation, so the two differ only in
+    which scope declares it and the contract cannot reject one by accident.
+    """
+    job = workflow_job(workflow, VERIFY_JOB)
+    env = require_mapping(job.setdefault("env", {}), "job environment")
+    env.update({TOKEN_VARIABLE: "${{ github.token }}"})
+
+
 def _grant_id_token(workflow: dict[str, object]) -> None:
     """Widen the job's permissions by one write scope."""
     job = workflow_job(workflow, VERIFY_JOB)
@@ -210,6 +253,8 @@ def _grant_id_token(workflow: dict[str, object]) -> None:
 #: The workflow mutations, each paired with the change it makes.
 WORKFLOW_MUTATIONS = {
     "id-token": _grant_id_token,
+    "workflow-token": _inherit_token_from_workflow,
+    "job-token": _inherit_token_from_job,
     "release-dependency": _depend_on_release,
     "trusted-in-download": _retarget_trusted_record,
     "artifact-pattern": _download_by_pattern,
@@ -219,7 +264,19 @@ WORKFLOW_MUTATIONS = {
 
 
 def mutate_workflow(workflow: dict[str, object], mutation: str) -> None:
-    """Change one dimension of the verification job's wiring."""
+    """Change one dimension of the verification job's wiring.
+
+    Parameters
+    ----------
+    workflow
+        The loaded workflow document, which this call edits in place. The
+        contract loads a fresh document per case, so one case's edit cannot
+        leak into the next.
+    mutation
+        The name of the change to make, one of :data:`WORKFLOW_MUTATIONS`. An
+        unknown name fails the calling case through :func:`pytest.fail`, so a
+        mistyped mutation names itself rather than passing untested.
+    """
     apply = WORKFLOW_MUTATIONS.get(mutation)
     if apply is None:
         pytest.fail(f"unknown workflow mutation {mutation!r}")
