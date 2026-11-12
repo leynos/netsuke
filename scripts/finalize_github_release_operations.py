@@ -40,7 +40,7 @@ import release_digest_record
 import release_digest_record_files
 import release_github_assets_adapter
 import release_reconcile_github
-import release_upload_plan
+import release_upload_messages
 
 if typ.TYPE_CHECKING:
     # Only the helper signatures name the identity; nothing here constructs one.
@@ -170,7 +170,7 @@ def require_verified(
     if result.verdict is release_plan.PlanVerdict.UNREADABLE:
         release_io.fail(release_io.EXIT_INPUT_UNREADABLE, result.detail)
     reason = (
-        release_upload_plan.blocked_message(result.conflicts, result.unverifiable)
+        release_upload_messages.blocked_message(result.conflicts, result.unverifiable)
         or result.detail
     )
     release_io.fail(release_io.EXIT_REFUSED, f"{reason}; {state}")
