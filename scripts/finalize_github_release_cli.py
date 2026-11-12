@@ -332,4 +332,3 @@ def _verdict(
 
 if __name__ == "__main__":
     raise SystemExit(main())
-# weave: run 'weave explain scripts/finalize_github_release_cli.py' for per-hunk detail, 'weave check' to verify your resolution
