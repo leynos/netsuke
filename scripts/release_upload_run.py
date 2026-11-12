@@ -64,11 +64,8 @@ def settle(
     -----
     :func:`verified_payload` runs before the first network call, and every
     conflict is reported before any upload, so one conflicting asset publishes
-    none of the others. The two halves stay spelled out rather than folded into
-    one call: `observe_release` alone touches the network or the filesystem, and
-    `settle_observation` reads what it returns and nothing else. Observing again
-    after the transfer is what makes the returned plan describe what GitHub
-    holds now.
+    none of the others. Observing again after the transfer is what makes the
+    returned plan describe what GitHub holds now.
 
     Examples
     --------
@@ -99,26 +96,56 @@ def settle(
     ['upload']
     """
     expected = verified_payload(request)
-    settlement = release_upload_observation.settle_observation(
-        release_upload_observation.observe_release(
-            request.tag, expected, runner=runner
-        ),
+    settlement = _observed_settlement(request.tag, expected, runner=runner)
+    pending = release_reconcile_github.uploads(settlement.actions)
+    if not release_upload_observation.should_upload(
+        request, settlement.actions, pending
+    ):
+        return settlement
+    release_upload_remote.upload(
+        request.tag, pending, request.payload_dir, runner=runner
+    )
+    # A second observation of the same release, not a second decision
+    # procedure: the returned plan has to describe what GitHub holds now.
+    return _observed_settlement(request.tag, expected, runner=runner)
+
+
+def _observed_settlement(
+    tag: str, expected: dict[str, str], *, runner: SubprocessRunner
+) -> release_upload_observation.Settlement:
+    """List the release once and turn that observation into a plan.
+
+    Returns
+    -------
+    release_upload_observation.Settlement
+        The plan for the release as GitHub holds it at this moment, and the
+        reasons behind any digest that could not be established.
+
+    Notes
+    -----
+    Listing and deciding stay two calls with one value between them:
+    :func:`release_upload_observation.observe_release` is the only half that
+    touches the network or the filesystem, and ``settle_observation`` reads
+    what it returns and nothing else. Composing them here keeps that boundary
+    while letting :func:`settle` name the two moments it observes -- once to
+    decide, once to confirm after a transfer -- without restating the pair.
+
+    Examples
+    --------
+    An empty listing leaves the one declared asset to upload:
+
+    >>> import release_upload_remote
+    >>> settlement = _observed_settlement(
+    ...     "v1", {"a.deb": "0" * 64},
+    ...     runner=release_upload_remote.StaticRunner('{"assets": []}'),
+    ... )
+    >>> [(name, action.value) for name, action in settlement.actions]
+    [('a.deb', 'upload')]
+    """
+    return release_upload_observation.settle_observation(
+        release_upload_observation.observe_release(tag, expected, runner=runner),
         expected=expected,
     )
-    pending = release_reconcile_github.uploads(settlement.actions)
-    if release_upload_observation.should_upload(request, settlement.actions, pending):
-        release_upload_remote.upload(
-            request.tag, pending, request.payload_dir, runner=runner
-        )
-        # A second observation of the same release, not a second decision
-        # procedure: the returned plan has to describe what GitHub holds now.
-        return release_upload_observation.settle_observation(
-            release_upload_observation.observe_release(
-                request.tag, expected, runner=runner
-            ),
-            expected=expected,
-        )
-    return settlement
 
 
 def verified_payload(request: UploadRequest) -> dict[str, str]:
