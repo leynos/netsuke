@@ -21,6 +21,14 @@ quote, and swallows the rest of the script -- including any continued call.
 :class:`_Reader` therefore keeps a stack of contexts, and refuses a script
 whose quoting it cannot resolve rather than silently dropping commands.
 
+Two further contexts decide whether a later call is read at all. An ANSI-C
+quote, ``$'...'``, is its own quoting context in which a backslash escapes the
+apostrophe, so ``$'a\'b'`` is one word rather than a quote that ends at the
+escape. And ``#`` opens a comment at the start of a word, which a shell
+operator also starts: in ``true;# '`` bash ignores the rest of the line, while
+a reader that waits for whitespace opens a quote and swallows the command
+after it.
+
 Run via ``make test-workflow-contracts``.
 """
 
@@ -34,6 +42,7 @@ class _Quote(enum.Enum):
     PLAIN = enum.auto()
     SINGLE = enum.auto()
     DOUBLE = enum.auto()
+    ANSI_C = enum.auto()
 
 
 class _Frame(typ.NamedTuple):
@@ -63,6 +72,11 @@ class UnbalancedScriptError(AssertionError):
 #: double quotes the backslash is literal, which is what stops a doubled
 #: backslash from acting as an escape inside an already-escaped pair.
 _DOUBLE_QUOTE_ESCAPES = ('"', "\\", "$", "`")
+
+#: The shell's control operators. Each ends the word before it, and bash counts
+#: the start of a word as the start of a comment, so ``true;# '`` comments out
+#: the rest of the line with no space in between.
+_WORD_ENDING_OPERATORS = frozenset(";&|()<>")
 
 
 def logical_lines(script: str) -> list[str]:
@@ -109,19 +123,15 @@ class _Reader:
         self._escaped_last = False
 
     def read(self) -> list[str]:
-        """Consume the script and return the commands it names, in order.
-
-        Returns
-        -------
-        list[str]
-            Each command, in script order.
-        """
+        """Consume the script and return its commands, in script order."""
         while self._index < len(self._script):
             quote = self._frames[-1].quote
             if quote is _Quote.SINGLE:
                 self._read_single_quoted()
             elif quote is _Quote.DOUBLE:
                 self._read_double_quoted()
+            elif quote is _Quote.ANSI_C:
+                self._read_ansi_c_quoted()
             else:
                 self._read_plain()
         self._require_balanced()
@@ -156,30 +166,54 @@ class _Reader:
             return
         self._take_plain_char()
 
-    def _read_plain(self) -> None:
-        """Read one character outside quotes, where every rule applies."""
-        if self._take_escape():
+    def _read_ansi_c_quoted(self) -> None:
+        r"""Read one character of ``$'...'`` text, where a backslash escapes."""
+        char = self._char()
+        if char == "\\" and self._following():
+            # C escape rules, so ``\'`` protects the apostrophe from closing
+            # the quote where ordinary single-quoted text would end it.
+            self._current.extend((char, self._following()))
+            self._escaped_last = True
+            self._index += 2
             return
-        if self._take_substitution():
-            return
-        if self._take_quote():
-            return
-        if self._take_closing_paren():
-            return
-        if self._take_comment():
-            return
-        if self._take_newline():
-            return
+        if char == "'":
+            self._frames.pop()
         self._take_plain_char()
 
-    def _take_quote(self) -> bool:
-        """Consume a quote and open the quoting context it starts.
+    def _read_plain(self) -> None:
+        """Read one character outside quotes, where every rule applies."""
+        if not (self._take_opening() or self._take_ending()):
+            self._take_plain_char()
 
-        Returns
-        -------
-        bool
-            Whether a quote was opened.
-        """
+    def _take_opening(self) -> bool:
+        """Consume the character that opens or escapes a construct, if it does."""
+        # Order matters only for ``$``, where ``$(`` and ``$'`` are
+        # two-character delimiters a quote check would split.
+        return (
+            self._take_escape()
+            or self._take_substitution()
+            or self._take_ansi_quote()
+            or self._take_quote()
+        )
+
+    def _take_ending(self) -> bool:
+        """Consume the character that ends part of the command, if it does."""
+        return (
+            self._take_closing_paren() or self._take_comment() or self._take_newline()
+        )
+
+    def _take_ansi_quote(self) -> bool:
+        r"""Consume ``$'`` and open the ANSI-C quoting context it starts."""
+        if self._char() != "$" or self._following() != "'":
+            return False
+        self._push(_Quote.ANSI_C)
+        self._current.extend(("$", "'"))
+        self._escaped_last = False
+        self._index += 2
+        return True
+
+    def _take_quote(self) -> bool:
+        """Consume a quote and open the quoting context it starts."""
         match self._char():
             case "'":
                 self._push(_Quote.SINGLE)
@@ -191,16 +225,9 @@ class _Reader:
         return True
 
     def _take_closing_paren(self) -> bool:
-        """Consume the ``)`` that closes a command substitution.
-
-        A ``)`` outside a substitution is ordinary text, so only the frame
-        records which one this is.
-
-        Returns
-        -------
-        bool
-            Whether a substitution was closed.
-        """
+        """Consume the ``)`` that closes a command substitution, if it does."""
+        # A ``)`` outside a substitution is ordinary text: only the frame says
+        # which one this is.
         if self._char() != ")" or not self._frames[-1].is_substitution:
             return False
         self._frames.pop()
@@ -208,29 +235,15 @@ class _Reader:
         return True
 
     def _take_comment(self) -> bool:
-        """Consume a comment, which names no part of the command.
-
-        Returns
-        -------
-        bool
-            Whether a comment was consumed.
-        """
+        """Consume a comment, which names no part of the command."""
         if self._char() != "#" or not self._at_word_start():
             return False
         self._index = self._comment_end()
         return True
 
     def _take_newline(self) -> bool:
-        """End the command at a newline, unless a context is still open.
-
-        A newline inside a quote or substitution is part of that construct,
-        so it neither ends the command nor leaves it.
-
-        Returns
-        -------
-        bool
-            Whether a command ended here.
-        """
+        """End the command at a newline, unless a context is still open."""
+        # A newline inside a quote or substitution belongs to that construct.
         if self._char() != "\n" or not self._at_top_level():
             return False
         self._emit()
@@ -244,17 +257,7 @@ class _Reader:
         self._index += 1
 
     def _take_substitution(self) -> bool:
-        r"""Consume ``$(`` and open a quoting context for the command inside.
-
-        The substitution's text is a fresh command, so its quotes belong to it
-        and not to the context the substitution sits in. Bash closes it at the
-        ``)`` that matches this ``(``, which is what the frame records.
-
-        Returns
-        -------
-        bool
-            Whether a substitution was opened.
-        """
+        r"""Consume ``$(`` and open a quoting context for the command inside."""
         if self._char() != "$" or self._following() != "(":
             return False
         self._push(_Quote.PLAIN, is_substitution=True)
@@ -268,13 +271,7 @@ class _Reader:
         self._frames.append(_Frame(quote, is_substitution))
 
     def _at_top_level(self) -> bool:
-        """Report whether no quote or substitution is open.
-
-        Returns
-        -------
-        bool
-            Whether the reader is outside every nested context.
-        """
+        """Report whether no quote or substitution is open."""
         return len(self._frames) == 1
 
     def _require_balanced(self) -> None:
@@ -291,18 +288,9 @@ class _Reader:
             raise UnbalancedScriptError
 
     def _take_escape(self) -> bool:
-        r"""Consume a backslash and the character it protects, if there is one.
-
-        A backslash-newline is deleted outright, joining the next line with
-        nothing between the halves. Any other pair is kept, because the
-        backslash still escapes the character after it -- which is what stops
-        ``\\`` from continuing the line.
-
-        Returns
-        -------
-        bool
-            Whether a character was consumed.
-        """
+        r"""Consume a backslash and the character it protects, if there is one."""
+        # Any pair but a continuation is kept, because the backslash still
+        # escapes the character after it -- which stops ``\\`` continuing.
         if self._char() != "\\":
             return False
         following = self._following()
@@ -331,32 +319,29 @@ class _Reader:
         r"""Report whether the current position starts a word.
 
         ``#`` opens a comment only there; inside a word it is ordinary text, as
-        in ``foo#bar`` or the ``$#`` parameter. Whitespace only ends a word
-        when it is unquoted, so an escaped space keeps the word open:
-        ``foo\ #`` leaves the ``#`` inside the argument, and the command after
-        the next ``;`` still runs.
+        in ``foo#bar`` or the ``$#`` parameter. Only an *unescaped* space ends
+        a word, so ``foo\ #`` keeps the ``#`` inside the argument, and a
+        control operator ends one too, so ``true;# '`` starts a comment.
+        Waiting for whitespace alone reads that apostrophe as an opening quote
+        and swallows the command after it.
 
         Returns
         -------
         bool
-            Whether the text so far is empty, or ends in an unescaped space.
+            Whether the text so far is empty, or ends in an unescaped space or
+            control operator.
         """
         if not self._current:
             return True
-        return self._current[-1].isspace() and not self._escaped_last
+        last = self._current[-1]
+        if self._escaped_last:
+            return False
+        return last.isspace() or last in _WORD_ENDING_OPERATORS
 
     def _comment_end(self) -> int:
-        """Return the index of the newline that ends the comment here.
-
-        A comment with no newline after it runs to the end of the script;
-        returning the length rather than a found index keeps the reader from
-        reading past it.
-
-        Returns
-        -------
-        int
-            The index the reader resumes at.
-        """
+        """Return the index of the newline that ends the comment here."""
+        # A comment with no newline runs to the end of the script; returning
+        # the length keeps the reader from reading past it.
         end = self._script.find("\n", self._index)
         return len(self._script) if end < 0 else end
 

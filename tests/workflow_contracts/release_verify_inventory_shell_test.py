@@ -125,6 +125,37 @@ def test_an_escaped_space_does_not_hide_a_release_call() -> None:
     )
 
 
+@pytest.mark.parametrize("operator", list(";&|()<>"))
+def test_an_operator_ends_the_word_before_a_hash(operator: str) -> None:
+    r"""Open a comment at a ``#`` that follows a control operator.
+
+    Bash starts a comment at the beginning of a word, and an operator starts a
+    word, so ``true;# '`` ignores the rest of the line. A reader that waits for
+    whitespace reads the apostrophe as an opening quote and swallows the
+    command after it -- which is the command a check needs to see.
+    """
+    script = f"true{operator}# 'x\ngh api --method POST repos/o/r/releases\n"
+    assert logical_lines(script) == [
+        f"true{operator}",
+        "gh api --method POST repos/o/r/releases",
+    ], "a hash after an operator must not swallow the command after it"
+
+
+def test_an_ansi_c_quote_escapes_its_apostrophe() -> None:
+    r"""Read ``$'a\'b'`` as one word, so the quote ends at its own delimiter.
+
+    ANSI-C quoting applies the C escape rules, so the backslash protects the
+    apostrophe. Reading it as ordinary single-quoted text ends the quote at
+    the escape and opens another at the real closing apostrophe, which leaves
+    the continued call below inside a quote of the reader's invention.
+    """
+    script = "printf $'a\\'b'\ngh a\\\npi --method POST repos/o/r/releases\n"
+    assert logical_lines(script) == [
+        "printf $'a\\'b'",
+        "gh api --method POST repos/o/r/releases",
+    ], "an escaped apostrophe must not close an ANSI-C quote"
+
+
 def test_a_quote_inside_a_substitution_does_not_close_the_outer_quote() -> None:
     r"""Keep the enclosing quote open across a nested command substitution.
 
