@@ -1,35 +1,35 @@
 //! Discover configuration layers while preserving each root's authority.
 //!
 //! Runs the `OrthoConfig` scan and applies the project-scope second pass, so a
-//! project `.netsuke.toml` outranks user-scope files. Project-chain occurrences
-//! retain project authority through quarantine; the same file reached from an
-//! operator root keeps operator authority. The project file's comparison key
-//! and its fallback policy live in [`project_key`] because that policy is a
-//! discovery decision.
+//! project `.netsuke.toml` outranks user-scope files. Automatic discovery reads
+//! the user scope first, because the dependency's own candidate order consults
+//! system locations before the home fallbacks. Project-chain occurrences retain
+//! project authority through quarantine; the same file reached from an operator
+//! root keeps operator authority. The project file's comparison key and its
+//! fallback policy live in [`project_key`] because that policy is a discovery
+//! decision.
 
 #[cfg(test)]
 use ortho_config::MapEnv;
 use ortho_config::{
-    ConfigDiscovery, FileLayerChain, MergeLayer, OrthoResult, SharedEnvSource,
+    ConfigDiscovery, EnvSource, FileLayerChain, MergeLayer, OrthoResult, SharedEnvSource,
     load_config_file_as_chain,
 };
 use std::borrow::Cow;
 use std::path::{Path, PathBuf};
-#[cfg(test)]
 use std::sync::Arc;
 
 use super::diagnostics::{
     BoundedConfigPath, ProjectLayerDeduplication, debug_optional_config_path_from_fields,
 };
-use super::paths::{PathNormalizer, project_scope_file};
+use super::paths::{PathNormalizer, project_scope_file, user_scope_candidates};
 use super::project_policy::scope_project_chain;
-
-mod project_key;
-use project_key::ProjectKey;
-
 pub(super) use super::project_policy::{
     ScopedFileLayer, retain_layers_and_resolve_json, scope_selected_primary_layer,
 };
+
+mod project_key;
+use project_key::ProjectKey;
 
 /// Project-scope outcome retained for a later trace replay.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -188,9 +188,8 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
     let project_key = project_file
         .as_deref()
         .map(|path| ProjectKey::classify(normalizer, path));
-    let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), env_source);
     let (file_layers, is_trusted_root) =
-        match first_automatic_chain(&discovery, project_key.as_ref()) {
+        match automatic_base_layers(directory, env_source, project_key.as_ref()) {
             Ok(found) => found,
             Err(error) => return (None, Err(error)),
         };
@@ -219,6 +218,51 @@ pub(super) fn collect_file_layers_with_normalizer_and_trace(
             },
         },
     )
+}
+
+/// Load the automatic discovery chain, preferring the user scope.
+///
+/// The user pass runs first so a valid system file cannot outrank the user's own
+/// configuration. The dependency's scan runs only when no user file exists, so
+/// system-provided configuration and the project roots it contributes still work
+/// as documented. An adopted user chain is rooted in the user's own file rather
+/// than in a project root, so it reports a trusted root.
+///
+/// # Errors
+///
+/// Returns an error when a present user candidate cannot be loaded, or when the
+/// dependency's scan reports a required or optional failure with no chain.
+fn automatic_base_layers(
+    directory: Option<&Path>,
+    env_source: SharedEnvSource,
+    project_key: Option<&ProjectKey>,
+) -> OrthoResult<(Vec<MergeLayer<'static>>, bool)> {
+    if let Some(layers) = user_scope_base_layers(env_source.as_ref())? {
+        return Ok((layers, true));
+    }
+    let discovery = config_discovery(directory.map(PathBuf::from).as_ref(), env_source);
+    first_automatic_chain(&discovery, project_key)
+}
+
+/// Load the first user-scope configuration file, if one exists.
+///
+/// # Errors
+///
+/// Returns an error when a candidate exists but cannot be read, parsed, or
+/// resolved through its `extends` chain. Falling through to a later candidate
+/// would silently substitute another scope, letting a broken user file re-enable
+/// the system policy it was meant to override.
+fn user_scope_base_layers(
+    env_source: &dyn EnvSource,
+) -> OrthoResult<Option<Vec<MergeLayer<'static>>>> {
+    user_scope_candidates(env_source)
+        .into_iter()
+        .find_map(|candidate| match load_config_file_as_chain(&candidate) {
+            Ok(Some(chain)) => Some(Ok(chain_layers(chain))),
+            Ok(None) => None,
+            Err(error) => Some(Err(error)),
+        })
+        .transpose()
 }
 
 /// Load project layers and preserve authority when operator and project paths overlap.
@@ -353,11 +397,16 @@ fn project_scope_layers(project_file: Option<&Path>) -> OrthoResult<Vec<MergeLay
 
 #[cfg(test)]
 mod property_tests;
+
 #[cfg(test)]
 mod quarantine_trace_tests;
+
 #[cfg(test)]
 mod replay_tests;
+
 #[cfg(test)]
 mod selector_tests;
+
 #[cfg(test)]
 mod tests;
+// weave: run 'weave explain src/cli/discovery/layers/mod.rs' for per-hunk detail, 'weave check' to verify your resolution
