@@ -47,14 +47,24 @@ pub fn theme_for(prefs: OutputPrefs) -> GraphicalTheme {
 /// because its context message is the whole report the human path has.
 #[must_use]
 pub fn render_failure(err: &Error, theme: &GraphicalTheme) -> Option<String> {
+    Some(render_diagnostic(select_diagnostic(err)?, theme))
+}
+
+/// Choose the diagnostic the human path reports, or `None` if there is none.
+///
+/// The order is the JSON path's: a [`runner::RunnerError`], then the first
+/// [`manifest::ManifestError`], then a [`Report`]. Both modes and both human
+/// decisions read this one function, so they cannot disagree about which error
+/// a report is about.
+fn select_diagnostic(err: &Error) -> Option<&dyn Diagnostic> {
     if let Some(runner_err) = err.downcast_ref::<runner::RunnerError>() {
-        return Some(render_diagnostic(runner_err, theme));
+        return Some(runner_err);
     }
     if let Some(manifest_err) = manifest_cause(err) {
-        return Some(render_diagnostic(manifest_err, theme));
+        return Some(manifest_err);
     }
-    let report = err.downcast_ref::<Report>()?;
-    Some(render_diagnostic(&**report, theme))
+    err.downcast_ref::<Report>()
+        .map(|report| &**report as &dyn Diagnostic)
 }
 
 /// Find the first manifest error in a failure chain.
@@ -97,11 +107,35 @@ pub fn handle_failure(err: &Error, prefs: &OutputPrefs) -> ExitCode {
         return ExitCode::FAILURE;
     }
     tracing::error!(error_kind = failure_kind(err), "runner failed");
-    match render_failure(err, &theme_for(*prefs)) {
-        Some(rendered) => drop(writeln!(io::stderr(), "{prefix} {rendered}")),
+    match failure_report(err, &theme_for(*prefs)) {
+        Some(report) => drop(writeln!(io::stderr(), "{prefix} {report}")),
         None => drop(writeln!(io::stderr(), "{prefix} {err}")),
     }
     ExitCode::FAILURE
+}
+
+/// Compose the human report for a failure, or `None` when it has no diagnostic.
+///
+/// A rendered diagnostic replaces the context line only when it names the
+/// artefact itself. A YAML diagnostic carries a `NamedSource`, so it does; a
+/// schema-version rejection carries no source code at all, and its message
+/// names the declaration and the supported schema but never which Netsukefile
+/// was refused. Printing only that diagnostic would leave a refusal
+/// unattributable in a project with more than one manifest, so the context
+/// line is kept ahead of it.
+///
+/// The test is [`Diagnostic::source_code`] rather than the message text: a
+/// diagnostic that supplies a source has already named the file, and one that
+/// does not has not. Matching on rendered text would make the decision depend
+/// on a localized string.
+fn failure_report(err: &Error, theme: &GraphicalTheme) -> Option<String> {
+    let rendered = render_failure(err, theme)?;
+    let names_artefact =
+        select_diagnostic(err).is_some_and(|diagnostic| diagnostic.source_code().is_some());
+    if names_artefact {
+        return Some(rendered);
+    }
+    Some(format!("{err}\n{rendered}"))
 }
 
 /// Classify a runner failure into the fixed category logged at this boundary.

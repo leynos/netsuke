@@ -203,14 +203,23 @@ impl RejectionSummary {
     }
 }
 
+/// The phrase only `manifest.schema_version.help` carries.
+///
+/// `MAJOR.MINOR.0` appears in the `invalid` summary as well as in the help, so
+/// it cannot show that the help rendered at all. This clause appears nowhere
+/// else, which is what makes its absence a real failure rather than a
+/// coincidence of wording.
+const REMEDY_PHRASE: &str = "without prerelease or build metadata";
+
 /// Assert a human-mode rejection renders its own summary and the shared remedy.
 ///
 /// The summary and the remedy are asserted separately on purpose. Every class
 /// carries `manifest.schema_version.help`, and that text is the only place a
 /// class-specific summary is *not* required — while `MAJOR.MINOR.0` appears in
-/// both the help and the `invalid` summary, so asserting the remedy alone
-/// cannot distinguish them. Requiring the class phrase is what makes the case
-/// discriminating.
+/// both the help and the `invalid` summary, so asserting it cannot show that
+/// the help rendered. Requiring the class phrase makes the case
+/// discriminating, and requiring a phrase unique to the help makes the remedy
+/// its own assertion rather than a consequence of the summary.
 fn assert_human_rejection_names_code_and_remedy(
     stderr: &str,
     case: &str,
@@ -228,6 +237,10 @@ fn assert_human_rejection_names_code_and_remedy(
         flattened.contains(summary.phrase()),
         "{case}: human output must render this class's own summary ({}): {stderr}",
         summary.phrase()
+    );
+    ensure!(
+        flattened.contains(REMEDY_PHRASE),
+        "{case}: human output must render the shared help text: {stderr}"
     );
     ensure!(
         flattened.contains("MAJOR.MINOR.0"),
