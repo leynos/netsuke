@@ -122,6 +122,58 @@ fn human_output_renders_the_schema_version_rejection(
         stderr.contains("1.0"),
         "human output must name the schema this Netsuke supports: {stderr}"
     );
+    // A schema rejection carries no source and no label, so `miette` draws no
+    // snippet from it. The context line is then the only place the refused
+    // file is named, and without it the refusal names no manifest at all.
+    ensure!(
+        stderr.contains("Failed to load manifest at"),
+        "a snippet-less rejection must keep the context line that names the \
+         manifest: {stderr}"
+    );
+    Ok(())
+}
+
+/// A YAML failure must name the manifest through its snippet, exactly once.
+///
+/// This is the counterpart of
+/// [`human_output_renders_the_schema_version_rejection`], and it binds the
+/// distinction at the process boundary: a labelled diagnostic draws a snippet
+/// naming the file, so the context line would repeat it. Counting is what makes
+/// the assertion discriminating — the file appears either way, so only the
+/// context line's absence shows the snippet replaced it rather than joined it.
+#[rstest]
+fn human_output_names_a_yaml_failure_once() -> Result<()> {
+    let temp = tempdir().context("create malformed-manifest workspace")?;
+    // A tab indents the target list, which YAML forbids. The parser reports the
+    // offending line and span, so the diagnostic carries a label.
+    fs::write(
+        temp.path().join("Netsukefile"),
+        concat!(
+            "netsuke_version: '1.0.0'\n",
+            "targets:\n",
+            "\t- name: hello\n",
+            "    command: echo hello\n",
+        ),
+    )
+    .context("write tab-indented manifest")?;
+    let output = create_netsuke_command(temp.path())
+        .args(["--locale", "en-GB", "generate", "--output", "out.ninja"])
+        .output()
+        .context("run generate against a malformed manifest")?;
+    ensure!(
+        !output.status.success(),
+        "a tab-indented manifest must be rejected"
+    );
+    let stderr = String::from_utf8(output.stderr).context("human diagnostics should be UTF-8")?;
+    ensure!(
+        stderr.contains("Netsukefile"),
+        "the report must name the manifest the failure is about: {stderr}"
+    );
+    ensure!(
+        !stderr.contains("Failed to load manifest at"),
+        "a snippet already names the manifest, so the context line would repeat \
+         it: {stderr}"
+    );
     Ok(())
 }
 
