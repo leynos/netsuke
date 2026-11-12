@@ -166,7 +166,7 @@ jobs:
       - name: Setup Rust
         id: setup-rust
         # Pinned to the shared-actions revision that adds `cache-provider`.
-        uses: leynos/shared-actions/.github/actions/setup-rust@6cec89bac47a21cf756d68d638a9a510998e57f8
+        uses: leynos/shared-actions/.github/actions/setup-rust@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           # The channel rust-toolchain.toml pins: the tree needs the
           # nightly-default Polonius borrow checker (see
@@ -200,7 +200,7 @@ jobs:
           # from `setup-rust`, so the exclusion is visible at the step it
           # applies to and a contract has something to read.
           RUSTFLAGS: -D warnings
-        uses: leynos/shared-actions/.github/actions/generate-coverage@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/generate-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           language: rust
           output-path: lcov.info
@@ -296,7 +296,7 @@ jobs:
         # warm-run dispatch runs from whichever branch started it, and the
         # upload action does not check the ref itself.
         if: steps.codescene_token.outputs.available == 'true' && github.ref == 'refs/heads/main'
-        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@7d751eded578e48dacf43ab173d5820e6437c474
+        uses: leynos/shared-actions/.github/actions/upload-codescene-coverage@0eabb6bc07148981de5da395e30cd78d83f5c7c2
         with:
           path: lcov.info
           format: lcov
