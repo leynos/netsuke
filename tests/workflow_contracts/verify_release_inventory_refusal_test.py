@@ -25,7 +25,6 @@ import typing as typ
 import pytest
 from verify_release_inventory_cases import (
     JOB_INPUTS,
-    default_publisher,
     default_scenario,
     final_diagnostic,
 )
@@ -161,22 +160,23 @@ FAULTS = (
 def _assert_trusted_inputs_survive(run: ActionRun) -> None:
     """Require the refusal to leave the publisher's trusted inputs intact.
 
-    The refusal runs before any step writes, so a refusal that removed or
-    truncated the declaration or the digest record would have destroyed the
-    only independent evidence the verification exists to compare against.
+    The refusal runs before any step writes, so one that removed, truncated, or
+    replaced the declaration or the digest record would have destroyed the only
+    independent evidence the verification exists to compare against. Each file
+    is compared byte for byte with what the harness staged; a check on the
+    declaration's names or on the record being non-empty would accept a
+    rewritten file that still happened to parse.
     """
     trusted = run.workspace / "trusted"
-    declaration = (trusted / "declaration.txt").read_text(encoding="utf-8")
-    assert declaration.split() == list(default_publisher().declared_names), (
-        "a refused run must leave the declaration intact"
-    )
-    record_path = trusted / "trusted.json"
-    # The record has to be readable before it can be read: a missing file would
-    # otherwise surface as an unrelated traceback rather than as this fault.
-    assert record_path.is_file(), "a refused run must leave the digest record"
-    assert record_path.read_text(encoding="utf-8").strip(), (
-        "a refused run must leave the digest record intact"
-    )
+    assert run.trusted_inputs, "the harness must stage the trusted inputs"
+    for name, expected in run.trusted_inputs.items():
+        staged = trusted / name
+        # The file has to exist before it can be read: a missing one would
+        # otherwise surface as an unrelated traceback rather than as this fault.
+        assert staged.is_file(), f"a refused run must leave {name} in place"
+        assert staged.read_bytes() == expected, (
+            f"a refused run must leave {name} byte for byte intact"
+        )
 
 
 @pytest.mark.parametrize("fault", FAULTS, ids=lambda fault: fault.name)

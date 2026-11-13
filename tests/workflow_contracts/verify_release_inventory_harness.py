@@ -73,6 +73,10 @@ class ActionRun:
         Every recorded ``gh`` invocation, one per line.
     baselines
         The interpreter each ``uv`` invocation was told to use.
+    trusted_inputs
+        The declaration and digest record as the harness staged them, keyed by
+        file name. A case compares them with the run's copies to show a
+        refusal left the publisher's evidence untouched.
     """
 
     completed: tuple[subprocess.CompletedProcess[str], ...]
@@ -82,6 +86,7 @@ class ActionRun:
     output_path: Path
     gh_log: str
     baselines: tuple[str, ...]
+    trusted_inputs: dict[str, bytes]
 
     @property
     def downloaded(self) -> tuple[str, ...]:
@@ -134,8 +139,17 @@ def _stage_scripts(workspace: Path) -> None:
         shutil.copy2(module, workspace / "scripts" / module.name)
 
 
-def _stage_trusted(workspace: Path, built: Path, publisher: Publisher) -> None:
-    """Write the publisher's declaration and trusted digest record."""
+def _stage_trusted(
+    workspace: Path, built: Path, publisher: Publisher
+) -> dict[str, bytes]:
+    """Write the publisher's declaration and trusted digest record.
+
+    Returns
+    -------
+    dict[str, bytes]
+        The staged files keyed by name, read back after writing so a case can
+        compare a run's copies with exactly what the harness put there.
+    """
     built.mkdir(parents=True)
     for name, body in publisher.files.items():
         _ = (built / name).write_bytes(body)
@@ -149,6 +163,10 @@ def _stage_trusted(workspace: Path, built: Path, publisher: Publisher) -> None:
         for name in publisher.recorded_names
     }
     release_digest_record_files.write_digest_record(digests, trusted / "trusted.json")
+    return {
+        name: (trusted / name).read_bytes()
+        for name in ("declaration.txt", "trusted.json")
+    }
 
 
 def _stage_sources(sources: Path, remote: Remote) -> Path:
@@ -208,6 +226,9 @@ class Sandbox:
         Every interpreter the ``uv`` stub was told to use.
     workspace
         The directory the steps run in.
+    trusted_inputs
+        The declaration and digest record as the harness staged them, keyed by
+        file name, so a case can detect any change a run made to them.
     """
 
     stubs: Path
@@ -218,6 +239,7 @@ class Sandbox:
     helper: Path
     baseline_log: Path
     workspace: Path
+    trusted_inputs: dict[str, bytes]
 
 
 def _run_root(tmp_path: Path) -> Path:
@@ -278,7 +300,7 @@ def _sandbox(tmp_path: Path, scenario: Scenario) -> Sandbox:
     output_file.touch()
     workspace = root / "workspace"
     _stage_scripts(workspace)
-    _stage_trusted(workspace, root / "build", scenario.publisher)
+    trusted_inputs = _stage_trusted(workspace, root / "build", scenario.publisher)
     return Sandbox(
         stubs=stubs,
         scratch=scratch,
@@ -288,6 +310,7 @@ def _sandbox(tmp_path: Path, scenario: Scenario) -> Sandbox:
         helper=helper,
         baseline_log=baseline_log,
         workspace=workspace,
+        trusted_inputs=trusted_inputs,
     )
 
 
@@ -369,4 +392,5 @@ def execute(tmp_path: Path, scenario: Scenario) -> ActionRun:
         output_path=sandbox.workspace / scenario.inputs.output_path,
         gh_log=sandbox.gh_log.read_text(encoding="utf-8"),
         baselines=tuple(sandbox.baseline_log.read_text(encoding="utf-8").split()),
+        trusted_inputs=sandbox.trusted_inputs,
     )

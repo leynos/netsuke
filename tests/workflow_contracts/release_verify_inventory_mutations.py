@@ -68,6 +68,19 @@ SUBSTITUTION_QUOTE_MUTATIONS = {
         "printf '%s\\n' \"$(printf '%s' '\"')\"\ngh re\\\nlease delete v1"
     ),
 }
+#: Commands a mutation appends after giving a variable the value of a command.
+#: Bash runs the POST, but the literal scan finds only the GET the step already
+#: contains, so only a check on the command word itself sees it. The second
+#: spelling puts the assignment and the call inside a command substitution,
+#: which bash parses as a fresh command.
+INDIRECT_COMMAND_MUTATIONS = {
+    "gh-api-indirect-command": (
+        'api=gh; "$api" api --method POST "repos/o/r/releases"'
+    ),
+    "gh-api-indirect-substitution": (
+        'body=$(api=gh; "$api" api --method POST "repos/o/r/releases")'
+    ),
+}
 #: Each write-implying argument a mutation adds to the listing call, in the
 #: spellings that whole-token matching would accept.
 LISTING_ARGUMENT_MUTATIONS = {
@@ -106,6 +119,22 @@ def _hide_write_in_substitution(steps: list[dict[str, object]]) -> None:
     )
 
 
+def _add_second_verifier_call(steps: list[dict[str, object]]) -> None:
+    """Run the pinned verifier a second time, against another trusted record.
+
+    The first call still matches every pinned token, so only counting the
+    invocations shows that the step hands the verifier a different record after
+    the checked one has run.
+    """
+    verify = named_step(steps, VERIFY_STEP)
+    command = (
+        "uv run --no-project --python 3.14 "
+        "scripts/verify_release_inventory_cli.py "
+        "--directory other --expected other --trusted other.json --output other"
+    )
+    verify["run"] = f"{verify['run']}{command}\n"
+
+
 def _add_secret_to_verify_step(steps: list[dict[str, object]]) -> None:
     """Give the tokenless verification step an environment secret."""
     verify = named_step(steps, VERIFY_STEP)
@@ -122,6 +151,7 @@ APPENDING_MUTATIONS = {
     **CONTINUATION_MUTATIONS,
     **ESCAPED_SPACE_MUTATIONS,
     **SUBSTITUTION_QUOTE_MUTATIONS,
+    **INDIRECT_COMMAND_MUTATIONS,
 }
 
 #: Each action mutation, paired with the change it makes to the steps.
@@ -136,6 +166,7 @@ ACTION_MUTATIONS: dict[str, cabc.Callable[[list[dict[str, object]]], None]] = {
     },
     "gh-api-substitution": _hide_write_in_substitution,
     "secret-token": _add_secret_to_verify_step,
+    "verifier-repeated": _add_second_verifier_call,
 }
 
 

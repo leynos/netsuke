@@ -16,12 +16,22 @@ import typing as typ
 import pytest
 from release_publish_path_scenarios import SCENARIOS
 from release_publish_path_verification import check_verify_inventory
+from release_verify_inventory_commands import (
+    GH_RELEASE_CALL,
+    forbidden_gh_flags,
+    gh_api_invocations,
+    indirect_command_words,
+    reject_secrets,
+    run_tokens,
+    script_lines,
+)
 from release_verify_inventory_mutations import (
     ACTION_MUTATIONS,
     WORKFLOW_MUTATIONS,
     mutate_action,
     mutate_workflow,
 )
+from release_verify_inventory_paths import assert_disjoint_inputs
 from release_verify_inventory_support import (
     ARTIFACT_ACTION,
     CHECKOUT_ACTION,
@@ -29,7 +39,6 @@ from release_verify_inventory_support import (
     EXPECTED_INPUTS,
     EXPECTED_JOB_INPUTS,
     EXPECTED_OUTPUTS,
-    GH_RELEASE_CALL,
     LOCAL_ACTION,
     NETWORK_STEPS,
     PUBLISH_JOB,
@@ -40,14 +49,9 @@ from release_verify_inventory_support import (
     VERIFY_COMMAND,
     VERIFY_JOB,
     VERIFY_STEP,
-    forbidden_gh_flags,
-    gh_api_invocations,
     load_action,
     load_action_steps,
-    reject_secrets,
     retained_artifact_name,
-    run_tokens,
-    script_lines,
 )
 from workflow_loading import (
     RELEASE_WORKFLOW_PATH,
@@ -90,6 +94,14 @@ def _assert_gh_api_calls(steps: list[dict[str, object]]) -> None:
         run = str(step.get("run"))
         assert not any(GH_RELEASE_CALL.search(line) for line in script_lines(run)), (
             f"{name} must not use the release subcommand: it can write"
+        )
+        # A command word built from a variable executes whatever the variable
+        # holds, so the literal scan below would see only the call it can read
+        # and miss a further one assigned earlier in the same step.
+        indirect = indirect_command_words(run)
+        assert not indirect, (
+            f"{name} must name its commands literally; {indirect!r} is built "
+            "from a variable, which can hide a write behind the scan"
         )
         invocations = gh_api_invocations(run)
         expected = 1 if name in NETWORK_STEPS else 0
@@ -173,36 +185,6 @@ def _assert_action_contract(action: dict[str, object]) -> None:
     _assert_verify_step(steps)
 
 
-def _assert_disjoint_inputs(inputs: dict[str, object]) -> None:
-    """Require trusted inputs inside their root and disjoint from the rest.
-
-    The action re-checks this at run time, but a caller that names a download
-    path as a trusted input has already defeated the reason the verification
-    exists: the downloaded bytes would be compared with themselves.
-    """
-    trusted = str(inputs["trusted-directory"]).rstrip("/")
-    for key in ("declaration-file", "trusted-record-file"):
-        value = str(inputs[key])
-        assert value.startswith(f"{trusted}/"), (
-            f"{key} ({value}) must be inside trusted-directory ({trusted})"
-        )
-    download = str(inputs["download-directory"]).rstrip("/")
-    output = str(inputs["output-path"]).rstrip("/")
-    for label, value in (("download-directory", download), ("output-path", output)):
-        assert not value.startswith(f"{trusted}/"), (
-            f"{label} ({value}) must be disjoint from trusted-directory"
-        )
-        assert not trusted.startswith(f"{value}/"), (
-            f"trusted-directory must not sit inside {label} ({value})"
-        )
-    assert not output.startswith(f"{download}/"), (
-        "the output record must not be written into the download directory"
-    )
-    assert not download.startswith(f"{output}/"), (
-        "the download directory must not sit inside the output record's directory"
-    )
-
-
 def _assert_job_contract(workflow: dict[str, object]) -> None:
     """Check the job's steps, trusted artefact, and local-action inputs."""
     job = workflow_job(workflow, VERIFY_JOB)
@@ -245,7 +227,10 @@ def _assert_job_contract(workflow: dict[str, object]) -> None:
     assert inputs == EXPECTED_JOB_INPUTS, (
         "the job must forward the contracted verification inputs"
     )
-    _assert_disjoint_inputs(inputs)
+    # The action re-checks this at run time, but a caller that names a download
+    # path as a trusted input has already defeated the reason the verification
+    # exists: the downloaded bytes would be compared with themselves.
+    assert_disjoint_inputs(inputs)
     assert steps.index(local) > max(
         steps.index(checkout), steps.index(setup_uv), steps.index(download)
     ), "the verification action must run after its checkout, tools, and artefact"
@@ -321,66 +306,6 @@ def test_workflow_mutations_are_rejected(mutation: str) -> None:
 
     with pytest.raises(AssertionError):
         _assert_complete_contract(action, workflow)
-
-
-@pytest.mark.parametrize(
-    "reference",
-    [
-        "${{ secrets.CARGO_REGISTRY_TOKEN }}",
-        "${{ secrets['CARGO_REGISTRY_TOKEN'] }}",
-        "${{ toJSON(secrets) }}",
-        "${{ format('Hello {0}', secrets.CARGO_REGISTRY_TOKEN) }}",
-    ],
-)
-def test_the_secret_scan_reaches_nested_values(reference: str) -> None:
-    """Reject a secret reference however it is spelled and however deeply nested.
-
-    The control for :func:`reject_secrets`. Without it the scan could be
-    vacuous — checking only top-level keys — and every assertion calling it
-    would still pass. The bracketed and whole-context spellings are the ones a
-    dotted-substring check would let through.
-    """
-    with pytest.raises(AssertionError):
-        reject_secrets({"steps": [{"env": {"TOKEN": reference}}]})
-
-
-def test_a_call_inside_a_substitution_is_still_scanned() -> None:
-    """Find a write hidden in ``$(...)``, which a line-anchored scan misses.
-
-    The mutation case above shows the contract rejects the shape; this one
-    shows why. The scan has to locate the call wherever it sits on the line,
-    and the flag check has to see the ``-f`` that turns it into a POST.
-    """
-    script = 'body=$(gh api --method GET -f x=y "repos/o/r/releases")\n'
-    (tokens,) = gh_api_invocations(script)
-    assert forbidden_gh_flags(tokens) == ["-f"], tokens
-
-
-def test_a_continued_command_is_scanned_after_joining() -> None:
-    r"""Read a command split across a backslash-newline as bash does.
-
-    ``gh \`` then ``api --method POST`` is one command whose method override
-    no raw-line scan can see, and a separate ordinary call would satisfy the
-    expected count. The ``midword`` spellings split the subcommand name itself,
-    which bash joins with nothing between the halves, so a join that inserted a
-    space would still miss them. Both shapes must expose the write, and the
-    release subcommand split either way must be caught by the release check.
-    """
-    script = (
-        'gh \\\n  api --method POST "repos/o/r/releases"\n'
-        'gh a\\\npi --method POST "repos/o/r/releases"\n'
-        "gh \\\n  release delete v1\n"
-        "gh re\\\nlease delete v1\n"
-    )
-    invocations = gh_api_invocations(script)
-    assert [forbidden_gh_flags(tokens) for tokens in invocations] == [
-        ["--method"],
-        ["--method"],
-    ], invocations
-    releases = [line for line in script_lines(script) if GH_RELEASE_CALL.search(line)]
-    assert len(releases) == 2, (
-        f"a continued release command must still be recognised, got {releases}"
-    )
 
 
 def test_the_action_and_job_satisfy_the_complete_contract() -> None:
